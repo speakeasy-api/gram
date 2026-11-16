@@ -42,7 +42,9 @@ type DeploymentRedeployManagement interface {
 }
 
 type RedeployDeploymentInput struct {
-	ProjectID                  string `json:"project_id" jsonschema:"exact project UUID; never inferred"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID                  string `json:"-"`
 	DeploymentID               string `json:"deployment_id,omitempty" jsonschema:"exact source deployment UUID returned by the preview; omit only for a preview of the active deployment"`
 	ExpectedActiveDeploymentID string `json:"expected_active_deployment_id,omitempty" jsonschema:"active_deployment_id from the preview, or none if the project has no active deployment; required for confirmation"`
 	IdempotencyKey             string `json:"idempotency_key" jsonschema:"stable key of 1 to 128 characters for this redeployment; reuse unchanged on retries"`
@@ -57,7 +59,6 @@ type DeploymentRedeployPreview struct {
 	OpenAPIAssets      int    `json:"openapi_assets"`
 	FunctionAssets     int    `json:"function_assets"`
 	Packages           int    `json:"packages"`
-	ExternalMCPs       int    `json:"external_mcps"`
 	Scope              string `json:"scope"`
 }
 
@@ -264,8 +265,8 @@ func (s *DeploymentRedeployService) Redeploy(ctx context.Context, principal Prin
 		if err != nil {
 			return zero, redeployUnavailable(err)
 		}
-		preview := &DeploymentRedeployPreview{ProjectID: project.ID.String(), SourceDeploymentID: source.ID, ActiveDeploymentID: active, SourceStatus: source.Status, OpenAPIAssets: len(source.Openapiv3Assets), FunctionAssets: len(source.FunctionsAssets), Packages: len(source.Packages), ExternalMCPs: len(source.ExternalMcps), Scope: "whole_project"}
-		return zero, &deploymentRedeployError{Code: "confirmation_required", Message: "Nothing was redeployed. This clones and reprocesses the whole project snapshot, not one server: all OpenAPI, function and package sources are included, and external MCP sources are dropped. Redeploying an older snapshot can replace newer project tools and configuration. Show the exact project, source, active deployment and source counts, obtain explicit confirmation, then resend these IDs with the same key and confirmed:true.", Preview: preview}
+		preview := &DeploymentRedeployPreview{ProjectID: project.ID.String(), SourceDeploymentID: source.ID, ActiveDeploymentID: active, SourceStatus: source.Status, OpenAPIAssets: len(source.Openapiv3Assets), FunctionAssets: len(source.FunctionsAssets), Packages: len(source.Packages), Scope: "whole_project"}
+		return zero, &deploymentRedeployError{Code: "confirmation_required", Message: "Nothing was redeployed. This clones and reprocesses the whole project snapshot, not one server: all OpenAPI, function and package sources are included. Redeploying an older snapshot can replace newer project tools and configuration. Show the exact project, source, active deployment and source counts, obtain explicit confirmation, then resend these IDs with the same key and confirmed:true.", Preview: preview}
 	}
 	charge := func(ctx context.Context) error { return s.budget.Allow(ctx, principal) }
 	receipt, err := s.receipts.Execute(ctx, principal, project, input, charge, func(ctx context.Context, tx pgx.Tx) (deploymentRedeployReceipt, error) {

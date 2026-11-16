@@ -15,6 +15,7 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
+import { TemporaryAccessPanel } from "./temporary-access-panel.tsx";
 import {
   SidePanelProvider,
   SidePanelSurface,
@@ -197,6 +198,7 @@ const AppLayoutContent = ({
       {/* Above the outlet so the suggestion → chat bubble morph survives the
           navigation into the chat route. */}
       <ChatLaunchOverlay />
+      <TemporaryAccessPanel />
     </div>
   );
 };
@@ -291,6 +293,7 @@ export const OrgLayout = (): JSX.Element => {
             </MembershipSyncGuard>
           </SidebarInset>
         </ModeSurface>
+        <TemporaryAccessPanel />
       </div>
     </SidebarProvider>
   );

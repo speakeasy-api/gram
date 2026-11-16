@@ -19,11 +19,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestStaffRedeployer_ProjectWithOnlyExternalMCPsDropsThemAndBecomesActive(t *testing.T) {
+// seedCompletedDeployment inserts a completed deployment with no sources,
+// without running the processing workflow.
+func seedCompletedDeployment(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	q := repo.New(ti.conn)
+	depID, err := q.InsertDeployment(ctx, repo.InsertDeploymentParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		IdempotencyKey: uuid.NewString(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.CreateDeploymentStatus(ctx, repo.CreateDeploymentStatusParams{DeploymentID: depID, Status: "completed"}))
+
+	return depID
+}
+
+func TestStaffRedeployer_CloneBecomesActiveAfterProcessing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
-	source := seedDeploymentWithExternalMCP(t, ctx, ti)
+	source := seedCompletedDeployment(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	projectID := *authCtx.ProjectID
@@ -42,7 +63,6 @@ func TestStaffRedeployer_ProjectWithOnlyExternalMCPsDropsThemAndBecomesActive(t 
 	})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
-	require.Empty(t, clone.ExternalMcps)
 
 	activeBeforeProcessing, err := repo.New(ti.conn).GetActiveDeploymentID(ctx, projectID)
 	require.NoError(t, err)
@@ -73,7 +93,7 @@ func TestStaffRedeployer_PrepareRefusesDeploymentFromAnotherProject(t *testing.T
 	t.Parallel()
 
 	ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
-	source := seedDeploymentWithExternalMCP(t, ctx, ti)
+	source := seedCompletedDeployment(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 

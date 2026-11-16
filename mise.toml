@@ -19,12 +19,12 @@ pin = true
 # Installed as speakeasy-sdks, not speakeasy: the AI Control Plane CLI built
 # from cli/ is also called speakeasy, and the repo pin would otherwise shadow
 # it in every worktree. Tasks call speakeasy-sdks.
-"github:speakeasy-api/speakeasy" = { version = "1.803.0", rename_exe = "speakeasy-sdks" }
+"github:speakeasy-api/speakeasy" = { version = "1.808.1", rename_exe = "speakeasy-sdks" }
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
 gh = "2.100.0"
-go = "1.27.3"
+go = "1.27.4"
 golangci-lint = "2.15.0"
 gomigrate = "4.19.1"
 gum = "0.17.0"
@@ -241,6 +241,9 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ## name, renewed by `mise run tls:tailscale`). zero:tailscale sets it locally
 ## when the tailnet has HTTPS certificates enabled.
 GRAM_TLS_PROVIDER = { default = "mkcert" }
+## The local seed keeps the clients it registers with Linear and Notion here
+## (gitignored), so reseeding reuses them.
+GRAM_DEMOSEED_CACHE_DIR = "{{ config_root }}/local/cache"
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""
@@ -409,6 +412,12 @@ GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
 ## randomize the listen port and issuer out of sync with the admin client.
 MOCK_OIDC_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
 MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
+## Local mock MCP server (server/cmd/mock-mcp), the offline upstream the local
+## seed registers as the "Acme Tasks (local mock)" remote MCP server. Loopback
+## only: the local server's remote MCP proxy is its only client.
+GRAM_MOCK_MCP_PORT = "4100"
+GRAM_MOCK_MCP_ADDRESS = "127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}"
+GRAM_MOCK_MCP_URL = "http://127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}/mcp"
 
 ########################
 ## Svix configuration ##

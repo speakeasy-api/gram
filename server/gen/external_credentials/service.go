@@ -248,7 +248,7 @@ type ListExternalCredentialsPayload struct {
 // ListExternalCredentialsResult is the result type of the externalCredentials
 // service listExternalCredentials method.
 type ListExternalCredentialsResult struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummary
 }
 

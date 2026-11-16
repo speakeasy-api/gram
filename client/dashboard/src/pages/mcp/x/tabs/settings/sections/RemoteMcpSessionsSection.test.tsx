@@ -6,6 +6,11 @@ import { RemoteMcpSessionsSection } from "./RemoteMcpSessionsSection";
 const mocks = vi.hoisted(() => ({
   clients: vi.fn(),
   issuer: vi.fn(),
+  flag: vi.fn(),
+}));
+
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => mocks.flag(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -47,6 +52,7 @@ const mcpServer = {
 } as McpServer;
 
 beforeEach(() => {
+  mocks.flag.mockReturnValue({ status: "missing" });
   mocks.issuer.mockReturnValue({
     data: { id: "user-session-issuer-1" },
     isLoading: false,
@@ -88,6 +94,32 @@ describe("RemoteMcpSessionsSection", () => {
     expect(
       screen.getByText(/apply when User Identity is configured/i),
     ).toBeDefined();
+    expect(screen.queryByText("Session length")).toBeNull();
+    expect(screen.queryByText("Client access")).toBeNull();
+  });
+
+  it("shows only the provider picker once MCP Authentication has its own page", () => {
+    mocks.flag.mockReturnValue({ status: "enabled" });
+    mocks.issuer.mockReturnValue({
+      data: {
+        id: "user-session-issuer-1",
+        slug: "acme-workforce",
+        sessionDurationHours: 336,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    mocks.clients.mockReturnValue({
+      items: [{ id: "remote-session-client-1" }],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
+
+    expect(screen.getByText("User session issuer")).toBeDefined();
+    expect(screen.queryByText(/Sessions last/)).toBeNull();
+    expect(screen.queryByText("Shared authorization server")).toBeNull();
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
   });

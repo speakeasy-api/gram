@@ -1,3 +1,9 @@
+import {
+  accountCatalogProvider,
+  accountSetupUrls,
+  pendingAccountProvider,
+} from "./account-provider";
+import { names } from "./provider-setup/state";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
@@ -101,6 +107,7 @@ export interface ServerInstallStatus {
    * that tally results, but the dialog shows it as a next step, not an error.
    */
   setupRequired?: string;
+  setupPolicy?: ServerGuardrailState;
   identityMode?: RemoteMcpCreationIdentity;
   /** Exact remote endpoint selected for this installed server. */
   remoteUrl?: string;
@@ -229,6 +236,8 @@ interface UseRemoteMcpInstallWorkflowOptions {
   servers: CatalogServer[];
   projectSlug?: string;
   serverNameSuffix?: string;
+  /** Initial choice for a single-server caller that owns the Identity handoff. */
+  initialConfiguration?: Pick<ServerConfig, "identityMode"> & { name?: string };
   /**
    * Install every endpoint of multi-remote servers instead of pausing on the
    * interactive selectRemotes phase. Required by headless/auto-start callers
@@ -242,6 +251,8 @@ interface UseRemoteMcpInstallWorkflowOptions {
   offerGuardrails?: boolean;
   /** Fresh catalog admission before any create, never after acceptance. */
   beforeInstall?: () => Promise<boolean>;
+  /** Interactive account-specific installs start disabled and configure on Setup. */
+  accountSetupEnabled?: boolean;
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */
@@ -252,13 +263,18 @@ export function headerValueKey(remoteUrl: string, headerName: string): string {
 function buildServerConfig(
   server: CatalogServer,
   serverNameSuffix = "",
+  initialConfiguration?: UseRemoteMcpInstallWorkflowOptions["initialConfiguration"],
 ): ServerConfig {
   return {
     server,
-    name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
+    name:
+      initialConfiguration?.name ??
+      `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
-    identityMode: supportsAutomaticOAuth(server) ? "user" : "none",
+    identityMode:
+      initialConfiguration?.identityMode ??
+      (supportsAutomaticOAuth(server) ? "user" : "none"),
     agentAuthorization: "",
     serviceAccountClient: null,
   };
@@ -386,6 +402,8 @@ export function useRemoteMcpInstallWorkflow({
   serverNameSuffix = "",
   offerGuardrails = false,
   beforeInstall,
+  accountSetupEnabled = false,
+  initialConfiguration,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
   const detectorMode = useDetectorMode();
@@ -434,16 +452,19 @@ export function useRemoteMcpInstallWorkflow({
     const singleRemote: ServerConfig[] = [];
 
     for (const server of servers) {
+      const initial = servers.length === 1 ? initialConfiguration : undefined;
       const remotes = server.remotes ?? [];
       if (remotes.length > 1 && !autoSelectRemotes) {
         multiRemote.push({
           server,
-          name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
+          name:
+            initial?.name ??
+            `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
           remotes,
           selectedRemoteUrls: new Set(),
         });
       } else {
-        singleRemote.push(buildServerConfig(server, serverNameSuffix));
+        singleRemote.push(buildServerConfig(server, serverNameSuffix, initial));
       }
     }
 
@@ -452,7 +473,7 @@ export function useRemoteMcpInstallWorkflow({
     setCurrentServerIndex(0);
     lastProcessedIndexRef.current = -1;
     setPhase(multiRemote.length > 0 ? "selectRemotes" : "configure");
-  }, [autoSelectRemotes, serverNameSuffix, servers]);
+  }, [autoSelectRemotes, serverNameSuffix, servers, initialConfiguration]);
 
   // Initialize server configs when servers change - partition into multi/single remote.
   useEffect(() => {
@@ -548,17 +569,15 @@ export function useRemoteMcpInstallWorkflow({
       setServerConfigs((prev) => [
         ...prev,
         {
-          server: currentConfig.server,
+          ...buildServerConfig(
+            currentConfig.server,
+            serverNameSuffix,
+            servers.length === 1 ? initialConfiguration : undefined,
+          ),
           name: currentConfig.name,
           remotes: currentConfig.remotes.filter((r) =>
             currentConfig.selectedRemoteUrls.has(r.url),
           ),
-          headerValues: {},
-          identityMode: supportsAutomaticOAuth(currentConfig.server)
-            ? "user"
-            : "none",
-          agentAuthorization: "",
-          serviceAccountClient: null,
         },
       ]);
     }
@@ -569,7 +588,14 @@ export function useRemoteMcpInstallWorkflow({
       // Done with all multi-remote servers, move to configure phase
       setPhase("configure");
     }
-  }, [canProceed, currentServerIndex, multiRemoteConfigs]);
+  }, [
+    canProceed,
+    currentServerIndex,
+    multiRemoteConfigs,
+    servers.length,
+    serverNameSuffix,
+    initialConfiguration,
+  ]);
 
   // The issuer lookup decides whether the install can honour an organization
   // issuer at all. A failed or truncated listing is not "no organization
@@ -622,31 +648,42 @@ export function useRemoteMcpInstallWorkflow({
       mcpEndpointUrl?: string;
       authConfigured: boolean;
       identityConfiguration?: ConfigureCreatedIdentityResult;
+      remoteUrl?: string;
     }> => {
       if (isFigmaCatalogServer(target.server)) {
         return installUnproxiedTarget(client, target, reqOpts);
       }
 
-      const probe = await client.remoteMcp.probeURL(
-        { probeURLForm: { url: target.remote.url } },
-        undefined,
-        reqOpts,
-      );
-      if (
-        probe.outcome === "unreachable" ||
-        probe.outcome === "invalid_mcp_response"
-      ) {
-        throw new Error(
-          probe.outcome === "unreachable"
-            ? "The Remote MCP server is unreachable."
-            : "The URL did not return a valid MCP response.",
+      const accountProvider = accountCatalogProvider(target.server);
+      const pendingAccount =
+        accountSetupEnabled &&
+        target.identityMode === "user" &&
+        accountProvider;
+      const remoteUrl = pendingAccount
+        ? accountSetupUrls[pendingAccount]
+        : target.remote.url;
+      if (!pendingAccount) {
+        const probe = await client.remoteMcp.probeURL(
+          { probeURLForm: { url: target.remote.url } },
+          undefined,
+          reqOpts,
         );
+        if (
+          probe.outcome === "unreachable" ||
+          probe.outcome === "invalid_mcp_response"
+        ) {
+          throw new Error(
+            probe.outcome === "unreachable"
+              ? "The Remote MCP server is unreachable."
+              : "The URL did not return a valid MCP response.",
+          );
+        }
       }
       const remoteMcpServer = await client.remoteMcp.createServer(
         {
           createServerForm: {
             name: target.name,
-            url: target.remote.url,
+            url: remoteUrl,
             transportType: "streamable-http",
           },
         },
@@ -726,23 +763,31 @@ export function useRemoteMcpInstallWorkflow({
         }
       }
 
-      const identityConfiguration = await configureCreatedRemoteMcpIdentity({
-        client,
-        remoteMcpServer,
-        mcpServer,
-        identityMode: target.identityMode,
-        // Already the whole header value: the credential form assembles the
-        // Bearer/Basic prefix so the operator can see exactly what is sent.
-        agentAuthorization:
-          target.identityMode === "agent"
-            ? target.agentAuthorization.trim()
-            : undefined,
-        serviceAccountClient:
-          target.identityMode === "agent"
-            ? (target.serviceAccountClient ?? undefined)
-            : undefined,
-        options: reqOpts,
-      });
+      const identityConfiguration: ConfigureCreatedIdentityResult =
+        pendingAccount
+          ? {
+              status: "setup-required",
+              mcpServer,
+              identityMode: "user",
+              message: `Finish ${names[pendingAccount]} connection setup before enabling this server.`,
+            }
+          : await configureCreatedRemoteMcpIdentity({
+              client,
+              remoteMcpServer,
+              mcpServer,
+              identityMode: target.identityMode,
+              // Already the whole header value: the credential form assembles the
+              // Bearer/Basic prefix so the operator can see exactly what is sent.
+              agentAuthorization:
+                target.identityMode === "agent"
+                  ? target.agentAuthorization.trim()
+                  : undefined,
+              serviceAccountClient:
+                target.identityMode === "agent"
+                  ? (target.serviceAccountClient ?? undefined)
+                  : undefined,
+              options: reqOpts,
+            });
       const configuredMcpServer =
         identityConfiguration.status === "configured"
           ? identityConfiguration.mcpServer
@@ -764,6 +809,7 @@ export function useRemoteMcpInstallWorkflow({
 
       return {
         mcpServer: configuredMcpServer,
+        remoteUrl,
         mcpEndpointUrl: endpoint
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
@@ -777,7 +823,7 @@ export function useRemoteMcpInstallWorkflow({
         identityConfiguration,
       };
     },
-    [client, defaultOrganizationIssuerId, orgSlug],
+    [client, defaultOrganizationIssuerId, orgSlug, accountSetupEnabled],
   );
 
   const admissionInFlight = useRef(false);
@@ -791,6 +837,7 @@ export function useRemoteMcpInstallWorkflow({
   const startInstall = useCallback(
     async (options?: {
       guardrail?: ServerGuardrailState;
+      customize?: ServerGuardrailState;
     }): Promise<string[]> => {
       if (
         !canInstall ||
@@ -851,6 +898,7 @@ export function useRemoteMcpInstallWorkflow({
         );
       };
 
+      let deferredCustomization = false;
       let anyAuthConfigured = false;
       let anyUnproxiedInstalled = false;
       // Servers that were created, for scoping the guardrail. A server kept
@@ -869,10 +917,15 @@ export function useRemoteMcpInstallWorkflow({
           }
           const identitySetupRequired =
             result.identityConfiguration?.status === "setup-required";
+          const setupPolicy = pendingAccountProvider(result.remoteUrl)
+            ? options?.customize
+            : undefined;
+          deferredCustomization ||= !!setupPolicy;
           setStatusAt(index, {
+            setupPolicy,
             status: identitySetupRequired ? "failed" : "completed",
             identityMode: target.identityMode,
-            remoteUrl: target.remote.url,
+            remoteUrl: result.remoteUrl ?? target.remote.url,
             mcpServerId: result.mcpServer.id,
             mcpServerParam: mcpServerRouteParam(result.mcpServer),
             mcpEndpointUrl: result.mcpEndpointUrl,
@@ -970,7 +1023,7 @@ export function useRemoteMcpInstallWorkflow({
       }
 
       setPhase("complete");
-      return installedServerIds;
+      return deferredCustomization ? [] : installedServerIds;
     },
     [
       beforeInstall,
@@ -1058,7 +1111,8 @@ export function useRemoteMcpInstallWorkflow({
         skip: async () => {
           await startInstall();
         },
-        installForCustomizing: () => startInstall(),
+        installForCustomizing: () =>
+          startInstall({ customize: guardrail ?? catalogPresetState([]) }),
         goBack: configureSkipped ? undefined : backToConfigure,
         ...base,
       };

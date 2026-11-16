@@ -3733,3 +3733,385 @@ func BuildListCustomDomainsPayload(adminListCustomDomainsOrganizationID string, 
 
 	return v, nil
 }
+
+// BuildListPlatformExternalCredentialsPayload builds the payload for the admin
+// listPlatformExternalCredentials endpoint from CLI flags.
+func BuildListPlatformExternalCredentialsPayload(adminListPlatformExternalCredentialsProvider string, adminListPlatformExternalCredentialsAdminSessionToken string) (*admin.ListPlatformExternalCredentialsPayload, error) {
+	var err error
+	var provider *string
+	{
+		if adminListPlatformExternalCredentialsProvider != "" {
+			provider = &adminListPlatformExternalCredentialsProvider
+			if !(*provider == "aws_iam" || *provider == "gcp_iam") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("provider", *provider, []any{"aws_iam", "gcp_iam"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListPlatformExternalCredentialsAdminSessionToken != "" {
+			adminSessionToken = &adminListPlatformExternalCredentialsAdminSessionToken
+		}
+	}
+	v := &admin.ListPlatformExternalCredentialsPayload{}
+	v.Provider = provider
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetGcpIamPlatformCredentialPayload builds the payload for the admin
+// getGcpIamPlatformCredential endpoint from CLI flags.
+func BuildGetGcpIamPlatformCredentialPayload(adminGetGcpIamPlatformCredentialID string, adminGetGcpIamPlatformCredentialAdminSessionToken string) (*admin.GetGcpIamPlatformCredentialPayload, error) {
+	var err error
+	var id string
+	{
+		id = adminGetGcpIamPlatformCredentialID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetGcpIamPlatformCredentialAdminSessionToken != "" {
+			adminSessionToken = &adminGetGcpIamPlatformCredentialAdminSessionToken
+		}
+	}
+	v := &admin.GetGcpIamPlatformCredentialPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCreateGcpIamPlatformCredentialPayload builds the payload for the admin
+// createGcpIamPlatformCredential endpoint from CLI flags.
+func BuildCreateGcpIamPlatformCredentialPayload(adminCreateGcpIamPlatformCredentialBody string, adminCreateGcpIamPlatformCredentialAdminSessionToken string) (*admin.CreateGcpIamPlatformCredentialPayload, error) {
+	var err error
+	var body CreateGcpIamPlatformCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateGcpIamPlatformCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateGcpIamPlatformCredentialAdminSessionToken != "" {
+			adminSessionToken = &adminCreateGcpIamPlatformCredentialAdminSessionToken
+		}
+	}
+	v := &admin.CreateGcpIamPlatformCredentialPayload{
+		Name:                      body.Name,
+		ImpersonateServiceAccount: body.ImpersonateServiceAccount,
+		WifPoolID:                 body.WifPoolID,
+		WifProviderID:             body.WifProviderID,
+		WifProjectNumber:          body.WifProjectNumber,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildUpdateGcpIamPlatformCredentialPayload builds the payload for the admin
+// updateGcpIamPlatformCredential endpoint from CLI flags.
+func BuildUpdateGcpIamPlatformCredentialPayload(adminUpdateGcpIamPlatformCredentialBody string, adminUpdateGcpIamPlatformCredentialAdminSessionToken string) (*admin.UpdateGcpIamPlatformCredentialPayload, error) {
+	var err error
+	var body UpdateGcpIamPlatformCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminUpdateGcpIamPlatformCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminUpdateGcpIamPlatformCredentialAdminSessionToken != "" {
+			adminSessionToken = &adminUpdateGcpIamPlatformCredentialAdminSessionToken
+		}
+	}
+	v := &admin.UpdateGcpIamPlatformCredentialPayload{
+		ID:                        body.ID,
+		Name:                      body.Name,
+		ImpersonateServiceAccount: body.ImpersonateServiceAccount,
+		WifPoolID:                 body.WifPoolID,
+		WifProviderID:             body.WifProviderID,
+		WifProjectNumber:          body.WifProjectNumber,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildVerifyGcpIamPlatformCredentialPayload builds the payload for the admin
+// verifyGcpIamPlatformCredential endpoint from CLI flags.
+func BuildVerifyGcpIamPlatformCredentialPayload(adminVerifyGcpIamPlatformCredentialBody string, adminVerifyGcpIamPlatformCredentialAdminSessionToken string) (*admin.VerifyGcpIamPlatformCredentialPayload, error) {
+	var err error
+	var body VerifyGcpIamPlatformCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminVerifyGcpIamPlatformCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminVerifyGcpIamPlatformCredentialAdminSessionToken != "" {
+			adminSessionToken = &adminVerifyGcpIamPlatformCredentialAdminSessionToken
+		}
+	}
+	v := &admin.VerifyGcpIamPlatformCredentialPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildDeleteGcpIamPlatformCredentialPayload builds the payload for the admin
+// deleteGcpIamPlatformCredential endpoint from CLI flags.
+func BuildDeleteGcpIamPlatformCredentialPayload(adminDeleteGcpIamPlatformCredentialBody string, adminDeleteGcpIamPlatformCredentialAdminSessionToken string) (*admin.DeleteGcpIamPlatformCredentialPayload, error) {
+	var err error
+	var body DeleteGcpIamPlatformCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDeleteGcpIamPlatformCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDeleteGcpIamPlatformCredentialAdminSessionToken != "" {
+			adminSessionToken = &adminDeleteGcpIamPlatformCredentialAdminSessionToken
+		}
+	}
+	v := &admin.DeleteGcpIamPlatformCredentialPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMemoryEvalOptionsPayload builds the payload for the admin
+// getMemoryEvalOptions endpoint from CLI flags.
+func BuildGetMemoryEvalOptionsPayload(adminGetMemoryEvalOptionsAdminSessionToken string) (*admin.GetMemoryEvalOptionsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetMemoryEvalOptionsAdminSessionToken != "" {
+			adminSessionToken = &adminGetMemoryEvalOptionsAdminSessionToken
+		}
+	}
+	v := &admin.GetMemoryEvalOptionsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListMemoryEvalRunsPayload builds the payload for the admin
+// listMemoryEvalRuns endpoint from CLI flags.
+func BuildListMemoryEvalRunsPayload(adminListMemoryEvalRunsCursor string, adminListMemoryEvalRunsLimit string, adminListMemoryEvalRunsAdminSessionToken string) (*admin.ListMemoryEvalRunsPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if adminListMemoryEvalRunsCursor != "" {
+			cursor = &adminListMemoryEvalRunsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if adminListMemoryEvalRunsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListMemoryEvalRunsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListMemoryEvalRunsAdminSessionToken != "" {
+			adminSessionToken = &adminListMemoryEvalRunsAdminSessionToken
+		}
+	}
+	v := &admin.ListMemoryEvalRunsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMemoryEvalRunPayload builds the payload for the admin
+// getMemoryEvalRun endpoint from CLI flags.
+func BuildGetMemoryEvalRunPayload(adminGetMemoryEvalRunID string, adminGetMemoryEvalRunAdminSessionToken string) (*admin.GetMemoryEvalRunPayload, error) {
+	var err error
+	var id string
+	{
+		id = adminGetMemoryEvalRunID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMemoryEvalRunAdminSessionToken != "" {
+			adminSessionToken = &adminGetMemoryEvalRunAdminSessionToken
+		}
+	}
+	v := &admin.GetMemoryEvalRunPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildStartMemoryEvalRunPayload builds the payload for the admin
+// startMemoryEvalRun endpoint from CLI flags.
+func BuildStartMemoryEvalRunPayload(adminStartMemoryEvalRunBody string, adminStartMemoryEvalRunAdminSessionToken string) (*admin.StartMemoryEvalRunPayload, error) {
+	var err error
+	var body StartMemoryEvalRunRequestBody
+	{
+		err = json.Unmarshal([]byte(adminStartMemoryEvalRunBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"config\": {\n         \"answer_models\": [\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"digest_model\": \"abc123\",\n         \"judge_model\": \"abc123\",\n         \"runs\": 2,\n         \"summary_model\": \"abc123\"\n      }\n   }'")
+		}
+		if body.Config == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("config", "body"))
+		}
+		if body.Config != nil {
+			if err2 := ValidateAdminMemoryEvalRunConfigRequestBody(body.Config); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminStartMemoryEvalRunAdminSessionToken != "" {
+			adminSessionToken = &adminStartMemoryEvalRunAdminSessionToken
+		}
+	}
+	v := &admin.StartMemoryEvalRunPayload{}
+	if body.Config != nil {
+		v.Config = marshalAdminMemoryEvalRunConfigRequestBodyToAdminAdminMemoryEvalRunConfig(body.Config)
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOrganizationAssistantsPayload builds the payload for the admin
+// listOrganizationAssistants endpoint from CLI flags.
+func BuildListOrganizationAssistantsPayload(adminListOrganizationAssistantsOrganizationID string, adminListOrganizationAssistantsAdminSessionToken string) (*admin.ListOrganizationAssistantsPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationAssistantsOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationAssistantsAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationAssistantsAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationAssistantsPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildMigrateOrganizationAssistantIdentitiesPayload builds the payload for
+// the admin migrateOrganizationAssistantIdentities endpoint from CLI flags.
+func BuildMigrateOrganizationAssistantIdentitiesPayload(adminMigrateOrganizationAssistantIdentitiesBody string, adminMigrateOrganizationAssistantIdentitiesAdminSessionToken string) (*admin.MigrateOrganizationAssistantIdentitiesPayload, error) {
+	var err error
+	var body MigrateOrganizationAssistantIdentitiesRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMigrateOrganizationAssistantIdentitiesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMigrateOrganizationAssistantIdentitiesAdminSessionToken != "" {
+			adminSessionToken = &adminMigrateOrganizationAssistantIdentitiesAdminSessionToken
+		}
+	}
+	v := &admin.MigrateOrganizationAssistantIdentitiesPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildMigrateOrganizationAssistantsToKitPayload builds the payload for the
+// admin migrateOrganizationAssistantsToKit endpoint from CLI flags.
+func BuildMigrateOrganizationAssistantsToKitPayload(adminMigrateOrganizationAssistantsToKitBody string, adminMigrateOrganizationAssistantsToKitAdminSessionToken string) (*admin.MigrateOrganizationAssistantsToKitPayload, error) {
+	var err error
+	var body MigrateOrganizationAssistantsToKitRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMigrateOrganizationAssistantsToKitBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		for _, e := range body.AssistantIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMigrateOrganizationAssistantsToKitAdminSessionToken != "" {
+			adminSessionToken = &adminMigrateOrganizationAssistantsToKitAdminSessionToken
+		}
+	}
+	v := &admin.MigrateOrganizationAssistantsToKitPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	if body.AssistantIds != nil {
+		v.AssistantIds = make([]string, len(body.AssistantIds))
+		for i, val := range body.AssistantIds {
+			v.AssistantIds[i] = val
+		}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

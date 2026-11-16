@@ -218,47 +218,11 @@ func (s *Service) project(ctx context.Context) (uuid.UUID, string, error) {
 		return uuid.Nil, "", fmt.Errorf("authorize mcp approval access: %w", err)
 	}
 
-	if err := s.requireFeature(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return uuid.Nil, "", err
-	}
-
 	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
 }
 
-// requireFeature enforces the rollout gate every entry point shares. The
-// PostHog flag is targeted by organization group (org slug), the same
-// evaluation the dashboard performs, and it fails closed: an unresolvable
-// slug or a flag-service error keeps the surface dark rather than open.
-func (s *Service) requireFeature(ctx context.Context, organizationID string) error {
-	var groups map[string]string
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		// Group targeting degrades to distinct-id-only evaluation; a flag
-		// released purely by org group reads as off for this org until the
-		// metadata lookup recovers.
-		s.logger.WarnContext(ctx, "resolve organization slug for mcp approval flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
-	}
-
-	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPApproval, organizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "mcp approval flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
-	}
-	if !enabled {
-		return oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
-	}
-
-	return nil
-}
-
-// requireResearchEnabled enforces the research-specific gates on top of the
-// approval rollout: the kill switch first — affirmatively on stops research
-// everywhere without touching any rollout targeting — then the research
-// rollout flag, org-group targeted and failing closed like the approval
-// flag. Research spends against the org's chat key on the open web, so it
-// rolls out to a narrower set than the approval workflow it belongs to.
+// requireResearchEnabled enforces the research kill switch: affirmatively on
+// stops research everywhere.
 func (s *Service) requireResearchEnabled(ctx context.Context, organizationID string) error {
 	var groups map[string]string
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
@@ -268,10 +232,8 @@ func (s *Service) requireResearchEnabled(ctx context.Context, organizationID str
 		groups = feature.OrgProjectGroups(org.Slug, "")
 	}
 
-	// The kill switch fails closed like the rollout flag: a run must not be
-	// bought while the state of its stop control is unknown — the rollout
-	// flag failing closed alongside only covers both evaluations failing
-	// together, not a partial failure.
+	// The kill switch fails closed: a run must not be bought while the state
+	// of its stop control is unknown.
 	killed, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPResearchKill, organizationID, groups)
 	if err != nil {
 		s.logger.WarnContext(ctx, "mcp research kill-switch check failed; refusing to start", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
@@ -279,15 +241,6 @@ func (s *Service) requireResearchEnabled(ctx context.Context, organizationID str
 	}
 	if killed {
 		return oops.E(oops.CodeForbidden, nil, "MCP research is temporarily disabled")
-	}
-
-	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPResearch, organizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "mcp research flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return oops.E(oops.CodeForbidden, nil, "MCP research is not enabled for this organization")
-	}
-	if !enabled {
-		return oops.E(oops.CodeForbidden, nil, "MCP research is not enabled for this organization")
 	}
 
 	return nil
@@ -298,15 +251,11 @@ func (s *Service) requireResearchEnabled(ctx context.Context, organizationID str
 // cannot reach the dashboard, and a scope for it would either be ungranted
 // for everyone who needs it or granted so universally it means nothing — the
 // same posture as the block and bypass surfaces. Authentication and project
-// membership still apply, and the rollout gate holds either way.
+// membership still apply.
 func (s *Service) member(ctx context.Context) (uuid.UUID, *contextvalues.AuthContext, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil || authCtx.UserID == "" {
 		return uuid.Nil, nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.requireFeature(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return uuid.Nil, nil, err
 	}
 
 	return *authCtx.ProjectID, authCtx, nil
@@ -446,14 +395,8 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 // block path and the API share one admission, and approval stays the only
 // flow a shadow-MCP ask can land in.
 //
-// The caller has already bound the redemption to the requester; the rollout
-// gate still applies, and its forbidden error is the documented signal to
-// fall back to the legacy bypass request.
+// The caller has already bound the redemption to the requester.
 func (s *Service) AdmitBlockedServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, requesterEmail, note string) (string, string, error) {
-	if err := s.requireFeature(ctx, organizationID); err != nil {
-		return "", "", err
-	}
-
 	key, display, err := admittableServerURL(serverURL)
 	if err != nil {
 		return "", "", err
@@ -646,18 +589,15 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 
 // CreatePlatformRequest admits a request from a trusted Platform MCP runtime.
 // The runtime resolves the exact project under the authenticated organization;
-// this method preserves the approval rollout gate, validation, redaction,
-// requester attribution, evidence gathering, audit, and transactional write used
-// by the HTTP API without pretending Platform MCP has a selected-project session.
+// this method preserves the validation, redaction, requester attribution,
+// evidence gathering, audit, and transactional write used by the HTTP API
+// without pretending Platform MCP has a selected-project session.
 func (s *Service) CreatePlatformRequest(ctx context.Context, organizationID string, projectID uuid.UUID, userID, targetKind, target, note string) (*gen.ApprovalRequestSummary, error) {
 	if s == nil || s.db == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "MCP review requests are temporarily unavailable")
 	}
 	if strings.TrimSpace(organizationID) == "" || projectID == uuid.Nil || strings.TrimSpace(userID) == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.requireFeature(ctx, organizationID); err != nil {
-		return nil, err
 	}
 	return s.createRequest(ctx, projectID, organizationID, userID, nil, targetKind, target, note)
 }
@@ -917,8 +857,6 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		return nil, err
 	}
 
-	// project already enforced the approval rollout; this adds research's
-	// own gates on top.
 	if err := s.requireResearchEnabled(ctx, orgID); err != nil {
 		return nil, err
 	}

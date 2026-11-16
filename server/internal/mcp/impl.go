@@ -359,6 +359,9 @@ type oauthTokenInputs struct {
 	// the matching tool's *_ACCESS_TOKEN env var, which the gateway forwards
 	// as the Authorization header on the outgoing upstream request.
 	Token string
+
+	// shared marks a credential the server holds for the organization, not the caller.
+	shared bool
 }
 
 // appendRemoteSessionTokenInputs converts a remote_session_issuer_id -> token
@@ -391,6 +394,7 @@ func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID
 			securityKeys:          nil,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			Token:                 entry.Token,
+			shared:                entry.CredentialOwner == remotesessions.CredentialOwnerSelf,
 		})
 	}
 	return dst, nil
@@ -491,6 +495,9 @@ type mcpInputs struct {
 	// a method has needed it. Nil until then; the flag is never evaluated
 	// more than once per request.
 	skillsOverMCP *bool
+
+	// upstreamRejection is set by tools/call when an HTTP tool's provider refused the credential sent.
+	upstreamRejection mcpconnectionattempts.Code
 }
 
 // recordServingAnalytics adds the known serving ids to product event properties.
@@ -1535,6 +1542,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					securityKeys:          []string{},
 					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					Token:                 authToken,
+					shared:                false,
 				})
 			}
 		case !cfg.isPublic:
@@ -1658,6 +1666,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 
 	// Call handlers resolve attribution after loading their toolset. Other
@@ -2212,7 +2221,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
 		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-		s.recordHostedToolsCallRefusal(ctx, payload, err)
+		s.recordHostedToolsCallOutcome(ctx, payload, err)
 		return body, err
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)

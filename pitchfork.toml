@@ -15,6 +15,7 @@ daemons = [
   "admin",
   "admin-dashboard",
   "mock-oidc",
+  "mock-mcp",
   "server",
   "worker",
   "streams",
@@ -33,6 +34,7 @@ daemons = [
   "admin",
   "admin-dashboard",
   "mock-oidc",
+  "mock-mcp",
   "server",
   "worker",
   "streams",
@@ -93,6 +95,11 @@ depends = ["admin"]
 
 [daemons.mock-oidc]
 run = "mise run start:mock-oidc"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+# Offline upstream for the local seed's "Acme Tasks (local mock)" remote server.
+[daemons.mock-mcp]
+run = "mise run start:mock-mcp"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
 [daemons.server]

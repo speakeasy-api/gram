@@ -392,11 +392,15 @@ func (u *upstreamSelector) resolveAuthClient(ctx context.Context, serverID uuid.
 }
 
 func (u *upstreamSelector) resolveAuthClients(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID]authClientResolution, error) {
+	enforced, err := u.service.authEnforcement.Enforced(ctx, u.organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	rows, err := upstreamclientsrepo.New(u.service.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
 		Proposed:          false, ProposedNoAuth: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CredentialKind: u.credentialKindOrDefault(), CredentialID: u.credentialID,
-		McpServerIds: serverIDs, OrganizationID: u.organizationID,
+		McpServerIds: serverIDs, OrganizationID: u.organizationID, TypedOnly: enforced,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load auth client choices: %w", err)
@@ -452,9 +456,13 @@ func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organiz
 }
 
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
-		Proposed:          true, ProposedNoAuth: false, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
+		Proposed:          true, ProposedNoAuth: false, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: enforced,
 	})
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve proposed auth client: %w", err)
@@ -478,10 +486,14 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 // is decided, so the server's own credential headers still make it a setup
 // gap. The query must not infer a client whose headers the choice will not send.
 func (s *Service) resolveNoAuthChoice(ctx context.Context, organizationID string, serverID uuid.UUID) (authClientResolution, error) {
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
-		Proposed:          true, ProposedNoAuth: true, ProposedRegistrationID: none, ProposedAuthClientID: none, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
+		Proposed:          true, ProposedNoAuth: true, ProposedRegistrationID: none, ProposedAuthClientID: none, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: enforced,
 	})
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve no-auth choice: %w", err)

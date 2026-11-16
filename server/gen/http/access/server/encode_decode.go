@@ -10281,16 +10281,17 @@ func marshalAccessDirectoryReviewItemToDirectoryReviewItemResponseBody(v *access
 // *access.ScopeDefinition.
 func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDefinition) *ScopeDefinitionResponseBody {
 	res := &ScopeDefinitionResponseBody{
-		Slug:           v.Slug,
-		Label:          v.Label,
-		Description:    v.Description,
-		ResourceType:   v.ResourceType,
-		Category:       v.Category,
-		Sensitive:      v.Sensitive,
-		Sensitivity:    v.Sensitivity,
-		Visibility:     v.Visibility,
-		AgentEligible:  v.AgentEligible,
-		ExclusionScope: v.ExclusionScope,
+		Slug:               v.Slug,
+		Label:              v.Label,
+		Description:        v.Description,
+		ResourceType:       v.ResourceType,
+		Category:           v.Category,
+		Sensitive:          v.Sensitive,
+		Sensitivity:        v.Sensitivity,
+		Visibility:         v.Visibility,
+		AgentEligible:      v.AgentEligible,
+		TemporaryGrantable: v.TemporaryGrantable,
+		ExclusionScope:     v.ExclusionScope,
 	}
 	if v.SubScopes != nil {
 		res.SubScopes = make([]string, len(v.SubScopes))
@@ -10901,6 +10902,25 @@ func marshalAccessAuthzChallengeToAuthzChallengeResponseBody(v *access.AuthzChal
 	} else {
 		res.RoleSlugs = []string{}
 	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = marshalAccessChallengeTemporaryGrantToChallengeTemporaryGrantResponseBody(v.ResolutionTemporaryGrant)
+	}
+
+	return res
+}
+
+// marshalAccessChallengeTemporaryGrantToChallengeTemporaryGrantResponseBody
+// builds a value of type *ChallengeTemporaryGrantResponseBody from a value of
+// type *access.ChallengeTemporaryGrant.
+func marshalAccessChallengeTemporaryGrantToChallengeTemporaryGrantResponseBody(v *access.ChallengeTemporaryGrant) *ChallengeTemporaryGrantResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ChallengeTemporaryGrantResponseBody{
+		ID:        v.ID,
+		Status:    v.Status,
+		ExpiresAt: v.ExpiresAt,
+	}
 
 	return res
 }
@@ -10948,6 +10968,9 @@ func marshalAccessChallengeBucketToChallengeBucketResponseBody(v *access.Challen
 		}
 	} else {
 		res.ChallengeIds = []string{}
+	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = marshalAccessChallengeTemporaryGrantToChallengeTemporaryGrantResponseBody(v.ResolutionTemporaryGrant)
 	}
 
 	return res

@@ -187,7 +187,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if err != nil {
 		return nil, err
 	}
-	policyAudit, err := policyAuditPayload(policy)
+	policyAudit, err := PolicyAuditPayload(policy)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error preparing api key audit").LogError(ctx, s.logger)
 	}
@@ -378,7 +378,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading api key policy").LogError(ctx, s.logger)
 	}
-	revokedPolicyAudit, err := policyAuditPayload(grantsToRoleGrants(revokedPolicy))
+	revokedPolicyAudit, err := PolicyAuditPayload(grantsToRoleGrants(revokedPolicy))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error preparing api key audit").LogError(ctx, s.logger)
 	}

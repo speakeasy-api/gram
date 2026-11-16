@@ -4,7 +4,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 )
@@ -80,6 +82,16 @@ func NewWithBytes(key []byte) (*Client, error) {
 		return nil, fmt.Errorf("invalid AES-256 key size: %d bytes", len(key))
 	}
 	return &Client{key: key}, nil
+}
+
+// fingerprintHexChars is how much of the key's SHA-256 a fingerprint shows:
+// enough to tell keys apart across pods, far too little to recover anything.
+const fingerprintHexChars = 8
+
+// Fingerprint names the key without revealing it, so logs can show which key a pod holds.
+func (e *Client) Fingerprint() string {
+	sum := sha256.Sum256(e.key)
+	return hex.EncodeToString(sum[:])[:fingerprintHexChars]
 }
 
 // Encrypt encrypts the plaintext using AES-GCM and returns a base64 encoded string

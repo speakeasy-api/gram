@@ -11,7 +11,9 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -69,6 +71,14 @@ type LocalFixturesOptions struct {
 	ObservedEnv map[string]string
 	// Slack connects the org to the developer's Slack test app, when set.
 	Slack LocalSlackOptions
+	// Upstreams wires the servers that need the developer's machine: the
+	// Linear and Notion clients.
+	Upstreams LocalUpstreamOptions
+	// ClickHouse receives the local-only servers' telemetry; nil skips it.
+	ClickHouse driver.Conn
+	// MockMCPURL is the local mock MCP server (server/cmd/mock-mcp) to
+	// register as a working remote MCP server; empty leaves it out.
+	MockMCPURL string
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -85,7 +95,10 @@ type LocalFixturesOptions struct {
 //     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper;
-//   - a global catalog logo entry and public platform asset when SiteURL is set.
+//   - a global catalog logo entry and public platform asset when SiteURL is set;
+//   - the upstreams that need the developer's machine (fixture_servers.go):
+//     the Linear and Notion clients registered with those vendors;
+//   - the Inspect tab's local-only remote servers (runLocalInspectFixtures).
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
 // registry entries, platform assets, and system roles are global.
@@ -168,6 +181,12 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
 		}},
+		{"grant local Channels administration", func() error {
+			if _, err := tx.Exec(ctx, localChannelsAccessSQL, spec.OrgID, dev.ID, spec.ProjectID()); err != nil {
+				return fmt.Errorf("grant local Channels access: %w", err)
+			}
+			return nil
+		}},
 		{"grant tool log visibility", func() error {
 			return q.LocalGrantToolLogVisibility(ctx, repo.LocalGrantToolLogVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
 		}},
@@ -229,14 +248,32 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"mcp app toolset entry", func() error {
 			return q.LocalAttachMCPAppToToolset(ctx, repo.LocalAttachMCPAppToToolsetParams{OrganizationID: spec.OrgID, ToolUrn: mcpAppToolURN(), ResourceUrn: mcpAppResourceURN(), ToolsetSlug: MCPAppToolsetSlug})
 		}},
+		{"local upstreams", func() error {
+			return wireLocalUpstreams(ctx, logger, tx, opts.Upstreams)
+		}},
 	} {
 		if err := step.run(); err != nil {
 			return fmt.Errorf("local fixture %q: %w", step.name, err)
 		}
 	}
 
+	inspect, err := runLocalInspectFixtures(ctx, logger, q, time.Now(), opts.MockMCPURL)
+	if err != nil {
+		return fmt.Errorf("local fixture %q: %w", "inspect tab servers", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit local fixtures: %w", err)
+	}
+
+	if opts.ClickHouse != nil && opts.MockMCPURL != "" {
+		// Under the seed lock, so a concurrent seed cannot purge or insert the
+		// same rows between the existence check and the insert.
+		if err := withSeedLock(ctx, logger, db, func(*pgxpool.Conn) error {
+			return insertLocalInspectTelemetry(ctx, inspect, opts.ClickHouse)
+		}); err != nil {
+			return fmt.Errorf("local fixture %q: %w", "inspect tab telemetry", err)
+		}
 	}
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
@@ -355,6 +392,21 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
 	}
 }
+
+// Existing system-role grant sets are intentionally not backfilled. Give the
+// local developer explicit Channels scopes without changing other tenants.
+const localChannelsAccessSQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT $1, 'user:' || $2::text, requested.scope,
+       jsonb_build_object('resource_kind', 'project', 'resource_id', $3::text)
+FROM unnest(ARRAY['channels:connect', 'channels:admin', 'channels:read_all']) AS requested(scope)
+WHERE NOT EXISTS (
+  SELECT 1 FROM principal_grants g
+  WHERE g.organization_id = $1 AND g.principal_urn = 'user:' || $2::text
+    AND g.scope = requested.scope
+    AND g.selectors = jsonb_build_object('resource_kind', 'project', 'resource_id', $3::text)
+)
+`
 
 func emailDomain(email string) string {
 	at := strings.LastIndexByte(email, '@')

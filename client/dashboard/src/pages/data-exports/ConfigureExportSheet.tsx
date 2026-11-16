@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Select,
   SelectContent,
@@ -25,6 +26,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { isValidDataExportEndpointURL } from "@/lib/data-export-validation";
+import { isKnownEnumValue, UNSUPPORTED_ENUM_VALUE_MESSAGE } from "@/lib/enum";
 import {
   blankWriteOnlyHeader,
   hasValidWriteOnlyHeaders,
@@ -34,6 +36,7 @@ import { useForm } from "@tanstack/react-form";
 import {
   DataSource,
   type DataSource as DataSourceValue,
+  MinSeverity,
 } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
 import type { Destination } from "@gram/client/models/components/destination.js";
@@ -60,11 +63,50 @@ export type ConfigureExportValues = {
   dataSource: DataSourceValue;
   destinationId: string;
   enabled: boolean;
+  minSeverity: MinSeverity;
   destinationName: string;
   endpointUrl: string;
   includeSensitiveData: boolean;
   headers: EditableWriteOnlyHeader[];
 };
+
+const MIN_SEVERITY_OPTIONS: Array<{
+  value: MinSeverity;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: MinSeverity.Error,
+    label: "Errors only (recommended)",
+    description: "Failed connections, such as a server that did not respond.",
+  },
+  {
+    value: MinSeverity.Warn,
+    label: "Warnings and errors",
+    description:
+      "Also blocked connections, such as someone without access to a server.",
+  },
+  {
+    value: MinSeverity.Info,
+    label: "Info, warnings and errors",
+    description: "Also declined connections, such as a canceled sign-in.",
+  },
+];
+
+function initialMinSeverity(route: DataExportRoute | undefined): MinSeverity {
+  if (route?.minSeverity && isKnownEnumValue(MinSeverity, route.minSeverity)) {
+    return route.minSeverity;
+  }
+  return MinSeverity.Error;
+}
+
+// A level this dashboard does not know must not be saved over with a default.
+function hasUnknownMinSeverity(route: DataExportRoute | undefined): boolean {
+  return (
+    route?.minSeverity !== undefined &&
+    !isKnownEnumValue(MinSeverity, route.minSeverity)
+  );
+}
 
 function initialDestinationID(
   route: DataExportRoute | undefined,
@@ -137,6 +179,7 @@ export function ConfigureExportSheet({
   const projectControlId = useId();
   const sourceControlId = useId();
   const destinationControlId = useId();
+  const minSeverityControlId = useId();
   const projectOptions = useMemo<ProjectOption[]>(
     () =>
       projects.map((candidate) => ({
@@ -174,6 +217,7 @@ export function ConfigureExportSheet({
     [destinations],
   );
   const initialDestinationId = initialDestinationID(route, destinations);
+  const unknownMinSeverity = hasUnknownMinSeverity(route);
   const initialDataSource =
     route?.dataSource ?? dataSources[0]?.value ?? DataSource.ProductTelemetry;
   const form = useForm({
@@ -182,6 +226,7 @@ export function ConfigureExportSheet({
       dataSource: initialDataSource as DataSourceValue,
       destinationId: initialDestinationId,
       enabled: (route?.enabled ?? true) as boolean,
+      minSeverity: initialMinSeverity(route),
       destinationName: "",
       endpointUrl: "",
       includeSensitiveData: false as boolean,
@@ -271,6 +316,66 @@ export function ConfigureExportSheet({
                 );
               }}
             </form.Field>
+
+            <form.Subscribe
+              selector={(state) =>
+                state.values.dataSource === DataSource.McpConnectionLogs
+              }
+            >
+              {(connectionLogs) => {
+                if (!connectionLogs) return null;
+                return (
+                  <form.Field name="minSeverity">
+                    {(field) => (
+                      <div className="space-y-3 border-t py-5">
+                        {unknownMinSeverity ? (
+                          <Alert variant="warning">
+                            {UNSUPPORTED_ENUM_VALUE_MESSAGE}
+                          </Alert>
+                        ) : null}
+                        <Label id={minSeverityControlId}>
+                          Lowest level to send
+                        </Label>
+                        <RadioGroup
+                          aria-labelledby={minSeverityControlId}
+                          value={unknownMinSeverity ? "" : field.state.value}
+                          disabled={unknownMinSeverity}
+                          onValueChange={(value) =>
+                            field.handleChange(value as MinSeverity)
+                          }
+                          className="gap-3"
+                        >
+                          {MIN_SEVERITY_OPTIONS.map((option) => {
+                            const optionId = `${minSeverityControlId}-${option.value}`;
+                            return (
+                              <label
+                                key={option.value}
+                                htmlFor={optionId}
+                                className="flex cursor-pointer items-start gap-3"
+                              >
+                                <RadioGroupItem
+                                  id={optionId}
+                                  value={option.value}
+                                  className="mt-0.5"
+                                />
+                                <div className="min-w-0 space-y-0.5">
+                                  <Text className="text-sm">
+                                    {option.label}
+                                  </Text>
+                                  <Text muted className="text-sm">
+                                    {option.description}
+                                  </Text>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </RadioGroup>
+                      </div>
+                    )}
+                  </form.Field>
+                );
+              }}
+            </form.Subscribe>
 
             <form.Field name="destinationId">
               {(field) => {
@@ -484,8 +589,15 @@ export function ConfigureExportSheet({
                 values,
                 destinations,
               );
+              const levelBlocked =
+                unknownMinSeverity &&
+                values.dataSource === DataSource.McpConnectionLogs;
               const disabled =
-                loading || saving || isSubmitting || !destinationValid;
+                loading ||
+                saving ||
+                isSubmitting ||
+                !destinationValid ||
+                levelBlocked;
               return (
                 <SheetFooter className="min-h-14 flex-row items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3">
                   <Button
