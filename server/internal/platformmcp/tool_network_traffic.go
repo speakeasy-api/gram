@@ -79,7 +79,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 	}
 
 	kind := telemetryrepo.MCPNetworkTrafficServerKindMCP
-	resourceID := targetID.String()
+	resourceID := targetID
 	if input.TargetKind == "mcp" {
 		server, err := mcpserversrepo.New(r.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: targetID, ProjectID: project.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -89,7 +89,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 			return MCPNetworkTrafficOutput{}, fmt.Errorf("load MCP server: %w", err)
 		}
 		if server.ToolsetID.Valid {
-			resourceID = server.ToolsetID.UUID.String()
+			resourceID = server.ToolsetID.UUID
 		}
 	} else {
 		kind = telemetryrepo.MCPNetworkTrafficServerKindMeta
@@ -101,7 +101,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 			return MCPNetworkTrafficOutput{}, fmt.Errorf("load gateway: %w", err)
 		}
 	}
-	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDOf(project.ID)).Read()); err != nil {
+	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(project.ID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return MCPNetworkTrafficOutput{}, ErrMCPConnectionSettingsNotFound
 		}

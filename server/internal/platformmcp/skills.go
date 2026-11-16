@@ -1065,7 +1065,7 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 	}
 	skillID := strings.TrimSpace(input.SkillID)
 	if skillID != "" {
-		if _, err := uuid.Parse(skillID); err != nil {
+		if parsed, err := uuid.Parse(skillID); err != nil || parsed == uuid.Nil {
 			return ListSkillDistributionsOutput{}, ErrRegistrationInvalid
 		}
 	}

@@ -156,11 +156,11 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
-	if err != nil {
+	if err != nil || projectID == uuid.Nil {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	targetID, err := uuid.Parse(input.TargetID)
-	if err != nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
+	if err != nil || targetID == uuid.Nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	grants, ok := authz.GrantsFromContext(ctx)
