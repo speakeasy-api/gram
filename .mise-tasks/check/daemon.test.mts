@@ -12,6 +12,12 @@ const daemons = [
   ["dev-idp", "GRAM_DEVIDP_CONTROL_ADDRESS", "GRAM_DEVIDP_CONTROL_PORT"],
   ["mock-oidc", "MOCK_OIDC_ADDRESS", "GRAM_ADMIN_OIDC_EMULATOR_PORT"],
   ["mock-mcp", "GRAM_MOCK_MCP_ADDRESS", "GRAM_MOCK_MCP_PORT"],
+  [
+    "tailnet-gateway",
+    "GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS",
+    "GRAM_TAILNET_GATEWAY_CONTROL_PORT",
+    "/readyz",
+  ],
 ] as const;
 
 const addresses = [
@@ -25,7 +31,7 @@ const addresses = [
   ["[::1]:23456", "[::1]:23456"],
 ] as const;
 
-for (const [name, addressVar, portVar] of daemons) {
+for (const [name, addressVar, portVar, path = "/healthz"] of daemons) {
   for (const [address, expected] of addresses) {
     test(`${name} probes ${String(address)} as ${expected}`, () => {
       const env = {
@@ -48,7 +54,7 @@ for (const [name, addressVar, portVar] of daemons) {
         { env, encoding: "utf8" },
       );
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, `http://${expected}/healthz`);
+      assert.equal(result.stdout, `http://${expected}${path}`);
     });
   }
 }

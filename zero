@@ -198,6 +198,9 @@ mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
 
+echo -e "\n⏳ Configuring local organization encryption"
+mise run zero:org-encryption
+
 echo -e "\n✅ All set up!"
 
 # Use local:start if configured. Otherwise, paused stacks need wake, not start.

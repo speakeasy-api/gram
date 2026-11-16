@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -39,6 +40,11 @@ import (
 )
 
 const ProviderTailscale = "tailscale"
+
+// RuntimeGateway is the network_ingresses.runtime value for an ingress hosted
+// by the tsnet tailnet gateway. Any other value, including NULL, means the
+// Tailscale Kubernetes operator hosts it.
+const RuntimeGateway = "gateway"
 
 var hostnamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
@@ -54,6 +60,10 @@ type Service struct {
 	requester            ReconcileRequester
 	publicationRequester PublicationRequester
 	health               HealthRefresher
+
+	// features chooses the runtime of a new ingress
+	// (feature.FlagPrivateNetworkGateway); nil means the operator.
+	features feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -79,7 +89,33 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		requester:            requester,
 		publicationRequester: publicationRequester,
 		health:               health,
+		features:             nil,
 	}
+}
+
+// WithFeatures lets the private-network-gateway flag choose the runtime of
+// new ingresses. Without it every new ingress uses the operator.
+func (s *Service) WithFeatures(features feature.Provider) *Service {
+	s.features = features
+	return s
+}
+
+// newIngressRuntime is the runtime a new ingress is created with: the tailnet
+// gateway when the organization has the private-network-gateway flag, the
+// operator (NULL) otherwise. It fails closed to the operator, the path every
+// existing ingress already runs on, when the flag is unset or unavailable.
+func (s *Service) newIngressRuntime(ctx context.Context, authCtx *contextvalues.AuthContext) pgtype.Text {
+	if s.features == nil {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagPrivateNetworkGateway, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate private network gateway flag; using the operator", attr.SlogError(err))
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return conv.ToPGText(RuntimeGateway)
 }
 
 func Attach(mux goahttp.Muxer, service *Service, enabled bool) {
@@ -186,7 +222,10 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if payload.Provider != ProviderTailscale {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported network ingress provider")
 	}
-	if err := validateHostname(payload.Hostname); err != nil {
+	// Decided before the transaction: the flag can need a network call.
+	runtime := s.newIngressRuntime(ctx, authCtx)
+	hostname := conv.PtrValOr(payload.Hostname, DefaultHostname)
+	if err := validateHostname(hostname); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
 	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
@@ -238,9 +277,11 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 
 	ingress, err := queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: payload.Provider,
-		Hostname: payload.Hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
+		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
 		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
+		// Chosen once, here; flipping the flag later never moves an ingress.
+		Runtime: runtime,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
