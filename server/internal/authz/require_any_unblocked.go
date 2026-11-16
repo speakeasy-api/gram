@@ -42,6 +42,8 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		return e.mapError(ctx, err)
 	}
 	if blocked != nil {
+		// Every other path ends in RequireAny, which reports this itself.
+		e.reportOtherOrganization(ctx, checks)
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,
 			Outcome:              authzrepo.OutcomeDeny,
