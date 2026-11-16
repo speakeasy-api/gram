@@ -4,7 +4,8 @@ import { useListMCPRegistries } from "@gram/client/react-query/listMCPRegistries
 import { useMcpRegistriesClearCacheMutation } from "@gram/client/react-query/mcpRegistriesClearCache";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { Loader2 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -36,11 +37,13 @@ export function RegistryCacheSection(): JSX.Element {
       </Text>
 
       {isLoading && (
-        <div className="text-muted-foreground flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <Text muted small>
-            Loading registries…
-          </Text>
+        <div
+          role="status"
+          aria-label="Loading registries"
+          className="space-y-3"
+        >
+          <Skeleton className="h-[62px] w-full" />
+          <Skeleton className="h-[62px] w-full" />
         </div>
       )}
 
@@ -80,7 +83,7 @@ export function RegistryCacheSection(): JSX.Element {
                 >
                   {isClearing && (
                     <Button.LeftIcon>
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Spinner className="mr-0 h-3 w-3" />
                     </Button.LeftIcon>
                   )}
                   <Button.Text>Clear Cache</Button.Text>

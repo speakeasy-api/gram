@@ -129,7 +129,7 @@ func TestTransferManager_RoundTrip(t *testing.T) {
 	manager := NewTransferManager(memCache)
 	session := testTransferSession()
 
-	code, err := manager.Create(ctx, session, testNonce, testSourceHost, testTargetHost)
+	code, err := manager.Create(ctx, session, time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(code), 43, "code must carry at least 32 bytes of entropy")
 
@@ -139,6 +139,7 @@ func TestTransferManager_RoundTrip(t *testing.T) {
 		UserID:               session.UserID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		WorkOSSessionID:      session.WorkOSSessionID,
+		SourceIssuedAt:       0,
 		SourceHost:           testSourceHost,
 		TargetHost:           testTargetHost,
 		NonceHash:            sha256Hex(testNonce),
@@ -155,7 +156,7 @@ func TestTransferManager_StoresNoSessionIDOrCode(t *testing.T) {
 	manager := NewTransferManager(memCache)
 	session := testTransferSession()
 
-	code, err := manager.Create(ctx, session, testNonce, testSourceHost, testTargetHost)
+	code, err := manager.Create(ctx, session, time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 
 	require.Len(t, memCache.items, 1)
@@ -173,7 +174,7 @@ func TestTransferManager_SecondConsumeFails(t *testing.T) {
 	ctx := t.Context()
 	manager := NewTransferManager(newTestMemoryCache())
 
-	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	code, err := manager.Create(ctx, testTransferSession(), time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 
 	require.NoError(t, manager.Consume(ctx, code))
@@ -201,7 +202,7 @@ func TestTransferManager_ExpiredCodeFails(t *testing.T) {
 	memCache := newTestMemoryCache()
 	manager := NewTransferManager(memCache)
 
-	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	code, err := manager.Create(ctx, testTransferSession(), time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 
 	// Simulate the cache TTL expiring the record.
@@ -217,7 +218,7 @@ func TestTransferManager_WrongTargetHostDoesNotConsume(t *testing.T) {
 	ctx := t.Context()
 	manager := NewTransferManager(newTestMemoryCache())
 
-	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	code, err := manager.Create(ctx, testTransferSession(), time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 
 	_, err = manager.Lookup(ctx, code, "wrong.example.com")
@@ -235,9 +236,9 @@ func TestTransferManager_CodesAreUnique(t *testing.T) {
 	ctx := t.Context()
 	manager := NewTransferManager(newTestMemoryCache())
 
-	first, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	first, err := manager.Create(ctx, testTransferSession(), time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
-	second, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	second, err := manager.Create(ctx, testTransferSession(), time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 
 	require.NotEqual(t, first, second)
@@ -253,12 +254,12 @@ func TestTransferManager_RejectsImpersonationAndSupportSessions(t *testing.T) {
 
 	impersonation := testTransferSession()
 	impersonation.ImpersonatorEmail = "support@example.com"
-	_, err := manager.Create(ctx, impersonation, testNonce, testSourceHost, testTargetHost)
+	_, err := manager.Create(ctx, impersonation, time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.ErrorIs(t, err, ErrSessionNotTransferable)
 
 	support := testTransferSession()
 	support.SupportOrganizationID = "support-org-id"
-	_, err = manager.Create(ctx, support, testNonce, testSourceHost, testTargetHost)
+	_, err = manager.Create(ctx, support, time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.ErrorIs(t, err, ErrSessionNotTransferable)
 
 	require.Empty(t, memCache.items)
@@ -270,7 +271,7 @@ func TestTransferRecord_BoundTo(t *testing.T) {
 	ctx := t.Context()
 	manager := NewTransferManager(newTestMemoryCache())
 
-	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	code, err := manager.Create(ctx, testTransferSession(), time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 	record, err := manager.Lookup(ctx, code, testTargetHost)
 	require.NoError(t, err)
@@ -284,7 +285,7 @@ func TestTransferRecord_BoundTo(t *testing.T) {
 func TestTransferManager_RequiresNonce(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewTransferManager(newTestMemoryCache()).Create(t.Context(), testTransferSession(), "", testSourceHost, testTargetHost)
+	_, err := NewTransferManager(newTestMemoryCache()).Create(t.Context(), testTransferSession(), time.Time{}, "", testSourceHost, testTargetHost)
 	require.Error(t, err)
 }
 
@@ -294,7 +295,7 @@ func TestTransferManager_CacheFailureIsNotNotFound(t *testing.T) {
 	ctx := t.Context()
 	memCache := newTestMemoryCache()
 	manager := NewTransferManager(memCache)
-	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	code, err := manager.Create(ctx, testTransferSession(), time.Time{}, testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 
 	outage := errors.New("connection refused")

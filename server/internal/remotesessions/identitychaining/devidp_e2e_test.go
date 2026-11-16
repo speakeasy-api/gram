@@ -54,6 +54,15 @@ type devIDPFixture struct {
 	db          *pgxpool.Pool
 	enc         *encryption.Client
 	idpClientID uuid.UUID
+
+	// trustedIssuerID is the remote session issuer external chaining
+	// exchanges at; resourceIssuerID is the vendor's.
+	trustedIssuerID  uuid.UUID
+	resourceIssuerID uuid.UUID
+
+	// vendorIssuer is the downstream authorization server issuer the
+	// binding names, as a provider policy keys it.
+	vendorIssuer string
 }
 
 // recordingObserver keeps every observation the chainer reports.
@@ -156,7 +165,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 		remoteIssuer = opts.remoteIssuer
 	}
 	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, remoteIssuer, resourceAS+"/token", devIDPClientID, "unused-secret")
-	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://mcp.docs.example"}
+	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: devIDPResource}
 	bindResource(t, db, req, resourceIssuer, resourceClient, devIDPResource, remotesessions.PreparationStateReady)
 
 	if opts.confirmAudience {
@@ -208,13 +217,16 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)
 	return devIDPFixture{
-		observed:    observed,
-		idp:         idp,
-		chainer:     chainer,
-		req:         req,
-		db:          db,
-		enc:         enc,
-		idpClientID: idpClient.ID,
+		observed:         observed,
+		idp:              idp,
+		chainer:          chainer,
+		req:              req,
+		db:               db,
+		enc:              enc,
+		idpClientID:      idpClient.ID,
+		trustedIssuerID:  idpIssuer.ID,
+		resourceIssuerID: resourceIssuer,
+		vendorIssuer:     remoteIssuer,
 	}
 }
 
@@ -281,7 +293,7 @@ func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
 	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
-	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false}, outcome)
+	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
 	observed := f.observed.all()
 	require.Len(t, observed, 1)
 	require.Equal(t, outcome, observed[0].Outcome)
@@ -312,9 +324,41 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 
 	requests := f.idp.Requests()
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
-	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome,
-		"a token acquired under the previous trusted registration is never released")
+	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonReauthenticationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome,
+		"a token acquired under the previous trusted registration is never released, and a new sign-in repairs it")
 	require.Equal(t, requests, f.idp.Requests())
+}
+
+func TestDevIDP_HeldDelegationClaim(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		age       time.Duration
+		reason    Reason
+		retryable bool
+		decision  RefreshDecision
+	}{
+		{name: "renewal may be running", age: 0, reason: ReasonTransientFailure, retryable: true, decision: RefreshUnconfirmed},
+		{name: "nothing is running", age: time.Hour, reason: ReasonReauthenticationRequired, retryable: false, decision: RefreshReauthenticate},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newDevIDPFixture(t, devIDPOptions{})
+			affected, err := repo.New(f.db).SetTrustedDelegationStateFixture(t.Context(), repo.SetTrustedDelegationStateFixtureParams{
+				OrganizationID: f.req.OrganizationID, ClientID: f.idpClientID,
+				RefreshClaimID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				UpdatedAt:      pgtype.Timestamptz{Time: time.Now().Add(-tc.age), Valid: true, InfinityModifier: pgtype.Finite},
+			})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, affected)
+
+			requests := f.idp.Requests()
+			_, outcome := f.chainer.Acquire(t.Context(), f.req)
+			require.Equal(t, Outcome{Stage: StageDelegation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: tc.retryable, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
+			require.Equal(t, requests, f.idp.Requests(), "a held claim contacts nobody")
+			require.Equal(t, tc.decision, NewGovernor(testenv.NewLogger(t), f.db, f.enc, f.chainer.delegation).RefreshDecision(t.Context(), f.req).Decision)
+		})
+	}
 }
 
 // Okta mints ID-JAGs only for a resource app's Issuer URL, which can differ

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -339,33 +338,34 @@ func metaDisplayOwner(t *testing.T, rows []metamcprepo.ListMetaMCPProxiedMemberR
 }
 
 // A meta render reads the member rows once and answers every card from
-// them, whichever issuer each client names.
+// them by the client each member is associated with, so two clients sharing
+// one authorization server never lend each other a member's resource.
 func TestResourceDisplayOwner_LoadsMetaMembersOnce(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	issuerA, issuerB := uuid.New(), uuid.New()
+	issuer := uuid.New()
+	clientA, clientB, sibling := uuid.New(), uuid.New(), uuid.New()
 	owner, loads := metaDisplayOwner(t, []metamcprepo.ListMetaMCPProxiedMemberResourcesRow{
-		{RemoteSessionIssuerID: conv.ToNullUUID(issuerA), UpstreamUrl: "https://a.example.test/mcp"},
-		{RemoteSessionIssuerID: conv.ToNullUUID(issuerB), UpstreamUrl: "https://b.example.test/mcp/"},
-		{RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UpstreamUrl: "https://orphan.example.test/mcp"},
+		{RemoteSessionClientID: clientA, UpstreamUrl: "https://a.example.test/mcp"},
+		{RemoteSessionClientID: clientB, UpstreamUrl: "https://b.example.test/mcp/"},
 	}, nil)
 
-	own, err := owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: "https://a.example.test/mcp"})
+	own, err := owner.owns(ctx, remotesessions.Client{ID: clientA, RemoteSessionIssuerID: issuer, ResourceIdentifier: "https://a.example.test/mcp"})
 	require.NoError(t, err)
 	require.True(t, own)
-	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerB, ResourceIdentifier: "https://b.example.test/mcp"})
+	own, err = owner.owns(ctx, remotesessions.Client{ID: clientB, RemoteSessionIssuerID: issuer, ResourceIdentifier: "https://b.example.test/mcp"})
 	require.NoError(t, err)
 	require.True(t, own, "trailing slash aside")
-	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: "https://b.example.test/mcp"})
+	own, err = owner.owns(ctx, remotesessions.Client{ID: clientA, RemoteSessionIssuerID: issuer, ResourceIdentifier: "https://b.example.test/mcp"})
 	require.NoError(t, err)
-	require.False(t, own, "another issuer's member does not lend its resource")
-	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: uuid.New(), ResourceIdentifier: "https://orphan.example.test/mcp"})
+	require.False(t, own, "another client's member does not lend its resource")
+	own, err = owner.owns(ctx, remotesessions.Client{ID: sibling, RemoteSessionIssuerID: issuer, ResourceIdentifier: "https://a.example.test/mcp"})
 	require.NoError(t, err)
-	require.False(t, own)
+	require.False(t, own, "a client sharing the authorization server is not associated with the member")
 	require.Equal(t, 1, *loads)
 
-	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: ""})
+	own, err = owner.owns(ctx, remotesessions.Client{ID: clientA, RemoteSessionIssuerID: issuer, ResourceIdentifier: ""})
 	require.NoError(t, err)
 	require.False(t, own, "a client that recorded nothing owns nothing")
 }

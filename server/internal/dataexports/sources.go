@@ -10,12 +10,15 @@ const (
 	// telemetry cannot carry them: it relays what reached the OTLP ingest
 	// endpoints, and a tool Speakeasy runs never passes through those.
 	DataSourceToolCallLogs = "tool_call_logs"
+	// DataSourceMCPConnectionLogs exports failed MCP connection attempts.
+	DataSourceMCPConnectionLogs = "mcp_connection_logs"
 )
 
 var validDataSources = map[string]struct{}{
-	DataSourceProductTelemetry: {},
-	DataSourceRiskFindings:     {},
-	DataSourceToolCallLogs:     {},
+	DataSourceProductTelemetry:  {},
+	DataSourceRiskFindings:      {},
+	DataSourceToolCallLogs:      {},
+	DataSourceMCPConnectionLogs: {},
 }
 
 // NormalizeDataSource validates and returns a supported data export source.

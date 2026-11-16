@@ -4,11 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
 import { MemoryRouter } from "react-router";
 
+import { CommandPaletteProvider } from "@/contexts/CommandPaletteProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import {
   DangerSettingsSection,
   DetailPage,
@@ -30,6 +32,10 @@ import {
  * host: the one query the frame issues (grants) fails silently and the org
  * crumb simply renders unlinked. Auth/Telemetry/Insights contexts all have
  * safe defaults and need no providers here.
+ *
+ * The command palette does not: `useCommandPalette` throws rather than
+ * falling back, so the frame took every one of these stories down with it
+ * once the chrome started registering actions.
  */
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,11 +49,13 @@ function appFrame(path: string): Decorator {
     <MemoryRouter initialEntries={[path]}>
       <QueryClientProvider client={queryClient}>
         <GramProvider client={gram}>
-          <SidebarProvider>
-            <SidebarInset>
-              <Story />
-            </SidebarInset>
-          </SidebarProvider>
+          <CommandPaletteProvider>
+            <SidebarProvider>
+              <SidebarInset>
+                <Story />
+              </SidebarInset>
+            </SidebarProvider>
+          </CommandPaletteProvider>
         </GramProvider>
       </QueryClientProvider>
     </MemoryRouter>

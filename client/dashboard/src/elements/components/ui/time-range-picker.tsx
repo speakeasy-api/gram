@@ -1,7 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateText, LanguageModel, Output } from "ai";
+import type { LanguageModel } from "ai";
+import { generateText, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
@@ -447,6 +448,11 @@ export interface TimeRangePickerProps {
   onPresetChange?: (preset: DateRangePreset) => void;
   /** Called when a custom range is selected */
   onCustomRangeChange?: (from: Date, to: Date, label?: string) => void;
+  /**
+   * Replaces onCustomRangeChange for calendar picks when supplied.
+   * Both dates are local midnight; to is the final selected day, inclusive.
+   */
+  onCalendarRangeChange?: (from: Date, to: Date) => void;
   /** Called to clear custom range */
   onClearCustomRange?: () => void;
   /** Initial label for custom range (from URL params) */
@@ -483,6 +489,7 @@ function TimeRangePicker({
   customRange,
   onPresetChange,
   onCustomRangeChange,
+  onCalendarRangeChange,
   onClearCustomRange,
   customRangeLabel: initialCustomLabel,
   showLive = false,
@@ -556,7 +563,8 @@ function TimeRangePicker({
 
   const handleCalendarSelect = (range: { start: Date; end: Date | null }) => {
     if (range.start && range.end) {
-      onCustomRangeChange?.(range.start, range.end);
+      if (onCalendarRangeChange) onCalendarRangeChange(range.start, range.end);
+      else onCustomRangeChange?.(range.start, range.end);
       setCustomLabel(null); // Calendar selections don't have AI labels
       setIsOpen(false);
       setShowCalendar(false);

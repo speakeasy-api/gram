@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	organizationremotesessionissuers "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -561,6 +562,89 @@ func BuildMigrateIssuerPayload(organizationRemoteSessionIssuersMigrateIssuerBody
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildSetEMAProvidersPayload builds the payload for the
+// organizationRemoteSessionIssuers setEMAProviders endpoint from CLI flags.
+func BuildSetEMAProvidersPayload(organizationRemoteSessionIssuersSetEMAProvidersBody string, organizationRemoteSessionIssuersSetEMAProvidersSessionToken string) (*organizationremotesessionissuers.SetEMAProvidersPayload, error) {
+	var err error
+	var body SetEMAProvidersRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersSetEMAProvidersBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expected_providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.Providers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		for _, e := range body.Providers {
+			if e != nil {
+				if err2 := ValidateEMAProviderInputRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.ExpectedProviders {
+			if e != nil {
+				if err2 := ValidateEMAProviderInputRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersSetEMAProvidersSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersSetEMAProvidersSessionToken
+		}
+	}
+	v := &organizationremotesessionissuers.SetEMAProvidersPayload{
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+	}
+	if body.Providers != nil {
+		v.Providers = make([]*types.EMAProviderInput, len(body.Providers))
+		for i, val := range body.Providers {
+			if val == nil {
+				v.Providers[i] = nil
+				continue
+			}
+			v.Providers[i] = marshalEMAProviderInputRequestBodyToTypesEMAProviderInput(val)
+		}
+	} else {
+		v.Providers = []*types.EMAProviderInput{}
+	}
+	if body.ExpectedProviders != nil {
+		v.ExpectedProviders = make([]*types.EMAProviderInput, len(body.ExpectedProviders))
+		for i, val := range body.ExpectedProviders {
+			if val == nil {
+				v.ExpectedProviders[i] = nil
+				continue
+			}
+			v.ExpectedProviders[i] = marshalEMAProviderInputRequestBodyToTypesEMAProviderInput(val)
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListEMAServicesPayload builds the payload for the
+// organizationRemoteSessionIssuers listEMAServices endpoint from CLI flags.
+func BuildListEMAServicesPayload(organizationRemoteSessionIssuersListEMAServicesSessionToken string) (*organizationremotesessionissuers.ListEMAServicesPayload, error) {
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersListEMAServicesSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersListEMAServicesSessionToken
+		}
+	}
+	v := &organizationremotesessionissuers.ListEMAServicesPayload{}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

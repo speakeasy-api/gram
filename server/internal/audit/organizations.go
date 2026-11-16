@@ -102,6 +102,7 @@ func (l *Logger) LogOrganizationOnboardingPlaybookAssigned(ctx context.Context, 
 		action = ActionOrganizationOnboardingPlaybookUnassigned
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization",
@@ -142,6 +143,7 @@ func (l *Logger) LogOrganizationOnboardingStackUpdated(ctx context.Context, dbtx
 		return fmt.Errorf("marshal onboarding stack after snapshot: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionOrganizationOnboardingStackUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
@@ -183,6 +185,7 @@ func (l *Logger) LogOrganizationSetupTaskUpdated(ctx context.Context, dbtx repo.
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -229,6 +232,7 @@ func (l *Logger) LogOrganizationInviteCreate(ctx context.Context, dbtx repo.DBTX
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -280,6 +284,7 @@ func (l *Logger) LogOrganizationInviteRevoke(ctx context.Context, dbtx repo.DBTX
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -331,6 +336,7 @@ func (l *Logger) LogOrganizationInviteRoleUpdate(ctx context.Context, dbtx repo.
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -376,6 +382,7 @@ func (l *Logger) LogOrganizationWebhooksToggled(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -440,6 +447,7 @@ func (l *Logger) LogOrganizationProductFeatureToggled(ctx context.Context, dbtx 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -496,6 +504,7 @@ func (l *Logger) LogOrganizationDeviceAgentConfigurationUpdated(
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -546,6 +555,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialArmed(ctx context.Context, dbtx r
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -630,6 +640,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialConverted(ctx context.Context, db
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type),
 		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.PtrToPGTextEmpty(event.ActorSlug),
@@ -670,6 +681,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -722,6 +734,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialStarted(ctx context.Context, dbtx
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -789,6 +802,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbt
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -851,6 +865,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialEndChanged(ctx context.Context, d
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -902,6 +917,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -955,6 +971,7 @@ func (l *Logger) LogOrganizationPaygActivated(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -1031,6 +1048,7 @@ func (l *Logger) LogOrganizationWhitelistUpdated(ctx context.Context, dbtx repo.
 		return fmt.Errorf("marshal whitelist after snapshot: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionOrganizationWhitelistUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
@@ -1075,6 +1093,7 @@ func (l *Logger) logOrganizationAccess(ctx context.Context, dbtx repo.DBTX, even
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,
@@ -1106,6 +1125,7 @@ func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -1153,7 +1173,8 @@ func (l *Logger) LogOrganizationAccountTypeChanged(ctx context.Context, dbtx rep
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
-	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorSlug: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""),
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal: false, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorSlug: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""),
 		OrganizationID: event.OrganizationID,
 		ActorID:        event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
 		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization", SubjectDisplayName: conv.ToPGText("Organization"),
@@ -1192,5 +1213,6 @@ func (l *Logger) LogOrganizationInferenceKeyRepaired(ctx context.Context, dbtx r
 	if err != nil {
 		return err
 	}
-	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorSlug: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), OrganizationID: event.OrganizationID, ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), Action: string(ActionOrganizationInferenceKeyRepaired), SubjectID: event.OrganizationID, SubjectType: "organization", SubjectDisplayName: conv.ToPGText("Organization"), Metadata: metadata, BeforeSnapshot: before, AfterSnapshot: after}, OutboxEvent: events.OrganizationAccountTypeV1})
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal: false, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorSlug: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), OrganizationID: event.OrganizationID, ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), Action: string(ActionOrganizationInferenceKeyRepaired), SubjectID: event.OrganizationID, SubjectType: "organization", SubjectDisplayName: conv.ToPGText("Organization"), Metadata: metadata, BeforeSnapshot: before, AfterSnapshot: after}, OutboxEvent: events.OrganizationAccountTypeV1})
 }

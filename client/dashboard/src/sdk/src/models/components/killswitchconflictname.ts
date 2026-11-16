@@ -3,15 +3,17 @@
  */
 
 import * as z from "zod/v4-mini";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 
 export const KillswitchConflictName = {
   OperationConflict: "operation_conflict",
   VersionConflict: "version_conflict",
 } as const;
-export type KillswitchConflictName = ClosedEnum<typeof KillswitchConflictName>;
+export type KillswitchConflictName = OpenEnum<typeof KillswitchConflictName>;
 
 /** @internal */
-export const KillswitchConflictName$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchConflictName
-> = z.enum(KillswitchConflictName);
+export const KillswitchConflictName$inboundSchema: z.ZodMiniType<
+  KillswitchConflictName,
+  unknown
+> = openEnums.inboundSchema(KillswitchConflictName);

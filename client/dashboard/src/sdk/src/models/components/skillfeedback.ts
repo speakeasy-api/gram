@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const SkillFeedbackOutcome = {
 /**
  * The reported skill feedback outcome.
  */
-export type SkillFeedbackOutcome = ClosedEnum<typeof SkillFeedbackOutcome>;
+export type SkillFeedbackOutcome = OpenEnum<typeof SkillFeedbackOutcome>;
 
 /**
  * A privacy-minimized feedback row for a skill.
@@ -59,9 +60,10 @@ export type SkillFeedback = {
 };
 
 /** @internal */
-export const SkillFeedbackOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof SkillFeedbackOutcome
-> = z.enum(SkillFeedbackOutcome);
+export const SkillFeedbackOutcome$inboundSchema: z.ZodMiniType<
+  SkillFeedbackOutcome,
+  unknown
+> = openEnums.inboundSchema(SkillFeedbackOutcome);
 
 /** @internal */
 export const SkillFeedback$inboundSchema: z.ZodMiniType<

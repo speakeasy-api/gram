@@ -6,7 +6,6 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { AdminAssets } from "./adminassets.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
-import { AdminExternalCredentials } from "./adminexternalcredentials.js";
 import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
@@ -18,10 +17,12 @@ import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { AuthClients } from "./authclients.js";
 import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { CommandSearch } from "./commandsearch.js";
 import { Dashboards } from "./dashboards.js";
 import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
@@ -32,16 +33,18 @@ import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
+import { GatewaySessions } from "./gatewaysessions.js";
+import { HiddenMcpServers } from "./hiddenmcpservers.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
-import { Launcher } from "./launcher.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -59,6 +62,7 @@ import { OrganizationRemoteSessionIssuers } from "./organizationremotesessioniss
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { OrganizationUserSessionIssuers } from "./organizationusersessionissuers.js";
+import { OrgEncryption } from "./orgencryption.js";
 import { Otel } from "./otel.js";
 import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
@@ -114,13 +118,6 @@ export class Gram extends ClientSDK {
   private _adminChatAnalysis?: AdminChatAnalysis;
   get adminChatAnalysis(): AdminChatAnalysis {
     return (this._adminChatAnalysis ??= new AdminChatAnalysis(this._options));
-  }
-
-  private _adminExternalCredentials?: AdminExternalCredentials;
-  get adminExternalCredentials(): AdminExternalCredentials {
-    return (this._adminExternalCredentials ??= new AdminExternalCredentials(
-      this._options,
-    ));
   }
 
   private _adminOpenRouterKeys?: AdminOpenRouterKeys;
@@ -182,6 +179,11 @@ export class Gram extends ClientSDK {
     return (this._auth ??= new Auth(this._options));
   }
 
+  private _authClients?: AuthClients;
+  get authClients(): AuthClients {
+    return (this._authClients ??= new AuthClients(this._options));
+  }
+
   private _businessMemories?: BusinessMemories;
   get businessMemories(): BusinessMemories {
     return (this._businessMemories ??= new BusinessMemories(this._options));
@@ -200,6 +202,11 @@ export class Gram extends ClientSDK {
   private _cliAuth?: CliAuth;
   get cliAuth(): CliAuth {
     return (this._cliAuth ??= new CliAuth(this._options));
+  }
+
+  private _commandSearch?: CommandSearch;
+  get commandSearch(): CommandSearch {
+    return (this._commandSearch ??= new CommandSearch(this._options));
   }
 
   private _dashboards?: Dashboards;
@@ -249,6 +256,16 @@ export class Gram extends ClientSDK {
     return (this._externalKeys ??= new ExternalKeys(this._options));
   }
 
+  private _gatewaySessions?: GatewaySessions;
+  get gatewaySessions(): GatewaySessions {
+    return (this._gatewaySessions ??= new GatewaySessions(this._options));
+  }
+
+  private _hiddenMcpServers?: HiddenMcpServers;
+  get hiddenMcpServers(): HiddenMcpServers {
+    return (this._hiddenMcpServers ??= new HiddenMcpServers(this._options));
+  }
+
   private _hooks?: Hooks;
   get hooks(): Hooks {
     return (this._hooks ??= new Hooks(this._options));
@@ -280,6 +297,13 @@ export class Gram extends ClientSDK {
     return (this._integrations ??= new Integrations(this._options));
   }
 
+  private _internalSessionIssuers?: InternalSessionIssuers;
+  get internalSessionIssuers(): InternalSessionIssuers {
+    return (this._internalSessionIssuers ??= new InternalSessionIssuers(
+      this._options,
+    ));
+  }
+
   private _jsonWebKeySets?: JsonWebKeySets;
   get jsonWebKeySets(): JsonWebKeySets {
     return (this._jsonWebKeySets ??= new JsonWebKeySets(this._options));
@@ -293,11 +317,6 @@ export class Gram extends ClientSDK {
   private _killswitches?: Killswitches;
   get killswitches(): Killswitches {
     return (this._killswitches ??= new Killswitches(this._options));
-  }
-
-  private _launcher?: Launcher;
-  get launcher(): Launcher {
-    return (this._launcher ??= new Launcher(this._options));
   }
 
   private _litellm?: Litellm;
@@ -357,6 +376,11 @@ export class Gram extends ClientSDK {
     return (this._oktaServerSuggestions ??= new OktaServerSuggestions(
       this._options,
     ));
+  }
+
+  private _orgEncryption?: OrgEncryption;
+  get orgEncryption(): OrgEncryption {
+    return (this._orgEncryption ??= new OrgEncryption(this._options));
   }
 
   private _organizationAssets?: OrganizationAssets;

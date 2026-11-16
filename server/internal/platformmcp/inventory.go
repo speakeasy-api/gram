@@ -108,6 +108,14 @@ func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distr
 }
 
 func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, slug, visibility, model string, backendKind MCPBackendKind, upstreamURL string, registrationID uuid.UUID, sourceKind, provider, reference, registrationStatus string, registrationRemoteID, registrationIssuerID, registrationMCPID, registrationEndpointID uuid.NullUUID, readinessState, checkedAt, expiresAt string, distributions map[uuid.UUID][]MCPDistribution) MCP {
+	enabledState := "unknown"
+	switch visibility {
+	case "private", "public":
+		enabledState = "enabled"
+	case "disabled":
+		enabledState = "disabled"
+	}
+
 	mcp := MCP{
 		ID:               id.String(),
 		ProjectID:        projectID.String(),
@@ -117,7 +125,8 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		Slug:             slug,
 		Version:          "",
 		Visibility:       visibility,
-		EffectiveEnabled: visibility != "disabled",
+		EffectiveEnabled: enabledState == "enabled",
+		EnabledState:     enabledState,
 		Model:            "",
 		BackendKind:      backendKind,
 		UpstreamURL:      "",
@@ -151,17 +160,23 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		if readinessState != "" {
 			mcp.Readiness = MCPReadiness{State: readinessState, CheckedAt: checkedAt, ExpiresAt: expiresAt}
 		}
-		// Disabled MCPs retain historical readiness evidence for audit and later
-		// diagnosis, but it cannot be treated as effective current readiness.
-		if visibility == "disabled" {
+		// Only confirmed enabled MCPs can expose historical readiness evidence
+		// as effective current readiness.
+		if enabledState != "enabled" {
 			mcp.Readiness = MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}
 		}
-		mcp.Operations = []string{"read", "dashboard_setup", "update_mcp_metadata"}
-		switch visibility {
-		case "disabled":
-			mcp.Operations = append(mcp.Operations, "enable_mcp")
-		case "private":
-			mcp.Operations = append(mcp.Operations, "disable_mcp")
+		mcp.Operations = []string{"read", "dashboard_setup"}
+		// The registration record is not serialized, so operations carry its
+		// completion: lifecycle writes refuse a pending or incomplete
+		// registration, and listing them would tell an agent the server is set up.
+		if mcp.Registration.Status == registrationStatusRegistered && mcp.Registration.ComponentsComplete {
+			mcp.Operations = append(mcp.Operations, "update_mcp_metadata")
+			switch visibility {
+			case "disabled":
+				mcp.Operations = append(mcp.Operations, "enable_mcp")
+			case "private":
+				mcp.Operations = append(mcp.Operations, "disable_mcp")
+			}
 		}
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	case model == "dashboard_managed":

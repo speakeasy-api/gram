@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestListMcpServers_Empty(t *testing.T) {
@@ -63,6 +66,34 @@ func TestListMcpServers_Multiple(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, result.McpServers, 2)
+}
+
+// A retired approvals server (builtin_backend) stays in mcp_servers until a
+// cleanup migration deletes it, but serves nothing, so it is not listed.
+func TestListMcpServers_HidesRetiredApprovalsServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	err := testrepo.New(ti.conn).InsertRetiredApprovalsServerFixture(ctx, testrepo.InsertRetiredApprovalsServerFixtureParams{
+		ID:        uuid.New(),
+		ProjectID: *authCtx.ProjectID,
+		Slug:      conv.ToPGText("speakeasy-approvals"),
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.McpServers)
 }
 
 func TestListMcpServers_FilterByRemoteMcpServerID(t *testing.T) {

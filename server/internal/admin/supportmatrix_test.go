@@ -21,7 +21,7 @@ func TestSupportMatrixPersistence(t *testing.T) {
 	require.NoError(t, SeedSupportMatrix(ctx, db))
 	snapshot, err := svc.GetSupportMatrix(ctx, nil)
 	require.NoError(t, err)
-	require.Len(t, snapshot.Methods, 11)
+	require.Len(t, snapshot.Methods, 13)
 	require.Len(t, snapshot.Products, 24)
 	require.Len(t, snapshot.Capabilities, 12)
 	require.Empty(t, snapshot.Draft.Mappings)

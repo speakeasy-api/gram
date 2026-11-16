@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ToolUsageTraceLogGroupKind = {
 /**
  * Child-log lookup strategy for a tool usage trace row
  */
-export type ToolUsageTraceLogGroupKind = ClosedEnum<
+export type ToolUsageTraceLogGroupKind = OpenEnum<
   typeof ToolUsageTraceLogGroupKind
 >;
 
@@ -39,9 +40,10 @@ export type ToolUsageTraceLogGroup = {
 };
 
 /** @internal */
-export const ToolUsageTraceLogGroupKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceLogGroupKind
-> = z.enum(ToolUsageTraceLogGroupKind);
+export const ToolUsageTraceLogGroupKind$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceLogGroupKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceLogGroupKind);
 
 /** @internal */
 export const ToolUsageTraceLogGroup$inboundSchema: z.ZodMiniType<

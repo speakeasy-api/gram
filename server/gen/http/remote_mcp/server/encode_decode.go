@@ -3761,6 +3761,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		Name:                  v.Name,
 		Slug:                  v.Slug,
 		PlatformEndpointSlug:  v.PlatformEndpointSlug,
+		LegacyPlatformSlug:    v.LegacyPlatformSlug,
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
@@ -3770,8 +3771,37 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            string(v.Visibility),
 		NetworkAccessMode:     string(v.NetworkAccessMode),
+		PrimaryEndpointID:     v.PrimaryEndpointID,
+		PrimaryEndpointURL:    v.PrimaryEndpointURL,
+		HasEndpoint:           v.HasEndpoint,
+		SetupGuideCompletedAt: v.SetupGuideCompletedAt,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
+	}
+	if v.Toolset != nil {
+		res.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v.Toolset)
+	}
+
+	return res
+}
+
+// marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody
+// builds a value of type *McpServerToolsetSummaryResponseBody from a value of
+// type *types.McpServerToolsetSummary.
+func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v *types.McpServerToolsetSummary) *McpServerToolsetSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpServerToolsetSummaryResponseBody{
+		ID:                    v.ID,
+		Slug:                  v.Slug,
+		Name:                  v.Name,
+		Description:           v.Description,
+		ToolCount:             v.ToolCount,
+		ToolSelectionMode:     v.ToolSelectionMode,
+		ExternalOauthServerID: v.ExternalOauthServerID,
+		RegistrySpecifier:     v.RegistrySpecifier,
+		HostingMcpServerID:    v.HostingMcpServerID,
 	}
 
 	return res

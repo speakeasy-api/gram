@@ -141,7 +141,7 @@ func TestConfiguredHeader_Resolve_PassThroughDeniedSource(t *testing.T) {
 	// The proxy already refuses to copy Cookie upstream. Reading it as a
 	// configured header's source would carry the dashboard's gram_session to
 	// an arbitrary remote server under whatever name the operator picked.
-	for _, source := range []string{"Cookie", "cookie", "Set-Cookie", "Proxy-Authorization"} {
+	for _, source := range []string{"Authorization", "authorization", "Cookie", "cookie", "Set-Cookie", "Proxy-Authorization"} {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
 
@@ -170,24 +170,4 @@ func TestConfiguredHeader_Resolve_PassThroughDeniedSource(t *testing.T) {
 			require.NotContains(t, err.Error(), "secret")
 		})
 	}
-}
-
-func TestConfiguredHeader_Resolve_PassThroughAuthorizationAllowed(t *testing.T) {
-	t.Parallel()
-
-	// Forwarding the caller's own upstream credential is the point of
-	// pass-through identity, so Authorization stays available as a source.
-	h := proxy.ConfiguredHeader{
-		IsRequired:             false,
-		Name:                   "Authorization",
-		StaticValue:            "",
-		ValueFromRequestHeader: "Authorization",
-	}
-	req, err := http.NewRequest(http.MethodGet, "https://example.test", nil)
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer upstream-token")
-
-	value, err := h.Resolve(req)
-	require.NoError(t, err)
-	require.Equal(t, "Bearer upstream-token", value)
 }

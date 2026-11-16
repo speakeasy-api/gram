@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type { BadgeProps } from "@/components/ui/Badge";
 import { chunk } from "@/lib/utils";
 import type {
@@ -34,13 +35,13 @@ const XAA_STATE_VARIANTS: Record<
 export function xaaStateLabel(
   state: OktaResourceConnectionServerState,
 ): string {
-  return XAA_STATE_LABELS[state];
+  return enumPresentation(XAA_STATE_LABELS, state, "Unknown");
 }
 
 export function xaaStateVariant(
   state: OktaResourceConnectionServerState,
 ): BadgeVariant {
-  return XAA_STATE_VARIANTS[state];
+  return enumPresentation(XAA_STATE_VARIANTS, state, "neutral");
 }
 
 const NOT_APPLICABLE_REASONS: Record<NotApplicableReason, string> = {
@@ -57,7 +58,11 @@ export function notApplicableReasonSummary(
   reason: NotApplicableReason | undefined,
 ): string {
   if (reason === undefined) return "No Okta connection needed.";
-  return NOT_APPLICABLE_SUMMARIES[reason];
+  return enumPresentation(
+    NOT_APPLICABLE_SUMMARIES,
+    reason,
+    "Status unavailable.",
+  );
 }
 
 export function notApplicableReasonLabel(
@@ -66,7 +71,11 @@ export function notApplicableReasonLabel(
   if (reason === undefined) {
     return "No Okta connection is needed for this server.";
   }
-  return NOT_APPLICABLE_REASONS[reason];
+  return enumPresentation(
+    NOT_APPLICABLE_REASONS,
+    reason,
+    "Status unavailable. Refresh the page for updated details.",
+  );
 }
 
 /** Short form for the table cell; the full sentence goes in the tooltip. */
@@ -90,12 +99,20 @@ const BROKEN_REASONS: Record<BrokenReason, string> = {
 
 export function brokenReasonSummary(reason: BrokenReason | undefined): string {
   if (reason === undefined) return "";
-  return BROKEN_REASON_SUMMARIES[reason];
+  return enumPresentation(
+    BROKEN_REASON_SUMMARIES,
+    reason,
+    "Connection problem.",
+  );
 }
 
 export function brokenReasonLabel(reason: BrokenReason | undefined): string {
   if (reason === undefined) return "";
-  return BROKEN_REASONS[reason];
+  return enumPresentation(
+    BROKEN_REASONS,
+    reason,
+    "The connection could not be verified. Refresh the page for updated details.",
+  );
 }
 
 /** States in which a recorded confirmation is shown and can be reviewed or cleared. */

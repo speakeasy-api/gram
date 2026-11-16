@@ -2,9 +2,13 @@ import { useSearchParams } from "react-router";
 
 const unexpected = "Server error. Please try again later or contact support.";
 const authErrorMessages: Record<string, string> = {
+  signin_link_invalid:
+    "This sign-in link expired, was already used, or belongs to another browser. Please sign in again.",
+  signin_canceled: "Sign-in was canceled. You can try again when you're ready.",
   lookup_error:
     "Failed to look up account details. Try again or contact support.",
   init_error: "Failed to initialize account. Try again or contact support.",
+  sign_in_revoked: "Your sign-in was ended. Sign in again to continue.",
   // A session transfer between Speakeasy hosts failed and sent the browser here.
   transfer_session_expired:
     "Your previous sign-in is no longer available. Please sign in again.",

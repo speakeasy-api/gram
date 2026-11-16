@@ -107,14 +107,25 @@ describe("PlatformMCPInstallWalkthrough", () => {
     );
 
     const text = document.body.textContent!.replace(/\s+/g, " ");
+    // The quick commands come first.
+    expect(
+      screen.getByText(
+        "/plugin marketplace add https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("/plugin install speakeasy@speakeasy"),
+    ).toBeTruthy();
+    // Auto-update follows: the /plugin toggle for one user, settings for an org.
+    expect(text).toContain("choose Enable auto-update");
     expect(text).toContain(
       '"url": "https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git"',
     );
     expect(text).toContain('"speakeasy": { "autoUpdate": true,');
     expect(text).toContain('"enabledPlugins": { "speakeasy@speakeasy": true }');
-    // Settings register the marketplace with auto-update on: no CLI step.
-    expect(text).not.toContain("/plugin marketplace add");
-    expect(text).not.toContain("/plugin install");
+    expect(text.indexOf("/plugin install")).toBeLessThan(
+      text.indexOf('"autoUpdate": true'),
+    );
   });
 
   it("clones the OpenCode package into the directory used by the copy step", () => {

@@ -280,7 +280,22 @@ func BuildCreateSensorPayload(sigintCreateSensorBody string, sigintCreateSensorS
 	{
 		err = json.Unmarshal([]byte(sigintCreateSensorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"input_strategy\": \"sliding_window\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\",\n      \"window_size\": 3\n   }'")
+		}
+		if body.InputStrategy != nil {
+			if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+			}
+		}
+		if body.WindowSize != nil {
+			if *body.WindowSize < 2 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+			}
+		}
+		if body.WindowSize != nil {
+			if *body.WindowSize > 10 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+			}
 		}
 		if body.Slug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -319,12 +334,17 @@ func BuildCreateSensorPayload(sigintCreateSensorBody string, sigintCreateSensorS
 		}
 	}
 	v := &sigint.CreateSensorPayload{
+		WindowSize:      body.WindowSize,
 		Enabled:         body.Enabled,
 		MatchExpression: body.MatchExpression,
 		Name:            body.Name,
 		Description:     body.Description,
 		Instructions:    body.Instructions,
 		Mode:            types.SigintSensorMode(body.Mode),
+	}
+	if body.InputStrategy != nil {
+		inputStrategy := types.SigintInputStrategy(*body.InputStrategy)
+		v.InputStrategy = &inputStrategy
 	}
 	if body.Slug != nil {
 		slug := types.Slug(*body.Slug)
@@ -452,7 +472,22 @@ func BuildUpdateSensorPayload(sigintUpdateSensorBody string, sigintUpdateSensorS
 	{
 		err = json.Unmarshal([]byte(sigintUpdateSensorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"input_strategy\": \"sliding_window\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\",\n      \"window_size\": 3\n   }'")
+		}
+		if body.InputStrategy != nil {
+			if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+			}
+		}
+		if body.WindowSize != nil {
+			if *body.WindowSize < 2 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+			}
+		}
+		if body.WindowSize != nil {
+			if *body.WindowSize > 10 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+			}
 		}
 		if body.Slug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -494,12 +529,17 @@ func BuildUpdateSensorPayload(sigintUpdateSensorBody string, sigintUpdateSensorS
 		}
 	}
 	v := &sigint.UpdateSensorPayload{
+		WindowSize:      body.WindowSize,
 		Enabled:         body.Enabled,
 		MatchExpression: body.MatchExpression,
 		ID:              body.ID,
 		Name:            body.Name,
 		Description:     body.Description,
 		Instructions:    body.Instructions,
+	}
+	if body.InputStrategy != nil {
+		inputStrategy := types.SigintInputStrategy(*body.InputStrategy)
+		v.InputStrategy = &inputStrategy
 	}
 	if body.Slug != nil {
 		slug := types.Slug(*body.Slug)

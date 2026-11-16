@@ -20,12 +20,33 @@ function fractionalDigits(value: string): number {
   return match[3]?.length ?? 0;
 }
 
-/** Reject malformed API costs before chart or total arithmetic can run. */
+export class UnsupportedSpendBreakdownError extends Error {
+  constructor() {
+    super("Refresh the page to display these newer spend estimates.");
+    this.name = "UnsupportedSpendBreakdownError";
+  }
+}
+
+/** Reject unsupported estimates and malformed costs before displaying totals. */
 export function validateSpendBreakdown(
   data: SpendBreakdownData,
 ): SpendBreakdownData {
+  if (
+    (data.availability !== "available" &&
+      data.availability !== "unsupported_plan") ||
+    data.currency !== "USD" ||
+    data.pricingBasis !== "current_payg_list_price"
+  ) {
+    throw new UnsupportedSpendBreakdownError();
+  }
   fractionalDigits(data.totalCostUsd);
   for (const product of data.products) {
+    if (
+      !Object.hasOwn(PALETTE_INDEX_BY_PRODUCT, product.id) ||
+      (product.unit !== "stokens" && product.unit !== "bytes")
+    ) {
+      throw new UnsupportedSpendBreakdownError();
+    }
     fractionalDigits(product.costUsd);
     for (const bucket of product.buckets) {
       fractionalDigits(bucket.costUsd);

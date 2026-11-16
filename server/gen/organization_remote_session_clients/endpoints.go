@@ -27,6 +27,7 @@ type Endpoints struct {
 	AttachClientKeySet        goa.Endpoint
 	DetachClientKeySet        goa.Endpoint
 	RotateClient              goa.Endpoint
+	DuplicateClient           goa.Endpoint
 	DeleteClient              goa.Endpoint
 	RemoveClientFromMcpServer goa.Endpoint
 }
@@ -48,6 +49,7 @@ func NewEndpoints(s Service) *Endpoints {
 		AttachClientKeySet:        NewAttachClientKeySetEndpoint(s, a.APIKeyAuth),
 		DetachClientKeySet:        NewDetachClientKeySetEndpoint(s, a.APIKeyAuth),
 		RotateClient:              NewRotateClientEndpoint(s, a.APIKeyAuth),
+		DuplicateClient:           NewDuplicateClientEndpoint(s, a.APIKeyAuth),
 		DeleteClient:              NewDeleteClientEndpoint(s, a.APIKeyAuth),
 		RemoveClientFromMcpServer: NewRemoveClientFromMcpServerEndpoint(s, a.APIKeyAuth),
 	}
@@ -67,6 +69,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AttachClientKeySet = m(e.AttachClientKeySet)
 	e.DetachClientKeySet = m(e.DetachClientKeySet)
 	e.RotateClient = m(e.RotateClient)
+	e.DuplicateClient = m(e.DuplicateClient)
 	e.DeleteClient = m(e.DeleteClient)
 	e.RemoveClientFromMcpServer = m(e.RemoveClientFromMcpServer)
 }
@@ -443,6 +446,41 @@ func NewRotateClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.RotateClient(ctx, p)
+	}
+}
+
+// NewDuplicateClientEndpoint returns an endpoint function that calls the
+// method "duplicateClient" of service "organizationRemoteSessionClients".
+func NewDuplicateClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DuplicateClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.DuplicateClient(ctx, p)
 	}
 }
 

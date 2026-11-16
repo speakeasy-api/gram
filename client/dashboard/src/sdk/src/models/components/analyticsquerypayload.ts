@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ClosedEnum } from "../../types/enums.js";
 import {
   AnalyticsFilter,
   AnalyticsFilter$Outbound,
@@ -20,21 +19,11 @@ import {
   AnalyticsOrderBy$Outbound,
   AnalyticsOrderBy$outboundSchema,
 } from "./analyticsorderby.js";
-
-/**
- * Time bucket width for a grouped query. Absent means none.
- */
-export const Grain = {
-  None: "none",
-  Hour: "hour",
-  Day: "day",
-  Week: "week",
-  Month: "month",
-} as const;
-/**
- * Time bucket width for a grouped query. Absent means none.
- */
-export type Grain = ClosedEnum<typeof Grain>;
+import {
+  AnalyticsSignalQuery,
+  AnalyticsSignalQuery$Outbound,
+  AnalyticsSignalQuery$outboundSchema,
+} from "./analyticssignalquery.js";
 
 /**
  * A query against one dataset, in catalog vocabulary. Organization comes from the session and project from the project header; neither is a field.
@@ -57,9 +46,9 @@ export type AnalyticsQueryPayload = {
    */
   from: Date;
   /**
-   * Time bucket width for a grouped query. Absent means none.
+   * Time interval from the analytics catalog. Composed queries admit none, minute, hour, day, week or month. Signal measurements also admit auto.
    */
-  grain?: Grain | undefined;
+  grain?: string | undefined;
   /**
    * Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.
    */
@@ -72,6 +61,7 @@ export type AnalyticsQueryPayload = {
    * Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.
    */
   orderBy?: Array<AnalyticsOrderBy> | undefined;
+  signalQuery?: AnalyticsSignalQuery | undefined;
   /**
    * End of the half-open window [from, to), ISO 8601
    */
@@ -83,9 +73,6 @@ export type AnalyticsQueryPayload = {
 };
 
 /** @internal */
-export const Grain$outboundSchema: z.ZodMiniEnum<typeof Grain> = z.enum(Grain);
-
-/** @internal */
 export type AnalyticsQueryPayload$Outbound = {
   dataset: string;
   dimensions?: Array<string> | undefined;
@@ -95,6 +82,7 @@ export type AnalyticsQueryPayload$Outbound = {
   limit: number;
   measures?: Array<AnalyticsMeasure$Outbound> | undefined;
   order_by?: Array<AnalyticsOrderBy$Outbound> | undefined;
+  signal_query?: AnalyticsSignalQuery$Outbound | undefined;
   to: string;
   ungrouped: boolean;
 };
@@ -109,16 +97,18 @@ export const AnalyticsQueryPayload$outboundSchema: z.ZodMiniType<
     dimensions: z.optional(z.array(z.string())),
     filters: z.optional(z.array(AnalyticsFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
-    grain: z.optional(Grain$outboundSchema),
+    grain: z.optional(z.string()),
     limit: z._default(z.int(), 100),
     measures: z.optional(z.array(AnalyticsMeasure$outboundSchema)),
     orderBy: z.optional(z.array(AnalyticsOrderBy$outboundSchema)),
+    signalQuery: z.optional(AnalyticsSignalQuery$outboundSchema),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     ungrouped: z._default(z.boolean(), false),
   }),
   z.transform((v) => {
     return remap$(v, {
       orderBy: "order_by",
+      signalQuery: "signal_query",
     });
   }),
 );

@@ -96,3 +96,22 @@ func TestOrgProjectGroups_NoOrgReturnsNil(t *testing.T) {
 	require.Nil(t, feature.OrgProjectGroups("", "default"))
 	require.Nil(t, feature.OrgProjectGroups("", ""))
 }
+
+func TestFlagVariantLocal(t *testing.T) {
+	t.Parallel()
+
+	provider := &feature.InMemory{}
+	provider.SetFlagVariant(testFeatureFlag, "organization", "treatment")
+
+	variant, err := feature.FlagVariantLocal(t.Context(), provider, testFeatureFlag, "organization", nil, map[string]string{"harness": "codex"})
+	require.NoError(t, err)
+	require.Equal(t, feature.Variant("treatment"), variant)
+
+	variant, err = feature.FlagVariantLocal(t.Context(), legacyProvider{}, testFeatureFlag, "organization", nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, variant, "a provider without local variants serves no variant")
+
+	variant, err = feature.FlagVariantLocal(t.Context(), nil, testFeatureFlag, "organization", nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, variant)
+}

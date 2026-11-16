@@ -1,3 +1,8 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import {
+  InputStrategy,
+  Mode,
+} from "@gram/client/models/components/createsigintsensorform.js";
 import { duplicateNameCounts } from "./signal-names";
 import { slugError } from "./slug";
 import { AnyField } from "@/components/moon/any-field";
@@ -23,6 +28,8 @@ import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 export interface SensorDraft {
+  inputStrategy: SigintSensor["inputStrategy"];
+  windowSize: number;
   enabled: boolean;
   slug?: string;
   name: string;
@@ -113,6 +120,10 @@ export function SensorEditorDialog({
 }: SensorEditorDialogProps): JSX.Element {
   const [name, setName] = useState(sensor?.name ?? "");
   const [enabled, setEnabled] = useState(sensor?.enabled ?? true);
+  const [inputStrategy, setInputStrategy] = useState<
+    SigintSensor["inputStrategy"]
+  >(sensor?.inputStrategy ?? "single_message");
+  const [windowSize, setWindowSize] = useState(String(sensor?.windowSize ?? 5));
   const [slug, setSlug] = useState(sensor?.slug ?? "");
   const [description, setDescription] = useState(sensor?.description ?? "");
   const [instructions, setInstructions] = useState(sensor?.instructions ?? "");
@@ -128,6 +139,29 @@ export function SensorEditorDialog({
     [signals],
   );
   const nameCounts = useMemo(() => duplicateNameCounts(signals), [signals]);
+  if (
+    !isKnownEnumValue(Mode, mode) ||
+    !isKnownEnumValue(InputStrategy, inputStrategy)
+  ) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Edit sensor</Dialog.Title>
+            <Dialog.Description>
+              Refresh the page before editing this sensor. Its configuration is
+              not supported by this dashboard yet.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    );
+  }
   const selected = new Set(signalIds);
   const needle = search.trim().toLocaleLowerCase();
   const available = signals.filter(
@@ -140,6 +174,16 @@ export function SensorEditorDialog({
   const nameValidation = validateName(name);
   const slugValidation = slugError(slug, sensor !== null);
   const tooManySignals = signalIds.length > signalLimit(mode);
+  const windowSizeValue = Number(windowSize);
+  let windowSizeError: string | null = null;
+  if (
+    inputStrategy === "sliding_window" &&
+    (!Number.isInteger(windowSizeValue) ||
+      windowSizeValue < 2 ||
+      windowSizeValue > 10)
+  ) {
+    windowSizeError = "Enter a whole number from 2 to 10.";
+  }
   const selectedMode = MODE_OPTIONS.find((option) => option.value === mode)!;
 
   const move = (index: number, offset: -1 | 1): void => {
@@ -160,10 +204,15 @@ export function SensorEditorDialog({
       pending ||
       nameValidation ||
       slugValidation ||
+      windowSizeError ||
       tooManySignals
     )
       return;
+    let savedWindowSize = sensor?.windowSize ?? 5;
+    if (inputStrategy === "sliding_window") savedWindowSize = windowSizeValue;
     onSave({
+      inputStrategy,
+      windowSize: savedWindowSize,
       enabled,
       name: name.trim(),
       slug: slug.trim() || undefined,
@@ -229,7 +278,7 @@ export function SensorEditorDialog({
               hint="Unique identifier for analytics and integrations. Leave blank on creation to generate from the name."
             />
             <AnyField
-              label="Mode"
+              label="Classification mode"
               optionality="hidden"
               hint={selectedMode.description}
               render={(props) => (
@@ -254,6 +303,48 @@ export function SensorEditorDialog({
                 </Select>
               )}
             />
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <AnyField
+              label="Message context"
+              optionality="hidden"
+              render={(props) => (
+                <Select
+                  value={inputStrategy}
+                  onValueChange={(value) =>
+                    setInputStrategy(value as SigintSensor["inputStrategy"])
+                  }
+                  disabled={!canWrite || pending}
+                >
+                  <SelectTrigger {...props} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="single_message">
+                      Current message only
+                    </SelectItem>
+                    <SelectItem value="sliding_window">
+                      Sliding window
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {inputStrategy === "sliding_window" && (
+              <InputField
+                label="Window size"
+                type="number"
+                required
+                min={2}
+                max={10}
+                step={1}
+                value={windowSize}
+                onChange={(event) => setWindowSize(event.target.value)}
+                disabled={!canWrite || pending}
+                error={submitted ? windowSizeError : null}
+                hint="2–10 messages, including the current message. Earlier messages provide context in timestamp order."
+              />
+            )}
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             <AnyField

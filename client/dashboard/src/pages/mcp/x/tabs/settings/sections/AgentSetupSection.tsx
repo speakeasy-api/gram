@@ -15,7 +15,7 @@ export function AgentSetupSection({
   return (
     <SettingsSection id={MCP_AGENT_SETUP_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Agent Setup</SettingsSection.Title>
+        <SettingsSection.Title>Tunnel agent setup</SettingsSection.Title>
         <SettingsSection.Description>
           Run a tunnel agent next to the upstream MCP server to connect this
           source. The snippets use a placeholder where the tunnel key goes; the

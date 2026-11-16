@@ -3,7 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import * as React from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
-import { IconName } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 
 export interface InputProps extends Omit<
   React.ComponentProps<"input">,

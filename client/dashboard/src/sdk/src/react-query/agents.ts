@@ -3,10 +3,16 @@
  */
 
 import {
+  InfiniteData,
   InvalidateQueryFilters,
   QueryClient,
+  QueryKey,
+  useInfiniteQuery,
+  UseInfiniteQueryResult,
   useQuery,
   UseQueryResult,
+  useSuspenseInfiniteQuery,
+  UseSuspenseInfiniteQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
@@ -22,26 +28,40 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
+  Lifecycle,
   ListAgentsRequest,
   ListAgentsSecurity,
+  NameOrder,
 } from "../models/operations/listagents.js";
 import { useGramContext } from "./_context.js";
 import {
+  InfiniteQueryHookOptions,
   QueryHookOptions,
+  SuspenseInfiniteQueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
 import {
+  AgentsInfiniteQueryData,
+  AgentsPageParams,
   AgentsQueryData,
+  buildAgentsInfiniteQuery,
   buildAgentsQuery,
   prefetchAgents,
+  prefetchAgentsInfinite,
   queryKeyAgents,
+  queryKeyAgentsInfinite,
 } from "./agents.core.js";
 export {
+  type AgentsInfiniteQueryData,
+  type AgentsPageParams,
   type AgentsQueryData,
+  buildAgentsInfiniteQuery,
   buildAgentsQuery,
   prefetchAgents,
+  prefetchAgentsInfinite,
   queryKeyAgents,
+  queryKeyAgentsInfinite,
 };
 
 export type AgentsQueryError =
@@ -95,9 +115,86 @@ export function useAgentsSuspense(
   });
 }
 
+/**
+ * list agents
+ */
+export function useAgentsInfinite(
+  request?: ListAgentsRequest | undefined,
+  security?: ListAgentsSecurity | undefined,
+  options?: InfiniteQueryHookOptions<AgentsInfiniteQueryData, AgentsQueryError>,
+): UseInfiniteQueryResult<
+  InfiniteData<AgentsInfiniteQueryData, AgentsPageParams>,
+  AgentsQueryError
+> {
+  const client = useGramContext();
+  return useInfiniteQuery<
+    AgentsInfiniteQueryData,
+    AgentsQueryError,
+    InfiniteData<AgentsInfiniteQueryData, AgentsPageParams>,
+    QueryKey,
+    AgentsPageParams
+  >({
+    ...buildAgentsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
+/**
+ * list agents
+ */
+export function useAgentsInfiniteSuspense(
+  request?: ListAgentsRequest | undefined,
+  security?: ListAgentsSecurity | undefined,
+  options?: SuspenseInfiniteQueryHookOptions<
+    AgentsInfiniteQueryData,
+    AgentsQueryError
+  >,
+): UseSuspenseInfiniteQueryResult<
+  InfiniteData<AgentsInfiniteQueryData, AgentsPageParams>,
+  AgentsQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseInfiniteQuery<
+    AgentsInfiniteQueryData,
+    AgentsQueryError,
+    InfiniteData<AgentsInfiniteQueryData, AgentsPageParams>,
+    QueryKey,
+    AgentsPageParams
+  >({
+    ...buildAgentsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
 export function setAgentsData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      cursor?: string | undefined;
+      limit?: number | undefined;
+      search?: string | undefined;
+      nameOrder?: NameOrder | undefined;
+      lifecycle?: Array<Lifecycle> | undefined;
+      ownerUserIds?: Array<string> | undefined;
+      registeredAfter?: Date | undefined;
+      registeredBefore?: Date | undefined;
+      gramSession?: string | undefined;
+    },
+  ],
   data: AgentsQueryData,
 ): AgentsQueryData | undefined {
   const key = queryKeyAgents(...queryKeyBase);
@@ -108,7 +205,17 @@ export function setAgentsData(
 export function invalidateAgents(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      cursor?: string | undefined;
+      limit?: number | undefined;
+      search?: string | undefined;
+      nameOrder?: NameOrder | undefined;
+      lifecycle?: Array<Lifecycle> | undefined;
+      ownerUserIds?: Array<string> | undefined;
+      registeredAfter?: Date | undefined;
+      registeredBefore?: Date | undefined;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

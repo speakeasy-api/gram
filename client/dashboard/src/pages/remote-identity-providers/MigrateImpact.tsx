@@ -9,6 +9,7 @@ import {
   mismatchValueLabel,
   warningSentence,
 } from "./issuerMismatches";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // Everything these render sits inside an Alert, which colors its whole subtree
 // to match its severity. So they style with plain elements and inherit that
@@ -164,9 +165,10 @@ export function MigrateImpact({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Text small muted>
-        Checking impact…
-      </Text>
+      <Skeleton label="Checking impact">
+        <div className="h-4 w-72" />
+        <div className="h-4 w-56" />
+      </Skeleton>
     );
   }
 
@@ -198,7 +200,7 @@ export function MigrateImpact({
     <Stack gap={2}>
       <Text small muted>
         {count} {count === 1 ? "client moves" : "clients move"} to the target
-        provider.
+        authorization server.
         {mcpServerNames && mcpServerNames.length > 0
           ? ` Affected MCP servers: ${mcpServerNames.join(", ")}.`
           : ""}
@@ -212,15 +214,15 @@ export function MigrateImpact({
           {emaBindingCount === 1 ? "this binding" : "these bindings"} before
           consolidating, then prepare{" "}
           {emaBindingCount === 1 ? "a new binding" : "new bindings"} for the
-          target provider.
+          target authorization server.
         </Alert>
       )}
 
       {endpointMismatches && endpointMismatches.length > 0 && (
-        <Alert variant="error" dismissible={false} alignTop>
+        <Alert variant="error" dismissible={false}>
           <Stack gap={2}>
             <p className="text-sm">
-              {`These providers describe different authorization servers (${mismatchFieldNames(endpointMismatches).join(", ")} differ). Consolidating them would break existing sessions.`}
+              {`These point at different upstream authorization servers (${mismatchFieldNames(endpointMismatches).join(", ")} differ). Consolidating them would break existing sessions.`}
             </p>
             <Stack gap={1}>
               {endpointMismatches.map((mismatch) => (
@@ -233,12 +235,12 @@ export function MigrateImpact({
 
       {conflictingMcpServerNames && conflictingMcpServerNames.length > 0 && (
         <Alert variant="error" dismissible={false}>
-          {`Both providers already have a client on these MCP servers: ${conflictingMcpServerNames.join(", ")}. Remove one client per server, then try again.`}
+          {`Both authorization servers already have a client on these MCP servers: ${conflictingMcpServerNames.join(", ")}. Remove one client per server, then try again.`}
         </Alert>
       )}
 
       {warnings && warnings.length > 0 && (
-        <Alert variant="warning" dismissible={false} alignTop>
+        <Alert variant="warning" dismissible={false}>
           <Stack gap={2}>
             {warnings.map((mismatch) => (
               <WarningDetail key={mismatch.field} mismatch={mismatch} />

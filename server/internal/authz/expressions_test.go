@@ -54,7 +54,11 @@ func TestEvaluateGrantCheck_rootGrantNotSelfExcluded(t *testing.T) {
 		t.Run(string(tc.scope), func(t *testing.T) {
 			t.Parallel()
 
-			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal})
+			var dimensions map[string]string
+			if ResourceKindForScope(tc.scope) == ResourceKindMCP {
+				dimensions = map[string]string{SelectorKeyProjectID: testProjectID}
+			}
+			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""})
 			require.NoError(t, err)
 			require.False(t, eval.Denied)
 			require.NotNil(t, eval.Grant)
@@ -69,8 +73,8 @@ func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
 
 	result, err := GrantDifference{
 		Base:      GrantCheck{Check: readCheck, Instance: nil},
@@ -88,8 +92,8 @@ func TestGrantExpressionEvaluate_differenceKeepsNonMatchingSetKey(t *testing.T) 
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
 
 	result, err := GrantDifference{
 		Base: GrantCheck{
@@ -113,9 +117,9 @@ func TestGrantExpressionEvaluate_nestedDifferencePreservesExclusionReason(t *tes
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
-	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
 	instance := Selector{SelectorKeyResourceKind: ResourceKindProject, SelectorKeyResourceID: "proj_123"}
 
 	result, err := GrantDifference{
@@ -143,22 +147,24 @@ func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelecto
 	}
 
 	result, err := expressionForCheck(Check{
-		Scope:         ScopeProjectWrite,
-		ResourceKind:  "",
-		ResourceID:    projectID,
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeProjectWrite,
+		ResourceKind:    "",
+		ResourceID:      projectID,
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
 	result, err = expressionForCheck(Check{
-		Scope:         ScopeProjectWrite,
-		ResourceKind:  "",
-		ResourceID:    "project_other",
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeProjectWrite,
+		ResourceKind:    "",
+		ResourceID:      "project_other",
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
@@ -175,11 +181,12 @@ func TestGrantExpressionEvaluate_projectReadBlocklistSubtractsProjectWrite(t *te
 	}
 
 	result, err := expressionForCheck(Check{
-		Scope:         ScopeProjectWrite,
-		ResourceKind:  "",
-		ResourceID:    projectID,
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+		Scope:           ScopeProjectWrite,
+		ResourceKind:    "",
+		ResourceID:      projectID,
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
@@ -209,25 +216,24 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 
-	result, err = expressionForCheck(Check{
-		Scope:         ScopeMCPWrite,
-		ResourceKind:  "",
-		ResourceID:    "dimensionless_probe",
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
+	// A check that omits the project cannot step around the block: it is
+	// invalid rather than matched.
+	_, err = expressionForCheck(Check{
+		Scope:           ScopeMCPWrite,
+		ResourceKind:    "",
+		ResourceID:      "dimensionless_probe",
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
 	}).Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
-func TestGrantExpressionEvaluate_mcpReadBlocklistLeavesMCPWrite(t *testing.T) {
+func TestGrantExpressionEvaluate_mcpReadBlocklistAlsoBlocksMCPWrite(t *testing.T) {
 	t.Parallel()
 
-	// The mcp:blocked_* scopes are independent of one another: seeing a
-	// server and administering it are separate capabilities, so a block on
-	// one says nothing about the other. Only mcp:blocked_write subtracts
-	// mcp:write.
+	// Blocks follow Implies in reverse: mcp:write implies mcp:read, so a
+	// block on read takes write away too, as it does for every other kind.
 	const projectID = "project_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
@@ -240,14 +246,18 @@ func TestGrantExpressionEvaluate_mcpReadBlocklistLeavesMCPWrite(t *testing.T) {
 
 	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
 	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
-	// The read it does name is subtracted.
 	result, err = expressionForCheck(MCPCheck(ScopeMCPRead, "server_in_project", projectID)).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
+
+	// A block bounded to the project leaves servers elsewhere alone.
+	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_elsewhere", "project_456")).Evaluate(grants)
+	require.NoError(t, err)
+	require.True(t, result.Satisfied)
 }
 
 func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T) {
@@ -258,22 +268,17 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 	const serverID = "server_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
+		NewGrant(ScopeMCPConnect, WildcardResource),
 		NewGrant(ScopeMCPBlockedConnect, serverID),
 	}
 
-	write := Check{
-		Scope:         ScopeMCPWrite,
-		ResourceKind:  "",
-		ResourceID:    serverID,
-		Dimensions:    nil,
-		selectorMatch: selectorMatchNormal,
-	}
+	write := MCPCheck(ScopeMCPWrite, serverID, testProjectID)
 	result, err := expressionForCheck(write).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 
-	// Connect, which mcp:write would otherwise satisfy, is the one it takes.
+	// Connect is the one it takes.
 	connect := write
 	connect.Scope = ScopeMCPConnect
 	result, err = expressionForCheck(connect).Evaluate(grants)

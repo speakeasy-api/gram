@@ -303,6 +303,11 @@ func (m *Minter) cachedFailure(ctx context.Context, keys cacheKeys) error {
 func (m *Minter) rememberFailure(ctx context.Context, logger *slog.Logger, keys cacheKeys, err error) {
 	entry := failureEntry{Key: keys.failure, Configuration: false, StatusCode: 0, Code: ""}
 	rejected, isRejection := errors.AsType[*remotesessions.TokenEndpointError](err)
+	if isRejection && rejected.Description != "" {
+		// Error omits the provider's description, and it is usually the only
+		// thing that says why a credential was refused.
+		logger = logger.With(attr.SlogOAuthErrorDescription(rejected.Description))
+	}
 
 	switch {
 	case errors.Is(err, remotesessions.ErrTokenEndpointConfiguration):

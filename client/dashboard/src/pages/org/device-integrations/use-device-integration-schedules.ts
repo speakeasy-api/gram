@@ -1,3 +1,5 @@
+import { DeviceIntegrationScheduleStateStatus } from "@gram/client/models/components/deviceintegrationschedulestate.js";
+import { isKnownEnumValue } from "@/lib/enum";
 import type { ScheduleBadgeRuntime } from "@/components/schedule-status-badge";
 import {
   invalidateDeviceIntegrationSchedules,
@@ -71,7 +73,12 @@ export function useDeviceScheduleRuntimes(
     for (const state of data?.schedules ?? []) {
       map[state.schedule] = {
         enabled: state.enabled,
-        status: state.status,
+        status: isKnownEnumValue(
+          DeviceIntegrationScheduleStateStatus,
+          state.status,
+        )
+          ? state.status
+          : "unknown",
         lastSyncedAt: state.lastSyncSuccessAt ?? null,
         error: state.lastSyncError ?? null,
         isMutating: state.schedule === inFlightSchedule,

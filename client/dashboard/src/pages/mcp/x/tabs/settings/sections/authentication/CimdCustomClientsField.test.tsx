@@ -149,12 +149,15 @@ vi.mock("sonner", () => ({
 
 const issuer: UserSessionIssuer = {
   authnChallengeMode: "chain",
+  authorizationServerMode: "endpoint",
   clientIdMetadataAdmissionMode: "presets",
   createdAt: new Date(0),
   id: "issuer-1",
   organizationId: "org-1",
   projectId: "project-1",
   sessionDurationHours: 24,
+  useAuthenticationHost: false,
+  issuerUrlPinned: false,
   slug: "issuer",
   updatedAt: new Date(0),
 };
@@ -292,7 +295,9 @@ describe("CimdCustomClientsField", () => {
     renderField();
 
     expect(testState.fetchNextPage).toHaveBeenCalled();
-    expect(screen.getByText("Loading…")).toBeDefined();
+    expect(
+      screen.getByRole("status", { name: "Loading allowed clients" }),
+    ).toBeDefined();
   });
 
   it("stops draining and reports an error when a later page fails", () => {
@@ -307,7 +312,9 @@ describe("CimdCustomClientsField", () => {
     // hasNextPage stays true after a failure, so without the error guard this
     // retries forever and the list claims to be loading indefinitely.
     expect(testState.fetchNextPage).not.toHaveBeenCalled();
-    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(
+      screen.queryByRole("status", { name: "Loading allowed clients" }),
+    ).toBeNull();
     expect(
       screen.getByText(/Could not load the clients allowed on this issuer/),
     ).toBeDefined();

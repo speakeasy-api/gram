@@ -1,7 +1,10 @@
+// @vitest-environment node
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  accessSummary,
   buildAccessRows,
   complementTools,
   inheritedGrants,
@@ -90,17 +93,21 @@ describe("grouping", () => {
 });
 
 describe("scope resolution", () => {
-  it("counts a stronger scope as granting the weaker ones it satisfies", () => {
+  it("counts manage as granting view, and neither as granting connect", () => {
     const row = rowFor([entry({ level: "manage" })]);
 
-    for (const scope of ["use", "view", "manage"] as const) {
-      expect(scopeState(row, scope, catalog).granted).toBe(true);
-    }
+    expect(scopeState(row, "manage", catalog).granted).toBe(true);
+    expect(scopeState(row, "view", catalog).granted).toBe(true);
+    // Connect is granted on its own: mcp:read and mcp:write do not imply it.
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
+    expect(
+      scopeState(rowFor([entry({ level: "view" })]), "use", catalog).granted,
+    ).toBe(false);
   });
 
-  it("takes away only the scope a block names", () => {
-    // The mcp:blocked_* scopes are independent, so closing connect leaves
-    // view and manage exactly as the role left them.
+  it("takes away only connect when connect is blocked", () => {
+    // Connect is implied by neither view nor manage, so closing it leaves
+    // both exactly as the role left them.
     const row = rowFor([
       role("Engineering", { level: "manage" }),
       role("Engineering", { appliesTo: "resource", level: "blocked" }),
@@ -109,6 +116,29 @@ describe("scope resolution", () => {
     expect(scopeState(row, "use", catalog).granted).toBe(false);
     expect(scopeState(row, "view", catalog).granted).toBe(true);
     expect(scopeState(row, "manage", catalog).granted).toBe(true);
+  });
+
+  it("takes manage away with a view block, since manage includes view", () => {
+    const row = rowFor([
+      role("Engineering", { level: "manage" }),
+      role("Engineering", { level: "use" }),
+      role("Engineering", { appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).granted).toBe(false);
+    expect(scopeState(row, "manage", catalog).granted).toBe(false);
+    // Connect is implied by neither, so the view block leaves it.
+    expect(scopeState(row, "use", catalog).granted).toBe(true);
+  });
+
+  it("leaves view standing under a manage block", () => {
+    const row = rowFor([
+      role("Engineering", { level: "manage" }),
+      role("Engineering", { appliesTo: "resource", level: "blocked_manage" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).granted).toBe(true);
+    expect(scopeState(row, "manage", catalog).granted).toBe(false);
   });
 
   it("honours a block that covers every server, which this page cannot lift", () => {
@@ -123,12 +153,12 @@ describe("scope resolution", () => {
   });
 
   it("unions the tools two grants open", () => {
-    const row = rowFor([
+    const person = personIn([
       entry({ level: "use", tools: ["a"] }),
-      entry({ principalUrn: "user:u1", level: "view", tools: ["b"] }),
+      role("R1", { appliesTo: "resource", level: "use", tools: ["b"] }),
     ]);
 
-    expect(reachableTools(row.cells.use, catalog)).toEqual(["a", "b"]);
+    expect(reachableTools(person.cells.use, catalog)).toEqual(["a", "b"]);
   });
 
   it("unions the tools two blocks take away", () => {
@@ -164,11 +194,11 @@ describe("scope resolution", () => {
     expect(scopeState(row, "use", catalog).value).toBe("1 tool");
   });
 
-  it("does not claim every tool for a narrowed stronger grant", () => {
-    // Manage over two tools satisfies a connect check for those two only.
+  it("opens no tools through a narrowed manage grant", () => {
+    // Manage does not satisfy a connect check, narrowed or not.
     const row = rowFor([entry({ level: "manage", tools: ["a", "b"] })]);
 
-    expect(scopeState(row, "use", catalog).value).toBe("2 tools");
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
   });
 
   it("falls back to naming the rule when the server publishes no catalogue", () => {
@@ -224,20 +254,83 @@ describe("a person and the roles they are in", () => {
     expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
   });
 
-  it("reads a row's own block for every server as plain no access", () => {
+  it("names the stronger line when the row's own rule for every server grants it", () => {
+    // Clearing View leaves it allowed through Manage; the line says so
+    // rather than reading as set on its own.
+    const row = rowFor([
+      role("Collaborator", { appliesTo: "all_resources", level: "manage" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
+    expect(scopeState(row, "manage", catalog).note).toBeUndefined();
+  });
+
+  it("reads a row's own block for every server as blocked", () => {
     const row = rowFor([role("Collaborator", { level: "blocked_manage" })]);
     const state = scopeState(row, "manage", catalog);
 
-    expect(state.value).toBe("No access");
+    expect(state.value).toBe("Blocked");
     expect(state.granted).toBe(false);
+    expect(state.blocked).toBe(true);
     expect(state.via).toBeUndefined();
     expect(state.note).toBeUndefined();
     expect(state.capped).toBe(true);
   });
 
+  it("reads a row's own block on this server as blocked", () => {
+    const row = rowFor([
+      role("Collaborator", { appliesTo: "resource", level: "blocked" }),
+    ]);
+    const state = scopeState(row, "use", catalog);
+
+    expect(state.value).toBe("Blocked");
+    expect(state.blocked).toBe(true);
+    // The row's own block can be lifted here, so the line stays editable.
+    expect(state.capped).toBe(false);
+  });
+
+  it("does not call a line blocked when only another principal blocks it", () => {
+    const person = personIn([
+      role("Admin", { level: "blocked_view" }),
+      entry({ principalUrn: "user:u1", appliesTo: "all_resources" }),
+    ]);
+    const state = scopeState(person, "view", catalog);
+
+    expect(state.blocked).toBe(false);
+    expect(state.value).toBe("No access");
+  });
+
+  it("calls a narrowed own block blocked when it covers every granted tool", () => {
+    const row = rowFor([
+      role("Collaborator", { level: "use" }),
+      role("Collaborator", {
+        appliesTo: "resource",
+        level: "blocked",
+        tools: ["a", "b", "c", "d", "e"],
+      }),
+    ]);
+    const state = scopeState(row, "use", catalog);
+
+    expect(state.value).toBe("Blocked");
+    expect(state.blocked).toBe(true);
+  });
+
+  it("does not call a narrowed own block blocked", () => {
+    const row = rowFor([
+      role("Collaborator", { level: "use" }),
+      role("Collaborator", {
+        appliesTo: "resource",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(scopeState(row, "use", catalog).blocked).toBe(false);
+  });
+
   it("names another principal over the row's own wider rule", () => {
     const person = personIn([
-      role("Admin", { level: "manage" }),
+      role("Admin", { level: "use", appliesTo: "resource" }),
       entry({ principalUrn: "user:u1", appliesTo: "all_resources" }),
     ]);
     const state = scopeState(person, "use", catalog);
@@ -251,6 +344,7 @@ describe("a person and the roles they are in", () => {
     // the write paths need it to know a block is required.
     const person = personIn([
       role("Admin", { level: "manage" }),
+      role("Admin", { level: "use" }),
       entry({ principalUrn: "user:u1", level: "use" }),
     ]);
 
@@ -515,5 +609,86 @@ describe("keptIndividually", () => {
       "Hana Sato",
       "Outside Staff",
     ]);
+  });
+});
+
+it.each(["future_level", "constructor", "__proto__"])(
+  "keeps an unknown own level %s readable without claiming access",
+  (level) => {
+    const rows = buildAccessRows([
+      entry({}),
+      entry({ level: unrecognized(level) }),
+    ]);
+    expect(accessSummary(rows[0]!)).toBe("Access unknown");
+    expect(scopeState(rows[0]!, "use").value).toBe("Access unknown");
+  },
+);
+
+it("does not claim known access survives an unknown inherited block", () => {
+  const row = personIn([
+    entry({}),
+    role("Engineering", { level: unrecognized("future_block") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
+});
+
+it("treats unknown applicability as unknown reach", () => {
+  const row = rowFor([
+    entry({ appliesTo: unrecognized("future_applicability") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
+  expect(scopeState(row, "use").value).toBe("Access unknown");
+});
+
+it.each(["future_kind", "constructor", "__proto__"])(
+  "does not infer reach for principal kind %s",
+  (kind) => {
+    const row = rowFor([entry({ kind: unrecognized(kind) })]);
+    expect(accessSummary(row)).toBe("Access unknown");
+    expect(scopeState(row, "use").value).toBe("Access unknown");
+  },
+);
+
+it("marks members reached by an unknown principal kind as unknown without changing unrelated rows", () => {
+  const rows = buildAccessRows([
+    role("Future group", {
+      kind: unrecognized("future_group"),
+      memberIds: ["u1"],
+    }),
+    entry({}),
+    entry({ principalUrn: "user:unrelated" }),
+  ]);
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:u1")!),
+  ).toBe("Access unknown");
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:unrelated")!),
+  ).toBe("All tools");
+});
+
+describe("a blocking row at a glance", () => {
+  it("reads a role blocked on every scope as blocked", () => {
+    const row = rowFor([
+      role("Contractors", { appliesTo: "resource", level: "blocked" }),
+      role("Contractors", { appliesTo: "resource", level: "blocked_view" }),
+      role("Contractors", { appliesTo: "resource", level: "blocked_manage" }),
+    ]);
+
+    expect(accessSummary(row, catalog)).toBe("Blocked");
+  });
+
+  it("names the blocked scopes after what the role still has", () => {
+    const row = rowFor([
+      role("Contractors", { level: "view" }),
+      role("Contractors", { appliesTo: "resource", level: "blocked" }),
+    ]);
+
+    expect(accessSummary(row, catalog)).toBe("View · Connect blocked");
+  });
+
+  it("names a partial block even when nothing is granted", () => {
+    const row = rowFor([role("Contractors", { level: "blocked_manage" })]);
+
+    expect(accessSummary(row, catalog)).toBe("Manage blocked");
   });
 });

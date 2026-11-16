@@ -73,6 +73,6 @@ func TestRemoteLoginCallbackFollowsTunnelBoundMidFlow(t *testing.T) {
 		"/mcp/remote_login_callback?code=fake-code&state="+url.QueryEscape(parsed.Query().Get("state")), nil)
 	req = req.WithContext(ctx)
 	err = fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), req)
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeGatewayError)
 	require.Nil(t, spy.form, "a tunnel-bound issuer must not be dialed over direct egress")
 }

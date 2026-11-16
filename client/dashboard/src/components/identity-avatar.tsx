@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,13 +31,16 @@ export function IdentityAvatar({
   label,
   className,
   textClassName,
+  src,
 }: {
   label: string;
   className?: string;
   textClassName?: string;
+  src?: string;
 }): JSX.Element {
   return (
     <Avatar className={cn("size-6 shrink-0", className)}>
+      {src && <AvatarImage src={src} alt="" />}
       <AvatarFallback
         className={cn(
           "text-muted-foreground text-[10px] leading-none font-medium tracking-tight",

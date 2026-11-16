@@ -168,7 +168,7 @@ export function ConfirmTrafficSection({
       <div className="space-y-4">
         <DetectedClients matchesSource={matchesSource} />
         {callout ? (
-          <Alert variant="info" alignTop>
+          <Alert variant="info">
             <AlertTitle>{callout.title}</AlertTitle>
             <AlertDescription>{callout.body}</AlertDescription>
           </Alert>

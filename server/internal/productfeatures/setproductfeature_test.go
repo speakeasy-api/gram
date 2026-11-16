@@ -260,6 +260,29 @@ func TestProductFeaturesService_SetProductFeatureSSOAllowedForPlatformAdmin(t *t
 	require.True(t, enabled)
 }
 
+func TestProductFeaturesService_SetProductFeatureRefusesUpstreamAuthEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureUpstreamAuthEnforced),
+		Enabled:        true,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "refused toggle must not write the feature row")
+}
+
 // Org admins keep self-serve control of the logs toggle even with the
 // platform-admin bit set — staff toggling logs must keep working too.
 func TestProductFeaturesService_SetProductFeatureLogsAllowedForPlatformAdmin(t *testing.T) {
@@ -299,8 +322,8 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 		productfeatures.FeatureHooksBrowserLogin,
 		productfeatures.FeatureHooksFailOpen,
 		productfeatures.FeatureSkillCaptureMetadataOnly,
-		productfeatures.FeatureConsentToolFiltering,
 		productfeatures.FeaturePlatformMCP,
+		productfeatures.FeatureOrganizationGatewayDisabled,
 	}
 	for _, feature := range orgSettable {
 		require.Falsef(t, feature.RequiresPlatformAdmin(), "feature %s must stay org-settable", feature)
@@ -625,5 +648,26 @@ func TestMutatorRejectsRetiredRoleDistributionFlag(t *testing.T) {
 		changed, err := mutator.ApplyFeatureChangeTx(t.Context(), nil, "org_retired_flag", productfeatures.Feature("automatic-role-distribution"), enabled, productfeatures.MutationActor{})
 		require.False(t, changed)
 		requireOopsCode(t, err, oops.CodeInvalid)
+	}
+}
+
+func TestOrganizationGatewayRequiresExplicitOptIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	orgID := requestedOrganizationID(ctx)
+	require.True(t, ti.client.Snapshot(ctx, orgID).OrganizationGatewayDisabled)
+	requireDisabled := func(want bool) {
+		t.Helper()
+		live, err := ti.client.IsFeatureEnabledUncached(ctx, orgID, productfeatures.FeatureOrganizationGatewayDisabled)
+		require.NoError(t, err)
+		require.Equal(t, want, live)
+		require.Equal(t, want, ti.client.Snapshot(ctx, orgID).OrganizationGatewayDisabled)
+	}
+	requireDisabled(true)
+	for _, disabled := range []bool{false, false, true, true, false} {
+		require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+			OrganizationID: orgID, FeatureName: gen.ProductFeatureName(productfeatures.FeatureOrganizationGatewayDisabled), Enabled: disabled,
+		}))
+		requireDisabled(disabled)
 	}
 }

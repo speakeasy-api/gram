@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const TargetState = {
 /**
  * Whether the skill has no distribution target, one target, or conflicting targets.
  */
-export type TargetState = ClosedEnum<typeof TargetState>;
+export type TargetState = OpenEnum<typeof TargetState>;
 
 /**
  * Active-machine convergence against the skill's plugin distribution target.
@@ -61,8 +62,8 @@ export type SkillDrift = {
 };
 
 /** @internal */
-export const TargetState$inboundSchema: z.ZodMiniEnum<typeof TargetState> = z
-  .enum(TargetState);
+export const TargetState$inboundSchema: z.ZodMiniType<TargetState, unknown> =
+  openEnums.inboundSchema(TargetState);
 
 /** @internal */
 export const SkillDrift$inboundSchema: z.ZodMiniType<SkillDrift, unknown> = z

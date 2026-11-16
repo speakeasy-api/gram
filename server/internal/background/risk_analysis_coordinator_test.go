@@ -55,7 +55,7 @@ func TestCoordinatorWorkflow_FansOutAndMarksAnalyzed(t *testing.T) {
 			analyzeCallCount++
 			require.Equal(t, policyID, args.RiskPolicyID)
 			require.Equal(t, projectID, args.ProjectID)
-			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs), Findings: 0}, nil
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs)}, nil
 		},
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
@@ -186,7 +186,7 @@ func TestCoordinatorWorkflow_FailedBatchExcludedFromMark(t *testing.T) {
 			if len(args.MessageIDs) > 0 {
 				return nil, temporal.NewApplicationError("scan failed", "", nil)
 			}
-			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.ContentPartIDs), Findings: 0}, nil
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.ContentPartIDs)}, nil
 		},
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
@@ -248,7 +248,7 @@ func TestCoordinatorWorkflow_UnitFailedForOnePolicyNotMarked(t *testing.T) {
 			if args.RiskPolicyID == failingPolicyID {
 				return nil, temporal.NewApplicationError("scan failed", "", nil)
 			}
-			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs), Findings: 0}, nil
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs)}, nil
 		},
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
@@ -298,7 +298,7 @@ func TestCoordinatorWorkflow_MarkFailureRetriesViaContinueAsNew(t *testing.T) {
 
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, args risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
-			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs), Findings: 0}, nil
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs)}, nil
 		},
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)

@@ -5,6 +5,7 @@ export type AgentProviderIconKind =
   | "opencode"
   | "openclaw"
   | "pi"
+  | "kit"
   | "litellm"
   | "cline"
   | "warp"
@@ -19,6 +20,7 @@ export type AgentProviderIconKind =
   | "microsoft-copilot"
   | "copilot"
   | "gemini"
+  | "antigravity"
   | "glean"
   | "bedrock"
   | "catchall"
@@ -38,6 +40,11 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
     ?.trim()
     .toLowerCase()
     .replace(/[\s_]+/g, "-");
+
+  // Exact aliases avoid assigning Kit's mark to unrelated toolkit sources.
+  if (normalizedSource === "kit" || normalizedSource === "ahp-harness:kit") {
+    return "kit";
+  }
 
   if (
     normalizedSource === "anthropic" ||
@@ -93,6 +100,7 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   if (normalizedSource?.includes("copilot")) {
     return "copilot";
   }
+  if (normalizedSource?.includes("antigravity")) return "antigravity";
   if (normalizedSource === "google" || normalizedSource?.includes("gemini")) {
     return "gemini";
   }

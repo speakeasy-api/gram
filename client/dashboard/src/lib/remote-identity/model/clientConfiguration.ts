@@ -1,25 +1,12 @@
 import type { ServerIdentityClientConfigurationTokenEndpointAuthMethod } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 
 /**
- * The scopes a new client should request.
+ * Every scope on offer: the protected resource's first, then the issuer's.
  *
- * The protected resource's RFC 9728 `scopes_supported` wins because it names
- * what this one server needs. The issuer's list is a fallback only: it names
- * everything the provider can grant, and requesting all of it is what broke
- * Salesforce logins. Every surface that registers a client must go through
- * here so a client does not come out different depending on who created it.
+ * Options for the manual scope picker only. An automatically created client
+ * stores no scope: the server discovers what to request at each sign-in, so a
+ * copied list cannot go stale or pose as an operator's choice.
  */
-export function preferredScopes(
-  protectedResourceScopes: string[] | undefined | null,
-  authorizationServerScopes: string[] | undefined | null,
-): string[] {
-  const resourceScopes = nonEmptyStrings(protectedResourceScopes);
-  return resourceScopes.length > 0
-    ? resourceScopes
-    : nonEmptyStrings(authorizationServerScopes);
-}
-
-/** Every scope on offer: the protected resource's first, then the issuer's. */
 export function advertisedScopes(
   protectedResourceScopes: string[] | undefined | null,
   authorizationServerScopes: string[] | undefined | null,
@@ -54,6 +41,8 @@ const PREFERRED_AUTH_METHODS = [
 type PreferredAuthMethod = (typeof PREFERRED_AUTH_METHODS)[number];
 
 /** The most preferred method the issuer advertises, or undefined for none. */
+export type CopyableAuthMethod = PreferredAuthMethod;
+
 function firstPreferredAuthMethod(
   supported: readonly string[],
 ): PreferredAuthMethod | undefined {
@@ -89,4 +78,45 @@ export function serverIdentityAuthMethod(
 ): ServerIdentityClientConfigurationTokenEndpointAuthMethod | undefined {
   if (supported.length === 0) return "client_secret_basic";
   return firstPreferredAuthMethod(supported);
+}
+
+/** The parts of a stored client that decide whether a new one can start from it. */
+type TemplateCandidate = {
+  credentialOwner: string;
+  upstreamRejectedAt?: Date | undefined;
+  clientIdMetadataUri?: string | undefined;
+  tokenEndpointAuthMethod?: string | undefined;
+  identityProviderConnectionId?: string | undefined;
+};
+
+/**
+ * Whether a new personal sign-in client can start from a stored one, mirroring
+ * the server's refusals so the rest stay out of a list rather than failing at
+ * Save. A client Speakeasy hosts a metadata document for has no credentials to
+ * copy and is registered again, which needs the provider to still support it.
+ * A shared credential, one the provider rejected, one an identity provider
+ * connection manages, and one that signs with a key set registered for its own
+ * record cannot stand in a second record.
+ */
+export function usableAsClientTemplate(
+  candidate: TemplateCandidate,
+  metadataDocumentSupported: boolean,
+): boolean {
+  if (candidate.credentialOwner !== "subject") return false;
+  if (candidate.upstreamRejectedAt) return false;
+  // Its registration belongs to the connection that manages it.
+  if (candidate.identityProviderConnectionId) return false;
+  if (candidate.clientIdMetadataUri) return metadataDocumentSupported;
+  // The SDK enum does not list private_key_jwt, but the server stores it.
+  return candidate.tokenEndpointAuthMethod !== "private_key_jwt";
+}
+
+/**
+ * A stored client's token endpoint method when a new client can declare it,
+ * undefined otherwise so the server decides.
+ */
+export function copyableAuthMethod(
+  method: string | undefined,
+): PreferredAuthMethod | undefined {
+  return PREFERRED_AUTH_METHODS.find((candidate) => candidate === method);
 }

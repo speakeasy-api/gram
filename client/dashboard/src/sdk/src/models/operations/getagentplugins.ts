@@ -6,6 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type GetAgentPluginsSecurity = {
+  deviceAgentTokenHeaderAuthorization?: string | undefined;
   apikeyHeaderGramKey?: string | undefined;
 };
 
@@ -38,6 +39,7 @@ export type GetAgentPluginsRequest = {
 
 /** @internal */
 export type GetAgentPluginsSecurity$Outbound = {
+  device_agent_token_header_Authorization?: string | undefined;
   "apikey_header_Gram-Key"?: string | undefined;
 };
 
@@ -47,10 +49,13 @@ export const GetAgentPluginsSecurity$outboundSchema: z.ZodMiniType<
   GetAgentPluginsSecurity
 > = z.pipe(
   z.object({
+    deviceAgentTokenHeaderAuthorization: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      deviceAgentTokenHeaderAuthorization:
+        "device_agent_token_header_Authorization",
       apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
   }),

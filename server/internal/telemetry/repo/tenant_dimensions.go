@@ -142,7 +142,9 @@ func (q *Queries) ReplaceTenantDimensions(ctx context.Context, organizations []O
 			)
 		}
 		query := "INSERT INTO organization_metadata_staging (id, slug, account_type, workos_id, workos_updated_at, webhooks_enabled, scim_enabled, sso_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, trial_tier, trial_ends_at, trial_converted_at, trial_demoted_at, trial_created_at, trial_updated_at, created_at, updated_at, disabled_at) VALUES " + tenantDimensionValuesClause(len(chunk), "(?, ?, ?, ?, fromUnixTimestamp64Micro(?), ?, ?, ?, ?, fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), ?, fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?))")
-		if err := q.conn.Exec(ctx, query, args...); err != nil {
+		// Acknowledged, so the EXCHANGE below never publishes a staging table
+		// still missing buffered chunks.
+		if err := q.conn.Exec(acknowledgedInsertContext(ctx), query, args...); err != nil {
 			return fmt.Errorf("insert organization metadata staging chunk: %w", err)
 		}
 	}
@@ -154,7 +156,7 @@ func (q *Queries) ReplaceTenantDimensions(ctx context.Context, organizations []O
 			args = append(args, row.ID, row.OrganizationID, row.Slug, row.CreatedAt.UnixMicro(), row.UpdatedAt.UnixMicro(), nullableUnixMicro(row.DeletedAt))
 		}
 		query := "INSERT INTO projects_staging (id, organization_id, slug, created_at, updated_at, deleted_at) VALUES " + tenantDimensionValuesClause(len(chunk), "(?, ?, ?, fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?), fromUnixTimestamp64Micro(?))")
-		if err := q.conn.Exec(ctx, query, args...); err != nil {
+		if err := q.conn.Exec(acknowledgedInsertContext(ctx), query, args...); err != nil {
 			return fmt.Errorf("insert projects staging chunk: %w", err)
 		}
 	}

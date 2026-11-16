@@ -27,7 +27,7 @@ func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, er
 			wait.ForExec([]string{"redis-cli", "ping"}),
 		),
 		WithPublishedPortWait("6379/tcp"),
-		WithoutPublishedPorts(),
+		WithLoopbackPorts(),
 	)
 
 	if err != nil {

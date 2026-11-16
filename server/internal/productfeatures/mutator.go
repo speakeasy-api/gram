@@ -138,6 +138,15 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 		return false, nil
 	}
 
+	syncGateway := func() error { return nil }
+	if feature == FeatureOrganizationGatewayDisabled {
+		var err error
+		syncGateway, err = prepareGatewayAuthClients(ctx, dbtx, organizationID)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	// Derive changed from the write itself so audit records exactly the
 	// transition that commits, without a read-then-write race.
 	q := repo.New(dbtx)
@@ -155,6 +164,20 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 		}
 		changed = inserted > 0
 	} else {
+		// The gateway is off until an administrator opts in. Persist the first
+		// opt-in as a soft-deleted disabled flag, retaining the existing API.
+		if feature == FeatureOrganizationGatewayDisabled {
+			current, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
+			if err != nil {
+				return false, fmt.Errorf("read gateway opt-in: %w", err)
+			}
+			if !current {
+				return false, nil
+			}
+			if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)}); err != nil {
+				return false, fmt.Errorf("record gateway opt-in: %w", err)
+			}
+		}
 		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -163,6 +186,10 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 		default:
 			changed = true
 		}
+	}
+
+	if err := syncGateway(); err != nil {
+		return false, err
 	}
 
 	if changed {

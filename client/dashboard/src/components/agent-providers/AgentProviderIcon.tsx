@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { GlobeIcon } from "lucide-react";
 import { useId } from "react";
 import { agentProviderIconKind } from "./agent-provider-icon-kind";
@@ -556,6 +557,21 @@ export function AgentProviderIcon({
       return <OpencodeIcon className={className} />;
     case "openclaw":
       return <OpenClawIcon className={className} />;
+    case "kit":
+      return (
+        <>
+          <img
+            src="/icons/platforms/kit.png"
+            alt=""
+            className={cn("block dark:hidden", className)}
+          />
+          <img
+            src="/icons/platforms/kit-dark.png"
+            alt=""
+            className={cn("hidden dark:block", className)}
+          />
+        </>
+      );
     case "pi":
       return <PiIcon className={className} />;
     case "litellm":
@@ -592,6 +608,14 @@ export function AgentProviderIcon({
       return <CopilotIcon className={className} />;
     case "gemini":
       return <GeminiIcon className={className} />;
+    case "antigravity":
+      return (
+        <img
+          src="/icons/platforms/antigravity.png"
+          alt=""
+          className={className}
+        />
+      );
     case "glean":
       return <GleanIcon className={className} />;
     case "bedrock":

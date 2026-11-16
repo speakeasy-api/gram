@@ -3,7 +3,6 @@ package killswitches
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -58,17 +57,17 @@ func insertVersionRow(t *testing.T, conn *pgxpool.Pool, orgID, state string, exp
 
 func countExpiryMarkers(t *testing.T, conn *pgxpool.Pool, orgID string) int {
 	t.Helper()
-	var count int
-	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_expiry_events WHERE organization_id = $1`, orgID).Scan(&count))
-	return count
+	count, err := repo.New(conn).CountKillswitchExpiryEventsFixture(t.Context(), orgID)
+	require.NoError(t, err)
+	return int(count)
 }
 
 func markerExists(t *testing.T, conn *pgxpool.Pool, prescriptionID PrescriptionID) bool {
 	t.Helper()
-	var count int
-	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_expiry_events WHERE prescription_id = $1`, string(prescriptionID)).Scan(&count))
+	id, err := uuid.Parse(string(prescriptionID))
+	require.NoError(t, err)
+	count, err := repo.New(conn).CountKillswitchExpiryEventsForPrescriptionFixture(t.Context(), id)
+	require.NoError(t, err)
 	return count > 0
 }
 
@@ -257,24 +256,24 @@ func TestExpiryRetryRecovery(t *testing.T) {
 	require.Len(t, listOutboxMessages(t, conn, orgID), 1)
 }
 
-func insertOperationReceipt(t *testing.T, conn *pgxpool.Pool, orgID, expiresAtSQL string) uuid.UUID {
+// insertOperationReceipt fabricates a receipt that expires expiresIn after the
+// database clock reading taken by the insert.
+func insertOperationReceipt(t *testing.T, conn *pgxpool.Pool, orgID string, expiresIn time.Duration) uuid.UUID {
 	t.Helper()
 	operationID := uuid.New()
-	//nolint:glint // notestingrawsql: fabricates private killswitch rows with SQL-computed timestamps that production lifecycle writes cannot produce
-	_, err := conn.Exec(t.Context(), fmt.Sprintf(`
-		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
-		VALUES ($1, $2, 'user:test', 'activate', 'hash', %s)
-	`, expiresAtSQL), orgID, operationID)
+	err := repo.New(conn).InsertKillswitchOperationExpiringInFixture(t.Context(), repo.InsertKillswitchOperationExpiringInFixtureParams{
+		OrganizationID: orgID, OperationID: operationID, ActorUserID: "user:test", Operation: "activate", RequestHash: "hash",
+		ExpiresIn: pgtype.Interval{Microseconds: expiresIn.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
 	require.NoError(t, err)
 	return operationID
 }
 
 func countOperations(t *testing.T, conn *pgxpool.Pool, orgID string) int {
 	t.Helper()
-	var count int
-	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_operations WHERE organization_id = $1`, orgID).Scan(&count))
-	return count
+	count, err := repo.New(conn).CountKillswitchOperationsFixture(t.Context(), orgID)
+	require.NoError(t, err)
+	return int(count)
 }
 
 func TestOperationCleanupBoundaryAndBatching(t *testing.T) {
@@ -285,10 +284,10 @@ func TestOperationCleanupBoundaryAndBatching(t *testing.T) {
 	insertOrganization(t, conn, otherOrgID)
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
 
-	insertOperationReceipt(t, conn, orgID, "clock_timestamp() - interval '1 hour'")
-	insertOperationReceipt(t, conn, orgID, "clock_timestamp()")
-	retained := insertOperationReceipt(t, conn, orgID, "clock_timestamp() + interval '1 hour'")
-	insertOperationReceipt(t, conn, otherOrgID, "clock_timestamp() - interval '1 minute'")
+	insertOperationReceipt(t, conn, orgID, -time.Hour)
+	insertOperationReceipt(t, conn, orgID, 0)
+	retained := insertOperationReceipt(t, conn, orgID, time.Hour)
+	insertOperationReceipt(t, conn, otherOrgID, -time.Minute)
 
 	deleted, err := maintenance.CleanupExpiredOperationsGlobal(t.Context(), 2)
 	require.NoError(t, err)
@@ -302,9 +301,8 @@ func TestOperationCleanupBoundaryAndBatching(t *testing.T) {
 
 	require.Equal(t, 1, countOperations(t, conn, orgID))
 	require.Zero(t, countOperations(t, conn, otherOrgID))
-	var remaining uuid.UUID
-	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT operation_id FROM killswitch_operations WHERE organization_id = $1`, orgID).Scan(&remaining))
+	remaining, err := repo.New(conn).GetKillswitchOperationIDFixture(t.Context(), orgID)
+	require.NoError(t, err)
 	require.Equal(t, retained, remaining)
 
 	_, err = maintenance.CleanupExpiredOperationsGlobal(t.Context(), 0)
@@ -319,7 +317,7 @@ func TestOperationCleanupConcurrentCleanersDoNotDoubleCount(t *testing.T) {
 	conn, orgID := newLifecycleDatabase(t, "killswitch_cleanup_concurrency")
 	const expired = 24
 	for range expired {
-		insertOperationReceipt(t, conn, orgID, "clock_timestamp() - interval '1 hour'")
+		insertOperationReceipt(t, conn, orgID, -time.Hour)
 	}
 
 	const cleaners = 3

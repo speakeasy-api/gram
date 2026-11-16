@@ -6,8 +6,10 @@ import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
+import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { cn } from "@/lib/utils";
-import { formatRemoteMcpDisplay } from "@/lib/sources";
+import { formatRemoteMcpDisplay, mcpServerRouteParam } from "@/lib/sources";
 import type { OrganizationMcpServer } from "@gram/client/models/components/organizationmcpserver.js";
 import {
   invalidateAllOrganizationRemoteSessionClientMcpServers,
@@ -24,6 +26,7 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 // mcpServerHref builds a cross-project link to a remote-MCP server's detail page
@@ -36,8 +39,17 @@ function mcpServerHref(
   server: OrganizationMcpServer,
 ): string | null {
   if (!orgSlug || !server.projectSlug) return null;
-  const param = server.slug?.trim() || server.id;
-  return `/${orgSlug}/projects/${server.projectSlug}/mcp/x/${param}/overview`;
+  return `/${orgSlug}/projects/${server.projectSlug}/mcp/${mcpServerRouteParam(server)}/overview`;
+}
+
+// mcpServerIdentityHref points at the server's own Identity settings, where an
+// organization served by typed auth clients changes what the server offers.
+function mcpServerIdentityHref(
+  orgSlug: string | undefined,
+  server: OrganizationMcpServer,
+): string | null {
+  if (!orgSlug || !server.projectSlug) return null;
+  return `/${orgSlug}/projects/${server.projectSlug}/mcp/${mcpServerRouteParam(server)}/settings#${MCP_AUTHENTICATION_SECTION_ID}`;
 }
 
 export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
@@ -45,6 +57,12 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
   const queryClient = useQueryClient();
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
+  // An organization whose servers are served by typed auth clients changes
+  // what a server offers under its own Identity, so removing the attachment
+  // from here would edit a binding its servers no longer read. Until the
+  // state is known neither action is offered, rather than guessing either way.
+  const upstreamAuth = useUpstreamAuthEnforcement();
+  const navigate = useNavigate();
   const { data, isLoading, isError } =
     useOrganizationRemoteSessionClientMcpServers({
       clientId,
@@ -92,22 +110,39 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
           name: server.name,
           url: server.url ?? "",
         });
-        const actions: Action[] = [
-          {
-            label: "Remove from server",
-            destructive: true,
-            disabled: remove.isPending,
-            onClick: () =>
-              remove.mutate({
-                request: {
-                  removeClientFromMcpServerRequestBody: {
-                    clientId,
-                    mcpServerId: server.id,
+        const identityHref = mcpServerIdentityHref(orgSlug, server);
+        const actions: Action[] =
+          upstreamAuth === "enforced"
+            ? identityHref
+              ? [
+                  {
+                    label: "Manage in Identity",
+                    description:
+                      "This organization configures what a server offers under its own Identity.",
+                    onClick: () => {
+                      void navigate(identityHref);
+                    },
                   },
-                },
-              }),
-          },
-        ];
+                ]
+              : []
+            : upstreamAuth === "legacy"
+              ? [
+                  {
+                    label: "Remove from server",
+                    destructive: true,
+                    disabled: remove.isPending,
+                    onClick: () =>
+                      remove.mutate({
+                        request: {
+                          removeClientFromMcpServerRequestBody: {
+                            clientId,
+                            mcpServerId: server.id,
+                          },
+                        },
+                      }),
+                  },
+                ]
+              : [];
         return (
           <TableRowContextMenu
             key={server.id}

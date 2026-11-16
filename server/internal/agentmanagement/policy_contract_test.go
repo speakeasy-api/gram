@@ -34,6 +34,12 @@ func TestPolicyGrantRequestSelectorContract(t *testing.T) {
 	}
 	require.NoError(t, yaml.Unmarshal(data, &spec))
 
+	body := spec.Paths["/rpc/agents.deletePolicyGrant"]["post"].RequestBody
+	require.Equal(t, "#/components/schemas/DeleteAgentPolicyGrantForm", body.Content["application/json"].Schema.Ref)
+	require.Equal(t, "#/components/schemas/AgentExpectedPolicy", spec.Components.Schemas["DeleteAgentPolicyGrantForm"].Properties["expected_policy"].Ref)
+	require.NotContains(t, spec.Components.Schemas["UpdateAgentPolicyGrantForm"].Properties, "expected_policy")
+	require.NotContains(t, spec.Components.Schemas["AgentPolicyGrantIDForm"].Properties, "expected_policy")
+
 	forms := map[string]string{
 		"createPolicyGrant": "CreateAgentPolicyGrantForm",
 		"updatePolicyGrant": "UpdateAgentPolicyGrantForm",

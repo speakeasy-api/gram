@@ -19,6 +19,10 @@ export type Trial = {
 
 export type InfoResponseBody = {
   /**
+   * Display-only signup offer variant for an accepted promotion; not billing eligibility
+   */
+  acceptedSignupOfferFlow?: string | undefined;
+  /**
    * Dashboard base URL of the platform host the active organization lives on. Set only for an ordinary session whose request arrived on a different platform host; the dashboard moves there.
    */
   activeOrganizationDashboardUrl?: string | undefined;
@@ -90,6 +94,7 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    accepted_signup_offer_flow: z.optional(z.string()),
     active_organization_dashboard_url: z.optional(z.string()),
     active_organization_id: z.string(),
     gram_account_type: z.string(),
@@ -111,6 +116,7 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "accepted_signup_offer_flow": "acceptedSignupOfferFlow",
       "active_organization_dashboard_url": "activeOrganizationDashboardUrl",
       "active_organization_id": "activeOrganizationId",
       "gram_account_type": "gramAccountType",

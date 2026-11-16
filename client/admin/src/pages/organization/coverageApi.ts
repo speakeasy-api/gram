@@ -5,6 +5,7 @@ import { gramAdminFetch } from "@/lib/gramAdminApi";
 const cellSchema = z.object({
   capability: z.enum(["session", "blocking", "identity", "cost", "shadow"]),
   surface: z.enum([
+    "mcp_gateway",
     "claude_code",
     "claude_chat",
     "cowork",
@@ -12,8 +13,10 @@ const cellSchema = z.object({
     "cursor",
     "other",
   ]),
-  status: z.enum(["observed", "none", "pending"]),
+  status: z.enum(["observed", "none", "pending", "na"]),
   value: z.number(),
+  /** Overrides the capability's unit when the column counts something else. */
+  unit: z.string().default(""),
   detail: z.string(),
   last_seen: z.string().optional(),
 });

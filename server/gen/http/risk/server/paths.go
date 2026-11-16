@@ -127,11 +127,6 @@ func GetRiskUserBreakdownRiskPath() string {
 	return "/rpc/risk.getUserBreakdown"
 }
 
-// GetRiskRuleBreakdownRiskPath returns the URL path to the risk service getRiskRuleBreakdown HTTP endpoint.
-func GetRiskRuleBreakdownRiskPath() string {
-	return "/rpc/risk.getRuleBreakdown"
-}
-
 // GetRiskSignalsRiskPath returns the URL path to the risk service getRiskSignals HTTP endpoint.
 func GetRiskSignalsRiskPath() string {
 	return "/rpc/risk.getSignals"
@@ -150,6 +145,11 @@ func GetRiskAnalysisStatusRiskPath() string {
 // CreateRiskPolicyBypassRequestRiskPath returns the URL path to the risk service createRiskPolicyBypassRequest HTTP endpoint.
 func CreateRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.createPolicyBypassRequest"
+}
+
+// GetRiskPolicyBypassRequestTargetRiskPath returns the URL path to the risk service getRiskPolicyBypassRequestTarget HTTP endpoint.
+func GetRiskPolicyBypassRequestTargetRiskPath() string {
+	return "/rpc/risk.getPolicyBypassRequestTarget"
 }
 
 // AcknowledgeRiskPolicyChallengeRiskPath returns the URL path to the risk service acknowledgeRiskPolicyChallenge HTTP endpoint.
@@ -195,6 +195,21 @@ func DenyRiskPolicyBypassRequestRiskPath() string {
 // RevokeRiskPolicyBypassRequestRiskPath returns the URL path to the risk service revokeRiskPolicyBypassRequest HTTP endpoint.
 func RevokeRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.revokePolicyBypassRequest"
+}
+
+// ListRiskPolicyApprovalsRiskPath returns the URL path to the risk service listRiskPolicyApprovals HTTP endpoint.
+func ListRiskPolicyApprovalsRiskPath() string {
+	return "/rpc/risk.listApprovals"
+}
+
+// GetRiskPolicyApprovalRiskPath returns the URL path to the risk service getRiskPolicyApproval HTTP endpoint.
+func GetRiskPolicyApprovalRiskPath() string {
+	return "/rpc/risk.getApproval"
+}
+
+// DecideRiskPolicyApprovalRiskPath returns the URL path to the risk service decideRiskPolicyApproval HTTP endpoint.
+func DecideRiskPolicyApprovalRiskPath() string {
+	return "/rpc/risk.decideApproval"
 }
 
 // TriggerRiskAnalysisRiskPath returns the URL path to the risk service triggerRiskAnalysis HTTP endpoint.

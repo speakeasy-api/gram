@@ -13,7 +13,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 
 const mocks = vi.hoisted(() => ({
   admin: true,
-  enabled: true,
+  issuerAvailable: false,
+  issuerQuery: undefined as
+    | { data?: { state: string; issuer?: string }; isError?: boolean }
+    | undefined,
   ema: vi.fn(),
   slack: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
@@ -42,9 +45,18 @@ vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
     </div>
   ),
 }));
+vi.mock("@/pages/identities/DirectoryPeopleSummary", () => ({
+  DirectoryPeopleSummary: () => null,
+}));
+vi.mock("./identity-provider/useEnterpriseIssuer", () => ({
+  useEnterpriseIssuer: () =>
+    mocks.issuerQuery ?? {
+      data: mocks.issuerAvailable ? { state: "setup_required" } : undefined,
+    },
+}));
 vi.mock("./identity-provider/IdentityProviders", () => ({
-  IdentityProviders: () => {
-    mocks.ema();
+  IdentityProviders: (props: unknown) => {
+    mocks.ema(props);
     return <div>EMA workspace</div>;
   },
 }));
@@ -54,8 +66,14 @@ vi.mock("./slack-workspaces/SlackWorkspaces", () => ({
     return <div>Slack workspace connections</div>;
   },
 }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.enabled ? "enabled" : "disabled" }),
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -76,14 +94,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: vi.fn() }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setup: {
-      Link: ({ children }: { children: ReactNode }) => (
-        <a href="/example/setup?task=identity-provider">{children}</a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: undefined }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => mocks.features(),
@@ -134,7 +146,8 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.admin = true;
-  mocks.enabled = true;
+  mocks.issuerAvailable = false;
+  mocks.issuerQuery = undefined;
   mocks.onboarding = {
     domainVerified: false,
     ssoConfigured: false,
@@ -183,18 +196,49 @@ describe("identity top-level tabs", () => {
     expect(mocks.features).not.toHaveBeenCalled();
   });
 
-  it.each(["admin", "enabled"] as const)(
-    "requires %s before mounting EMA",
-    (gate) => {
-      mocks[gate] = false;
-      show("?tab=identity-providers&provider=okta&view=setup");
-      expect(
-        screen.queryByRole("link", { name: "Identity providers" }),
-      ).toBeNull();
-      expect(mocks.ema).not.toHaveBeenCalled();
-      expect(mocks.features).toHaveBeenCalled();
-    },
-  );
+  it("requires admin before mounting EMA", () => {
+    mocks.admin = false;
+    show("?tab=identity-providers&provider=okta&view=setup");
+    expect(
+      screen.queryByRole("link", { name: "Identity providers" }),
+    ).toBeNull();
+    expect(mocks.ema).not.toHaveBeenCalled();
+    expect(mocks.features).toHaveBeenCalled();
+  });
+
+  it("lists the Speakeasy provider when the issuer is offered", () => {
+    mocks.issuerAvailable = true;
+    show("?tab=identity-providers");
+    expect(
+      screen.getByRole("link", { name: "Identity providers" }),
+    ).toBeTruthy();
+    expect(mocks.ema).toHaveBeenCalledWith({ showSpeakeasy: true });
+  });
+
+  it.each([
+    [
+      "an existing issuer reports unavailable",
+      { data: { state: "unavailable", issuer: "https://issuer.example.com" } },
+    ],
+    ["its status failed to load", { isError: true }],
+  ])("keeps the Speakeasy provider reachable when %s", (_, query) => {
+    mocks.issuerQuery = query;
+    show("?tab=identity-providers");
+    expect(mocks.ema).toHaveBeenCalledWith({ showSpeakeasy: true });
+  });
+
+  it("hides the Speakeasy provider when the issuer is not offered", () => {
+    mocks.issuerQuery = { data: { state: "unavailable" } };
+    show("?tab=identity-providers");
+    expect(mocks.ema).toHaveBeenCalledWith({ showSpeakeasy: false });
+  });
+
+  it("keeps the issuer off the Single sign-on tab", () => {
+    mocks.issuerAvailable = true;
+    show();
+    expect(screen.queryByText(/Enterprise Managed Authorization/)).toBeNull();
+    expect(mocks.ema).not.toHaveBeenCalled();
+  });
 
   it("falls back to SSO for arbitrary unsupported tabs", () => {
     show("?tab=bogus");
@@ -427,8 +471,7 @@ describe("domain verification portal", () => {
 });
 
 describe("Slack workspaces tab", () => {
-  it("opens for organization admins independently of rollout flags", () => {
-    mocks.enabled = false;
+  it("opens for organization admins", () => {
     show("?tab=slack-workspaces");
     expect(screen.getByText("Slack workspace connections")).toBeTruthy();
     expect(mocks.slack).toHaveBeenCalled();

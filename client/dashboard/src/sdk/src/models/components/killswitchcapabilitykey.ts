@@ -3,20 +3,21 @@
  */
 
 import * as z from "zod/v4-mini";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 
 export const KillswitchCapabilityKey = {
   McpToolCalls: "mcp_tool_calls",
 } as const;
-export type KillswitchCapabilityKey = ClosedEnum<
-  typeof KillswitchCapabilityKey
->;
+export type KillswitchCapabilityKey = OpenEnum<typeof KillswitchCapabilityKey>;
 
 /** @internal */
-export const KillswitchCapabilityKey$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchCapabilityKey
-> = z.enum(KillswitchCapabilityKey);
+export const KillswitchCapabilityKey$inboundSchema: z.ZodMiniType<
+  KillswitchCapabilityKey,
+  unknown
+> = openEnums.inboundSchema(KillswitchCapabilityKey);
 /** @internal */
-export const KillswitchCapabilityKey$outboundSchema: z.ZodMiniEnum<
-  typeof KillswitchCapabilityKey
-> = KillswitchCapabilityKey$inboundSchema;
+export const KillswitchCapabilityKey$outboundSchema: z.ZodMiniType<
+  string,
+  KillswitchCapabilityKey
+> = openEnums.outboundSchema(KillswitchCapabilityKey);

@@ -295,3 +295,11 @@ func (wc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Membe
 
 	return all, nil
 }
+
+// RevokeSession ends a WorkOS AuthKit session.
+func (wc *Client) RevokeSession(ctx context.Context, sessionID string) error {
+	if err := wc.um.RevokeSession(ctx, usermanagement.RevokeSessionOpts{SessionID: sessionID}); err != nil {
+		return fmt.Errorf("revoke workos session: %w", err)
+	}
+	return nil
+}

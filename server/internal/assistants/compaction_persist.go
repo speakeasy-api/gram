@@ -142,14 +142,16 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 				ContentHash:      nil,
 				Generation:       0,
 			},
-			BillingUserID:  conv.FromPGTextOrEmpty[string](chatRow.UserID),
-			AssistantID:    principalAssistantID,
-			WorkloadSource: metering.WorkloadSourceAssistant,
-			UserEmail:      "",
-			Provider:       "",
-			HookHostname:   "",
-			AccountType:    chatRow.AccountType,
-			BillingMode:    "",
+			BillingUserID:     conv.FromPGTextOrEmpty[string](chatRow.UserID),
+			AssistantID:       principalAssistantID,
+			WorkloadSource:    metering.WorkloadSourceAssistant,
+			UserEmail:         "",
+			Provider:          "",
+			InferenceProvider: "",
+			Lineage:           nil,
+			HookHostname:      "",
+			AccountType:       chatRow.AccountType,
+			BillingMode:       "",
 		})
 	}
 
@@ -158,7 +160,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	if _, err := tx.Exec(ctx, "SELECT 1 FROM chats WHERE id = $1 FOR UPDATE", threadRow.ChatID); err != nil {
+	if err := chatrepo.New(tx).LockChatForCompaction(ctx, chatrepo.LockChatForCompactionParams{ID: threadRow.ChatID, ProjectID: projectID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
 	}
 	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: threadRow.ChatID, ProjectID: projectID})
@@ -167,6 +169,9 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	}
 	for i := range writes {
 		writes[i].Params.Generation = currentGen + 1
+	}
+	if err := chat.MarkCompactedLineage(ctx, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
+		return fmt.Errorf("capture compacted lineage: %w", err)
 	}
 	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
 	if err != nil {

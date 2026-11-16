@@ -58,11 +58,13 @@ const STATUS_TYPES: Array<{ label: string; value: ObserveStatusFilterValue }> =
     { label: "Error", value: "error" },
     { label: "Success", value: "success" },
     { label: "Blocked", value: "blocked" },
-    { label: "Pending", value: "pending" },
+    // The filter matches every call with no result: still running (Pending)
+    // or long ended without one (Unknown).
+    { label: "Pending or unknown", value: "pending" },
   ];
 
 // Server, User and the date range are the most-used dimensions, so they pin as
-// always-visible pills. Role and Agent appear as pills once active; Type is
+// always-visible pills. Role and Harness appear as pills once active; Type is
 // sheet-only (it always carries a default value and would otherwise pill).
 const DATE_DIMENSION = {
   id: "date",
@@ -96,9 +98,9 @@ const OBSERVE_FILTER_BASE = [
   },
   {
     id: "source",
-    label: "Agent",
+    label: "Harness",
     kind: "multiselect",
-    placeholder: "Filter by agent",
+    placeholder: "Filter by harness",
   },
   { id: "type", label: "Type", kind: "multiselect", hideChip: true },
 ] as const;

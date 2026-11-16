@@ -14,9 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 )
 
 const (
@@ -53,7 +56,7 @@ var errChatListDuplicateRow = errors.New("platform mcp chat list returned a chat
 
 // chatListLimitations is stated on every page so a caller never mistakes the
 // listing for a transcript reader or an export.
-const chatListLimitations = "Metadata only: chat titles, messages, prompts, tool inputs and outputs are never returned; read a transcript in the dashboard. The window selects chats by activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end, newest activity first. A cursor pins the window it was minted for, so later pages walk the same interval. Identities are masked and user references expire and are bound to this session and project. risk_findings_count counts live findings under enabled policies; excluded and dismissed findings are not counted. Every count is in chats: one row per chat, total_matches counts chats, and at most 500 chats can be walked per listing. A chat several assistants worked in reports the assistant the listing was narrowed to, otherwise its most recently active one. total_matches is the count at the time of this page and can change between pages."
+const chatListLimitations = "Metadata only: chat titles, messages, prompts, tool inputs and outputs are never returned; read a transcript in the dashboard. Without chat:read on the project the listing covers only the caller's own chats and the agent-only chats (no human participant) of agents they currently own, and no filter widens it. The window selects chats by activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end, newest activity first. A cursor pins the window it was minted for, so later pages walk the same interval. Identities are masked and user references expire and are bound to this session and project. risk_findings_count counts live findings under enabled policies; excluded and dismissed findings are not counted. Every count is in chats: one row per chat, total_matches counts chats, and at most 500 chats can be walked per listing. A chat several assistants worked in reports the assistant the listing was narrowed to, otherwise its most recently active one. total_matches is the count at the time of this page and can change between pages."
 
 // chatMetadataReader is the pair of chat queries the listing reads through, so
 // unit tests can model the read without a database.
@@ -62,48 +65,152 @@ type chatMetadataReader interface {
 	CountChats(ctx context.Context, arg chatrepo.CountChatsParams) (int64, error)
 }
 
+// chatListScope is the visibility a listing runs under. An empty userID lists
+// every session in the project; otherwise the listing is the member's own
+// sessions plus agent-only sessions of the agents in ownedAgentIDs.
+type chatListScope struct {
+	userID        string
+	ownedAgentIDs []uuid.UUID
+}
+
+func (s chatListScope) projectWide() bool {
+	return s.userID == ""
+}
+
+// chatListVisibility decides whether a caller lists every session in a
+// project or only their own and their agents', so unit tests can fix the
+// answer without an authorization engine.
+type chatListVisibility interface {
+	resolve(ctx context.Context, principal Principal, projectID uuid.UUID) (chatListScope, error)
+}
+
+// ownedAgentLister lists the agents a member currently owns: owner match, not
+// deleted, not latched for owner reassignment.
+type ownedAgentLister interface {
+	ListOwnedAgentIDs(ctx context.Context, arg chatrepo.ListOwnedAgentIDsParams) ([]uuid.UUID, error)
+}
+
+// authzChatListVisibility is the dashboard chat list's visibility rule: a
+// chat:read grant on the project (or the managed-assistant runtime) sees every
+// session; everyone else sees their own and their owned agents'.
+type authzChatListVisibility struct {
+	engine *authz.Engine
+	agents ownedAgentLister
+}
+
+func (v authzChatListVisibility) resolve(ctx context.Context, principal Principal, projectID uuid.UUID) (chatListScope, error) {
+	if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); isAssistantCall {
+		return chatListScope{userID: "", ownedAgentIDs: nil}, nil
+	}
+	// Evaluate, not Require: a member without chat:read is the expected case,
+	// not a denial to record. Where RBAC is not enforced Evaluate would allow
+	// everything, so that case stays constrained to the member's own sessions.
+	enforce, err := v.engine.ShouldEnforce(ctx)
+	if err != nil {
+		return chatListScope{}, fmt.Errorf("resolve chat list visibility: %w", err)
+	}
+	if enforce {
+		allowed, err := v.engine.Evaluate(ctx, authz.ChatReadCheck(projectID.String()))
+		if err != nil {
+			return chatListScope{}, fmt.Errorf("evaluate chat list visibility: %w", err)
+		}
+		if allowed {
+			return chatListScope{userID: "", ownedAgentIDs: nil}, nil
+		}
+	}
+	// The own scope is the authenticated user's, so the principal must be the
+	// same person the grants were loaded for.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || principal.UserID == "" || authCtx.UserID != principal.UserID {
+		return chatListScope{}, ErrForbidden
+	}
+	owned, err := v.agents.ListOwnedAgentIDs(ctx, chatrepo.ListOwnedAgentIDsParams{
+		OrganizationID: principal.OrganizationID,
+		OwnerUserID:    principal.UserID,
+	})
+	if err != nil {
+		return chatListScope{}, fmt.Errorf("resolve owned agents for chat list: %w", err)
+	}
+	return chatListScope{userID: principal.UserID, ownedAgentIDs: owned}, nil
+}
+
+// chatRiskProject reads one project's live ClickHouse findings for a listing.
+type chatRiskProject interface {
+	QualifyingChatIDs(ctx context.Context, minCount uint64) ([]uuid.UUID, error)
+	Counts(ctx context.Context, chatIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+}
+
+// chatRiskFindings resolves a project's findings reader once per listing, so
+// unit tests can serve finding counts without ClickHouse.
+type chatRiskFindings interface {
+	ForProject(ctx context.Context, scope chatfindings.Scope) (chatRiskProject, error)
+}
+
+// chatFindingsReader adapts chatfindings.Reader to chatRiskFindings.
+type chatFindingsReader struct {
+	reader *chatfindings.Reader
+}
+
+func (r chatFindingsReader) ForProject(ctx context.Context, scope chatfindings.Scope) (chatRiskProject, error) {
+	project, err := r.reader.ForProject(ctx, scope)
+	if err != nil {
+		return nil, fmt.Errorf("resolve chat findings project: %w", err)
+	}
+	return project, nil
+}
+
 // ChatMetadataService serves list_chats: one project's conversations reduced
 // to when they were active, how long they ran, which app produced them, whether
 // risk analysis found anything, and a masked participant. It never reads
 // chat_messages, so no path through it can return what was said.
 type ChatMetadataService struct {
-	projects   riskProjectResolver
-	chats      chatMetadataReader
-	references *subjectReferenceCodec
-	budget     OperationBudget
-	now        func() time.Time
+	projects     riskProjectResolver
+	chats        chatMetadataReader
+	visibility   chatListVisibility
+	references   *subjectReferenceCodec
+	budget       OperationBudget
+	now          func() time.Time
+	riskFindings chatRiskFindings
 }
 
-// NewChatMetadataService composes the listing. A nil database, an invalid
-// budget, or missing key material leaves the service nil, which registers the
-// unavailable stub rather than a tool that always fails.
-func NewChatMetadataService(db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *ChatMetadataService {
+// NewChatMetadataService composes the listing. A nil database, engine or
+// findings reader, an invalid budget, or missing key material leaves the
+// service nil, which registers the unavailable stub, not a tool that always fails.
+func NewChatMetadataService(db *pgxpool.Pool, engine *authz.Engine, findings *chatfindings.Reader, budget OperationBudget, keyMaterial string) *ChatMetadataService {
 	codec, err := newSubjectReferenceCodec(keyMaterial)
-	if db == nil || err != nil || !budget.valid() {
+	if db == nil || engine == nil || findings == nil || err != nil || !budget.valid() {
 		return nil
 	}
+	chats := chatrepo.New(db)
 	return &ChatMetadataService{
-		projects:   postgresRiskProjectResolver{queries: platformrepo.New(db)},
-		chats:      chatrepo.New(db),
-		references: codec,
-		budget:     budget,
-		now:        time.Now,
+		projects:     postgresRiskProjectResolver{queries: platformrepo.New(db)},
+		chats:        chats,
+		visibility:   authzChatListVisibility{engine: engine, agents: chats},
+		references:   codec,
+		budget:       budget,
+		now:          time.Now,
+		riskFindings: chatFindingsReader{reader: findings},
 	}
 }
 
 func (s *ChatMetadataService) valid() bool {
-	return s != nil && s.projects != nil && s.chats != nil && s.references != nil && s.budget.valid() && s.now != nil
+	return s != nil && s.projects != nil && s.chats != nil && s.visibility != nil && s.references != nil && s.budget.valid() && s.now != nil && s.riskFindings != nil
 }
 
 // ListChatsInput narrows one project's chats. Every filter is optional; an
 // empty listing returns the chats active in the last week.
 type ListChatsInput struct {
-	ProjectID     string `json:"project_id,omitempty"`
-	ProjectSlug   string `json:"project_slug,omitempty"`
-	Window        string `json:"window,omitempty"`
-	Risk          string `json:"risk,omitempty"`
-	Source        string `json:"source,omitempty"`
-	AssistantID   string `json:"assistant_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
+	ProjectSlug string `json:"project_slug,omitempty"`
+	Window      string `json:"window,omitempty"`
+	Risk        string `json:"risk,omitempty"`
+	Source      string `json:"source,omitempty"`
+	AssistantID string `json:"assistant_id,omitempty"`
+
+	// AgentID keeps only sessions attributed to this exact agent.
+	AgentID string `json:"agent_id,omitempty"`
+
 	UserReference string `json:"user_reference,omitempty"`
 	Limit         int    `json:"limit,omitempty"`
 	Cursor        string `json:"cursor,omitempty"`
@@ -128,8 +235,17 @@ type ChatSummary struct {
 	// AssistantID and AssistantName identify the administrator-configured
 	// assistant behind the chat, when it was an assistant thread: the one the
 	// listing was narrowed to, otherwise the most recently active.
-	AssistantID    string `json:"assistant_id,omitempty"`
-	AssistantName  string `json:"assistant_name,omitempty"`
+	AssistantID   string `json:"assistant_id,omitempty"`
+	AssistantName string `json:"assistant_name,omitempty"`
+	// AgentID and AgentName identify the agent principal that produced the
+	// chat, recorded from the authenticated actor at capture. A channel session
+	// has no assistant record, so these are the only actor it reports. An agent
+	// is a non-human principal, like an assistant, so naming it crosses no
+	// person-reference boundary: the human participants of such a session stay
+	// masked here exactly as they do for every other chat. AgentName is absent
+	// when the agent has since been deleted, leaving AgentID reported alone.
+	AgentID        string `json:"agent_id,omitempty"`
+	AgentName      string `json:"agent_name,omitempty"`
 	MaskedIdentity string `json:"masked_identity,omitempty"`
 	// UserReference narrows a follow-up list_chats call to the same person. It
 	// is minted only for identities the listing can filter on.
@@ -154,9 +270,16 @@ type chatList struct {
 	risk        string
 	source      string
 	assistantID string
-	limit       int
+
+	// agentID is the validated agent filter, or an invalid UUID when omitted.
+	agentID uuid.NullUUID
+
+	limit int
 	// identity is the decoded user filter, "kind:identifier", or empty.
 	identity string
+	// scope is the visibility the listing runs under; a cursor is bound to it
+	// so a page minted in one scope cannot resume in another.
+	scope chatListScope
 }
 
 func (s *ChatMetadataService) List(ctx context.Context, principal Principal, input ListChatsInput) (ListChatsOutput, error) {
@@ -183,12 +306,42 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		return zero, fmt.Errorf("resolve chat list project: %w", err)
 	}
 	list.projectID = project.ID
+	list.scope, err = s.visibility.resolve(ctx, principal, project.ID)
+	if err != nil {
+		return zero, err
+	}
 
-	userID, externalUserID := "", ""
+	hasRiskFilter := chatListHasRiskFilter(list.risk)
+	findingsProject, err := s.riskFindings.ForProject(ctx, chatfindings.Scope{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	if err != nil {
+		return zero, fmt.Errorf("prepare project chat findings: %w", err)
+	}
+	var riskChatIDs []uuid.UUID
+	if hasRiskFilter != "" {
+		riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, 0)
+		if err != nil {
+			return zero, fmt.Errorf("filter project chats by findings: %w", err)
+		}
+	}
+
+	userID, externalUserID := list.scope.userID, ""
+	ownedAgentIDs := list.scope.ownedAgentIDs
 	if input.UserReference != "" {
 		userID, externalUserID, err = s.chatListUserFilter(principal, input.UserReference, &list)
 		if err != nil {
 			return zero, err
+		}
+		// A person reference can only narrow. In the member's own scope the only
+		// person it may name is the member, and then it selects their own
+		// sessions alone, not their agents'.
+		if !list.scope.projectWide() {
+			if userID != list.scope.userID {
+				return zero, ErrSubjectReferenceNotFound
+			}
+			ownedAgentIDs = nil
 		}
 	}
 
@@ -205,11 +358,17 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 	rows, err := s.chats.ListChats(ctx, chatrepo.ListChatsParams{
 		ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ProjectID:      list.projectID,
-		HasRiskFilter:  chatListHasRiskFilter(list.risk),
+		HasRiskFilter:  hasRiskFilter,
 		MinRiskScore:   -1,
+		RiskChatIds:    riskChatIDs,
 		ExternalUserID: externalUserID,
-		UserID:         userID,
-		Pinned:         "",
+		// UserID and OwnedAgentIds carry the visibility scope: empty for a
+		// project-wide listing, otherwise the member and the agents they own,
+		// the same predicate the dashboard chat list runs.
+		UserID:        userID,
+		OwnedAgentIds: ownedAgentIDs,
+		AgentID:       list.agentID,
+		Pinned:        "",
 		// The search parameter also matches titles and emails, which would turn
 		// the listing into a content oracle; it is never populated here.
 		Search:            "",
@@ -253,11 +412,14 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		total, err := s.chats.CountChats(ctx, chatrepo.CountChatsParams{
 			FromTime:          pgtype.Timestamptz{Time: list.window.start, InfinityModifier: pgtype.Finite, Valid: true},
 			ToTime:            pgtype.Timestamptz{Time: list.window.end, InfinityModifier: pgtype.Finite, Valid: true},
-			HasRiskFilter:     chatListHasRiskFilter(list.risk),
+			HasRiskFilter:     hasRiskFilter,
 			MinRiskScore:      -1,
+			RiskChatIds:       riskChatIDs,
 			ProjectID:         list.projectID,
 			ExternalUserID:    externalUserID,
 			UserID:            userID,
+			OwnedAgentIds:     ownedAgentIDs,
+			AgentID:           list.agentID,
 			Pinned:            "",
 			Search:            "",
 			AssistantID:       list.assistantID,
@@ -278,6 +440,14 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		rows = rows[:max(remaining, 0)]
 		more = false
 	}
+	chatIDs := make([]uuid.UUID, len(rows))
+	for i := range rows {
+		chatIDs[i] = rows[i].ID
+	}
+	riskCounts, err := findingsProject.Counts(ctx, chatIDs)
+	if err != nil {
+		return zero, fmt.Errorf("count project chat findings: %w", err)
+	}
 	chats := make([]ChatSummary, 0, len(rows))
 	seen := make(map[uuid.UUID]struct{}, len(rows))
 	for _, row := range rows {
@@ -285,7 +455,7 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 			return zero, errChatListDuplicateRow
 		}
 		seen[row.ID] = struct{}{}
-		summary, err := s.chatSummary(principal, list, row)
+		summary, err := s.chatSummary(principal, list, row, riskCounts[row.ID])
 		if err != nil {
 			return zero, err
 		}
@@ -343,6 +513,14 @@ func normalizeChatList(input ListChatsInput) (chatList, error) {
 		}
 		list.assistantID = id.String()
 	}
+	if input.AgentID != "" {
+		id, err := uuid.Parse(input.AgentID)
+		if err != nil {
+			return chatList{}, ErrChatListInvalid
+		}
+		list.agentID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+
 	switch {
 	case list.limit < 0:
 		return chatList{}, ErrChatListInvalid
@@ -371,7 +549,7 @@ func chatListHasRiskFilter(risk string) string {
 // it travels inside the sealed cursor and is restored from it — because the
 // scope has to be computable before the cursor is opened.
 func (l chatList) cursorScope() string {
-	return queryScope("list_chats", l.projectID.String(), string(l.window.Window), l.risk, l.source, l.assistantID, l.identity)
+	return queryScope("list_chats", l.projectID.String(), string(l.window.Window), l.risk, l.source, l.assistantID, l.identity, l.agentID.UUID.String(), strconv.FormatBool(l.agentID.Valid), l.scope.userID)
 }
 
 // chatListUserScope binds the person references a listing mints to the project
@@ -408,7 +586,7 @@ func (s *ChatMetadataService) chatListUserFilter(principal Principal, reference 
 // chatSummary projects one row. The identity is masked and, when it is recorded
 // under a column the listing can filter on, accompanied by a reference a
 // follow-up listing can be narrowed with.
-func (s *ChatMetadataService) chatSummary(principal Principal, list chatList, row chatrepo.ListChatsRow) (ChatSummary, error) {
+func (s *ChatMetadataService) chatSummary(principal Principal, list chatList, row chatrepo.ListChatsRow, riskFindings int64) (ChatSummary, error) {
 	lastMessage := row.CreatedAt.Time
 	if row.LastMessageTimestamp.Valid {
 		lastMessage = row.LastMessageTimestamp.Time
@@ -418,12 +596,14 @@ func (s *ChatMetadataService) chatSummary(principal Principal, list chatList, ro
 		CreatedAt:         row.CreatedAt.Time.UTC().Format(time.RFC3339),
 		LastMessageAt:     lastMessage.UTC().Format(time.RFC3339),
 		MessageCount:      int(row.NumMessages),
-		RiskFindingsCount: int(row.RiskFindingsCount),
+		RiskFindingsCount: int(riskFindings),
 		Source:            findingLabel(conv.FromPGTextOrEmpty[string](row.Source)),
 		Client:            findingLabel(row.OriginatingClient),
 		AccountType:       findingLabel(row.AccountType),
 		AssistantID:       uuidString(row.AssistantID),
 		AssistantName:     findingLabel(conv.FromPGTextOrEmpty[string](row.AssistantName)),
+		AgentID:           uuidString(row.AgentID),
+		AgentName:         findingLabel(conv.FromPGTextOrEmpty[string](row.AgentName)),
 	}
 	identityKind, identifier := chatIdentity(row)
 	if identifier == "" {

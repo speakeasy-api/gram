@@ -109,8 +109,9 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 		return ClientAdmission{}, err
 	}
 	q := usersessionsrepo.New(tx)
-	// Take the lifecycle locks in advisory-then-row order before comparing the
-	// stored mode. This also serializes with EMA preparation and owner binding.
+	// Take the lifecycle locks in advisory-then-row order. This serializes with
+	// EMA preparation and owner binding; the admission mode does not affect
+	// identity-chaining bindings, so changing it is not guarded.
 	if err := lifecycle.LockUserIssuer(ctx, tx, principal.OrganizationID, project.ID, issuerID); err != nil {
 		return ClientAdmission{}, fmt.Errorf("lock platform mcp client admission issuer: %w", err)
 	}
@@ -120,12 +121,6 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 	}
 	if err != nil {
 		return ClientAdmission{}, fmt.Errorf("load platform mcp client admission issuer: %w", err)
-	}
-	currentMode, _ := admission.ResolveMode(existing.ClientIDMetadataAdmissionMode.String, existing.ClientIDMetadataAdmissionMode.Valid)
-	if string(currentMode) != mode {
-		if err := lifecycle.GuardEMABindings(ctx, tx, principal.OrganizationID, project.ID, issuerID); err != nil {
-			return ClientAdmission{}, fmt.Errorf("guard platform mcp client admission bindings: %w", err)
-		}
 	}
 	updated, err := q.UpdateUserSessionIssuer(ctx, usersessionsrepo.UpdateUserSessionIssuerParams{
 		// Omitted fields keep their stored values: only the admission mode is

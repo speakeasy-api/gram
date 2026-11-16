@@ -10,10 +10,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -27,7 +25,6 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -102,8 +99,6 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 		INSERT INTO risk_findings (id, created_at, message_created_at, organization_id, project_id, rule_id, source, category, chat_id, false_positive_at)
 		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
 	`, uuid.Must(uuid.NewV7()), from.Add(43*time.Hour), from.Add(43*time.Hour), orgID, projectID.String(), chatA.String(), from.Add(44*time.Hour)))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),
@@ -186,7 +181,6 @@ func TestGetRiskSignals_MCPServerFilterCanonicalizesAndHidesDismissed(t *testing
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -213,7 +207,6 @@ func TestGetRiskSignals_MCPServerFilterCanonicalizesAndHidesDismissed(t *testing
 	dismissal.FalsePositiveAt = &dismissedAt
 
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{current, previous, otherServer, dismissed, dismissal}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	nonCanonicalServerID := "{" + serverID + "}"
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
@@ -248,7 +241,6 @@ func TestGetRiskSignals_EmptyWindow(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -264,21 +256,6 @@ func TestGetRiskSignals_EmptyWindow(t *testing.T) {
 	require.Equal(t, int64(0), result.Findings)
 	require.InDelta(t, 0, result.OrgRiskScore, 0.001)
 	require.InDelta(t, 0, result.PreviousOrgRiskScore, 0.001)
-}
-
-// TestGetRiskSignals_FlagDisabled asserts an org without the
-// gram-risk-watchdog PostHog flag is refused even with the org:admin scope.
-func TestGetRiskSignals_FlagDisabled(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	_, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{From: nil, To: nil})
-	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 // TestGetRiskSignals_RequiresOrgAdmin asserts the endpoint denies callers
@@ -302,9 +279,6 @@ func TestGetRiskSignals_InvalidWindow(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	// The flag gate runs before window validation, so it must be open for
-	// the window errors to surface.
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -334,7 +308,6 @@ func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -359,7 +332,6 @@ func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{attributed, bare, prevBare}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),
@@ -399,7 +371,6 @@ func TestGetRiskSignals_MCPServerFilter(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -457,7 +428,6 @@ func TestGetRiskSignals_MCPServerFilter(t *testing.T) {
 		finding(41*time.Hour, "secret.github_pat", uuid.NewString(), "ghost"),
 	}
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	window := &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),

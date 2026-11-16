@@ -10,6 +10,10 @@ package types
 // TunneledMcpServerConnections is the result type of the tunneledMcp service
 // listServerConnections method.
 type TunneledMcpServerConnections struct {
+	// available or unavailable: whether live connection storage could be read
+	CollectionState *string
+	// Server time when this view was read
+	ObservedAt *string
 	// Live tunnel connections currently visible in Redis
 	Connections []*TunneledMcpConnection
 	// Number of active tunnel connections currently visible in Redis

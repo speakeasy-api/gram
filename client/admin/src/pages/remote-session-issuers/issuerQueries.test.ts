@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { queryKeyAdminGetSession } from "@gram/admin-client/react-query/adminGetSession.core";
 import { queryKeyAdminGetGlobalIssuer } from "@gram/admin-client/react-query/adminGetGlobalIssuer.core";
 import {

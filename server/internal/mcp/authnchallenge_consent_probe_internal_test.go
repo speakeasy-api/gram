@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -13,8 +14,9 @@ func TestProbeProxyBuilderDisablesTrafficMetrics(t *testing.T) {
 	t.Parallel()
 
 	built, err := probeProxyBuilder(func(context.Context) (*proxy.Proxy, error) {
-		return &proxy.Proxy{Metrics: &proxy.Metrics{}}, nil
+		return &proxy.Proxy{Metrics: &proxy.Metrics{}, RequestObserver: func(string, string, string, time.Duration) { t.Error("validation must not record tunnel traffic") }}, nil
 	})(t.Context())
 	require.NoError(t, err)
 	require.Nil(t, built.Metrics)
+	require.Nil(t, built.RequestObserver)
 }

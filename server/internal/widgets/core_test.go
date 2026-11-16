@@ -58,15 +58,15 @@ func TestCheckEnforcesNameAndDescriptionLimits(t *testing.T) {
 
 	long := strings.Repeat("x", 2001)
 	for name, input := range map[string]widgets.Input{
-		"empty name":       {Name: "", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
-		"long name":        {Name: long[:201], Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
-		"long description": {Name: "ok", Description: &long, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
+		"empty name":       {Name: "", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart()},
+		"long name":        {Name: long[:201], Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart()},
+		"long description": {Name: "ok", Description: &long, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart()},
 	} {
 		err := ti.service.Check(ctx, input)
 		require.Error(t, err, name)
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
-	require.NoError(t, ti.service.Check(ctx, widgets.Input{Name: long[:200], Description: new(long[:2000]), Dataset: "sessions", Query: validQuery(), Visualization: barChart()}))
+	require.NoError(t, ti.service.Check(ctx, widgets.Input{Name: long[:200], Description: new(long[:2000]), Dataset: "tool_calls", Query: validQuery(), Visualization: barChart()}))
 }
 
 func TestReadForChangeAppliesTheCreatorOrWriteRule(t *testing.T) {
@@ -116,11 +116,11 @@ func TestUpdateInTxRefusesAStaleVersion(t *testing.T) {
 	read, err := ti.service.Read(ctx, created.ID)
 	require.NoError(t, err)
 
-	_, err = ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "someone else's edit", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+	_, err = ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "someone else's edit", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
 	tx := beginTx(t, ctx, ti)
-	_, err = ti.service.UpdateInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), widgets.Input{Name: "stale edit", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()}, read.Version)
+	_, err = ti.service.UpdateInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), widgets.Input{Name: "stale edit", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart()}, read.Version)
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.ErrorIs(t, err, widgets.ErrVersionChanged)
 	require.NoError(t, tx.Rollback(ctx))
@@ -130,7 +130,7 @@ func TestUpdateInTxRefusesAStaleVersion(t *testing.T) {
 	require.Equal(t, "someone else's edit", current.Widget.Name)
 
 	tx = beginTx(t, ctx, ti)
-	updated, err := ti.service.UpdateInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), widgets.Input{Name: "fresh edit", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()}, current.Version)
+	updated, err := ti.service.UpdateInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), widgets.Input{Name: "fresh edit", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart()}, current.Version)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 	require.Equal(t, "fresh edit", updated.Widget.Name)

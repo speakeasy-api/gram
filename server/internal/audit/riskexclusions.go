@@ -33,6 +33,7 @@ type LogRiskExclusionCreateEvent struct {
 
 func (l *Logger) LogRiskExclusionCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskExclusionCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -85,6 +86,7 @@ func (l *Logger) LogRiskExclusionUpdate(ctx context.Context, dbtx repo.DBTX, eve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -122,6 +124,7 @@ type LogRiskExclusionDeleteEvent struct {
 
 func (l *Logger) LogRiskExclusionDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskExclusionDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

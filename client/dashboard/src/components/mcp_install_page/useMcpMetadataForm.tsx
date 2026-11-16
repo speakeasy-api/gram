@@ -1,5 +1,5 @@
 import type { McpMetadata } from "@gram/client/models/components/mcpmetadata.js";
-import { invalidateGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -108,23 +108,12 @@ export function useMcpMetadataMetadataForm(
 
   const [urlValid, setUrlValid] = useState<ValidationResult>({ valid: true });
 
-  // Mutation request and the React Query invalidation key carry exactly the
-  // same backend identifier so a refetch after save lands on the same row the
-  // mutation touched. Keep these derived in one place to avoid drift, and
-  // memo on the primitive backend id so save/saveAsync stay referentially
-  // stable across renders.
+  // Memo on the primitive backend id so save/saveAsync stay referentially stable.
   const targetKind = target.kind;
   const targetToolsetSlug =
     target.kind === "toolset" ? target.toolsetSlug : undefined;
   const targetMcpServerId =
     target.kind === "mcp_server" ? target.mcpServerId : undefined;
-  const invalidationKey = useMemo(
-    () =>
-      targetKind === "toolset"
-        ? { toolsetSlug: targetToolsetSlug! }
-        : { mcpServerId: targetMcpServerId! },
-    [targetKind, targetToolsetSlug, targetMcpServerId],
-  );
   const backendRequestFields = useMemo(
     () =>
       targetKind === "toolset"
@@ -135,7 +124,8 @@ export function useMcpMetadataMetadataForm(
 
   const mutation = useMcpMetadataSetMutation({
     onSettled: () => {
-      void invalidateGetMcpMetadata(queryClient, [invalidationKey]);
+      // A canonical server's record is also read by toolset slug, so refresh every key.
+      void invalidateAllGetMcpMetadata(queryClient);
     },
   });
 

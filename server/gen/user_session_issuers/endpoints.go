@@ -20,6 +20,7 @@ type Endpoints struct {
 	UpdateUserSessionIssuer goa.Endpoint
 	ListUserSessionIssuers  goa.Endpoint
 	GetUserSessionIssuer    goa.Endpoint
+	GetAttachImpact         goa.Endpoint
 	DeleteUserSessionIssuer goa.Endpoint
 }
 
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateUserSessionIssuer: NewUpdateUserSessionIssuerEndpoint(s, a.APIKeyAuth),
 		ListUserSessionIssuers:  NewListUserSessionIssuersEndpoint(s, a.APIKeyAuth),
 		GetUserSessionIssuer:    NewGetUserSessionIssuerEndpoint(s, a.APIKeyAuth),
+		GetAttachImpact:         NewGetAttachImpactEndpoint(s, a.APIKeyAuth),
 		DeleteUserSessionIssuer: NewDeleteUserSessionIssuerEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -44,6 +46,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateUserSessionIssuer = m(e.UpdateUserSessionIssuer)
 	e.ListUserSessionIssuers = m(e.ListUserSessionIssuers)
 	e.GetUserSessionIssuer = m(e.GetUserSessionIssuer)
+	e.GetAttachImpact = m(e.GetAttachImpact)
 	e.DeleteUserSessionIssuer = m(e.DeleteUserSessionIssuer)
 }
 
@@ -280,6 +283,65 @@ func NewGetUserSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetUserSessionIssuer(ctx, p)
+	}
+}
+
+// NewGetAttachImpactEndpoint returns an endpoint function that calls the
+// method "getAttachImpact" of service "userSessionIssuers".
+func NewGetAttachImpactEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetAttachImpactPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetAttachImpact(ctx, p)
 	}
 }
 

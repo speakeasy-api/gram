@@ -4,7 +4,7 @@ contents:
     - https://dl-cdn.alpinelinux.org/alpine/v3.23/main
   packages:
     - alpine-baselayout-data
-    - ca-certificates-bundle
+    - ca-certificates
     - su-exec
     - nodejs~24
     - gram-runner
@@ -12,6 +12,10 @@ cmd: gram-runner -language javascript
 entrypoint:
   shell-fragment: |
     set -e
+    # Alpine's bundle still trusts an affected eMudhra root. Refresh before any network I/O.
+    sed -i -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
+      -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' /etc/ca-certificates.conf
+    update-ca-certificates
     gram-runner -init -language javascript
     exec su-exec gram "$0" "$@"
 

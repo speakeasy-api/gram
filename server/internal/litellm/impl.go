@@ -180,6 +180,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    "hook.ingest.v1",
@@ -192,10 +193,11 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 			UserEmail:      conv.PtrEmpty(email),
 		},
 		Session: &hooksgen.HookIngestSession{
-			ID:     &sessionID,
-			TurnID: &turnID,
-			Cwd:    nil,
-			Model:  conv.PtrEmpty(model),
+			ID:      &sessionID,
+			TurnID:  &turnID,
+			Cwd:     nil,
+			Model:   conv.PtrEmpty(model),
+			Surface: nil,
 		},
 		Event: &hooksgen.HookIngestEvent{
 			Type:       "prompt.submitted",
@@ -213,10 +215,12 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 			Notification:          nil,
 			McpAttribution:        nil,
 			PromptAttachments:     nil,
+			DeliveryFailure:       nil,
 		},
 		Raw: nil,
 	}
 	outcome, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
@@ -310,6 +314,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	role := "assistant"
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    "hook.ingest.v1",
@@ -322,10 +327,11 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 			UserEmail:      conv.PtrEmpty(email),
 		},
 		Session: &hooksgen.HookIngestSession{
-			ID:     &sessionID,
-			TurnID: &callID,
-			Cwd:    nil,
-			Model:  conv.PtrEmpty(model),
+			ID:      &sessionID,
+			TurnID:  &callID,
+			Cwd:     nil,
+			Model:   conv.PtrEmpty(model),
+			Surface: nil,
 		},
 		Event: &hooksgen.HookIngestEvent{
 			Type:       "assistant.responded",
@@ -343,10 +349,12 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 			Notification:          nil,
 			McpAttribution:        nil,
 			PromptAttachments:     nil,
+			DeliveryFailure:       nil,
 		},
 		Raw: nil,
 	}
 	_, err = s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),

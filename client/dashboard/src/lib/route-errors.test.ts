@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { describe, expect, it } from "vitest";
 import {

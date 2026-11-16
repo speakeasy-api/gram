@@ -10,9 +10,19 @@ import {
   OTELLogsPayload$outboundSchema,
 } from "../components/otellogspayload.js";
 
+export type HooksNumberLogsSecurityOption1 = {
+  deviceAgentTokenHeaderAuthorization: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type HooksNumberLogsSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type HooksNumberLogsSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
-  projectSlugHeaderGramProject?: string | undefined;
+  option1?: HooksNumberLogsSecurityOption1 | undefined;
+  option2?: HooksNumberLogsSecurityOption2 | undefined;
 };
 
 export type HooksNumberLogsRequest = {
@@ -28,9 +38,76 @@ export type HooksNumberLogsRequest = {
 };
 
 /** @internal */
+export type HooksNumberLogsSecurityOption1$Outbound = {
+  device_agent_token_header_Authorization: string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const HooksNumberLogsSecurityOption1$outboundSchema: z.ZodMiniType<
+  HooksNumberLogsSecurityOption1$Outbound,
+  HooksNumberLogsSecurityOption1
+> = z.pipe(
+  z.object({
+    deviceAgentTokenHeaderAuthorization: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      deviceAgentTokenHeaderAuthorization:
+        "device_agent_token_header_Authorization",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function hooksNumberLogsSecurityOption1ToJSON(
+  hooksNumberLogsSecurityOption1: HooksNumberLogsSecurityOption1,
+): string {
+  return JSON.stringify(
+    HooksNumberLogsSecurityOption1$outboundSchema.parse(
+      hooksNumberLogsSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type HooksNumberLogsSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const HooksNumberLogsSecurityOption2$outboundSchema: z.ZodMiniType<
+  HooksNumberLogsSecurityOption2$Outbound,
+  HooksNumberLogsSecurityOption2
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function hooksNumberLogsSecurityOption2ToJSON(
+  hooksNumberLogsSecurityOption2: HooksNumberLogsSecurityOption2,
+): string {
+  return JSON.stringify(
+    HooksNumberLogsSecurityOption2$outboundSchema.parse(
+      hooksNumberLogsSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type HooksNumberLogsSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
-  "project_slug_header_Gram-Project"?: string | undefined;
+  Option1?: HooksNumberLogsSecurityOption1$Outbound | undefined;
+  Option2?: HooksNumberLogsSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -39,13 +116,17 @@ export const HooksNumberLogsSecurity$outboundSchema: z.ZodMiniType<
   HooksNumberLogsSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
-    projectSlugHeaderGramProject: z.optional(z.string()),
+    option1: z.optional(
+      z.lazy(() => HooksNumberLogsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => HooksNumberLogsSecurityOption2$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      option1: "Option1",
+      option2: "Option2",
     });
   }),
 );

@@ -79,12 +79,15 @@ function issuer(
 ): UserSessionIssuer {
   return {
     authnChallengeMode: "chain",
+    authorizationServerMode: "endpoint",
     clientIdMetadataAdmissionMode: mode,
     createdAt: new Date(0),
     id: "issuer-1",
     organizationId: "org-1",
     projectId: "project-1",
     sessionDurationHours: 24,
+    useAuthenticationHost: false,
+    issuerUrlPinned: false,
     slug: "issuer",
     updatedAt: new Date(0),
   };

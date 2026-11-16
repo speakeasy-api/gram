@@ -1,36 +1,42 @@
 export const FEATURE_FLAGS = {
-  assistants: "assistants",
+  inferenceWorkloadSetup: "inference-workload-setup",
+  // UI-only visibility; saved runtime selection and backend authorization are independent.
+  assistantKitRuntime: "assistant-kit-runtime",
+  // UI-only rollout gate; Channels operations enforce organization grants.
+  channels: "channels",
   budgets: "gram-budgets",
-  deploymentsPage: "gram-deployments-page",
-  deviceAgent: "gram-device-agent",
-  deviceIntegrations: "gram-device-integrations",
-  experimentalChat: "gram-experimental-chat",
+  // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
+  emaProviders: "ema-providers",
   explore: "gram-explore",
-  functions: "gram-functions",
-  gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
-  mcpResearch: "gram-mcp-research",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",
-  newCostsPage: "gram-new-costs-page",
-  oktaConnections: "okta-connections",
+  // UI-only rollout gate for the Sync from Okta option of Add MCP server; the
+  // Okta application and suggestion APIs behind it are not gated.
+  oktaMcpImport: "okta-mcp-import",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
-  rbac: "gram-rbac",
+  // Org-targeted, read server-side under the same key when a private network
+  // connection is created: the tailnet gateway when enabled, the Tailscale
+  // operator otherwise. The setup sheet shows the matching steps.
+  privateNetworkGateway: "private-network-gateway",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine
   // the organization runs. Read through `useFeatureFlagVariant`; the boolean
   // read is true for every variant, `off` included. `useDetectorMode` maps it
   // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
-  riskWatchdog: "gram-risk-watchdog",
-  // UI-only rollout gate for folding Shadow AI into Security and Policy: the
-  // Shadow AI policy kind in Guardrails, the Watchdog decision tile and the
-  // retired Shadow AI nav entry. Not enforced server-side.
-  shadowAiGuardrails: "gram-shadow-ai-guardrails",
-  tunneledMcp: "gram-tunneled-mcp",
-  userSessionsDashboard: "user-sessions-dashboard",
+  // Org-targeted, read server-side under the same key: whether MCP servers
+  // and gateways serve their linked skills to connected agents. Gates the MCP
+  // server and gateway Skills tabs and the skill page's "Served over MCP".
+  skillsOverMcp: "skills-over-mcp",
+  // Creating tool approval policies and the Tool approvals tab. The server
+  // enforces the same key on policy create and update.
+  toolApprovals: "risk-tool-approvals",
+  // UI-only rollout gate for the organization's Speakeasy authorization
+  // servers page; the APIs behind it are not gated.
+  userSessionIssuerDashboard: "gram-user-session-issuer-dashboard",
 } as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];

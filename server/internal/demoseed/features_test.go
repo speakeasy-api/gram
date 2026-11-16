@@ -11,7 +11,7 @@ import (
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
-func TestSeedPreservesFailClosedChoice(t *testing.T) {
+func TestSeedPreservesExplicitFeatureChoice(t *testing.T) {
 	t.Parallel()
 
 	for _, spec := range []Spec{DefaultSpec(), LocalSpec()} {
@@ -22,23 +22,33 @@ func TestSeedPreservesFailClosedChoice(t *testing.T) {
 			db, err := infra.CloneTestDatabase(t, "testdb")
 			require.NoError(t, err)
 			q := featurerepo.New(db)
-			params := featurerepo.IsFeatureEnabledParams{
-				OrganizationID: spec.OrgID,
-				FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+			seedLocalPostgres(ctx, t, db, spec)
+			seedLocalPostgres(ctx, t, db, spec)
+			features := []productfeatures.Feature{
+				productfeatures.FeatureHooksFailOpen,
+				productfeatures.FeatureOrganizationGatewayDisabled,
 			}
+			for _, feature := range features {
+				params := featurerepo.IsFeatureEnabledParams{
+					OrganizationID: spec.OrgID,
+					FeatureName:    string(feature),
+				}
+				enabled, err := q.IsFeatureEnabled(ctx, params)
+				require.NoError(t, err)
+				require.True(t, enabled, "first seed must enable %s", feature)
 
+				_, err = q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams(params))
+				require.NoError(t, err)
+			}
 			seedLocalPostgres(ctx, t, db, spec)
-			seedLocalPostgres(ctx, t, db, spec)
-			enabled, err := q.IsFeatureEnabled(ctx, params)
-			require.NoError(t, err)
-			require.True(t, enabled)
-
-			_, err = q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams(params))
-			require.NoError(t, err)
-			seedLocalPostgres(ctx, t, db, spec)
-			enabled, err = q.IsFeatureEnabled(ctx, params)
-			require.NoError(t, err)
-			require.False(t, enabled, "reseed must preserve an explicit fail-closed choice")
+			for _, feature := range features {
+				enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+					OrganizationID: spec.OrgID,
+					FeatureName:    string(feature),
+				})
+				require.NoError(t, err)
+				require.False(t, enabled, "reseed must preserve an explicit choice for %s", feature)
+			}
 		})
 	}
 }

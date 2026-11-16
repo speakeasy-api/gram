@@ -132,14 +132,14 @@ export function CreateRemoteIdentityProviderSheet({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Remote identity provider created");
+      toast.success("Authorization server created");
       onOpenChange(false);
       routes.remoteIdentityProviders.issuerDetail.goTo(created.id);
     },
     onError: (error) => {
       // useMutation surfaces error.message via createMutation.error (shown in
       // the inline Alert); a console line keeps the stack for debugging.
-      console.error("Create remote identity provider failed", error);
+      console.error("Create authorization server failed", error);
     },
   });
 
@@ -211,7 +211,7 @@ export function CreateRemoteIdentityProviderSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            New Remote Identity Provider
+            New Authorization Server
           </SheetTitle>
         </SheetHeader>
 
@@ -235,8 +235,9 @@ export function CreateRemoteIdentityProviderSheet({
                 </SelectContent>
               </Select>
               <Text muted small>
-                Organizational providers are inherited by every project. Choose
-                a project to scope the provider to it.
+                Organizational authorization servers are inherited by every
+                project. Choose a project to scope the authorization server to
+                it.
               </Text>
             </Stack>
 
@@ -288,10 +289,10 @@ export function CreateRemoteIdentityProviderSheet({
                   setSlug(value);
                   setSlugDirty(true);
                 }}
-                placeholder="my-identity-provider"
+                placeholder="my-authorization-server"
               />
               <Text muted small>
-                Identifier for this identity provider. Auto-derived from the
+                Identifier for this authorization server. Auto-derived from the
                 Issuer URL until you edit it.
               </Text>
             </Stack>
@@ -306,7 +307,7 @@ export function CreateRemoteIdentityProviderSheet({
                   setName(value);
                   setNameDirty(true);
                 }}
-                placeholder="My Identity Provider"
+                placeholder="My Authorization Server"
               />
               <Text muted small>
                 Friendly label shown in the dashboard. Auto-derived from the
@@ -320,7 +321,7 @@ export function CreateRemoteIdentityProviderSheet({
               value={logoAssetId}
               onChange={setLogoAssetId}
               onUploadingChange={setLogoUploading}
-              description="Shown beside this provider in the dashboard and on the connect consent page."
+              description="Shown beside this authorization server in the dashboard and on the connect consent page."
             />
 
             <Stack gap={2}>
@@ -334,7 +335,7 @@ export function CreateRemoteIdentityProviderSheet({
               />
               <Text muted small>
                 Linked from the New Client sheet so operators can set up an
-                OAuth client with this provider themselves.
+                OAuth client with this authorization server themselves.
               </Text>
             </Stack>
 

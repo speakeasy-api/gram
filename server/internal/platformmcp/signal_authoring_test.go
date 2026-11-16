@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gensigint "github.com/speakeasy-api/gram/server/gen/sigint"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -163,10 +164,11 @@ func TestSignalToolMatchingPreviewAndExactProject(t *testing.T) {
 	t.Parallel()
 	ctx, f := newSignalAuthoringFixture(t)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
+	reg.withProjects(slugProjects{f.project.Slug: f.project.ID})
 	registerSignalTools(reg, f.service)
 	descriptor := descriptorByName(t, reg, "preview_sensor_match")
 
-	data, err := json.Marshal(previewSensorMatchInput{ProjectID: f.project.ID.String(), Expression: `message.role != "assistant"`, Examples: []sensorMatchExample{{Role: new("user")}, {Role: new("assistant")}, {}}})
+	data, err := json.Marshal(previewSensorMatchInput{ProjectSlug: f.project.Slug, Expression: `message.role != "assistant"`, Examples: []sensorMatchExample{{Role: new("user")}, {Role: new("assistant")}, {}}})
 	require.NoError(t, err)
 
 	result, err := descriptor.Invoke(ctx, data)
@@ -203,10 +205,11 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
+	reg.withProjects(slugProjects{f.project.Slug: f.project.ID})
 	registerSignalTools(reg, f.service)
 	search := descriptorByName(t, reg, "find_signals")
 
-	data, err := json.Marshal(findSignalsInput{ProjectID: f.project.ID.String(), Query: "topic", Limit: 1})
+	data, err := json.Marshal(findSignalsInput{ProjectSlug: f.project.Slug, Query: "topic", Limit: 1})
 	require.NoError(t, err)
 
 	value, err := search.Invoke(ctx, data)
@@ -219,7 +222,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.Equal(t, 1, page.Signals[0].SensorCount)
 	require.NotEmpty(t, page.NextCursor)
 
-	data, err = json.Marshal(findSignalsInput{ProjectID: f.project.ID.String(), Query: "topic", Limit: 1, Cursor: page.NextCursor})
+	data, err = json.Marshal(findSignalsInput{ProjectSlug: f.project.Slug, Query: "topic", Limit: 1, Cursor: page.NextCursor})
 	require.NoError(t, err)
 
 	value, err = search.Invoke(ctx, data)
@@ -229,7 +232,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, second.ID, page.Signals[0].ID)
 	require.Empty(t, page.NextCursor)
-	input := signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, Enabled: new(false), MatchExpression: new(`message.role == "assistant"`), Signals: &[]sigint.SignalReference{{ID: second.ID}, {ID: first.ID}}}}
+	input := signalAuthoringInput{ProjectSlug: f.project.Slug, Proposal: sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, Enabled: new(false), InputStrategy: new(types.SigintInputStrategy("sliding_window")), WindowSize: new(10), MatchExpression: new(`message.role == "assistant"`), Signals: &[]sigint.SignalReference{{ID: second.ID}, {ID: first.ID}}}}
 	mutation := descriptorByName(t, reg, "update_sensor")
 
 	data, err = json.Marshal(input)
@@ -241,7 +244,15 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	preview, ok := value.(signalAuthoringOutput)
 	require.True(t, ok)
 	require.False(t, preview.Sensor.Enabled)
+	require.Equal(t, "sliding_window", preview.Sensor.InputStrategy)
+	require.Equal(t, 10, preview.Sensor.WindowSize)
 	input.Confirmed, input.ExpectedVersion, input.PreviewToken, input.IdempotencyKey = true, preview.Version, preview.PreviewToken, "update-sensor-request"
+	changed := input
+	changed.Proposal.WindowSize = new(2)
+	changedData, err := json.Marshal(changed)
+	require.NoError(t, err)
+	_, err = mutation.Invoke(ctx, changedData)
+	require.Error(t, err, "confirmation must bind the exact window size")
 
 	data, err = json.Marshal(input)
 	require.NoError(t, err)
@@ -249,7 +260,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	_, err = mutation.Invoke(ctx, data)
 	require.NoError(t, err)
 
-	data, err = json.Marshal(getSensorInput{ProjectID: f.project.ID.String(), SensorID: sensor.ID})
+	data, err = json.Marshal(getSensorInput{ProjectSlug: f.project.Slug, SensorID: sensor.ID})
 	require.NoError(t, err)
 
 	value, err = descriptorByName(t, reg, "get_sensor").Invoke(ctx, data)
@@ -259,11 +270,13 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, `message.role == "assistant"`, live.Sensor.MatchExpression)
 	require.False(t, live.Sensor.Enabled)
+	require.Equal(t, "sliding_window", live.Sensor.InputStrategy)
+	require.Equal(t, 10, live.Sensor.WindowSize)
 	require.Equal(t, second.ID, live.Sensor.Signals[0].ID)
 	require.Equal(t, first.ID, live.Sensor.Signals[1].ID)
 	require.True(t, live.Sensor.Ready)
 
-	data, err = json.Marshal(findSignalsInput{ProjectID: f.project.ID.String(), Query: "Topics"})
+	data, err = json.Marshal(findSignalsInput{ProjectSlug: f.project.Slug, Query: "Topics"})
 	require.NoError(t, err)
 
 	value, err = descriptorByName(t, reg, "find_sensors").Invoke(ctx, data)
@@ -273,6 +286,8 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, summaries.Sensors, 1)
 	require.False(t, summaries.Sensors[0].Enabled)
+	require.Equal(t, "sliding_window", summaries.Sensors[0].InputStrategy)
+	require.Equal(t, 10, summaries.Sensors[0].WindowSize)
 	require.Equal(t, 2, summaries.Sensors[0].SignalCount)
 }
 
@@ -282,6 +297,7 @@ func TestSignalToolsUnavailableRefusals(t *testing.T) {
 	bindExternalTestPrincipal(server)
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	reg.withProjects(slugProjects{})
 	registerSignalTools(reg, nil)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 
@@ -295,7 +311,7 @@ func TestSignalToolsUnavailableRefusals(t *testing.T) {
 	defer o11y.NoLogDefer(session.Close)
 
 	for _, descriptor := range reg.For(AudienceExternal) {
-		args := map[string]any{"project_id": uuid.NewString()}
+		args := map[string]any{"project_slug": "no-such-project"}
 		switch descriptor.Name {
 		case "create_sensor", "create_signal", "update_sensor", "update_signal":
 			args["proposal"] = map[string]any{"operation": descriptor.Name}

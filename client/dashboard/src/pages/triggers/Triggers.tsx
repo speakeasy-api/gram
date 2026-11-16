@@ -1,3 +1,4 @@
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useProject } from "@/contexts/Auth";
@@ -29,8 +30,8 @@ import {
   invalidateAllTriggers,
 } from "@gram/client/react-query/triggers.js";
 import { useUpdateTriggerMutation } from "@gram/client/react-query/updateTrigger.js";
-import { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
-import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
+import type { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
+import type { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
 import { SlackReplyModeOptions } from "@/pages/assistants/onboarding/SlackReplyModeOptions";
@@ -254,6 +255,7 @@ function TriggersTable({
             className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
           >
             <Icon name="file-text" className="h-4 w-4" />
+            <span className="sr-only">View tool logs for this trigger</span>
           </routes.logs.Link>
         </div>
       ),
@@ -959,12 +961,10 @@ export function TriggersPanel(): JSX.Element {
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (
-            <Stack align="center" justify="center" className="py-16">
-              <Icon
-                name="loader-circle"
-                className="text-muted-foreground h-6 w-6 animate-spin"
-              />
-            </Stack>
+            <SkeletonTable
+              label="Loading triggers"
+              columns={["1fr", "2fr", "1fr", "0.8fr", "1fr"]}
+            />
           ) : triggers.length === 0 ? (
             <TriggersEmptyState onCreate={openCreate} projectId={project.id} />
           ) : (

@@ -1,6 +1,8 @@
 package authz
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -112,6 +114,40 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 	require.Equal(t, uint32(1), message.GetEvaluatedGrantCount())
 }
 
+func TestChallengeLogger_publishesAfterRequestCanceled(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: orgID,
+		UserID:               "user_canceled",
+		AccountType:          "enterprise",
+	})
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
+
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_canceled"}
+	challengeLogger{
+		Operation: authzrepo.OperationRequire,
+		Outcome:   authzrepo.OutcomeAllow,
+		Reason:    authzrepo.ReasonGrantMatched,
+		Checks:    []Check{check},
+		Focus:     &check,
+	}.Log(ctx, conn, testenv.NewLogger(t), func(ctx context.Context, _ string) (bool, error) {
+		if err := ctx.Err(); err != nil {
+			return false, fmt.Errorf("flag check: %w", err)
+		}
+		_, bounded := ctx.Deadline()
+		require.True(t, bounded)
+		return true, nil
+	})
+
+	require.Len(t, listChallengeOutboxRows(t, conn), 1)
+}
+
 func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 	t.Parallel()
 
@@ -174,7 +210,7 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 	conn := newTestDB(t)
 	seedOrganization(t, ctx, conn, orgID)
 
-	check := Check{Scope: ScopeMCPConnect, ResourceID: "tool_assistant"}
+	check := MCPCheck(ScopeMCPConnect, "tool_assistant", testProjectID)
 	challengeLogger{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeAllow,
@@ -235,7 +271,7 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 	focus := Check{Scope: ScopeProjectRead, ResourceID: "proj_focus"}
 	checks := []Check{
 		focus,
-		{Scope: ScopeMCPConnect, ResourceID: "tool_other"},
+		MCPCheck(ScopeMCPConnect, "tool_other", testProjectID),
 	}
 	matches := []grantMatch{
 		{

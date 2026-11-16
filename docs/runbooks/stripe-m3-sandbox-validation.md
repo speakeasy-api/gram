@@ -132,6 +132,50 @@ advance clocks, or change trial state. Real sandbox setup, wake/pause/restart,
 credential rotation/expiry, checkout and webhook processing remain manual
 validation steps; run them only when authorized.
 
+## Manual partner conversion and daily inference settlement
+
+Only a manually applied promotion satisfying the enabled signup-offer and
+gateway-scope checks can terminate an ordinary Checkout trial early. No code,
+unmapped codes, disabled offers, and unrelated discounts retain existing trial
+behavior. Use only isolated synthetic customers and test-mode credentials when
+validating this route; do not consume finite-use shared promotion codes.
+
+Stripe sandbox validation established these API contracts for
+`2026-03-25.dahlia`:
+
+- `trial_end=now` with `proration_behavior=none` activates the subscription and
+  resets the anchor to the current instant; identical idempotency-key replay is
+  safe.
+- Adding `billing_cycle_anchor=unchanged` is rejected when ending a trial.
+- `billing_cycle_anchor_config` is not accepted by subscription update.
+- The non-midnight time persists across renewals; it is not just a first stub.
+
+For this route only, verify the redeemed partner subscription's original monthly
+anchor against each invoice, including February/leap-year day clamping. Preserve
+all Stripe invoice timestamps and existing identity checks. Never round persisted
+invoice periods or relax the nonpartner midnight requirement.
+
+Inference allocation uses completed UTC days with an initial waiver: exclude the
+UTC day containing conversion, then assign each later boundary day to the next
+invoice. For a conversion on December 31 at 13:17 UTC, the first invoice allocates
+January 1–30 and the next allocates January 31–February 28 in a leap year. Native
+Stripe meter periods remain December 31 13:17–January 31 13:17 and January 31
+13:17–February 29 13:17 respectively. The day waiver concerns daily inference,
+not timestamped native-meter events.
+
+Check recovery/readiness/freeze selection as well as final charges; retries must
+not duplicate days, and cancellation must retain the original anchor for pending
+settlement. An externally changed anchor or unsupported interval must fail closed,
+not silently move historical costs to a new period.
+
+Focused deterministic production-seam regressions:
+
+```sh
+mise run test:server ./internal/usage -run 'TestManualPartner|TestPartnerInvoice' -count=1
+mise run test:server ./internal/background/activities -run TestPartnerDailyAllocations -count=1
+mise run test:server ./internal/thirdparty/stripe -run 'TestPartnerCheckoutWire|TestEndPartnerCheckoutTrial' -count=1
+```
+
 ## Create a clocked Stripe customer
 
 Choose a UTC timestamp before the next midnight and export it as Unix seconds.

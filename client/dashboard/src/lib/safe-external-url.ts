@@ -80,7 +80,11 @@ export function safeSameOriginPath(
 export function authPageHref(
   page: "/login" | "/sign-up",
   redirectTo: string | null | undefined,
+  partnerCode?: string,
 ): string {
   const path = safeSameOriginPath(redirectTo);
-  return path ? `${page}?redirect=${encodeURIComponent(path)}` : page;
+  const query = new URLSearchParams();
+  if (path) query.set("redirect", path);
+  if (partnerCode?.trim()) query.set("partner_code", partnerCode.trim());
+  return query.size ? `${page}?${query}` : page;
 }

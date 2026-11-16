@@ -24,13 +24,13 @@ import (
 // only has to delete its own rows. No copy, nothing to pin.
 var sessionSharedPredicateFragments = []string{
 	// Claude OTEL provenance URN.
-	"(gram_urn = 'claude-code:otel:logs')",
+	"gram_urn = 'claude-code:otel:logs'",
 	// api_request row markers.
 	"(toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')",
 	// tool_result row markers.
 	"(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')",
 	// Agent usage-row URN prefixes.
-	"(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))",
+	"startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')",
 	// Codex OTEL usage rows.
 	"toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed'",
 	// LiteLLM normalized model spans.

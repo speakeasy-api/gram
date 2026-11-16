@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	ActionCustomDomainsCreate Action = "custom_domains:create"
-	ActionCustomDomainsUpdate Action = "custom_domains:update"
-	ActionCustomDomainsDelete Action = "custom_domains:delete"
+	ActionCustomDomainsCreate    Action = "custom_domains:create"
+	ActionCustomDomainsUpdate    Action = "custom_domains:update"
+	ActionCustomDomainsDelete    Action = "custom_domains:delete"
+	ActionCustomDomainsReconcile Action = "custom_domains:reconcile"
 )
 
 type LogCustomDomainCreateEvent struct {
@@ -55,6 +56,7 @@ func (l *Logger) LogCustomDomainUpdate(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -82,6 +84,7 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 	action := ActionCustomDomainsCreate
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -105,7 +108,7 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomainV1})
 }
 
-type LogCustomDomainDeleteEvent struct {
+type LogCustomDomainReconcileEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
@@ -116,10 +119,56 @@ type LogCustomDomainDeleteEvent struct {
 	DomainName      string
 }
 
+func (l *Logger) LogCustomDomainReconcile(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainReconcileEvent) error {
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionCustomDomainsReconcile),
+
+		SubjectID:          event.CustomDomainURN.ID.String(),
+		SubjectType:        string(subjectTypeCustomDomain),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.DomainName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		Metadata:       nil,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomainV1})
+}
+
+type LogCustomDomainDeleteEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	CustomDomainURN urn.CustomDomain
+	DomainName      string
+
+	// CustomDomainSnapshotBefore is the domain's API view before deletion.
+	// Deletion clears the DNS target token, so this snapshot is the lasting
+	// record of which domain owned it.
+	CustomDomainSnapshotBefore *domains.CustomDomain
+}
+
 func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainDeleteEvent) error {
 	action := ActionCustomDomainsDelete
+	beforeSnapshot, err := marshalAuditPayload(event.CustomDomainSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -136,7 +185,7 @@ func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, even
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		Metadata:       nil,
-		BeforeSnapshot: nil,
+		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  nil,
 	}
 

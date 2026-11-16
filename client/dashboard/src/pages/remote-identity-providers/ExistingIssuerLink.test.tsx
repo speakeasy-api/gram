@@ -10,15 +10,8 @@ vi.mock("@/contexts/Auth", () => ({
   }),
   useProject: () => ({ id: "active-project", slug: "active" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: ({ projectSlug }: { projectSlug: string }) => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        href: (id: string) =>
-          `/org/projects/${projectSlug}/remote-identity-providers/${id}`,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "active" }),
 }));
 // Resolved by id, so a match past the org's first listing page still links.
 const issuersById: Record<string, { id: string; projectId: string }> = {
@@ -59,7 +52,7 @@ it.each([
     );
     expect(
       screen
-        .getByRole("link", { name: "View existing provider" })
+        .getByRole("link", { name: "View existing authorization server" })
         .getAttribute("href"),
     ).toBe(
       `/org/projects/${projectSlug}/remote-identity-providers/other-issuer`,
@@ -67,7 +60,7 @@ it.each([
   },
 );
 it.each(["missing", "inaccessible-issuer"])(
-  "does not link unresolved provider %s into the active project",
+  "does not link unresolved authorization server %s into the active project",
   (id) => {
     render(
       <MemoryRouter>

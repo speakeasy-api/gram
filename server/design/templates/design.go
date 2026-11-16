@@ -7,7 +7,7 @@ import (
 )
 
 var _ = Service("templates", func() {
-	Description("Manages re-usable prompt templates and higher-order tools for a project.")
+	Description("Manages re-usable prompt templates for a project.")
 
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
@@ -211,7 +211,7 @@ var _ = Service("templates", func() {
 			})
 			Attribute("kind", String, func() {
 				Description("The kind of prompt the template is used for")
-				Enum("prompt", "higher_order_tool")
+				Enum("prompt")
 			})
 
 			security.ByKeyPayload()
@@ -251,7 +251,7 @@ var CreatePromptTemplateForm = Type("CreatePromptTemplateForm", func() {
 	})
 	Attribute("kind", String, func() {
 		Description("The kind of prompt the template is used for")
-		Enum("prompt", "higher_order_tool")
+		Enum("prompt")
 	})
 	Attribute("tools_hint", ArrayOf(String), func() {
 		Description("The suggested tool names associated with the prompt template")
@@ -286,7 +286,7 @@ var UpdatePromptTemplateForm = Type("UpdatePromptTemplateForm", func() {
 	})
 	Attribute("kind", String, func() {
 		Description("The kind of prompt the template is used for")
-		Enum("prompt", "higher_order_tool")
+		Enum("prompt")
 	})
 	Attribute("tools_hint", ArrayOf(String), func() {
 		Description("The suggested tool names associated with the prompt template")

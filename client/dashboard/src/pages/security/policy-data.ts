@@ -1,6 +1,14 @@
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 
-export type PolicyAction = "flag" | "block" | "warn" | "quarantine";
+// require_approval holds MCP tool calls until an approver approves them. Only
+// the approval editor sets it; the detection editors' action step never
+// offers it.
+export type PolicyAction =
+  | "flag"
+  | "block"
+  | "warn"
+  | "quarantine"
+  | "require_approval";
 
 export type PolicyMessageType =
   | "user_message"

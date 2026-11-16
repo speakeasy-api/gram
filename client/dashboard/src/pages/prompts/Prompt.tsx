@@ -19,9 +19,7 @@ export default function PromptPage(): JSX.Element {
   });
 
   let content = null;
-  if (status === "pending") {
-    content = null;
-  } else if (status === "error") {
+  if (status === "error") {
     content = <p className="text-red-500">{error.message}</p>;
   } else if (status === "success" && data) {
     content = (
@@ -54,7 +52,7 @@ export default function PromptPage(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>{content}</Page.Body>
+      <Page.Body isLoading={status === "pending"}>{content}</Page.Body>
     </Page>
   );
 }

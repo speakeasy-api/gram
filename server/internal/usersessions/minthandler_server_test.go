@@ -134,13 +134,13 @@ func TestMintUserSessionForServerAllowsMCPConnect(t *testing.T) {
 	require.NotEmpty(t, got.AccessToken)
 	require.Equal(t, 3600, got.ExpiresIn)
 
-	// Remote-server tokens are bound to the user_session_issuer audience (the
-	// /x/mcp convention), not a toolset.
+	// Server tokens are bound to the user_session_issuer audience, not a toolset.
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
 		got.AccessToken,
 		urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
 	)
 	require.NoError(t, err)
+	require.Equal(t, "http://0.0.0.0/mcp/"+server.Slug.String, claims.Issuer)
 
 	row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{
 		UserSessionIssuerID: server.UserSessionIssuerID.UUID,
@@ -192,7 +192,7 @@ func TestMintUserSessionForServerRejectsUngatedServer(t *testing.T) {
 
 // TestMintUserSessionForServerUsesPrimaryEndpointIssuer pins the iss claim
 // to the server's primary endpoint URL when the server has mcp_endpoints
-// rows; the legacy /x/mcp/{slug} shape only applies to servers with no
+// rows; the /mcp/{slug} fallback only applies to servers with no
 // endpoints (covered by TestMintUserSessionForServerAllowsMCPConnect, whose
 // fixture creates none).
 func TestMintUserSessionForServerUsesPrimaryEndpointIssuer(t *testing.T) {
@@ -341,8 +341,6 @@ func createBackingToolset(t *testing.T, ctx context.Context, ti *testInstance, s
 		Slug:                   slug + "-backing",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -426,7 +424,7 @@ func TestMintUserSessionForToolsetIgnoresUngovernedWrapper(t *testing.T) {
 				urn.NewToolset(toolset.ID).String(),
 			)
 			require.NoError(t, err)
-			require.Equal(t, "http://0.0.0.0/mcp/"+toolset.McpSlug.String, claims.Issuer)
+			require.Equal(t, "http://0.0.0.0/mcp/"+slug, claims.Issuer)
 		})
 	}
 }

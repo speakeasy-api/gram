@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
-	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
@@ -106,6 +105,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 	)
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, networkIngressProviderFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 
 	return &cli.Command{
@@ -123,8 +123,11 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err := validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key")); err != nil {
 				return err
 			}
-			if c.String("network-ingress-operator-namespace") == "" {
+			if c.Bool("network-ingress-operator-provider-enabled") && c.String("network-ingress-operator-namespace") == "" {
 				return errors.New("private ingress operator namespace is required for observation and cleanup")
+			}
+			if !c.Bool("network-ingress-operator-provider-enabled") && !c.Bool("network-ingress-gateway-enabled") {
+				return errors.New("private ingress reconciler needs the operator provider or the tailnet gateway enabled")
 			}
 
 			serviceName := "gram-network-ingress-worker"
@@ -177,6 +180,11 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			// The reconciler defines and deletes services, so a local one must
+			// carry a development id rather than fall back to production names.
+			if _, err := localDevelopmentNamer(c.String("environment"), c.String(networkIngressDevIDFlag)); err != nil {
+				return err
+			}
 			if config.ProviderMutationsEnabled && !config.MutationReady() {
 				return errors.New("private ingress provider mutation configuration is incomplete")
 			}
@@ -190,18 +198,26 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if config.ProviderMutationsEnabled && encryptionClient == nil {
 				return errors.New("private ingress encryption key is required when provider mutations are enabled")
 			}
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "")
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "", "")
 			if err != nil {
 				return fmt.Errorf("create Kubernetes client: %w", err)
 			}
-			if k8sClient.Clientset == nil || k8sClient.DynamicClient == nil {
-				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients")
+			if config.OperatorProviderEnabled && (k8sClient.Clientset == nil || k8sClient.DynamicClient == nil) {
+				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients while the operator provider is enabled")
 			}
-			var publicationRequester networkingress.PublicationRequester
-			if c.Bool(pluginPublicationEmitFlagName) {
-				publicationRequester = plugins.PublicationRequests{Enabled: true}
+			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
+			// Gateway auth keys and node state are sealed under each
+			// organization's key, which the reconciler mints on first use.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, newGCPIdentity(ctx, logger, c), newAuditLogger())
+			if err != nil {
+				return err
 			}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
+			lockDB, err := newNetworkIngressLockDB(ctx, logger, meterProvider, c)
+			if err != nil {
+				return err
+			}
+			defer lockDB.Close()
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err
 			}
@@ -221,9 +237,11 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			)
 			healthMux := http.NewServeMux()
 			healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-				if err := checkNetworkIngressWorkerKubernetes(r.Context(), k8sClient.Clientset); err != nil {
-					http.Error(w, "kubernetes dependency unavailable", http.StatusServiceUnavailable)
-					return
+				if config.OperatorProviderEnabled {
+					if err := checkNetworkIngressWorkerKubernetes(r.Context(), k8sClient.Clientset); err != nil {
+						http.Error(w, "kubernetes dependency unavailable", http.StatusServiceUnavailable)
+						return
+					}
 				}
 				healthHandler.ServeHTTP(w, r)
 			})

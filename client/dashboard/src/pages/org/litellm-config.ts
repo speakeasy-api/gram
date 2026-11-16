@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { FailurePosture as KnownFailurePosture } from "@gram/client/models/components/createinstancerequestbody.js";
 import type { LiteLLMInstanceFailurePosture } from "@gram/client/models/components/litellminstance.js";
 
 function apiBase(serverURL: string): string {
@@ -19,6 +21,10 @@ export function buildLiteLLMGuardrailConfig(
   serverURL: string,
   failurePosture: LiteLLMInstanceFailurePosture,
 ): string {
+  const supportedPosture = requireKnownEnumValue(
+    KnownFailurePosture,
+    failurePosture,
+  );
   return `guardrails:
   - guardrail_name: gram-risk
     litellm_params:
@@ -48,7 +54,7 @@ export function buildLiteLLMGuardrailConfig(
       default_on: true
       streaming_end_of_stream_only: true
       fail_on_error: true
-      unreachable_fallback: ${failurePosture}`;
+      unreachable_fallback: ${supportedPosture}`;
 }
 
 export function buildLiteLLMEnvironment(

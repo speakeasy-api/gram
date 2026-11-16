@@ -1,13 +1,9 @@
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 import React, { Children, isValidElement, useMemo, useState } from "react";
-import { ComponentProps, ReactNode } from "react";
-import {
-  Group,
-  Panel,
-  PanelImperativeHandle,
-  Separator,
-} from "react-resizable-panels";
+import type { ComponentProps, ReactNode } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
+import { Group, Panel, Separator } from "react-resizable-panels";
 
 export interface ResizeHandleProps extends ComponentProps<typeof Separator> {
   children?: ReactNode;

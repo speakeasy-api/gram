@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -16,14 +17,14 @@ export const AnalyticsFieldRole = {
   Dimension: "dimension",
   Measure: "measure",
 } as const;
-export type AnalyticsFieldRole = ClosedEnum<typeof AnalyticsFieldRole>;
+export type AnalyticsFieldRole = OpenEnum<typeof AnalyticsFieldRole>;
 
 export const Type = {
   String: "string",
   Int64: "int64",
   Float64: "float64",
 } as const;
-export type Type = ClosedEnum<typeof Type>;
+export type Type = OpenEnum<typeof Type>;
 
 /**
  * One queryable field on a dataset.
@@ -59,12 +60,14 @@ export type AnalyticsField = {
 };
 
 /** @internal */
-export const AnalyticsFieldRole$inboundSchema: z.ZodMiniEnum<
-  typeof AnalyticsFieldRole
-> = z.enum(AnalyticsFieldRole);
+export const AnalyticsFieldRole$inboundSchema: z.ZodMiniType<
+  AnalyticsFieldRole,
+  unknown
+> = openEnums.inboundSchema(AnalyticsFieldRole);
 
 /** @internal */
-export const Type$inboundSchema: z.ZodMiniEnum<typeof Type> = z.enum(Type);
+export const Type$inboundSchema: z.ZodMiniType<Type, unknown> = openEnums
+  .inboundSchema(Type);
 
 /** @internal */
 export const AnalyticsField$inboundSchema: z.ZodMiniType<

@@ -5,9 +5,36 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
+ */
+export const AuthorizationServerMode = {
+  Endpoint: "endpoint",
+  Shared: "shared",
+} as const;
+/**
+ * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
+ */
+export type AuthorizationServerMode = OpenEnum<typeof AuthorizationServerMode>;
+
+/**
+ * Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.
+ */
+export const AuthorizationServerUnavailableReason = {
+  PinnedIssuerUrlInvalid: "pinned_issuer_url_invalid",
+  HostNotServed: "host_not_served",
+} as const;
+/**
+ * Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.
+ */
+export type AuthorizationServerUnavailableReason = OpenEnum<
+  typeof AuthorizationServerUnavailableReason
+>;
 
 /**
  * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
@@ -21,7 +48,7 @@ export const ClientIdMetadataAdmissionMode = {
 /**
  * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
  */
-export type ClientIdMetadataAdmissionMode = ClosedEnum<
+export type ClientIdMetadataAdmissionMode = OpenEnum<
   typeof ClientIdMetadataAdmissionMode
 >;
 
@@ -30,9 +57,23 @@ export type ClientIdMetadataAdmissionMode = ClosedEnum<
  */
 export type UserSessionIssuer = {
   /**
+   * Whether this deployment has an authentication host the issuer can be moved onto. Present on responses, not audit snapshots.
+   */
+  authenticationHostAvailable?: boolean | undefined;
+  /**
    * chain | interactive.
    */
   authnChallengeMode: string;
+  /**
+   * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
+   */
+  authorizationServerMode: AuthorizationServerMode;
+  /**
+   * Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.
+   */
+  authorizationServerUnavailableReason?:
+    | AuthorizationServerUnavailableReason
+    | undefined;
   /**
    * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
    */
@@ -43,6 +84,14 @@ export type UserSessionIssuer = {
    */
   id: string;
   /**
+   * The RFC 8414 issuer identifier of the issuer's shared authorization server. Present only for a shared issuer whose authorization server this deployment serves.
+   */
+  issuerUrl?: string | undefined;
+  /**
+   * Whether the shared authorization server's issuer URL was fixed when the issuer was set up, so it stays the same if the deployment's hosts change. An unpinned shared issuer derives its issuer URL from the deployment's current hosts, so a host change also changes the values configured on other platforms. Always false outside shared mode.
+   */
+  issuerUrlPinned: boolean;
+  /**
    * The owning organization id.
    */
   organizationId: string;
@@ -50,6 +99,10 @@ export type UserSessionIssuer = {
    * The owning project id; empty for organization-owned issuers.
    */
   projectId: string;
+  /**
+   * The owning project's name. Present on organization-level reads of project-specific issuers.
+   */
+  projectName?: string | undefined;
   /**
    * Maximum issued user session lifetime, in hours.
    */
@@ -59,6 +112,10 @@ export type UserSessionIssuer = {
    */
   slug: string;
   /**
+   * The token endpoint of the issuer's shared authorization server. Present exactly when issuer_url is.
+   */
+  tokenEndpoint?: string | undefined;
+  /**
    * The organization-level remote_session_client Speakeasy uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
    */
   trustedRemoteSessionClientId?: string | undefined;
@@ -67,12 +124,29 @@ export type UserSessionIssuer = {
    */
   trustedRemoteSessionIssuerId?: string | undefined;
   updatedAt: Date;
+  /**
+   * Whether the issuer opts in to announcing its authorization servers on the deployment's authentication host rather than the MCP host. This is the stored setting: on a deployment without an authentication host it has no effect, and issuer_url shows the host actually used.
+   */
+  useAuthenticationHost: boolean;
 };
 
 /** @internal */
-export const ClientIdMetadataAdmissionMode$inboundSchema: z.ZodMiniEnum<
-  typeof ClientIdMetadataAdmissionMode
-> = z.enum(ClientIdMetadataAdmissionMode);
+export const AuthorizationServerMode$inboundSchema: z.ZodMiniType<
+  AuthorizationServerMode,
+  unknown
+> = openEnums.inboundSchema(AuthorizationServerMode);
+
+/** @internal */
+export const AuthorizationServerUnavailableReason$inboundSchema: z.ZodMiniType<
+  AuthorizationServerUnavailableReason,
+  unknown
+> = openEnums.inboundSchema(AuthorizationServerUnavailableReason);
+
+/** @internal */
+export const ClientIdMetadataAdmissionMode$inboundSchema: z.ZodMiniType<
+  ClientIdMetadataAdmissionMode,
+  unknown
+> = openEnums.inboundSchema(ClientIdMetadataAdmissionMode);
 
 /** @internal */
 export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
@@ -80,7 +154,12 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    authentication_host_available: z.optional(z.boolean()),
     authn_challenge_mode: z.string(),
+    authorization_server_mode: AuthorizationServerMode$inboundSchema,
+    authorization_server_unavailable_reason: z.optional(
+      AuthorizationServerUnavailableReason$inboundSchema,
+    ),
     client_id_metadata_admission_mode:
       ClientIdMetadataAdmissionMode$inboundSchema,
     created_at: z.pipe(
@@ -88,28 +167,42 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    issuer_url: z.optional(z.string()),
+    issuer_url_pinned: z.boolean(),
     organization_id: z.string(),
     project_id: z.string(),
+    project_name: z.optional(z.string()),
     session_duration_hours: z.int(),
     slug: z.string(),
+    token_endpoint: z.optional(z.string()),
     trusted_remote_session_client_id: z.optional(z.string()),
     trusted_remote_session_issuer_id: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    use_authentication_host: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "authentication_host_available": "authenticationHostAvailable",
       "authn_challenge_mode": "authnChallengeMode",
+      "authorization_server_mode": "authorizationServerMode",
+      "authorization_server_unavailable_reason":
+        "authorizationServerUnavailableReason",
       "client_id_metadata_admission_mode": "clientIdMetadataAdmissionMode",
       "created_at": "createdAt",
+      "issuer_url": "issuerUrl",
+      "issuer_url_pinned": "issuerUrlPinned",
       "organization_id": "organizationId",
       "project_id": "projectId",
+      "project_name": "projectName",
       "session_duration_hours": "sessionDurationHours",
+      "token_endpoint": "tokenEndpoint",
       "trusted_remote_session_client_id": "trustedRemoteSessionClientId",
       "trusted_remote_session_issuer_id": "trustedRemoteSessionIssuerId",
       "updated_at": "updatedAt",
+      "use_authentication_host": "useAuthenticationHost",
     });
   }),
 );

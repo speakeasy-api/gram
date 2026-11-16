@@ -38,8 +38,11 @@ type TransferRecord struct {
 	// WorkOSSessionID lets logout on the destination host revoke the
 	// WorkOS session.
 	WorkOSSessionID string
-	SourceHost      string
-	TargetHost      string
+	// SourceIssuedAt is the source session's issuance in Unix microseconds,
+	// 0 when unknown, so the destination keeps the sign-out-everywhere epoch.
+	SourceIssuedAt int64
+	SourceHost     string
+	TargetHost     string
 	// NonceHash is the SHA-256 of the browser binding nonce that transferIn's
 	// start mode set as a cookie on the target host. It also names that
 	// cookie. Only the browser holding the cookie can redeem the code.
@@ -91,7 +94,7 @@ func transferKey(code string) string {
 
 // Create stores a transfer record for session, bound to the browser that
 // holds nonce, and returns its one-time code.
-func (m *TransferManager) Create(ctx context.Context, session Session, nonce, sourceHost, targetHost string) (string, error) {
+func (m *TransferManager) Create(ctx context.Context, session Session, issuedAt time.Time, nonce, sourceHost, targetHost string) (string, error) {
 	if nonce == "" {
 		return "", errors.New("transfer nonce is required")
 	}
@@ -110,6 +113,7 @@ func (m *TransferManager) Create(ctx context.Context, session Session, nonce, so
 		UserID:               session.UserID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		WorkOSSessionID:      session.WorkOSSessionID,
+		SourceIssuedAt:       issuedAtMicros(issuedAt),
 		SourceHost:           sourceHost,
 		TargetHost:           targetHost,
 		NonceHash:            sha256Hex(nonce),
@@ -147,4 +151,11 @@ func (m *TransferManager) Consume(ctx context.Context, code string) error {
 		return cacheError("consume", err)
 	}
 	return nil
+}
+
+func issuedAtMicros(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMicro()
 }

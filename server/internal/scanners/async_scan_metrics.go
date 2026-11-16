@@ -12,7 +12,6 @@ import (
 
 const (
 	AsyncScanEngineReal = "real"
-	AsyncScanEngineStub = "stub"
 
 	AsyncScanOutcomeOK           = "ok"
 	AsyncScanOutcomeScanError    = "scan_error"
@@ -30,6 +29,12 @@ const (
 	meterAsyncScanHandlerMessages = "risk.async_scan.handler_messages"
 )
 
+type AsyncScanEngineSelectionReason string
+
+const (
+	AsyncScanEngineSelectionUpstreamSelected AsyncScanEngineSelectionReason = "upstream_selected"
+)
+
 type AsyncScanHandlerMetrics struct {
 	handledMessages metric.Int64Counter
 }
@@ -43,7 +48,7 @@ func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners")
 	handledMessages, err := meter.Int64Counter(
 		meterAsyncScanHandlerMessages,
-		metric.WithDescription("Total async risk scan messages handled by scanner, engine, gate decision, and outcome"),
+		metric.WithDescription("Total async risk scan messages handled by scanner, engine, selection reason, and outcome"),
 		metric.WithUnit("{message}"),
 	)
 	if err != nil {
@@ -53,7 +58,9 @@ func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog
 	return &AsyncScanHandlerMetrics{handledMessages: handledMessages}
 }
 
-func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scanner, engine, outcome string, gateReason AsyncShadowGateReason) {
+// RecordHandled counts one handled message. Every async handler runs the real
+// engine on the scan the publisher selected, so those labels are fixed.
+func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scanner, outcome string) {
 	if m == nil || m.handledMessages == nil {
 		return
 	}
@@ -61,8 +68,8 @@ func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scan
 	m.handledMessages.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("scanner", scanner),
-		attribute.String("engine", engine),
+		attribute.String("engine", AsyncScanEngineReal),
 		attr.Outcome(outcome),
-		attribute.String("gate_reason", string(gateReason)),
+		attribute.String("selection_reason", string(AsyncScanEngineSelectionUpstreamSelected)),
 	))
 }

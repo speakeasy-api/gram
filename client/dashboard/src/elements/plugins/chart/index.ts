@@ -1,4 +1,4 @@
-import { Plugin } from "@/elements/types/plugins";
+import type { Plugin } from "@/elements/types/plugins";
 import chartPrompt from "@/elements/prompts/chart.txt?raw";
 import { ChartRenderer } from "./component";
 

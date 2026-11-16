@@ -1,0 +1,103 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+/** Re-read connections when OAuth closes or the dashboard regains focus. */
+export function useOAuthPopup(
+  onComplete: (reason: "popup-closed" | "focus") => void | Promise<void>,
+): {
+  open: (
+    url: string | (() => Promise<string>),
+    options?: { name?: string; features?: string },
+  ) => boolean;
+  cancel: () => void;
+  isClosed: () => boolean;
+  blocked: boolean;
+} {
+  const callback = useRef(onComplete);
+  callback.current = onComplete;
+  const popup = useRef<Window | null>(null);
+  const inFlight = useRef(0);
+  const preparing = useRef(false);
+  const [blocked, setBlocked] = useState(false);
+  const cancel = useCallback(() => {
+    popup.current?.close();
+    popup.current = null;
+    preparing.current = false;
+  }, []);
+  const isClosed = useCallback(
+    () => !popup.current || popup.current.closed,
+    [],
+  );
+  useEffect(() => {
+    const notify = async (reason: "popup-closed" | "focus") => {
+      if (reason === "focus" && inFlight.current > 0) return;
+      inFlight.current += 1;
+      try {
+        await callback.current(reason);
+      } finally {
+        inFlight.current -= 1;
+      }
+    };
+    const consumeClosedPopup = () => {
+      if (preparing.current || !popup.current?.closed) return false;
+      popup.current = null;
+      void notify("popup-closed");
+      return true;
+    };
+    const refresh = () => {
+      if (popup.current) {
+        consumeClosedPopup();
+        return;
+      }
+      if (document.visibilityState === "visible") void notify("focus");
+    };
+    const closed = window.setInterval(() => {
+      consumeClosedPopup();
+    }, 500);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(closed);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+  return {
+    blocked,
+    cancel,
+    isClosed,
+    open: (url, options) => {
+      if (popup.current) {
+        if (!popup.current.closed) popup.current.focus();
+        return false;
+      }
+      const child = window.open(
+        "about:blank",
+        options?.name ?? "speakeasy-connection",
+        options?.features ?? "popup=yes,width=560,height=720",
+      );
+      setBlocked(!child);
+      if (!child) return false;
+      child.opener = null;
+      popup.current = child;
+      if (typeof url === "string") {
+        child.location.href = url;
+      } else {
+        // Reserve the window during the click, before asynchronous setup.
+        preparing.current = true;
+        void Promise.resolve()
+          .then(url)
+          .then((destination) => {
+            if (popup.current !== child) return;
+            if (!child.closed) child.location.href = destination;
+            preparing.current = false;
+          })
+          .catch(() => {
+            if (popup.current !== child) return;
+            cancel();
+          });
+      }
+      child.focus();
+      return true;
+    },
+  };
+}

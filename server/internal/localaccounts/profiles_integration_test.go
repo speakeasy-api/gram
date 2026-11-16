@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/localaccounts/fixtures/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/localaccounts/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -44,7 +44,7 @@ func TestProfilesElapsedFixtureReconcilesWithoutResurrection(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, handled)
 	for range 2 {
-		org, err := mv.DescribeOrganization(t.Context(), logger, orgrepo.New(db), stub, profileOrg)
+		org, err := orgaccount.Describe(t.Context(), logger, orgrepo.New(db), stub, profileOrg)
 		require.NoError(t, err)
 		require.Equal(t, "free", org.GramAccountType)
 		require.False(t, org.HasActiveSubscription)
@@ -81,8 +81,8 @@ func TestProfilesMarkerDetachesOnOwnerDelete(t *testing.T) {
 	stub := billing.NewStubClientWithLocalProfiles(testenv.NewLogger(t), testenv.NewTracerProvider(t), db)
 	tier, active, err := stub.GetCustomerTier(t.Context(), org)
 	require.NoError(t, err)
-	require.Equal(t, billing.TierPro, *tier)
-	require.True(t, active)
+	require.Nil(t, tier)
+	require.False(t, active)
 }
 
 func TestProfilesDryRunWithoutMarkerAndGuardRollback(t *testing.T) {

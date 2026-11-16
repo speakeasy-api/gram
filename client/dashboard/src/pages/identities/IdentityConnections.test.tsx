@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import IdentityConnections from "./IdentityConnections";
 
@@ -54,12 +55,8 @@ vi.mock("@tanstack/react-query", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("react-router", () => ({
-  useLocation: () => ({ search: "" }),
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({}),
-  useRoutes: () => ({}),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("./identityHandoffs", () => ({
   identityHandoffs: () => ({ mcpSessions: "/sessions" }),
@@ -100,7 +97,7 @@ vi.mock("./useIdentityQueries", () => ({
 
 describe("IdentityConnections", () => {
   it("renders the active MCP connections list from the sessions query", () => {
-    render(<IdentityConnections />);
+    render(<IdentityConnections />, { wrapper: MemoryRouter });
 
     const panel = screen.getByTestId("active-connections");
     const list = within(panel).getByTestId("connections-list");
@@ -116,7 +113,7 @@ describe("IdentityConnections", () => {
   // Which AI tools a person runs is a security question about them, not a
   // list of things they have connected. It moved to Identity -> Security.
   it("no longer carries the employee Shadow AI section", () => {
-    render(<IdentityConnections />);
+    render(<IdentityConnections />, { wrapper: MemoryRouter });
 
     expect(screen.queryByTestId("shadow-ai")).toBeNull();
   });

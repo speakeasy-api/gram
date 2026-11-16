@@ -21,6 +21,8 @@ type ExternalKey struct {
 	// @access: confidential
 	Provider string
 	// @access: confidential
+	Purpose string
+	// @access: confidential
 	Algorithm string
 	// @access: confidential
 	Name string
@@ -28,6 +30,31 @@ type ExternalKey struct {
 	CustomerGrantReference pgtype.Text
 	// @access: confidential
 	IdentityProviderConnectionID uuid.NullUUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type InternalSessionIssuer struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: restricted
+	Issuer string
+	// @access: confidential
+	JsonWebKeySetID uuid.UUID
+	// @access: confidential
+	DisabledAt pgtype.Timestamptz
+	// @access: confidential
+	AllowedSignInMethods []string
+	// @access: opaque-confidential
+	AllowedMicrosoftTenantIds []string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

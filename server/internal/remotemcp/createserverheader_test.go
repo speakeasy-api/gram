@@ -249,7 +249,7 @@ func TestCreateServerHeader_RejectsProtectedPassThroughSources(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	for _, source := range []string{"Gram-Key", "gRaM-cHaT-sEsSiOn", "Gram_Session", "Gram-Project", "Gram-Consent-State", "X-Gram-Tunnel-Id", "X-Gram-Agent-Version", "X_Speakeasy_Identity", "Proxy-Authorization", "Set-Cookie", "Speakeasy-AI-Key", "speakeasy-ai-chat-session"} {
+	for _, source := range []string{"Authorization", " authorization", "Gram-Key", "gRaM-cHaT-sEsSiOn", "Gram_Session", "Gram-Project", "Gram-Consent-State", "X-Gram-Tunnel-Id", "X-Gram-Agent-Version", "X_Speakeasy_Identity", "Proxy-Authorization", "Set-Cookie", "Speakeasy-AI-Key", "speakeasy-ai-chat-session"} {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
 
@@ -319,13 +319,12 @@ func TestCreateServerHeader_AllowsOperatorCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "X-Service-Token", *header.ValueFromRequestHeader)
 
-	// Forwarding the caller's own upstream credential is what pass-through
-	// identity is for.
-	header, err = ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("Authorization")
+	// A caller-supplied upstream credential may be sent as Authorization.
+	header, err = ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(createTestServer(t, ctx, ti).ID, "Authorization", func(p *gen.CreateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Upstream-Credential")
 	}))
 	require.NoError(t, err)
-	require.Equal(t, "Authorization", *header.ValueFromRequestHeader)
+	require.Equal(t, "X-Upstream-Credential", *header.ValueFromRequestHeader)
 }
 
 func TestCreateServerHeader_RejectsInvalidNamesAndValues(t *testing.T) {
@@ -530,6 +529,7 @@ func TestCreateServerHeader_RefusalsExplainTheFix(t *testing.T) {
 		want []string
 	}{
 		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot read request header "gram-key": Speakeasy credentials and cookies are never forwarded to remote MCP servers`}},
+		{name: "X-Caller-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("Authorization") }, code: oops.CodeBadRequest, want: []string{`header "X-Caller-Token" cannot read request header "Authorization": it may carry the caller's Speakeasy credential`, "separate request header"}},
 		{name: "set-cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header "set-cookie" cannot be configured on a remote MCP server`, "Cookie can only hold a static value"}},
 		{name: "X-Upstream-Cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("Cookie") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Cookie" cannot read request header "Cookie": Speakeasy credentials and cookies are never forwarded to remote MCP servers`}},
 		{name: "Gram-Key", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X-Client-Token") }, code: oops.CodeBadRequest, want: []string{`header "Gram-Key" cannot be populated from a request header: it is a Speakeasy header`}},

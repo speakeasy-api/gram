@@ -189,15 +189,13 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 		return deniedResult(&endpoint, &server, nil, mode), nil
 	}
 	if server.ToolsetID.Valid && server.ID == server.ToolsetID.UUID {
-		toolset, err := toolsetsrepo.New(db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ToolsetID.UUID, ProjectID: endpoint.ProjectID})
+		// The wrapper owns hosting state; only a missing backing toolset denies here.
+		_, err := toolsetsrepo.New(db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ToolsetID.UUID, ProjectID: endpoint.ProjectID})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return deniedResult(&endpoint, &server, nil, mode), nil
 		case err != nil:
 			return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load hosted MCP toolset").LogError(ctx, logger)
-		}
-		if !toolset.McpEnabled || (server.Visibility == mcpservers.VisibilityPublic) != toolset.McpIsPublic || server.UserSessionIssuerID != toolset.UserSessionIssuerID {
-			return deniedResult(&endpoint, &server, nil, mode), nil
 		}
 	}
 	return ResolutionResult{Endpoint: &endpoint, Server: &server, MetaServer: nil, Mode: mode, Found: true, Allowed: true}, nil

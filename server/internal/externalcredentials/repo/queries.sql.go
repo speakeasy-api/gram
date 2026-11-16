@@ -12,6 +12,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countIssuerKeysGrantedByCredential = `-- name: CountIssuerKeysGrantedByCredential :one
+SELECT count(*)
+FROM external_credentials AS ec
+JOIN external_keys AS ek
+  ON ek.external_credential_id = ec.id
+JOIN json_web_keys AS k
+  ON k.external_key_id = ek.id
+ AND k.organization_id = ek.organization_id
+JOIN internal_session_issuers AS isi
+  ON isi.organization_id = k.organization_id
+ AND isi.json_web_key_set_id = k.json_web_key_set_id
+WHERE ec.id = $1::uuid
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND (k.state <> 'revoked' OR ($2::boolean AND k.kms_disabled_at IS NULL))
+`
+
+type CountIssuerKeysGrantedByCredentialParams struct {
+	ExternalCredentialID  uuid.UUID
+	IncludePendingCleanup bool
+}
+
+// Issuer keys still holding a signer grant made with this platform
+// credential's service account: live keys and, with include_pending_cleanup,
+// revoked keys whose KMS cleanup is pending. Platform credentials sign for
+// every organization, so the count spans them.
+func (q *Queries) CountIssuerKeysGrantedByCredential(ctx context.Context, arg CountIssuerKeysGrantedByCredentialParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countIssuerKeysGrantedByCredential, arg.ExternalCredentialID, arg.IncludePendingCleanup)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLiveManagedExternalKeysByCredential = `-- name: CountLiveManagedExternalKeysByCredential :one
 SELECT count(*)
 FROM external_keys
@@ -28,6 +61,34 @@ WHERE external_credential_id = $1::uuid
 // credential backs; mutating the credential would break every one of them.
 func (q *Queries) CountLiveManagedExternalKeysByCredential(ctx context.Context, externalCredentialID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countLiveManagedExternalKeysByCredential, externalCredentialID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countManagedEncryptionKeysByCredential = `-- name: CountManagedEncryptionKeysByCredential :one
+SELECT count(*)
+FROM managed_encryption_keys AS mek
+JOIN external_keys AS ek
+  ON ek.id = mek.external_key_id
+ AND ek.organization_id = mek.organization_id
+WHERE ek.external_credential_id = $1::uuid
+  AND ek.deleted IS FALSE
+  AND mek.kms_disabled_at IS NULL
+`
+
+// Speakeasy-managed organization encryption keys (KEKs) that reach their KMS
+// key through this platform credential. Every one pins the credential's id and
+// impersonated account, so changing its identity or deleting it makes each
+// organization using one fail closed. Keys the cleanup sweep has disabled no
+// longer need the credential: the sweep revokes the grant before it sets
+// kms_disabled_at. Run after LockExternalCredentialForUpdate: the key's
+// external_keys row is inserted in the same transaction as its
+// managed_encryption_keys row, and that insert's foreign key check takes FOR
+// KEY SHARE on the credential, so a concurrent key either shows up here or
+// waits behind the lock.
+func (q *Queries) CountManagedEncryptionKeysByCredential(ctx context.Context, externalCredentialID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countManagedEncryptionKeysByCredential, externalCredentialID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

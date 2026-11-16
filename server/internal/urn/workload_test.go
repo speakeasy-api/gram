@@ -85,3 +85,61 @@ func TestWorkloadUrnsRejectInvalidValues(t *testing.T) {
 	_, err = urn.NewWorkloadAdmission(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }
+
+func TestWorkloadDeviceJoinTokenRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.MustParse("88888888-8888-8888-8888-888888888888")
+	original := urn.NewWorkloadDeviceJoinToken(id)
+
+	require.Equal(t, "workload_device_join_token:88888888-8888-8888-8888-888888888888", original.String())
+
+	parsed, err := urn.ParseWorkloadDeviceJoinToken(original.String())
+	require.NoError(t, err)
+	require.Equal(t, original.ID, parsed.ID)
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	require.Equal(t, `"workload_device_join_token:88888888-8888-8888-8888-888888888888"`, string(data))
+
+	var fromJSON urn.WorkloadDeviceJoinToken
+	require.NoError(t, json.Unmarshal(data, &fromJSON))
+	require.Equal(t, original.ID, fromJSON.ID)
+
+	text, err := original.MarshalText()
+	require.NoError(t, err)
+
+	var fromText urn.WorkloadDeviceJoinToken
+	require.NoError(t, fromText.UnmarshalText(text))
+	require.Equal(t, original.ID, fromText.ID)
+
+	value, err := original.Value()
+	require.NoError(t, err)
+
+	var fromDB urn.WorkloadDeviceJoinToken
+	require.NoError(t, fromDB.Scan(value))
+	require.Equal(t, original.ID, fromDB.ID)
+}
+
+func TestWorkloadDeviceJoinTokenRejectsInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{
+		"",
+		"workload_admission:88888888-8888-8888-8888-888888888888",
+		"workload_device_join_token:not-a-uuid",
+		"workload_device_join_token:",
+	} {
+		_, err := urn.ParseWorkloadDeviceJoinToken(value)
+		require.ErrorIs(t, err, urn.ErrInvalid, value)
+	}
+
+	_, err := urn.NewWorkloadDeviceJoinToken(uuid.Nil).MarshalJSON()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
+	_, err = urn.NewWorkloadDeviceJoinToken(uuid.Nil).Value()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
+	var fromDB urn.WorkloadDeviceJoinToken
+	require.ErrorIs(t, fromDB.Scan("workload_issuer:88888888-8888-8888-8888-888888888888"), urn.ErrInvalid)
+}

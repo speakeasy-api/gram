@@ -1,17 +1,35 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 export type RankedRow = {
   /** Stable identity; also the react key. */
   id: string;
   label: string;
+  /**
+   * The label as drawn, for a subject a string cannot say — an agent, which
+   * carries its own face. `label` stays the plain text, so the row's tooltip
+   * and its width still read off one string.
+   */
+  content?: ReactNode;
   value: number;
   /** Shown to the right of the value, e.g. a failure rate. */
   secondary?: string;
   /** Renders the row as a link into the logs for this slice. */
   href?: string;
+  /**
+   * Splits the bar into parts that sum to `value`, each with its own fill,
+   * for a card whose count has a breakdown worth seeing on the bar itself.
+   */
+  segments?: RankedRowSegment[];
+};
+
+type RankedRowSegment = {
+  value: number;
+  color: string;
+  /** Resting fill strength; the parts tell apart by it, not by hue alone. */
+  opacity: number;
 };
 
 /**
@@ -122,11 +140,33 @@ export function RankedList({
 
           const content = (
             <>
-              <span
-                aria-hidden
-                className="absolute inset-y-0 left-0 z-0"
-                style={{ width, backgroundColor: rowColor, opacity }}
-              />
+              {/* Segmented rows skip the rank ramp: their fill strength already
+                  tells the parts apart, so order reads from bar length alone. */}
+              {row.segments ? (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 z-0 flex"
+                  style={{ width }}
+                >
+                  {row.segments.map((segment, segmentIndex) => (
+                    <span
+                      key={segmentIndex}
+                      className="h-full"
+                      style={{
+                        width: `${row.value > 0 ? (segment.value / row.value) * 100 : 0}%`,
+                        backgroundColor: segment.color,
+                        opacity: segment.opacity,
+                      }}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 z-0"
+                  style={{ width, backgroundColor: rowColor, opacity }}
+                />
+              )}
               <span
                 aria-hidden
                 className="absolute inset-y-0 left-0 z-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-[0.18]"
@@ -136,7 +176,7 @@ export function RankedList({
                 className="relative z-10 min-w-0 flex-1 truncate"
                 title={row.label}
               >
-                {row.label}
+                {row.content ?? row.label}
               </span>
               <span className="relative z-10 shrink-0 font-mono text-xs tabular-nums">
                 {row.value.toLocaleString()}

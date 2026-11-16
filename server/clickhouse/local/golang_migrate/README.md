@@ -21,7 +21,7 @@ The migration engine is controlled by the `CLICKHOUSE_MIGRATION_ENGINE` environm
 
 ```toml
 [env]
-CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"  # or "atlas"
+CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate" # or "atlas"
 ```
 
 If you don't have this variable set, the `mise zero:migrations` task will automatically detect whether you have Atlas installed and logged in, and configure the appropriate engine for you.

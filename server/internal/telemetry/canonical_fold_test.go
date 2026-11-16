@@ -11,14 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -32,7 +29,6 @@ func seedIdentityMapEntry(t *testing.T, ctx context.Context, ti *testInstance, o
 	require.NoError(t, ti.chConn.Exec(ctx,
 		"INSERT INTO identity_map (org_id, email_lower, canonical_user_id, canonical_email) VALUES (?, ?, ?, ?)",
 		orgID, emailLower, userID, canonicalEmail))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 }
 
 func foldTestContext(t *testing.T) (context.Context, *testInstance, string) {
@@ -40,10 +36,7 @@ func foldTestContext(t *testing.T) (context.Context, *testInstance, string) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 	return ctx, ti, authCtx.ActiveOrganizationID
 }
 
@@ -51,7 +44,6 @@ func TestCostAnalytics_CanonicalFold_FiltersFoldThroughMap(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -71,7 +63,6 @@ func TestCostAnalytics_CanonicalFold_FiltersFoldThroughMap(t *testing.T) {
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), workChatID, 1, 100, 50, 0, 0, "opus", strings.ToUpper(workEmail[:1])+workEmail[1:], "Engineering", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), personalChatID, 2, 200, 100, 0, 0, "opus", strings.ToUpper(personalEmail), "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 9, 900, 900, 0, 0, "opus", "stranger-"+suffix+"@example.com", "Engineering", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
@@ -99,7 +90,7 @@ func TestCostAnalytics_CanonicalFold_FiltersFoldThroughMap(t *testing.T) {
 		require.Len(t, sessions.Sessions, 2)
 
 		wideFrom, wideTo := summaryWindow(now)
-		wideSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		wideSessions := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 			From:    wideFrom,
 			To:      wideTo,
 			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},
@@ -117,7 +108,6 @@ func TestCostAnalytics_CanonicalFold_GroupByEmailFoldsBuckets(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -134,7 +124,6 @@ func TestCostAnalytics_CanonicalFold_GroupByEmailFoldsBuckets(t *testing.T) {
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", strings.ToUpper(personalEmail), "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 4, "", hostname)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.Query(ctx, &gen.QueryPayload{
 		From:    now.Add(-time.Hour).Format(time.RFC3339),
@@ -173,8 +162,7 @@ func TestCostAnalytics_CanonicalFold_GroupByEmailFoldsBuckets(t *testing.T) {
 func TestCostAnalytics_CanonicalFold_UnmappedEmailStaysLiteral(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+	ctx, ti, _ := foldTestContext(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -184,7 +172,6 @@ func TestCostAnalytics_CanonicalFold_UnmappedEmailStaysLiteral(t *testing.T) {
 
 	now := time.Now().UTC()
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 5, 100, 50, 0, 0, "opus", strings.ToUpper(unmapped), "", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Case-insensitive literal matching survives for unmapped emails: both
 	// sides fall back to lower() through the same expression.
@@ -204,7 +191,6 @@ func TestCostAnalytics_CanonicalFold_SelfConsistentUnderMapLag(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -215,7 +201,6 @@ func TestCostAnalytics_CanonicalFold_SelfConsistentUnderMapLag(t *testing.T) {
 	now := time.Now().UTC()
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", personalEmail, "", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	query := func(email string) float64 {
 		result, err := ti.service.Query(ctx, &gen.QueryPayload{
@@ -247,41 +232,6 @@ func TestCostAnalytics_CanonicalFold_SelfConsistentUnderMapLag(t *testing.T) {
 	require.InDelta(t, 3, query(workEmail), 0.001)
 }
 
-func TestCostAnalytics_CanonicalFold_ShadowServesLiteralResults(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFoldShadow, orgID, true)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	projectID := authCtx.ProjectID.String()
-	suffix := uuid.NewString()[:8]
-	workEmail := "swork-" + suffix + "@example.com"
-	personalEmail := "spersonal-" + suffix + "@example.com"
-	userID := uuid.NewString()
-	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
-	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
-
-	now := time.Now().UTC()
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", personalEmail, "", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
-	// Shadow mode must not change served results: with no Postgres identity
-	// links, the literal path matches only the requested email even though the
-	// map would fold both.
-	result, err := ti.service.Query(ctx, &gen.QueryPayload{
-		From:    now.Add(-time.Hour).Format(time.RFC3339),
-		To:      now.Add(time.Hour).Format(time.RFC3339),
-		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{workEmail}}},
-		TopN:    10,
-		SortBy:  "total_cost",
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Table, 1)
-	require.InDelta(t, 1, result.Table[0].Measures.TotalCost, 0.001)
-}
-
 func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 	t.Parallel()
 
@@ -290,7 +240,6 @@ func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx0, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx0.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -312,7 +261,6 @@ func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 100, 50, 2.5)
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), employeeID, "", 700, 300, 42)
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), otherID, personalEmail, 9000, 9000, 999)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	for _, identifier := range []string{employeeID, workLower, personalEmail} {
 		m := userMetrics(t, ctx, ti, identifier)
@@ -331,7 +279,6 @@ func TestEmployeeDetail_CanonicalFold_UnfoldableOrgFallsBackToLegacyScope(t *tes
 	// serving the detail page unfiltered would show every user's rows.
 	badOrgID := "org'--" + uuid.NewString()[:8]
 	ctx = switchOrganizationInCtx(t, ctx, badOrgID)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, badOrgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -342,7 +289,6 @@ func TestEmployeeDetail_CanonicalFold_UnfoldableOrgFallsBackToLegacyScope(t *tes
 	now := time.Now().UTC()
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeID, "", 700, 300, 42)
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), strangerID, "", 9000, 9000, 999)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	m := userMetrics(t, ctx, ti, employeeID)
 	require.Equal(t, int64(700), m.TotalInputTokens)
@@ -353,8 +299,6 @@ func TestGetObservabilityOverview_CanonicalFold_SummaryScopesToUser(t *testing.T
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -365,7 +309,6 @@ func TestGetObservabilityOverview_CanonicalFold_SummaryScopesToUser(t *testing.T
 	now := time.Now().UTC()
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeID, "", 700, 300, 42)
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), strangerID, "", 9000, 9000, 999)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// In fold mode the legacy User set stays empty, and with no other filters
 	// the summary used to fall through to the unfiltered MV path and count
@@ -385,7 +328,6 @@ func TestEmployeeDetail_CanonicalFold_DeletedUserEmailNotFolded(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -404,7 +346,6 @@ func TestEmployeeDetail_CanonicalFold_DeletedUserEmailNotFolded(t *testing.T) {
 	// Email-only row that folds to the active owner: the departed user's page
 	// must not sweep it in just because their directory row carries the email.
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), departedEmail, 100, 50, 2.5)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	m := userMetrics(t, ctx, ti, departedID)
 	require.Equal(t, int64(700), m.TotalInputTokens)
@@ -427,7 +368,6 @@ func TestSearchEmployeeAgentUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) 
 	now := time.Now().UTC()
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", strings.ToUpper(personalEmail), "", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	params := repo.SearchEmployeeAgentUsageParams{
 		GramProjectID:        projectID,
@@ -447,7 +387,7 @@ func TestSearchEmployeeAgentUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) 
 	require.NotContains(t, byEmail, personalEmail)
 	require.NotContains(t, byEmail, strings.ToUpper(personalEmail))
 
-	// Literal mode keeps the split rows — the flag-off behavior.
+	// An empty canonical org keeps the split rows.
 	params.CanonicalIdentityOrg = ""
 	rows, err = ti.chClient.SearchEmployeeAgentUsage(ctx, params)
 	require.NoError(t, err)
@@ -476,7 +416,6 @@ func TestGetTumBreakdownDimByDay_CanonicalFold_EmailSlicesFold(t *testing.T) {
 	now := time.Now().UTC()
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", personalEmail, "", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	params := repo.GetTokensUnderManagementParams{
 		ProjectIDs:          []string{projectID},
@@ -510,7 +449,6 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -545,7 +483,6 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 	event(workEmail, "Skill", "deploy-helper")
 	event(strangerEmail, "weather", "")
 	event("", "weather", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	{
 		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
@@ -609,7 +546,6 @@ func TestHooksDrill_CanonicalFold_ExclusionAndTraceList(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -641,7 +577,6 @@ func TestHooksDrill_CanonicalFold_ExclusionAndTraceList(t *testing.T) {
 	event(strings.ToUpper(personalEmail))
 	event(strangerEmail)
 	event("")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
@@ -689,7 +624,6 @@ func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -712,7 +646,6 @@ func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), strangerB, 10, 10, 0.1)
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-20*time.Minute), strangerC, 20, 20, 0.2)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
@@ -772,7 +705,6 @@ func TestSearchUsers_CanonicalFold_IDDrillReachesFoldedSummary(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -786,7 +718,6 @@ func TestSearchUsers_CanonicalFold_IDDrillReachesFoldedSummary(t *testing.T) {
 	now := time.Now().UTC()
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), personalEmail, 200, 100, 2.0)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// An id-shaped key still reaches the summary that folded to an email:
 	// rows match by raw user_id and group under the canonical key.
@@ -812,7 +743,6 @@ func TestSearchUsers_CanonicalFold_RoleRollupCountsEmployeeOnce(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -826,7 +756,6 @@ func TestSearchUsers_CanonicalFold_RoleRollupCountsEmployeeOnce(t *testing.T) {
 	now := time.Now().UTC()
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// No role assignments seeded, so everything lands in Unassigned — which is
 	// exactly what pins the fold: one employee is one user in the rollup, not
@@ -854,7 +783,6 @@ func TestSearchUsers_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -874,7 +802,6 @@ func TestSearchUsers_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strangerEmail, 9, 9, 0.1)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
@@ -916,46 +843,6 @@ func TestSearchUsers_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	require.Len(t, filtered.Users, 1)
 	require.Equal(t, workEmail, filtered.Users[0].UserID)
 	require.Equal(t, int64(300), filtered.Users[0].TotalInputTokens)
-}
-
-func TestSearchUsers_CanonicalFold_ShadowServesLiteralList(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFoldShadow, orgID, true)
-
-	projectID := authCtx.ProjectID.String()
-	deploymentID := uuid.NewString()
-	suffix := uuid.NewString()[:8]
-	workEmail := "vwork-" + suffix + "@example.com"
-	personalEmail := "vpersonal-" + suffix + "@example.com"
-	userID := "gram-user-" + uuid.NewString()
-	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
-	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
-
-	now := time.Now().UTC()
-	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
-	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
-	// Shadow mode serves the literal list — the employee still splits across
-	// their two email keys — while the folded comparison runs detached.
-	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: now.Add(-time.Hour).Format(time.RFC3339),
-			To:   now.Add(time.Hour).Format(time.RFC3339),
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
-	require.NoError(t, err)
-	require.Len(t, res.Users, 2)
-	keys := []string{res.Users[0].UserID, res.Users[1].UserID}
-	require.Contains(t, keys, workEmail)
-	require.Contains(t, keys, strings.ToUpper(personalEmail))
 }
 
 func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {
@@ -1001,14 +888,13 @@ func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testi
 		Limit:                50,
 		CanonicalIdentityOrg: orgID,
 	}
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	rows, _, err := ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, workEmail, rows[0].UserEmail)
 	require.Equal(t, uint64(2), rows[0].CallCount)
 
-	// Literal mode keeps the split rows — the flag-off behavior.
+	// An empty canonical org keeps the split rows.
 	params.CanonicalIdentityOrg = ""
 	rows, _, err = ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
 	require.NoError(t, err)
@@ -1051,7 +937,6 @@ func TestListToolUsageTraces_CanonicalFold_EmailFilterReachesAliasRows(t *testin
 			statusCode:  200,
 		})
 	}
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// "email" is the user kind the Tool Logs query records an email-attributed
 	// call under; the repository's own constant for it is unexported.
@@ -1065,12 +950,9 @@ func TestListToolUsageTraces_CanonicalFold_EmailFilterReachesAliasRows(t *testin
 		Limit:                10,
 	}
 
-	var folded []repo.ToolUsageTraceSummary
-	require.Eventually(t, func() bool {
-		var err error
-		folded, err = ti.chClient.ListToolUsageTraces(ctx, params)
-		return err == nil && len(folded) == 2
-	}, 2*time.Second, 50*time.Millisecond, "expected the folded filter to reach both the canonical and the alias row")
+	folded, err := ti.chClient.ListToolUsageTraces(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, folded, 2, "expected the folded filter to reach both the canonical and the alias row")
 	keys := make([]string, 0, len(folded))
 	for _, row := range folded {
 		keys = append(keys, row.UserKey)

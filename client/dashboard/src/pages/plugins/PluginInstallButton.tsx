@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { forwardRef } from "react";
@@ -18,11 +19,11 @@ export const PluginInstallButton = forwardRef<
         className="bg-primary-foreground/25 h-4 w-px self-center"
       />
       <Button.RightIcon>
-        <Icon
-          aria-hidden="true"
-          name={loading ? "loader-circle" : "chevron-down"}
-          className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"}
-        />
+        {loading ? (
+          <Spinner className="mr-0" />
+        ) : (
+          <Icon aria-hidden="true" name="chevron-down" className="h-4 w-4" />
+        )}
       </Button.RightIcon>
     </Button>
   );

@@ -25,13 +25,31 @@ SELECT pg_advisory_lock(hashtextextended('product-feature:' || @organization_id:
 SELECT pg_advisory_unlock(hashtextextended('product-feature:' || @organization_id::text || ':' || @feature_name::text, 0)) AS unlocked;
 
 -- name: IsFeatureEnabled :one
+-- The inverted gateway setting defaults to disabled until a soft-deleted
+-- flag records an administrator's explicit opt-in.
+SELECT COALESCE(EXISTS (
+    SELECT 1 FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = @organization_id
+      AND active_feature.feature_name = @feature_name
+      AND active_feature.deleted IS FALSE
+) OR (
+    @feature_name::text = 'organization_gateway_disabled'
+    AND NOT EXISTS (
+        SELECT 1 FROM organization_features AS configured_feature
+        WHERE configured_feature.organization_id = @organization_id
+          AND configured_feature.feature_name = @feature_name
+    )
+), FALSE)::boolean AS enabled;
+
+-- name: IsFeatureExplicitlyEnabled :one
+-- Only an active row counts: unlike IsFeatureEnabled, an organization that
+-- never configured the inverted gateway setting reads as not turned off.
 SELECT EXISTS (
-        SELECT 1
-        FROM organization_features
-        WHERE organization_id = @organization_id
-            AND feature_name = @feature_name
-            AND deleted IS FALSE
-) AS enabled;
+    SELECT 1 FROM organization_features
+    WHERE organization_id = @organization_id
+      AND feature_name = @feature_name
+      AND deleted IS FALSE
+)::boolean AS enabled;
 
 -- name: HasDeviceAgentSync :one
 -- Whether any device has polled agent.getPlugins for the org — the member-

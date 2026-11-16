@@ -83,3 +83,24 @@ describe("useVerifyRemoteMcpUrl", () => {
     });
   });
 });
+
+it("replaces a successful verdict when the next probe has an unknown outcome", async () => {
+  mocks.probe
+    .mockResolvedValueOnce({ outcome: "mcp_available" })
+    .mockResolvedValueOnce({ outcome: "future_outcome" });
+  const hook = renderHook(() =>
+    useVerifyRemoteMcpUrl("https://example.com/mcp"),
+  );
+  await act(async () => {
+    await hook.result.current.trigger();
+  });
+  expect(hook.result.current.result?.verified).toBe(true);
+  await act(async () => {
+    await hook.result.current.trigger();
+  });
+  expect(hook.result.current.result).toMatchObject({
+    verified: false,
+    message: expect.stringContaining("unknown result"),
+  });
+  expect(hook.result.current.result?.outcome).toBeUndefined();
+});

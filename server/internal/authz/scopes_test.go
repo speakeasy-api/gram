@@ -124,12 +124,13 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 
 	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExpansions[ScopeOrgBlockedAdmin])
 	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExpansions[ScopeProjectBlockedWrite])
-	// The mcp:blocked_* scopes are the exception: they are independent of
-	// one another, so a block on connect leaves view and manage standing.
-	// Connecting to a server and administering it are different jobs.
+	// MCP blocks follow Implies in reverse like every other kind: a check
+	// for mcp:blocked_write is satisfied by mcp:blocked_read, so blocking
+	// read takes write away. mcp:connect is implied by neither read nor
+	// write, so its block stays on its own.
 	require.Nil(t, scopeExpansions[ScopeMCPBlockedConnect])
 	require.Nil(t, scopeExpansions[ScopeMCPBlockedRead])
-	require.Nil(t, scopeExpansions[ScopeMCPBlockedWrite])
+	require.Equal(t, []Scope{ScopeMCPBlockedRead}, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
 	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, scopeExpansions[ScopeAssistantBlockedWrite])
@@ -168,6 +169,61 @@ func TestSystemRoleAdminExcludesChatRead(t *testing.T) {
 	for _, grant := range SystemRoleGrants[SystemRoleMember] {
 		require.NotEqual(t, string(ScopeChatRead), grant.Scope)
 	}
+}
+
+// log:read is not a default for any system role. Raw tool-call logs carry every
+// member's tool arguments, results, and prompts, so a project's logs must be
+// granted explicitly; neither project access nor org:admin implies it.
+func TestSystemRolesExcludeLogRead(t *testing.T) {
+	t.Parallel()
+
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+}
+
+func TestLogReadNotImpliedByProjectOrOrgScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin} {
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeLogRead, scope)
+	}
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeLogRead))
+}
+
+// org:admin holds memory:read and memory:write by default; members do not.
+// Team memory summarizes every member's sessions, so a member needs an
+// explicit per-project grant.
+func TestSystemRoleAdminIncludesMemoryScopes(t *testing.T) {
+	t.Parallel()
+
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeMemoryRead))
+	require.Contains(t, admin, string(ScopeMemoryWrite))
+
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeMemoryRead), grant.Scope)
+		require.NotEqual(t, string(ScopeMemoryWrite), grant.Scope)
+	}
+}
+
+func TestMemoryScopesProjectScopedAndNotImpliedByProjectOrOrgScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin, ScopeChatRead, ScopeChatWrite} {
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeMemoryRead, scope)
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeMemoryWrite, scope)
+	}
+	require.Contains(t, ScopeImplicationClosure(ScopeMemoryWrite), ScopeMemoryRead)
+	require.NotContains(t, ScopeImplicationClosure(ScopeMemoryRead), ScopeMemoryWrite)
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeMemoryRead))
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeMemoryWrite))
 }
 
 // environment:read is not a member default: environment values include secrets,
@@ -259,8 +315,8 @@ func TestCheckExpand_mcpConnect(t *testing.T) {
 
 	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "tool_a"})
 	require.Contains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a"})
+	require.NotContains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"})
+	require.NotContains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a"})
 	require.NotContains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource})
 }
 
@@ -312,20 +368,20 @@ func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
 	require.Nil(t, grant)
 }
 
-func TestGrantsHasAccess_mcpReadSatisfiesMCPConnect(t *testing.T) {
+func TestGrantsHasAccess_mcpReadDoesNotSatisfyMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPRead, "tool_a")}
 	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.Nil(t, grant)
 }
 
-func TestGrantsHasAccess_mcpWriteSatisfiesMCPConnect(t *testing.T) {
+func TestGrantsHasAccess_mcpWriteDoesNotSatisfyMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
 	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.Nil(t, grant)
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
@@ -480,8 +536,8 @@ func TestScopeExpansions_isDAG(t *testing.T) {
 	t.Parallel()
 
 	for start := range scopeExpansions {
-		inStack := map[Scope]bool{}
-		visited := map[Scope]bool{}
+		inStack := make(map[Scope]bool)
+		visited := make(map[Scope]bool)
 		var hasCycle func(s Scope) bool
 		hasCycle = func(s Scope) bool {
 			if inStack[s] {
@@ -511,8 +567,8 @@ func TestCalculateSubScopes(t *testing.T) {
 	}{
 		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgDeviceAgentSync), string(ScopeOrgHooksIngest), string(ScopeOrgRead)}},
 		{scope: string(ScopeProjectWrite), want: []string{string(ScopeProjectRead)}},
-		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
-		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},
+		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPRead)}},
+		{scope: string(ScopeMCPRead), want: []string{}},
 		{scope: string(ScopeOrgRead), want: []string{}},
 		{scope: string(ScopeProjectRead), want: []string{}},
 		{scope: string(ScopeRoot), want: []string{}},
@@ -582,17 +638,17 @@ func TestWorkloadScopeShape(t *testing.T) {
 	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadRead))
 }
 
-func TestWorkloadScopeIsAdminDefaultAndNotMemberDefault(t *testing.T) {
+func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
 	t.Parallel()
 
 	// Administrators configure workload identity, beside agent:authorize: both
 	// hand a machine an agent's authority.
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadRead))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadWrite))
 
-	// Not a member default in either direction. Read alone discloses which
-	// machines the organization recognises, which is its trust policy, so a
-	// member who needs it gets an explicit grant through a custom role.
-	require.False(t, slices.Contains(memberScopes, ScopeWorkloadRead))
-	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
+	// workload:read is a member default so that team members can view the Access
+	// Hub in preview deployments. workload:write remains admin-only since it
+	// allows granting machine access.
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadRead))
+	require.False(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadWrite))
 }

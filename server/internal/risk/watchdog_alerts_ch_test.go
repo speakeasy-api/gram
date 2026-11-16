@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestWatchdogAlertsClickHouse(t *testing.T) {
@@ -60,7 +59,6 @@ func TestWatchdogAlertsClickHouse(t *testing.T) {
 	insert(uuid.New(), "foreign-org", p.ProjectID, "rule-a", "", "foreign", "", "", "", from, from, "")
 	insert(uuid.New(), p.OrganizationID, uuid.NewString(), "rule-a", "", "foreign", "", "", "", from, from, "")
 	insert(uuid.New(), p.OrganizationID, p.ProjectID, "rule-b", "", "", "", "", "", from, from, "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	alerts, err := q.ListWatchdogAlerts(ctx, p, chrepo.WatchdogAlertLimit)
 	require.NoError(t, err)
 	require.Len(t, alerts, 2)
@@ -97,7 +95,6 @@ func TestWatchdogAlertsClickHouseMCPServerScope(t *testing.T) {
 	findingB := chOverviewFinding(t, projectID, auth.ActiveOrganizationID, uuid.New(), uuid.New(), from.Add(20*time.Minute), "gitleaks", "rule-b", "user-b@example.com")
 	findingB.MCPServerID = serverB
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{findingA, findingB}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	q := chrepo.New(ti.chConn)
 	params := chrepo.RiskSignalWindowParams{
@@ -155,7 +152,6 @@ func TestWatchdogAlertsClickHouseArrayOverflow(t *testing.T) {
     (id,organization_id,project_id,rule_id,risk_policy_id,chat_source,created_at,message_created_at)
     SELECT generateUUIDv4(), ?, ?, 'overflow', if(? = 'policy', toString(number), ''), if(? = 'client', toString(number), ''), ?, ? FROM numbers(201)`,
 				auth.ActiveOrganizationID, auth.ProjectID.String(), dimension, dimension, window, window))
-			testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 			rows, err := q.ListWatchdogAlerts(ctx, chrepo.RiskSignalWindowParams{
 				OrganizationID: auth.ActiveOrganizationID,
 				ProjectID:      auth.ProjectID.String(),
@@ -179,7 +175,6 @@ func TestWatchdogAlertGroupsClickHousePerRuleLimit(t *testing.T) {
   (id,organization_id,project_id,rule_id,team,created_at,message_created_at)
   SELECT generateUUIDv4(), ?, ?, concat('rule-', toString(intDiv(number, 210))), leftPad(toString(number % 210), 3, '0'), ?, ? FROM numbers(630)`,
 		auth.ActiveOrganizationID, auth.ProjectID.String(), from, from))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	p := chrepo.RiskSignalWindowParams{
 		OrganizationID: auth.ActiveOrganizationID,
 		ProjectID:      auth.ProjectID.String(),

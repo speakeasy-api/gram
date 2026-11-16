@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	writerrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -51,6 +54,10 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 		AssetName:      "Test Asset",
 	})
 	require.NoError(t, err)
+
+	internal, err := auditrepo.New(conn).GetAuditLogInternalBySubject(ctx, assetID.String())
+	require.NoError(t, err)
+	require.False(t, internal)
 
 	envelope, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: orgID,
@@ -212,4 +219,90 @@ func TestLogger_WritesAuditLogAndOutboxEntry(t *testing.T) {
 	outboxCountAfter, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationWebhooksV1.EventType()))
 	require.NoError(t, err)
 	require.Equal(t, outboxCountBefore+1, outboxCountAfter)
+}
+
+func TestLogger_WithoutOutboxRecordsAuditRowOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	orgID := uuid.New().String()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Test Org",
+		Slug:        "test-org-" + orgID[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	assetID, err := uuid.NewV7()
+	require.NoError(t, err)
+	err = audit.NewLogger(audit.WithoutOutbox()).LogAssetCreate(ctx, conn, audit.LogAssetCreateEvent{
+		OrganizationID: orgID,
+		ProjectID:      uuid.NullUUID{},
+		Actor:          urn.NewSystemPrincipal("audit-test-backfill"),
+		AssetURN:       urn.NewAsset(urn.AssetKindImage, assetID),
+		AssetName:      "Test Asset",
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, assetID.String(), record.SubjectID)
+	internal, err := auditrepo.New(conn).GetAuditLogInternalBySubject(ctx, assetID.String())
+	require.NoError(t, err)
+	require.False(t, internal)
+
+	_, err = auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
+		OrganizationID: orgID,
+		EventType:      string(events.AssetV1.EventType()),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestLogger_InternalEvents(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	orgID := uuid.NewString()
+	actor := urn.NewSystemPrincipal("audit-test")
+	promotion := urn.NewCatalogPromotion(uuid.New())
+	logger := audit.NewLogger()
+	actions := []struct {
+		name string
+		log  func(conn *pgxpool.Pool) error
+	}{
+		{"Archive", func(conn *pgxpool.Pool) error {
+			return logger.LogCatalogPromotionArchive(ctx, conn, audit.LogCatalogPromotionArchiveEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"Reject", func(conn *pgxpool.Pool) error {
+			return logger.LogCatalogPromotionReject(ctx, conn, audit.LogCatalogPromotionRejectEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"Restore", func(conn *pgxpool.Pool) error {
+			return logger.LogCatalogPromotionRestore(ctx, conn, audit.LogCatalogPromotionRestoreEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"RetryDocs", func(conn *pgxpool.Pool) error {
+			return logger.LogCatalogPromotionRetryDocs(ctx, conn, audit.LogCatalogPromotionRetryDocsEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"PromoteCatalogue", func(conn *pgxpool.Pool) error {
+			return logger.LogMcpServerPromoteCatalogue(ctx, conn, audit.LogMcpServerPromoteCatalogueEvent{OrganizationID: orgID, Actor: actor, McpServerURN: urn.NewMcpServer(uuid.New())})
+		}},
+	}
+	for _, action := range actions {
+		t.Run(action.name, func(t *testing.T) {
+			t.Parallel()
+			conn, err := infra.CloneTestDatabase(t, "testdb")
+			require.NoError(t, err)
+			require.NoError(t, action.log(conn))
+			rows, err := writerrepo.New(conn).ListAuditLogs(ctx, writerrepo.ListAuditLogsParams{OrganizationID: orgID, IncludeInternalEvents: true})
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			require.True(t, rows[0].IsInternal)
+			count, err := auditrepo.New(conn).CountPublishOutboxByOrg(ctx, orgID)
+			require.NoError(t, err)
+			require.Zero(t, count)
+		})
+	}
 }

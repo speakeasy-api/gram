@@ -1,4 +1,9 @@
 import {
+  AIIntegrationScheduleStateStatus,
+  StreamKind,
+} from "@gram/client/models/components/aiintegrationschedulestate.js";
+import { isKnownEnumValue } from "@/lib/enum";
+import {
   invalidateAiIntegrationSchedules,
   useAiIntegrationSchedules,
 } from "@gram/client/react-query/aiIntegrationSchedules";
@@ -14,7 +19,8 @@ type ScheduleRuntimeStatus =
   | "success"
   | "failed"
   | "auto_paused"
-  | "disabled";
+  | "disabled"
+  | "unknown";
 
 // Per-schedule scheduler state as the UI consumes it, mapped from the
 // aiIntegrations.listSchedules endpoint.
@@ -94,12 +100,16 @@ export function useScheduleRuntimes(
     for (const state of data?.schedules ?? []) {
       map[state.schedule] = {
         enabled: state.enabled,
-        status: state.status,
+        status: isKnownEnumValue(AIIntegrationScheduleStateStatus, state.status)
+          ? state.status
+          : "unknown",
         lastSyncedAt: state.lastPollSuccessAt ?? null,
         error: state.lastPollError ?? null,
         isMutating: state.schedule === inFlightSchedule,
         stream: state.stream ?? null,
-        streamKind: state.streamKind ?? null,
+        streamKind: isKnownEnumValue(StreamKind, state.streamKind)
+          ? state.streamKind
+          : null,
       };
     }
     return map;

@@ -175,6 +175,8 @@ export function buildLoginRedirectURL(
   redirectTo: string | null,
   orgName?: string,
   email?: string,
+  partnerCode?: string,
+  attribution?: Record<string, string>,
 ): string {
   // The base is only consulted when getServerURL() is relative (empty in
   // tests, per vitest.config.ts) — window.location.origin is always
@@ -199,6 +201,13 @@ export function buildLoginRedirectURL(
   // in AGE-3125, which covers both endpoints — the fixes differ, since this
   // hand-off is a top-level navigation and cannot use a header.
   if (email) url.searchParams.set("email", email);
+  if (partnerCode?.trim())
+    url.searchParams.set("partner_code", partnerCode.trim());
+  // Sign-up only: UTMs and the analytics session id, which the server
+  // attaches to the sign-up events (see lib/signup-attribution.ts).
+  for (const [key, value] of Object.entries(attribution ?? {})) {
+    url.searchParams.set(key, value);
+  }
   return url.toString();
 }
 
@@ -219,7 +228,7 @@ export function capitalize(str: string): string {
 
 /**
  * Turn a URL slug into a Title Case display string, e.g.
- * "custom-tools" -> "Custom Tools". Intended for the static (literal) segments
+ * "risk-policies" -> "Risk Policies". Intended for the static (literal) segments
  * of a route path — not for dynamic slug params like toolset or user
  * identifiers, which should keep their original casing.
  */

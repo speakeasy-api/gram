@@ -8,12 +8,8 @@ import {
   ShadowAISetupEmptyState,
 } from "./setup-empty-state";
 
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ deviceAgent: { href: () => "/org/device-agent" } }),
-  useRoutes: () => ({
-    policyCenter: { href: () => "/guardrails" },
-    plugins: { href: () => "/plugins" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => children,
@@ -25,12 +21,12 @@ it.each([
   {
     Component: RiskSetupEmptyState,
     action: "Create risk policy",
-    href: "/guardrails",
+    href: "/org/projects/project/risk-policies",
   },
   {
     Component: CostsSetupEmptyState,
     action: "Set up OpenTelemetry",
-    href: "/plugins",
+    href: "/org/projects/project/plugins",
   },
 ])(
   "offers $action for onboarding and filter guidance for narrowed results",

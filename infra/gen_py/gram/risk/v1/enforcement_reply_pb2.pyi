@@ -15,6 +15,7 @@ class EnforcementScanner(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ENFORCEMENT_SCANNER_PROMPT_INJECTION: _ClassVar[EnforcementScanner]
     ENFORCEMENT_SCANNER_JUDGE: _ClassVar[EnforcementScanner]
     ENFORCEMENT_SCANNER_LLM_ANALYZER: _ClassVar[EnforcementScanner]
+    ENFORCEMENT_SCANNER_CUSTOM_RULES: _ClassVar[EnforcementScanner]
 
 class EnforcementStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -28,6 +29,7 @@ ENFORCEMENT_SCANNER_PRESIDIO: EnforcementScanner
 ENFORCEMENT_SCANNER_PROMPT_INJECTION: EnforcementScanner
 ENFORCEMENT_SCANNER_JUDGE: EnforcementScanner
 ENFORCEMENT_SCANNER_LLM_ANALYZER: EnforcementScanner
+ENFORCEMENT_SCANNER_CUSTOM_RULES: EnforcementScanner
 ENFORCEMENT_STATUS_UNSPECIFIED: EnforcementStatus
 ENFORCEMENT_STATUS_OK: EnforcementStatus
 ENFORCEMENT_STATUS_ERROR: EnforcementStatus
@@ -72,7 +74,7 @@ class EnforcementDiagnostics(_message.Message):
     def __init__(self, scan_duration_ms: _Optional[int] = ..., consumer_id: _Optional[str] = ..., delivery_attempt: _Optional[int] = ...) -> None: ...
 
 class EnforcementReply(_message.Message):
-    __slots__ = ("correlation_id", "scanner", "status", "reason", "findings", "diagnostics", "policy_id")
+    __slots__ = ("correlation_id", "scanner", "status", "reason", "findings", "diagnostics", "policy_id", "content_truncated", "incomplete")
     CORRELATION_ID_FIELD_NUMBER: _ClassVar[int]
     SCANNER_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -80,6 +82,8 @@ class EnforcementReply(_message.Message):
     FINDINGS_FIELD_NUMBER: _ClassVar[int]
     DIAGNOSTICS_FIELD_NUMBER: _ClassVar[int]
     POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    INCOMPLETE_FIELD_NUMBER: _ClassVar[int]
     correlation_id: str
     scanner: EnforcementScanner
     status: EnforcementStatus
@@ -87,4 +91,6 @@ class EnforcementReply(_message.Message):
     findings: _containers.RepeatedCompositeFieldContainer[EnforcementFinding]
     diagnostics: EnforcementDiagnostics
     policy_id: str
-    def __init__(self, correlation_id: _Optional[str] = ..., scanner: _Optional[_Union[EnforcementScanner, str]] = ..., status: _Optional[_Union[EnforcementStatus, str]] = ..., reason: _Optional[str] = ..., findings: _Optional[_Iterable[_Union[EnforcementFinding, _Mapping]]] = ..., diagnostics: _Optional[_Union[EnforcementDiagnostics, _Mapping]] = ..., policy_id: _Optional[str] = ...) -> None: ...
+    content_truncated: bool
+    incomplete: bool
+    def __init__(self, correlation_id: _Optional[str] = ..., scanner: _Optional[_Union[EnforcementScanner, str]] = ..., status: _Optional[_Union[EnforcementStatus, str]] = ..., reason: _Optional[str] = ..., findings: _Optional[_Iterable[_Union[EnforcementFinding, _Mapping]]] = ..., diagnostics: _Optional[_Union[EnforcementDiagnostics, _Mapping]] = ..., policy_id: _Optional[str] = ..., content_truncated: _Optional[bool] = ..., incomplete: _Optional[bool] = ...) -> None: ...

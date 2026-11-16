@@ -105,7 +105,7 @@ export function ClientKeyRegistration({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-eyebrow">Public key</span>
           <Text muted small>
-            For providers that take a pasted key set
+            For authorization servers that take a pasted key set
           </Text>
         </div>
         <Button

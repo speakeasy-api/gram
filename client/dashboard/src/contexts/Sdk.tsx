@@ -7,7 +7,7 @@ import {
 } from "@/lib/route-errors";
 import { useLocation, useParams } from "react-router";
 
-import { Gram } from "@gram/client";
+import type { Gram } from "@gram/client";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { handleError } from "@/lib/errors";
 import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";

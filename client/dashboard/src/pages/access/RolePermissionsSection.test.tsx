@@ -12,10 +12,15 @@ function scope(
 ): ScopeDefinition {
   return {
     slug: slug as ScopeDefinition["slug"],
+    label: `${slug} label`,
     resourceType,
+    category: resourceType as ScopeDefinition["category"],
     description: `${slug} description`,
     agentEligible: true,
+    temporaryGrantable: false,
     visibility: "user_visible",
+    sensitive: false,
+    subScopes: [],
   };
 }
 
@@ -63,6 +68,19 @@ describe("RolePermissionsSection tabs", () => {
     expect(screen.queryByText("mcp:read")).toBeNull();
   });
 
+  it("shows the catalogue label beside the slug in rows and the picker", () => {
+    renderSection(["mcp:connect"]);
+
+    expect(screen.getByText("mcp:connect label")).toBeTruthy();
+    expect(screen.getByText("mcp:connect")).toBeTruthy();
+    expect(screen.getByText("mcp:connect description")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+
+    expect(screen.getAllByText("mcp:connect label")).toHaveLength(2);
+    expect(screen.getAllByText("mcp:connect")).toHaveLength(2);
+  });
+
   it("lists mcp:read and mcp:write under Platform access with the connect note", () => {
     renderSection(["mcp:read", "mcp:write", "mcp:connect", "project:read"]);
 
@@ -99,41 +117,5 @@ describe("RolePermissionsSection tabs", () => {
       />,
     );
     expect(screen.getByRole("tab", { name: "MCP access (4)" })).toBeTruthy();
-  });
-});
-
-describe("a permission the role only blocks", () => {
-  function renderBlocked(onToggleScope: (scope: string) => void = () => {}) {
-    render(
-      <RolePermissionsSection
-        groups={groups}
-        selectedScopes={new Set(["mcp:read"])}
-        blockOnlyScopes={new Set(["mcp:read"])}
-        onToggleScope={onToggleScope}
-        renderScopeRule={() => null}
-      />,
-    );
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Platform access/ }));
-  }
-
-  it("marks the row blocked and drops the connect note", () => {
-    renderBlocked();
-    expect(screen.getByText("Blocked")).toBeTruthy();
-    expect(screen.queryByText(/Also allows connecting/)).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Remove block on mcp:read" }),
-    ).toBeTruthy();
-  });
-
-  it("offers the blocked permission as not yet added, so picking it grants it", () => {
-    const toggled: string[] = [];
-    renderBlocked((scope) => {
-      toggled.push(scope);
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
-    const option = screen.getByRole("option", { name: /^mcp:read/ });
-    expect(option.textContent).not.toContain("Already added");
-    fireEvent.click(option);
-    expect(toggled).toEqual(["mcp:read"]);
   });
 });

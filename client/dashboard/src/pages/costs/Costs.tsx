@@ -11,8 +11,6 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { BudgetsContent } from "@/pages/budgets/Budgets";
 import { useMemo, useState, type JSX } from "react";
 import { useLocation } from "react-router";
-import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
-import { InsightsAgentsPage } from "../insights/Insights";
 import { CostsExplorer } from "./CostsExplorer";
 import { displayName, parseDrillPath } from "./taxonomy";
 
@@ -65,20 +63,9 @@ function NewCostsPage(): JSX.Element {
 // column — aligned with each tab's max-width content, like PolicyCenter's
 // Policies/Exclusions strip — not up in the page chrome beside the
 // breadcrumbs.
-function TabbedCostsPage({
-  newCostsEnabled,
-}: {
-  newCostsEnabled: boolean;
-}): JSX.Element {
+function TabbedCostsPage(): JSX.Element {
   const [activeTab, setActiveTab] = useState<CostsTab>("costs");
   const breadcrumbSubstitutions = useCostsBreadcrumbSubstitutions();
-
-  // The two cost views scroll differently: the explorer expects its container
-  // to scroll (the old Page.Body default), while the legacy agents view owns
-  // an internal scroll area and needs a non-scrolling flex column around it.
-  const costsTabClass = newCostsEnabled
-    ? "min-h-0 overflow-y-auto"
-    : "flex min-h-0 flex-col overflow-hidden";
 
   return (
     <WorkbenchPage breadcrumbSubstitutions={breadcrumbSubstitutions}>
@@ -103,9 +90,9 @@ function TabbedCostsPage({
             </PageTabsList>
           </div>
         </div>
-        <TabsContent value="costs" className={costsTabClass}>
+        <TabsContent value="costs" className="min-h-0 overflow-y-auto">
           <RequireScope scope="org:admin" level="page">
-            {newCostsEnabled ? <CostsExplorer /> : <InsightsAgentsContent />}
+            <CostsExplorer />
           </RequireScope>
         </TabsContent>
         <TabsContent value="budgets" className="min-h-0 overflow-y-auto">
@@ -120,26 +107,11 @@ function TabbedCostsPage({
   );
 }
 
-// Routed at the project-level `costs` path. Two PostHog flags shape it:
-//   • `gram-new-costs-page` toggles the new taxonomy explorer on; off (the
-//     default) keeps the existing agents/costs page so we can roll out and
-//     roll back per org/user.
-//   • `gram-budgets` adds the Budgets tab beside the cost view; off (the
-//     default) renders the cost view alone with no tab strip. The same key
-//     gates spend-rule enforcement server-side (the background evaluator and
-//     hence the hooks spend gate), so an org sees the page and is subject to
-//     enforcement together, or neither.
+// Budgets remains independently gated because the same flag also controls
+// spend-rule enforcement on the server.
 export default function Costs(): JSX.Element {
   const telemetry = useTelemetry();
-  const newCostsEnabled =
-    telemetry.isFeatureEnabled("gram-new-costs-page") ?? false;
   const budgetsEnabled = telemetry.isFeatureEnabled("gram-budgets") ?? false;
 
-  if (budgetsEnabled) {
-    return <TabbedCostsPage newCostsEnabled={newCostsEnabled} />;
-  }
-  if (newCostsEnabled) {
-    return <NewCostsPage />;
-  }
-  return <InsightsAgentsPage />;
+  return budgetsEnabled ? <TabbedCostsPage /> : <NewCostsPage />;
 }

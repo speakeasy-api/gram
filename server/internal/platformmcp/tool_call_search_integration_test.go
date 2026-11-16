@@ -67,6 +67,7 @@ func TestSearchToolCallsNarrowsToOneServerWithoutReportedNames(t *testing.T) {
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{
 		authz.NewGrant(authz.ScopeProjectRead, project.ID.String()),
+		authz.NewGrant(authz.ScopeLogRead, project.ID.String()),
 		authz.NewGrant(authz.ScopeMCPRead, configured.ID.String()),
 	})
 

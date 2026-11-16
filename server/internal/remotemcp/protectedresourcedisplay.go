@@ -105,6 +105,7 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 			UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
 			ProjectID:           conv.ToNullUUID(projectID),
 			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
+			OrganizationWide:    false,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("list registration clients: %w", err)

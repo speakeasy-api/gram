@@ -80,7 +80,20 @@ func (m *tunnelManager) serverView(ctx context.Context, logger *slog.Logger, ser
 }
 
 func (m *tunnelManager) serverConnectionsView(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) *types.TunneledMcpServerConnections {
-	return mv.BuildTunneledMcpServerConnectionsView(m.connectionsForServer(ctx, logger, serverID))
+	if m.runtime == nil {
+		view := mv.BuildTunneledMcpServerConnectionsView(nil)
+		state := "unavailable"
+		view.CollectionState = &state
+		return view
+	}
+	connections, err := m.runtime.Connections(ctx, serverID.String())
+	view := mv.BuildTunneledMcpServerConnectionsView(connections)
+	if err != nil {
+		logger.ErrorContext(ctx, "load tunneled mcp connection cache", attr.SlogError(err), attr.SlogTunneledMCPServerID(serverID.String()))
+		state := "unavailable"
+		view.CollectionState = &state
+	}
+	return view
 }
 
 func (m *tunnelManager) serverViewWithoutRuntime(server repo.TunneledMcpServer) *types.TunneledMcpServer {

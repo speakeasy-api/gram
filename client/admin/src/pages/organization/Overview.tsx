@@ -1,11 +1,12 @@
 import { useRef, useState, type JSX, type Ref } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { ExternalLinkIcon, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { ExternalLinkButton } from "@/components/ExternalLinkButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,8 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AdoptionDashboardLink } from "@/pages/organization/AdoptionDashboardLink";
 import { OnboardingPlaybook } from "@/pages/organization/OnboardingPlaybook";
-import { OnboardingStack } from "@/pages/organization/OnboardingStack";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
@@ -151,14 +152,20 @@ export function OverviewRoute(): JSX.Element | null {
   // record they were started on. `RecordLayout` keys this whole subtree the
   // same way, which is what actually enforces it today; this one holds if the
   // view is ever mounted somewhere that does not.
-  return <Overview key={data.id} org={data} />;
+  return <Overview key={data.id} org={data} idOrSlug={idOrSlug} />;
 }
 
 // One field per write. The endpoint takes both as optional, and a type that
 // allows both would let a write carry a field the operator never touched.
 type FactChange = { account_type: string } | { whitelisted: boolean };
 
-export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
+export function Overview({
+  org,
+  idOrSlug,
+}: {
+  org: AdminOrganization;
+  idOrSlug?: string;
+}): JSX.Element {
   const qc = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
   const { announce, showFailure } = useWriteReport();
@@ -396,17 +403,10 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
                 />
                 {/* Absent when the deployment has no WorkOS environment set. */}
                 {org.workos_dashboard_url ? (
-                  <Button asChild variant="ghost" size="icon-xs">
-                    <a
-                      href={org.workos_dashboard_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Open in WorkOS"
-                      title="Open in WorkOS"
-                    >
-                      <ExternalLinkIcon aria-hidden="true" />
-                    </a>
-                  </Button>
+                  <ExternalLinkButton
+                    href={org.workos_dashboard_url}
+                    label="Open in WorkOS"
+                  />
                 ) : null}
               </span>
             ) : (
@@ -480,14 +480,18 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               </span>
             </div>
           </Row>
-          <Row label="Playbook">
-            <OnboardingPlaybook organizationId={org.id} />
+          <Row label="Adoption Dashboard Link">
+            <AdoptionDashboardLink key={org.id} org={org} />
           </Row>
           <TrialFacts org={org} />
         </Panel>
 
-        <Panel title="Stack">
-          <OnboardingStack organizationId={org.id} />
+        <Panel title="Onboarding">
+          <p className="text-muted-foreground text-sm">
+            Configure the setup wizard cards this organization sees, including
+            its playbook, step order, and stack context.
+          </p>
+          <OnboardingPlaybook organizationId={org.id} idOrSlug={idOrSlug} />
         </Panel>
 
         <Panel

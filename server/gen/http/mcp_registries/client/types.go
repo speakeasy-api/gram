@@ -1030,14 +1030,20 @@ type ExternalMCPServerEntryResponseBody struct {
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
-	// Number of tools the server exposes
+	// Number of declared tools, when catalog evidence is available
 	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
-	// Whether every tool on the server is read-only
+	// Whether every declared tool is read-only, when catalog evidence is available
 	IsReadOnly *bool `form:"is_read_only,omitempty" json:"is_read_only,omitempty" xml:"is_read_only,omitempty"`
 	// Whether the server's OAuth authorization server advertises a dynamic client
-	// registration endpoint (RFC 7591). When false, connecting requires manual
-	// setup (static OAuth client credentials or API keys).
+	// registration endpoint (RFC 7591). False alone does not establish that manual
+	// setup is required.
 	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
+	// Whether issuer metadata advertises compatible Client ID Metadata Document
+	// support.
+	SupportsCimd *bool `form:"supports_cimd,omitempty" json:"supports_cimd,omitempty" xml:"supports_cimd,omitempty"`
+	// Advertised authentication setup; unknown means evidence is insufficient, not
+	// that manual setup is required.
+	AuthSetup *string `form:"auth_setup,omitempty" json:"auth_setup,omitempty" xml:"auth_setup,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// The source repository the registry links for this server, when it declares
@@ -3343,12 +3349,6 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
-	}
-	if body.IsReadOnly == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("is_read_only", "body"))
-	}
 	if body.SupportsDcr == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("supports_dcr", "body"))
 	}
@@ -3363,6 +3363,11 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
+	}
+	if body.AuthSetup != nil {
+		if !(*body.AuthSetup == "none" || *body.AuthSetup == "dcr" || *body.AuthSetup == "cimd" || *body.AuthSetup == "manual" || *body.AuthSetup == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_setup", *body.AuthSetup, []any{"none", "dcr", "cimd", "manual", "unknown"}))
+		}
 	}
 	for _, e := range body.Remotes {
 		if e != nil {

@@ -242,18 +242,19 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 	emitPluginSkills(files, "", p)
 
 	if mode == agentPluginCredentialsPackage {
-		cursorJSON, err := marshalJSON(cursorPluginMeta{Name: p.Slug + "-cursor", DisplayName: p.Name + " (Cursor)", Description: p.Description, Version: pluginManifestVersion(cfg), Author: cursorAuthor{Name: cfg.OrgName, Email: ""}, Homepage: "https://getgram.ai"})
+		cursorJSON, err := marshalJSON(cursorPluginMeta{Name: p.Slug + "-cursor", DisplayName: p.Name + " (Cursor)", Description: p.Description, Version: pluginManifestVersion(cfg), Author: cursorAuthor{Name: cfg.OrgName, Email: ""}, Homepage: speakeasyHomepageURL})
 		if err != nil {
 			return nil, fmt.Errorf("marshal shared Cursor plugin.json: %w", err)
 		}
 		files[".cursor-plugin/plugin.json"] = cursorJSON
 
-		legacyCodexFiles := make(map[string][]byte)
-		if err := generateCodexPluginInDir(legacyCodexFiles, "", p.Slug+"-codex", p, cfg); err != nil {
-			return nil, fmt.Errorf("generate shared Codex legacy overlay: %w", err)
+		// Retain the native MCP config for Cursor, but not a Codex manifest.
+		// Codex must use its dedicated native package, not this AP1.0 root.
+		cursorMCPFiles := make(map[string][]byte)
+		if err := generateCodexPluginInDir(cursorMCPFiles, "", p.Slug+"-codex", p, cfg); err != nil {
+			return nil, fmt.Errorf("generate shared Cursor MCP config: %w", err)
 		}
-		files[".codex-plugin/plugin.json"] = legacyCodexFiles[".codex-plugin/plugin.json"]
-		files[".mcp.json"] = legacyCodexFiles[".mcp.json"]
+		files[".mcp.json"] = cursorMCPFiles[".mcp.json"]
 	}
 
 	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {

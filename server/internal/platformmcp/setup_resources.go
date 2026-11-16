@@ -44,6 +44,9 @@ const (
 // to judge the content, and the freshness signal that decides whether it is
 // served at all.
 type SetupResource struct {
+	// Render personalizes reviewed text for the authenticated organization.
+	Render func(context.Context, string) (string, error)
+
 	URI         string
 	Name        string
 	Title       string
@@ -78,7 +81,7 @@ type SetupResource struct {
 	Links []string
 	// DocsURL is this guide's published page on the Speakeasy documentation
 	// site — the same content, somewhere a person can open, link, and share.
-	// The gram:// URI addresses the resource; this addresses the page.
+	// The speakeasy:// URI addresses the resource; this addresses the page.
 	DocsURL string
 }
 
@@ -190,7 +193,6 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 			Title:       resource.Title,
 			Description: resource.Description,
 			MIMEType:    "text/markdown",
-			Size:        int64(len(resource.Text)),
 		}, ResourceMeta{
 			Authorization: ExternalAuthorizationMember,
 			// Both audiences: a reviewed guide carries no connection-scoped or
@@ -198,7 +200,15 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 			// external client reads. Anything less would leave the resource
 			// links in a search result dangling on the assistant surface.
 			Audiences: bothAudiences,
-		}, func(_ context.Context) (string, error) {
+		}, func(ctx context.Context) (string, error) {
+			text := resource.Text
+			if resource.staleness(now()) != setupWithheld && resource.Render != nil {
+				var err error
+				text, err = resource.Render(ctx, text)
+				if err != nil {
+					return "", reg.failSafe(ctx, resource.URI, err)
+				}
+			}
 			switch resource.staleness(now()) {
 			case setupWithheld:
 				// The reader loses the guide, not the sources behind it: the
@@ -206,11 +216,11 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 				// when content is withheld, so they travel with the refusal.
 				return "", resource.unavailableError()
 			case setupStale:
-				return resource.staleWarning() + resource.Text, nil
+				return resource.staleWarning() + text, nil
 			case setupFresh:
-				return resource.Text, nil
+				return text, nil
 			default:
-				return resource.Text, nil
+				return text, nil
 			}
 		})
 	}
@@ -228,10 +238,10 @@ func ValidateSetupResource(resource SetupResource) error {
 	switch {
 	case err != nil:
 		return fmt.Errorf("parse setup resource URI %q: %w", resource.URI, err)
-	case parsed.Scheme != "gram" || parsed.Host != "platform-mcp" || !strings.HasPrefix(resource.URI, "gram://platform-mcp/setup/"):
-		return fmt.Errorf("setup resource URI %q is not under gram://platform-mcp/setup/", resource.URI)
+	case parsed.Scheme != "speakeasy" || parsed.Host != "platform-mcp" || !strings.HasPrefix(resource.URI, "speakeasy://platform-mcp/setup/"):
+		return fmt.Errorf("setup resource URI %q is not under speakeasy://platform-mcp/setup/", resource.URI)
 	case resource.URI != setupResourceURIFromURI(resource.URI):
-		return fmt.Errorf("setup resource URI %q is not exactly gram://platform-mcp/setup/<provider>/<intent>", resource.URI)
+		return fmt.Errorf("setup resource URI %q is not exactly speakeasy://platform-mcp/setup/<provider>/<intent>", resource.URI)
 	case resource.Name == "" || resource.Title == "" || resource.Description == "":
 		return fmt.Errorf("setup resource %q is missing a name, title, or description", resource.URI)
 	case resource.Text == "":
@@ -253,13 +263,34 @@ func ValidateSetupResource(resource SetupResource) error {
 // because a corpus builder must produce exactly these URIs — they are a public
 // contract with every MCP client that has one bookmarked.
 func SetupResourceURI(provider, intent string) string {
-	return fmt.Sprintf("gram://platform-mcp/setup/%s/%s", provider, intent)
+	return fmt.Sprintf("speakeasy://platform-mcp/setup/%s/%s", provider, intent)
 }
 
 func setupResourceURIFromURI(uri string) string {
-	parts := strings.Split(strings.TrimPrefix(uri, "gram://platform-mcp/setup/"), "/")
+	parts := strings.Split(strings.TrimPrefix(uri, "speakeasy://platform-mcp/setup/"), "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return ""
 	}
 	return SetupResourceURI(parts[0], parts[1])
+}
+
+// WithSetupCallbackResolver resolves the placeholder only after authentication.
+func WithSetupCallbackResolver(resources []SetupResource, placeholder string, resolve func(context.Context, string) (string, error)) []SetupResource {
+	for i := range resources {
+		resources[i].Render = func(ctx context.Context, text string) (string, error) {
+			if !strings.Contains(text, placeholder) {
+				return text, nil
+			}
+			principal, err := principalFromToolContext(ctx)
+			if err != nil {
+				return "", err
+			}
+			callback, err := resolve(ctx, principal.OrganizationID)
+			if err != nil {
+				return "", err
+			}
+			return strings.ReplaceAll(text, placeholder, callback), nil
+		}
+	}
+	return resources
 }

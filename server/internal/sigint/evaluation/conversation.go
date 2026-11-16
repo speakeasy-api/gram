@@ -3,6 +3,8 @@ package evaluation
 import (
 	"context"
 	"fmt"
+	"maps"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -11,7 +13,9 @@ import (
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
@@ -24,7 +28,27 @@ type MessageSource interface {
 	LoadMessages(context.Context, string, uuid.UUID, []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error)
 }
 
-// LoadMessages reads current message state and attachment locators together.
+// HistorySource resolves non-system predecessors of a persisted target snapshot,
+// newest first. System messages do not consume the history limit. Inline payloads
+// beyond the byte budget are replaced by ContentTooLarge markers before transfer.
+type HistorySource interface {
+	LoadHistory(context.Context, string, uuid.UUID, repo.LoadEvaluationMessagesRow, int, int) ([]repo.LoadEvaluationHistoryRow, error)
+}
+
+// LoadHistory pins context to the target's tenant, conversation, generation and timestamp.
+func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target repo.LoadEvaluationMessagesRow, limit, budget int) ([]repo.LoadEvaluationHistoryRow, error) {
+	rows, err := repo.New(r.db).LoadEvaluationHistory(ctx, repo.LoadEvaluationHistoryParams{
+		OrganizationID: org, ProjectID: project, ChatID: target.ChatID, Generation: target.Generation,
+		TargetID: target.ID, TargetCreatedAt: target.CreatedAt, TargetSeq: target.Seq, HistoryLimit: conv.SafeInt32(limit),
+		ContentBudget: int64(budget),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load evaluation history: %w", err)
+	}
+	return rows, nil
+}
+
+// LoadMessages reads non-system message state and attachment locators together.
 func (r *Repository) LoadMessages(ctx context.Context, org string, project uuid.UUID, ids []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error) {
 	rows, err := repo.New(r.db).LoadEvaluationMessages(ctx, repo.LoadEvaluationMessagesParams{OrganizationID: org, ProjectID: project, MessageIds: ids})
 	if err != nil {
@@ -51,6 +75,9 @@ func (h *ConversationHandler) eligible(ctx context.Context, m *conversationv1.Me
 		return false
 	}
 	if m.GetRole() != conversationv1.MessageEvent_ROLE_USER && m.GetRole() != conversationv1.MessageEvent_ROLE_ASSISTANT {
+		return false
+	}
+	if kind := m.GetCaptureKind(); kind != "" && kind != "original" {
 		return false
 	}
 	for _, id := range []string{m.GetId(), m.GetMessageId(), m.GetConversationId(), m.GetProjectId()} {
@@ -102,7 +129,7 @@ func (h *ConversationHandler) HandleBatchWithResult(ctx context.Context, message
 
 		byID := make(map[uuid.UUID]repo.LoadEvaluationMessagesRow, len(rows))
 		for _, row := range rows {
-			byID[row.ChatMessage.ID] = row
+			byID[row.ID] = row
 		}
 		for _, m := range batch {
 			row, ok := byID[uuid.MustParse(m.Message.GetMessageId())]
@@ -144,7 +171,7 @@ func (h *ConversationHandler) Handle(ctx context.Context, m *conversationv1.Mess
 }
 
 func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.MessageEvent, row repo.LoadEvaluationMessagesRow) error {
-	p := row.ChatMessage
+	p := row
 	if p.ID.String() != m.GetMessageId() || p.ProjectID.UUID.String() != m.GetProjectId() || p.ChatID.String() != m.GetConversationId() {
 		var event Event
 		h.evaluator.terminal(ctx, event, "invalid_identity")
@@ -153,28 +180,44 @@ func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.Me
 	if p.Role != "user" && p.Role != "assistant" {
 		return nil
 	}
-	return h.evaluator.Evaluate(ctx, &conversationInput{message: m, stored: row, blobs: h.blobs})
+	if !m.HasCaptureKind() && p.Generation > 0 {
+		return nil
+	}
+	history, _ := h.messages.(HistorySource)
+	return h.evaluator.Evaluate(ctx, &conversationInput{message: m, stored: row, blobs: h.blobs, history: history})
 }
 
 type conversationInput struct {
 	message *conversationv1.MessageEvent
 	stored  repo.LoadEvaluationMessagesRow
 	blobs   BlobReader
+	history HistorySource
 }
 
-func (in *conversationInput) Resolve(ctx context.Context) (classifier.Entry, error) {
-	return input(ctx, in.blobs, in.message.GetProjectId(), in.stored)
+func (in *conversationInput) NewBuffer(maxSize int) InputBuffer {
+	return &conversationBuffer{
+		input: in, maxSize: maxSize,
+		targetLoaded: false, target: classifier.Entry{}, targetErr: nil,
+		historyLoaded: false, historyRows: nil, historyErr: nil,
+		resolved: nil, resolvedBytes: 0, contentLimitSize: 0,
+	}
 }
 
 func (in *conversationInput) MatchingMessage() *matching.Message {
-	return &matching.Message{Role: in.stored.ChatMessage.Role}
+	return &matching.Message{Role: in.stored.Role}
 }
 
 func (in *conversationInput) Event() Event {
 	m := in.message
-	p := in.stored.ChatMessage
+	p := in.stored
 	messageContext := &sigintv1.Reading_ConversationMessage{}
 	messageContext.SetConversationId(m.GetConversationId())
+	messageContext.SetGeneration(p.Generation)
+	messageContext.SetSequence(p.Seq)
+	messageContext.SetCaptureKind(m.GetCaptureKind())
+	if m.HasOriginalMessageId() {
+		messageContext.SetOriginalMessageId(m.GetOriginalMessageId())
+	}
 	messageContext.SetRole(sigintv1.Reading_ConversationMessage_ROLE_USER)
 	if p.Role == "assistant" {
 		messageContext.SetRole(sigintv1.Reading_ConversationMessage_ROLE_ASSISTANT)
@@ -184,7 +227,9 @@ func (in *conversationInput) Event() Event {
 	subject.SetId(m.GetMessageId())
 	subject.SetOccurredAt(m.GetMessageCreatedAt())
 	subject.SetConversationMessage(messageContext)
-	event := Event{OrganizationID: m.GetOrganizationId(), ProjectID: m.GetProjectId(), Subject: subject, Actor: nil, BillingUserID: nil, Source: nil, Account: nil, AssistantID: nil, Replayed: nil}
+	// Invalid request timestamps become zero and are rejected before evaluation.
+	requestedAt, _ := time.Parse(time.RFC3339Nano, m.GetOccurredAt())
+	event := Event{Evaluation: readings.Context{TriggerKind: readings.TriggerStream, RunID: uuid.Nil, RequestedAt: requestedAt}, OrganizationID: m.GetOrganizationId(), ProjectID: m.GetProjectId(), Subject: subject, Actor: nil, BillingUserID: nil, Source: nil, Account: nil, AssistantID: nil, Replayed: nil, Attributes: nil}
 	actor := &sigintv1.Reading_Actor{}
 	if p.UserID.Valid {
 		actor.SetUserId(p.UserID.String)
@@ -198,6 +243,7 @@ func (in *conversationInput) Event() Event {
 	}
 
 	if source := m.GetIngestion(); source != nil {
+		event.Attributes = maps.Clone(source.GetAttributes())
 		if source.HasObservedUserEmail() {
 			actor.SetUserEmail(source.GetObservedUserEmail())
 		}

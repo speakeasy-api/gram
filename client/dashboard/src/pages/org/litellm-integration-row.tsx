@@ -1,3 +1,5 @@
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { FailurePosture as KnownFailurePosture } from "@gram/client/models/components/createinstancerequestbody.js";
 import { CodeBlock } from "@/components/code";
 import { InputField } from "@/components/moon/input-field";
 import { Alert, ErrorAlert } from "@/components/ui/Alert";
@@ -15,8 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { Stack } from "@/components/ui/Stack";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { getServerURL } from "@/lib/utils";
@@ -31,7 +35,8 @@ import { useRevokeLiteLLMInstanceMutation } from "@gram/client/react-query/revok
 import { useRotateLiteLLMInstanceKeyMutation } from "@gram/client/react-query/rotateLiteLLMInstanceKey.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Network, Plus, RefreshCw } from "lucide-react";
-import { FormEvent, useState } from "react";
+import type { FormEvent } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLiteLLMInstanceProjects } from "./use-litellm-instance-projects";
@@ -295,9 +300,11 @@ export function LiteLLMIntegrationRow(): JSX.Element {
                   disabled={instancesQuery.isFetching}
                 >
                   <Button.LeftIcon>
-                    <RefreshCw
-                      className={`size-3.5 ${instancesQuery.isFetching ? "animate-spin" : ""}`}
-                    />
+                    {instancesQuery.isFetching ? (
+                      <Spinner className="mr-0 size-3.5" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
                   </Button.LeftIcon>
                   <Button.Text>Refresh</Button.Text>
                 </Button>
@@ -419,7 +426,10 @@ export function CreateInstanceDialog({
         gramProject: projectSlug,
         createInstanceRequestBody: {
           name: name.trim(),
-          failurePosture,
+          failurePosture: requireKnownEnumValue(
+            KnownFailurePosture,
+            failurePosture,
+          ),
         },
       },
     });
@@ -736,14 +746,23 @@ export function SetupContent({
           {buildLiteLLMEnvironment(serverURL, instance.project.slug)}
         </CodeBlock>
       </SetupSection>
-      <SetupSection
-        title="LiteLLM configuration"
-        description="Merge this guardrail fragment into your LiteLLM configuration."
-      >
-        <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
-          {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
-        </CodeBlock>
-      </SetupSection>
+      {isKnownEnumValue(KnownFailurePosture, instance.failurePosture) ? (
+        <SetupSection
+          title="LiteLLM configuration"
+          description="Merge this guardrail fragment into your LiteLLM configuration."
+        >
+          <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
+            {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
+          </CodeBlock>
+        </SetupSection>
+      ) : (
+        <Alert variant="warning">
+          This instance uses an unsupported failure posture.{" "}
+          {result
+            ? "Save the integration key securely before refreshing the page."
+            : "Refresh the page before configuring LiteLLM."}
+        </Alert>
+      )}
       <SetupSection
         title="Verify safe traffic"
         description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL in your shell, then run this against the proxy."
@@ -800,18 +819,22 @@ export function HealthBadge({
     case "pending":
       return <Badge variant="neutral">Waiting for traffic</Badge>;
   }
+  return <Badge variant="neutral">Unknown</Badge>;
 }
 
-function FailurePostureBadge({
+export function FailurePostureBadge({
   posture,
 }: {
   posture: FailurePosture;
 }): JSX.Element {
-  return posture === "fail_closed" ? (
-    <Badge variant="neutral">Fail closed</Badge>
-  ) : (
-    <Badge variant="warning">Fail open</Badge>
-  );
+  switch (posture) {
+    case "fail_closed":
+      return <Badge variant="neutral">Fail closed</Badge>;
+    case "fail_open":
+      return <Badge variant="warning">Fail open</Badge>;
+    default:
+      return <Badge variant="neutral">Unknown</Badge>;
+  }
 }
 
 export function DiagnosticsPanel({
@@ -901,5 +924,7 @@ function errorKindLabel(
       return "Payload limit exceeded";
     case undefined:
       return undefined;
+    default:
+      return "Unknown";
   }
 }

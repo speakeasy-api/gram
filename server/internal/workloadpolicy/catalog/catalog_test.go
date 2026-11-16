@@ -1,6 +1,9 @@
 package catalog_test
 
 import (
+	"fmt"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -30,27 +33,6 @@ variables:
 subject:
   template: "wimse://issuer.example.com/org/{org_id}/agent/"
   wildcard: true
-setup:
-  steps:
-    - id: org
-      title: Organization
-      phase: collect
-      blocks:
-        - type: field
-          variable: org_id
-        - type: subject_rule
-    - id: create
-      title: Create
-      phase: create
-      blocks:
-        - type: agent_picker
-    - id: console
-      title: Console
-      phase: connect
-      blocks:
-        - type: computed
-          value: token_endpoint
-          label: Token endpoint
 `
 
 func TestEmbeddedPlatformsAreValid(t *testing.T) {
@@ -61,24 +43,151 @@ func TestEmbeddedPlatformsAreValid(t *testing.T) {
 	require.NotEmpty(t, platforms)
 }
 
-func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
-	t.Parallel()
+// embeddedPlatform is the embedded catalog's entry for key; the test fails
+// when there is none.
+func embeddedPlatform(t *testing.T, key string) *catalog.Platform {
+	t.Helper()
 
 	platforms, err := catalog.Embedded().Platforms(t.Context())
 	require.NoError(t, err)
-
-	var claudeTag *catalog.Platform
 	for i := range platforms {
-		if platforms[i].Key == "claude-tag" {
-			claudeTag = &platforms[i]
+		if platforms[i].Key == key {
+			return &platforms[i]
 		}
 	}
-	require.NotNil(t, claudeTag)
+	require.FailNow(t, "no embedded platform", key)
+	return nil
+}
+
+func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
+	t.Parallel()
+
+	claudeTag := embeddedPlatform(t, "claude-tag")
 	require.Equal(t, "https://identity.anthropic.com/agents", claudeTag.Issuer.Value)
 	require.Equal(t, catalog.VisibilityHidden, claudeTag.Issuer.Visibility)
 	require.Equal(t, "wimse://identity.anthropic.com/org/{org_id}/agent/", claudeTag.Subject.Template)
 	require.True(t, claudeTag.Subject.Wildcard)
-	require.NotNil(t, claudeTag.Setup)
+}
+
+func TestEmbeddedGKEPinsOneClusterAndServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	gke := embeddedPlatform(t, "gke")
+	cluster := "https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}"
+	require.Equal(t, cluster, gke.Issuer.Value)
+	require.Equal(t, cluster+"/jwks", gke.JWKSURI.Value)
+	require.Equal(t, "system:serviceaccount:{namespace}:{service_account}", gke.Subject.Template)
+	require.False(t, gke.Subject.Wildcard)
+
+	// A value holding a delimiter could reach into a neighboring segment, such
+	// as a namespace of "prod:admin" naming another namespace's account.
+	for _, variable := range gke.Variables {
+		pattern := regexp.MustCompile("^(?:" + variable.Pattern + ")$")
+		for _, delimiter := range []string{":", "/", "*"} {
+			require.False(t, pattern.MatchString("ab"+delimiter+"cd"), "%s admits %q", variable.Key, delimiter)
+		}
+	}
+}
+
+func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
+	t.Parallel()
+
+	github := embeddedPlatform(t, "github-actions")
+	// Listed but not offered until a stable speakeasyd release supports
+	// GitHub Actions, except to organizations its feature flag is on for.
+	// The rest of this test, the API tests that read the catalog, and the
+	// dashboard's own fixtures keep the setup covered.
+	require.False(t, github.Enabled)
+	require.Equal(t, "https://token.actions.githubusercontent.com", github.Issuer.Value)
+	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)
+	require.Equal(t, "repo:{owner}/{repo}:", github.Subject.Template)
+	require.True(t, github.Subject.Wildcard)
+	require.Equal(t, "Whole repository", github.Subject.Label)
+	require.Equal(t, []catalog.SubjectAlternative{
+		{Key: "branch", Label: "One branch", Template: "repo:{owner}/{repo}:ref:refs/heads/{branch}", Wildcard: false},
+		{Key: "environment", Label: "One environment", Template: "repo:{owner}/{repo}:environment:{environment}", Wildcard: false},
+		{Key: "pull_request", Label: "Pull requests", Template: "repo:{owner}/{repo}:pull_request", Wildcard: false},
+	}, github.Subject.Alternatives)
+
+	patterns := make(map[string]*regexp.Regexp, len(github.Variables))
+	for _, variable := range github.Variables {
+		require.Equal(t, catalog.TierRule, variable.Tier, "%s varies per repository, not per platform", variable.Key)
+		patterns[variable.Key] = regexp.MustCompile("^(?:" + variable.Pattern + ")$")
+	}
+	require.Len(t, patterns, 4)
+	owner, repo, branch, environment := patterns["owner"], patterns["repo"], patterns["branch"], patterns["environment"]
+
+	// A value holding a delimiter could reach past its segment: an owner of
+	// "acme/app" or a repository of "app:ref" would move the stem, and a "*"
+	// would read as a second wildcard.
+	for key, pattern := range map[string]*regexp.Regexp{"owner": owner, "repo": repo} {
+		for _, delimiter := range []string{":", "/", "*", " "} {
+			require.False(t, pattern.MatchString("ab"+delimiter+"cd"), "%s admits %q", key, delimiter)
+		}
+		// GitHub names never contain "@", so it may only introduce an ID.
+		require.False(t, pattern.MatchString("ab@cd"), "%s admits a non-numeric ID", key)
+		require.False(t, pattern.MatchString("ab@"), "%s admits an empty ID", key)
+		require.False(t, pattern.MatchString("ab@1@2"), "%s admits two IDs", key)
+	}
+
+	for _, valid := range []string{"octo-org", "Octo-Org", "a", "octo-org@123456", strings.Repeat("a", 39)} {
+		require.True(t, owner.MatchString(valid), "owner refuses %q", valid)
+	}
+	for _, invalid := range []string{"", "-octo", "octo_org", "octo.org", strings.Repeat("a", 40)} {
+		require.False(t, owner.MatchString(invalid), "owner admits %q", invalid)
+	}
+	for _, valid := range []string{"octo-repo", "Octo.Repo_2", ".github", "octo-repo@456789", strings.Repeat("a", 100)} {
+		require.True(t, repo.MatchString(valid), "repository refuses %q", valid)
+	}
+	for _, invalid := range []string{"", strings.Repeat("a", 101)} {
+		require.False(t, repo.MatchString(invalid), "repository admits %q", invalid)
+	}
+
+	// A branch and an environment end an exact rule, so a "/" cannot reach
+	// another segment, but a ":" would forge a context and a "*" a wildcard.
+	for key, pattern := range map[string]*regexp.Regexp{"branch": branch, "environment": environment} {
+		for _, refused := range []string{"", "main:x", "main*", "release/*", "main\n", "main\x00"} {
+			require.False(t, pattern.MatchString(refused), "%s admits %q", key, refused)
+		}
+	}
+	for _, valid := range []string{"main", "release/v2.1", "renovate/@types-node-20.x", "feat+1", "!main", "Feature_X"} {
+		require.True(t, branch.MatchString(valid), "branch refuses %q", valid)
+	}
+	// Git refuses these in a branch name, so a rule naming one admits nothing.
+	for _, invalid := range []string{"/main", "main/", "a//b", "feat?", "[x]", "a\\b", "a^b", "a~1", "my branch"} {
+		require.False(t, branch.MatchString(invalid), "branch admits %q", invalid)
+	}
+	for _, valid := range []string{"production", "Production EU", "review/pr-12", "Production%3AV1", strings.Repeat("e", 255)} {
+		require.True(t, environment.MatchString(valid), "environment refuses %q", valid)
+	}
+	require.False(t, environment.MatchString(strings.Repeat("e", 256)), "environment admits 256 characters")
+}
+
+// The pull request choice ends on text no repository name can hold, so the
+// branch and environment choices cannot produce its subject, and the embedded
+// catalog loads. A choice that could produce it too is refused, since a saved
+// rule would then read back as either.
+func TestParseRefusesAGitHubChoiceOverlappingPullRequests(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile("platforms/github-actions.yaml")
+	require.NoError(t, err)
+	// extraAlternative continues the alternative that ends the file.
+	const last = "      wildcard: false\n"
+	require.True(t, strings.HasSuffix(string(raw), last), "github-actions.yaml must end on its last alternative")
+
+	for name, template := range map[string]string{
+		"the same rule under another key":  "repo:{owner}/{repo}:pull_request",
+		"an environment that can spell it": "repo:{owner}/{repo}:pull_{environment}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			overlapping := strings.TrimSuffix(string(raw), last) + extraAlternative("overlapping", template)
+			_, err := catalog.Parse([]byte(overlapping))
+			require.ErrorContains(t, err, `subject alternative "overlapping" could match the same subject as alternative "pull_request"`)
+		})
+	}
 }
 
 func TestParseAcceptsAValidPlatform(t *testing.T) {
@@ -87,7 +196,6 @@ func TestParseAcceptsAValidPlatform(t *testing.T) {
 	platform, err := catalog.Parse([]byte(validPlatform))
 	require.NoError(t, err)
 	require.Equal(t, "example", platform.Key)
-	require.Len(t, platform.Setup.Steps, 3)
 }
 
 func TestParseRefusesInvalidPlatforms(t *testing.T) {
@@ -100,6 +208,7 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		wantErr string
 	}{
 		{name: "unknown field", from: "enabled: true", to: "enabled: true\nenabeld: true", wantErr: "enabeld"},
+		{name: "setup block", from: "enabled: true", to: "enabled: true\nsetup:\n  steps: []", wantErr: "setup"},
 		{name: "http issuer", from: "value: https://issuer.example.com\n", to: "value: http://issuer.example.com\n", wantErr: "https"},
 		{name: "bad visibility", from: "visibility: hidden", to: "visibility: secret", wantErr: "visibility"},
 		{name: "undeclared variable", from: "{org_id}/agent/", to: "{tenant}/agent/", wantErr: "undeclared variable"},
@@ -107,29 +216,15 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		{name: "star in template", from: "{org_id}/agent/\"", to: "{org_id}/agent/*\"", wantErr: `"*"`},
 		{name: "missing pattern", from: "    pattern: \"[a-z0-9-]+\"\n", to: "", wantErr: "pattern is required"},
 		{name: "rule variable in issuer", from: "value: https://issuer.example.com\n", to: "value: https://{org_id}.issuer.example.com\n", wantErr: "platform-tier"},
-		{name: "unknown block", from: "- type: agent_picker", to: "- type: script", wantErr: "unknown block type"},
 		{name: "external icon", from: "icon: /access-hub/example.svg", to: "icon: https://evil.example.com/x.svg", wantErr: "dashboard's origin"},
 		{name: "tab-split icon", from: "icon: /access-hub/example.svg", to: "icon: \"/\\t/evil.example.com/x.svg\"", wantErr: "dashboard's origin"},
-		{name: "external image", from: "- type: agent_picker", to: "- type: image\n          src: https://evil.example.com/x.png\n          alt: x", wantErr: "dashboard's origin"},
-		{name: "unknown computed value", from: "value: token_endpoint", to: "value: client_secret", wantErr: "not one Speakeasy derives"},
-		{name: "connect before create", from: "      title: Organization\n      phase: collect", to: "      title: Organization\n      phase: connect", wantErr: "collect, then create, then connect"},
-		{name: "no create step", from: "phase: create", to: "phase: collect", wantErr: "exactly one create step"},
 		{name: "issuer with a query", from: "value: https://issuer.example.com\n", to: "value: https://issuer.example.com?tenant=x\n", wantErr: "no userinfo, query or fragment"},
 		{name: "jwks_uri with a fragment", from: "value: https://issuer.example.com/jwks.json", to: "value: https://issuer.example.com/jwks.json#keys", wantErr: "no userinfo, query or fragment"},
-		{name: "link with userinfo", from: "- type: agent_picker", to: "- type: link\n          href: https://user@docs.example.com\n          label: Docs", wantErr: "https URL"},
 		{name: "unclosed placeholder", from: "{org_id}/agent/", to: "{org_id/agent/", wantErr: "brace"},
 		{name: "named group in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "(?P<id>[a-z0-9-]+)"`, wantErr: "(?:...) groups"},
 		{name: "flag group in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "(?i)[a-z0-9-]+"`, wantErr: "(?:...) groups"},
 		{name: "unicode class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "\\pL+"`, wantErr: "Go and JavaScript"},
 		{name: "posix class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "[[:alnum:]-]+"`, wantErr: "POSIX"},
-		{name: "image in markdown", from: "- type: agent_picker", to: "- type: text\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
-		{name: "checklist item without a label", from: "- type: agent_picker", to: "- type: checklist_item\n          markdown: Leave empty", wantErr: "needs a label"},
-		{name: "checklist item with nothing to do", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource", wantErr: "computed value or markdown"},
-		{name: "checklist item with both", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: token_endpoint\n          markdown: Leave empty", wantErr: "not both"},
-		{name: "checklist item with unknown value", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: client_secret", wantErr: "not one Speakeasy derives"},
-		{name: "checklist item with an image", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
-		{name: "form control setting on a platform block", from: "- type: agent_picker", to: "- type: agent_picker\n          placeholder: Pick one", wantErr: "belong to custom flows"},
-		{name: "collect after create", from: "      title: Console\n      phase: connect", to: "      title: Console\n      phase: collect", wantErr: "collect, then create, then connect"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -140,6 +235,94 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
+}
+
+// withAlternatives is validPlatform offering an exact rule for one agent
+// beside its wildcard over the whole organization.
+var withAlternatives = strings.NewReplacer(
+	"    pattern: \"[a-z0-9-]+\"\n", `    pattern: "[a-z0-9-]+"
+  - key: agent_id
+    tier: rule
+    label: Agent ID
+    pattern: "[a-z0-9]+"
+`,
+	"  wildcard: true\n", `  wildcard: true
+  label: Every agent
+  alternatives:
+    - key: one_agent
+      label: One agent
+      template: "wimse://issuer.example.com/org/{org_id}/agent/{agent_id}"
+      wildcard: false
+`,
+).Replace(validPlatform)
+
+// extraAlternative replaces the end of withAlternatives' one alternative with
+// that end followed by another exact alternative.
+func extraAlternative(key, template string) string {
+	return fmt.Sprintf("      wildcard: false\n    - key: %s\n      label: %s\n      template: %q\n      wildcard: false\n", key, key, template)
+}
+
+func TestParseAcceptsSubjectAlternatives(t *testing.T) {
+	t.Parallel()
+
+	platform, err := catalog.Parse([]byte(withAlternatives))
+	require.NoError(t, err)
+	require.Equal(t, "Every agent", platform.Subject.Label)
+	require.Equal(t, []catalog.SubjectAlternative{{
+		Key:      "one_agent",
+		Label:    "One agent",
+		Template: "wimse://issuer.example.com/org/{org_id}/agent/{agent_id}",
+		Wildcard: false,
+	}}, platform.Subject.Alternatives)
+}
+
+func TestParseRefusesInvalidSubjectAlternatives(t *testing.T) {
+	t.Parallel()
+
+	const alternativeTemplate = `"wimse://issuer.example.com/org/{org_id}/agent/{agent_id}"`
+	tests := []struct {
+		name    string
+		from    string
+		to      string
+		wantErr string
+	}{
+		{name: "default without a label", from: "  label: Every agent\n", to: "", wantErr: "subject.label is required"},
+		{name: "alternative without a label", from: "      label: One agent\n", to: "", wantErr: `"one_agent": label is required`},
+		{name: "alternative key not snake_case", from: "key: one_agent", to: "key: One-Agent", wantErr: "lowercase snake_case"},
+		{name: "same rule as the default", from: alternativeTemplate + "\n      wildcard: false", to: "\"wimse://issuer.example.com/org/{org_id}/agent/\"\n      wildcard: true", wantErr: "could match the same subject as the default"},
+		{name: "wildcard alternative inside the default", from: alternativeTemplate + "\n      wildcard: false", to: "\"wimse://issuer.example.com/org/{org_id}/agent/{agent_id}/\"\n      wildcard: true", wantErr: "could match the same subject as the default"},
+		{name: "alternatives differing only in a variable", from: "      wildcard: false\n", to: extraAlternative("other_agent", "wimse://issuer.example.com/org/{org_id}/agent/{org_id}"), wantErr: `could match the same subject as alternative "one_agent"`},
+		{name: "alternative extending another", from: "      wildcard: false\n", to: extraAlternative("agent_run", "wimse://issuer.example.com/org/{org_id}/agent/{agent_id}/run"), wantErr: `could match the same subject as alternative "one_agent"`},
+		{name: "star in an alternative", from: alternativeTemplate, to: `"wimse://issuer.example.com/org/{org_id}/agent/*"`, wantErr: `"*"`},
+		{name: "wildcard alternative ending on a variable", from: alternativeTemplate + "\n      wildcard: false", to: alternativeTemplate + "\n      wildcard: true", wantErr: "wildcard stem"},
+		{name: "undeclared variable in an alternative", from: "{agent_id}\"", to: "{agent}\"", wantErr: "undeclared variable"},
+		{name: "alternative declared twice", from: "      wildcard: false\n", to: extraAlternative("one_agent", "wimse://issuer.example.com/org/{org_id}/agents/{agent_id}"), wantErr: "declared twice"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Contains(t, withAlternatives, tc.from, "test case must change the fixture")
+			_, err := catalog.Parse([]byte(strings.Replace(withAlternatives, tc.from, tc.to, 1)))
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+// Two exact rules are told apart by literal text both readings of a subject
+// reach at the same place, which holds only while every variable before it
+// refuses the character that ends it.
+func TestParseTellsAlternativesApartByTextNoVariableReaches(t *testing.T) {
+	t.Parallel()
+
+	team := strings.Replace(withAlternatives, "      wildcard: false\n", extraAlternative("one_team", "wimse://issuer.example.com/org/{org_id}/team/{agent_id}"), 1)
+	_, err := catalog.Parse([]byte(team))
+	require.NoError(t, err, `organization IDs refuse "/", so "/agent/" and "/team/" start at the same place`)
+
+	// An organization ID that may hold "/" could reach past "/team", so the
+	// two can no longer be shown apart and the catalog is refused.
+	_, err = catalog.Parse([]byte(strings.Replace(team, `pattern: "[a-z0-9-]+"`, `pattern: "[a-z0-9/-]+"`, 1)))
+	require.ErrorContains(t, err, `alternative "one_team" could match the same subject as alternative "one_agent"`)
 }
 
 func TestLoadRequiresTheFileNameToBeTheKey(t *testing.T) {

@@ -34,7 +34,8 @@ func TestParseTemplateIDs_ValidatesCompleteRegistry(t *testing.T) {
 		"trial_ending_soon":"id-10",
 		"access_paused":"id-11",
 		"payg_activated":"id-12",
-		"setup_task_assignment":"id-13"
+		"setup_task_assignment":"id-13",
+		"directory_review_pending":"id-14"
 	}`)
 	require.NoError(t, err)
 	require.NoError(t, ids.ValidateRegistered())

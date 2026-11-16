@@ -1,9 +1,8 @@
-import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import type { Toolset } from "@/lib/toolTypes";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { PageSection } from "./MCPDetails";
+import { PageSection } from "./PageSection";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";
@@ -25,11 +24,7 @@ export function ToolsetAuthenticationSection({
 }): JSX.Element {
   const target = useToolsetAuthTarget(toolset);
   const [externalOAuthOpen, setExternalOAuthOpen] = useState(false);
-  const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-  const externalOAuthAvailable = canConfigureExternalOAuth(
-    toolset,
-    externalMcpOAuthStatus === "required-unconfigured",
-  );
+  const externalOAuthAvailable = canConfigureExternalOAuth(toolset);
 
   return (
     <>

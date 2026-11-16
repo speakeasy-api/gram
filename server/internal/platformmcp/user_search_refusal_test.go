@@ -16,6 +16,7 @@ import (
 type refusingProjectReader struct {
 	diagnosticsProjectReader
 	projectErr error
+	logReadErr error
 	mcpErr     error
 }
 
@@ -24,6 +25,24 @@ func (r refusingProjectReader) ResolveProjectRead(context.Context, Principal, Fi
 		return ResolvedProject{}, r.projectErr
 	}
 	return ResolvedProject{}, nil
+}
+
+// ResolveProjectLogRead refuses independently of ResolveProjectRead, so a test
+// pins which of the two scopes the handler actually checked.
+func (r refusingProjectReader) ResolveProjectLogRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
+	if r.logReadErr != nil {
+		return ResolvedProject{}, r.logReadErr
+	}
+	return ResolvedProject{}, nil
+}
+
+// ResolveProjectLogScope refuses with the same error as ResolveProjectLogRead:
+// the fake stands for a caller the scope resolver turns away outright.
+func (r refusingProjectReader) ResolveProjectLogScope(context.Context, Principal, FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error) {
+	if r.logReadErr != nil {
+		return ResolvedProject{}, nil, r.logReadErr
+	}
+	return ResolvedProject{}, nil, nil
 }
 
 func (r refusingProjectReader) GetMCP(context.Context, Principal, GetMCPInput) (MCP, error) {
@@ -65,7 +84,9 @@ func TestUserSearch_ChargesTheSensitiveBudgetOnlyForServedReads(t *testing.T) {
 	require.Empty(t, connection.keys, "an unauthorized call never reaches the sensitive budget")
 	require.Empty(t, reader.searchParams)
 
-	service.reader = diagnosticsProjectReader{output: ListProjectsOutput{}}
+	// User search is a project:read surface: a missing log:read must not
+	// refuse it.
+	service.reader = refusingProjectReader{diagnosticsProjectReader: diagnosticsProjectReader{output: ListProjectsOutput{}}, projectErr: nil, logReadErr: errors.New("log:read denied"), mcpErr: nil}
 	_, err = service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "", Limit: 0, Cursor: ""})
 	require.NoError(t, err)
 	require.Equal(t, []string{"connection-1"}, connection.keys, "a served page is charged exactly once")

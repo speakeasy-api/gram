@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,23 +53,21 @@ func TestGetChatAnalysisVerdictsByChatIDs(t *testing.T) {
 	rows := []repo.ChatAnalysisScore{newest, newest, superseded, otherJudge, otherOrg}
 	require.NoError(t, ti.chClient.InsertChatAnalysisScores(ctx, rows))
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		got, err := ti.chClient.GetChatAnalysisVerdictsByChatIDs(ctx, repo.GetChatAnalysisVerdictsByChatIDsParams{
-			OrganizationID: ti.orgID,
-			ProjectID:      ti.projectID,
-			Judge:          repo.ChatAnalysisJudgeWorkUnits,
-			ChatIDs:        []string{scoredChatID, unscoredChatID},
-		})
-		require.NoError(c, err)
-		require.Len(c, got, 1)
+	got, err := ti.chClient.GetChatAnalysisVerdictsByChatIDs(ctx, repo.GetChatAnalysisVerdictsByChatIDsParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      ti.projectID,
+		Judge:          repo.ChatAnalysisJudgeWorkUnits,
+		ChatIDs:        []string{scoredChatID, unscoredChatID},
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
 
-		verdict, ok := got[scoredChatID]
-		require.True(c, ok)
-		require.Equal(c, scoredChatID, verdict.ChatID)
-		require.InDelta(c, 42.0, verdict.Score, 1e-9)
-		require.Equal(c, newest.Detail, verdict.Detail)
-		require.WithinDuration(c, now, verdict.ScoredAt, time.Second)
-	}, 10*time.Second, 200*time.Millisecond)
+	verdict, ok := got[scoredChatID]
+	require.True(t, ok)
+	require.Equal(t, scoredChatID, verdict.ChatID)
+	require.InDelta(t, 42.0, verdict.Score, 1e-9)
+	require.Equal(t, newest.Detail, verdict.Detail)
+	require.WithinDuration(t, now, verdict.ScoredAt, time.Second)
 
 	empty, err := ti.chClient.GetChatAnalysisVerdictsByChatIDs(ctx, repo.GetChatAnalysisVerdictsByChatIDsParams{
 		OrganizationID: ti.orgID,

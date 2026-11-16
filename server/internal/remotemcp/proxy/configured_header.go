@@ -3,7 +3,6 @@ package proxy
 import (
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 // IsDeniedPassThroughSource reports whether an inbound header may not be used
@@ -15,11 +14,12 @@ import (
 // without this it could carry that same cookie upstream under any name it
 // likes and walk straight around that decision.
 //
-// Authorization is deliberately absent: forwarding the caller's own upstream
-// credential is what pass-through identity is for.
+// Authorization is denied for the same reason: it may carry the credential
+// the caller authenticated to Speakeasy with. An upstream credential supplied
+// by the caller must arrive in a header of its own.
 func IsDeniedPassThroughSource(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "cookie", "set-cookie", "proxy-authorization":
+	switch headerKey(name) {
+	case "authorization", "cookie", "set-cookie", "proxy-authorization":
 		return true
 	default:
 		return false
@@ -33,6 +33,10 @@ type ConfiguredHeader struct {
 	// IsRequired, when true, causes the proxy to reject the request with a
 	// bad-request error if the header cannot be resolved to a non-empty value.
 	IsRequired bool
+
+	// IsSecret preserves whether the configured value is credential material,
+	// even after decryption. It does not change header resolution.
+	IsSecret bool
 
 	// Name is the HTTP header name to send to the remote MCP server.
 	Name string

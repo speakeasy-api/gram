@@ -29,9 +29,9 @@ func TestProxy_Post_Upstream401_ReplacesWWWAuthenticateWhenSet(t *testing.T) {
 
 	upstream := upstreamRejecting(t, http.StatusUnauthorized)
 	p := newProxyForTest(t, upstream.URL)
-	p.WWWAuthenticate = `Bearer resource_metadata="https://gram.example.com/.well-known/oauth-protected-resource/x/mcp/slug"`
+	p.WWWAuthenticate = `Bearer resource_metadata="https://gram.example.com/.well-known/oauth-protected-resource/mcp/slug"`
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -40,7 +40,7 @@ func TestProxy_Post_Upstream401_ReplacesWWWAuthenticateWhenSet(t *testing.T) {
 
 	require.Equal(t, http.StatusUnauthorized, rr.Code)
 	require.Equal(t,
-		`Bearer resource_metadata="https://gram.example.com/.well-known/oauth-protected-resource/x/mcp/slug"`,
+		`Bearer resource_metadata="https://gram.example.com/.well-known/oauth-protected-resource/mcp/slug"`,
 		rr.Header().Get("WWW-Authenticate"),
 		"relayed 401 must challenge the client with this server's resource metadata, not the upstream's")
 	require.Contains(t, rr.Body.String(), "invalid_token", "upstream body still relays")
@@ -53,7 +53,7 @@ func TestProxy_Post_Upstream403_ReplacesWWWAuthenticateWhenSet(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.WWWAuthenticate = `Bearer resource_metadata="https://gram.example.com/meta"`
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -80,7 +80,7 @@ func TestProxy_Get_UpstreamSSE401_ReplacesWWWAuthenticateWhenSet(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.WWWAuthenticate = `Bearer resource_metadata="https://gram.example.com/meta"`
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rr := httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestProxy_Post_Upstream401_RelaysWWWAuthenticateWhenUnset(t *testing.T) {
 	upstream := upstreamRejecting(t, http.StatusUnauthorized)
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -122,7 +122,7 @@ func TestProxy_Post_Upstream200_DoesNotInjectHeader(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.WWWAuthenticate = `Bearer resource_metadata="https://gram.example.com/meta"`
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 

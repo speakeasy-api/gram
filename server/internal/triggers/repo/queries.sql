@@ -52,6 +52,46 @@ ON CONFLICT (project_id, target_ref)
 DO NOTHING
 RETURNING *;
 
+-- name: CreateSpeakeasySlackTriggerInstance :one
+INSERT INTO trigger_instances (
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status
+) VALUES (
+    @organization_id,
+    @project_id,
+    'speakeasy_slack',
+    @name,
+    NULL,
+    @target_kind,
+    @target_ref,
+    @target_display,
+    @config_json,
+    'active'
+)
+ON CONFLICT (project_id, target_ref)
+  WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE
+DO NOTHING
+RETURNING *;
+
+-- name: GetSpeakeasySlackTriggerInstance :one
+SELECT *
+FROM trigger_instances
+WHERE project_id = @project_id
+  AND definition_slug = 'speakeasy_slack'
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND status = 'active'
+  AND deleted IS FALSE
+LIMIT 1;
+
 -- name: ListTriggerInstances :many
 SELECT *
 FROM trigger_instances ti
@@ -268,3 +308,12 @@ WHERE project_id = @project_id
   AND target_ref = @target_ref
   AND correlation_id = @correlation_id
   AND deleted IS FALSE;
+
+-- name: GetWakeWorkloadSession :one
+-- Recheck the authenticated session inside the wake transaction.
+SELECT id
+FROM user_sessions
+WHERE jti = @jti AND subject_urn = @subject_urn
+  AND organization_id = @organization_id
+  AND (project_id = @project_id OR project_id IS NULL)
+  AND deleted IS FALSE AND expires_at > clock_timestamp();

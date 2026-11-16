@@ -45,7 +45,6 @@ func mintFor(t *testing.T, issuer *principalcredential.Issuer, project uuid.UUID
 	raw, _, err := issuer.Mint(principalcredential.Credential{
 		OrganizationID: "org-test", ProjectID: project, AuthorizerUserID: authorizer,
 		Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()),
-		Grants:    []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, uuid.NewString())},
 	})
 	require.NoError(t, err)
 	return raw
@@ -63,6 +62,8 @@ func TestAuthenticateRechecksTheAuthorizer(t *testing.T) {
 	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
 	require.True(t, ok)
 	require.Equal(t, "user-1", credential.AuthorizerUserID)
+	require.True(t, credential.DerivesPolicyAtAdmission, "admission derives the credential's policy")
+	require.Empty(t, credential.DelegatedGrants)
 
 	require.NoError(t, orgrepo.New(db).DeleteOrganizationUserRelationship(t.Context(), orgrepo.DeleteOrganizationUserRelationshipParams{OrganizationID: "org-test", UserID: pgtype.Text{String: "user-2", Valid: true}}))
 	_, err = issuer.Authenticate(t.Context(), mintFor(t, issuer, project, "user-2"))

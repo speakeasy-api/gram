@@ -1,18 +1,20 @@
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useOrganization } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
-import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
+import { Page } from "@/components/page-layout";
+import { Icon } from "@/components/ui/Icon";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Card } from "@/components/ui/Card";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
-import { Plugin } from "@gram/client/models/components/plugin.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,
@@ -39,6 +41,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
+import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
@@ -73,7 +76,7 @@ export default function Plugins(): JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
   const canWritePlugin = usePluginWriteAccess();
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
   return hasScope("org:admin", organization.id) ? (
     <PluginsWithMarketplaceSettings />
@@ -100,6 +103,7 @@ function PluginsContent({
   >["data"];
 }): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createAutoSyncEnabled, setCreateAutoSyncEnabled] = useState(true);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
     useState(false);
@@ -222,10 +226,26 @@ function PluginsContent({
         createPluginForm: {
           name,
           description: description || undefined,
+          autoSyncEnabled: createAutoSyncEnabled,
         },
       },
     });
   };
+
+  const openCreateDialog = () => {
+    setCreateAutoSyncEnabled(true);
+    setIsCreateDialogOpen(true);
+  };
+
+  // Plugins whose auto sync is off only publish their changes on a manual
+  // sync, so the marketplace card says so.
+  const pausedPluginNames = useMemo(
+    () =>
+      (data?.plugins ?? [])
+        .filter((plugin) => plugin.autoSyncEnabled === false)
+        .map((plugin) => plugin.name),
+    [data?.plugins],
+  );
 
   // Destructure mutate so the dep array references the stable function
   // directly (TanStack Query keeps mutate referentially stable, but the
@@ -370,18 +390,11 @@ function PluginsContent({
     );
   };
 
-  const createCard = canWritePlugin ? (
-    <CreateResourceCard
-      title="New Plugin"
-      description="Bundle MCP servers and hooks for distribution to supported coding agents."
-      onClick={() => setIsCreateDialogOpen(true)}
-    />
-  ) : null;
-
   return (
     <>
       <ResourceListPage
         title="Plugins"
+        bodyClassName="-mt-6"
         description={
           <span className={hasPlugins ? "block w-3/4" : undefined}>
             Create distributable plugin bundles that package MCP servers and
@@ -389,23 +402,16 @@ function PluginsContent({
             supported agent marketplaces via GitHub.
           </span>
         }
-        hideToolbar={!hasPlugins}
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: "Search plugins",
-        }}
-        filters={{
-          schema: PLUGINS_FILTERS,
-          values: pluginFilters.values,
-          optionsById: pluginFilterOptions,
-          onChange: pluginFilters.setValue as (
-            id: string,
-            value: FilterValue,
-          ) => void,
-          onClear: pluginFilters.clearValue as (id: string) => void,
-          onClearAll: pluginFilters.clearAll,
-        }}
+        primaryAction={
+          canWritePlugin ? (
+            <Button onClick={openCreateDialog}>
+              <Button.LeftIcon>
+                <Icon name="plus" />
+              </Button.LeftIcon>
+              <Button.Text>Create plugin</Button.Text>
+            </Button>
+          ) : undefined
+        }
       >
         <Stack direction="vertical" gap={8}>
           {canManageMarketplace &&
@@ -431,7 +437,6 @@ function PluginsContent({
                       marketplaceSettings.observabilityEnabled
                     }
                   />
-                  <div className="border-border border-t" />
                 </>
               ) : (
                 <>
@@ -454,8 +459,8 @@ function PluginsContent({
                     observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
                     }
+                    pausedPluginNames={pausedPluginNames}
                   />
-                  <div className="border-border border-t" />
                 </>
               )
             ) : (
@@ -476,9 +481,30 @@ function PluginsContent({
                     marketplaceSettings.observabilityEnabled
                   }
                 />
-                <div className="border-border border-t" />
               </>
             ))}
+          {hasPlugins && (
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search plugins"
+              />
+              <Page.Toolbar.Filters
+                schema={PLUGINS_FILTERS}
+                values={pluginFilters.values}
+                optionsById={pluginFilterOptions}
+                onChange={
+                  pluginFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={pluginFilters.clearValue as (id: string) => void}
+                onClearAll={pluginFilters.clearAll}
+              />
+            </Page.Toolbar>
+          )}
           <Text small muted>
             The default plugin is where all newly created MCP servers will be
             automatically published to. If you have the default plugin installed
@@ -499,7 +525,6 @@ function PluginsContent({
             plugins={filteredPlugins}
             publishStatus={canManageMarketplace ? publishStatus : undefined}
             searchQuery={hasPlugins ? search : ""}
-            createCard={createCard}
           />
           {canManageMarketplace && (
             <>
@@ -547,6 +572,22 @@ function PluginsContent({
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
             <InputField label="Name" name="name" required autoFocus />
             <InputField label="Description" name="description" />
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label id="create-plugin-auto-sync-label">
+                  Sync changes automatically
+                </Label>
+                <Text small muted>
+                  When off, the plugin reaches your marketplace only when
+                  someone clicks Sync changes.
+                </Text>
+              </div>
+              <Switch
+                aria-labelledby="create-plugin-auto-sync-label"
+                checked={createAutoSyncEnabled}
+                onCheckedChange={setCreateAutoSyncEnabled}
+              />
+            </div>
             <Dialog.Footer>
               <Button
                 variant="secondary"
@@ -698,7 +739,7 @@ function ObservabilityPluginCard({
       : undefined;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -828,7 +869,7 @@ function ObservabilityPluginCard({
         open={isInstallSheetOpen}
         onOpenChange={setIsInstallSheetOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 
@@ -851,7 +892,7 @@ function PlatformMCPPluginCard(): JSX.Element | null {
   if (!hasScope("org:admin")) return null;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Network className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -885,7 +926,7 @@ function PlatformMCPPluginCard(): JSX.Element | null {
         setupOpen={installOpen}
         onSetupOpenChange={setInstallOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 
@@ -893,12 +934,10 @@ function PluginGrid({
   plugins,
   publishStatus,
   searchQuery,
-  createCard,
 }: {
   plugins: Plugin[];
   publishStatus: PublishStatusResult | undefined;
   searchQuery: string;
-  createCard: React.ReactNode;
 }) {
   if (plugins.length === 0) {
     return (
@@ -906,9 +945,6 @@ function PluginGrid({
         {searchQuery ? (
           <Text muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Text>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {createCard}
-        </div>
       </div>
     );
   }
@@ -922,7 +958,6 @@ function PluginGrid({
           publishStatus={publishStatus}
         />
       ))}
-      {createCard}
     </div>
   );
 }

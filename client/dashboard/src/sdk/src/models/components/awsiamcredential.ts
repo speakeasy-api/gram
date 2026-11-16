@@ -5,23 +5,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
  * The cloud provider of the credential.
  */
-export const AwsIamCredentialProvider = {
+export const Provider = {
   AwsIam: "aws_iam",
   GcpIam: "gcp_iam",
 } as const;
 /**
  * The cloud provider of the credential.
  */
-export type AwsIamCredentialProvider = ClosedEnum<
-  typeof AwsIamCredentialProvider
->;
+export type Provider = OpenEnum<typeof Provider>;
 
 /**
  * An AWS IAM external credential.
@@ -62,7 +61,7 @@ export type AwsIamCredential = {
   /**
    * The cloud provider of the credential.
    */
-  provider: AwsIamCredentialProvider;
+  provider: Provider;
   /**
    * Optional STS region override.
    */
@@ -74,9 +73,8 @@ export type AwsIamCredential = {
 };
 
 /** @internal */
-export const AwsIamCredentialProvider$inboundSchema: z.ZodMiniEnum<
-  typeof AwsIamCredentialProvider
-> = z.enum(AwsIamCredentialProvider);
+export const Provider$inboundSchema: z.ZodMiniType<Provider, unknown> =
+  openEnums.inboundSchema(Provider);
 
 /** @internal */
 export const AwsIamCredential$inboundSchema: z.ZodMiniType<
@@ -95,7 +93,7 @@ export const AwsIamCredential$inboundSchema: z.ZodMiniType<
     oidc_audience: z.optional(z.string()),
     oidc_subject: z.optional(z.string()),
     organization_id: z.string(),
-    provider: AwsIamCredentialProvider$inboundSchema,
+    provider: Provider$inboundSchema,
     sts_region: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

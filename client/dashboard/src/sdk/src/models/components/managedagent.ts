@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -22,9 +23,13 @@ export const Lifecycle = {
   Suspended: "suspended",
   Revoked: "revoked",
 } as const;
-export type Lifecycle = ClosedEnum<typeof Lifecycle>;
+export type Lifecycle = OpenEnum<typeof Lifecycle>;
 
 export type ManagedAgent = {
+  /**
+   * An assigned connection has expired or is no longer available; an authorized editor must reconnect their own account and assign it again
+   */
+  connectionNeedsRefresh?: boolean | undefined;
   createdAt: Date;
   id: string;
   lifecycle: Lifecycle;
@@ -48,14 +53,14 @@ export type ManagedAgent = {
 };
 
 /** @internal */
-export const Lifecycle$inboundSchema: z.ZodMiniEnum<typeof Lifecycle> = z.enum(
-  Lifecycle,
-);
+export const Lifecycle$inboundSchema: z.ZodMiniType<Lifecycle, unknown> =
+  openEnums.inboundSchema(Lifecycle);
 
 /** @internal */
 export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
   z.pipe(
     z.object({
+      connection_needs_refresh: z.optional(z.boolean()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -78,6 +83,7 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "connection_needs_refresh": "connectionNeedsRefresh",
         "created_at": "createdAt",
         "owner_profile": "ownerProfile",
         "owner_reassignment_reason": "ownerReassignmentReason",

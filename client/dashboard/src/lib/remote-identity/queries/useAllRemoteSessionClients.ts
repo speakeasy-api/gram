@@ -23,8 +23,11 @@ export function useAllRemoteSessionClients(
 ): {
   items: RemoteSessionClient[];
   isLoading: boolean;
+  /** Within isLoading: the whole list is on hand and being checked again. */
+  isRefreshing: boolean;
   isError: boolean;
   error: Error | null;
+  refetch: () => void;
 } {
   const query = useRemoteSessionClientsInfinite(filters, undefined, {
     enabled: options?.enabled,
@@ -47,6 +50,14 @@ export function useAllRemoteSessionClients(
   // background refetch can otherwise expose cached pages as complete and let a
   // consumer make decisions from a stale partial list.
   const isLoading = query.isFetching || hasNextPage;
+  const isRefreshing = query.isFetching && !!query.data && !hasNextPage;
 
-  return { items, isLoading, isError: query.isError, error: query.error };
+  return {
+    items,
+    isLoading,
+    isRefreshing,
+    isError: query.isError,
+    error: query.error,
+    refetch: () => void query.refetch(),
+  };
 }

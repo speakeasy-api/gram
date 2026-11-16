@@ -4,8 +4,6 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { useCallback } from "react";
 
 import {
   cancelOrganizationFetches,
@@ -13,7 +11,6 @@ import {
   invalidateOrganizationActivity,
   invalidateOrganizationDetails,
   invalidateOrganizationStats,
-  organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import {
@@ -40,24 +37,6 @@ import type { StartTrialRequestBody } from "@gram/admin-client/models/components
 // is a component, and a file that mixes a hook with components loses fast
 // refresh, so it sits in `PeekTrigger.tsx` instead. The controls these hooks
 // drive sit in `OrganizationActions.tsx` for the same reason.
-export function useOpenOrganization(): (org: AdminOrganization) => void {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-
-  return useCallback(
-    (org: AdminOrganization) => {
-      const idOrSlug = org.slug || org.id;
-      // The row already holds the whole record, so the detail page paints from
-      // it on the first frame instead of showing a spinner. The detail query
-      // still refetches behind that: the snapshot is stale the moment it
-      // lands, and an admin reading a stale record is worse than one request.
-      qc.setQueryData(organizationQuery(idOrSlug).queryKey, org);
-      void navigate({ to: "/organizations/$idOrSlug", params: { idOrSlug } });
-    },
-    [navigate, qc],
-  );
-}
-
 // The two states the server will extend. Everything else is refused there:
 // converted, demoted and expired are all rejected with a conflict, and an
 // organization with no trial has no end date to add days to. Offering the

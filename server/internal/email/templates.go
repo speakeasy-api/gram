@@ -38,6 +38,7 @@ const (
 	TemplateKeyAccessPaused              TemplateKey = "access_paused"
 	TemplateKeyPaygActivated             TemplateKey = "payg_activated"
 	TemplateKeySetupTaskAssignment       TemplateKey = "setup_task_assignment"
+	TemplateKeyDirectoryReviewPending    TemplateKey = "directory_review_pending"
 )
 
 var (
@@ -119,9 +120,10 @@ var RegisteredTemplates = []Template{
 	OpenRouterInternalCreditsThreshold{OrganizationName: "", ThresholdPercent: "", Exhausted: false},
 	CustomDomainUnhealthy{Email: "", Domain: "", IssueMessage: "", DomainLink: ""},
 	WeeklyUsageSummary{OrganizationName: "", CycleEndDate: "", DaysRemaining: "", UsageThroughDate: "", StorageTokens: "", StorageChangePercent: "", ScanningTokens: "", ScanningChangePercent: "", EgressGib: "", EgressChangePercent: "", ShowEstimatedSpend: "", StorageCostUSD: "", ScanningCostUSD: "", EgressCostUSD: "", TotalCostUSD: "", ViewUsageURL: ""},
-	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: ""},
+	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: "", PermissionLabel: "", PermissionScope: "", PermissionDescription: ""},
 	TrialEndingSoon{OrganizationName: "", TrialEndDate: "", ActionURL: ""},
 	AccessPaused{OrganizationName: "", ActionURL: ""},
 	PaygActivated{OrganizationName: "", TumPricePerMillionUsd: "", ActionURL: ""},
 	SetupTaskAssignment{AssignerName: "", OrganizationName: "", TaskTitle: "", TaskDescription: "", SetupLink: ""},
+	DirectoryReviewPending{OrganizationName: "", Summary: "", NewGroupCount: "", NewAttributeValueCount: "", SourceMissingCount: "", ReviewURL: "", IsReminder: ""},
 }

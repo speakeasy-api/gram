@@ -48,10 +48,12 @@ scratch/
 /local/lake
 /local/lgtm
 /local/ssl
+/local/netingress
 /local/keys
 /local/functions
 /local/devidp
 /agents/runner/target
+/agents/code-runner/target
 /agents/runtime-artifacts
 .speakeasy/temp
 /app_getgram_ai.env

@@ -114,11 +114,9 @@ func newBasicConnection(t *testing.T, ctx context.Context) *basicConnection {
 func basicFakes() *okta.FakeFactory {
 	return okta.NewFakeFactory(map[string]okta.Fixtures{
 		basicOrgURL: {
-			Users:         nil,
 			Apps:          []okta.App{{ID: "0oaappa0000000000001", Label: "Notion MCP", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}}},
 			AppUsers:      nil,
 			AppGroups:     nil,
-			Groups:        nil,
 			GrantedScopes: []string{"okta.apps.read"},
 		},
 	})

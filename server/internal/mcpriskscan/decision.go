@@ -20,6 +20,17 @@ type Decision struct {
 	Description   string
 	UserMessage   string
 	Indeterminate bool
+
+	// ApprovalToken is set when a require_approval policy holds the call. The
+	// deny is then an instruction to the agent, not a refusal: seams that can
+	// return a tool result return UserMessage as an isError result so the agent
+	// requests approval and retries.
+	ApprovalToken string
+}
+
+// HeldForApproval reports whether the call is denied pending approval.
+func (d Decision) HeldForApproval() bool {
+	return d.Denied() && d.ApprovalToken != ""
 }
 
 // Allow returns a clean allow decision.
@@ -32,6 +43,7 @@ func Allow() Decision {
 		Description:   "",
 		UserMessage:   "",
 		Indeterminate: false,
+		ApprovalToken: "",
 	}
 }
 

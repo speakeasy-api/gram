@@ -15,12 +15,14 @@ export type ProjectGuideEventCard = {
 export const PROJECT_GUIDE_OUTPUT_LIMIT = 18;
 export const LISTEN_TIMEOUT_SECONDS = 90;
 export const PROJECT_GUIDE_MICRO_STEP_DELAY_MS = 3000;
+export const MCP_SETUP_CONFIRMATION_DELAY_MS = 2000;
 
 export type ProjectGuideDisplayState =
   | "opening"
   | "ready"
   | "running"
   | "preparing"
+  | "confirming"
   | "checkpoint"
   | "waiting"
   | "paused"
@@ -454,12 +456,21 @@ export const projectGuideMachine = setup({
     ),
     recordMcpServerSelected: assign(({ context, event }) => {
       if (event.type !== "SELECT_MCP_SERVER") return {};
-      return appendOutput(context, [
+      return appendOutput(
         {
-          kind: "note",
-          message: `${event.name} selected. Ready to start the journey`,
+          ...context,
+          output: context.output.filter(
+            (entry) =>
+              !entry.message.endsWith(" selected. Ready to start the journey"),
+          ),
         },
-      ]);
+        [
+          {
+            kind: "note",
+            message: `${event.name} selected. Ready to start the journey`,
+          },
+        ],
+      );
     }),
     recordStart: assign(({ context }) => {
       const mode = stepMode(context);
@@ -491,6 +502,29 @@ export const projectGuideMachine = setup({
             : Math.min(1, Math.max(0, progress)),
       };
     }),
+    recordMcpSetupConfirmation: assign(({ context, event }) => {
+      if (event.type !== "ADAPTER_REPORT" || event.report.type !== "success")
+        return {};
+      return {
+        ...appendOutput(context, [
+          { kind: "result", message: event.report.result },
+        ]),
+        operationProgress: 1,
+      };
+    }),
+    advanceMcpSetup: assign(({ context }) => ({
+      completedByPath: { ...context.completedByPath, "third-party-mcp": [0] },
+      ...appendOutput(context, [
+        {
+          kind: "next",
+          message: `Next · ${narrativeStepLabel("third-party-mcp", 1)}`,
+        },
+      ]),
+      elapsedListeningSeconds: 0,
+      operationProgress: null,
+      error: null,
+      attempt: 0,
+    })),
     recordSuccessAndAdvance: assign(({ context, event }) => {
       let result: string;
       if (event.type === "ADAPTER_REPORT" && event.report.type === "success") {
@@ -790,8 +824,8 @@ export const projectGuideMachine = setup({
         ADAPTER_REPORT: [
           {
             guard: "currentSuccessReport",
-            target: "checkpoint",
-            actions: "recordSuccessAndAdvance",
+            target: "confirming",
+            actions: "recordMcpSetupConfirmation",
           },
           {
             guard: "currentErrorReport",
@@ -799,6 +833,14 @@ export const projectGuideMachine = setup({
             actions: ["rememberPreparingError", "recordError"],
           },
         ],
+      },
+    },
+    confirming: {
+      after: {
+        [MCP_SETUP_CONFIRMATION_DELAY_MS]: {
+          target: "checkpoint",
+          actions: "advanceMcpSetup",
+        },
       },
     },
     checkpoint: {

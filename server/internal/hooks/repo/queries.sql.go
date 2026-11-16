@@ -526,6 +526,91 @@ func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlo
 	return err
 }
 
+const linkChatActingAgent = `-- name: LinkChatActingAgent :execrows
+UPDATE chats
+SET agent_id = $1
+  , updated_at = NOW()
+WHERE chats.id = $2
+  AND chats.project_id = $3
+  AND chats.agent_id IS NULL
+  AND chats.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM agents a
+    WHERE a.id = $1
+      AND a.organization_id = chats.organization_id
+      AND a.deleted IS FALSE
+  )
+`
+
+type LinkChatActingAgentParams struct {
+	AgentID   uuid.NullUUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Records the Speakeasy agent principal that produced a captured session, so a
+// session list can name the agent that made the calls. A channel session has no
+// assistant record, and agent-actor capture deliberately blanks the human
+// identity columns, so without this the acting agent is invisible.
+//
+// Fill-once, like the user_accounts link above: a chat row is created on the
+// session's first persisted message and reused for every later delivery, so
+// stamping only at creation would leave every chat created before this landed
+// unattributed forever. Never overwrites an agent an earlier delivery set, so a
+// later caller cannot reassign an existing session to a different agent.
+//
+// The agent id arrives from the server-stamped authenticated actor, never from
+// client input, and the EXISTS guard resolves it against a live agent row in the
+// chat's own organization at write time. chats.agent_id carries no foreign key
+// (agents is declared after chats), so this guard is what keeps the column from
+// naming a deleted agent or one belonging to another tenant.
+func (q *Queries) LinkChatActingAgent(ctx context.Context, arg LinkChatActingAgentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatActingAgent, arg.AgentID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const linkChatOwner = `-- name: LinkChatOwner :execrows
+UPDATE chats
+SET user_id = $1
+  , external_user_id = $2
+  , updated_at = NOW()
+WHERE id = $3
+  AND project_id = $4
+  AND COALESCE(user_id, '') = ''
+  AND COALESCE(external_user_id, '') = ''
+  AND agent_id IS NULL
+  AND deleted IS FALSE
+`
+
+type LinkChatOwnerParams struct {
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Backfills the human owner of a session whose chat row was created before the
+// session's identity was known: a shared plugin key with no self-reported email
+// creates the chat ownerless when its first prompt beats the first OTEL export.
+// Fill-once and only for a chat with no owner at all, so it never replaces an
+// identity chat creation recorded, and never names a person on a session an
+// agent key produced.
+func (q *Queries) LinkChatOwner(ctx context.Context, arg LinkChatOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatOwner,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
 UPDATE chats
 SET user_account_id = $1
@@ -554,6 +639,43 @@ func (q *Queries) LinkChatUserAccount(ctx context.Context, arg LinkChatUserAccou
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listChatExternalMessageIDs = `-- name: ListChatExternalMessageIDs :many
+SELECT external_message_id::text
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2
+  AND external_message_id = ANY($3::text[])
+`
+
+type ListChatExternalMessageIDsParams struct {
+	ChatID             uuid.UUID
+	ProjectID          uuid.NullUUID
+	ExternalMessageIds []string
+}
+
+// Which of these external message ids the chat already holds. The Claude
+// transcript upload uses it to tell the prompts it stores for the first time
+// from those a per-event hook stored before it.
+func (q *Queries) ListChatExternalMessageIDs(ctx context.Context, arg ListChatExternalMessageIDsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listChatExternalMessageIDs, arg.ChatID, arg.ProjectID, arg.ExternalMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var external_message_id string
+		if err := rows.Scan(&external_message_id); err != nil {
+			return nil, err
+		}
+		items = append(items, external_message_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many

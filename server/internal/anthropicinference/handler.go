@@ -74,6 +74,8 @@ func (w verdictTimeoutWriter) WriteHeader(status int) {
 
 // Attach mounts the webhook once. Configuration changes take effect on the next request.
 func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, resolver ConfigResolver) {
+	logger = logger.With(attr.SlogComponent("anthropic-inference"))
+
 	endpoint := http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		config, err := resolver.Resolve(r.Context(), mux.Vars(r)["id"])
 		if err != nil {
@@ -119,7 +121,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// is acknowledged. It never reaches transcript storage or policy evaluation.
 	if len(h.keys) == 0 {
 		var probe Frame
-		if json.Unmarshal(body, &probe) == nil && probe.Type == "prompt" && probe.Source.Application == "config-test" {
+		if json.Unmarshal(body, &probe) == nil && probe.Type == frameTypePrompt && probe.Source.Application == "config-test" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"action":"allow"}`))
 			return
@@ -140,18 +142,23 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "webhook identity mismatch", http.StatusForbidden)
 		return
 	}
-	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
-	if frame.Type == "prompt" {
+	verdict := allowVerdict()
+	if frame.Type == frameTypePrompt || frame.Type == frameTypeToolCall {
 		verdict, err = h.processor.Process(r.Context(), h.config, frame)
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, context.Canceled) && errors.Is(r.Context().Err(), context.Canceled):
+			h.logger.ErrorContext(r.Context(), "Anthropic closed the inference hook before a verdict", attr.SlogError(err))
+			return
+		default:
 			h.logger.ErrorContext(r.Context(), "process Anthropic inference hook", attr.SlogError(err))
 			// A failed evaluation must not silently allow inference, including when
 			// Anthropic's administrator selected allow-on-webhook-failure.
-			verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
+			verdict = denyVerdict(unavailableDenyReason)
 		}
 	}
 	if verdict.Action != "allow" && verdict.Action != "deny" {
-		verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
+		verdict = denyVerdict(unavailableDenyReason)
 	}
 	verdict.DenyReason = string([]rune(verdict.DenyReason)[:min(len([]rune(verdict.DenyReason)), 500)])
 	w.Header().Set("Content-Type", "application/json")

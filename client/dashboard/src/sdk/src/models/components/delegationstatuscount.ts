@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -25,7 +26,7 @@ export const DelegationStatusCountStatus = {
 /**
  * Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.
  */
-export type DelegationStatusCountStatus = ClosedEnum<
+export type DelegationStatusCountStatus = OpenEnum<
   typeof DelegationStatusCountStatus
 >;
 
@@ -56,9 +57,10 @@ export type DelegationStatusCount = {
 };
 
 /** @internal */
-export const DelegationStatusCountStatus$inboundSchema: z.ZodMiniEnum<
-  typeof DelegationStatusCountStatus
-> = z.enum(DelegationStatusCountStatus);
+export const DelegationStatusCountStatus$inboundSchema: z.ZodMiniType<
+  DelegationStatusCountStatus,
+  unknown
+> = openEnums.inboundSchema(DelegationStatusCountStatus);
 
 /** @internal */
 export const DelegationStatusCount$inboundSchema: z.ZodMiniType<

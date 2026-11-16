@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ElementsConfig } from "@/elements/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

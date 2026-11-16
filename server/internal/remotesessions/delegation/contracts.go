@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 // Provider exposes only binding and policy facts, never registration secrets.
@@ -60,6 +62,11 @@ type Dependencies struct {
 	LoadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	LoadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	RefreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+
+	// Connections records renewal outcomes; nil records nothing.
+	Connections *mcpconnectionattempts.Recorder
+	// RefreshPaused reports that the provider recently rejected the client itself.
+	RefreshPaused func(context.Context, Provider) bool
 }
 
 type RefreshFailure string
@@ -68,11 +75,22 @@ const (
 	RefreshAmbiguous       RefreshFailure = "ambiguous"
 	RefreshInvalidGrant    RefreshFailure = "invalid_grant"
 	RefreshConfiguration   RefreshFailure = "configuration"
+	RefreshClientRejected  RefreshFailure = "client_rejected"
+	RefreshSetup           RefreshFailure = "setup"
 	RefreshInvalidIdentity RefreshFailure = "invalid_identity"
 	RefreshRetryable       RefreshFailure = "retryable"
+	// RefreshSetupRetryable is a transient fault before the request was sent.
+	RefreshSetupRetryable RefreshFailure = "setup_retryable"
 )
 
 // RefreshError carries a classified outcome only, never upstream payloads.
-type RefreshError struct{ Kind RefreshFailure }
+type RefreshError struct {
+	Kind RefreshFailure
+	// SigningFailure changes outcome ownership, never retry or claim semantics.
+	SigningFailure bool
+
+	// RetryAfter is how long the provider asked to wait, zero when it didn't say.
+	RetryAfter time.Duration
+}
 
 func (e *RefreshError) Error() string { return "delegation refresh failed" }

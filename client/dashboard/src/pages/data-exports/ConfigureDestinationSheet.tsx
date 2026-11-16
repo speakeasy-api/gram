@@ -211,7 +211,7 @@ export function ConfigureDestinationSheet({
                     />
                   </div>
                   {field.state.value ? (
-                    <Alert variant="warning" alignTop>
+                    <Alert variant="warning">
                       This export may contain customer data.
                     </Alert>
                   ) : null}

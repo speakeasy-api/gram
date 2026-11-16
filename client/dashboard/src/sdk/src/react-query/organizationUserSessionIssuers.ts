@@ -30,6 +30,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListOrganizationUserSessionIssuersRequest,
   ListOrganizationUserSessionIssuersSecurity,
+  QueryParamTier,
 } from "../models/operations/listorganizationusersessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -77,7 +78,7 @@ export type OrganizationUserSessionIssuersQueryError =
  * listIssuers organizationUserSessionIssuers
  *
  * @remarks
- * List organization-owned user_session_issuers. Requires org:read.
+ * List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.
  */
 export function useOrganizationUserSessionIssuers(
   request?: ListOrganizationUserSessionIssuersRequest | undefined,
@@ -106,7 +107,7 @@ export function useOrganizationUserSessionIssuers(
  * listIssuers organizationUserSessionIssuers
  *
  * @remarks
- * List organization-owned user_session_issuers. Requires org:read.
+ * List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.
  */
 export function useOrganizationUserSessionIssuersSuspense(
   request?: ListOrganizationUserSessionIssuersRequest | undefined,
@@ -135,7 +136,7 @@ export function useOrganizationUserSessionIssuersSuspense(
  * listIssuers organizationUserSessionIssuers
  *
  * @remarks
- * List organization-owned user_session_issuers. Requires org:read.
+ * List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.
  */
 export function useOrganizationUserSessionIssuersInfinite(
   request?: ListOrganizationUserSessionIssuersRequest | undefined,
@@ -178,7 +179,7 @@ export function useOrganizationUserSessionIssuersInfinite(
  * listIssuers organizationUserSessionIssuers
  *
  * @remarks
- * List organization-owned user_session_issuers. Requires org:read.
+ * List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.
  */
 export function useOrganizationUserSessionIssuersInfiniteSuspense(
   request?: ListOrganizationUserSessionIssuersRequest | undefined,
@@ -223,6 +224,7 @@ export function setOrganizationUserSessionIssuersData(
     parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      tier?: QueryParamTier | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -242,6 +244,7 @@ export function invalidateOrganizationUserSessionIssuers(
     [parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      tier?: QueryParamTier | undefined;
       gramSession?: string | undefined;
     }]
   >,

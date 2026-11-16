@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FC } from "react";
+import type { FC } from "react";
+import type { TooltipContentProps, ScatterShapeProps } from "recharts";
 import {
   ScatterChart as RechartsScatterChart,
   Scatter,
@@ -12,8 +13,6 @@ import {
   ResponsiveContainer,
   ZAxis,
   Symbols,
-  TooltipContentProps,
-  ScatterShapeProps,
 } from "recharts";
 
 interface ScatterDataPoint {

@@ -107,7 +107,43 @@ func TestCreateServer_ListAndGet(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestCreateServer_RejectsBlockedHost(t *testing.T) {
+// Clients reach unproxied servers directly, so hosts that only resolve or
+// route inside the client's network must be accepted.
+func TestCreateServer_AcceptsPrivateNetworkHosts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{name: "tailnet name", url: "https://mcp.tailnet-0000.ts.net/mcp"},
+		{name: "unresolvable name", url: "https://mcp.internal.invalid/mcp"},
+		{name: "shared address space ip", url: "http://100.64.0.10:8080/mcp"},
+		{name: "private ip", url: "http://10.0.0.1/mcp"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			ctx = withStaffEmail(t, ctx)
+
+			server, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+				Name:             nil,
+				URL:              tc.url,
+				Description:      nil,
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.url, server.URL)
+		})
+	}
+}
+
+func TestCreateServer_RejectsMissingHost(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -118,7 +154,24 @@ func TestCreateServer_RejectsBlockedHost(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		Name:             nil,
-		URL:              "https://" + blockedTestHost + "/mcp",
+		URL:              "https:///mcp",
+		Description:      nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestCreateServer_RejectsCredentialsInURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withStaffEmail(t, ctx)
+
+	_, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             nil,
+		URL:              "https://user:secret@vendor.example.com/mcp",
 		Description:      nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)

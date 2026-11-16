@@ -33,9 +33,11 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 				ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 				ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 					OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
-					McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 				})
 				require.NoError(t, err)
+				if kind == "toolset" {
+					createCanonicalWrapper(t, conn, ts, "example-tools-endpoint", "private")
+				}
 				payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 				targetID := ts.ID
 				if kind == "toolset" {
@@ -58,9 +60,11 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 				if mutation == "update" {
 					live, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 						OrganizationID: "org-test", ProjectID: projectID, Name: "Live tools", Slug: "live-tools",
-						McpSlug: pgtype.Text{String: "live-tools-endpoint", Valid: true}, McpEnabled: true,
 					})
 					require.NoError(t, err)
+					if kind == "toolset" {
+						createCanonicalWrapper(t, conn, live, "live-tools-endpoint", "private")
+					}
 					original := &gen.CreateAssistantPayload{Name: "Original", Model: payload.Model}
 					if kind == "toolset" {
 						original.Toolsets = []*types.AssistantToolsetRef{{ToolsetSlug: live.Slug}}
@@ -130,15 +134,12 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 					require.NoError(t, err)
 					require.Len(t, listed.Assistants, 1)
 					require.Equal(t, "Original", listed.Assistants[0].Name)
+					require.EqualValues(t, 1, counts)
 					if kind == "toolset" {
-						require.EqualValues(t, 1, counts.Toolsets)
-						require.Zero(t, counts.McpServers)
 						require.Len(t, listed.Assistants[0].Toolsets, 1)
 						require.Equal(t, "live-tools", listed.Assistants[0].Toolsets[0].ToolsetSlug)
 						require.Empty(t, listed.Assistants[0].McpServers)
 					} else {
-						require.Zero(t, counts.Toolsets)
-						require.EqualValues(t, 1, counts.McpServers)
 						require.Empty(t, listed.Assistants[0].Toolsets)
 						require.Len(t, listed.Assistants[0].McpServers, 1)
 						require.Equal(t, "live-server", listed.Assistants[0].McpServers[0].McpServerSlug)
@@ -162,9 +163,9 @@ func TestServiceMixedAttachmentsConcurrentMCPBackendUpdate(t *testing.T) {
 	require.NoError(t, err)
 	target, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "Target tools", Slug: "target-tools",
-		McpSlug: pgtype.Text{String: "target-tools-endpoint", Valid: true}, McpEnabled: true,
 	})
 	require.NoError(t, err)
+	createCanonicalWrapper(t, conn, target, "target-tools-endpoint", "private")
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{String: "Example server", Valid: true},
 		Slug:      pgtype.Text{String: "example-server", Valid: true},

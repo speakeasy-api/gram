@@ -1,6 +1,6 @@
 ---
 name: benchmarking-prompt-injection
-description: Use when changing or reviewing prompt-injection detection in server/internal/scanners/promptinjection, server/cmd/risk-pi-report, the prompt_injection fixtures, server/internal/judgemessage, GetJudgeMessageWindow in server/internal/risk/queries.sql, trajectory building in server/internal/background/activities/risk_analysis, or server/internal/hooks skill-upload handling. Triggers: "prompt injection", "Jev", "confirmer", "risk:pi", "false positive", "recall", "relabel".
+description: Use when changing or reviewing the prompt-injection detector's prompts or model selection, or when explicitly asked to run, investigate, or maintain its risk:pi benchmark, results, or fixtures. Do not activate for hook or upload handling, attachment ingestion, policy enforcement, evidence assembly, or other changes that leave detector prompts and models unchanged unless the task explicitly concerns the benchmark.
 ---
 
 # Benchmarking prompt-injection changes

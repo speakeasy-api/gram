@@ -51,7 +51,15 @@ func (t *slackTool) Descriptor() core.ToolDescriptor {
 	return t.descriptor
 }
 
+// Call runs the tool with the Slack token from the server's environment. A
+// failure that configuration causes says what is missing and who can fix it.
 func (t *slackTool) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+	return configError(t.call(ctx, env, payload, wr))
+}
+
+// call runs the tool without Call's configuration advice, for callers whose
+// token does not come from the server's environment.
+func (t *slackTool) call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	if t.client == nil {
 		return fmt.Errorf("slack client not configured")
 	}

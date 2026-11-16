@@ -40,7 +40,7 @@ func ApplyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID 
 	// Match normal role delivery lock ordering: project admission, then plugins.
 	pluginIDs := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
-		pluginIDs = append(pluginIDs, row.PluginServer.PluginID)
+		pluginIDs = append(pluginIDs, row.PluginID)
 	}
 	pluginIDs = sortedCleanupIDs(pluginIDs)
 	for _, pluginID := range pluginIDs {
@@ -65,25 +65,24 @@ func ApplyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID 
 		if !row.AutomaticProvenance {
 			continue
 		}
-		membership := row.PluginServer
-		platform, err := ContainsPlatformTools(ctx, tx, org, projectID, membership.ToolsetID, membership.McpServerID)
+		platform, err := ContainsPlatformTools(ctx, tx, org, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, row.McpServerID)
 		if err != nil {
 			return nil, err
 		}
 		if !platform {
 			continue
 		}
-		removed, err := pluginsrepo.New(tx).RemovePlatformCleanupMembership(ctx, pluginsrepo.RemovePlatformCleanupMembershipParams{ID: membership.ID, PluginID: membership.PluginID, OrganizationID: org, ProjectID: projectID})
+		removed, err := pluginsrepo.New(tx).RemovePlatformCleanupMembership(ctx, pluginsrepo.RemovePlatformCleanupMembershipParams{ID: row.ID, PluginID: row.PluginID, OrganizationID: org, ProjectID: projectID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("remove platform cleanup membership: %w", err)
 		}
-		if err := auditChange(ctx, tx, org, projectID, membership.PluginID, removed, false); err != nil {
+		if err := auditChange(ctx, tx, org, projectID, row.PluginID, removed, false); err != nil {
 			return nil, err
 		}
-		removedPlugins = append(removedPlugins, membership.PluginID)
+		removedPlugins = append(removedPlugins, row.PluginID)
 	}
 	return sortedCleanupIDs(removedPlugins), nil
 }
@@ -112,15 +111,10 @@ func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, tools
 			return nil, err
 		}
 		for _, candidate := range candidates {
-			if candidate.LegacyToolsetID != target && (candidate.BackendKind != "toolset" || candidate.ID != toolsetID) {
+			if candidate.LegacyToolsetID != target {
 				continue
 			}
-			direct, wrapper := target, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-			if candidate.BackendKind == "mcp_server" {
-				direct = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-				wrapper = uuid.NullUUID{UUID: candidate.ID, Valid: true}
-			}
-			if _, err := Eligible(ctx, tx, org, projectID, direct, wrapper, guard); err != nil {
+			if _, err := Eligible(ctx, tx, org, projectID, candidate.ID, guard); err != nil {
 				return nil, err
 			}
 		}
@@ -139,7 +133,7 @@ func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, tools
 		ids := make([]uuid.UUID, 0, len(rows))
 		for _, row := range rows {
 			if row.AutomaticProvenance {
-				ids = append(ids, row.PluginServer.ID)
+				ids = append(ids, row.ID)
 			}
 		}
 		removed, err := ApplyPlatformCleanup(ctx, tx, org, projectID, ids)
@@ -147,7 +141,7 @@ func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, tools
 			return nil, err
 		}
 		removedPlugins = append(removedPlugins, removed...)
-		after = rows[len(rows)-1].PluginServer.ID
+		after = rows[len(rows)-1].ID
 	}
 	return sortedCleanupIDs(removedPlugins), nil
 }

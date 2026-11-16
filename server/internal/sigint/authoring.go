@@ -72,6 +72,12 @@ type AuthoringInput struct {
 	// Enabled applies only to sensors; creation defaults to true and updates preserve omission.
 	Enabled *bool `json:"enabled,omitempty"`
 
+	// InputStrategy selects single_message or sliding_window; omission preserves updates.
+	InputStrategy *types.SigintInputStrategy `json:"input_strategy,omitempty" jsonschema:"single_message (default) or sliding_window; classify the target using timestamp-ordered preceding context"`
+
+	// WindowSize includes the target and is retained when switching strategies.
+	WindowSize *int `json:"window_size,omitempty" jsonschema:"total sliding window messages, from 2 to 10; defaults to 5; omission preserves updates"`
+
 	// Signals is the complete ordered sensor membership when supplied.
 	Signals *[]SignalReference `json:"signals,omitempty"`
 }
@@ -225,13 +231,13 @@ func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input Auth
 	case "update_signal":
 		result.Signal, err = s.UpdateSignalWithTx(ctx, tx, &gen.UpdateSignalPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, ClassifierCriteria: input.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	case "create_sensor":
-		result.Sensor, err = s.CreateSensorWithTx(ctx, tx, &gen.CreateSensorPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: types.SigintSensorMode(*input.Mode), MatchExpression: input.MatchExpression, Enabled: input.Enabled, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Sensor, err = s.CreateSensorWithTx(ctx, tx, &gen.CreateSensorPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: types.SigintSensorMode(*input.Mode), MatchExpression: input.MatchExpression, Enabled: input.Enabled, InputStrategy: input.InputStrategy, WindowSize: input.WindowSize, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	case "update_sensor":
 		var mode *types.SigintSensorMode
 		if input.Mode != nil {
 			mode = new(types.SigintSensorMode(*input.Mode))
 		}
-		result.Sensor, err = s.UpdateSensorWithTx(ctx, tx, &gen.UpdateSensorPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: mode, MatchExpression: input.MatchExpression, Enabled: input.Enabled, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Sensor, err = s.UpdateSensorWithTx(ctx, tx, &gen.UpdateSensorPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: mode, MatchExpression: input.MatchExpression, Enabled: input.Enabled, InputStrategy: input.InputStrategy, WindowSize: input.WindowSize, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	}
 	if err != nil {
 		return result, err
@@ -265,7 +271,7 @@ func validateAuthoringInput(input AuthoringInput) error {
 		return invalid()
 	}
 	if input.Operation == "create_signal" || input.Operation == "update_signal" {
-		if input.Signals != nil || input.Instructions != nil || input.Mode != nil || input.MatchExpression != nil || input.Enabled != nil {
+		if input.Signals != nil || input.Instructions != nil || input.Mode != nil || input.MatchExpression != nil || input.Enabled != nil || input.InputStrategy != nil || input.WindowSize != nil {
 			return invalid()
 		}
 	} else if input.Criteria != nil {

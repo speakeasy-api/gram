@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from "vitest";
 
 import {
@@ -69,12 +70,20 @@ describe("provider row URL state", () => {
     ).toBeNull();
   });
 
-  test.each(["toString", "constructor", "__proto__", "OpenAI"])(
-    "rejects a provider that is not one of the four keys: %p",
+  test.each(["toString", "constructor", "__proto__", "OpenAI", "grok"])(
+    "rejects a provider that is not one of the provider keys: %p",
     (provider) => {
       expect(
         decodeProviderRows(encodeRawJson([{ ...SHARED_ROWS[1], provider }])),
       ).toBeNull();
+    },
+  );
+
+  test.each(["openai", "anthropic", "gemini", "spacexsi", "cursor", "other"])(
+    "accepts the %p provider key",
+    (provider) => {
+      const rows = [{ ...SHARED_ROWS[1], provider } as ProviderRow];
+      expect(decodeProviderRows(encodeProviderRows(rows))).toEqual(rows);
     },
   );
 

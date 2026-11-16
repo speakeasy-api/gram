@@ -106,7 +106,7 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, userIssuerID, false)
 
 	plan := linkPlan(t, ctx, userIssuerID, providerID, uuid.Nil)
-	plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
+	plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, RegistrationResource: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
 	plan.Bound = remotesessions.ReuseBound
 	commit := identityCommitter(t, ti).Prepare(plan)
 	require.NoError(t, commit.Preflight(ctx))
@@ -156,7 +156,6 @@ func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, c
 func requireLiveAgentBindings(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID uuid.UUID) {
 	t.Helper()
 	live, err := repo.New(ti.conn).HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{
-		ProjectID:             projectIDFromContext(t, ctx),
 		OrganizationID:        activeOrganizationID(t, ctx),
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,

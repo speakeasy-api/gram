@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -60,6 +61,12 @@ func clientKeySource(row *usersessions_repo.UserSessionClient) (jwks.Source, err
 	}
 }
 
+// obsoleteRuntimeOAuthClient invalidates retired runtime registrations, including
+// rows whose binding foreign keys were cleared. They cannot become ordinary clients.
+func obsoleteRuntimeOAuthClient(row *usersessions_repo.UserSessionClient) bool {
+	return row.AssistantRuntimeID.Valid || row.AssistantTriggerWorkloadBindingID.Valid || strings.HasPrefix(row.ClientID, "assistant-runtime-")
+}
+
 // authenticateOAuthClient checks the presented credentials against what the
 // client row requires. Shared by the token and revocation endpoints so the
 // two cannot drift, and so a jti spent at one is spent at the other. Returns
@@ -75,6 +82,9 @@ func clientKeySource(row *usersessions_repo.UserSessionClient) (jwks.Source, err
 // urls are the addressed authorization server's URLs, from which an
 // assertion's accepted audiences derive.
 func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, urls AuthorizationServerURLs, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, creds presentedClientCredentials) string {
+	if obsoleteRuntimeOAuthClient(row) {
+		return "obsolete_runtime_client"
+	}
 	kind, err := clientcred.KindOf(row.TokenEndpointAuthMethod, row.ClientSecretHash.Valid)
 	if err != nil {
 		logger.ErrorContext(ctx, "user session client row is not authenticatable, failing closed",

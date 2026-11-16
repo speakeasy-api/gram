@@ -18,6 +18,7 @@ export const ICON_SOURCE_BY_TARGET_ID: Record<string, string> = {
   "chatgpt-classic": "chatgpt",
   codex: "codex",
   cursor: "cursor",
+  kit: "kit",
   opencode: "opencode",
   openclaw: "openclaw",
   "gemini-cli": "gemini",
@@ -32,6 +33,7 @@ export const ICON_SOURCE_BY_TARGET_ID: Record<string, string> = {
   // Devin and Windsurf are one vendor's two shapes: Devin Desktop is the
   // rebranded Windsurf, so both carry Cognition's mark.
   devin: "devin",
+  antigravity: "antigravity",
 };
 
 // Every target id AIToolIcon has a mark for, so the test can walk the map

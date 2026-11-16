@@ -11,11 +11,11 @@ const IMPACT_COPY: Record<SharedIssuerImpact, string> = {
   repoint:
     "These servers share this user session issuer, and this change moves them to a different upstream authorization server:",
   clear:
-    "These servers share this user session issuer, and this change leaves either no providers or multiple providers linked, so they lose their upstream authorization server until exactly one provider is linked:",
+    "These servers share this user session issuer, and this change leaves either no authorization servers or multiple authorization servers linked, so they lose their upstream authorization server until exactly one authorization server is linked:",
   resignin:
     "These servers share this user session issuer, and the client is replaced for all of them. Everyone signed in to them will have to sign in again:",
   client_removed:
-    "These gateways share this user session issuer and lose a client their members sign in through. Those members stop working until a client for their provider is linked again:",
+    "These gateways share this user session issuer and lose a client their members sign in through. Those members stop working until a client for their authorization server is linked again:",
 };
 
 /** Names the servers that a change on a shared user session issuer would affect. */

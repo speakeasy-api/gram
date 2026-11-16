@@ -21,6 +21,10 @@ export type AuthTransferInRequest = {
    * Optional URL path to land on once the session is established on this host
    */
   redirect?: string | undefined;
+  /**
+   * Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.
+   */
+  replaceSession?: boolean | undefined;
 };
 
 export type AuthTransferInResponse = {
@@ -32,6 +36,7 @@ export type AuthTransferInRequest$Outbound = {
   source_host?: string | undefined;
   code?: string | undefined;
   redirect?: string | undefined;
+  replace_session?: boolean | undefined;
 };
 
 /** @internal */
@@ -43,10 +48,12 @@ export const AuthTransferInRequest$outboundSchema: z.ZodMiniType<
     sourceHost: z.optional(z.string()),
     code: z.optional(z.string()),
     redirect: z.optional(z.string()),
+    replaceSession: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {
       sourceHost: "source_host",
+      replaceSession: "replace_session",
     });
   }),
 );

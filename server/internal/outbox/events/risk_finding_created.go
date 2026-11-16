@@ -19,6 +19,11 @@ var RiskFindingCreatedV1 = outbox.NewEventDef[RiskFindingCreatedPayloadV1](
 	"A potential risk was detected in a LLM message or tool call",
 )
 
+// RiskFindingCreatedEventID derives the Svix idempotency key from a finding id.
+func RiskFindingCreatedEventID(findingID uuid.UUID) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding-created-event:"+findingID.String()))
+}
+
 type RiskFindingCreatedPayloadV1 struct {
 	ID                uuid.UUID `json:"id"`
 	ProjectID         uuid.UUID `json:"project_id"`

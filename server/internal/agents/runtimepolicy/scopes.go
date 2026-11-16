@@ -15,8 +15,17 @@ const (
 	RuntimeScopeRegistryVersion2 RuntimeScopeRegistryVersion = 2
 	RuntimeScopeRegistryVersion3 RuntimeScopeRegistryVersion = 3
 	RuntimeScopeRegistryVersion4 RuntimeScopeRegistryVersion = 4
+	RuntimeScopeRegistryVersion5 RuntimeScopeRegistryVersion = 5
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion4
+	RuntimeScopeRegistryVersion6 RuntimeScopeRegistryVersion = 6
+	RuntimeScopeRegistryVersion7 RuntimeScopeRegistryVersion = 7
+
+	// RuntimeScopeRegistryVersion8 registers the same scopes as version 7. It
+	// exists for DelegatedPolicyVersion8, whose implication closure no longer
+	// derives mcp:connect from mcp:read or mcp:write.
+	RuntimeScopeRegistryVersion8 RuntimeScopeRegistryVersion = 8
+
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion8
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -47,10 +56,6 @@ func activeRuntimeScope() runtimeScopeDefinition {
 	}
 }
 
-func safeRuntimeScope() runtimeScopeDefinition {
-	return safeRuntimeScopeSince(RuntimeScopeRegistryVersion1)
-}
-
 // safeRuntimeScopeSince registers a scope that became agent-runtime-safe in a
 // later registry version, so policies stored at older versions stay unchanged.
 func safeRuntimeScopeSince(version RuntimeScopeRegistryVersion) runtimeScopeDefinition {
@@ -67,59 +72,28 @@ func retiredRuntimeScope() runtimeScopeDefinition {
 	}
 }
 
-// runtimeScopeDefinitions is the application-owned overlay that determines
-// which authorization scopes agent direct and delegated policy may use.
-var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
-	authz.ScopeRoot:                    activeRuntimeScope(),
-	authz.ScopeOrgRead:                 activeRuntimeScope(),
-	authz.ScopeOrgBlockedRead:          activeRuntimeScope(),
-	authz.ScopeOrgAdmin:                activeRuntimeScope(),
-	authz.ScopeOrgBlockedAdmin:         activeRuntimeScope(),
-	authz.ScopeProjectRead:             safeRuntimeScope(),
-	authz.ScopeProjectBlockedRead:      safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeProjectWrite:            safeRuntimeScope(),
-	authz.ScopeProjectBlockedWrite:     safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeMCPRead:                 safeRuntimeScope(),
-	authz.ScopeMCPBlockedRead:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeMCPWrite:                safeRuntimeScope(),
-	authz.ScopeMCPBlockedWrite:         safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeMCPConnect:              safeRuntimeScope(),
-	authz.ScopeMCPBlockedConnect:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeEnvironmentRead:         safeRuntimeScope(),
-	authz.ScopeEnvironmentBlockedRead:  safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeEnvironmentWrite:        safeRuntimeScope(),
-	authz.ScopeEnvironmentBlockedWrite: safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeSkillRead:               safeRuntimeScope(),
-	authz.ScopeSkillBlockedRead:        safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeSkillWrite:              safeRuntimeScope(),
-	authz.ScopeSkillBlockedWrite:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeAssistantRead:           safeRuntimeScopeSince(RuntimeScopeRegistryVersion3),
-	authz.ScopeAssistantBlockedRead:    safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopeAssistantWrite:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion3),
-	authz.ScopeAssistantBlockedWrite:   safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
-	authz.ScopePluginWrite:             activeRuntimeScope(),
-	authz.ScopePluginBlockedWrite:      activeRuntimeScope(),
-	authz.ScopeRiskPolicyEvaluate:      safeRuntimeScope(),
-	authz.ScopeRiskPolicyBypass:        activeRuntimeScope(),
-	authz.ScopeRiskPolicyBlock:         activeRuntimeScope(),
-	authz.ScopeChatRead:                activeRuntimeScope(),
-	authz.ScopeChatWrite:               activeRuntimeScope(),
-	authz.ScopeAgentRead:               activeRuntimeScope(),
-	authz.ScopeAgentWrite:              activeRuntimeScope(),
-	authz.ScopeAgentAuthorize:          activeRuntimeScope(),
-	authz.ScopeAgentTransfer:           activeRuntimeScope(),
-	// Registered but deliberately NOT agent-runtime-safe. A workload inherits its
-	// assigned agent's policy, so making these safe would let a machine admit
-	// further machines and assign them agents — the trust policy editing itself.
-	// Configuring workload identity stays a human act, beside agent:authorize.
-	authz.ScopeWorkloadRead:         activeRuntimeScope(),
-	authz.ScopeWorkloadBlockedRead:  activeRuntimeScope(),
-	authz.ScopeWorkloadWrite:        activeRuntimeScope(),
-	authz.ScopeWorkloadBlockedWrite: activeRuntimeScope(),
-	authz.ScopeOrgDeviceAgentSync:   safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
-	authz.ScopeOrgHooksIngest:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
-	scopeMCPApprovalReadTombstone:   retiredRuntimeScope(),
-	scopeMCPApprovalDecideTombstone: retiredRuntimeScope(),
+// runtimeScopeDefinitions determines which authorization scopes agent direct
+// and delegated policy may use. It is derived from the authz model, where each
+// permission declares since which registry version it is agent-safe and
+// retired scopes stay as tombstones.
+var runtimeScopeDefinitions = deriveRuntimeScopeDefinitions()
+
+func deriveRuntimeScopeDefinitions() map[authz.Scope]runtimeScopeDefinition {
+	declared := authz.AgentEligibilityByScope()
+	out := make(map[authz.Scope]runtimeScopeDefinition, len(declared))
+	for scope, eligibility := range declared {
+		switch {
+		case eligibility.Retired:
+			out[scope] = retiredRuntimeScope()
+		case eligibility.SafeSince == 0:
+			out[scope] = activeRuntimeScope()
+		case eligibility.SafeSince < int(RuntimeScopeRegistryVersion1) || eligibility.SafeSince > int(CurrentRuntimeScopeRegistryVersion):
+			panic(fmt.Sprintf("authz scope %q is agent-safe since registry version %d, outside 1..%d", scope, eligibility.SafeSince, CurrentRuntimeScopeRegistryVersion))
+		default:
+			out[scope] = safeRuntimeScopeSince(RuntimeScopeRegistryVersion(eligibility.SafeSince))
+		}
+	}
+	return out
 }
 
 // RuntimeScopeLifecycleFor returns the lifecycle of a scope known to the agent

@@ -1,6 +1,7 @@
 import {
   encodeIdentityUrn,
   identityUrnFor,
+  isAgentRef,
   withIdentityWindow,
 } from "@/lib/identity-urn";
 import type { IdentityRef } from "@/lib/identity-urn";
@@ -38,10 +39,15 @@ export function useIdentityHrefBuilder(
   // covers every call site, and it has to be the destination's gate — checking
   // project:read would hide the link from org readers who can open the page
   // and show it to project readers who cannot.
+  //
+  // Except for an agent, which `IdentityDetailRoot` serves without that scope
+  // because an agent resolves through its own management API and authorizes
+  // per agent. Gating its link on org:read hid an agent's own page from the
+  // owner the page was built to serve.
   const { hasAnyScope, isLoading } = useRBAC();
   const canOpenIdentities = isLoading || hasAnyScope(["org:read"]);
   return (identifier) =>
-    identifier && canOpenIdentities
+    identifier && (canOpenIdentities || isAgentRef(identifier))
       ? withIdentityWindow(
           routes.identities.detail[section].href(
             encodeIdentityUrn(identityUrnFor(identifier)),

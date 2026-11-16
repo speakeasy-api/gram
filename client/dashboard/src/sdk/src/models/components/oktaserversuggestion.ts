@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -28,7 +29,7 @@ export const OktaServerSuggestionState = {
 /**
  * open: not yet acted on; dismissed: an administrator dismissed it; installed: a live MCP server in one of the organization's projects fronts one of the entry's URLs (trailing slashes ignored; legacy deployment attachments are not consulted). Installed outranks dismissed.
  */
-export type OktaServerSuggestionState = ClosedEnum<
+export type OktaServerSuggestionState = OpenEnum<
   typeof OktaServerSuggestionState
 >;
 
@@ -88,9 +89,10 @@ export type OktaServerSuggestion = {
 };
 
 /** @internal */
-export const OktaServerSuggestionState$inboundSchema: z.ZodMiniEnum<
-  typeof OktaServerSuggestionState
-> = z.enum(OktaServerSuggestionState);
+export const OktaServerSuggestionState$inboundSchema: z.ZodMiniType<
+  OktaServerSuggestionState,
+  unknown
+> = openEnums.inboundSchema(OktaServerSuggestionState);
 
 /** @internal */
 export const OktaServerSuggestion$inboundSchema: z.ZodMiniType<

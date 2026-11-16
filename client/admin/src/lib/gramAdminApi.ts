@@ -1,9 +1,9 @@
 import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
 
-import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
+import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/adminAuth";
 
-export { isRedirectingToLogin } from "@/lib/gramAdminClient";
+export { isRedirectingToLogin } from "@/lib/adminAuth";
 
 // Speakeasy admin API client.
 //
@@ -268,6 +268,10 @@ export type AdminOrganization = {
   workos_dashboard_url?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  // Absent unless the matching Stripe ID is set and the deployment has a
+  // Stripe API key that says which dashboard mode the IDs belong to.
+  stripe_customer_dashboard_url?: string;
+  stripe_subscription_dashboard_url?: string;
   whitelisted: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
@@ -279,6 +283,9 @@ export type AdminOrganization = {
   // and absent on every row the list endpoint returns: only the record read
   // selects it.
   creation_source?: string;
+  // Staff-entered link to the organization's adoption dashboard. Absent when
+  // none is set, and absent on list rows: only the record read selects it.
+  adoption_dashboard_url?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -303,6 +310,25 @@ export function getStripeCustomer(
   return gramAdminFetch<AdminStripeCustomer>(
     `/admin/organization.stripeCustomer?${query}`,
     { cache: "no-store" },
+  );
+}
+
+export type SetAdoptionDashboardUrlRequest = {
+  organization_id: string;
+  // An https URL, or empty to clear the link.
+  adoption_dashboard_url: string;
+};
+
+export function setAdoptionDashboardUrl(
+  body: SetAdoptionDashboardUrlRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setAdoptionDashboardUrl",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
   );
 }
 
@@ -525,6 +551,8 @@ export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
   url: string;
+  name: string;
+  slug: string;
   ownership_confirmed: boolean;
 };
 
@@ -563,6 +591,172 @@ export function listOrganizationProjects(
   );
 }
 
+export type AdminProjectRedeployPreview = {
+  organization_id: string;
+  project_id: string;
+  project_name: string;
+  // Sent back as `expected_active_deployment_id`, so a redeploy clones the
+  // deployment the operator reviewed or refuses.
+  active_deployment_id: string;
+  openapi_assets: number;
+  function_assets: number;
+  packages: number;
+};
+
+export function getProjectRedeployPreview(
+  organizationID: string,
+  projectID: string,
+): Promise<AdminProjectRedeployPreview> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<AdminProjectRedeployPreview>(
+    `/admin/project.redeployPreview?${qs}`,
+  );
+}
+
+export type RedeployProjectRequest = {
+  organization_id: string;
+  project_id: string;
+  expected_active_deployment_id: string;
+};
+
+export type AdminProjectRedeployResult = {
+  project_id: string;
+  source_deployment_id: string;
+  // Processing continues after this returns, and this deployment becomes active
+  // only if it succeeds.
+  deployment_id: string;
+};
+
+export function redeployProject(
+  body: RedeployProjectRequest,
+): Promise<AdminProjectRedeployResult> {
+  return gramAdminMutation<AdminProjectRedeployResult>(
+    "/admin/project.redeploy",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export type AdminAssistantIdentityState =
+  | "NEVER_CONFIGURED"
+  | "ACTIVE"
+  | "UNAVAILABLE";
+
+export type AdminOrganizationAssistant = {
+  id: string;
+  name: string;
+  project_id: string;
+  project_slug: string;
+  project_name: string;
+  status: string;
+  identity_state: AdminAssistantIdentityState;
+  agent_id?: string;
+  // 2 is the default runtime, 3 is Kit.
+  runtime_version: number;
+  created_by_user_id?: string;
+  created_by_user_email?: string;
+  // The migration makes the creator the new agent's owner, so an assistant
+  // whose creator left the organization is skipped.
+  creator_active: boolean;
+  created_at: string;
+};
+
+export type AdminOrganizationAssistants = {
+  organization_id: string;
+  assistants: AdminOrganizationAssistant[];
+};
+
+export function listOrganizationAssistants(
+  organizationID: string,
+): Promise<AdminOrganizationAssistants> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationAssistants>(
+    `/admin/organization.assistants?${qs}`,
+  );
+}
+
+export type AdminAssistantIdentityMigrationOutcome =
+  | "migrated"
+  | "already_migrated"
+  | "needs_owner"
+  | "failed";
+
+export type AdminAssistantIdentityMigrationRun = {
+  organization_id: string;
+  migrated: number;
+  already_migrated: number;
+  needs_owner: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantIdentityMigrationOutcome;
+  }[];
+};
+
+export function migrateOrganizationAssistantIdentities(
+  organizationID: string,
+): Promise<AdminAssistantIdentityMigrationRun> {
+  return gramAdminMutation<AdminAssistantIdentityMigrationRun>(
+    "/admin/organization.migrateAssistantIdentities",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export type AdminAssistantKitMigrationOutcome =
+  | "switched"
+  | "already_kit"
+  | "needs_identity"
+  | "ineligible"
+  | "busy"
+  | "failed";
+
+export type AdminAssistantKitMigrationRun = {
+  organization_id: string;
+  switched: number;
+  already_kit: number;
+  needs_identity: number;
+  ineligible: number;
+  busy: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantKitMigrationOutcome;
+  }[];
+};
+
+// Moves the given assistants, or every live assistant of the organization when
+// none are given, to the Kit runtime.
+export function migrateOrganizationAssistantsToKit(
+  organizationID: string,
+  assistantIDs?: string[],
+): Promise<AdminAssistantKitMigrationRun> {
+  return gramAdminMutation<AdminAssistantKitMigrationRun>(
+    "/admin/organization.migrateAssistantsToKit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: organizationID,
+        assistant_ids: assistantIDs,
+      }),
+    },
+  );
+}
+
 export type AdminMcpServerSource =
   | "toolset"
   | "remote"
@@ -578,6 +772,8 @@ export type AdminMcpServer = {
   // row with no endpoint.
   url?: string;
   visibility: "disabled" | "private" | "public";
+  // Remote MCP server upstream address; omitted for other server types.
+  upstream_url?: string;
   source: AdminMcpServerSource;
   created_at: string;
 };

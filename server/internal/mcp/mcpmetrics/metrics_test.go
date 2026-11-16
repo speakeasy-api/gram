@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
 func TestNewMetrics(t *testing.T) {
@@ -465,4 +466,132 @@ func collectMetric(t *testing.T, reader *sdkmetric.ManualReader, name string) me
 	}
 	t.Fatalf("metric %q not found", name)
 	return metricdata.Metrics{}
+}
+
+func TestRecordIDJAGExchange_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	issuerID := uuid.NewString()
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeRejected, IDJAGRejectionFromValidator(idjag.ReasonNotProvisioned))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeAccepted, IDJAGRejectionNone)
+
+	got := collectMetric(t, reader, InstrumentOAuthIDJAGExchange)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "exchange instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 2)
+	for _, point := range sum.DataPoints {
+		require.Equal(t, int64(1), point.Value)
+		issuer, _ := point.Attributes.Value(attr.UserSessionIssuerIDKey)
+		require.Equal(t, issuerID, issuer.AsString())
+		_, hasClient := point.Attributes.Value(attr.OAuthClientIDKey)
+		require.False(t, hasClient, "client ids are unbounded and never a dimension")
+		outcome, _ := point.Attributes.Value(attr.OAuthIDJAGOutcomeKey)
+		reason, hasReason := point.Attributes.Value(attr.OAuthIDJAGRejectionReasonKey)
+		switch IDJAGExchangeOutcome(outcome.AsString()) {
+		case IDJAGExchangeRejected:
+			require.True(t, hasReason)
+			require.Equal(t, "subject_not_provisioned", reason.AsString())
+		case IDJAGExchangeAccepted:
+			require.False(t, hasReason, "accepted exchanges carry no rejection reason")
+		case IDJAGExchangeError:
+			t.Fatal("no exchange failed")
+		default:
+			t.Fatalf("unexpected outcome %q", outcome.AsString())
+		}
+	}
+}
+
+func TestRecordIDJAGExchange_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeRejected, IDJAGRejectionInvalidRequest)
+
+	empty := &Metrics{}
+	empty.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeError, IDJAGRejectionNone)
+}
+
+func TestIDJAGRejectionFromValidator_MapsUnknownReasonsGenerically(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonAudienceMismatch), IDJAGRejectionFromValidator(idjag.ReasonAudienceMismatch))
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonResourceNotIndicated), IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(idjag.Reason("a_reason_added_later")))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(""))
+}
+
+// TestRecordSkillRead_PinsInstrumentAndDimensions pins the wiring a noop
+// meter cannot see: the instrument name and the three bounded attribute keys.
+func TestRecordSkillRead_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	require.NotNil(t, m.mcpSkillReadCounter)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+
+	got := collectMetric(t, reader, InstrumentMCPSkillRead)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.McpSkillOrigin(SkillOriginDistribution),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(2), sum.DataPoints[0].Value)
+}
+
+func TestRecordSkillRead_SeparatesSurfaceAndOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginEmbedded)
+	m.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
+
+	sum, ok := collectMetric(t, reader, InstrumentMCPSkillRead).Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 3)
+}
+
+func TestRecordSkillRead_UsesTrustedPrivateOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example",
+		OrganizationID:   "<ORG_ID>",
+		NetworkIngressID: uuid.New(),
+	})
+
+	NewMetrics(meter, testenv.NewLogger(t)).RecordSkillRead(ctx, SurfaceHosting, SkillOriginDistribution)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPSkillRead),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.McpSkillOrigin(SkillOriginDistribution),
+		attr.NetworkSurface(NetworkSurfacePrivate),
+	)
+}
+
+func TestRecordSkillRead_IsNilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	empty := &Metrics{}
+	empty.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
 }

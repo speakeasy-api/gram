@@ -106,7 +106,9 @@ func (s *ServiceCore) InterruptDashboardTurn(
 	// that leaves watchers hanging is indistinguishable from one that did
 	// nothing. Best-effort: a lost frame costs responsiveness, and the turn is
 	// stopped either way.
-	if result.StoppedSomething() {
+	// A queued cancellation must not terminate the UI stream while the Kit
+	// owner is still draining an unconfirmed in-flight cancellation.
+	if result.StoppedSomething() && !errors.Is(interruptErr, ErrKitInterruptPending) {
 		s.chatWriter.PublishTurnInterrupted(ctx, chatID)
 	}
 
@@ -173,10 +175,13 @@ func (s *ServiceCore) interruptThreadRuntime(ctx context.Context, projectID, ass
 	}
 
 	interrupted, err := s.runtime.InterruptTurn(ctx, assistantRuntimeRecord{
+		LifecycleTx:         nil,
+		Retired:             false,
 		ID:                  row.ID,
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
 		ProjectID:           row.ProjectID,
+		RuntimeVersion:      row.RuntimeVersion,
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,

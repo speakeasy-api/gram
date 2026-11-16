@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -124,12 +125,7 @@ func TestDeleteUserSessionIssuer_ConflictWithActiveToolset(t *testing.T) {
 
 	issuerID := uuid.MustParse(created.ID)
 	toolset := createBackingToolset(t, ctx, ti, "delete-issuer-toolset-owner")
-	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
 		ID:               issuerID.String(),
@@ -338,17 +334,10 @@ func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingToolset(t *testi
 		Slug:                   "org-tier-toolset-owner",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
-	_, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           siblingID,
-	})
-	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
 		ID:           issuerID.String(),
@@ -365,12 +354,9 @@ func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingToolset(t *testi
 
 	// Releasing the sibling project's reference makes the issuer deletable, so
 	// the sweep blocks on a live owner rather than on the tier itself.
-	_, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Slug:                toolset.Slug,
-		ProjectID:           siblingID,
+	testenv.SetHostedMCP(t, ctx, ti.conn, siblingID, toolset.ID, testenv.HostedMCP{
+		Visibility: "", UserSessionIssuerID: &uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
-	require.NoError(t, err)
 
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
 		ID:           issuerID.String(),
@@ -398,8 +384,6 @@ func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingMCPServer(t *tes
 		Slug:                   "org-tier-server-owner-backing",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -454,17 +438,10 @@ func TestDeleteOrganizationUserSessionIssuer_IgnoresOwnersInDeletedProject(t *te
 		Slug:                   "org-tier-deleted-project-toolset",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
-	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           siblingID,
-	})
-	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                    uuid.New(),

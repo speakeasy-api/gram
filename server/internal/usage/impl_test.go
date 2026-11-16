@@ -19,10 +19,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -265,17 +267,22 @@ func seedEnabledToolsets(t *testing.T, db *pgxpool.Pool, orgID string, serverCou
 	require.NoError(t, err)
 
 	for i := range serverCount {
-		_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		slug := fmt.Sprintf("enabled-%d-%s", i, uuid.NewString()[:8])
+		toolset, err := toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 			OrganizationID:         orgID,
 			ProjectID:              project.ID,
 			Name:                   "Enabled Server",
-			Slug:                   fmt.Sprintf("enabled-%d-%s", i, uuid.NewString()[:8]),
+			Slug:                   slug,
 			Description:            pgtype.Text{},
 			DefaultEnvironmentSlug: pgtype.Text{},
-			McpSlug:                pgtype.Text{},
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
+		tx := testenv.BeginTx(t, ctx, db)
+		_, err = hostedmcp.CreateCanonical(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), hostedmcp.CreateCanonicalInput{
+			Toolset: toolset, Slug: slug, Visibility: "private",
+		})
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit(ctx))
 	}
 }
 

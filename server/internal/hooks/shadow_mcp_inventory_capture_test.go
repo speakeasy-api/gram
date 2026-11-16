@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestClaudeSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
@@ -209,7 +208,6 @@ func TestClaudeUnauthenticatedSessionStartRecordsNoMCPInventory(t *testing.T) {
 	_, err = ti.service.getCachedMCPList(ctx, sessionID)
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "a known session id does not let an unauthenticated sender write the guard snapshot")
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: authCtx.ProjectID.String(),
 		Limit:         50,
@@ -398,7 +396,6 @@ func TestCodexSessionStartSkipsShadowMCPInventoryWhenSnapshotCacheFails(t *testi
 	})
 	require.NoError(t, err)
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: authCtx.ProjectID.String(),
 		Limit:         50,
@@ -422,7 +419,6 @@ func requireShadowMCPInventoryURLsFromHooks(
 	// single insert, so a matching length means the batch is complete.
 	var rows []telemetryrepo.ShadowMCPInventoryURLRow
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 		var err error
 		rows, err = chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
 			GramProjectID: projectID,

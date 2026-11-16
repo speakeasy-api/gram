@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -8,7 +9,7 @@ import { specFromWidget, widgetFromSpec } from "./widgetSpec";
 // back exactly as it is stored, or it would open marked unsaved.
 const SEED = resolve(
   import.meta.dirname,
-  "../../../../../server/internal/demoseed/postgres.sql",
+  "../../../../../server/internal/demoseed/queries/07_activity.sql",
 );
 
 interface SeededWidget {

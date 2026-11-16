@@ -137,7 +137,7 @@ func TestRefreshSession(t *testing.T) {
 		RemoteSessionClientID: uuid.MustParse(result.RemoteSessionClientID),
 	})
 	require.NoError(t, err)
-	plain, err := enc.Decrypt(stored.AccessTokenEncrypted)
+	plain, err := enc.Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access", plain)
 	require.Equal(t, []string{"read:only"}, stored.Scopes)
@@ -340,7 +340,7 @@ func TestRefreshScopeRecoveryRejectsJWTForAnotherSubject(t *testing.T) {
 		withIDTokenIssuer(issuer), withEnrichmentAS(as))
 	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestTokenResponseNullScopeIsUnreportedAtExchangeAndRefresh(t *testing.T) {
 	})
 	require.Equal(t, []string{"initial:read"}, env.session.Scopes)
 
-	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})

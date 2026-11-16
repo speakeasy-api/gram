@@ -3,7 +3,8 @@
  */
 
 import * as z from "zod/v4-mini";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 
 /**
  * The part of the MCP an OpenAPI change affects.
@@ -16,11 +17,12 @@ export const OpenAPIv3EvaluationCategory = {
 /**
  * The part of the MCP an OpenAPI change affects.
  */
-export type OpenAPIv3EvaluationCategory = ClosedEnum<
+export type OpenAPIv3EvaluationCategory = OpenEnum<
   typeof OpenAPIv3EvaluationCategory
 >;
 
 /** @internal */
-export const OpenAPIv3EvaluationCategory$inboundSchema: z.ZodMiniEnum<
-  typeof OpenAPIv3EvaluationCategory
-> = z.enum(OpenAPIv3EvaluationCategory);
+export const OpenAPIv3EvaluationCategory$inboundSchema: z.ZodMiniType<
+  OpenAPIv3EvaluationCategory,
+  unknown
+> = openEnums.inboundSchema(OpenAPIv3EvaluationCategory);

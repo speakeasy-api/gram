@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -14,13 +15,13 @@ export const RoiConfidence = {
   Med: "med",
   High: "high",
 } as const;
-export type RoiConfidence = ClosedEnum<typeof RoiConfidence>;
+export type RoiConfidence = OpenEnum<typeof RoiConfidence>;
 
 export const SkillEfficacyScoredSessionSurface = {
   Dev: "dev",
   Assistant: "assistant",
 } as const;
-export type SkillEfficacyScoredSessionSurface = ClosedEnum<
+export type SkillEfficacyScoredSessionSurface = OpenEnum<
   typeof SkillEfficacyScoredSessionSurface
 >;
 
@@ -41,13 +42,16 @@ export type SkillEfficacyScoredSession = {
 };
 
 /** @internal */
-export const RoiConfidence$inboundSchema: z.ZodMiniEnum<typeof RoiConfidence> =
-  z.enum(RoiConfidence);
+export const RoiConfidence$inboundSchema: z.ZodMiniType<
+  RoiConfidence,
+  unknown
+> = openEnums.inboundSchema(RoiConfidence);
 
 /** @internal */
-export const SkillEfficacyScoredSessionSurface$inboundSchema: z.ZodMiniEnum<
-  typeof SkillEfficacyScoredSessionSurface
-> = z.enum(SkillEfficacyScoredSessionSurface);
+export const SkillEfficacyScoredSessionSurface$inboundSchema: z.ZodMiniType<
+  SkillEfficacyScoredSessionSurface,
+  unknown
+> = openEnums.inboundSchema(SkillEfficacyScoredSessionSurface);
 
 /** @internal */
 export const SkillEfficacyScoredSession$inboundSchema: z.ZodMiniType<

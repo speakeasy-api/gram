@@ -1,12 +1,13 @@
 import { cn } from "@/lib/utils";
-import React, { FC, PropsWithChildren, ReactNode } from "react";
+import type { FC, PropsWithChildren, ReactNode } from "react";
+import React from "react";
 import { Icon } from "../Icon";
 import { SimpleTooltip } from "../Tooltip";
 import { Stack } from "../Stack";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
 import { Skeleton, SkeletonParagraph } from "../Skeleton";
-import { iconNames } from "../Icon/names";
+import type { iconNames } from "../Icon/names";
 import { Children } from "react";
 
 type RightElement = {

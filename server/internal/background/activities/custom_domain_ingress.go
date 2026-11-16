@@ -26,6 +26,7 @@ const (
 )
 
 type CustomDomainIngress struct {
+	db                 *pgxpool.Pool
 	domains            *customdomainsRepo.Queries
 	logger             *slog.Logger
 	provisionerFactory k8s.ProvisionerFactory
@@ -44,6 +45,7 @@ func WithSetupSleep(d time.Duration) CustomDomainIngressOption {
 
 func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, opts ...CustomDomainIngressOption) *CustomDomainIngress {
 	c := &CustomDomainIngress{
+		db:                 db,
 		domains:            customdomainsRepo.New(db),
 		logger:             logger,
 		provisionerFactory: k8sClient,
@@ -120,7 +122,17 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 // domain Kubernetes resources. The domain-scoped Temporal workflow serializes
 // calls and schedules another pass when desired state changes during Apply.
 func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args ReconcileCustomDomainArgs) error {
-	desired, err := c.domains.GetCustomDomainRouteConfig(ctx, args.CustomDomainID)
+	organizationID, err := c.domains.GetCustomDomainOrganizationIDForReconcile(ctx, args.CustomDomainID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load custom domain organization").LogError(ctx, c.logger)
+	}
+	desired, err := c.domains.GetCustomDomainRouteConfig(ctx, customdomainsRepo.GetCustomDomainRouteConfigParams{
+		ID:             args.CustomDomainID,
+		OrganizationID: organizationID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -162,6 +174,10 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 		}
 		return nil
 	}
+
+	// Backfill rows created before DNS target tokens existed. Nothing routes on
+	// the token yet, so a failure must not block Apply.
+	backfillDNSTargetToken(ctx, c.logger, c.db, desired.OrganizationID, desired.ID, desired.Domain, desired.DnsTargetToken)
 
 	result, err := provisioner.Apply(ctx, config)
 	if err != nil {

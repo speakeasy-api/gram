@@ -1,33 +1,8 @@
-/**
- * Pure ranking for the intent-ranked command palette.
- *
- * Port of the Jev launcher's `Fuzzy.swift` prefilter plus the score,
- * verb-resolution and readiness rules from the design spec. No React, no
- * network: the palette feeds it candidates and a judgment and renders what
- * comes back.
- */
-import {
-  isSendable,
-  type Judgment,
-  type LauncherCandidate,
-  type Verb,
-} from "./candidates/types";
+/** Pure fuzzy ranking for command palette candidates. */
+import type { LauncherCandidate, Verb } from "./candidates/types";
 
-/** How many prefiltered candidates are sent to `launcher.judge`. */
-export const PREFILTER_LIMIT = 13;
 /** Candidates below this fuzzy score are dropped entirely. */
 export const MIN_FUZZY = 0.15;
-/** `judgment.ready` at or above this shows the green ↵ on the top row. */
-export const READY_THRESHOLD = 0.6;
-/** A top-row target probability this certain also shows the green ↵. */
-export const CERTAIN_TARGET_THRESHOLD = 0.9;
-
-const TARGET_WEIGHT = 0.65;
-const ACTION_WEIGHT = 0.2;
-const FUZZY_WEIGHT = 0.15;
-
-const UNCLEAR = "unclear";
-
 /**
  * Filler words stripped from the query before matching. The launcher's list
  * plus dashboard filler that would otherwise crowd out identifiers. "mcp" is
@@ -227,8 +202,6 @@ export function fuzzyScore(
 }
 
 interface Prefiltered {
-  /** Candidates sent to Jev: the top `limit` of `all`, never people (see `isSendable`). */
-  sendable: LauncherCandidate[];
   /** Every candidate at or above `minFuzzy`, fuzzy desc then title asc. */
   all: Array<{ candidate: LauncherCandidate; fuzzy: number }>;
 }
@@ -240,24 +213,16 @@ function compareTitle(a: LauncherCandidate, b: LauncherCandidate): number {
 export function prefilter(
   query: string,
   candidates: LauncherCandidate[],
-  opts: { limit?: number; minFuzzy?: number } = {},
+  opts: { minFuzzy?: number } = {},
 ): Prefiltered {
-  const limit = opts.limit ?? PREFILTER_LIMIT;
   const minFuzzy = opts.minFuzzy ?? MIN_FUZZY;
-
   const all = candidates
     .map((candidate) => ({ candidate, fuzzy: fuzzyScore(query, candidate) }))
     .filter((row) => row.fuzzy >= minFuzzy)
     .sort(
       (a, b) => b.fuzzy - a.fuzzy || compareTitle(a.candidate, b.candidate),
     );
-
-  const sendable = all
-    .filter((row) => isSendable(row.candidate))
-    .slice(0, limit)
-    .map((row) => row.candidate);
-
-  return { sendable, all };
+  return { all };
 }
 
 export interface RankedRow {
@@ -268,85 +233,12 @@ export interface RankedRow {
   targetP: number;
 }
 
-function actionSum(c: LauncherCandidate, judgment: Judgment): number {
-  return c.verbs.reduce((sum, verb) => sum + (judgment.action[verb] ?? 0), 0);
-}
-
-/**
- * Combine fuzzy scores with a judgment into the final row order. Without a
- * judgment the order is the fuzzy order. Candidates that were not sent to
- * Jev keep `0.15 * fuzzy` so they sort beneath judged rows but stay
- * reachable.
- */
-export function rank(pre: Prefiltered, judgment: Judgment | null): RankedRow[] {
-  const sent = new Set(pre.sendable.map((c) => c.id));
-
-  const rows = pre.all.map(({ candidate, fuzzy }): RankedRow => {
-    const targetP = judgment?.target[candidate.id] ?? 0;
-    let score = fuzzy;
-    if (judgment) {
-      score = sent.has(candidate.id)
-        ? TARGET_WEIGHT * targetP +
-          ACTION_WEIGHT * actionSum(candidate, judgment) +
-          FUZZY_WEIGHT * fuzzy
-        : FUZZY_WEIGHT * fuzzy;
-    }
-    return {
-      candidate,
-      score,
-      fuzzy,
-      verb: resolveVerb(candidate, judgment),
-      targetP,
-    };
-  });
-
-  return rows.sort(
-    (a, b) => b.score - a.score || compareTitle(a.candidate, b.candidate),
-  );
-}
-
-/** Key with the highest probability; ties go to the earlier key. */
-function argmax(
-  keys: readonly string[],
-  probabilities: Record<string, number>,
-): { key: string | null; p: number } {
-  let best: string | null = null;
-  let bestP = -Infinity;
-  for (const key of keys) {
-    const p = probabilities[key] ?? 0;
-    if (p > bestP) {
-      best = key;
-      bestP = p;
-    }
-  }
-  return { key: best, p: best === null ? 0 : bestP };
-}
-
-/**
- * The verb Jev picked for this row: the overall winning verb when the row
- * carries it, otherwise "open". A row never shows a different mutating verb
- * just because it is the best of the ones it happens to have — with
- * {enable: 0.6, disable: 0.25} an [open, disable] row reads "open", not
- * "Disable". "open" also when there is no judgment, when "unclear" wins
- * overall, or when the winner has no mass.
- */
-export function resolveVerb(
-  c: LauncherCandidate,
-  judgment: Judgment | null,
-): Verb {
-  if (!judgment) return "open";
-  const overall = argmax(Object.keys(judgment.action), judgment.action);
-  if (overall.key === null || overall.key === UNCLEAR || overall.p <= 0) {
-    return "open";
-  }
-  return c.verbs.includes(overall.key as Verb) ? (overall.key as Verb) : "open";
-}
-
-/** Whether the top row should show the green ↵ affordance. */
-export function isReady(rows: RankedRow[], judgment: Judgment | null): boolean {
-  const top = rows[0];
-  if (!judgment || !top) return false;
-  return (
-    judgment.ready >= READY_THRESHOLD || top.targetP >= CERTAIN_TARGET_THRESHOLD
-  );
+export function rank(pre: Prefiltered): RankedRow[] {
+  return pre.all.map(({ candidate, fuzzy }) => ({
+    candidate,
+    score: fuzzy,
+    fuzzy,
+    verb: "open",
+    targetP: 0,
+  }));
 }

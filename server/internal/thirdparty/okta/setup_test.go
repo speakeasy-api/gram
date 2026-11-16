@@ -204,7 +204,6 @@ type stubOkta struct {
 	rotateTokenNonce     bool
 	tokenNonce           string
 	lastAppsQuery        url.Values
-	groupsQueries        []url.Values
 	emitResourceNonce    string
 	emitTokenNonce       string
 	requireResourceNonce bool
@@ -226,7 +225,6 @@ type stubOkta struct {
 	apps                    []appJSON
 	appUsers                map[string][]appUserJSON
 	appGroups               map[string][]appGroupJSON
-	groups                  []groupJSON
 	pageSize                int
 	pending429              int
 	rateLimitLimit          int
@@ -293,7 +291,6 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 		apps:                    nil,
 		appUsers:                map[string][]appUserJSON{},
 		appGroups:               map[string][]appGroupJSON{},
-		groups:                  nil,
 		pageSize:                0,
 		pending429:              0,
 		rateLimitLimit:          0,
@@ -315,7 +312,6 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 	mux.HandleFunc("GET /api/v1/apps/{id}", s.resource(s.handleGetApp))
 	mux.HandleFunc("GET /api/v1/apps/{id}/users", s.resource(s.handleAppUsers))
 	mux.HandleFunc("GET /api/v1/apps/{id}/groups", s.resource(s.handleAppGroups))
-	mux.HandleFunc("GET /api/v1/groups", s.resource(s.handleListGroups))
 	mux.HandleFunc("GET /", s.resource(s.handleOverride))
 	s.srv = httptest.NewServer(mux)
 	s.origin = s.srv.URL
@@ -355,12 +351,6 @@ func (s *stubOkta) setAppGroups(appID string, groups []appGroupJSON) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.appGroups[appID] = groups
-}
-
-func (s *stubOkta) setGroups(groups []groupJSON) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.groups = groups
 }
 
 func (s *stubOkta) setPageSize(n int) {
@@ -911,32 +901,6 @@ func (s *stubOkta) handleAppGroups(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	groups := s.appGroups[r.PathValue("id")]
 	s.mu.Unlock()
-	s.writeJSON(w, http.StatusOK, paginate(s, w, r, groups))
-}
-
-func (s *stubOkta) handleListGroups(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	groups := s.groups
-	s.groupsQueries = append(s.groupsQueries, r.URL.Query())
-	s.mu.Unlock()
-	if r.URL.Query().Has("q") {
-		http.Error(w, "q does not support pagination", http.StatusBadRequest)
-		return
-	}
-	if search := r.URL.Query().Get("search"); search != "" {
-		var prefix string
-		if !strings.HasPrefix(search, "profile.name sw ") || json.Unmarshal([]byte(strings.TrimPrefix(search, "profile.name sw ")), &prefix) != nil {
-			http.Error(w, "invalid search expression", http.StatusBadRequest)
-			return
-		}
-		filtered := make([]groupJSON, 0)
-		for _, group := range groups {
-			if strings.HasPrefix(strings.ToLower(group.Profile.Name), strings.ToLower(prefix)) {
-				filtered = append(filtered, group)
-			}
-		}
-		groups = filtered
-	}
 	s.writeJSON(w, http.StatusOK, paginate(s, w, r, groups))
 }
 

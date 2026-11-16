@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // seedExternalUserFindings writes one ClickHouse finding per external user id,
@@ -27,7 +26,6 @@ func seedExternalUserFindings(t *testing.T, ti *testInstance, projectID uuid.UUI
 		rows = append(rows, chListFinding(t, projectID, orgID, chatID, msgID, policyID, eventAt, eventAt, "gitleaks", "aws-access-key-id", externalUserID, "AKIA**************LE", "", ""))
 	}
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(t.Context(), rows))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	return rows
 }
 

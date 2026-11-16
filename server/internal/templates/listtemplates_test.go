@@ -38,7 +38,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "higher_order_tool",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create second template")
@@ -51,7 +51,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 		Prompt:           "Third template prompt",
 		Description:      nil,
 		Engine:           "",
-		Kind:             "higher_order_tool",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 		Arguments:        new(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
 	})
@@ -91,7 +91,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 	require.Equal(t, template2.Template.ID, t2.ID, "second template ID mismatch")
 	require.Equal(t, "Second template prompt", t2.Prompt, "second template prompt mismatch")
 	require.Empty(t, t2.Engine, "second template engine mismatch")
-	require.Equal(t, "higher_order_tool", t2.Kind, "second template kind mismatch")
+	require.Equal(t, "prompt", t2.Kind, "second template kind mismatch")
 
 	// Verify third template
 	t3, found := templateMap["list-template-3"]

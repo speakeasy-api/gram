@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/xml"
 	"slices"
 	"strings"
 	"testing"
@@ -59,6 +60,96 @@ func TestParseJUnitFailures_Panic(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []testKey{{Package: "server/internal/pan", Test: "TestBoom"}}, got)
 	require.Equal(t, []string{"server/internal/pan"}, crashed)
+}
+
+// raceOutput is the shape of real -race output: the report lands in whichever
+// test was running, and every running test fails with the race verdict.
+const raceOutput = `=== CONT  TestBystander
+==================
+WARNING: DATA RACE
+Read at 0x00c006bef9c0 by goroutine 1611:
+  github.com/speakeasy-api/gram/server/internal/mcp_test.TestRacy()
+      github.com/speakeasy-api/gram/server/internal/mcp/racy_test.go:151 +0xc1c
+  testing.tRunner()
+      testing/testing.go:2195 +0x21c
+
+Previous write at 0x00c006bef9c0 by goroutine 32956:
+  github.com/speakeasy-api/gram/server/internal/mcp_test.TestRacy.func1()
+      github.com/speakeasy-api/gram/server/internal/mcp/racy_test.go:132 +0x71
+  net/http.HandlerFunc.ServeHTTP()
+      net/http/server.go:2358 +0x47
+
+Goroutine 1611 (running) created at:
+  testing.(*T).Run()
+      testing/testing.go:2260 +0xb12
+  github.com/speakeasy-api/gram/server/internal/mcp_test.TestMain()
+      github.com/speakeasy-api/gram/server/internal/mcp/setup_test.go:105 +0x148
+==================
+    testing.go:1867: race detected during execution of test
+--- FAIL: TestBystander (0.15s)
+`
+
+func TestAttributeRaces(t *testing.T) {
+	t.Parallel()
+
+	racy := testKey{Package: "server/internal/mcp", Test: "TestRacy"}
+	bystander := testKey{Package: "server/internal/mcp", Test: "TestBystander"}
+	quiet := testKey{Package: "server/internal/mcp", Test: "TestQuiet"}
+	broken := testKey{Package: "server/internal/mcp", Test: "TestBroken"}
+	verdict := "    testing.go:1867: race detected during execution of test\n"
+
+	t.Run("bystanders give way to the tests the race names", func(t *testing.T) {
+		t.Parallel()
+		got := attributeRaces([]failure{
+			{Key: bystander, Output: raceOutput},
+			{Key: quiet, Output: "ERROR failed to insert telemetry log\n    github.com/x/logger.go:194\n" + verdict},
+			{Key: broken, Output: "    broken_test.go:12: boom\n" + verdict},
+		})
+		require.Equal(t, []testKey{broken, racy}, got,
+			"a test with its own failure stays; TestMain in the creation stack is not blamed")
+	})
+
+	t.Run("a race that names no test keeps every failure", func(t *testing.T) {
+		t.Parallel()
+		noTest := strings.ReplaceAll(raceOutput, "mcp_test.TestRacy", "mcp.(*Service).handle")
+		got := attributeRaces([]failure{{Key: bystander, Output: noTest}, {Key: quiet, Output: verdict}})
+		require.Equal(t, []testKey{bystander, quiet}, got)
+	})
+}
+
+func TestParseJUnitFailures_Race(t *testing.T) {
+	t.Parallel()
+
+	var report strings.Builder
+	report.WriteString(`<testsuites><testsuite name="github.com/speakeasy-api/gram/server/internal/mcp">`)
+	for name, output := range map[string]string{
+		"TestBystander": raceOutput,
+		"TestOther":     "=== CONT  TestOther\n    testing.go:1867: race detected during execution of test\n--- FAIL: TestOther (0.01s)\n",
+	} {
+		report.WriteString(`<testcase classname="github.com/speakeasy-api/gram/server/internal/mcp" name="` + name + `"><failure message="Failed">`)
+		require.NoError(t, xml.EscapeText(&report, []byte(output)))
+		report.WriteString(`</failure></testcase>`)
+	}
+	report.WriteString(`</testsuite></testsuites>`)
+
+	got, crashed, err := parseJUnitFailures(strings.NewReader(report.String()))
+	require.NoError(t, err)
+	require.Equal(t, []testKey{{Package: "server/internal/mcp", Test: "TestRacy"}}, got)
+	require.Empty(t, crashed)
+}
+
+func TestParseLogFailures_Race(t *testing.T) {
+	t.Parallel()
+
+	var log strings.Builder
+	for line := range strings.SplitSeq("=== \x1b[31mFAIL\x1b[0m: server/internal/mcp TestBystander (0.15s)\n"+raceOutput+
+		"=== \x1b[31mFAIL\x1b[0m: server/internal/mcp TestOther (0.01s)\n    testing.go:1867: race detected during execution of test\n", "\n") {
+		log.WriteString("2026-10-22T12:42:47.4720214Z " + line + "\n")
+	}
+
+	got, err := parseLogFailures(strings.NewReader(log.String()))
+	require.NoError(t, err)
+	require.Equal(t, []testKey{{Package: "server/internal/mcp", Test: "TestRacy"}}, got)
 }
 
 func TestParseLogFailures(t *testing.T) {

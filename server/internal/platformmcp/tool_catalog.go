@@ -14,6 +14,7 @@ type SearchCatalogInput struct {
 	Query       string `json:"query,omitempty" jsonschema:"optional search text; only reviewed catalog candidates are returned"`
 	ProviderKey string `json:"provider_key,omitempty" jsonschema:"optional reviewed provider key to filter"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque continuation cursor returned by search_mcp_catalog"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional project slug; result cards mark the servers this project already has. Defaults to the organization's Default project, the same project register_catalog_mcp adds to. Does not change which servers are returned"`
 }
 
 type SearchCatalogOutput struct {
@@ -29,8 +30,17 @@ type InspectCatalogCandidateInput struct {
 
 // CandidateInspection is the safe common projection for reviewed and direct
 // candidate paths. Direct remote URLs are always marked unreviewed and never
-// enter the reviewed catalogue.
+// enter the reviewed catalogue. ToolNames and ToolCount are present, even when
+// empty, exactly when a direct remote URL's tools were listed; reviewed
+// catalogue entries do not publish tool declarations, so both are absent there.
 type CandidateInspection struct {
+	// SupportsDCR is advertised dynamic registration support for a reviewed catalogue entry.
+	SupportsDCR *bool `json:"supports_dcr,omitempty" jsonschema:"reviewed catalog only: advertised dynamic client registration support, not a verified OAuth connection; false alone does not establish manual setup"`
+	// SupportsCIMD is advertised compatible metadata-document support for a reviewed catalogue entry.
+	SupportsCIMD *bool `json:"supports_cimd,omitempty" jsonschema:"reviewed catalog only: advertised client ID metadata document support compatible with public clients, not a verified OAuth connection"`
+	// AuthSetup is the reviewed catalogue setup classification; unknown is not manual setup.
+	AuthSetup string `json:"auth_setup,omitempty" jsonschema:"reviewed catalog only: none, dcr, cimd, manual, or unknown; unknown means insufficient evidence, not manual setup"`
+
 	ProviderKey            string                      `json:"provider_key,omitempty"`
 	CatalogRef             string                      `json:"catalog_ref,omitempty"`
 	CanonicalURL           string                      `json:"canonical_url,omitempty"`
@@ -38,8 +48,8 @@ type CandidateInspection struct {
 	Description            string                      `json:"description,omitempty"`
 	Version                string                      `json:"version,omitempty"`
 	Transport              string                      `json:"transport"`
-	ToolNames              []string                    `json:"tool_names"`
-	ToolCount              int                         `json:"tool_count"`
+	ToolNames              []string                    `json:"tool_names,omitzero" jsonschema:"names of the tools the remote URL listed; absent when not known, such as for a reviewed catalog entry or a URL that requires sign-in"`
+	ToolCount              *int                        `json:"tool_count,omitempty" jsonschema:"number of tools the server offers; absent when not known"`
 	Configuration          []CatalogConfigurationField `json:"configuration,omitempty"`
 	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 	Trust                  string                      `json:"trust"`
@@ -53,14 +63,19 @@ type CandidateInspection struct {
 	Actions                     []RepairAction `json:"actions,omitempty"`
 }
 
-func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
+func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "search_mcp_catalog",
-		Title:       "Search Reviewed MCP Servers",
-		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything.",
+		Title:       "Search the MCP Catalog",
+		Description: "Search the reviewed catalogue of MCP servers Speakeasy has vetted for adding. This only lists options: nothing is added to a project and nobody receives anything. Present each result's auth_setup (how the server signs users in); when it is unknown, check the setup guide with search_speakeasy_docs before saying how it signs in.",
+		Annotations: readOnlyOpenWorldAnnotations(),
+		Meta:        cardToolMeta(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
-		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
+		// The project only marks which results are already added. Declaring
+		// it defaultable lets the managed assistant inject its own project
+		// and hide the selector, so it cannot read another project's state.
+		Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SearchCatalogOutput{}, err
@@ -111,16 +126,19 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 				return nil, SearchCatalogOutput{}, fmt.Errorf("encode platform mcp catalog cursor: %w", err)
 			}
 		}
-		return nil, output, nil
+		project := registrations.catalogCardProject(ctx, principal, input.ProjectSlug, page)
+		carousel := buildCatalogCarousel(page, project, output.NextCursor != "")
+		carousel.fillLogos(registrations.catalogLogoURIs(ctx, page, carousel.storedLogos()))
+		return catalogCarouselResult(carousel), output, nil
 	})
 }
 
 func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemote DirectRemoteInspector, gate CatalogRegistrationGateChecker, budget OperationBudget) {
 	addTool(reg, &mcp.Tool{
 		Name:        "inspect_mcp_candidate",
-		Title:       "Inspect an MCP Server",
-		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider can be connected automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
-		Annotations: readOnlyAnnotations(),
+		Title:       "Preview an MCP Server Before Adding It",
+		Description: "Look at one MCP server before adding it: a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. This changes nothing: the server is not added to a project and nobody receives it. For a catalogue entry, supports_dcr, supports_cimd and auth_setup report advertised capabilities, not a verified connection; unknown setup is not manual setup. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider connects automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CandidateInspection, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -153,7 +171,11 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
 			category := setupCategoryFromInspection(inspection)
-			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
+			var toolCount *int
+			if inspection.ToolNames != nil {
+				toolCount = new(inspection.ToolCount)
+			}
+			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: toolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
 		}
 		if catalog == nil {
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
@@ -168,7 +190,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 			}
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
 		}
-		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, ToolNames: details.ToolNames, ToolCount: details.ToolCount, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SetupIntent: details.SetupIntent}, nil
+		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SupportsDCR: new(details.SupportsDCR), SupportsCIMD: new(details.SupportsCIMD), AuthSetup: details.AuthSetup, SetupIntent: details.SetupIntent}, nil
 	})
 }
 

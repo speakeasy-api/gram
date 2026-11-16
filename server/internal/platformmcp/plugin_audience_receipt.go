@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 )
 
 const maxPluginAssignmentReceiptPayloadBytes = 16 << 10
@@ -97,6 +98,9 @@ func validPluginAssignmentReceiptResult(result SetPluginAssignmentsReceiptResult
 	}
 	for _, assignment := range result.Assignments {
 		if assignment.DisplayName == "" || (assignment.Kind != "everyone" && assignment.Kind != "role" && assignment.Kind != "directory_group" && assignment.Kind != "directory_attribute") {
+			return false
+		}
+		if _, err := installmode.Parse(assignment.InstallMode); assignment.InstallMode != "" && err != nil {
 			return false
 		}
 	}

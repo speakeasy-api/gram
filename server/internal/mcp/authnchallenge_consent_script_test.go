@@ -79,7 +79,7 @@ const element = (attrs = {}) => ({
 });
 const fallbackClass = 'text-muted-foreground interact:text-foreground';
 const cards = {};
-const statuses = ['connected', 'rejected', 'error', 'offline'].map((id) => {
+const statuses = ['connected', 'rejected', 'ready', 'error', 'offline'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = fallbackClass;
@@ -94,22 +94,27 @@ const statuses = ['connected', 'rejected', 'error', 'offline'].map((id) => {
   return status;
 });
 const summary = element({ 'data-connected-count': '1', 'data-connected-total': '5' });
+const root = element();
+const dispatched = [];
 const posts = [];
 vm.runInNewContext(source, {
   URLSearchParams,
   Number,
   String,
+  CustomEvent: class { constructor(type) { this.type = type; } },
   fetch(url, init) {
     const body = new URLSearchParams(init.body);
     posts.push({ url, method: init.method, body: Object.fromEntries(body) });
     const id = body.get('client_id');
     if (id === 'offline') return Promise.reject(new Error('offline'));
     if (id === 'error') return Promise.resolve({ ok: false, json: () => Promise.reject(new Error('no body')) });
-    const result = id === 'connected' ? { status: 'connected', message: 'ignored' } : { status: 'rejected', message: 'Example refused.' };
+    const result = id === 'connected' ? { status: 'connected', message: 'ignored' } : id === 'ready' ? { status: 'ready', message: 'ignored' } : { status: 'rejected', message: 'Example refused.' };
     return Promise.resolve({ ok: true, json: () => Promise.resolve(result) });
   },
   document: {
     body: { hasAttribute: () => false },
+    documentElement: root,
+    dispatchEvent(event) { dispatched.push(event.type); },
     createElement: () => element(),
     createTextNode: (text) => ({ text }),
     querySelector(selector) {
@@ -126,7 +131,7 @@ for (const status of statuses) {
   assert.equal(status.children.length, 2, 'checking shows a spinner and label');
   assert.equal(status.children[1].text, 'Connecting through your identity provider…');
 }
-assert.deepEqual(posts.map((p) => p.body), ['connected', 'rejected', 'error', 'offline'].map((id) => ({
+assert.deepEqual(posts.map((p) => p.body), ['connected', 'rejected', 'ready', 'error', 'offline'].map((id) => ({
   state: 'state-1', csrf_token: 'csrf-1', action: 'identity_chaining_check', client_id: id,
 })));
 assert.ok(posts.every((p) => p.url === '/mcp/x/connect/remote-session' && p.method === 'POST'));
@@ -135,9 +140,15 @@ setTimeout(() => {
   const ok = cards.connected;
   assert.equal(ok.status.getAttribute('data-chain-check'), 'connected');
   assert.equal(ok.status.className, 'text-xs text-default-success');
-  assert.equal(ok.status.textContent, 'Connected through your identity provider');
+  assert.equal(ok.status.textContent, 'Service connected through your identity provider');
   assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the quiet fallback');
   assert.equal(summary.textContent, '2 of 5 connected');
+
+  const ready = cards.ready;
+  assert.equal(ready.status.getAttribute('data-chain-check'), 'unknown', 'an unrecognized status reads neutral');
+  assert.equal(ready.status.textContent, 'Managed by your identity provider');
+  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps separate OAuth optional');
+  assert.equal(summary.textContent, '2 of 5 connected', 'a neutral card does not claim a downstream token');
 
   const no = cards.rejected;
   assert.equal(no.status.getAttribute('data-chain-check'), 'rejected');
@@ -146,6 +157,8 @@ setTimeout(() => {
   assert.match(no.fallback.className, /\bbg-primary\b/);
   assert.equal(no.fallback.textContent, 'Connect');
   assert.equal(no.fallback.getAttribute('data-connect-fallback'), null);
+  assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');
+  assert.deepEqual(dispatched, ['gram:consent-chain-rejected']);
 
   for (const id of ['error', 'offline']) {
     const c = cards[id];
@@ -159,4 +172,45 @@ setTimeout(() => {
 	cmd.Stdin = bytes.NewReader(consentScriptData)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "consent script chain checks: %s", out)
+}
+
+func TestConsentScriptPreservesDiscoveryChoice(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, "-e", `
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const source = require('node:fs').readFileSync(0, 'utf8');
+const saved = new Map();
+function render(state) {
+  const select = { value: '', addEventListener: (name, fn) => { select[name] = fn; } };
+  const form = { elements: { state: { value: state } }, querySelector: () => null, addEventListener() {} };
+  vm.runInNewContext(source, {
+    sessionStorage: { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) },
+    document: { body: { hasAttribute: () => false }, querySelectorAll: () => [], querySelector: selector => {
+      if (selector === 'form[data-approve-form]') return form;
+      if (selector === 'select[name="discovery_mode"]') return select;
+      return null;
+    } },
+    window: {},
+  });
+  return select;
+}
+const first = render('challenge-one');
+assert.equal(first.value, '');
+first.value = 'direct'; first.change();
+assert.equal(render('challenge-one').value, 'direct');
+assert.equal(render('challenge-two').value, '');
+const restored = render('challenge-one');
+restored.value = ''; restored.change();
+assert.equal(render('challenge-one').value, '');
+saved.set('gram-consent-discovery-v1:challenge-one', 'unknown');
+assert.equal(render('challenge-one').value, '');
+`)
+	cmd.Stdin = bytes.NewReader(consentScriptData)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "consent discovery persistence: %s", out)
 }

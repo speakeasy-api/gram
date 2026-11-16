@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type AdminProjectDetail = {
   /**
+   * The deployment the project currently serves. Absent when no deployment has completed.
+   */
+  activeDeploymentId?: string | undefined;
+  /**
    * Number of active API keys in the project.
    */
   apiKeyCount: number;
@@ -70,6 +74,7 @@ export const AdminProjectDetail$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    active_deployment_id: z.optional(z.string()),
     api_key_count: z.int(),
     assistant_count: z.int(),
     created_at: z.pipe(
@@ -93,6 +98,7 @@ export const AdminProjectDetail$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "active_deployment_id": "activeDeploymentId",
       "api_key_count": "apiKeyCount",
       "assistant_count": "assistantCount",
       "created_at": "createdAt",

@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -38,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	riskanalysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -50,7 +50,6 @@ import (
 	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -403,6 +402,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 	container, err := testcontainers.Run(t.Context(), manifest.Image,
 		testcontainers.WithLogger(testenv.NewTestcontainersLogger()),
 		testcontainers.WithExposedPorts("4000/tcp"),
+		testenv.WithLoopbackPorts(),
 		testcontainers.WithHostPortAccess(hostPorts...),
 		testcontainers.WithFiles(testcontainers.ContainerFile{
 			Reader: bytes.NewReader(configBytes), ContainerFilePath: "/app/e2e-config.yaml", FileMode: 0o644,
@@ -790,24 +790,29 @@ func (h *proxyHarness) timeoutAndResend() {
 
 func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 	h.t.Helper()
-	customRules, err := customruleanalyzer.NewScanner(h.conn)
-	require.NoError(h.t, err)
 	celEngine, err := riskcelenv.New()
 	require.NoError(h.t, err)
-	flags := &feature.InMemory{}
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(h.t), h.conn, cache.NoopCache, nil)
+	gitleaksPub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	var gitleaksRequests []*riskv1.GitleaksAnalysis
+	gitleaksPub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			request, ok := args.Get(1).(*riskv1.GitleaksAnalysis)
+			require.True(h.t, ok)
+			gitleaksRequests = append(gitleaksRequests, request)
+		})
 	analyze, err := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(h.t), testenv.NewTracerProvider(h.t), testenv.NewMeterProvider(h.t), h.conn,
-		nil, &riskanalysis.StubPIIScanner{}, nil, shadowMCPClient, noMCPProvenance{}, nil, flags,
+		nil, &feature.InMemory{},
 		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+		gitleaksPub,
 		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.Finding](),
-		customRules, celEngine, nil, nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis](),
+		celEngine,
 		false,
 	)
 	require.NoError(h.t, err)
@@ -816,22 +821,14 @@ func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 	env.RegisterActivity(analyze.Do)
 	activityResult, err := env.ExecuteActivity(analyze.Do, riskanalysis.AnalyzeBatchArgs{
 		ProjectID: h.projectID, OrganizationID: h.orgID, RiskPolicyID: h.policy.ID, PolicyVersion: h.policy.Version,
-		MessageIDs: []uuid.UUID{messageID}, ContentPartIDs: nil, Sources: h.policy.Sources, MessageTypes: h.policy.MessageTypes,
+		MessageIDs: []uuid.UUID{messageID}, ContentPartIDs: nil, Sources: h.policy.Sources,
 		PresidioEntities: nil, PresidioScoreThreshold: 0, CustomRuleIds: nil, ApprovedEmailDomains: nil,
-		BuiltinPresetsEnabled: false, DetectionScopes: nil,
+		DetectionScopes: nil,
 	})
 	require.NoError(h.t, err)
 	var analyzed riskanalysis.AnalyzeBatchResult
 	require.NoError(h.t, activityResult.Get(&analyzed))
 	require.Equal(h.t, 1, analyzed.Processed)
-	require.Positive(h.t, analyzed.Findings)
-	findings, err := riskrepo.New(h.conn).ListRiskResultsByProjectAndPolicy(h.t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
-		ProjectID: h.projectID, RiskPolicyID: h.policy.ID, CursorMessageCreatedAt: pgtype.Timestamptz{},
-		CursorID: uuid.NullUUID{}, PageLimit: 10,
-	})
-	require.NoError(h.t, err)
-	require.NotEmpty(h.t, findings)
-	require.Equal(h.t, riskanalysis.SourceGitleaks, findings[0].Source)
-	require.True(h.t, findings[0].Found)
-	require.Equal(h.t, messageID, findings[0].ChatMessageID.UUID)
+	require.Len(h.t, gitleaksRequests, 1)
+	require.Equal(h.t, messageID.String(), gitleaksRequests[0].GetChatMessageId())
 }

@@ -16,9 +16,14 @@ import {
   BookOpenIcon,
   Grid2X2Icon,
   KeyRoundIcon,
+  ShieldCheckIcon,
   PlugZapIcon,
   ListChecksIcon,
   ChartColumnStackedIcon,
+  ActivityIcon,
+  GlobeIcon,
+  MessageSquareIcon,
+  FlaskConicalIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -72,6 +77,12 @@ export const ADMIN_NAV_GROUPS = [
         icon: Grid2X2Icon,
       },
       {
+        to: "/signup-offers",
+        label: "Signup offers",
+        keywords: "signup stripe promotion tailscale partner gateway",
+        icon: BookOpenIcon,
+      },
+      {
         to: "/onboarding-steps",
         label: "Steps",
         keywords: "onboarding steps setup wizard cards groups playbooks",
@@ -88,6 +99,45 @@ export const ADMIN_NAV_GROUPS = [
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/upstream-oauth-migration",
+        label: "Upstream OAuth migration",
+        keywords: "oauth clients associations credentials backfill migrate",
+        icon: KeyRoundIcon,
+      },
+      {
+        to: "/platform-credentials",
+        label: "Platform credentials",
+        keywords:
+          "external credentials gcp iam service account impersonation workload identity federation wif signing kms",
+        icon: ShieldCheckIcon,
+      },
+      {
+        to: "/custom-domains",
+        label: "Custom domains",
+        keywords: "dns cname routing target hostname domain vanity",
+        icon: GlobeIcon,
+      },
+      {
+        to: "/memory-evals",
+        label: "Organizational Memory evals",
+        keywords:
+          "organizational memory team memory eval evals benchmark models summary digest accuracy compare",
+        icon: FlaskConicalIcon,
+      },
+      {
+        to: "/fleet-health",
+        label: "Fleet health",
+        keywords:
+          "hook clients curl binary versions sessions inference device agents speakeasyd rollout",
+        icon: ActivityIcon,
+      },
+      {
+        to: "/platform-mcp-feedback",
+        label: "Platform MCP feedback",
+        keywords: "feedback reports ratings notes users platform mcp",
+        icon: MessageSquareIcon,
       },
       {
         to: "/mcp-setup",

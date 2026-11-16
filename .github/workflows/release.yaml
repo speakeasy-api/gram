@@ -5,7 +5,11 @@ on:
     branches:
       - main
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
 
 jobs:
   release:
@@ -17,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # to push tags
-      pull-requests: read
-      issues: read
+      pull-requests: read # changesets links each changelog entry to its pull request
+      issues: read # changesets resolves issue references in changelog entries
       id-token: write # to publish to NPM
     outputs:
       published: ${{ steps.changesets.outputs.published }}
@@ -31,28 +35,23 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # changesets pushes with its own github-token, not checkout's.
+        with:
+          persist-credentials: false
 
+      # No caches in this job: it publishes to npm, so nothing it installs
+      # may come from a restored cache.
       - name: Setup Mise
         uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
-          cache: true
+          cache: false
           cache_key_prefix: mise-github-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
-
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
         run: aube install --frozen-lockfile
@@ -64,6 +63,10 @@ jobs:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
 
+          # changesets pushes the version branch, opens its PR, and tags and
+          # creates the GitHub releases.
+          permission-contents: write
+          permission-pull-requests: write
       # Configure git to commit as the GitHub App so commits trigger workflows.
       # Commits from github-actions[bot] don't trigger workflows by design.
       - name: Configure git for GitHub App
@@ -80,9 +83,6 @@ jobs:
           version-script: mise exec -- aube exec changeset -- version
           publish-script: mise exec --env viteprod -- aube exec changeset -- publish
 
-      - name: Prune aube store
-        run: aube store prune
-
   release-cli:
     needs: [release]
     if: needs.release.outputs.published == 'true' && contains(fromJSON(needs.release.outputs.publishedPackages).*.name, 'cli')
@@ -98,6 +98,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: "go.mod"
@@ -113,7 +114,7 @@ jobs:
           minimum_release_age: 1d
           install: true
           install_args: node
-          cache: true
+          cache: false
           cache_key_prefix: mise-github-v1
           env: false
       - name: Generate GitHub App Token for Speakeasy Bot
@@ -124,6 +125,8 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram,homebrew-tap
+          # goreleaser publishes the release and pushes the Homebrew formula.
+          permission-contents: write
       - name: Create release tag
         # GoReleaser expects a tag on HEAD before releasing. The newest tag
         # will be on an old commit, specified by `changeset`, so this is a
@@ -157,6 +160,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Set up Docker Buildx
@@ -190,4 +195,6 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=AGPL-3.0
       - name: Sign image
-        run: cosign sign --yes "${IMAGE}@${{ steps.build.outputs.digest }}"
+        run: cosign sign --yes "${IMAGE}@${STEPS_BUILD_OUTPUTS_DIGEST}"
+        env:
+          STEPS_BUILD_OUTPUTS_DIGEST: ${{ steps.build.outputs.digest }}

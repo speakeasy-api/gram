@@ -1,3 +1,5 @@
+import { RiskContentNotice } from "./RiskContentNotice";
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { addDays } from "date-fns";
 import { useCallback, useMemo } from "react";
@@ -22,6 +24,8 @@ import {
 import { RevealAllContext } from "./reveal-all-context";
 import type { ExecutionPayload } from "./use-execution-payload";
 import { MaskedMatch, RedactionChip, RevealedSpan } from "./risk-ui";
+import { ActiveTemporaryAccess } from "@/components/temporary-access";
+import { REVEAL_SCOPE } from "./unmask";
 
 // Mirrors mcpFindingEvidenceRetention on the server.
 const EVIDENCE_RETENTION_DAYS = 90;
@@ -265,6 +269,20 @@ export function FindingPayload({
   onToggleReveal: () => void;
   onSelect: (id: string) => void;
 }): JSX.Element {
+  const restricted = useRiskContentRestricted();
+  if (restricted) {
+    return (
+      <DrawerSection
+        label={
+          result.phase === "response"
+            ? "Response · tool result"
+            : "Request · tools/call params"
+        }
+      >
+        <RiskContentNotice />
+      </DrawerSection>
+    );
+  }
   const notStored = payload.data?.revealState === "evidence_not_stored";
   const expiresAt =
     payload.data?.expiresAt ??
@@ -292,6 +310,7 @@ export function FindingPayload({
         onSelect={onSelect}
       />
       {!canReveal && <NoRevealAccessNote />}
+      {canReveal && <ActiveTemporaryAccess scope={REVEAL_SCOPE} />}
       {canReveal && !notStored && (
         <span className={DRAWER_FOOTNOTE}>
           Reveals are audited · Evidence retained until{" "}

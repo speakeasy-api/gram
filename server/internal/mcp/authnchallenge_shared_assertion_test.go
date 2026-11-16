@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -13,12 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -33,7 +36,7 @@ func sharedIDJAGFixture(t *testing.T) (context.Context, *testInstance, idJAGTest
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, sharedTestUpstreamIssuer, jwksURL)
 	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
 	f := sharedIssuerFixture{
-		issuer: issuer, client: createIDJAGClient(t, ctx, ti, issuer.ID),
+		issuer: issuer, client: seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID),
 		slugA:     seedPublicServerOnIssuer(t, ctx, ti, issuer.ID),
 		slugB:     seedPublicServerOnIssuer(t, ctx, ti, issuer.ID),
 		issuerURL: ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String(),
@@ -136,7 +139,7 @@ func TestSharedAuthorizationServer_AssertionResourceRefusalDoesNotConsumeIDJAG(t
 		resources []string
 		code      string
 	}{
-		{nil, "invalid_request"}, {[]string{resource, resource}, "invalid_target"},
+		{[]string{resource, resource}, "invalid_target"},
 		{[]string{resource + "/"}, "invalid_target"}, {[]string{"not-a-resource"}, "invalid_target"},
 		{[]string{foreign.resource(ti, foreign.slugA)}, "invalid_target"},
 		{[]string{ti.serverURL.String() + "/mcp/unknown"}, "invalid_target"},
@@ -291,5 +294,164 @@ func TestSharedAuthorizationServer_MetadataRequiresPublicWorkloadResource(t *tes
 			require.NotContains(t, metadata.GrantTypes, oauthwire.GrantTypeJWTBearer)
 		}
 		require.Empty(t, metadata.GrantProfiles)
+	}
+}
+
+// An Okta-style assertion binds the session to the server the request names, and only that one.
+func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimBindsRequestedResource(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	resource := f.resource(ti, f.slugA)
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {resource},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	resp := decodeSharedTokenResponse(t, w)
+	require.Equal(t, []any{resource}, unverifiedClaims(t, resp.AccessToken)["aud"])
+	for _, target := range []string{f.slugA, f.slugB} {
+		endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, target, "mcp")
+		require.NoError(t, err)
+		_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), resp.AccessToken, ti.serverURL.String(), endpoint)
+		if target == f.slugA {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+		}
+	}
+}
+
+// A resource-less assertion naming a server the person cannot connect to is an invalid target.
+func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimRefusesUnauthorizedResource(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	req := sharedRequest(authztest.WithExactGrants(t, ctx), http.MethodPost, "/oauth/usi/"+f.issuer.ID.String()+"/token", f.issuer.ID.String(), strings.NewReader(url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {f.resource(ti, f.slugA)},
+	}.Encode()))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleSharedToken(w, req))
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+}
+
+// A resource-less assertion cannot reach another issuer's MCP server.
+func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimRefusesForeignResource(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	foreign := seedSharedIssuer(t, ctx, ti)
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {foreign.resource(ti, foreign.slugA)},
+	})
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+}
+
+// Codex sends no resource: the assertion's resource claim picks the server.
+func TestSharedAuthorizationServer_IDJAGWithoutRequestResourceUsesResourceClaim(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	resource := f.resource(ti, f.slugB)
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, resource, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	resp := decodeSharedTokenResponse(t, w)
+	require.Equal(t, []any{resource}, unverifiedClaims(t, resp.AccessToken)["aud"])
+	for _, target := range []string{f.slugA, f.slugB} {
+		endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, target, "mcp")
+		require.NoError(t, err)
+		_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), resp.AccessToken, ti.serverURL.String(), endpoint)
+		if target == f.slugB {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+		}
+	}
+}
+
+func TestSharedAuthorizationServer_IDJAGResourceClaimRefusalDoesNotConsumeIDJAG(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	foreign := seedSharedIssuer(t, ctx, ti)
+	assertionID := uuid.NewString()
+	for _, claim := range []any{
+		foreign.resource(ti, foreign.slugA),
+		"not-a-resource",
+		ti.serverURL.String() + "/mcp/unknown",
+		"",
+		[]string{f.resource(ti, f.slugA)},
+		42,
+	} {
+		w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+			oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
+			oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, claim, f.client.ClientID, mockidp.MockUserEmail, assertionID)},
+		})
+		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+		require.Equal(t, "invalid_grant", decodeSharedTokenResponse(t, w).Error, claim)
+	}
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, f.resource(ti, f.slugA), f.client.ClientID, mockidp.MockUserEmail, assertionID)},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimIsInvalidTarget(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	form := url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+	}
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+
+	form[oauthwire.ParamResource] = []string{f.resource(ti, f.slugA)}
+	w = sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// Shared metadata omits the ID-JAG grant without a usable jwks_uri or with admission disabled.
+func TestSharedAuthorizationServer_MetadataOmitsIDJAG(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		jwksURL          string
+		disableAdmission bool
+	}{
+		"missing_jwks":       {jwksURL: ""},
+		"plain_http_jwks":    {jwksURL: "http://idp.example.com/jwks"},
+		"admission_disabled": {jwksURL: "https://identity.example.test/keys", disableAdmission: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, _, _ := newIDJAGTestService(t)
+			issuer := createTrustedIDJAGIssuer(t, ctx, ti, requireProjectAuthContext(t, ctx).ActiveOrganizationID, sharedTestUpstreamIssuer, tc.jwksURL)
+			setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
+			if tc.disableAdmission {
+				setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
+			}
+			issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
+			w := httptest.NewRecorder()
+			require.NoError(t, ti.service.HandleSharedAuthorizationServerMetadata(w, sharedRequest(ctx, http.MethodGet, issuerURL+"/.well-known/oauth-authorization-server", issuer.ID.String(), nil)))
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var metadata struct {
+				GrantTypes []string `json:"grant_types_supported"`
+				Profiles   []string `json:"authorization_grant_profiles_supported"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+			require.NotContains(t, metadata.GrantTypes, oauthwire.GrantTypeJWTBearer)
+			require.NotContains(t, metadata.Profiles, oauthwire.GrantProfileIDJAG)
+		})
 	}
 }

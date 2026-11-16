@@ -40,7 +40,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	// APIKeyAuth already put the actor on ctx: scope the session ids first.
@@ -469,6 +469,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  s.now(),
@@ -553,6 +554,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,

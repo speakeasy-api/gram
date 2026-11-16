@@ -5,6 +5,8 @@ description: Summarize critical Watchdog findings for an explicit Speakeasy AI C
 
 # Summarize critical Watchdog findings
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Turn an AICP Watchdog review into a concise, channel-neutral digest: establish the authenticated scope, read critical findings, rank the rules that need attention, and report coverage and limitations.
 
 ## Scope and prerequisites
@@ -13,23 +15,23 @@ Turn an AICP Watchdog review into a concise, channel-neutral digest: establish t
 - Require an explicit project slug or ID from the user or saved task instructions. Do not silently choose the Default project. A request explicitly naming the Default project is sufficient.
 - If an expected organization ID is configured, require an exact match. Otherwise report the connection's organization ID and ask the user to confirm it before reading findings. Never infer an organization name from its ID.
 - This skill only returns a digest. Do not send messages, create schedules, or change policies, exclusions, or MCP configuration. Delivery and scheduling belong to separate user instructions and independently authorized connectors. No delivery connector is required to run this skill.
-- Never request or expose credentials. If authentication or permissions fail, stop and ask the user to reconnect or obtain access through the approved setup flow.
+- Never request or expose credentials. If authentication fails, stop and follow the `platform-sign-in` workflow to sign this client in. If permissions fail, stop and ask the user to obtain access through the approved setup flow.
 
 ## Read workflow
 
 1. Call `get_platform_context`. Verify the expected organization as described above. Stop on a mismatch; do not query another organization as a fallback.
 2. Select the project using one of these paths:
-   - **Configured project:** If the user or saved task supplies an exact project ID or slug, use that selector directly. Do not call `list_projects` or require complete organization-wide discovery for this path. The findings tool enforces access to the selected project; supplying a selector is not proof of authorization. If both selectors are supplied, ask the user to choose one before querying; in an unattended task with both selectors, return “Digest unavailable” and ask the owner to configure exactly one.
-   - **Project discovery:** If no exact selector is supplied, call `list_projects` through this same connection and ask the user to choose an exact ID or slug. If discovery is truncated, stop discovery and direct the user to the complete AICP dashboard list; resume only after they supply an exact selector. Do not infer scope from a partial list, guess IDs, or silently select Default. In an unattended task without a selector, return “Digest unavailable” and ask the owner to configure one.
+   - **Configured project:** If the user or saved task supplies an exact project slug, use it directly. Do not call `list_projects` or require complete organization-wide discovery for this path. The findings tool enforces access to the selected project; supplying a slug is not proof of authorization. If the user or saved task names its project by ID instead, call `list_projects` and use the slug of the project with exactly that ID. If none matches and the result has `truncated: true`, the project may be past the returned list: do not report it missing; stop and ask the owner for the exact project slug. If none matches in a complete list, stop. If both an ID and a slug are supplied, resolve the ID the same way and stop when that project's slug differs from the supplied slug; in an unattended task return “Digest unavailable” and ask the owner to configure one exact project.
+   - **Project discovery:** If no exact project is supplied, call `list_projects` through this same connection and ask the user to choose an exact project. If discovery is truncated, stop discovery and direct the user to the complete AICP dashboard list; resume only after they supply an exact project slug. Do not infer scope from a partial list, guess slugs, or silently select Default. In an unattended task without a project, return “Digest unavailable” and ask the owner to configure one.
      Stop on a missing, ambiguous, or inaccessible project; never substitute another project.
 3. Set `to` once to the current execution time in UTC and `from` to exactly 24 hours earlier. Use RFC3339 timestamps. A delayed scheduled run still uses the actual execution time, not its originally scheduled time. Report the resulting rolling window, not “yesterday.”
 4. Call `list_watchdog_findings` with exactly these choices:
    - `severity: "critical"`. Never broaden severity automatically, including when the result is empty.
-   - Exactly one explicit selector: `project_id` or `project_slug`. Pass the selected value unchanged; do not send both selectors.
+   - The selected project's slug as `project_slug`, passed unchanged.
    - The computed `from` and `to`.
    - `group_by: ["app"]`.
      Tool names may have connector-specific prefixes. Use the matching registered operations, not the general Event Feed.
-5. Validate the returned project against the supplied selector: compare its ID for `project_id`, or its slug for `project_slug`. Stop on a mismatch. Validate severity, window, totals, and groups. Require nonnegative `total_alerts` and `total_count`, and an explicit `truncated` flag. Missing fields, mismatched scope, or inconsistent totals are a failed digest, not an empty result. For an untruncated response, the number of groups and sum of their counts must equal `total_alerts` and `total_count`. For a truncated response, returned groups/counts must not exceed those totals.
+5. Validate the returned project against the supplied slug. Stop on a mismatch. Validate severity, window, totals, and groups. Require nonnegative `total_alerts` and `total_count`, and an explicit `truncated` flag. Missing fields, mismatched scope, or inconsistent totals are a failed digest, not an empty result. For an untruncated response, the number of groups and sum of their counts must equal `total_alerts` and `total_count`. For a truncated response, returned groups/counts must not exceed those totals.
 6. Sort returned rules by finding count descending, breaking ties by rule ID. Summarize up to five rules. Return the digest in the format below without invoking any delivery tools.
 
 ## Digest format

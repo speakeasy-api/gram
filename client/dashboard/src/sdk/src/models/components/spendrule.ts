@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const SpendRuleAction = {
 /**
  * Rule action: flag (record events only) or block (deny agent traffic on breach).
  */
-export type SpendRuleAction = ClosedEnum<typeof SpendRuleAction>;
+export type SpendRuleAction = OpenEnum<typeof SpendRuleAction>;
 
 /**
  * UTC calendar window the budget covers.
@@ -36,7 +37,7 @@ export const SpendRuleWindowKind = {
 /**
  * UTC calendar window the budget covers.
  */
-export type SpendRuleWindowKind = ClosedEnum<typeof SpendRuleWindowKind>;
+export type SpendRuleWindowKind = OpenEnum<typeof SpendRuleWindowKind>;
 
 export type SpendRule = {
   /**
@@ -107,14 +108,16 @@ export type SpendRule = {
 };
 
 /** @internal */
-export const SpendRuleAction$inboundSchema: z.ZodMiniEnum<
-  typeof SpendRuleAction
-> = z.enum(SpendRuleAction);
+export const SpendRuleAction$inboundSchema: z.ZodMiniType<
+  SpendRuleAction,
+  unknown
+> = openEnums.inboundSchema(SpendRuleAction);
 
 /** @internal */
-export const SpendRuleWindowKind$inboundSchema: z.ZodMiniEnum<
-  typeof SpendRuleWindowKind
-> = z.enum(SpendRuleWindowKind);
+export const SpendRuleWindowKind$inboundSchema: z.ZodMiniType<
+  SpendRuleWindowKind,
+  unknown
+> = openEnums.inboundSchema(SpendRuleWindowKind);
 
 /** @internal */
 export const SpendRule$inboundSchema: z.ZodMiniType<SpendRule, unknown> = z

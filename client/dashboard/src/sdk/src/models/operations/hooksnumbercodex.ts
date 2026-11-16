@@ -10,9 +10,19 @@ import {
   CodexHookPayload$outboundSchema,
 } from "../components/codexhookpayload.js";
 
+export type HooksNumberCodexSecurityOption1 = {
+  deviceAgentTokenHeaderAuthorization: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type HooksNumberCodexSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type HooksNumberCodexSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
-  projectSlugHeaderGramProject?: string | undefined;
+  option1?: HooksNumberCodexSecurityOption1 | undefined;
+  option2?: HooksNumberCodexSecurityOption2 | undefined;
 };
 
 export type HooksNumberCodexRequest = {
@@ -36,9 +46,76 @@ export type HooksNumberCodexRequest = {
 };
 
 /** @internal */
+export type HooksNumberCodexSecurityOption1$Outbound = {
+  device_agent_token_header_Authorization: string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const HooksNumberCodexSecurityOption1$outboundSchema: z.ZodMiniType<
+  HooksNumberCodexSecurityOption1$Outbound,
+  HooksNumberCodexSecurityOption1
+> = z.pipe(
+  z.object({
+    deviceAgentTokenHeaderAuthorization: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      deviceAgentTokenHeaderAuthorization:
+        "device_agent_token_header_Authorization",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function hooksNumberCodexSecurityOption1ToJSON(
+  hooksNumberCodexSecurityOption1: HooksNumberCodexSecurityOption1,
+): string {
+  return JSON.stringify(
+    HooksNumberCodexSecurityOption1$outboundSchema.parse(
+      hooksNumberCodexSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type HooksNumberCodexSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const HooksNumberCodexSecurityOption2$outboundSchema: z.ZodMiniType<
+  HooksNumberCodexSecurityOption2$Outbound,
+  HooksNumberCodexSecurityOption2
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function hooksNumberCodexSecurityOption2ToJSON(
+  hooksNumberCodexSecurityOption2: HooksNumberCodexSecurityOption2,
+): string {
+  return JSON.stringify(
+    HooksNumberCodexSecurityOption2$outboundSchema.parse(
+      hooksNumberCodexSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type HooksNumberCodexSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
-  "project_slug_header_Gram-Project"?: string | undefined;
+  Option1?: HooksNumberCodexSecurityOption1$Outbound | undefined;
+  Option2?: HooksNumberCodexSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -47,13 +124,17 @@ export const HooksNumberCodexSecurity$outboundSchema: z.ZodMiniType<
   HooksNumberCodexSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
-    projectSlugHeaderGramProject: z.optional(z.string()),
+    option1: z.optional(
+      z.lazy(() => HooksNumberCodexSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => HooksNumberCodexSecurityOption2$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      option1: "Option1",
+      option2: "Option2",
     });
   }),
 );

@@ -224,9 +224,22 @@ describe("AppSidebar", () => {
         links: [
           { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
+          { label: "Signup offers", href: "/signup-offers" },
           { label: "Steps", href: "/onboarding-steps" },
           { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+          {
+            label: "Upstream OAuth migration",
+            href: "/upstream-oauth-migration",
+          },
+          { label: "Platform credentials", href: "/platform-credentials" },
+          { label: "Custom domains", href: "/custom-domains" },
+          { label: "Organizational Memory evals", href: "/memory-evals" },
+          { label: "Fleet health", href: "/fleet-health" },
+          {
+            label: "Platform MCP feedback",
+            href: "/platform-mcp-feedback",
+          },
           { label: "Admin MCP", href: "/mcp-setup" },
           {
             label: "Demo organization",

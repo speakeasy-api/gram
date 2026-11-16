@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -394,7 +395,10 @@ func TestReconcileCustomDomain_DeleteDuringApplyRemovesAppliedResource(t *testin
 	require.Equal(t, "race-resource", calls[1].ResourceName)
 	require.Equal(t, "race-secret", calls[1].SecretName)
 
-	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customdomainsRepo.GetCustomDomainRouteConfigParams{
+		ID:             customDomain.ID,
+		OrganizationID: customDomain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.True(t, deleted.Deleted)
 	require.False(t, deleted.IngressName.Valid)
@@ -447,7 +451,10 @@ func TestReconcileCustomDomain_DeleteDuringConvergenceConvergesToDeleted(t *test
 	}
 	close(provisioner.releaseApply)
 	require.Eventually(t, func() bool {
-		route, routeErr := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+		route, routeErr := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customdomainsRepo.GetCustomDomainRouteConfigParams{
+			ID:             customDomain.ID,
+			OrganizationID: customDomain.OrganizationID,
+		})
 		return routeErr == nil && route.IngressName.Valid
 	}, 5*time.Second, 10*time.Millisecond)
 
@@ -464,7 +471,10 @@ func TestReconcileCustomDomain_DeleteDuringConvergenceConvergesToDeleted(t *test
 
 	_, err = customdomainsRepo.New(conn).GetCustomDomainByID(ctx, customDomain.ID)
 	require.Error(t, err)
-	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customdomainsRepo.GetCustomDomainRouteConfigParams{
+		ID:             customDomain.ID,
+		OrganizationID: customDomain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, deleted.IngressName.Valid)
 	require.False(t, deleted.CertSecretName.Valid)
@@ -539,7 +549,10 @@ func TestReconcileCustomDomain_DeletedRetriesDeleteIdempotently(t *testing.T) {
 	require.Equal(t, "retry-resource", calls[0].ResourceName)
 	require.Equal(t, "retry-secret", calls[0].SecretName)
 
-	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customdomainsRepo.GetCustomDomainRouteConfigParams{
+		ID:             customDomain.ID,
+		OrganizationID: customDomain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, deleted.IngressName.Valid)
 	require.False(t, deleted.CertSecretName.Valid)
@@ -601,4 +614,33 @@ func TestReconcileCustomDomain_PendingDomainAppliesButNeverActivates(t *testing.
 	require.NoError(t, err)
 	require.False(t, row.Verified, "reconciliation must never set verified")
 	require.False(t, row.Activated, "an unverified domain must not activate")
+}
+
+func TestReconcileCustomDomain_BackfillsDNSTargetToken(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "reconcile_backfill_token_test")
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  "org-reconcile-backfill",
+		Domain:          "reconcile-backfill.example.com",
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	require.False(t, customDomain.DnsTargetToken.Valid)
+
+	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner}, activities.WithSetupSleep(0))
+	require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
+
+	route, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customdomainsRepo.GetCustomDomainRouteConfigParams{
+		ID:             customDomain.ID,
+		OrganizationID: customDomain.OrganizationID,
+	})
+	require.NoError(t, err)
+	require.True(t, route.DnsTargetToken.Valid)
+	require.Len(t, route.DnsTargetToken.String, customdomains.DNSTargetTokenLength)
 }

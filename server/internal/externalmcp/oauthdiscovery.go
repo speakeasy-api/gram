@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -55,56 +53,6 @@ type OAuthDiscoveryResult struct {
 	// completion — callers that treat "none" as "publishes no OAuth
 	// metadata" must keep that case distinct.
 	ProbeIncomplete bool
-}
-
-// ExternalMCPOAuthConfig contains OAuth configuration extracted from an external MCP tool
-// that requires OAuth authentication.
-type ExternalMCPOAuthConfig struct {
-	// RemoteURL is the parsed URL of the external MCP server
-	RemoteURL *url.URL
-	// RegistryID is the ID of the MCP registry the server belongs to
-	RegistryID string
-	// Slug is the tool prefix slug (e.g., "github")
-	Slug string
-	// Name is the reverse-DNS server name (e.g., "ai.exa/exa")
-	Name string
-
-	// OAuth metadata from the external server
-	OAuthVersion          string   // "2.1", "2.0", or "none"
-	AuthorizationEndpoint string   // OAuth authorization endpoint URL
-	TokenEndpoint         string   // OAuth token endpoint URL
-	RegistrationEndpoint  string   // OAuth dynamic client registration endpoint URL
-	ScopesSupported       []string // OAuth scopes supported by the server
-}
-
-// ResolveOAuthConfig returns the OAuth configuration from the first external MCP tool
-// in the toolset that requires OAuth, or nil if none found.
-func ResolveOAuthConfig(toolset *types.Toolset) *ExternalMCPOAuthConfig {
-	for _, tool := range toolset.Tools {
-		if tool.ExternalMcpToolDefinition == nil || !tool.ExternalMcpToolDefinition.RequiresOauth {
-			continue
-		}
-
-		remoteURL, err := url.Parse(tool.ExternalMcpToolDefinition.RemoteURL)
-		if err != nil {
-			continue
-		}
-
-		def := tool.ExternalMcpToolDefinition
-		return &ExternalMCPOAuthConfig{
-			RemoteURL:             remoteURL,
-			RegistryID:            def.RegistryID,
-			Slug:                  def.Slug,
-			Name:                  def.Name,
-			OAuthVersion:          def.OauthVersion,
-			AuthorizationEndpoint: conv.PtrValOr(def.OauthAuthorizationEndpoint, ""),
-			TokenEndpoint:         conv.PtrValOr(def.OauthTokenEndpoint, ""),
-			RegistrationEndpoint:  conv.PtrValOr(def.OauthRegistrationEndpoint, ""),
-			ScopesSupported:       def.OauthScopesSupported,
-		}
-	}
-
-	return nil
 }
 
 // errWellKnownAbsent marks a well-known fetch the server answered with a

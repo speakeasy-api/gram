@@ -53,6 +53,18 @@ export function identityRefForUserKey(
   return isEmailAddress(key) ? { email: key } : { externalUserId: key };
 }
 
+/**
+ * Whether this reference names an agent rather than a person.
+ *
+ * An agent is the one identity whose page does not need `org:read`: it
+ * resolves through its own management API, which authorizes per agent, so
+ * ownership is enough. Only a passed-through URN can say so — the other
+ * shapes key people.
+ */
+export function isAgentRef(ref: IdentityRef): boolean {
+  return "urn" in ref && ref.urn.startsWith("agent:");
+}
+
 export function identityUrnFor(ref: IdentityRef): string {
   if ("urn" in ref) return ref.urn;
   if ("userId" in ref) return `user:${ref.userId}`;

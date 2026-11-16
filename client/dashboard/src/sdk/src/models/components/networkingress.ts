@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const EndpointNamespaceKind = {
 /**
  * Pinned endpoint namespace
  */
-export type EndpointNamespaceKind = ClosedEnum<typeof EndpointNamespaceKind>;
+export type EndpointNamespaceKind = OpenEnum<typeof EndpointNamespaceKind>;
 
 /**
  * Private-network provider
@@ -30,7 +31,19 @@ export const NetworkIngressProvider = {
 /**
  * Private-network provider
  */
-export type NetworkIngressProvider = ClosedEnum<typeof NetworkIngressProvider>;
+export type NetworkIngressProvider = OpenEnum<typeof NetworkIngressProvider>;
+
+/**
+ * What hosts the ingress on the customer's tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.
+ */
+export const Runtime = {
+  Gateway: "gateway",
+  Operator: "operator",
+} as const;
+/**
+ * What hosts the ingress on the customer's tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.
+ */
+export type Runtime = OpenEnum<typeof Runtime>;
 
 export type NetworkIngress = {
   connectedSince?: Date | undefined;
@@ -81,6 +94,10 @@ export type NetworkIngress = {
    */
   provider: NetworkIngressProvider;
   /**
+   * What hosts the ingress on the customer's tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.
+   */
+  runtime: Runtime;
+  /**
    * Latest redacted lifecycle status
    */
   status: string;
@@ -88,14 +105,20 @@ export type NetworkIngress = {
 };
 
 /** @internal */
-export const EndpointNamespaceKind$inboundSchema: z.ZodMiniEnum<
-  typeof EndpointNamespaceKind
-> = z.enum(EndpointNamespaceKind);
+export const EndpointNamespaceKind$inboundSchema: z.ZodMiniType<
+  EndpointNamespaceKind,
+  unknown
+> = openEnums.inboundSchema(EndpointNamespaceKind);
 
 /** @internal */
-export const NetworkIngressProvider$inboundSchema: z.ZodMiniEnum<
-  typeof NetworkIngressProvider
-> = z.enum(NetworkIngressProvider);
+export const NetworkIngressProvider$inboundSchema: z.ZodMiniType<
+  NetworkIngressProvider,
+  unknown
+> = openEnums.inboundSchema(NetworkIngressProvider);
+
+/** @internal */
+export const Runtime$inboundSchema: z.ZodMiniType<Runtime, unknown> = openEnums
+  .inboundSchema(Runtime);
 
 /** @internal */
 export const NetworkIngress$inboundSchema: z.ZodMiniType<
@@ -124,6 +147,7 @@ export const NetworkIngress$inboundSchema: z.ZodMiniType<
     last_error: z.optional(z.string()),
     organization_id: z.string(),
     provider: NetworkIngressProvider$inboundSchema,
+    runtime: Runtime$inboundSchema,
     status: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

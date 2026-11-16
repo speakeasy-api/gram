@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const ExternalKeySummaryAlgorithm = {
 /**
  * The signing algorithm of the key.
  */
-export type ExternalKeySummaryAlgorithm = ClosedEnum<
+export type ExternalKeySummaryAlgorithm = OpenEnum<
   typeof ExternalKeySummaryAlgorithm
 >;
 
@@ -33,7 +34,7 @@ export const ExternalKeySummaryProvider = {
 /**
  * The cloud KMS provider of the key.
  */
-export type ExternalKeySummaryProvider = ClosedEnum<
+export type ExternalKeySummaryProvider = OpenEnum<
   typeof ExternalKeySummaryProvider
 >;
 
@@ -80,14 +81,16 @@ export type ExternalKeySummary = {
 };
 
 /** @internal */
-export const ExternalKeySummaryAlgorithm$inboundSchema: z.ZodMiniEnum<
-  typeof ExternalKeySummaryAlgorithm
-> = z.enum(ExternalKeySummaryAlgorithm);
+export const ExternalKeySummaryAlgorithm$inboundSchema: z.ZodMiniType<
+  ExternalKeySummaryAlgorithm,
+  unknown
+> = openEnums.inboundSchema(ExternalKeySummaryAlgorithm);
 
 /** @internal */
-export const ExternalKeySummaryProvider$inboundSchema: z.ZodMiniEnum<
-  typeof ExternalKeySummaryProvider
-> = z.enum(ExternalKeySummaryProvider);
+export const ExternalKeySummaryProvider$inboundSchema: z.ZodMiniType<
+  ExternalKeySummaryProvider,
+  unknown
+> = openEnums.inboundSchema(ExternalKeySummaryProvider);
 
 /** @internal */
 export const ExternalKeySummary$inboundSchema: z.ZodMiniType<

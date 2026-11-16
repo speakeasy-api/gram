@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 
 import { OrgSidebar } from "./org-sidebar";
 import type { ReactNode } from "react";
@@ -7,26 +8,13 @@ import type { ProductTier } from "@/hooks/useProductTier";
 
 const mocks = vi.hoisted(() => ({
   features: vi.fn(() => ({})),
-  active: "agents",
   isPlatformAdmin: false,
   productTier: "enterprise" as ProductTier,
   adminOrganizationId: null as string | null,
+  userSessionIssuersFlag: "disabled" as "enabled" | "disabled",
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () =>
-    new Proxy(
-      {},
-      {
-        get: (_, key: string) => ({
-          title: key === "identity" ? "IDP and SSO" : key,
-          active: key === mocks.active,
-          href: () =>
-            key === "identity" || key === "setup"
-              ? `/example/${key}`
-              : `/${key}`,
-        }),
-      },
-    ),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "project" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
@@ -69,10 +57,14 @@ vi.mock("@/hooks/useProductTier", () => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
 }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.userSessionIssuersFlag }),
+}));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: mocks.features,
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   Link: ({ children, to }: { children: ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
@@ -114,15 +106,17 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/components/scope-gated-nav-group", () => ({
   ScopeGatedNavGroup: ({
+    label: groupLabel,
     items,
   }: {
+    label: string;
     items: {
       item: { title: string; href: () => string };
       label?: string;
       scope?: string | string[];
     }[];
   }) => (
-    <>
+    <nav aria-label={groupLabel}>
       {items.map(({ item, label, scope }) => (
         <a
           key={item.title}
@@ -133,22 +127,30 @@ vi.mock("@/components/scope-gated-nav-group", () => ({
           {label ?? item.title}
         </a>
       ))}
-    </>
+    </nav>
   ),
 }));
 vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
 vi.mock("./trial-status-card", () => ({ TrialStatusCard: () => null }));
 
+function renderSidebar(path = "/example") {
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <OrgSidebar />
+    </MemoryRouter>,
+  );
+}
+
 afterEach(() => {
   cleanup();
-  mocks.active = "agents";
   mocks.isPlatformAdmin = false;
   mocks.productTier = "enterprise";
   mocks.adminOrganizationId = null;
+  mocks.userSessionIssuersFlag = "disabled";
 });
 
 it("lists one IDP and SSO entry under Team and no vendor entry", () => {
-  render(<OrgSidebar />);
+  renderSidebar();
   expect(screen.queryByRole("link", { name: "okta" })).toBeNull();
   expect(
     screen.queryByRole("link", { name: "Enterprise Managed Auth" }),
@@ -158,58 +160,57 @@ it("lists one IDP and SSO entry under Team and no vendor entry", () => {
 });
 
 it("keeps Network Access visible without a staff entitlement", () => {
-  render(<OrgSidebar />);
+  renderSidebar();
   expect(screen.getByText("Network Access")).toBeTruthy();
 });
 
 it.each([
-  ["team", "Team"],
-  ["access", "Team"],
-  ["identity", "Team"],
-  ["auditLogs", "Secure"],
-  ["workloadIssuers", "Secure"],
-])("selects the correct group for %s", (active, group) => {
-  mocks.active = active;
-  render(<OrgSidebar />);
+  ["/example/team", "Team", "Team"],
+  ["/example/access", "Team", "Roles & Permissions"],
+  ["/example/identity", "Team", "IDP and SSO"],
+  ["/example/audit-logs", "Secure", "Audit Logs"],
+])("selects the correct group for %s", (path, group, item) => {
+  renderSidebar(path);
   expect(screen.getByTestId("selection").getAttribute("data-group")).toBe(
     group,
   );
-  expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(
-    active === "identity" ? "IDP and SSO" : active,
-  );
+  expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(item);
 });
 
-it("lists the Access Hub under Secure, gated on the workload scopes", () => {
-  render(<OrgSidebar />);
-  const accessHub = screen.getByRole("link", { name: "workloadIssuers" });
-  expect(accessHub.getAttribute("href")).toBe("/workloadIssuers");
-  expect(accessHub.getAttribute("data-scope")).toBe(
-    "workload:read workload:write",
-  );
+it("keeps Org Gateway and leaves MCP Authentication out of Settings", () => {
+  // MCP Authentication lives on each project's MCP Sessions page now.
+  mocks.userSessionIssuersFlag = "enabled";
+  renderSidebar();
+  const settings = screen.getByRole("navigation", { name: "Settings" });
+  expect(
+    within(settings).queryByRole("link", { name: "MCP Authentication" }),
+  ).toBeNull();
+  expect(
+    within(settings).getByRole("link", { name: "Org Gateway" }),
+  ).toBeTruthy();
 });
 
 it.each([false, true])(
   "omits platform issuer management for platform admin=%s",
   (isPlatformAdmin) => {
     mocks.isPlatformAdmin = isPlatformAdmin;
-    mocks.active = "remoteIdentityProviders";
-    render(<OrgSidebar />);
+    renderSidebar("/example/remote-identity-providers/issuer-1");
     expect(
-      screen.queryByRole("link", { name: "platformRemoteIdentityProviders" }),
+      screen.queryByRole("link", { name: /Remote Identity Providers/ }),
     ).toBeNull();
     expect(
-      screen.queryByRole("link", { name: "remoteIdentityProviders" }),
+      screen.queryByRole("link", { name: "Authorization Servers" }),
     ).toBeNull();
-    expect(screen.queryByRole("link", { name: "agents" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Agent Identity" })).toBeNull();
     if (isPlatformAdmin)
       expect(
-        screen.getByRole("link", { name: "platformAdminOpenRouterKeys" }),
+        screen.getByRole("link", { name: "OpenRouter Keys" }),
       ).toBeTruthy();
   },
 );
 
 it("does not request organization features for baseline project users", () => {
-  render(<OrgSidebar />);
+  renderSidebar();
   expect(mocks.features).toHaveBeenLastCalledWith(
     expect.anything(),
     undefined,
@@ -232,7 +233,7 @@ it.each([
   (tier, adminOrganizationId, visible) => {
     mocks.productTier = tier;
     mocks.adminOrganizationId = adminOrganizationId;
-    render(<OrgSidebar />);
+    renderSidebar();
     const link = screen.queryByRole("link", {
       name: "Finish organization setup",
     });

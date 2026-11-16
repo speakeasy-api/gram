@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // An initialize declaring 2026-07-28 never starts a handshake, even when its
@@ -31,7 +30,7 @@ func TestServePublic_Declared20260728InitializeDoesNotStartHandshake(t *testing.
 				require.True(t, ok)
 				slug := "lifecycle-" + uuid.NewString()[:8]
 				if surface == "hosted" {
-					toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+					toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 					slug = toolset.McpSlug.String
 				} else {
 					createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)

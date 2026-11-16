@@ -13,7 +13,7 @@ import (
 
 // GetRiskAnalysisStatus reports the run state of the project's risk analysis
 // coordinator for the Watchdog "last analyzed" badge. It shares the signals
-// endpoint's gates (org:admin plus the Watchdog flag) because it describes
+// endpoint's org:admin authorization because it describes
 // the same surface, and it reads Temporal directly rather than Postgres:
 // the coordinator is signal-driven, so the latest workflow run is the only
 // record of when analysis last happened.
@@ -25,10 +25,6 @@ func (s *Service) GetRiskAnalysisStatus(ctx context.Context, _ *gen.GetRiskAnaly
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
-	}
-
-	if !s.riskWatchdogEnabled(ctx, authCtx) {
-		return nil, oops.E(oops.CodeForbidden, nil, "risk signals are not enabled for this organization")
 	}
 
 	status, err := s.signaler.Describe(ctx, *authCtx.ProjectID)

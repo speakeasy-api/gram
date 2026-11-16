@@ -34,13 +34,25 @@ export function SettingsPage({
   area,
   primaryAction,
   children,
+  renderHeader,
   variant = "sections",
 }: TemplateFrameProps &
   TemplateHeaderProps & {
     children: ReactNode;
+    /** Decorate the canonical header without duplicating its title or description. */
+    renderHeader?: (header: ReactNode) => ReactNode;
     /** "sections" (default) or "content" (single narrow prose column). */
     variant?: "sections" | "content";
   }): JSX.Element {
+  const header = (
+    <TemplateHeader
+      title={title}
+      description={description}
+      stage={stage}
+      area={area}
+      primaryAction={primaryAction}
+    />
+  );
   return (
     <TemplateFrame
       scope={scope}
@@ -48,13 +60,7 @@ export function SettingsPage({
       resourceId={resourceId}
       breadcrumbSubstitutions={breadcrumbSubstitutions}
     >
-      <TemplateHeader
-        title={title}
-        description={description}
-        stage={stage}
-        area={area}
-        primaryAction={primaryAction}
-      />
+      {renderHeader ? renderHeader(header) : header}
       {variant === "content" ? (
         <div className="max-w-3xl">{children}</div>
       ) : (

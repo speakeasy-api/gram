@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import type { Snapshot } from "@/pages/coverage/model";
@@ -10,7 +11,15 @@ function cell(
   surface: CoverageCell["surface"],
   status: CoverageCell["status"],
 ): CoverageCell {
-  return { capability, surface, status, value: 0, detail: "", last_seen: "" };
+  return {
+    capability,
+    surface,
+    status,
+    value: 0,
+    unit: "",
+    detail: "",
+    last_seen: "",
+  };
 }
 
 const snapshot: Snapshot = {

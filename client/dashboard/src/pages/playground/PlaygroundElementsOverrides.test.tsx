@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { NO_MCP_TOOLS_MESSAGE } from "@/elements/lib/mcpToolsAvailability";

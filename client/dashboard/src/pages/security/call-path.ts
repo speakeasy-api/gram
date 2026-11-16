@@ -1,10 +1,11 @@
-import type {
+import { isKnownEnumValue } from "@/lib/enum";
+import {
   EnforcementOutcome,
-  RiskResult,
+  type RiskResult,
 } from "@gram/client/models/components/riskresult.js";
 import { isBlockingOutcome } from "./risk-outcome";
 
-export type CallPathLink = { blocked: boolean; label: string };
+export type CallPathLink = { blocked: boolean | null; label: string };
 
 export type CallPath = {
   /** Client ↔ gateway. */
@@ -12,7 +13,7 @@ export type CallPath = {
   /** Gateway ↔ MCP server. */
   right: CallPathLink;
   /** False when the gateway stopped the request before it reached the server. */
-  serverReached: boolean;
+  serverReached: boolean | null;
   caption: string;
 };
 
@@ -40,6 +41,7 @@ function requestCaption(outcome: EnforcementOutcome, server: string): string {
     case "logged":
       return `Logged only. The call was forwarded to ${server} unchanged.`;
   }
+  return "The request outcome is unknown.";
 }
 
 function responseCaption(outcome: EnforcementOutcome, server: string): string {
@@ -58,6 +60,7 @@ function responseCaption(outcome: EnforcementOutcome, server: string): string {
     case "logged":
       return `Logged only. The result from ${server} reached the client unchanged.`;
   }
+  return "The response outcome is unknown.";
 }
 
 /**
@@ -68,13 +71,22 @@ export function callOutcome(
   result: RiskResult,
   siblings: readonly RiskResult[],
 ): EnforcementOutcome | undefined {
-  const blocking = siblings.find(
-    (s) =>
-      s.executionId === result.executionId &&
-      s.phase === result.phase &&
-      isBlockingOutcome(s.enforcementOutcome),
+  const matching = siblings.filter(
+    (s) => s.executionId === result.executionId && s.phase === result.phase,
   );
-  return blocking?.enforcementOutcome ?? result.enforcementOutcome;
+  const blocking = matching.find((s) =>
+    isBlockingOutcome(s.enforcementOutcome),
+  );
+  const unknown = matching.find(
+    (s) =>
+      s.enforcementOutcome !== undefined &&
+      !isKnownEnumValue(EnforcementOutcome, s.enforcementOutcome),
+  );
+  return (
+    blocking?.enforcementOutcome ??
+    unknown?.enforcementOutcome ??
+    result.enforcementOutcome
+  );
 }
 
 // Maps phase × enforcement outcome to the call path strip: the blocked link is
@@ -84,6 +96,29 @@ export function callPathFor(
   outcome: EnforcementOutcome | undefined,
   server: string,
 ): CallPath {
+  if (phase !== undefined && phase !== "request" && phase !== "response") {
+    return {
+      left: { blocked: null, label: "Unknown" },
+      right: { blocked: null, label: "Unknown" },
+      serverReached: null,
+      caption: "The call path is unavailable for this phase.",
+    };
+  }
+  if (outcome !== undefined && !isKnownEnumValue(EnforcementOutcome, outcome)) {
+    const response = phase === "response";
+    return {
+      left: response
+        ? { blocked: null, label: "Delivery unknown" }
+        : { blocked: false, label: "request →" },
+      right: response
+        ? { blocked: false, label: "← response" }
+        : { blocked: null, label: "Forwarding unknown" },
+      serverReached: response ? true : null,
+      caption: response
+        ? "The response outcome is unknown."
+        : "The request outcome is unknown.",
+    };
+  }
   const holdLabel = outcome ? HOLD_LABEL[outcome] : undefined;
   if (phase === "response") {
     return {

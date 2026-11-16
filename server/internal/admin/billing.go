@@ -382,88 +382,34 @@ func (s *Service) GetStripeSubscriptionCandidate(ctx context.Context, payload *g
 }
 
 func (s *Service) SetStripeSubscription(ctx context.Context, payload *gen.SetStripeSubscriptionPayload) (*gen.AdminOrganization, error) {
-	organization, state, err := s.verifiedStripeSubscription(ctx, payload.OrganizationID, payload.StripeSubscriptionID)
-	if err != nil {
-		return nil, err
-	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin Stripe subscription transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	queries := repo.New(tx)
-	if err := queries.AdminAcquireStripeSubscriptionLock(ctx, state.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock Stripe subscription").LogError(ctx, s.logger)
-	}
-	// The advisory lock only serializes database assignments. Re-check the
-	// organization on this transaction and the live Stripe subscription so
-	// a deletion in the meantime is not recorded.
-	organization, err = queries.AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        organization.ID,
-		AllowSlug: false,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.C(oops.CodeNotFound)
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read organization after locking Stripe subscription").LogError(ctx, s.logger)
-	}
-	if err := requirePaygSubscriptionAssignment(organization); err != nil {
-		return nil, err
-	}
-	state, err = s.liveStripeSubscriptionForOrganization(ctx, organization, state.ID)
-	if err != nil {
-		return nil, err
-	}
-	_, err = queries.AdminSetStripeSubscription(ctx, repo.AdminSetStripeSubscriptionParams{
-		StripeSubscriptionID:     state.ID,
-		StripeBillingCycleAnchor: conv.ToPGTimestamptz(state.BillingCycleAnchor.UTC()),
-		BillingCycleAnchorDay:    conv.SafeInt32(state.BillingCycleAnchor.UTC().Day()),
-		OrganizationID:           organization.ID,
-		StripeCustomerID:         organization.StripeCustomerID.String,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeConflict, nil, "organization cannot accept this Stripe subscription")
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "set Stripe subscription").LogError(ctx, s.logger)
-	}
-
-	updated, err := queries.AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        organization.ID,
-		AllowSlug: false,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.C(oops.CodeNotFound)
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read organization after setting Stripe subscription").LogError(ctx, s.logger)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit Stripe subscription transaction").LogError(ctx, s.logger)
-	}
-	return s.adminOrganizationFromGetRow(updated), nil
+	return s.linkStripeSubscription(ctx, payload)
 }
 
 func (s *Service) verifiedStripeSubscription(ctx context.Context, organizationID, subscriptionID string) (repo.AdminGetOrganizationRow, *stripeclient.SubscriptionState, error) {
 	if err := validateStripeSubscriptionID(subscriptionID); err != nil {
 		return repo.AdminGetOrganizationRow{}, nil, err
 	}
-	organization, err := s.paygSubscriptionAssignmentOrganization(ctx, organizationID)
+	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
 	if err != nil {
 		return repo.AdminGetOrganizationRow{}, nil, err
 	}
-	state, err := s.liveStripeSubscriptionForOrganization(ctx, organization, subscriptionID)
+	if err := requireStripeSubscriptionAssignment(organization, subscriptionID); err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	state, err := s.liveStripeSubscriptionForOrganization(ctx, organization, subscriptionID, stripeclient.RequireAdoptionEligibility)
 	if err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	if err := requireStripeActivationStatus(state); err != nil {
 		return repo.AdminGetOrganizationRow{}, nil, err
 	}
 	return organization, state, nil
 }
 
-func (s *Service) liveStripeSubscriptionForOrganization(ctx context.Context, organization repo.AdminGetOrganizationRow, subscriptionID string) (*stripeclient.SubscriptionState, error) {
-	state, err := s.billing.GetStripeSubscriptionByID(ctx, subscriptionID)
+func (s *Service) liveStripeSubscriptionForOrganization(ctx context.Context, organization repo.AdminGetOrganizationRow, subscriptionID string, options ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	state, err := s.billing.GetStripeSubscriptionByID(lookupCtx, subscriptionID, options...)
 	if err != nil {
 		return nil, fmt.Errorf("get Stripe subscription: %w", err)
 	}
@@ -476,28 +422,42 @@ func (s *Service) liveStripeSubscriptionForOrganization(ctx context.Context, org
 	return state, nil
 }
 
-func (s *Service) paygSubscriptionAssignmentOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
-	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
-	if err != nil {
-		return repo.AdminGetOrganizationRow{}, err
+func requireStripeSubscriptionAssignment(organization repo.AdminGetOrganizationRow, subscriptionID string) error {
+	switch organization.AccountType {
+	case string(billing.TierPayg):
+		if organization.TrialTier.Valid && !organization.TrialConvertedAt.Valid {
+			return oops.E(oops.CodeConflict, nil, "PAYG organization has an unconverted trial; repair its trial lifecycle before linking a subscription")
+		}
+	case string(billing.TierBase):
+	case string(billing.TierEnterprise):
+		if organization.TrialTier.String != "enterprise" || organization.TrialConvertedAt.Valid {
+			return oops.E(oops.CodeConflict, nil, "paid enterprise organizations cannot be converted by linking a subscription")
+		}
+	default:
+		return oops.E(oops.CodeConflict, nil, "subscription linking requires a free, PAYG, or unconverted enterprise trial organization")
 	}
-	if err := requirePaygSubscriptionAssignment(organization); err != nil {
-		return repo.AdminGetOrganizationRow{}, err
-	}
-	return organization, nil
-}
-
-func requirePaygSubscriptionAssignment(organization repo.AdminGetOrganizationRow) error {
-	if organization.AccountType != string(billing.TierPayg) {
-		return oops.E(oops.CodeConflict, nil, "subscription ID can only be set for a PAYG organization")
+	if organization.TrialTier.String == "enterprise" && !organization.TrialConvertedAt.Valid &&
+		((organization.AccountType == string(billing.TierEnterprise) && !organization.Whitelisted) ||
+			(organization.AccountType == string(billing.TierBase) && organization.Whitelisted)) {
+		return oops.E(oops.CodeConflict, nil, "enterprise trial has incompatible organization access")
 	}
 	if !organization.StripeCustomerID.Valid || organization.StripeCustomerID.String == "" {
 		return oops.E(oops.CodeConflict, nil, "set a Stripe customer ID before setting a subscription ID")
 	}
-	if organization.StripeSubscriptionID.Valid && organization.StripeSubscriptionID.String != "" {
+	if organization.StripeSubscriptionID.Valid && organization.StripeSubscriptionID.String != "" &&
+		(organization.StripeSubscriptionID.String != subscriptionID || organization.AccountType != string(billing.TierPayg)) {
 		return oops.E(oops.CodeConflict, nil, "organization already has a Stripe subscription")
 	}
 	return nil
+}
+
+func requireStripeActivationStatus(state *stripeclient.SubscriptionState) error {
+	switch state.Status {
+	case "active", "trialing", "past_due":
+		return nil
+	default:
+		return oops.E(oops.CodeConflict, nil, "Stripe subscription is not eligible for activation")
+	}
 }
 
 func (s *Service) GetStripeSubscription(ctx context.Context, payload *gen.GetStripeSubscriptionPayload) (*gen.AdminStripeSubscription, error) {

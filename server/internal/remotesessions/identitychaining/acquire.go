@@ -14,75 +14,109 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// acquire runs one exchange and redemption for an authorized selection.
-// Nothing here replays a request after an ambiguous submission. The boolean
-// reports whether an ID-JAG passed validation before redemption.
-func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, Outcome, bool) {
+// acquire issues one ID-JAG from src and redeems it for an authorized
+// selection. Nothing here replays a request after an ambiguous submission. The
+// boolean reports whether an ID-JAG passed validation before redemption.
+func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request, sel selection, src tokenSource) (Token, Outcome, bool) {
 	var none Token
-	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
-	assertion, err := c.delegation.Resolve(ctx, binding, authority{db: c.db, req: req})
-	switch {
-	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
-		return none, newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false), false
-	case errors.Is(err, remotesessions.ErrDelegationConfiguration):
-		return none, newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false), false
-	case err != nil:
-		return none, newOutcome(StageDelegation, ReasonTransientFailure, ConfidenceVerified, true), false
+	var resourceAS *remotesessions.TokenEndpoint
+	ready := func() Outcome {
+		endpoint, err := c.challenges.LoadClientTokenEndpoint(ctx, sel.clientID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return newOutcome(StageRedemption, ReasonStaleConfiguration, ConfidenceVerified, true)
+		case errors.Is(err, remotesessions.ErrTokenEndpointConfiguration):
+			return newOutcome(StageRedemption, ReasonConfigurationRequired, ConfidenceVerified, false)
+		case err != nil:
+			logger.ErrorContext(ctx, "load identity chaining resource client", attr.SlogError(err))
+			return newOutcome(StageRedemption, ReasonTransientFailure, ConfidenceVerified, true)
+		}
+		if endpoint.IssuerID() != sel.remoteIssuerID || endpoint.ClientID() != sel.externalClientID || endpoint.Issuer() != sel.issuer {
+			return newOutcome(StageRedemption, ReasonStaleConfiguration, ConfidenceVerified, true)
+		}
+		resourceAS = endpoint
+		return success
 	}
-	// Subject continuity needs the verified upstream subject the assertion
-	// was retained with; a retained row without one predates that record.
-	if assertion.Subject() == "" || assertion.SessionID() == uuid.Nil {
-		return none, newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false), false
-	}
-
-	idp, err := c.challenges.LoadIdentityProviderEndpoint(ctx, c.keys, req.OrganizationID, sel.trustedIssuerID, sel.trustedClientID)
-	switch {
-	case errors.Is(err, remotesessions.ErrFederatedConfiguration), errors.Is(err, remotesessions.ErrFederatedSigning):
-		return none, newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false), false
-	case err != nil:
-		return none, newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true), false
-	}
-	resourceAS, err := c.challenges.LoadClientTokenEndpoint(ctx, sel.clientID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return none, newOutcome(StageRedemption, ReasonStaleConfiguration, ConfidenceVerified, true), false
-	case errors.Is(err, remotesessions.ErrTokenEndpointConfiguration):
-		return none, newOutcome(StageRedemption, ReasonConfigurationRequired, ConfidenceVerified, false), false
-	case err != nil:
-		logger.ErrorContext(ctx, "load identity chaining resource client", attr.SlogError(err))
-		return none, newOutcome(StageRedemption, ReasonTransientFailure, ConfidenceVerified, true), false
-	}
-	if resourceAS.IssuerID() != sel.remoteIssuerID || resourceAS.ClientID() != sel.externalClientID || resourceAS.Issuer() != sel.issuer {
-		return none, newOutcome(StageRedemption, ReasonStaleConfiguration, ConfidenceVerified, true), false
-	}
-
-	grant, outcome := exchange(ctx, idp, assertion.Value(), sel)
+	grant, outcome := src.issue(ctx, logger, req, sel, ready)
 	if !outcome.Succeeded() {
 		return none, outcome, false
 	}
-	if outcome = c.validateGrant(ctx, logger, idp, idp.Issuer(), grant, assertion.Subject(), sel); !outcome.Succeeded() {
-		return none, outcome, false
-	}
-	cred, outcome := c.redeem(ctx, logger, resourceAS, grant, sel)
+	cred, outcome := c.redeem(ctx, logger, resourceAS, grant.value, sel)
 	if !outcome.Succeeded() {
 		return none, outcome, true
 	}
-	cred.trustedSessionID = assertion.SessionID()
-	cred.trustedObtainedAt = assertion.ObtainedAt()
+	cred.trustedSessionID = grant.trustedSessionID
+	cred.trustedObtainedAt = grant.trustedObtainedAt
 
-	switch err := c.publish(ctx, req, sel, cred); {
+	slot, err := c.publishSlot(ctx, logger, req, sel, cred)
+	switch {
+	case errors.Is(err, errConsentNotStored):
+		// The consent page only needs the outcome; nothing was stored to
+		// recheck. Remember it, so a reload does not redeem again.
+		acceptedKey := cacheKey("identityChainingConsentAccepted", req, sel)
+		if err := c.locks.Set(context.WithoutCancel(ctx), acceptedKey, true, consentAcceptedTTL); err != nil {
+			logger.WarnContext(ctx, "record identity chaining consent acceptance", attr.SlogCacheKey(acceptedKey), attr.SlogError(err))
+		}
+		return Token{value: cred.accessToken, expiresAt: cred.expiresAt.Add(-accessExpirySkew)}, success, true
 	case errors.Is(err, errStale):
 		return none, newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true), true
 	case err != nil:
 		logger.ErrorContext(ctx, "publish identity chaining credential", attr.SlogError(err))
-		return none, newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceVerified, true), true
+		// The grant was already redeemed.
+		outcome := newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceVerified, true)
+		outcome.Submitted = true
+		return none, outcome, true
+	}
+	// The delegation check can't join the publish transaction, so a
+	// credential whose authority changed meanwhile is withdrawn at once.
+	if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
+		c.retire(ctx, logger, req, slot)
+		return none, outcome, true
+	}
+	if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
+		c.retire(ctx, logger, req, slot)
+		return none, outcome, true
 	}
 	return Token{value: cred.accessToken, expiresAt: cred.expiresAt.Add(-accessExpirySkew)}, success, true
+}
+
+// exchangeGrant resolves the human's retained identity provider delegation and
+// exchanges it at the trusted identity provider for a validated ID-JAG.
+func (c *Chainer) exchangeGrant(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome) {
+	var none issuedGrant
+	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
+	assertion, err := c.delegation.Resolve(ctx, binding, authority{db: c.db, req: req})
+	if outcome := delegationOutcome(err); !outcome.Succeeded() {
+		return none, outcome
+	}
+	// Subject continuity needs the verified upstream subject the assertion
+	// was retained with; a retained row without one predates that record.
+	if assertion.Subject() == "" || assertion.SessionID() == uuid.Nil {
+		return none, newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	}
+
+	idp, err := c.challenges.LoadIdentityProviderEndpoint(ctx, c.keys, req.OrganizationID, sel.trustedIssuerID, sel.trustedClientID)
+	if err != nil {
+		return none, identityProviderLoadOutcome(err)
+	}
+	if outcome := ready(); !outcome.Succeeded() {
+		return none, outcome
+	}
+
+	grant, outcome := exchange(ctx, idp, assertion.Value(), sel)
+	if !outcome.Succeeded() {
+		return none, outcome
+	}
+	if outcome = c.validateGrant(ctx, logger, idp, idp.Issuer(), grant, assertion.Subject(), sel); !outcome.Succeeded() {
+		return none, outcome
+	}
+	return issuedGrant{value: grant, trustedSessionID: assertion.SessionID(), trustedObtainedAt: assertion.ObtainedAt()}, success
 }
 
 // exchange asks the trusted identity provider to exchange the human's ID token
@@ -120,7 +154,10 @@ func (c *Chainer) validateGrant(ctx context.Context, logger *slog.Logger, verifi
 	header, err := verifier.VerifyAssertion(ctx, raw, &claims)
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrJWTKeySetUnavailable) {
-			return newOutcome(StageValidation, ReasonTransientFailure, ConfidenceVerified, true)
+			// The provider already issued this grant.
+			outcome := newOutcome(StageValidation, ReasonTransientFailure, ConfidenceVerified, true)
+			outcome.Submitted = true
+			return outcome
 		}
 		logger.WarnContext(ctx, "identity chaining assertion grant failed verification", attr.SlogError(err))
 		return invalid
@@ -189,12 +226,21 @@ func (c *Chainer) redeem(ctx context.Context, logger *slog.Logger, resourceAS to
 // classifyEndpointError maps a token endpoint failure to an outcome.
 // invalid_grant stays ambiguous: it does not prove expiry or missing trust.
 func classifyEndpointError(stage Stage, err error) Outcome {
+	// Our own route store failing is retryable, and nothing reached the provider.
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return newOutcome(stage, ReasonTransientFailure, ConfidenceUnknown, true)
+	}
+	if errors.Is(err, remotesessions.ErrTokenEndpointConfiguration) {
+		return newOutcome(stage, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
 	failure, ok := errors.AsType[*remotesessions.TokenEndpointError](err)
 	if !ok {
 		return newOutcome(stage, ReasonMalformedResponse, ConfidenceVerified, false)
 	}
 	outcome := classifyEndpointFailure(stage, failure)
 	outcome.providerDescription = failure.Description
+	// The request may have been processed before it failed.
+	outcome.Submitted = outcome.Reason == ReasonTransientFailure
 	return outcome
 }
 
@@ -219,4 +265,15 @@ func classifyEndpointFailure(stage Stage, failure *remotesessions.TokenEndpointE
 		return newOutcome(stage, ReasonInvalidGrant, ConfidenceUnknown, false)
 	}
 	return newOutcome(stage, ReasonUnknownRejection, ConfidenceUnknown, false)
+}
+
+func identityProviderLoadOutcome(err error) Outcome {
+	switch {
+	// Must precede the signing case: a signer outage joins both errors and stays retryable.
+	case errors.Is(err, remotesessions.ErrFederatedUnavailable):
+		return newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
+	case errors.Is(err, remotesessions.ErrFederatedConfiguration), errors.Is(err, remotesessions.ErrFederatedSigning):
+		return newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
+	return newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
 }

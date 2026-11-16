@@ -10,7 +10,6 @@ import {
   ChevronUp,
   GitBranch,
   Info,
-  Loader2,
   Pin,
   Search,
   SlidersHorizontal,
@@ -28,6 +27,7 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,16 +67,22 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
+import {
+  isOwnScopeSession,
+  useOwnedAgentIds,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
-import { chatOwnerLabel } from "@/lib/chat-owner";
+import { chatActor, chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
 import { formatChatSource, formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
 } from "@/pages/security/exclusion-sheet";
-import { TRANSCRIPT_DENIED_REASON } from "@/pages/security/unmask";
+import { TRANSCRIPT_DENIED_NOTE } from "@/pages/security/unmask";
+import { ChatReadAccess } from "@/pages/security/finding-drawer-parts";
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
@@ -103,13 +109,19 @@ import {
   buildClaudeUsageByMessageId,
   formatTokenCount,
   formatUsageCost,
+  isCostUnknown,
+  totalTokensFor,
+  UNKNOWN_COST_EXPLANATION,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { UnknownCost } from "./UnknownCost";
 import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
 import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
 import { EffectsView } from "./EffectsView";
 import { exportTraceDataAsJson } from "./chatExport";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
 
@@ -169,15 +181,6 @@ function findingKey(r: RiskResult): string {
 
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
-}
-
-function totalTokensFor(chat: {
-  totalTokens?: number;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-}): number {
-  if (chat.totalTokens && chat.totalTokens > 0) return chat.totalTokens;
-  return (chat.totalInputTokens || 0) + (chat.totalOutputTokens || 0);
 }
 
 // ChatDetailErrorFallback is the defensive backstop for unexpected
@@ -276,10 +279,13 @@ function SessionSummary({
   compact = false,
 }: {
   chat: {
+    userId?: string;
     externalUserId?: string;
     assistantId?: string;
     assistantName?: string;
     assistantAgentId?: string;
+    agentId?: string;
+    agentName?: string;
     accountType?: string;
     accountEmail?: string;
     source?: string;
@@ -301,16 +307,19 @@ function SessionSummary({
   };
   userLabel: ReactNode;
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
   compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
   const {
     costPerUnit: workUnitsCostPerUnit,
     tokensPerUnit: workUnitsTokensPerUnit,
   } = workUnitsEfficiency(chat);
   const accountEmail = personalAccountEmail(chat);
+  const actor = chatActor(chat, accountEmail);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
@@ -335,7 +344,14 @@ function SessionSummary({
                   {formatUsageCost(chat.totalCost!)}
                 </span>
               )}
-              {hasCost && tokens > 0 && (
+              {/* A bare dash, not the tooltip one: it sits inside the popover
+                  trigger, and the popover says why the cost is missing. */}
+              {costUnknown && (
+                <span className="tabular-nums" aria-label="Unknown cost">
+                  —
+                </span>
+              )}
+              {(hasCost || costUnknown) && tokens > 0 && (
                 <span aria-hidden className="text-muted-foreground/40">
                   |
                 </span>
@@ -358,15 +374,15 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            {chat.assistantName ? (
-              <>
-                <MetaRow label="Agent">
-                  <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
-                </MetaRow>
-                <MetaRow label="On behalf of">{userLabel}</MetaRow>
-              </>
-            ) : (
-              <MetaRow label="User">{userLabel}</MetaRow>
+            {actor.agent && (
+              <MetaRow label="Agent">
+                <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
+              </MetaRow>
+            )}
+            {actor.person && (
+              <MetaRow label={actor.agent ? "On behalf of" : "User"}>
+                {userLabel}
+              </MetaRow>
             )}
             {accountEmail && (
               <MetaRow label="Account">
@@ -403,10 +419,21 @@ function SessionSummary({
             )}
             <MetaRow label="Duration">{duration}s</MetaRow>
             <MetaRow label="Messages">{messageCount}</MetaRow>
-            <MetaRow label="Tool calls">{toolCount}</MetaRow>
+            {toolCount !== undefined && (
+              <MetaRow label="Tool calls">{toolCount}</MetaRow>
+            )}
             <MetaRow label="Total cost">
-              {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
+              <TotalCostValue
+                cost={chat.totalCost}
+                hasCost={hasCost}
+                costUnknown={costUnknown}
+              />
             </MetaRow>
+            {costUnknown && (
+              <p className="text-muted-foreground py-1.5 text-xs">
+                {UNKNOWN_COST_EXPLANATION}
+              </p>
+            )}
             {chat.totalInputTokens !== undefined && (
               <MetaRow label="Input tokens">
                 {chat.totalInputTokens.toLocaleString()}
@@ -450,27 +477,51 @@ function HeaderMetadataBadge({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The session's total cost in its details: the figure, a dash when its agent
+ * does not report cost (the explanation follows the row), or "unknown" when
+ * no usage arrived at all.
+ */
+function TotalCostValue({
+  cost,
+  hasCost,
+  costUnknown,
+}: {
+  cost: number | undefined;
+  hasCost: boolean;
+  costUnknown: boolean;
+}): JSX.Element {
+  if (hasCost && cost !== undefined) return <>{formatUsageCost(cost)}</>;
+  if (costUnknown) {
+    return (
+      <span className="tabular-nums" aria-label="Unknown cost">
+        —
+      </span>
+    );
+  }
+  return <>unknown</>;
+}
+
 function ChatDetailMetadataBadges({
-  chatId,
   chat,
   messageCount,
   toolCount,
 }: {
-  chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"];
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
       <HeaderMetadataBadge>
         {messageCount.toLocaleString()} messages
       </HeaderMetadataBadge>
-      {toolCount > 0 && (
+      {toolCount !== undefined && toolCount > 0 && (
         <HeaderMetadataBadge>
           {toolCount.toLocaleString()} tool calls
         </HeaderMetadataBadge>
@@ -502,6 +553,11 @@ function ChatDetailMetadataBadges({
       {hasCost && (
         <HeaderMetadataBadge>
           {formatUsageCost(chat.totalCost!)}
+        </HeaderMetadataBadge>
+      )}
+      {costUnknown && (
+        <HeaderMetadataBadge>
+          <UnknownCost />
         </HeaderMetadataBadge>
       )}
       {tokens > 0 && (
@@ -727,7 +783,8 @@ function ChatDetailHeader({
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
   userLabel: ReactNode;
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
   canManageChat: boolean;
   compactMetadata: boolean;
   showFilter: boolean;
@@ -750,10 +807,15 @@ function ChatDetailHeader({
   onSetView: (view: ViewMode) => void;
   onClose: () => void;
 }) {
+  const actor = chatActor(chat, personalAccountEmail(chat));
   return (
     <div className="border-b px-4 py-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="text-muted-foreground -my-1 flex min-w-0 items-center gap-1 text-xs">
+            <span className="truncate font-mono">{chatId}</span>
+            <CopyButton text={chatId} size="xs" tooltip="Copy chat ID" />
+          </div>
           <SheetTitle className="truncate text-base">
             {chat.title || getTraceId(chatId)}
           </SheetTitle>
@@ -768,18 +830,14 @@ function ChatDetailHeader({
                 </span>
               </span>
               <span className="text-muted-foreground inline-flex max-w-full flex-wrap items-center gap-1.5 text-sm">
-                {chat.assistantName ? (
-                  <>
-                    <AssistantActorLink
-                      chat={chat}
-                      className="text-foreground [&_a]:pb-0.5"
-                    />
-                    <span>on behalf of</span>
-                    <span className="text-foreground min-w-0 break-words">
-                      {userLabel}
-                    </span>
-                  </>
-                ) : (
+                {actor.agent && (
+                  <AssistantActorLink
+                    chat={chat}
+                    className="text-foreground [&_a]:pb-0.5"
+                  />
+                )}
+                {actor.agent && actor.person && <span>on behalf of</span>}
+                {actor.person && (
                   <span className="text-foreground min-w-0 break-words">
                     {userLabel}
                   </span>
@@ -787,17 +845,13 @@ function ChatDetailHeader({
               </span>
               {compactMetadata ? (
                 <ChatDetailMetadataBadges
-                  chatId={chatId}
                   chat={chat}
                   messageCount={messageCount}
                   toolCount={toolCount}
                 />
               ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <HeaderMetadataBadge>
-                    {getTraceId(chatId)}
-                  </HeaderMetadataBadge>
-                  {chat.slackChannelId && (
+                chat.slackChannelId && (
+                  <div className="flex flex-wrap items-center gap-2">
                     <HeaderMetadataBadge>
                       <SlackChannelLink
                         channelId={chat.slackChannelId}
@@ -805,8 +859,8 @@ function ChatDetailHeader({
                         teamId={chat.slackTeamId}
                       />
                     </HeaderMetadataBadge>
-                  )}
-                </div>
+                  </div>
+                )
               )}
               <WorkUnitsHeaderMetrics chat={chat} />
             </div>
@@ -832,12 +886,14 @@ function ChatDetailHeader({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => onSetView("tools")}
-              >
-                Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
-              </DropdownMenuItem>
+              {toolCount !== undefined && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => onSetView("tools")}
+                >
+                  Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 className="cursor-pointer gap-2"
                 disabled={pinPending}
@@ -1115,7 +1171,7 @@ function SessionSummarySection({
         >
           <Button.LeftIcon>
             {summarize.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
             ) : (
               <Sparkles className="size-3.5" />
             )}
@@ -1173,8 +1229,9 @@ function ChatDetailPanel({
   // Risk findings are an org-admin resource (risk.results.list is org-admin
   // gated). Only admins get the risk-windowed "Risky only" view + its data.
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
+  const toolLogsAccess = useToolLogsAccess();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [view, setView] = useState<ViewMode>("chat");
+  const [selectedView, setView] = useState<ViewMode>("chat");
   const [rawView, setRawView] = useState(false);
   useEffect(() => setRawView(false), [chatId]);
   const [riskyOnly, setRiskyOnly] = useState(false);
@@ -1264,6 +1321,7 @@ function ChatDetailPanel({
       !!capturedChat?.originatingClient?.startsWith("claude-code"));
   const isClaudeTag =
     capturedSource === "claude-tag" || (claudeSource && tagMetadata.detected);
+  const openClawSession = capturedSource === "openclaw";
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
     const title =
@@ -1284,6 +1342,19 @@ function ChatDetailPanel({
       title: title || "Claude Tag session",
     };
   }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);
+  // A session's tool calls come from the project's raw tool logs. Without
+  // log:read the server returns them only for the viewer's own sessions and
+  // their agents', so the Tool calls view is offered on exactly those.
+  const ownedAgents = useOwnedAgentIds(
+    !toolLogsAccess.projectWide && Boolean(capturedChat?.agentId),
+  );
+  const canViewToolLogs =
+    toolLogsAccess.projectWide ||
+    isOwnScopeSession(capturedChat, user.id, ownedAgents);
+  // Once access goes away (a grants refetch, a new session) the transcript
+  // shows instead of a Tool calls view with nothing behind it.
+  const view: ViewMode =
+    selectedView === "tools" && !canViewToolLogs ? "chat" : selectedView;
   const validFocusedMessageTurn =
     focusedMessageTurn !== undefined &&
     Number.isInteger(focusedMessageTurn) &&
@@ -1360,6 +1431,7 @@ function ChatDetailPanel({
   } = useSearchLogsMutation();
 
   useEffect(() => {
+    if (!canViewToolLogs) return;
     searchLogs({
       request: {
         searchLogsPayload: {
@@ -1368,7 +1440,7 @@ function ChatDetailPanel({
         },
       },
     });
-  }, [chatId, searchLogs]);
+  }, [chatId, searchLogs, canViewToolLogs]);
 
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
@@ -1382,9 +1454,12 @@ function ChatDetailPanel({
     setActiveOccurrenceKey(null);
   }, [chatId]);
 
+  // Logs fetched before access went away are ignored everywhere: the Tool
+  // calls view, its count, and the session export.
   const logs = useMemo(
-    () => filterPanelTelemetryLogs(logsData?.logs ?? []),
-    [logsData?.logs],
+    () =>
+      canViewToolLogs ? filterPanelTelemetryLogs(logsData?.logs ?? []) : [],
+    [canViewToolLogs, logsData?.logs],
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
@@ -1622,7 +1697,14 @@ function ChatDetailPanel({
     }
   }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
-  const userLabelOverride = chat && !readableTag ? userLabel : undefined;
+  // An agent session that reports nobody has no owner for its user turns to
+  // name. Without the override they fall back to the transcript's neutral
+  // "User" instead of an "anonymous" person.
+  const ownerNamed = chat
+    ? chatActor(chat, personalAccountEmail(chat)).person
+    : false;
+  const userLabelOverride =
+    chat && !readableTag && ownerNamed ? userLabel : undefined;
   // The same key ChatOwnerLabel uses: a chat carries the Speakeasy user when the
   // owner is a member and the reported agent id otherwise. Memoized because a
   // fresh object each render would invalidate the row context below on every
@@ -1648,6 +1730,7 @@ function ChatDetailPanel({
       userLabel: chat?.externalUserId,
       userLabelOverride,
       ownerIdentifier: readableTag ? null : ownerIdentifier,
+      openClawSession,
     }),
     [
       riskResultsByMessage,
@@ -1661,6 +1744,7 @@ function ChatDetailPanel({
       userLabelOverride,
       ownerIdentifier,
       readableTag,
+      openClawSession,
     ],
   );
 
@@ -1717,8 +1801,17 @@ function ChatDetailPanel({
   if (chatLoading) {
     return (
       <div className="p-8">
-        <SheetTitle>Loading</SheetTitle>
-        <SheetDescription>Fetching chat session details...</SheetDescription>
+        <SheetTitle className="sr-only">Loading</SheetTitle>
+        <SheetDescription className="sr-only">
+          Fetching chat session details...
+        </SheetDescription>
+        <Skeleton>
+          <div className="h-7 w-64" />
+          <div className="h-4 w-40" />
+          <div className="mt-4 h-24 w-full" />
+          <div className="h-24 w-full" />
+          <div className="h-24 w-full" />
+        </Skeleton>
       </div>
     );
   }
@@ -1729,8 +1822,9 @@ function ChatDetailPanel({
         <SheetTitle>Permission denied</SheetTitle>
         <SheetDescription className="text-warning mt-2 flex items-start gap-2">
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
-          <span>{TRANSCRIPT_DENIED_REASON}</span>
+          <span>{TRANSCRIPT_DENIED_NOTE}</span>
         </SheetDescription>
+        <ChatReadAccess chatId={chatId} className="mt-4" />
       </div>
     ) : (
       <div className="p-8">
@@ -1761,7 +1855,7 @@ function ChatDetailPanel({
         chat={chat}
         userLabel={userLabelNode}
         messageCount={chat.numMessages}
-        toolCount={toolLogs.length}
+        toolCount={canViewToolLogs ? toolLogs.length : undefined}
         canManageChat={canManageChat}
         compactMetadata={riskFocus}
         showFilter={view === "chat" || view === "effects"}
@@ -1861,7 +1955,7 @@ function ChatDetailPanel({
               className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors disabled:cursor-default"
             >
               {loadingAllMessages ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Spinner className="mr-0 size-3.5" />
               ) : (
                 <ChevronsDown className="size-3.5" />
               )}
@@ -1901,6 +1995,7 @@ function ChatDetailPanel({
                 claudeTurnByPromptId={claudeTurnByPromptId}
                 userLabel={chat?.externalUserId}
                 userLabelOverride={userLabelOverride}
+                openClawSession={openClawSession}
                 isLoading={chatLoading || loadingAllMessages}
               />
             </div>

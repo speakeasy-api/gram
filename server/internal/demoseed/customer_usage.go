@@ -9,6 +9,9 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
 // customerUsageSeedLockID serializes concurrent customer usage seeds.
@@ -132,11 +135,12 @@ func RunCustomerUsageSeed(ctx context.Context, environment, databaseURL, clickho
 		return fmt.Errorf("acquire customer usage seed lock connection: %w", err)
 	}
 	defer lockConn.Release()
-	if _, err := lockConn.Exec(ctx, "SELECT pg_advisory_lock($1)", customerUsageSeedLockID); err != nil {
+	lockQueries := repo.New(lockConn)
+	if err := lockQueries.CustomerUsageSeedLock(ctx, customerUsageSeedLockID); err != nil {
 		return fmt.Errorf("serialize customer usage seed: %w", err)
 	}
 	defer func() {
-		_, _ = lockConn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", customerUsageSeedLockID)
+		_ = lockQueries.CustomerUsageSeedUnlock(context.WithoutCancel(ctx), customerUsageSeedLockID)
 	}()
 
 	now := time.Now().UTC()
@@ -152,16 +156,15 @@ func seedCustomerUsageOrganizations(ctx context.Context, conn *pgxpool.Conn, now
 		return fmt.Errorf("begin customer usage seed: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := repo.New(tx)
 
 	fixtures := customerUsageSeedFixtures()
 	ids := customerUsageSeedIDs()
 	// An existing row with a reserved id but another slug or a WorkOS link is
 	// not ours. Refuse rather than overwrite it.
 	for _, fixture := range fixtures {
-		var collision bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (
- SELECT 1 FROM public.organization_metadata WHERE id=$1
- AND (slug<>$2 OR workos_id IS NOT NULL))`, fixture.ID, fixture.Slug).Scan(&collision); err != nil {
+		collision, err := q.CustomerUsageSeedOrganizationCollision(ctx, repo.CustomerUsageSeedOrganizationCollisionParams{OrganizationID: fixture.ID, Slug: fixture.Slug})
+		if err != nil {
 			return fmt.Errorf("validate fictional organization identity: %w", err)
 		}
 		if collision {
@@ -169,26 +172,30 @@ func seedCustomerUsageOrganizations(ctx context.Context, conn *pgxpool.Conn, now
 		}
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM public.trials WHERE organization_id=ANY($1::text[])`, ids); err != nil {
+	if err := q.CustomerUsageSeedDeleteTrials(ctx, ids); err != nil {
 		return fmt.Errorf("clear fictional trials: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM public.billing_metadata WHERE organization_id=ANY($1::text[])`, ids); err != nil {
+	if err := q.CustomerUsageSeedDeleteBillingMetadata(ctx, ids); err != nil {
 		return fmt.Errorf("clear fictional billing metadata: %w", err)
 	}
 
 	for _, fixture := range fixtures {
 		createdAt := now.AddDate(0, 0, -fixture.CreatedDaysAgo)
-		if _, err := tx.Exec(ctx, `INSERT INTO public.organization_metadata
-   (id,name,slug,gram_account_type,created_at,disabled_at) VALUES ($1,$2,$3,$4,$5,NULL)
-   ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,
-   gram_account_type=EXCLUDED.gram_account_type,created_at=EXCLUDED.created_at,
-   disabled_at=NULL,updated_at=$6`,
-			fixture.ID, fixture.Name, fixture.Slug, fixture.AccountType, createdAt, now); err != nil {
+		if err := q.CustomerUsageSeedUpsertOrganization(ctx, repo.CustomerUsageSeedUpsertOrganizationParams{
+			ID:              fixture.ID,
+			Name:            fixture.Name,
+			Slug:            fixture.Slug,
+			GramAccountType: fixture.AccountType,
+			CreatedAt:       conv.ToPGTimestamptz(createdAt),
+			UpdatedAt:       conv.ToPGTimestamptz(now),
+		}); err != nil {
 			return fmt.Errorf("seed fictional organization: %w", err)
 		}
 		if fixture.AnchorDay != 0 {
-			if _, err := tx.Exec(ctx, `INSERT INTO public.billing_metadata (organization_id,billing_cycle_anchor_day)
-   VALUES ($1,$2)`, fixture.ID, fixture.AnchorDay); err != nil {
+			if err := q.CustomerUsageSeedInsertBillingAnchor(ctx, repo.CustomerUsageSeedInsertBillingAnchorParams{
+				OrganizationID:        fixture.ID,
+				BillingCycleAnchorDay: int32(fixture.AnchorDay), // #nosec G115 -- fixture anchor days are 1..31
+			}); err != nil {
 				return fmt.Errorf("seed fictional billing anchor: %w", err)
 			}
 		}
@@ -204,8 +211,12 @@ func seedCustomerUsageOrganizations(ctx context.Context, conn *pgxpool.Conn, now
 		case "converted":
 			convertedAt = new(endsAt.AddDate(0, 0, -2))
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO public.trials (organization_id,tier,created_at,ends_at,converted_at,demoted_at)
-   VALUES ($1,'enterprise',$2,$3,$4,NULL)`, fixture.ID, startedAt, endsAt, convertedAt); err != nil {
+		if err := q.CustomerUsageSeedInsertTrial(ctx, repo.CustomerUsageSeedInsertTrialParams{
+			OrganizationID: fixture.ID,
+			CreatedAt:      conv.ToPGTimestamptz(startedAt),
+			EndsAt:         conv.ToPGTimestamptz(endsAt),
+			ConvertedAt:    conv.PtrToPGTimestamptz(convertedAt),
+		}); err != nil {
 			return fmt.Errorf("seed fictional trial: %w", err)
 		}
 	}

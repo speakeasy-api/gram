@@ -162,7 +162,8 @@ func applies(rc repo.OktaResourceConnection, result Result, audience string) boo
 // server-side selection and the organization's live connection.
 func (o *Observer) ObserveAttempt(ctx context.Context, obs identitychaining.Observation) error {
 	result, ok := resultFor(obs)
-	if !ok {
+	// Only an external provider's exchange says anything about the connection.
+	if !ok || obs.Provider != remotesessions.EMAProviderExternal {
 		o.count(ctx, dispositionIgnored, "")
 		return nil
 	}

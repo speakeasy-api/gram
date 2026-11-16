@@ -10,7 +10,7 @@ import { McpMetadata, McpMetadata$inboundSchema } from "./mcpmetadata.js";
 
 export type GetMcpMetadataResponseBody = {
   /**
-   * Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.
+   * Metadata used to configure the MCP install page. toolset_id or mcp_server_id identifies which backend the metadata belongs to; a hosted MCP server with a live canonical MCP server carries both, set to the same id.
    */
   metadata?: McpMetadata | undefined;
 };

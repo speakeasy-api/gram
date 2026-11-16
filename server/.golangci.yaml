@@ -66,11 +66,11 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
-      # Bench commands and dev-mcp are developer CLIs (not part of the server
+      # Bench commands, dev-mcp and mock-mcp are developer CLIs (not part of the server
       # binary). Like test files, they favor terse partial structs and direct
       # error returns over production-grade hardening, so exempt them from the
       # same dev-tooling linters we exempt tests from.
-      - path: cmd/(riskjudge|skillefficacy|skillsuggest)bench/|cmd/dev-mcp/
+      - path: cmd/(riskjudge|skillefficacy|skillsuggest)bench/|cmd/dev-mcp/|cmd/mock-mcp/
         linters:
           - exhaustruct
           - wrapcheck
@@ -382,6 +382,7 @@ linters:
         - '^github.com/urfave/cli/v2\.Command$'
         - '^github.com/urfave/cli/v2\..*Flag$'
         - '^gopkg.in/yaml.v3\.Node$'
+        - '^tailscale\.com/tsnet\.Server$'
         - '^github.com/redis/go-redis/v9\.Options$'
         - '^github.com/testcontainers/testcontainers-go\.GenericContainerRequest$'
         - '^github.com/testcontainers/testcontainers-go\.ContainerRequest$'
@@ -421,8 +422,12 @@ linters:
     exhaustive:
       check:
         - switch
-        - map
+        - mapliteral
       default-signifies-exhaustive: true
+      # Protobuf wire field numbers are an open, schema-defined integer space.
+      ignore-types:
+        - '^google\.golang\.org/protobuf/encoding/protowire\.Number$'
+        - '^google\.golang\.org/protobuf/reflect/protoreflect\.FieldNumber$'
     errcheck:
       exclude-functions:
         - "github.com/speakeasy-api/gram/server/internal/o11y.LogDefer"
@@ -457,20 +462,31 @@ linters:
         # providers, encryption clients, infra launchers). It must not import
         # domain packages, otherwise internal tests in those packages can no
         # longer use testenv. Per-domain test helpers belong in sibling
-        # packages such as `externalmcptest` and `functionstest`.
+        # packages such as `functionstest`.
         testenv-no-domain-imports:
           list-mode: lax
           files:
             - "**/internal/testenv/*.go"
           deny:
             - pkg: "github.com/speakeasy-api/gram/server/internal/externalmcp"
-              desc: Move helpers that need externalmcp to internal/externalmcptest.
+              desc: Move helpers that need externalmcp to a per-domain test package.
             - pkg: "github.com/speakeasy-api/gram/server/internal/functions"
               desc: Move helpers that need functions to internal/functionstest.
             - pkg: "github.com/speakeasy-api/gram/server/internal/assets"
               desc: Move helpers that need assets to a per-domain test package.
             - pkg: "github.com/speakeasy-api/gram/server/internal/authz"
               desc: testenv must not depend on authz; tests in package authz import testenv.
+        # mv/orgaccount exists so lightweight callers (auth/sessions and, through
+        # it, testenv) can describe an organization without compiling all of
+        # mv. Importing mv here would restore that dependency without any
+        # compile error.
+        mv-orgaccount-no-mv:
+          list-mode: lax
+          files:
+            - "**/internal/mv/orgaccount/*.go"
+          deny:
+            - pkg: "github.com/speakeasy-api/gram/server/internal/mv$"
+              desc: mv/orgaccount must not import mv; move shared helpers into mv/orgaccount instead.
     importas:
       no-unaliased: true
       alias:
@@ -480,6 +496,10 @@ linters:
       require-specific: true
       require-explanation: true
     wrapcheck:
+      # Generated API packages own their error contracts.
+      ignore-package-globs:
+        - "github.com/speakeasy-api/gram/server/gen"
+        - "github.com/speakeasy-api/gram/server/gen/*"
       ignore-sigs:
         - "errors.New("
         - "errors.Join("
@@ -502,9 +522,19 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
-        - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireUnmanaged("
-        - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireDeletable("
-        - "github.com/speakeasy-api/gram/server/internal/managedrows.Error("
+        # These helpers preserve or construct an already contextualized typed error.
+        - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogError("
+        - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogWarn("
+        - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogInfo("
+        - "github.com/speakeasy-api/gram/server/internal/oops.NewOAuthError("
+        - "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers.NewAuthError("
+        - "github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting.GatewayFailureRejection("
+        - "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy.NewKillswitchInfrastructureRejection("
+        - "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy.NewKillswitchMatchRejection("
+        - "k8s.io/apimachinery/pkg/api/errors.NewConflict("
+        - "github.com/speakeasy-api/gram/server/internal/idpmanagedresources.RequireUnmanaged("
+        - "github.com/speakeasy-api/gram/server/internal/idpmanagedresources.RequireDeletable("
+        - "github.com/speakeasy-api/gram/server/internal/idpmanagedresources.Error("
         - "github.com/speakeasy-api/gram/server/internal/httpcache.WriteCacheableJSON("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("
@@ -520,6 +550,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
+        - "github.com/speakeasy-api/gram/server/internal/environments.ResolveReadableEnvironment("
         - "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision.ValidateName("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).AuthorizeWithHandlerProjectAccess("
@@ -529,6 +560,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
         - "(*github.com/speakeasy-api/gram/server/internal/functions.ToolExtractor).Do("
         - "github.com/speakeasy-api/gram/server/internal/mv.ToolVariationsGroupName("
+        - "github.com/speakeasy-api/gram/server/internal/mv/orgaccount.Describe("
         - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).Call("
         - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).CallWithToken("
 

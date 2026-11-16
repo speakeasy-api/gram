@@ -27,11 +27,7 @@ export function ApiErrorAlert({
   if (error == null) return null;
   const described = describeApiError(error);
   return (
-    <Alert
-      variant={alertVariant(described.kind)}
-      alignTop
-      className={className}
-    >
+    <Alert variant={alertVariant(described.kind)} className={className}>
       <div className="flex flex-col gap-0.5">
         <Text variant="small" className="font-medium">
           {described.title}

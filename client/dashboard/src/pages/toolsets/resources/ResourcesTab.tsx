@@ -9,7 +9,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/Command";
-import { Action, MoreActions } from "@/components/ui/MoreActions";
+import type { Action } from "@/components/ui/MoreActions";
+import { MoreActions } from "@/components/ui/MoreActions";
 import {
   Popover,
   PopoverContent,
@@ -18,8 +19,8 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
-import { Resource, Toolset } from "@/lib/toolTypes";
-import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
+import type { Resource, Toolset } from "@/lib/toolTypes";
+import type { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { Dialog } from "@/components/ui/Dialog";
 import { Stack } from "@/components/ui/Stack";
 import { Newspaper } from "lucide-react";

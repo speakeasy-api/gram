@@ -13,9 +13,9 @@ import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListRiskPolicyBypassRequestsResult } from "../models/components/listriskpolicybypassrequestsresult.js";
 import {
+  ListRiskPolicyBypassRequestsQueryParamStatus,
   ListRiskPolicyBypassRequestsRequest,
   ListRiskPolicyBypassRequestsSecurity,
-  Status,
 } from "../models/operations/listriskpolicybypassrequests.js";
 import { unwrapAsync } from "../types/fp.js";
 export type RiskListPolicyBypassRequestsQueryData =
@@ -84,7 +84,7 @@ export function buildRiskListPolicyBypassRequestsQuery(
 export function queryKeyRiskListPolicyBypassRequests(
   parameters: {
     policyId?: string | undefined;
-    status?: Status | undefined;
+    status?: ListRiskPolicyBypassRequestsQueryParamStatus | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

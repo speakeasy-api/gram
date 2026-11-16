@@ -126,7 +126,10 @@ function SelectItem({
       <div className="flex flex-col">
         <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
         {description && (
-          <span className="text-muted-foreground text-xs leading-tight">
+          <span
+            data-slot="select-item-description"
+            className="text-muted-foreground text-xs leading-tight"
+          >
             {description}
           </span>
         )}

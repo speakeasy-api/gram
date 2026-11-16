@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const LastPollStatus = {
 /**
  * Derived status for the latest usage poll state. Omitted when no config is set for the provider.
  */
-export type LastPollStatus = ClosedEnum<typeof LastPollStatus>;
+export type LastPollStatus = OpenEnum<typeof LastPollStatus>;
 
 /**
  * Per-organization AI provider integration config. The provider API key is write-only; reads only expose whether a key is configured.
@@ -35,11 +36,15 @@ export type AIIntegrationConfig = {
    */
   createdAt?: Date | undefined;
   /**
+   * gemini_compliance only: the Google Workspace admin email the service account acts as. Omitted for other providers.
+   */
+  delegatedUser?: string | undefined;
+  /**
    * Whether the provider integration is active.
    */
   enabled: boolean;
   /**
-   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.
+   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); for gemini_compliance, the Google Vault matter exports are created in. Omitted for providers that do not need one.
    */
   externalOrganizationId?: string | undefined;
   /**
@@ -71,6 +76,14 @@ export type AIIntegrationConfig = {
    */
   nextPollAfter?: Date | undefined;
   /**
+   * gemini_compliance only: the selected Google Workspace organizational unit. Omitted until one is saved.
+   */
+  orgUnitId?: string | undefined;
+  /**
+   * gemini_compliance only: the selected organizational unit's path; "/" is the whole organization. Omitted until one is saved.
+   */
+  orgUnitPath?: string | undefined;
+  /**
    * Organization the config belongs to.
    */
   organizationId: string;
@@ -79,7 +92,7 @@ export type AIIntegrationConfig = {
    */
   projectId?: string | undefined;
   /**
-   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
    */
   provider: string;
   /**
@@ -89,9 +102,10 @@ export type AIIntegrationConfig = {
 };
 
 /** @internal */
-export const LastPollStatus$inboundSchema: z.ZodMiniEnum<
-  typeof LastPollStatus
-> = z.enum(LastPollStatus);
+export const LastPollStatus$inboundSchema: z.ZodMiniType<
+  LastPollStatus,
+  unknown
+> = openEnums.inboundSchema(LastPollStatus);
 
 /** @internal */
 export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
@@ -103,6 +117,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     created_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    delegated_user: z.optional(z.string()),
     enabled: z.boolean(),
     external_organization_id: z.optional(z.string()),
     has_api_key: z.boolean(),
@@ -118,6 +133,8 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     next_poll_after: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    org_unit_id: z.optional(z.string()),
+    org_unit_path: z.optional(z.string()),
     organization_id: z.string(),
     project_id: z.optional(z.string()),
     provider: z.string(),
@@ -129,6 +146,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "billing_mode": "billingMode",
       "created_at": "createdAt",
+      "delegated_user": "delegatedUser",
       "external_organization_id": "externalOrganizationId",
       "has_api_key": "hasApiKey",
       "last_poll_error": "lastPollError",
@@ -136,6 +154,8 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
       "last_poll_status": "lastPollStatus",
       "last_polled_at": "lastPolledAt",
       "next_poll_after": "nextPollAfter",
+      "org_unit_id": "orgUnitId",
+      "org_unit_path": "orgUnitPath",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

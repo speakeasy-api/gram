@@ -38,13 +38,15 @@ type LifecycleUpdateInput struct {
 	Visibility        string
 	NetworkAccessMode *networkaccess.Mode
 
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	// ClearUserSessionIssuer detaches the issuer; UserSessionIssuerID must then be invalid.
+	ClearUserSessionIssuer bool
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	UnproxiedMcpServerID   uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
 }
 
 const maxLifecycleMCPServerNameBytes = 256
@@ -72,16 +74,16 @@ func UpdateMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.T
 		return repo.McpServer{}, fmt.Errorf("lock MCP server: %w", err)
 	}
 	if existing.ToolsetID.Valid && existing.ToolsetID.UUID == existing.ID {
-		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "hosted MCP network access is managed through the toolset")
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "change a hosted MCP server's network access with mcpServers.update")
 	}
 	if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
 		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
 	}
-	updated, err := tx.Exec(ctx, `UPDATE mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp() WHERE id = $2 AND project_id = $3 AND deleted IS FALSE AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE)`, networkaccess.Storage(mode), input.ServerID, input.ProjectID)
+	updated, err := queries.UpdateMCPServerNetworkAccessMode(ctx, repo.UpdateMCPServerNetworkAccessModeParams{NetworkAccessMode: networkaccess.Storage(mode), ID: input.ServerID, ProjectID: input.ProjectID})
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("update MCP server network access mode: %w", err)
 	}
-	if updated.RowsAffected() != 1 {
+	if updated != 1 {
 		return repo.McpServer{}, pgx.ErrNoRows
 	}
 	after, err := queries.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{ID: input.ServerID, ProjectID: input.ProjectID})
@@ -194,20 +196,21 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 	}
 
 	updated, err := repo.New(tx).UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                  name,
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         input.EnvironmentID,
-		UserSessionIssuerID:   input.UserSessionIssuerID,
-		RemoteMcpServerID:     input.RemoteMcpServerID,
-		TunneledMcpServerID:   input.TunneledMcpServerID,
-		ToolsetID:             input.ToolsetID,
-		UnproxiedMcpServerID:  input.UnproxiedMcpServerID,
-		ToolVariationsGroupID: input.ToolVariationsGroupID,
-		Visibility:            input.Visibility,
-		NetworkAccessModeSet:  input.NetworkAccessMode != nil,
-		NetworkAccessMode:     storedMode,
-		ID:                    existing.ID,
-		ProjectID:             input.ProjectID,
+		Name:                   name,
+		Slug:                   conv.ToPGText(slug),
+		EnvironmentID:          input.EnvironmentID,
+		UserSessionIssuerID:    input.UserSessionIssuerID,
+		ClearUserSessionIssuer: input.ClearUserSessionIssuer,
+		RemoteMcpServerID:      input.RemoteMcpServerID,
+		TunneledMcpServerID:    input.TunneledMcpServerID,
+		ToolsetID:              input.ToolsetID,
+		UnproxiedMcpServerID:   input.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  input.ToolVariationsGroupID,
+		Visibility:             input.Visibility,
+		NetworkAccessModeSet:   input.NetworkAccessMode != nil,
+		NetworkAccessMode:      storedMode,
+		ID:                     existing.ID,
+		ProjectID:              input.ProjectID,
 	})
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("update MCP server lifecycle: %w", err)

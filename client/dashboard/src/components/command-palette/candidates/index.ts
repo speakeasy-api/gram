@@ -1,22 +1,37 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { LauncherCandidate } from "./types";
 import { useAccessRequestCandidates } from "./useAccessRequestCandidates";
+import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 import { useActionCandidates } from "./useActionCandidates";
+import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
+import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
 import { useEnvironmentCandidates } from "./useEnvironmentCandidates";
+import { useGatewayCandidates } from "./useGatewayCandidates";
 import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
+import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import { useMcpServerCandidates } from "./useMcpServerCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
+import { usePlatformSetupCandidates } from "./usePlatformSetupCandidates";
 import { usePluginCandidates } from "./usePluginCandidates";
 import { usePolicyCandidates } from "./usePolicyCandidates";
 import { useProjectCandidates } from "./useProjectCandidates";
 import { useRecentCandidates } from "./useRecentCandidates";
-import { useRuleCandidates } from "./useRuleCandidates";
+import {
+  useBuiltinRuleCandidates,
+  useRuleCandidates,
+} from "./useRuleCandidates";
+import {
+  createGrantFingerprint,
+  type ResourceSearchMetrics,
+  useResourceSearchCandidates,
+} from "./useResourceSearchCandidates";
+import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
 /**
@@ -29,23 +44,41 @@ import { useSourceCandidates } from "./useSourceCandidates";
  * query's `enabled` option, so nothing fetches while the palette is closed.
  * Project-scoped sources are further gated on `inProject`, and admin-only
  * sources on RBAC, mirroring the gates the resource groups applied before.
+ *
+ * Session titles are intentionally excluded: transcripts are high-volume,
+ * sensitive history, so opening the palette must not crawl their pages. The
+ * Agent Sessions page action opens the scoped search; an agent's profile links
+ * there with its agent and time-window filters. See docs/rbac.md.
  */
+// Channels is hidden: it contributes no page action and no named
+// conversations, and is reachable only by direct URL. Private titles must not
+// escape their project cache. Discovery pages the live message archive (including DM previews and endpoint
+// attribution), with no metadata search/public-only endpoint. Crawling every
+// page on global launcher opens would duplicate the archive and its access-
+// revocation cache outside Channels. Keep this sensitive, high-volume archive
+// in the Channels list; do not register a partial first-page resource index.
 export function useLauncherCandidates({
   enabled,
   inProject,
   recentsUserId,
   orgSlug,
   projectSlug,
+  query,
+  resourceSearchPending,
+  onSearchMetrics,
 }: {
   enabled: boolean;
   inProject: boolean;
   recentsUserId: string | null;
   orgSlug: string | undefined;
   projectSlug: string | undefined;
+  query: string;
+  resourceSearchPending: boolean;
+  onSearchMetrics?: (metrics: ResourceSearchMetrics) => void;
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const project = useProject();
-  const { hasAnyScope, hasScope } = useRBAC();
+  const { grants, hasAnyScope, hasScope } = useRBAC();
   // Every org-level check names the organization: without a resource id
   // hasScope is existential (a grant on any org passes), so a member who is
   // an admin elsewhere would otherwise fire this tenant's forbidden calls.
@@ -57,11 +90,17 @@ export function useLauncherCandidates({
   // gate.
   const canReadApprovals = hasScope("org:admin", organization.id);
   const canReadPeople = hasAnyScope(["org:read", "org:admin"], organization.id);
+  // The Device Agent pages' own gate.
+  const canReadDevices = canReadPeople;
   // The MCP page's own gate (pages/mcp/MCP.tsx), so a member who cannot open
   // the listing never fires its (forbidden) list calls from the palette.
   // Sources are a tab of that section and their detail page gates on
   // mcp:read, so they share it.
   const canListMcp = hasAnyScope(["mcp:read", "mcp:write"]);
+  // Listing gateways requires mcp:read on the project itself
+  // (server/internal/metamcp/impl.go), so a grant in another project must not
+  // fire the forbidden list call here or keep its cached names visible.
+  const canListGateways = hasAnyScope(["mcp:read", "mcp:write"], project.id);
   // Plugins list for whoever can edit them (org admins and plugin:write on
   // this project, per usePluginWriteAccess) or read the organization; the
   // same gate the Plugins page renders behind.
@@ -75,8 +114,40 @@ export function useLauncherCandidates({
   const canBrowseCatalog = hasScope("project:read", project.id);
   const canReadAssistants = hasScope("assistant:read", undefined, project.id);
 
-  const projectEnabled = enabled && inProject;
+  const canReadSkills = hasScope("skill:read", project.id);
 
+  const projectEnabled = enabled && inProject;
+  // Cold-open shows local actions, pages, and recents. Defer every remote
+  // inventory until the same eligible, debounced query that drives server
+  // search, so opening Command K never drains resource lists into the browser.
+  const remoteCandidatesEnabled =
+    enabled && Array.from(query.trim()).length >= 2;
+  const projectRemoteCandidatesEnabled = remoteCandidatesEnabled && inProject;
+  // Row-level assistant and MCP grants can change without changing any coarse
+  // page gate. Keep the canonical grant fingerprint local to the query cache; it
+  // is never included in palette telemetry.
+  const accessKey = useMemo(() => createGrantFingerprint(grants), [grants]);
+  const resourceSearch = useResourceSearchCandidates({
+    enabled: projectEnabled,
+    accessKey,
+    query,
+    searchPending: resourceSearchPending,
+  });
+  useEffect(() => {
+    onSearchMetrics?.(resourceSearch.metrics);
+  }, [onSearchMetrics, resourceSearch.metrics]);
+  // A partial response identifies exactly which inventories need legacy
+  // coverage. Successful remote kinds never re-enable their old list calls.
+  const fallback = useCallback(
+    (kind: string) =>
+      projectEnabled && resourceSearch.fallbackKinds.has(kind as never),
+    [projectEnabled, resourceSearch.fallbackKinds],
+  );
+
+  const gatewayConnections = useGatewayConnectionCandidates({
+    enabled: remoteCandidatesEnabled,
+    inProject,
+  });
   const actions = useActionCandidates();
   const recents = useRecentCandidates({
     enabled,
@@ -84,57 +155,119 @@ export function useLauncherCandidates({
     orgSlug,
     projectSlug,
   });
-  const marketplace = useMarketplaceCandidate({ enabled, inProject });
+  const marketplace = useMarketplaceCandidate({
+    enabled: remoteCandidatesEnabled,
+    inProject,
+  });
+  // Keep the MCP inventory live even after its open/detail rows migrate: the
+  // local candidates carry visibility state and per-server mutation verbs that
+  // the compact remote index intentionally does not model. Overlapping remote
+  // open rows are deduplicated below, while remote-only rows remain available.
   const mcpServers = useMcpServerCandidates({
-    enabled: projectEnabled && canListMcp,
+    enabled: projectRemoteCandidatesEnabled && canListMcp,
+  });
+  const gateways = useGatewayCandidates({
+    enabled: fallback("gateway") && canListGateways,
   });
   const catalog = useCatalogCandidates({
-    enabled: projectEnabled && canBrowseCatalog,
+    enabled: projectRemoteCandidatesEnabled && canBrowseCatalog,
   });
   const plugins = usePluginCandidates({
-    enabled: projectEnabled && canListPlugins,
+    enabled: fallback("plugin") && canListPlugins,
   });
   const assistants = useAssistantCandidates({
-    enabled: projectEnabled && canReadAssistants,
+    enabled: fallback("assistant") && canReadAssistants,
   });
-  const environments = useEnvironmentCandidates({ enabled: projectEnabled });
+  const skills = useSkillCandidates({
+    enabled: fallback("skill") && canReadSkills,
+  });
+  const inferenceSetup = useInferenceSetupCandidate({
+    enabled: remoteCandidatesEnabled,
+    inProject,
+  });
+  const platformSetups = usePlatformSetupCandidates({
+    enabled: remoteCandidatesEnabled,
+    inProject,
+  });
+  const agentIdentities = useAgentIdentityCandidates({
+    enabled: remoteCandidatesEnabled && !inProject,
+  });
+  const environments = useEnvironmentCandidates({
+    enabled: fallback("environment"),
+  });
   const sources = useSourceCandidates({
-    enabled: projectEnabled && canListMcp,
+    enabled: projectRemoteCandidatesEnabled && canListMcp,
   });
-  const deployments = useDeploymentCandidates({ enabled: projectEnabled });
+  // Deployment rows are synthetic history entries, not durable named
+  // resources, so they remain on their existing independent source.
+  const deployments = useDeploymentCandidates({
+    enabled: projectRemoteCandidatesEnabled,
+  });
   const policies = usePolicyCandidates({
-    enabled: projectEnabled && isAdmin,
+    enabled: projectRemoteCandidatesEnabled && isAdmin,
   });
-  const rules = useRuleCandidates({ enabled: projectEnabled && isAdmin });
+  const rules = useRuleCandidates({
+    enabled: fallback("rule") && isAdmin,
+    includeBuiltins: false,
+  });
+  const builtinRules = useBuiltinRuleCandidates({
+    enabled: projectRemoteCandidatesEnabled && isAdmin,
+  });
   const accessRequests = useAccessRequestCandidates({
-    enabled: projectEnabled && canReadApprovals,
+    enabled: projectRemoteCandidatesEnabled && canReadApprovals,
   });
-  const people = usePersonCandidates({ enabled: enabled && canReadPeople });
+  const people = usePersonCandidates({
+    enabled: remoteCandidatesEnabled && !inProject && canReadPeople,
+  });
+  const devices = useManagedDeviceCandidates({
+    enabled: remoteCandidatesEnabled && canReadDevices,
+  });
   // Org-scoped, so offered from both shells: at the org level picking a
   // project is the palette's main job, inside a project it is a switcher.
-  const projects = useProjectCandidates({ enabled });
+  const projects = useProjectCandidates({ enabled: remoteCandidatesEnabled });
 
   return useMemo(() => {
     const projectOnly = (list: LauncherCandidate[]) => (inProject ? list : []);
     const adminOnly = (list: LauncherCandidate[]) =>
       inProject && isAdmin ? list : [];
+    const localMcpRouteIDs = new Set(
+      mcpServers.map((candidate) => candidate.id.replace(/^mcp:/, "")),
+    );
+    const indexedCandidates = resourceSearch.candidates.filter((candidate) => {
+      if (candidate.kind !== "mcp_server") return true;
+      const identity = candidate.resourceIdentity;
+      return (
+        !identity ||
+        (!localMcpRouteIDs.has(identity.id) &&
+          !localMcpRouteIDs.has(identity.routeSelector))
+      );
+    });
     return [
       ...actions,
+      ...gatewayConnections,
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
+      ...(inProject ? indexedCandidates : []),
+      ...(fallback("gateway") && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
-      ...(inProject && canListPlugins ? plugins : []),
-      ...(inProject && canReadAssistants ? assistants : []),
-      ...projectOnly(environments),
+      ...(fallback("plugin") && canListPlugins ? plugins : []),
+      ...(fallback("assistant") && canReadAssistants ? assistants : []),
+      ...(fallback("skill") && canReadSkills ? skills : []),
+      ...(!inProject ? agentIdentities : []),
+      ...inferenceSetup,
+      ...platformSetups,
+      ...(fallback("environment") ? projectOnly(environments) : []),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
       ...adminOnly(policies),
-      ...adminOnly(rules),
+      ...adminOnly(builtinRules),
+      ...(fallback("rule") ? adminOnly(rules) : []),
       ...(inProject && canReadApprovals ? accessRequests : []),
-      ...(canReadPeople ? people : []),
+      ...(!inProject && canReadPeople ? people : []),
+      ...(canReadDevices ? devices : []),
       ...projects,
     ];
   }, [
@@ -142,14 +275,25 @@ export function useLauncherCandidates({
     isAdmin,
     canReadApprovals,
     canReadPeople,
+    canReadDevices,
     canListMcp,
+    canListGateways,
     canListPlugins,
     canBrowseCatalog,
     canReadAssistants,
+    canReadSkills,
+    resourceSearch.candidates,
+    fallback,
+    skills,
+    agentIdentities,
+    inferenceSetup,
+    platformSetups,
     actions,
+    gatewayConnections,
     recents,
     marketplace,
     mcpServers,
+    gateways,
     catalog,
     plugins,
     assistants,
@@ -158,8 +302,10 @@ export function useLauncherCandidates({
     deployments,
     policies,
     rules,
+    builtinRules,
     accessRequests,
     people,
+    devices,
     projects,
   ]);
 }

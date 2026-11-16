@@ -1,3 +1,5 @@
+import { narrowTokenEndpointAuthMethod } from "./issuerFormUtils";
+import { isKnownEnumValue } from "@/lib/enum";
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -9,18 +11,18 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
-import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import {
   invalidateAllMcpServers,
   useMcpServers,
@@ -36,10 +38,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  IssuerScopeOverrideAlert,
-  LegacyCallbackAlert,
-} from "@/pages/remote-identity-providers/clientAlerts";
+import { LegacyCallbackAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
@@ -116,7 +115,7 @@ export function ModifyRemoteIdentityProviderSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Modify Remote Identity Provider
+            Modify Authorization Server
           </SheetTitle>
         </SheetHeader>
 
@@ -397,14 +396,12 @@ function ModifyRemoteIdentityProviderSheetBody({
         // refreshes (AGE-3279).
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        // Issuer overrides feed the scopes a sign-in would request.
-        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
-      toast.success("Identity provider updated");
+      toast.success("Authorization server updated");
       onClose();
     },
     onError: (error) => {
-      console.error("Modify identity provider failed", error);
+      console.error("Modify authorization server failed", error);
     },
   });
 
@@ -424,14 +421,41 @@ function ModifyRemoteIdentityProviderSheetBody({
   const clientFieldsInitializedRef = useRef(false);
   useEffect(() => {
     if (!primaryClient || clientFieldsInitializedRef.current) return;
-    setTokenEndpointAuthMethod(primaryClient.tokenEndpointAuthMethod ?? "");
-    setAuthAudienceFormat(primaryClient.tokenEndpointAuthAudienceFormat);
+    setTokenEndpointAuthMethod(
+      narrowTokenEndpointAuthMethod(
+        primaryClient.tokenEndpointAuthMethod,
+        true,
+      ) ?? "",
+    );
+    setAuthAudienceFormat(
+      isKnownEnumValue(
+        UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+        primaryClient.tokenEndpointAuthAudienceFormat,
+      )
+        ? primaryClient.tokenEndpointAuthAudienceFormat
+        : undefined,
+    );
     setScopeOverride((primaryClient.scope ?? []).join(", "));
     setAudienceOverride(primaryClient.audience ?? "");
     clientFieldsInitializedRef.current = true;
   }, [primaryClient]);
 
-  const submittable = !!primaryClient && issuerUrl.trim().length > 0;
+  const supportsAuthMethod =
+    primaryClient?.tokenEndpointAuthMethod === undefined ||
+    narrowTokenEndpointAuthMethod(
+      primaryClient.tokenEndpointAuthMethod,
+      true,
+    ) !== undefined;
+  const supportsClientEditing =
+    supportsAuthMethod &&
+    (!isPrivateKeyJwtAuthMethod(tokenEndpointAuthMethod) ||
+      primaryClient?.tokenEndpointAuthAudienceFormat === undefined ||
+      isKnownEnumValue(
+        UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+        primaryClient.tokenEndpointAuthAudienceFormat,
+      ));
+  const submittable =
+    !!primaryClient && issuerUrl.trim().length > 0 && supportsClientEditing;
 
   const handleSubmit = () => {
     if (!submittable || submitting || logoUploading || !primaryClient) return;
@@ -445,7 +469,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           <Alert variant="warning" dismissible={false}>
             <Stack gap={2}>
               <Text className="font-medium">
-                Heads up — this identity provider is shared with{" "}
+                Heads up — this authorization server is shared with{" "}
                 {affectedMcpServers.length === 1
                   ? "1 other MCP server"
                   : `${affectedMcpServers.length} other MCP servers`}{" "}
@@ -453,8 +477,8 @@ function ModifyRemoteIdentityProviderSheetBody({
               </Text>
               <Text small>
                 Issuer URL and endpoint edits apply to every server that uses
-                this provider. Client credentials, scope, and audience changes
-                only affect this server.
+                this authorization server. Client credentials, scope, and
+                audience changes only affect this server.
               </Text>
               <Text small mono>
                 {affectedMcpServers
@@ -501,8 +525,8 @@ function ModifyRemoteIdentityProviderSheetBody({
             {issuer.slug}
           </Text>
           <Text muted small>
-            Slug is the stable identifier for this identity provider and can't
-            be renamed here.
+            Slug is the stable identifier for this authorization server and
+            can't be renamed here.
           </Text>
         </Stack>
 
@@ -513,7 +537,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           <Input
             value={name}
             onChange={setName}
-            placeholder="My Identity Provider"
+            placeholder="My Authorization Server"
           />
           <Text muted small>
             Friendly label shown in the dashboard. Clear it to fall back to the
@@ -526,7 +550,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           value={logoAssetId}
           onChange={setLogoAssetId}
           onUploadingChange={setLogoUploading}
-          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+          description="Shown beside this authorization server in the dashboard and on the connect consent page. Saved with your other changes."
         />
 
         <EndpointsFields
@@ -561,15 +585,26 @@ function ModifyRemoteIdentityProviderSheetBody({
         )}
 
         {isLoadingClient ? (
-          <Text muted small>
-            Loading client credentials…
-          </Text>
+          <div className="border-t pt-6">
+            <Skeleton label="Loading client credentials">
+              <div className="h-5 w-48" />
+              <div className="h-10 w-full" />
+              <div className="h-16 w-full" />
+              <div className="h-4 w-20" />
+              <div className="h-5 w-64" />
+              <div className="h-4 w-40" />
+              <div className="h-9 w-full" />
+              <div className="h-4 w-40" />
+              <div className="h-9 w-full" />
+            </Skeleton>
+          </div>
         ) : (
           <ClientCredentialsFields
             clientId={primaryClient?.clientId ?? ""}
             clientSecret={clientSecret}
             tokenEndpointAuthMethod={tokenEndpointAuthMethod}
             allowPrivateKeyJwt={primaryClient?.jsonWebKeySetId != null}
+            unsupportedAuthMethod={!supportsAuthMethod}
             clientIdEditable={false}
             callbackURL={
               primaryClient ? (primaryClient.callbackUrl ?? null) : undefined
@@ -588,9 +623,11 @@ function ModifyRemoteIdentityProviderSheetBody({
           <ClientAssertionAudienceField
             value={
               authAudienceFormat ??
+              primaryClient?.tokenEndpointAuthAudienceFormat ??
               UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
             }
             onChange={setAuthAudienceFormat}
+            disabled={!supportsClientEditing}
           />
         )}
 
@@ -599,8 +636,14 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
+
+        {!supportsClientEditing && (
+          <Text small muted>
+            Refresh the page before editing this unsupported client
+            configuration.
+          </Text>
+        )}
 
         {submitError && (
           <Alert variant="error" dismissible={false}>

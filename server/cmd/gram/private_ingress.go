@@ -25,37 +25,29 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 type mcpServerRuntime struct {
 	MCP      *mcp.Service
-	XMCP     *xmcp.Service
 	Metadata *mcpmetadata.Service
 }
 
 type mcpServerRuntimeDependencies struct {
-	Logger     *slog.Logger
-	DB         *pgxpool.Pool
-	Encryption *encryption.Client
-	MCP        *mcp.Service
-	Metadata   *mcpmetadata.Service
+	MCP      *mcp.Service
+	Metadata *mcpmetadata.Service
 }
 
 func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) (*mcpServerRuntime, error) {
-	if deps.Logger == nil || deps.DB == nil || deps.Encryption == nil || deps.MCP == nil || deps.Metadata == nil {
+	if deps.MCP == nil || deps.Metadata == nil {
 		return nil, errors.New("MCP server runtime dependencies are incomplete")
 	}
 
 	return &mcpServerRuntime{
 		MCP:      deps.MCP,
-		XMCP:     xmcp.NewService(deps.Logger, deps.DB, deps.Encryption, deps.MCP),
 		Metadata: deps.Metadata,
 	}, nil
 }
@@ -74,6 +66,9 @@ func newNetworkIngressServerCommand() *cli.Command {
 				c.String("netingress-tls-key-file"),
 				c.Bool("dev-single-process"),
 			); err != nil {
+				return err
+			}
+			if err := validatePrivateGatewayPrincipal(c.String("netingress-gateway-namespace"), c.String("netingress-gateway-service-account")); err != nil {
 				return err
 			}
 
@@ -112,15 +107,15 @@ func newNetworkIngressServerCommand() *cli.Command {
 				[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: deps.DB}},
 				[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: deps.Redis}}, temporalHealth)
 			stopControl, err := controlServer.Start(ctx, privateIngressReadinessHandler(
-				deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
-				"/var/run/secrets/kubernetes.io/serviceaccount/token", healthHandler))
+				deps.TokenReviewer, c.String("netingress-readiness-token-file"), healthHandler))
 			if err != nil {
 				return fmt.Errorf("start private ingress control server: %w", err)
 			}
 			defer func() { _ = runShutdown(logger, ctx, []func(context.Context) error{stopControl}) }()
 			return servePrivateIngress(ctx, privateIngressServerDependencies{
 				Logger: logger, MeterProvider: otel.GetMeterProvider(), DB: deps.DB,
-				Kubernetes: deps.Kubernetes, Runtime: deps.Runtime,
+				TokenReviewer: deps.TokenReviewer, Runtime: deps.Runtime,
+				GatewayNamespace: c.String("netingress-gateway-namespace"), GatewayServiceAccount: c.String("netingress-gateway-service-account"),
 			}, c.String("netingress-address"), c.String("netingress-tls-cert-file"), c.String("netingress-tls-key-file"))
 		},
 		Before: func(ctx *cli.Context) error {
@@ -132,6 +127,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 func privateIngressServerFlags() []cli.Flag {
 	flags := mcpRuntimeFlags()
 	return append(flags,
+		riskFingerprintPepperFlag(),
 		&cli.StringFlag{
 			Name:    "netingress-address",
 			Usage:   "Private network ingress HTTPS address; empty disables the listener",
@@ -147,7 +143,35 @@ func privateIngressServerFlags() []cli.Flag {
 			Usage:   "TLS private key file for the private network ingress listener",
 			EnvVars: []string{"GRAM_NETINGRESS_TLS_KEY_FILE"},
 		},
+		&cli.StringFlag{
+			Name:    "netingress-readiness-token-file",
+			Usage:   "Token the readiness probe reviews to confirm token review works; the pod's own service-account token in a cluster",
+			Value:   "/var/run/secrets/kubernetes.io/serviceaccount/token",
+			EnvVars: []string{"GRAM_NETINGRESS_READINESS_TOKEN_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-local-token-key-file",
+			Usage:   "Local development only: verify attestation tokens signed with this HMAC key instead of Kubernetes TokenReview",
+			EnvVars: []string{"GRAM_NETINGRESS_LOCAL_TOKEN_KEY_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-gateway-namespace",
+			Usage:   "Namespace of the tailnet gateway service account accepted for any gateway-hosted ingress",
+			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-gateway-service-account",
+			Usage:   "Tailnet gateway service account accepted for any gateway-hosted ingress",
+			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_SERVICE_ACCOUNT"},
+		},
 	)
+}
+
+func validatePrivateGatewayPrincipal(namespace, serviceAccount string) error {
+	if (namespace == "") != (serviceAccount == "") {
+		return errors.New("private network ingress gateway namespace and service account must be configured together")
+	}
+	return nil
 }
 
 func validatePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) error {
@@ -170,8 +194,15 @@ type privateIngressServerDependencies struct {
 	Logger        *slog.Logger
 	MeterProvider metric.MeterProvider
 	DB            *pgxpool.Pool
-	Kubernetes    *k8s.KubernetesClients
 	Runtime       *mcpServerRuntime
+
+	// TokenReviewer verifies the attestation token on every private request.
+	TokenReviewer netingress.TokenReviewer
+
+	// GatewayNamespace and GatewayServiceAccount identify the tailnet gateway
+	// whose requests resolve their ingress by host. Both empty disables it.
+	GatewayNamespace      string
+	GatewayServiceAccount string
 }
 
 func servePrivateIngress(
@@ -181,8 +212,8 @@ func servePrivateIngress(
 	certFile string,
 	keyFile string,
 ) error {
-	if deps.Kubernetes == nil || deps.Kubernetes.Clientset == nil {
-		return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
+	if deps.TokenReviewer == nil {
+		return errors.New("private network ingress listener requires an attestation token reviewer")
 	}
 	if deps.Runtime == nil {
 		return errors.New("private network ingress listener requires an MCP server runtime")
@@ -207,20 +238,25 @@ func servePrivateIngress(
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(deps.Logger))
 	mux.Use(middleware.NewRecovery(deps.Logger))
+	verifier := netingress.NewAttestationVerifier(
+		deps.TokenReviewer,
+		netingress.NewIngressLookup(deps.DB),
+		netingress.DefaultTokenAudience,
+		30*time.Second,
+		telemetry,
+	)
+	if deps.GatewayNamespace != "" || deps.GatewayServiceAccount != "" {
+		if err := verifier.UseGatewayPrincipal(deps.GatewayNamespace, deps.GatewayServiceAccount); err != nil {
+			return fmt.Errorf("configure tailnet gateway principal: %w", err)
+		}
+	}
 	mux.Use(netingress.Middleware(
-		netingress.NewAttestationVerifier(
-			deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
-			netingress.NewIngressLookup(deps.DB),
-			netingress.DefaultTokenAudience,
-			30*time.Second,
-			telemetry,
-		),
+		verifier,
 		netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
 		telemetry,
 	))
 	mux.Use(middleware.SessionMiddleware)
 	mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
-	xmcp.AttachPrivate(mux, deps.Runtime.XMCP, deps.Runtime.Metadata)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -228,8 +264,8 @@ func servePrivateIngress(
 	}
 	defer func() { _ = listener.Close() }()
 
-	requestCtx, cancelRequests := context.WithCancel(ctx)
-	defer cancelRequests()
+	requestCtx, cancelRequests := context.WithCancelCause(ctx)
+	defer cancelRequests(nil)
 	server := &http.Server{
 		Addr:              address,
 		Handler:           mux,
@@ -248,7 +284,10 @@ func servePrivateIngress(
 	go func() {
 		defer close(shutdownDone)
 		<-sigctx.Done()
-		shutdownPrivateIngress(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout)
+		// Listen streams never finish on their own, so end them first and let
+		// their clients reconnect to a replica that is still serving.
+		deps.Runtime.MCP.StartDrain(requestInterruptAfter)
+		drainHTTPServer(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout, "failed to shutdown private network ingress listener")
 	}()
 
 	deps.Logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(listener.Addr().String()))
@@ -260,17 +299,4 @@ func servePrivateIngress(
 	}
 	<-shutdownDone
 	return nil
-}
-
-func shutdownPrivateIngress(ctx context.Context, logger *slog.Logger, server *http.Server, cancelRequests context.CancelFunc, timeout time.Duration) {
-	graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), timeout, errors.New("graceful shutdown timed out"))
-	defer graceCancel()
-	defer cancelRequests()
-	if err := server.Shutdown(graceCtx); err != nil {
-		logger.ErrorContext(ctx, "failed to shutdown private network ingress listener", attr.SlogError(err))
-		cancelRequests()
-		if err := server.Close(); err != nil {
-			logger.ErrorContext(ctx, "close private network ingress connections", attr.SlogError(err))
-		}
-	}
 }
