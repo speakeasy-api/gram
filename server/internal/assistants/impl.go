@@ -648,7 +648,7 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 func parseAssistantID(raw string) (uuid.UUID, error) {
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("parse assistant id: %w", err)
 	}
 	if id == uuid.Nil {
 		return uuid.Nil, errors.New("assistant id is the nil uuid")
