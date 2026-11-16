@@ -6,6 +6,10 @@ func literal(project string) authz.Check {
 	return authz.Check{Scope: "project:read", ResourceID: project} // want `replace the authz.Check literal: build authorization checks with the typed refs`
 }
 
+func zero() (authz.Check, error) {
+	return authz.Check{}, nil
+}
+
 func constructors(env, project string) []authz.Check {
 	return []authz.Check{
 		authz.EnvironmentCheck("environment:read", env, project), // want `replace authz.EnvironmentCheck: build authorization checks`
