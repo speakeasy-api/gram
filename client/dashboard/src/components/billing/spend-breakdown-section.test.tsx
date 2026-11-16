@@ -77,9 +77,9 @@ function response(): SpendBreakdownData {
   };
 }
 
-function renderSection() {
+function renderSection(retry: boolean | number = false) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry, retryDelay: 0 } },
   });
   render(
     <QueryClientProvider client={client}>
@@ -115,7 +115,7 @@ describe("SpendBreakdownSection unsupported responses", () => {
       const reload = vi
         .spyOn(window.location, "reload")
         .mockImplementation(() => {});
-      renderSection();
+      renderSection(true);
 
       expect((await screen.findByRole("alert")).textContent).toContain(
         "Refresh the page to display these newer spend estimates.",
@@ -144,6 +144,9 @@ describe("SpendBreakdownSection unsupported responses", () => {
     });
     newer.totalCostUsd = "10";
     mocks.fetchSpend.mockResolvedValue(newer);
+    // Ensure observer updates do not rely on multiple reads sharing a timestamp.
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => ++now);
     await act(async () => {
       await client.refetchQueries({ queryKey: ["spend"] });
     });
@@ -156,6 +159,18 @@ describe("SpendBreakdownSection unsupported responses", () => {
     expect(screen.getAllByText("$1.00")).toHaveLength(2);
     expect(screen.queryByText("New product")).toBeNull();
     expect(screen.queryByText("$10.00")).toBeNull();
+    expect(client.getQueryData(["spend"])).toEqual(response());
+  });
+
+  it("preserves automatic retries for ordinary failures", async () => {
+    mocks.fetchSpend
+      .mockRejectedValueOnce(new Error("Network unavailable"))
+      .mockResolvedValue(response());
+    renderSection(1);
+
+    expect(await screen.findByText("Selected estimated cost")).toBeTruthy();
+    expect(mocks.fetchSpend).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it.each([false, true])(
