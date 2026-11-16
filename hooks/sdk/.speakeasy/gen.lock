@@ -6,9 +6,9 @@ management:
   generationVersion: 2.960.8
   releaseVersion: 0.1.0
 persistentEdits:
-  generation_id: 0fe934db-a7e3-45e5-8f39-4df7c3f60792
-  pristine_commit_hash: 4668aca279fa152b4403479a185fa9a8bccdbcc1
-  pristine_tree_hash: e8dfd5b8df6741a59c9fd69fbb147219dfef7672
+  generation_id: 2f252887-4965-4ce7-a26a-25af74ed8c05
+  pristine_commit_hash: 27778b377410bf10b3a2e4d31eb2060ea1b4c5e9
+  pristine_tree_hash: 1890209b81a9c9f40c13a4b4b11ffd1685c8ea5e
 features:
   go:
     additionalDependencies: 0.1.0
