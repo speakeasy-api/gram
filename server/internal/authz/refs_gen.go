@@ -304,9 +304,9 @@ func (r WorkloadRef) Write() Check {
 // MCPServerCollection names every mcp resource of one project.
 type MCPServerCollection struct{ project string }
 
-// MCPServers names every mcp resource of the project.
-func (r ProjectRef) MCPServers() MCPServerCollection {
-	return MCPServerCollection{project: r.id}
+// MCPServers names every mcp resource of project.
+func MCPServers[P ID](project P) MCPServerCollection {
+	return MCPServerCollection{project: idString(project)}
 }
 
 // Read requests ScopeMCPRead on every mcp resource of the project.
@@ -327,9 +327,9 @@ func (c MCPServerCollection) Connect() Check {
 // EnvironmentCollection names every environment resource of one project.
 type EnvironmentCollection struct{ project string }
 
-// Environments names every environment resource of the project.
-func (r ProjectRef) Environments() EnvironmentCollection {
-	return EnvironmentCollection{project: r.id}
+// Environments names every environment resource of project.
+func Environments[P ID](project P) EnvironmentCollection {
+	return EnvironmentCollection{project: idString(project)}
 }
 
 // Read requests ScopeEnvironmentRead on every environment resource of the project.
@@ -345,9 +345,9 @@ func (c EnvironmentCollection) Write() Check {
 // AssistantCollection names every assistant resource of one project.
 type AssistantCollection struct{ project string }
 
-// Assistants names every assistant resource of the project.
-func (r ProjectRef) Assistants() AssistantCollection {
-	return AssistantCollection{project: r.id}
+// Assistants names every assistant resource of project.
+func Assistants[P ID](project P) AssistantCollection {
+	return AssistantCollection{project: idString(project)}
 }
 
 // Read requests ScopeAssistantRead on every assistant resource of the project.

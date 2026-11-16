@@ -29,7 +29,7 @@ func RefName(kind authz.Kind) string {
 	return camel(string(kind))
 }
 
-// CollectionName is the Go name of the ProjectRef method that names every
+// CollectionName is the Go name of the function that names every
 // resource of a kind in one project: environment becomes Environments.
 func CollectionName(kind authz.Kind) string {
 	return RefName(kind) + "s"
@@ -66,8 +66,8 @@ func renderCollections(b *strings.Builder, r authz.Registry) {
 		name := RefName(t.Kind)
 		plural := CollectionName(t.Kind)
 		fmt.Fprintf(b, "// %sCollection names every %s resource of one project.\ntype %sCollection struct{ project string }\n\n", name, t.Kind, name)
-		fmt.Fprintf(b, "// %s names every %s resource of the project.\n", plural, t.Kind)
-		fmt.Fprintf(b, "func (r ProjectRef) %s() %sCollection {\n\treturn %sCollection{project: r.id}\n}\n\n", plural, name, name)
+		fmt.Fprintf(b, "// %s names every %s resource of project.\n", plural, t.Kind)
+		fmt.Fprintf(b, "func %s[P ID](project P) %sCollection {\n\treturn %sCollection{project: idString(project)}\n}\n\n", plural, name, name)
 		for _, p := range t.Permissions {
 			if slices.ContainsFunc(p.Dimensions, func(d authz.Dimension) bool { return refDimension(r, d) }) {
 				continue
