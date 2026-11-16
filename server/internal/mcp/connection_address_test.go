@@ -66,6 +66,7 @@ func TestGatewayMemberAtBlockedAddress(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed.String(), row.Reason)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.NotEmpty(t, row.MemberID)
+	require.Equal(t, "192.0.2.10", row.ProviderHost, "the member's configured host")
 	require.Equal(t, `server "member" uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 	require.NotContains(t, text, "192.0.2.10")
 }
@@ -85,6 +86,7 @@ func TestGatewayMemberAtMissingHost(t *testing.T) {
 
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotFound.String(), row.Reason)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Equal(t, missingMemberHost, row.ProviderHost, "the member's configured host")
 	require.Equal(t, `server "member" uses an address that does not point anywhere. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 }
 
@@ -132,6 +134,7 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 		row := rec.Rows()[len(rec.Rows())-1]
 		require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed.String(), row.Reason, call)
 		require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes, call)
+		require.Empty(t, row.ProviderHost, "a sign-in provider's address names no member host")
 
 		status := f.connectionStatus(t, ctx)
 		require.Equal(t, metamcp.SignInUnavailable, status.Servers[0].Status, call)

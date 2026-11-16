@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -352,7 +353,25 @@ func TestMemberClientFailure_TunneledTransportTimeoutIsNotTheProvider(t *testing
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
 }
 
-// A call that never reached the member's upstream names no host; one it reached names the session's own.
+// redirectedToBlocked is the error a real guardian client returns when the upstream redirects to a refused address.
+func redirectedToBlocked(t *testing.T) error {
+	t.Helper()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://192.0.2.10/mcp", http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithBlockedCIDRBlocks("192.0.2.0/24"))
+	require.NoError(t, err)
+	resp, err := policy.Client().Get(upstream.URL)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+	return fmt.Errorf("get redirected upstream: %w", err)
+}
+
+// A call that never reached the member's upstream names no host, unless its own configured address is the
+// problem; one it reached names the session's own. Redirect hops and tunnels never name a host.
 func TestMemberClientFailure_NamesOnlyAReachedUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -361,21 +380,28 @@ func TestMemberClientFailure_NamesOnlyAReachedUpstream(t *testing.T) {
 	gate := &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New()}
 	member := metaMember{serverID: uuid.New(), slug: "fixture"}
 	dial := memberDial{provider: "https://mcp.example.com/mcp"}
+	const noAnswer = `server "fixture" did not answer: upstream unreachable or timed out`
 
 	for _, tc := range []struct {
 		name     string
 		exchange error
+		dial     memberDial
+		code     mcpconnectionattempts.Code
+		text     string
 		host     string
 	}{
-		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), host: ""},
-		{name: "unresolved", exchange: fmt.Errorf("lookup: %w", guardian.ErrBadHost), host: ""},
-		{name: "unreachable", exchange: errors.New("connection refused"), host: "mcp.example.com"},
+		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), dial: dial, code: mcpconnectionattempts.CodeAddressNotAllowed, text: `server "fixture" uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address`, host: "mcp.example.com"},
+		{name: "missing", exchange: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "mcp.example.com", IsNotFound: true}}, dial: dial, code: mcpconnectionattempts.CodeAddressNotFound, text: `server "fixture" uses an address that does not point anywhere. Ask your administrator to check the server's address`, host: "mcp.example.com"},
+		{name: "unresolved", exchange: fmt.Errorf("lookup: %w", guardian.ErrBadHost), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},
+		{name: "redirect hop", exchange: redirectedToBlocked(t), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},
+		{name: "tunneled", exchange: fmt.Errorf("dial gateway: %w", guardian.ErrBlockedIP), dial: memberDial{tunneled: true}, code: mcpconnectionattempts.CodeInternalError, text: noAnswer, host: ""},
+		{name: "unreachable", exchange: errors.New("connection refused"), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: "mcp.example.com"},
 	} {
-		err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{err: tc.exchange}, dial, member, errors.New("call failed"))
+		err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{err: tc.exchange}, tc.dial, member, errors.New("call failed"))
 		failure, ok := errors.AsType[memberConnectionError](err)
 		require.True(t, ok, tc.name)
-		require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, failure.code, tc.name)
-		require.Equal(t, `server "fixture" did not answer: upstream unreachable or timed out`, err.Error(), tc.name)
+		require.Equal(t, tc.code, failure.code, tc.name)
+		require.Equal(t, tc.text, err.Error(), tc.name)
 
 		service.recordMemberFailure(t.Context(), gate, member, failure.code, memberUpstreamHost(err))
 		rows := rec.Rows()
