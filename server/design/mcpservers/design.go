@@ -176,6 +176,35 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMcpServer"}`)
 	})
 
+	Method("setSetupGuideCompleted", func() {
+		Description("Mark the upstream provider's manual setup guide for an MCP server as done, or clear that mark. Marking it done again keeps the original completion time. Requires the same access as updateMcpServer.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the MCP server", func() {
+				Format(FormatUUID)
+			})
+			Attribute("completed", Boolean, "true marks the setup guide as done; false clears the mark")
+			Required("id", "completed")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(McpServer)
+
+		HTTP(func() {
+			POST("/rpc/mcpServers.setSetupGuideCompleted")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setMcpServerSetupGuideCompleted")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSetupGuideCompleted")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetMcpServerSetupGuideCompleted"}`)
+	})
+
 	Method("listToolFilters", func() {
 		Description("List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.")
 
@@ -567,6 +596,10 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("primary_endpoint_url", String, "The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.")
 	Attribute("has_endpoint", Boolean, "Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.")
+	Attribute("setup_guide_completed_at", String, func() {
+		Description("When an admin marked the upstream provider's manual setup guide as done. Absent while it is not done.")
+		Format(FormatDateTime)
+	})
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)
