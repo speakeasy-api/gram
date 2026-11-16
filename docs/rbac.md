@@ -34,7 +34,7 @@ agent:00000000-0000-0000-0000-000000000004
 
 Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
-Agent Identity is in beta and is available under **Identities → Agents** in the dashboard. Existing rollout gates and authorization requirements still apply.
+Agent Identity is in beta and is available under **Identity → Agents** in the dashboard. Existing rollout gates and authorization requirements still apply.
 
 The current RBAC implementation supports `user`, `role`, `agent`, and `api_key` principals. An `api_key:<api_keys.id>` principal is a legacy API key holding its own server and auth client policy; it is written only through `keys.create` and is not grantable anywhere else (see "API key policies and the mandatory check").
 
