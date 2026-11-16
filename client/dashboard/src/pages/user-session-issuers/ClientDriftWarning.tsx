@@ -115,7 +115,7 @@ function ClientRow({ use }: { use: ClientUse }): JSX.Element {
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 text-center align-top">
+      <td className="px-4 py-3 text-center align-middle">
         <span
           role="img"
           aria-label={use.bound ? "Bound" : "Not bound"}
