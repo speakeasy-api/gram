@@ -156,7 +156,7 @@ func (r Registry) Validate() error {
 				}
 			}
 
-			blocks := 0
+			blocks, exemptions := 0, 0
 			for _, x := range p.Exclusions {
 				switch x.Kind {
 				case ExclusionBlock:
@@ -169,6 +169,7 @@ func (r Registry) Validate() error {
 					}
 					claim(t.BlockScopeFor(p), owner+" (block)")
 				case ExclusionExemption:
+					exemptions++
 					target, ok := actions[x.Action]
 					switch {
 					case !ok:
@@ -184,6 +185,11 @@ func (r Registry) Validate() error {
 			}
 			if blocks > 1 {
 				fail("%s: at most one block per permission", owner)
+			}
+			// A permission has one exclusion scope, so it is either blocked or
+			// exempted, never both.
+			if blocks+exemptions > 1 {
+				fail("%s: at most one exclusion per permission", owner)
 			}
 		}
 
