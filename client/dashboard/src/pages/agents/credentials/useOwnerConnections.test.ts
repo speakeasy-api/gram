@@ -77,6 +77,7 @@ const server = {
   id: "server_example",
   projectSlug: "default",
   issuerId: "issuer_example",
+  kind: "Remote",
 } as InventoryServer;
 
 it("treats a server whose own auth offers only a shared credential as shared", () => {
@@ -308,6 +309,35 @@ describe("a server sharing an org-wide issuer with another server", () => {
       status: "ready",
       sessions: [ownSession],
     });
+  });
+
+  it("is ready with one of the server's own sign-ins when enforced", () => {
+    mocks.enforcement = "enforced";
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          ownSignIn,
+          { ...ownSignIn, remoteSessionClientId: "client_second" },
+        ],
+      },
+    });
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [ownSession],
+    });
+  });
+
+  it("keeps every issuer registration for a hosted server without enforcement", () => {
+    const hosted = { ...server, kind: "Hosted" } as InventoryServer;
+    mocks.clients = [
+      otherServersSignIn,
+      { id: "client_own", credentialOwner: "subject" },
+    ];
+    mocks.required = ["client_own"];
+    const { result } = renderHook(() => useOwnerConnections([hosted], true));
+    expect(result.current.byServer.get(hosted.id)?.status).toBe("missing");
   });
 
   it("keeps the server checking until enforcement is known", () => {

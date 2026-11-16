@@ -45,12 +45,19 @@ export function userSubject(userId: string): string {
  * is what the attachment endpoint will accept. A client whose credential is
  * its own (`credential_owner: self`) is shared by every caller and needs no
  * person.
+ *
+ * With `anyOne`, the server is ready once any of its personal sign-ins has a
+ * working connection: under upstream auth enforcement the gateway lets a
+ * caller choose among a server's own sign-ins, so one serves. Without it,
+ * every sign-in is required, as the runtime requires each of a server's own
+ * registrations when upstream auth is not enforced.
  */
 export function serverConnection(
   issuerId: string,
   clients: ServerSignIn[],
   sessions: RemoteSession[],
   now: number = Date.now(),
+  { anyOne = false }: { anyOne?: boolean } = {},
 ): ServerConnection {
   const personal = clients.filter(
     (client) => client.credentialOwner !== "self",
@@ -79,6 +86,14 @@ export function serverConnection(
     }
     found.push(session);
     if (connectionLifetime(session, now).kind === "ended") ended.push(client);
+  }
+  if (anyOne) {
+    const working = found.filter(
+      (session) => connectionLifetime(session, now).kind !== "ended",
+    );
+    if (working.length > 0) return { status: "ready", sessions: working };
+    if (found.length > 0) return { status: "ended", sessions: found };
+    return { status: "missing", signIns: missing, connected: 0 };
   }
   if (missing.length > 0)
     return {
@@ -254,6 +269,11 @@ async function issuerSignInsRequired(
       server.projectId === issuer.projectId &&
       server.issuerId === issuer.issuerId,
   );
+  // A hosted server needs every registration its issuer binds; only proxied
+  // servers narrow to their own.
+  const hosted = sharing.some(
+    (server) => server.kind !== "Remote" && server.kind !== "Tunneled",
+  );
   const [clients, ...required] = await Promise.all([
     collectPageItems(
       api.remoteSessionClients.list(
@@ -262,14 +282,17 @@ async function issuerSignInsRequired(
         { signal },
       ),
     ),
-    ...sharing.map((server) =>
-      api.remoteSessions.listServerClientAssociations(
-        { gramProject, mcpServerId: server.id },
-        undefined,
-        { signal },
+    ...sharing
+      .filter(() => !hosted)
+      .map((server) =>
+        api.remoteSessions.listServerClientAssociations(
+          { gramProject, mcpServerId: server.id },
+          undefined,
+          { signal },
+        ),
       ),
-    ),
   ]);
+  if (hosted) return clients;
   const ids = new Set(required.flatMap((read) => read.requiredClientIds));
   return clients.filter((client) => ids.has(client.id));
 }
@@ -341,6 +364,9 @@ export async function attachOwnerConnections(
       collectPageItems(api.remoteSessions.list(scope, undefined, { signal })),
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);
+    // Under enforcement one working sign-in serves a server, so the ones the
+    // caller never connected are skipped as long as another one serves.
+    let served = 0;
     for (const client of clients) {
       if (client.credentialOwner === "self") continue;
       const current = bindings.items.filter(
@@ -354,13 +380,16 @@ export async function attachOwnerConnections(
             binding.remoteSession !== undefined &&
             connectionLifetime(binding.remoteSession).kind !== "ended",
         )
-      )
+      ) {
+        served += 1;
         continue;
+      }
       const session = candidates.find(
         (candidate) =>
           candidate.remoteSessionClientId === client.id &&
           connectionLifetime(candidate).kind !== "ended",
       );
+      if (!session && typed) continue;
       if (!session && skipMissing) {
         missing.add(server.name);
         continue;
@@ -394,6 +423,17 @@ export async function attachOwnerConnections(
         undefined,
         { signal },
       );
+      served += 1;
+    }
+    const personalCount = clients.filter(
+      (client) => client.credentialOwner !== "self",
+    ).length;
+    if (typed && personalCount > 0 && served === 0) {
+      if (!skipMissing)
+        throw new Error(
+          `Your connection to ${server.name} is no longer available. Sign in to it again, then retry.`,
+        );
+      missing.add(server.name);
     }
   }
   return [...missing];

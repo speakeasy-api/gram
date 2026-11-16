@@ -47,8 +47,8 @@ const andList = new Intl.ListFormat("en", {
 });
 
 /**
- * What a server still needs before it is ready, in words: "1 of 3 sign-ins
- * connected. Still needs a connection to Stripe and Vercel." Null when there
+ * What a server still needs before it is ready, in words: "This server has 2
+ * Linear sign-ins; 1 is connected." Null when there
  * is nothing to add to the row's own "Requires connection": no sign-in is
  * known to be missing, or nothing is connected yet and the one missing is the
  * server's own, which the row already names.
@@ -75,9 +75,20 @@ export function missingSignInsSentence(
     names[0] === server.name
   )
     return null;
+  const total = connected + missing;
+  const verb = connected === 1 ? "is" : "are";
+  // What is left shares the server's name, as when one service is registered
+  // twice: say so plainly rather than naming the server back to itself.
+  if (
+    connected > 0 &&
+    unnamed === 0 &&
+    names.length === 1 &&
+    names[0] === server.name
+  )
+    return `This server has ${total} ${server.name} sign-ins; ${connected} ${verb} connected.`;
   const progress =
     connected > 0
-      ? `${connected} of ${connected + missing} sign-ins connected. `
+      ? `This server has ${total} sign-ins; ${connected} ${verb} connected. `
       : "";
   if (names.length === 0)
     return `${progress}${

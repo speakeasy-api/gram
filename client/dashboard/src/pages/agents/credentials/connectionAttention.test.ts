@@ -54,7 +54,7 @@ describe("missingSignInsSentence", () => {
         signIns: [signIn("linear_two", "Linear")],
         connected: 1,
       }),
-    ).toBe("1 of 2 sign-ins connected. Still needs a connection to Linear.");
+    ).toBe("This server has 2 Linear sign-ins; 1 is connected.");
   });
 
   it("does not hide two missing sign-ins that share the server's name", () => {
@@ -64,6 +64,18 @@ describe("missingSignInsSentence", () => {
         missing(signIn("linear_one", "Linear"), signIn("linear_two", "Linear")),
       ),
     ).toBe("Still needs a connection to 2 Linear sign-ins.");
+  });
+
+  it("names what is left when it is not the server's own service", () => {
+    expect(
+      missingSignInsSentence(linear, {
+        status: "missing",
+        signIns: [signIn("stripe", "Stripe")],
+        connected: 2,
+      }),
+    ).toBe(
+      "This server has 3 sign-ins; 2 are connected. Still needs a connection to Stripe.",
+    );
   });
 
   it("adds nothing when the connection is not missing a sign-in", () => {

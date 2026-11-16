@@ -242,6 +242,31 @@ describe("serverConnection", () => {
     ).toEqual({ names: ["2 Linear sign-ins"], unnamed: 0 });
   });
 
+  it("is ready with any one working sign-in when one is enough", () => {
+    // Under enforcement the caller chooses among the server's own sign-ins.
+    const connection = serverConnection(
+      "issuer_one",
+      [client("client_one"), client("client_two")],
+      [session({})],
+      now,
+      { anyOne: true },
+    );
+    expect(connection).toEqual({ status: "ready", sessions: [session({})] });
+    expect(
+      serverConnection(
+        "issuer_one",
+        [client("client_one"), client("client_two")],
+        [],
+        now,
+        { anyOne: true },
+      ),
+    ).toEqual({
+      status: "missing",
+      signIns: [client("client_one"), client("client_two")],
+      connected: 0,
+    });
+  });
+
   it("prefers a working connection over one that has ended", () => {
     const ended = session({ id: "session_old", accessExpiresAt: earlier });
     const working = session({ id: "session_new" });
@@ -393,6 +418,53 @@ describe("attachOwnerConnections", () => {
       expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
         attachBindingRequestBody: { remoteSessionId: "session_mine" },
       });
+    });
+
+    it("attaches the one connected sign-in when enforced and the server has two", async () => {
+      const { fake, attachBinding } = api({
+        auth: () =>
+          Promise.resolve(
+            authentication([
+              own,
+              {
+                ...own,
+                id: "auth_second",
+                remoteSessionClientId: "client_two",
+              },
+            ]),
+          ),
+        clients: [],
+        candidates: [session({})],
+        bindings: [],
+      });
+      const missing = await attachOwnerConnections(
+        fake,
+        "agent_new",
+        [server],
+        undefined,
+        false,
+        true,
+      );
+      expect(missing).toEqual([]);
+      expect(attachBinding).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps every issuer registration for a hosted server", async () => {
+      const hostedServer = { ...server, kind: "Hosted" } as InventoryServer;
+      const { fake, attachBinding } = api({
+        auth: () => Promise.resolve(authentication([own])),
+        clients: [client("client_other_server"), client("client_one")],
+        candidates: [session({})],
+        bindings: [],
+        required: { [server.id]: ["client_one"] },
+      });
+      await expect(
+        attachOwnerConnections(fake, "agent_new", [hostedServer]),
+      ).rejects.toThrow(/no longer available/);
+      expect(
+        fake.remoteSessions.listServerClientAssociations,
+      ).not.toHaveBeenCalled();
+      expect(attachBinding).not.toHaveBeenCalled();
     });
 
     it("asks for the sign-ins the runtime requires when it is not", async () => {
