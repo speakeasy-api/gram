@@ -764,8 +764,8 @@ trackedFiles:
   src/funcs/telemetryGetMetaMcpServerUsage.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
   src/funcs/telemetryGetOrgMcpServerActivity.ts: {}
-  src/funcs/telemetryGetOrganizationGatewayOverview.ts: {}
-  src/funcs/telemetryGetOrganizationGatewayUsage.ts: {}
+  src/funcs/telemetryGetProjectGatewayOverview.ts: {}
+  src/funcs/telemetryGetProjectGatewayUsage.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
   src/funcs/telemetryGetProjectOverview.ts: {}
   src/funcs/telemetryGetToolUsageClientToolBreakdown.ts: {}
@@ -1336,9 +1336,9 @@ trackedFiles:
   src/models/components/getmyconnectionsresult.ts: {}
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
-  src/models/components/getorganizationgatewayactivitypayload.ts: {}
   src/models/components/getorgmcpserveractivityresult.ts: {}
   src/models/components/getpluginsresult.ts: {}
+  src/models/components/getprojectgatewayactivitypayload.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewpayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
@@ -2597,8 +2597,6 @@ trackedFiles:
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
   src/models/operations/getorganizationgateway.ts: {}
-  src/models/operations/getorganizationgatewayoverview.ts: {}
-  src/models/operations/getorganizationgatewayusage.ts: {}
   src/models/operations/getorganizationremotesessionclient.ts: {}
   src/models/operations/getorganizationremotesessionclientdelegationstatus.ts: {}
   src/models/operations/getorganizationremotesessionclientdeletepreflight.ts: {}
@@ -2619,6 +2617,8 @@ trackedFiles:
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
   src/models/operations/getproject.ts: {}
+  src/models/operations/getprojectgatewayoverview.ts: {}
+  src/models/operations/getprojectgatewayusage.ts: {}
   src/models/operations/getprojectmetricssummary.ts: {}
   src/models/operations/getprojectoverview.ts: {}
   src/models/operations/getpublishstatus.ts: {}
@@ -3554,14 +3554,14 @@ trackedFiles:
   src/react-query/getObservabilityOverview.ts: {}
   src/react-query/getOrgMcpServerActivity.core.ts: {}
   src/react-query/getOrgMcpServerActivity.ts: {}
-  src/react-query/getOrganizationGatewayOverview.core.ts: {}
-  src/react-query/getOrganizationGatewayOverview.ts: {}
-  src/react-query/getOrganizationGatewayUsage.core.ts: {}
-  src/react-query/getOrganizationGatewayUsage.ts: {}
   src/react-query/getPaygBillingSummary.core.ts: {}
   src/react-query/getPaygBillingSummary.ts: {}
   src/react-query/getPeriodUsage.core.ts: {}
   src/react-query/getPeriodUsage.ts: {}
+  src/react-query/getProjectGatewayOverview.core.ts: {}
+  src/react-query/getProjectGatewayOverview.ts: {}
+  src/react-query/getProjectGatewayUsage.core.ts: {}
+  src/react-query/getProjectGatewayUsage.ts: {}
   src/react-query/getProjectMetricsSummary.core.ts: {}
   src/react-query/getProjectMetricsSummary.ts: {}
   src/react-query/getProjectOverview.core.ts: {}
@@ -8478,6 +8478,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getProjectGatewayOverview:
+    speakeasy-default-get-project-gateway-overview:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"comparison": {"avg_latency_ms": 5550.48, "avg_resolution_time_ms": 1438.36, "avg_session_duration_ms": 3083.12, "cache_creation_input_tokens": 481923, "cache_read_input_tokens": 244654, "failed_chats": 383129, "failed_tool_calls": 131806, "resolved_chats": 251342, "total_chats": 707581, "total_cost": 4170.79, "total_input_tokens": 764954, "total_output_tokens": 631002, "total_tokens": 362177, "total_tool_calls": 840522}, "interval_seconds": 873831, "summary": {"avg_latency_ms": 4182.17, "avg_resolution_time_ms": 4669.23, "avg_session_duration_ms": 1070.74, "cache_creation_input_tokens": 195587, "cache_read_input_tokens": 149781, "failed_chats": 439997, "failed_tool_calls": 833337, "resolved_chats": 499004, "total_chats": 434290, "total_cost": 4402.99, "total_input_tokens": 570801, "total_output_tokens": 125284, "total_tokens": 692262, "total_tool_calls": 193798}, "time_series": [], "top_tools_by_count": [], "top_tools_by_failure_rate": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getProjectGatewayUsage:
+    speakeasy-default-get-project-gateway-usage:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"funnel": {"describe_server": 15843, "describe_tools": 811347, "execute_tool": 589347, "list_servers": 120016}, "members": [{"error_count": 75352, "mcp_server_id": "82609ce7-5983-413d-be8f-034a9c138ba6", "tool_calls": 670538}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getProjectMetricsSummary:
     speakeasy-default-get-project-metrics-summary:
       requestBody:

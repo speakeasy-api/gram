@@ -97,7 +97,7 @@ func listGatewaySessions(ctx context.Context, service GatewaySessionManagement, 
 	// Preserve the live actor and grants. The management service derives a manual
 	// gateway's project; organization scope deliberately ignores the working one.
 	result, err := service.ListGatewaySessions(ctx, &gatewaygen.ListGatewaySessionsPayload{
-		GatewayID: input.GatewayID, SessionToken: nil, ApikeyToken: nil,
+		GatewayID: input.GatewayID, ProjectID: nil, SessionToken: nil, ApikeyToken: nil,
 		Search: input.Search, ServerID: input.ServerID, ProviderID: input.ProviderID,
 		Status: conv.Default(input.Status, "active"), CreatedAfter: input.CreatedAfter, CreatedBefore: input.CreatedBefore,
 		Sort: conv.Default(input.Sort, "newest"), Cursor: input.Cursor, Limit: conv.Default(input.Limit, 50),

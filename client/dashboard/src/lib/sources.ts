@@ -167,6 +167,7 @@ export const RESERVED_MCP_SEGMENTS: ReadonlySet<string> = new Set([
   "deployments",
   "sources",
   "organization-gateway",
+  "project-gateway",
   "gateway",
   "x",
 ]);

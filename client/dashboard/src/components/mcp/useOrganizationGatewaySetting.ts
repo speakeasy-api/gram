@@ -54,13 +54,13 @@ export function useOrganizationGatewaySetting({
       if (!isCurrentOrganization()) return;
       toast.success(
         variables.request.setProductFeatureRequestBody.enabled
-          ? "Organization Gateway turned off"
-          : "Organization Gateway turned on",
+          ? "Gateways turned off"
+          : "Gateways turned on",
       );
     },
     onError: (error) => {
       if (!isCurrentOrganization()) return;
-      handleAPIError(error, "Failed to update the Organization Gateway");
+      handleAPIError(error, "Failed to update the gateways");
     },
   });
 

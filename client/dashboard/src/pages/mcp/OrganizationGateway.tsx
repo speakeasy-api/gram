@@ -10,9 +10,10 @@ import {
   TabsContent,
 } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { MCPAssignments } from "../access/MCPAssignments";
 import { GatewayActivitySection } from "./gateway/GatewayActivitySection";
-import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
+import { SpeakeasyMark } from "@/components/mcp/ProjectGatewayCard";
 import {
   GatewayNotServed,
   OrganizationGatewaySwitch,
@@ -28,7 +29,8 @@ import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { projectGatewayUrl } from "@/components/mcp/useProjectGatewayEntry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
@@ -39,8 +41,8 @@ import { organizationGatewayInstallPlatforms } from "./organization-gateway-inst
 
 /**
  * The Organization Gateway: one MCP URL that gives each person every server they can
- * reach across the organization's projects. Opened from its card at the head
- * of the MCP Servers list.
+ * reach across the organization's projects. Opened from the organization's
+ * settings.
  */
 export default function OrganizationGateway(): JSX.Element {
   const organization = useOrganization();
@@ -55,12 +57,36 @@ export default function OrganizationGateway(): JSX.Element {
   );
 }
 
+/**
+ * The Project Gateway: the Organization Gateway limited to one project's
+ * servers. Opened from its card at the head of the MCP Servers list. It has no
+ * setting of its own, so while the Organization Gateway is off this page
+ * offers the organization's switch.
+ */
+export function ProjectGatewayPage(): JSX.Element {
+  const organization = useOrganization();
+  const project = useProject();
+  return (
+    <RequireScope scope="org:read" level="page">
+      <OrganizationGatewayContent
+        key={`${organization.id}/${project.id}`}
+        organizationId={organization.id}
+        organizationSlug={organization.slug}
+        project={{ id: project.id, name: project.name, slug: project.slug }}
+      />
+    </RequireScope>
+  );
+}
+
 function OrganizationGatewayContent({
   organizationId,
   organizationSlug,
+  project,
 }: {
   organizationId: string;
   organizationSlug: string;
+  /** Limits the page to this project's gateway. */
+  project?: { id: string; name: string; slug: string };
 }): JSX.Element {
   const isCurrentOrganization = useIsCurrentOrganization(organizationId);
   const {
@@ -91,18 +117,33 @@ function OrganizationGatewayContent({
     )
       ? selectedTab
       : undefined) ?? (isOn === false && canManage ? "assignments" : "install");
-  const endpointUrl =
+  const organizationUrl =
     isOn && gateway.data?.available ? gateway.data.url : undefined;
+  const endpointUrl =
+    organizationUrl && project
+      ? projectGatewayUrl(organizationUrl, project.slug)
+      : organizationUrl;
+  const name = project ? "Project Gateway" : "Organization Gateway";
+  const showSwitch = isOn !== undefined && !!features.data && !features.error;
 
-  let installStatus =
-    "Organization Gateway installation is unavailable. Check the gateway status above.";
+  let installStatus = `${name} installation is unavailable. Check the gateway status above.`;
   if (isOn === false) {
     installStatus = canManage
-      ? "Enable Organization Gateway to get your endpoint and installation steps."
-      : "An organization admin must enable Organization Gateway before installation details are available.";
+      ? `Turn on gateways to get your ${name} endpoint and installation steps.`
+      : `An organization admin must turn on gateways before ${name} installation details are available.`;
   } else if (gateway.isLoading || isOn === undefined) {
-    installStatus = "Loading Organization Gateway installation details…";
+    installStatus = `Loading ${name} installation details…`;
   }
+  const install = endpointUrl ? (
+    <OrganizationGatewayInstall
+      serverName={project ? project.slug : organizationSlug}
+      url={endpointUrl}
+    />
+  ) : (
+    <Text small muted>
+      {installStatus}
+    </Text>
+  );
 
   return (
     <SettingsPage
@@ -111,62 +152,72 @@ function OrganizationGatewayContent({
           <span className="border-border bg-card flex size-9 shrink-0 items-center justify-center border">
             <SpeakeasyMark className="size-6" />
           </span>
-          Organization Gateway
+          {name}
         </span>
       }
       description={
         <span className="block max-w-2xl">
-          One unified MCP server containing every MCP server each person can
-          access across all projects. Each person signs in with their Speakeasy
-          account. As their access changes, so does what they can use.
+          {project
+            ? `One unified MCP server containing every MCP server in ${project.name} each person can access.`
+            : "One unified MCP server containing every MCP server each person can access across all projects."}{" "}
+          Each person signs in with their Speakeasy account. As their access
+          changes, so does what they can use.
         </span>
       }
       renderHeader={(header) => (
-        <section
-          className={cn(
-            BRAND_MESH_SURFACE_CLASS,
-            "border-border mb-8 border px-6 py-6 sm:px-8 sm:py-8",
-          )}
-        >
-          <BrandMeshLayers />
-          {header}
+        <>
+          {!project && <MoveToProjectGateways />}
           <section
-            aria-label={endpointUrl ? "Gateway endpoint" : "Gateway status"}
-            className="border-border flex min-w-0 flex-col gap-4 bg-card text-black dark:text-foreground border px-5 py-4 sm:flex-row sm:items-center"
+            className={cn(
+              BRAND_MESH_SURFACE_CLASS,
+              "border-border mb-8 border px-6 py-6 sm:px-8 sm:py-8",
+            )}
           >
-            <div className="min-w-0 flex-1">
-              <GatewayBody gateway={gateway} isOn={isOn} />
-            </div>
-            <div className="flex shrink-0 items-stretch self-end divide-black/10 border-black/10 bg-black/5 dark:divide-border dark:border-border dark:bg-muted divide-x border sm:self-auto">
-              {isOn !== undefined && !!features.data && !features.error ? (
-                // Not a <label>: label activation would forward clicks on the text
-                // to the switch past RequireScope's pointer-events guard.
-                <div className="flex items-center gap-3 px-4 py-2">
-                  <Text
-                    small
-                    as="span"
-                    className="text-black/60 dark:text-muted-foreground"
-                  >
-                    {isOn ? "Enabled" : "Disabled"}
-                  </Text>
-                  <OrganizationGatewaySwitch
-                    on={isOn}
-                    setOn={setOn}
-                    isPending={isPending}
-                  />
-                </div>
-              ) : undefined}
-              {endpointUrl && (
-                <CopyButton
-                  text={endpointUrl}
-                  size="lg"
-                  tooltip="Copy endpoint"
-                  className="h-auto shrink-0 text-black hover:bg-black/5 hover:text-black dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground rounded-none"
+            <BrandMeshLayers />
+            {header}
+            <section
+              aria-label={endpointUrl ? "Gateway endpoint" : "Gateway status"}
+              className="border-border flex min-w-0 flex-col gap-4 bg-card text-black dark:text-foreground border px-5 py-4 sm:flex-row sm:items-center"
+            >
+              <div className="min-w-0 flex-1">
+                <GatewayBody
+                  gateway={gateway}
+                  isOn={isOn}
+                  endpointUrl={endpointUrl}
+                  isProject={!!project}
                 />
-              )}
-            </div>
+              </div>
+              <div className="flex shrink-0 items-stretch self-end divide-black/10 border-black/10 bg-black/5 dark:divide-border dark:border-border dark:bg-muted divide-x border sm:self-auto">
+                {showSwitch ? (
+                  // Not a <label>: label activation would forward clicks on the text
+                  // to the switch past RequireScope's pointer-events guard.
+                  <div className="flex items-center gap-3 px-4 py-2">
+                    <Text
+                      small
+                      as="span"
+                      className="text-black/60 dark:text-muted-foreground"
+                    >
+                      {isOn ? "Enabled" : "Disabled"}
+                    </Text>
+                    <OrganizationGatewaySwitch
+                      on={!!isOn}
+                      setOn={setOn}
+                      isPending={isPending}
+                    />
+                  </div>
+                ) : undefined}
+                {endpointUrl && (
+                  <CopyButton
+                    text={endpointUrl}
+                    size="lg"
+                    tooltip="Copy endpoint"
+                    className="h-auto shrink-0 text-black hover:bg-black/5 hover:text-black dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground rounded-none"
+                  />
+                )}
+              </div>
+            </section>
           </section>
-        </section>
+        </>
       )}
     >
       {features.error && (
@@ -179,57 +230,88 @@ function OrganizationGatewayContent({
           </AlertDescription>
         </Alert>
       )}
-      <div className="space-y-8">
-        <Tabs value={tab} onValueChange={setTab}>
-          <div className="border-border border-b">
-            <PageTabsList>
-              <PageTabsTrigger value="install">Install</PageTabsTrigger>
-              <PageTabsTrigger value="connections">Connections</PageTabsTrigger>
-              <PageTabsTrigger value="activity">Activity</PageTabsTrigger>
-              <RequireScope scope="org:admin" level="component">
-                <PageTabsTrigger value="assignments">
-                  View assignments
+      {project ? (
+        <div className="space-y-8">
+          <Tabs value={tab} onValueChange={setTab}>
+            <div className="border-border border-b">
+              <PageTabsList>
+                <PageTabsTrigger value="install">Install</PageTabsTrigger>
+                <PageTabsTrigger value="connections">
+                  Connections
                 </PageTabsTrigger>
-              </RequireScope>
-            </PageTabsList>
-          </div>
-          <TabsContent value="install" className="mt-6">
-            {endpointUrl ? (
-              <OrganizationGatewayInstall
-                serverName={organizationSlug}
-                url={endpointUrl}
+                <PageTabsTrigger value="activity">Activity</PageTabsTrigger>
+                <RequireScope scope="org:admin" level="component">
+                  <PageTabsTrigger value="assignments">
+                    View assignments
+                  </PageTabsTrigger>
+                </RequireScope>
+              </PageTabsList>
+            </div>
+            <TabsContent value="install" className="mt-6">
+              {install}
+            </TabsContent>
+            <TabsContent value="connections" className="mt-6">
+              <ClientsAndSessionsTab
+                gateway={{ projectId: project.id }}
+                issuerId={undefined}
               />
-            ) : (
-              <Text small muted>
-                {installStatus}
-              </Text>
-            )}
-          </TabsContent>
-          <TabsContent value="connections" className="mt-6">
-            <ClientsAndSessionsTab gateway={{}} issuerId={undefined} />
-          </TabsContent>
-          <TabsContent value="activity" className="mt-6">
-            <GatewayActivitySection
-              scope={{ kind: "organization", organizationId }}
-            />
-          </TabsContent>
-          <TabsContent value="assignments" className="mt-6">
-            <RequireScope scope="org:admin" level="section">
-              <MCPAssignments />
-            </RequireScope>
-          </TabsContent>
-        </Tabs>
-      </div>
+            </TabsContent>
+            <TabsContent value="activity" className="mt-6">
+              <GatewayActivitySection
+                scope={{ kind: "project", projectId: project.id }}
+              />
+            </TabsContent>
+            <TabsContent value="assignments" className="mt-6">
+              <RequireScope scope="org:admin" level="section">
+                <MCPAssignments />
+              </RequireScope>
+            </TabsContent>
+          </Tabs>
+        </div>
+      ) : null}
     </SettingsPage>
+  );
+}
+
+/**
+ * The Organization Gateway is giving way to each project's own gateway, so its
+ * page points there instead of carrying installation, connections or activity.
+ */
+function MoveToProjectGateways(): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <Alert className="mb-8">
+      <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <AlertTitle>Use Project Gateways instead</AlertTitle>
+          <AlertDescription>
+            Each project has its own gateway: every server in that project at
+            one URL, with its own connections and activity. Connect agents to a
+            Project Gateway rather than this one.
+          </AlertDescription>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => routes.mcp.projectGateway.goTo()}
+        >
+          Open Project Gateway
+        </Button>
+      </div>
+    </Alert>
   );
 }
 
 function GatewayBody({
   gateway,
   isOn,
+  endpointUrl,
+  isProject,
 }: {
   gateway: OrganizationGatewaySetting["gateway"];
   isOn: boolean | undefined;
+  endpointUrl: string | undefined;
+  isProject: boolean;
 }): JSX.Element {
   if (gateway.isLoading) {
     return <Skeleton className="h-6 w-full" />;
@@ -261,14 +343,15 @@ function GatewayBody({
     return (
       <Alert variant="warning">
         <AlertDescription>
-          Organization Gateway is off. An organization admin can turn it on for
-          the team. Reviewing MCP assignments first is recommended.
+          {isProject
+            ? "Gateways are off for every project. An organization admin can turn them on for the team."
+            : "Organization Gateway is off. An organization admin can turn it on for the team."}
         </AlertDescription>
       </Alert>
     );
   }
 
-  const url = gateway.data.available ? gateway.data.url : undefined;
+  const url = gateway.data.available ? endpointUrl : undefined;
   if (!url) {
     return (
       <Alert variant="warning">

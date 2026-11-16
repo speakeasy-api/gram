@@ -31,23 +31,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetOrganizationGatewayOverviewRequest,
-  GetOrganizationGatewayOverviewRequest$outboundSchema,
-  GetOrganizationGatewayOverviewSecurity,
-} from "../models/operations/getorganizationgatewayoverview.js";
+  GetProjectGatewayOverviewRequest,
+  GetProjectGatewayOverviewRequest$outboundSchema,
+  GetProjectGatewayOverviewSecurity,
+} from "../models/operations/getprojectgatewayoverview.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getOrganizationGatewayOverview telemetry
+ * getProjectGatewayOverview telemetry
  *
  * @remarks
- * Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
+ * Observability overview metrics for calls dispatched through the selected project's Project Gateway: the Organization Gateway limited to that project's servers.
  */
-export function telemetryGetOrganizationGatewayOverview(
+export function telemetryGetProjectGatewayOverview(
   client: GramCore,
-  request: GetOrganizationGatewayOverviewRequest,
-  security?: GetOrganizationGatewayOverviewSecurity | undefined,
+  request: GetProjectGatewayOverviewRequest,
+  security?: GetProjectGatewayOverviewSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function telemetryGetOrganizationGatewayOverview(
 
 async function $do(
   client: GramCore,
-  request: GetOrganizationGatewayOverviewRequest,
-  security?: GetOrganizationGatewayOverviewSecurity | undefined,
+  request: GetProjectGatewayOverviewRequest,
+  security?: GetProjectGatewayOverviewSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,25 +95,26 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(GetOrganizationGatewayOverviewRequest$outboundSchema, value),
+    (value) => z.parse(GetProjectGatewayOverviewRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.GetOrganizationGatewayActivityPayload,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.GetProjectGatewayActivityPayload, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/telemetry.getOrganizationGatewayOverview")();
+  const path = pathToFunc("/rpc/telemetry.getProjectGatewayOverview")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -122,6 +123,11 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
@@ -133,7 +139,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getOrganizationGatewayOverview",
+    operationID: "getProjectGatewayOverview",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

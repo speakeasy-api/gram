@@ -71,9 +71,13 @@ type GatewaySessionsResult struct {
 // ListGatewaySessionFacetsPayload is the payload type of the gatewaySessions
 // service listGatewaySessionFacets method.
 type ListGatewaySessionFacetsPayload struct {
-	// Project gateway id. Omit for the Organization Gateway; organization access
-	// is then required and the selected project is ignored.
-	GatewayID    *string
+	// Project gateway id. Omit, along with project_id, for the Organization
+	// Gateway; organization access is then required.
+	GatewayID *string
+	// Project whose Project Gateway, the Organization Gateway limited to that
+	// project's servers, to read. Not combined with gateway_id; project access is
+	// then required.
+	ProjectID    *string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -81,9 +85,13 @@ type ListGatewaySessionFacetsPayload struct {
 // ListGatewaySessionsPayload is the payload type of the gatewaySessions
 // service listGatewaySessions method.
 type ListGatewaySessionsPayload struct {
-	// Project gateway id. Omit for the Organization Gateway; organization access
-	// is then required and the selected project is ignored.
-	GatewayID    *string
+	// Project gateway id. Omit, along with project_id, for the Organization
+	// Gateway; organization access is then required.
+	GatewayID *string
+	// Project whose Project Gateway, the Organization Gateway limited to that
+	// project's servers, to read. Not combined with gateway_id; project access is
+	// then required.
+	ProjectID    *string
 	SessionToken *string
 	ApikeyToken  *string
 	// Case-insensitive literal search by subject URN, name, or email.

@@ -31,23 +31,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetOrganizationGatewayUsageRequest,
-  GetOrganizationGatewayUsageRequest$outboundSchema,
-  GetOrganizationGatewayUsageSecurity,
-} from "../models/operations/getorganizationgatewayusage.js";
+  GetProjectGatewayUsageRequest,
+  GetProjectGatewayUsageRequest$outboundSchema,
+  GetProjectGatewayUsageSecurity,
+} from "../models/operations/getprojectgatewayusage.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getOrganizationGatewayUsage telemetry
+ * getProjectGatewayUsage telemetry
  *
  * @remarks
- * Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.
+ * Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.
  */
-export function telemetryGetOrganizationGatewayUsage(
+export function telemetryGetProjectGatewayUsage(
   client: GramCore,
-  request: GetOrganizationGatewayUsageRequest,
-  security?: GetOrganizationGatewayUsageSecurity | undefined,
+  request: GetProjectGatewayUsageRequest,
+  security?: GetProjectGatewayUsageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function telemetryGetOrganizationGatewayUsage(
 
 async function $do(
   client: GramCore,
-  request: GetOrganizationGatewayUsageRequest,
-  security?: GetOrganizationGatewayUsageSecurity | undefined,
+  request: GetProjectGatewayUsageRequest,
+  security?: GetProjectGatewayUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,25 +95,26 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(GetOrganizationGatewayUsageRequest$outboundSchema, value),
+    (value) => z.parse(GetProjectGatewayUsageRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.GetOrganizationGatewayActivityPayload,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.GetProjectGatewayActivityPayload, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/telemetry.getOrganizationGatewayUsage")();
+  const path = pathToFunc("/rpc/telemetry.getProjectGatewayUsage")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -122,6 +123,11 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
@@ -133,7 +139,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getOrganizationGatewayUsage",
+    operationID: "getProjectGatewayUsage",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

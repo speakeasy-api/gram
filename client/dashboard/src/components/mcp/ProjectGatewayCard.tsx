@@ -7,8 +7,7 @@ import { useRoutes } from "@/routes";
 import { ArrowRight } from "lucide-react";
 import { McpEntityCard } from "./McpEntityCard";
 
-const ORGANIZATION_GATEWAY_SUBTITLE =
-  "Every server your team can reach, at one URL";
+const PROJECT_GATEWAY_SUBTITLE = "Every server in this project, at one URL";
 
 export function SpeakeasyMark({
   className,
@@ -18,17 +17,13 @@ export function SpeakeasyMark({
   return <img src={speakeasyIcon} alt="" aria-hidden className={className} />;
 }
 
-export function OrganizationGatewayCard({
-  isOff,
-}: {
-  isOff: boolean;
-}): JSX.Element {
+export function ProjectGatewayCard({ isOff }: { isOff: boolean }): JSX.Element {
   const routes = useRoutes();
   return (
     <McpEntityCard
       className="speakeasy-rainbow-frame cursor-pointer"
       ditherPalette={SPEAKEASY_RAINBOW}
-      onClick={() => routes.mcp.organizationGateway.goTo()}
+      onClick={() => routes.mcp.projectGateway.goTo()}
       icon={<SpeakeasyMark className="size-10" />}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -37,12 +32,12 @@ export function OrganizationGatewayCard({
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
         >
-          Organization Gateway
+          Project Gateway
         </Text>
       </div>
 
       <Text small muted className="mt-1 truncate">
-        {ORGANIZATION_GATEWAY_SUBTITLE}
+        {PROJECT_GATEWAY_SUBTITLE}
       </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">

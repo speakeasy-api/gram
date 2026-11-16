@@ -28512,11 +28512,19 @@ paths:
       operationId: listGatewaySessions
       parameters:
         - allowEmptyValue: true
-          description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+          description: Project gateway id. Omit, along with project_id, for the Organization Gateway; organization access is then required.
           in: query
           name: gateway_id
           schema:
-            description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+            description: Project gateway id. Omit, along with project_id, for the Organization Gateway; organization access is then required.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.
+          in: query
+          name: project_id
+          schema:
+            description: Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.
             format: uuid
             type: string
         - allowEmptyValue: true
@@ -28702,11 +28710,19 @@ paths:
       operationId: listGatewaySessionFacets
       parameters:
         - allowEmptyValue: true
-          description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+          description: Project gateway id. Omit, along with project_id, for the Organization Gateway; organization access is then required.
           in: query
           name: gateway_id
           schema:
-            description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+            description: Project gateway id. Omit, along with project_id, for the Organization Gateway; organization access is then required.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.
+          in: query
+          name: project_id
+          schema:
+            description: Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.
             format: uuid
             type: string
         - allowEmptyValue: true
@@ -73547,10 +73563,10 @@ paths:
       x-speakeasy-react-hook:
         name: GetOrgMcpServerActivity
         type: query
-  /rpc/telemetry.getOrganizationGatewayOverview:
+  /rpc/telemetry.getProjectGatewayOverview:
     post:
-      description: Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
-      operationId: getOrganizationGatewayOverview
+      description: 'Observability overview metrics for calls dispatched through the selected project''s Project Gateway: the Organization Gateway limited to that project''s servers.'
+      operationId: getProjectGatewayOverview
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -73559,11 +73575,18 @@ paths:
           schema:
             description: Session header
             type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetOrganizationGatewayActivityPayload'
+              $ref: '#/components/schemas/GetProjectGatewayActivityPayload'
         required: true
       responses:
         "200":
@@ -73627,19 +73650,20 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
-      summary: getOrganizationGatewayOverview telemetry
+      summary: getProjectGatewayOverview telemetry
       tags:
         - telemetry
-      x-speakeasy-name-override: getOrganizationGatewayOverview
+      x-speakeasy-name-override: getProjectGatewayOverview
       x-speakeasy-react-hook:
-        name: GetOrganizationGatewayOverview
+        name: GetProjectGatewayOverview
         type: query
-  /rpc/telemetry.getOrganizationGatewayUsage:
+  /rpc/telemetry.getProjectGatewayUsage:
     post:
-      description: Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.
-      operationId: getOrganizationGatewayUsage
+      description: Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.
+      operationId: getProjectGatewayUsage
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -73648,11 +73672,18 @@ paths:
           schema:
             description: Session header
             type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetOrganizationGatewayActivityPayload'
+              $ref: '#/components/schemas/GetProjectGatewayActivityPayload'
         required: true
       responses:
         "200":
@@ -73716,14 +73747,15 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
-      summary: getOrganizationGatewayUsage telemetry
+      summary: getProjectGatewayUsage telemetry
       tags:
         - telemetry
-      x-speakeasy-name-override: getOrganizationGatewayUsage
+      x-speakeasy-name-override: getProjectGatewayUsage
       x-speakeasy-react-hook:
-        name: GetOrganizationGatewayUsage
+        name: GetProjectGatewayUsage
         type: query
   /rpc/telemetry.getProjectMetricsSummary:
     post:
@@ -100100,23 +100132,6 @@ components:
       required:
         - projects
         - recent_window_days
-    GetOrganizationGatewayActivityPayload:
-      type: object
-      properties:
-        from:
-          type: string
-          description: Start time in ISO 8601 format
-          example: "2025-12-19T10:00:00Z"
-          format: date-time
-        to:
-          type: string
-          description: End time in ISO 8601 format
-          example: "2025-12-19T11:00:00Z"
-          format: date-time
-      description: Time range for the caller's Organization Gateway activity
-      required:
-        - from
-        - to
     GetPluginsResult:
       type: object
       properties:
@@ -100151,6 +100166,23 @@ components:
         - marketplaces
         - plugins
         - mcp_servers
+    GetProjectGatewayActivityPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Time range for the selected project's Project Gateway activity
+      required:
+        - from
+        - to
     GetProjectMetricsSummaryPayload:
       type: object
       properties:

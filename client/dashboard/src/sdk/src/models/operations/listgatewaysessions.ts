@@ -48,9 +48,13 @@ export type Sort = ClosedEnum<typeof Sort>;
 
 export type ListGatewaySessionsRequest = {
   /**
-   * Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+   * Project gateway id. Omit, along with project_id, for the Organization Gateway; organization access is then required.
    */
   gatewayId?: string | undefined;
+  /**
+   * Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.
+   */
+  projectId?: string | undefined;
   /**
    * Case-insensitive literal search by subject URN, name, or email.
    */
@@ -145,6 +149,7 @@ export const Sort$outboundSchema: z.ZodMiniEnum<typeof Sort> = z.enum(Sort);
 /** @internal */
 export type ListGatewaySessionsRequest$Outbound = {
   gateway_id?: string | undefined;
+  project_id?: string | undefined;
   search?: string | undefined;
   server_id?: string | undefined;
   provider_id?: string | undefined;
@@ -165,6 +170,7 @@ export const ListGatewaySessionsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gatewayId: z.optional(z.string()),
+    projectId: z.optional(z.string()),
     search: z.optional(z.string()),
     serverId: z.optional(z.string()),
     providerId: z.optional(z.string()),
@@ -184,6 +190,7 @@ export const ListGatewaySessionsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       gatewayId: "gateway_id",
+      projectId: "project_id",
       serverId: "server_id",
       providerId: "provider_id",
       createdAfter: "created_after",

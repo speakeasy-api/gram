@@ -12,9 +12,13 @@ export type ListGatewaySessionFacetsSecurity = {
 
 export type ListGatewaySessionFacetsRequest = {
   /**
-   * Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+   * Project gateway id. Omit, along with project_id, for the Organization Gateway; organization access is then required.
    */
   gatewayId?: string | undefined;
+  /**
+   * Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.
+   */
+  projectId?: string | undefined;
   /**
    * Session header
    */
@@ -61,6 +65,7 @@ export function listGatewaySessionFacetsSecurityToJSON(
 /** @internal */
 export type ListGatewaySessionFacetsRequest$Outbound = {
   gateway_id?: string | undefined;
+  project_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
 };
@@ -72,12 +77,14 @@ export const ListGatewaySessionFacetsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gatewayId: z.optional(z.string()),
+    projectId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       gatewayId: "gateway_id",
+      projectId: "project_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
     });
