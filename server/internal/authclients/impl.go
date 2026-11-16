@@ -94,7 +94,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) ListAuthClients(ctx context.Context, payload *gen.ListAuthClientsPayload) (*gen.ListAuthClientsResult, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.require(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (s *Service) ListAuthClients(ctx context.Context, payload *gen.ListAuthClie
 }
 
 func (s *Service) GetAuthClient(ctx context.Context, payload *gen.GetAuthClientPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.require(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (s *Service) GetAuthClient(ctx context.Context, payload *gen.GetAuthClientP
 }
 
 func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthClientPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 }
 
 func (s *Service) DetachAuthClientFromMcpServer(ctx context.Context, payload *gen.DetachAuthClientFromMcpServerPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +295,7 @@ func (s *Service) DetachAuthClientFromMcpServer(ctx context.Context, payload *ge
 }
 
 func (s *Service) GetMcpServerAuthentication(ctx context.Context, payload *gen.GetMcpServerAuthenticationPayload) (*types.McpServerAuthentication, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.require(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +318,7 @@ func (s *Service) GetMcpServerAuthentication(ctx context.Context, payload *gen.G
 }
 
 func (s *Service) SetMcpServerUpstreamAuthRequirement(ctx context.Context, payload *gen.SetMcpServerUpstreamAuthRequirementPayload) (*types.McpServerAuthentication, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +345,7 @@ func (s *Service) SetMcpServerUpstreamAuthRequirement(ctx context.Context, paylo
 	return s.serverAuthentication(ctx, queries, authCtx.ActiveOrganizationID, server.ID, server.ProjectID, server.Visibility, server.UpstreamAuthPending, logger)
 }
 
-func (s *Service) require(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) require(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, nil, oops.C(oops.CodeUnauthorized)
@@ -361,7 +361,7 @@ func (s *Service) require(ctx context.Context, scope authz.Scope) (*contextvalue
 		return nil, nil, oops.E(oops.CodeForbidden, nil, "legacy API keys cannot manage the organization's auth clients").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, nil, err
 	}
 
