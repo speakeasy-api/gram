@@ -15,10 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -108,15 +106,6 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		if hostedmcp.IsCanonical(&server, server.ID) {
-			toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: projectID})
-			switch {
-			case err == nil:
-				return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, &server, toolset)
-			case !errors.Is(err, pgx.ErrNoRows):
-				return none, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, logger)
-			}
-		}
 		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, server.ID)
 		if err != nil {
 			return none, err
@@ -139,13 +128,13 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
 		}
 		if wrapper == nil {
-			alias, err := legacyalias.Get(ctx, s.db, projectID, toolset.ID)
-			if err != nil {
-				return none, oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, logger)
-			}
-			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: !alias.CustomDomainID.Valid}, nil
+			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(nil)}, nil
 		}
-		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset)
+		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
+		if err != nil {
+			return none, err
+		}
+		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
 		if err != nil {
@@ -168,27 +157,6 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		}
 		return attachTarget{issuerID: server.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	}
-}
-
-// canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer: its live endpoints and,
-// while the server is enabled, the toolset's frozen alias, which still serves on its own host.
-func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, toolset toolsetsrepo.Toolset) (attachTarget, error) {
-	customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
-	if err != nil {
-		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
-	}
-	// The frozen alias still serves on its own host while the server is enabled.
-	alias, err := legacyalias.Get(ctx, s.db, projectID, toolset.ID)
-	if err != nil {
-		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, logger)
-	}
-	if alias.Slug.Valid && alias.Slug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
-		customDomainIDs = append(customDomainIDs, alias.CustomDomainID)
-	}
-	if len(customDomainIDs) == 0 {
-		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: !alias.CustomDomainID.Valid}, nil
-	}
-	return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 }
 
 // liveEndpointDomains lists the custom domain of each endpoint the server serves on.

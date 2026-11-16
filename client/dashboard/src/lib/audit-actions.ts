@@ -99,6 +99,7 @@ export const AUDIT_ACTIONS = [
   "data_export_route:delete",
   "data_export_route:pause",
   "data_export_route:resume",
+  "data_export_route:test",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -220,6 +221,11 @@ export const AUDIT_ACTIONS = [
   "organization_encryption_config:rollback_switch",
   "organization_encryption_config:suspend",
   "organization_encryption_config:switch_key",
+  "organization_encryption_transition:clear_platform_copies",
+  "organization_encryption_transition:enroll",
+  "organization_encryption_transition:finalize",
+  "organization_encryption_transition:rollback",
+  "organization_encryption_transition:start_org_kms",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
@@ -339,6 +345,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:migrate_to_remote_mcp",
+  "toolset:move_legacy_alias",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -646,6 +653,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "paused data export route";
     case "data_export_route:resume":
       return "resumed data export route";
+    case "data_export_route:test":
+      return "sent a test event for data export route";
 
     case "network_ingress:create":
       return "created private network ingress";
@@ -1105,6 +1114,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detached an OAuth proxy from";
     case "toolset:migrate_to_remote_mcp":
       return "migrated the external MCP server";
+    case "toolset:move_legacy_alias":
+      return "moved the legacy address";
 
     case "trigger-instance:create":
       return "created trigger";
@@ -1197,6 +1208,18 @@ export function staticActionPhrase(action: AuditAction): string {
       return "suspended";
     case "organization_encryption_config:resume":
       return "resumed";
+    // Internal staff-only entries; the subject names the use case being moved,
+    // as "Organization encryption: <use case>".
+    case "organization_encryption_transition:enroll":
+      return "enrolled";
+    case "organization_encryption_transition:rollback":
+      return "rolled back";
+    case "organization_encryption_transition:finalize":
+      return "finalized";
+    case "organization_encryption_transition:start_org_kms":
+      return "started using organization keys for";
+    case "organization_encryption_transition:clear_platform_copies":
+      return "cleared platform-key copies for";
 
     default:
       return assertNever(action);

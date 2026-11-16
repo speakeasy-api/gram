@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -100,7 +99,6 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	available, err := CheckSlugAvailable(ctx, tx, SlugAvailabilityCheck{
 		Slug: input.Slug, CustomDomainID: input.CustomDomainID, OrganizationID: authCtx.ActiveOrganizationID,
-		ExcludeToolsetID: uuid.NullUUID{}, ExcludeMcpServerID: input.McpServerID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability")
@@ -125,11 +123,6 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		ActorSlug: nil, McpEndpointURN: urn.NewMcpEndpoint(created.ID), Slug: created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation")
-	}
-	if hostedServer != nil {
-		if err := legacyalias.FollowAlias(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServer.ID); err != nil {
-			return nil, err //nolint:wrapcheck // oops errors pass through.
-		}
 	}
 	return mv.BuildMcpEndpointView(created), nil
 }
@@ -165,10 +158,6 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, nil, err
 	}
-	if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {
-		return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug")
-	}
-
 	// Keep the shared writer order: ingress lifecycle, project admission,
 	// domains, endpoint, then its backing server. The ingress lock serializes
 	// this mutation with ingress state changes before any row locks are taken.
@@ -214,6 +203,12 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return nil, nil, oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request")
 	}
+	// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+	if input.Slug != existing.Slug || input.CustomDomainID != existing.CustomDomainID {
+		if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug")
+		}
+	}
 
 	var targetServer *mcpserversrepo.McpServer
 	if existing.McpServerID.Valid {
@@ -242,8 +237,7 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 		}
 		available, err := CheckSlugAvailable(ctx, tx, SlugAvailabilityCheck{
 			Slug: input.Slug, CustomDomainID: input.CustomDomainID,
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ExcludeToolsetID: uuid.NullUUID{}, ExcludeMcpServerID: existing.McpServerID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if err != nil {
 			return nil, nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability")

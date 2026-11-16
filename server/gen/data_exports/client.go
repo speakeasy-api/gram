@@ -24,10 +24,11 @@ type Client struct {
 	CreateRouteEndpoint       goa.Endpoint
 	UpdateRouteEndpoint       goa.Endpoint
 	DeleteRouteEndpoint       goa.Endpoint
+	TestRouteEndpoint         goa.Endpoint
 }
 
 // NewClient initializes a "dataExports" service client given the endpoints.
-func NewClient(listDestinations, listForOrg, createDestination, updateDestination, deleteDestination, listRoutes, createRoute, updateRoute, deleteRoute goa.Endpoint) *Client {
+func NewClient(listDestinations, listForOrg, createDestination, updateDestination, deleteDestination, listRoutes, createRoute, updateRoute, deleteRoute, testRoute goa.Endpoint) *Client {
 	return &Client{
 		ListDestinationsEndpoint:  listDestinations,
 		ListForOrgEndpoint:        listForOrg,
@@ -38,6 +39,7 @@ func NewClient(listDestinations, listForOrg, createDestination, updateDestinatio
 		CreateRouteEndpoint:       createRoute,
 		UpdateRouteEndpoint:       updateRoute,
 		DeleteRouteEndpoint:       deleteRoute,
+		TestRouteEndpoint:         testRoute,
 	}
 }
 
@@ -233,4 +235,28 @@ func (c *Client) UpdateRoute(ctx context.Context, p *UpdateRoutePayload) (res *D
 func (c *Client) DeleteRoute(ctx context.Context, p *DeleteRoutePayload) (err error) {
 	_, err = c.DeleteRouteEndpoint(ctx, p)
 	return
+}
+
+// TestRoute calls the "testRoute" endpoint of the "dataExports" service.
+// TestRoute may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TestRoute(ctx context.Context, p *TestRoutePayload) (res *TestDataExportRouteResult, err error) {
+	var ires any
+	ires, err = c.TestRouteEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TestDataExportRouteResult), nil
 }

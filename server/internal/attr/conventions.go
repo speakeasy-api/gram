@@ -576,21 +576,17 @@ const (
 	// McpKillswitchResourceClassKey is the bounded kill-switch resource
 	// coverage class of a covered MCP tools/call. Never a server identifier.
 	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
-	// McpEntryPointKey is the bounded entry-point dimension on the
-	// mcp.toolset_slug_fallback counter: which public surface resolved a
-	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
-	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
-	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
-	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
-	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
-	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
-	McpURLKey              = attribute.Key("gram.mcp.url")
-	McpSessionSubjectKey   = attribute.Key("gram.mcp.session_subject")
+	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	McpServerIDsKey               = attribute.Key("gram.mcp_server.ids")
+	McpEndpointIDKey              = attribute.Key("gram.mcp_endpoint.id")
+	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
+	McpURLKey                     = attribute.Key("gram.mcp.url")
+	McpSessionSubjectKey          = attribute.Key("gram.mcp.session_subject")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -601,11 +597,6 @@ const (
 	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
 	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
 	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
-
-	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
-	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
-	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
-	McpFallbackToolsetCustomDomainKey = attribute.Key("gram.mcp.fallback.toolset_custom_domain")
 
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
@@ -696,6 +687,26 @@ const (
 	// the encryption key a process holds, so pods with different keys can be
 	// told apart without revealing the key.
 	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
+
+	// OrgEncryptionUseCaseKey is the organization encryption use case a value
+	// or key belongs to, such as oauth-session-tokens.
+	OrgEncryptionUseCaseKey = attribute.Key("gram.orgencryption.use_case")
+
+	// OrgEncryptionTransitionStateKey is an organization's transition state
+	// for one use case: platform_key, dual_write or org_kms.
+	OrgEncryptionTransitionStateKey = attribute.Key("gram.orgencryption.transition_state")
+
+	// OrgEncryptionErrorCodeKey is the ENC-* code of a platform-key
+	// decryption failure. It never carries the value or ciphertext.
+	OrgEncryptionErrorCodeKey = attribute.Key("gram.orgencryption.error_code")
+
+	// OrgEncryptionMismatchedCountKey counts values whose two copies did not
+	// match during verification.
+	OrgEncryptionMismatchedCountKey = attribute.Key("gram.orgencryption.mismatched_count")
+
+	// OrgEncryptionUnopenableCountKey counts organization-key copies that did
+	// not open during verification.
+	OrgEncryptionUnopenableCountKey = attribute.Key("gram.orgencryption.unopenable_count")
 
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
@@ -859,6 +870,11 @@ const (
 	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
 	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
 	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
+
+	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
+	TestEventKey = attribute.Key("speakeasy.test_event")
+	// TestEventIDKey is shared by every record one data export test sends, so a destination can find them.
+	TestEventIDKey = attribute.Key("speakeasy.test_event.id")
 
 	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
@@ -2701,6 +2717,34 @@ func SlogEncryptionKeyFingerprint(v string) slog.Attr {
 	return slog.String(string(EncryptionKeyFingerprintKey), v)
 }
 
+func OrgEncryptionUseCase[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionUseCaseKey.String(string(v))
+}
+
+func SlogOrgEncryptionUseCase[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionUseCaseKey), string(v))
+}
+
+func OrgEncryptionTransitionState[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionTransitionStateKey.String(string(v))
+}
+
+func SlogOrgEncryptionTransitionState[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionTransitionStateKey), string(v))
+}
+
+func SlogOrgEncryptionErrorCode(v string) slog.Attr {
+	return slog.String(string(OrgEncryptionErrorCodeKey), v)
+}
+
+func SlogOrgEncryptionMismatchedCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionMismatchedCountKey), v)
+}
+
+func SlogOrgEncryptionUnopenableCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionUnopenableCountKey), v)
+}
+
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
 	return OAuthValidationTriggerKey.String(string(v))
 }
@@ -3319,6 +3363,16 @@ func SlogExtMcpConnectionStepResult(v string) slog.Attr {
 func ExtMcpConnectionFinal(v bool) attribute.KeyValue { return ExtMcpConnectionFinalKey.Bool(v) }
 func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
+}
+
+func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }
+func SlogTestEvent(v bool) slog.Attr {
+	return slog.Bool(string(TestEventKey), v)
+}
+
+func TestEventID(v string) attribute.KeyValue { return TestEventIDKey.String(v) }
+func SlogTestEventID(v string) slog.Attr {
+	return slog.String(string(TestEventIDKey), v)
 }
 
 func ExtMcpConnectionUserMessage(v string) attribute.KeyValue {
@@ -3941,23 +3995,6 @@ func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
 func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
 func SlogMcpSkillTargetID(v string) slog.Attr {
 	return slog.String(string(McpSkillTargetIDKey), v)
-}
-
-func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
-func SlogMcpEntryPoint[V ~string](v V) slog.Attr {
-	return slog.String(string(McpEntryPointKey), string(v))
-}
-
-func SlogMcpFallbackRequestHost[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackRequestHostKey), string(v))
-}
-
-func SlogMcpFallbackCanonicalWrapper(v bool) slog.Attr {
-	return slog.Bool(string(McpFallbackCanonicalWrapperKey), v)
-}
-
-func SlogMcpFallbackToolsetCustomDomain[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackToolsetCustomDomainKey), string(v))
 }
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {

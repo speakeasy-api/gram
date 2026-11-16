@@ -14,7 +14,6 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -101,7 +100,7 @@ func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
 }
 
 // A toolset with a canonical server previews that server's issuer, and is on
-// the platform host through its legacy alias or any live endpoint.
+// the platform host through any live endpoint.
 func TestGetAttachImpactCanonicalServer(t *testing.T) {
 	t.Parallel()
 
@@ -128,16 +127,13 @@ func TestGetAttachImpactCanonicalServer(t *testing.T) {
 		return byToolset
 	}
 
-	// Without a live endpoint the frozen alias domain decides.
+	// Without a live endpoint the preview errs toward warning.
 	impact := preview()
 	require.Equal(t, currentID.String(), impact.CurrentIssuer.ID)
-	require.True(t, impact.AuthorizationServerChanges, "the alias is on the platform host")
+	require.True(t, impact.AuthorizationServerChanges)
 
-	// A live endpoint governs: the platform-host alias no longer counts.
+	// A live endpoint governs.
 	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
-	require.False(t, preview().AuthorizationServerChanges)
-
-	testenv.SetLegacyAlias(t, ctx, ti.conn, projectID, toolset.ID, "", uuid.NullUUID{UUID: domainID, Valid: true})
 	require.False(t, preview().AuthorizationServerChanges)
 
 	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-canonical-platform")
@@ -372,47 +368,4 @@ func TestGetAttachImpactHonorsProjectScopedAuthorization(t *testing.T) {
 			}
 		})
 	}
-}
-
-// A frozen platform alias keeps serving beside custom-domain endpoints while the server is enabled.
-func TestGetAttachImpactCountsFrozenPlatformAlias(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	projectID := *authCtx.ProjectID
-	currentID := seedIssuer(t, ctx, ti, "impact-alias-current")
-	candidateID := seedIssuer(t, ctx, ti, "impact-alias-candidate")
-	useAuthenticationHost(t, ctx, ti, candidateID)
-	domainID := createCustomDomain(t, ctx, ti)
-	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Name: "impact-alias", Slug: "impact-alias",
-		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
-	})
-	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, ti.conn, projectID, toolset.ID, "impact-alias-frozen", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	servers := mcpserversrepo.New(ti.conn)
-	server, err := servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: projectID,
-		Name: pgtype.Text{String: toolset.Slug, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
-		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{UUID: currentID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{},
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityPrivate,
-	})
-	require.NoError(t, err)
-	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-alias-domain")
-	preview := func() bool {
-		t.Helper()
-		impact, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{McpServerID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
-		require.NoError(t, err)
-		return impact.AuthorizationServerChanges
-	}
-	require.True(t, preview(), "the platform alias still serves")
-
-	_, err = servers.SyncHostedMCPServer(ctx, mcpserversrepo.SyncHostedMCPServerParams{
-		Name: server.Name, Slug: server.Slug, Visibility: mcpservers.VisibilityDisabled, UserSessionIssuerID: server.UserSessionIssuerID,
-		ToolVariationsGroupID: server.ToolVariationsGroupID, NetworkAccessMode: server.NetworkAccessMode, ID: server.ID, ProjectID: projectID,
-	})
-	require.NoError(t, err)
-	require.False(t, preview(), "a disabled server's alias serves nobody")
 }

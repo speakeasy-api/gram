@@ -472,7 +472,9 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 		check authz.Check
 	}{
 		{[]string{"environment"}, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
-		{[]string{"gateway"}, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
+		// Matches metamcp.ListMetaMcpServers. MCP checks must carry the project
+		// dimension: the engine rejects one without it as malformed.
+		{[]string{"gateway"}, authz.MCPCheck(authz.ScopeMCPRead, projectID.String(), projectID.String())},
 		// Match access.listMembers: organization readers and project readers can
 		// both use the active member roster. Duplicate kind checks are ORed below.
 		{[]string{"person"}, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
