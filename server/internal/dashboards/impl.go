@@ -116,9 +116,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize resolves the project a request runs in and checks a scope on it.
-// Membership is project:read, which every member holds: making a dashboard
-// is not an administrative act.
+// authorize resolves the project a request runs in and requires the check
+// that permission builds for it. Callers pass authz.ProjectRef.Read, which
+// every member holds: making a dashboard is not an administrative act.
 func (s *Service) authorize(ctx context.Context, permission func(authz.ProjectRef) authz.Check) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
