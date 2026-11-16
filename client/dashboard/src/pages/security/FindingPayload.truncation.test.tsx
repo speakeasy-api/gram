@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FindingPayload } from "./FindingPayload";
 import { STORED_PAYLOAD_MAX_BYTES } from "./payload-spans";
 
+// Temporary access reads the viewer's grants; these tests cover masking.
+vi.mock("@/components/temporary-access", () => ({
+  ActiveTemporaryAccess: () => null,
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));

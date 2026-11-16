@@ -280,8 +280,6 @@ describe("hosted MCP server visibility", () => {
       name: "Hosted tools",
       toolCount: 1,
       toolSelectionMode: "static",
-      externalMcpSlugs: [],
-      externalMcpProxyOnly: false,
     },
     visibility: "private",
   } as McpServer;

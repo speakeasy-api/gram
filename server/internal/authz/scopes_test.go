@@ -124,12 +124,13 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 
 	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExpansions[ScopeOrgBlockedAdmin])
 	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExpansions[ScopeProjectBlockedWrite])
-	// The mcp:blocked_* scopes are the exception: they are independent of
-	// one another, so a block on connect leaves view and manage standing.
-	// Connecting to a server and administering it are different jobs.
+	// MCP blocks follow Implies in reverse like every other kind: a check
+	// for mcp:blocked_write is satisfied by mcp:blocked_read, so blocking
+	// read takes write away. mcp:connect is implied by neither read nor
+	// write, so its block stays on its own.
 	require.Nil(t, scopeExpansions[ScopeMCPBlockedConnect])
 	require.Nil(t, scopeExpansions[ScopeMCPBlockedRead])
-	require.Nil(t, scopeExpansions[ScopeMCPBlockedWrite])
+	require.Equal(t, []Scope{ScopeMCPBlockedRead}, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
 	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, scopeExpansions[ScopeAssistantBlockedWrite])
@@ -642,12 +643,12 @@ func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
 
 	// Administrators configure workload identity, beside agent:authorize: both
 	// hand a machine an agent's authority.
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadRead))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadWrite))
 
 	// workload:read is a member default so that team members can view the Access
 	// Hub in preview deployments. workload:write remains admin-only since it
 	// allows granting machine access.
-	require.True(t, slices.Contains(memberScopes, ScopeWorkloadRead))
-	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadRead))
+	require.False(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadWrite))
 }

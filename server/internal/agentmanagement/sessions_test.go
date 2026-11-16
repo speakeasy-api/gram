@@ -336,7 +336,7 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	require.NoError(t, err)
 	// Runtime tombstones retain linkage and encrypted credentials for retries.
 	require.Equal(t, "agent:"+agent.ID.String(), tombstone.SubjectUrn.String())
-	require.Equal(t, "fixture-not-a-token", tombstone.AccessTokenEncrypted)
+	require.Equal(t, conv.ToPGText("fixture-not-a-token"), tombstone.AccessTokenEncrypted)
 	require.Equal(t, conv.ToPGText("fixture-refresh"), tombstone.RefreshTokenEncrypted)
 }
 

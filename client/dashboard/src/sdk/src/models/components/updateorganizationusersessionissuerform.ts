@@ -65,7 +65,7 @@ export type UpdateOrganizationUserSessionIssuerForm = {
    */
   slug?: string | undefined;
   /**
-   * Organization-level remote_session_client Speakeasy uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.
+   * Organization-level remote_session_client Speakeasy uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. A client requires a trusted issuer; an issuer may be trusted without one.
    */
   trustedRemoteSessionClientId?: string | undefined;
   /**

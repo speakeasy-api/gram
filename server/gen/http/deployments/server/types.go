@@ -63,9 +63,6 @@ type EvolveRequestBody struct {
 	// The functions, identified by slug, to exclude from the new deployment when
 	// cloning a previous deployment.
 	ExcludeFunctions []string `form:"exclude_functions,omitempty" json:"exclude_functions,omitempty" xml:"exclude_functions,omitempty"`
-	// Has no effect: new deployments never include external MCP servers. Accepted
-	// so existing callers keep working.
-	ExcludeExternalMcps []string `form:"exclude_external_mcps,omitempty" json:"exclude_external_mcps,omitempty" xml:"exclude_external_mcps,omitempty"`
 }
 
 // RedeployRequestBody is the type of the "deployments" service "redeploy"
@@ -125,15 +122,14 @@ type GetDeploymentResponseBody struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
-	// The number of tools in the deployment generated from external MCP servers.
-	ExternalMcpToolCount int64 `form:"external_mcp_tool_count" json:"external_mcp_tool_count" xml:"external_mcp_tool_count"`
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpToolCount *int64 `form:"external_mcp_tool_count,omitempty" json:"external_mcp_tool_count,omitempty" xml:"external_mcp_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages" json:"packages" xml:"packages"`
-	// The external MCP servers that were deployed.
-	ExternalMcps []*DeploymentExternalMCPResponseBody `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // GetLatestDeploymentResponseBody is the type of the "deployments" service
@@ -2148,21 +2144,6 @@ type DeploymentPackageResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 }
 
-// DeploymentExternalMCPResponseBody is used to define fields on response body
-// types.
-type DeploymentExternalMCPResponseBody struct {
-	// The ID of the deployment external MCP record.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The ID of the external MCP registry the server is from.
-	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The display name for the external MCP server.
-	Name string `form:"name" json:"name" xml:"name"`
-	// A URL-friendly identifier used for tool prefixing.
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The canonical server name used to look up the server in the registry.
-	RegistryServerSpecifier string `form:"registry_server_specifier" json:"registry_server_specifier" xml:"registry_server_specifier"`
-}
-
 // DeploymentResponseBody is used to define fields on response body types.
 type DeploymentResponseBody struct {
 	// The ID to of the deployment.
@@ -2200,15 +2181,14 @@ type DeploymentResponseBody struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
-	// The number of tools in the deployment generated from external MCP servers.
-	ExternalMcpToolCount int64 `form:"external_mcp_tool_count" json:"external_mcp_tool_count" xml:"external_mcp_tool_count"`
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpToolCount *int64 `form:"external_mcp_tool_count,omitempty" json:"external_mcp_tool_count,omitempty" xml:"external_mcp_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages" json:"packages" xml:"packages"`
-	// The external MCP servers that were deployed.
-	ExternalMcps []*DeploymentExternalMCPResponseBody `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // DeploymentSummaryResponseBody is used to define fields on response body
@@ -2230,10 +2210,12 @@ type DeploymentSummaryResponseBody struct {
 	FunctionsAssetCount int64 `form:"functions_asset_count" json:"functions_asset_count" xml:"functions_asset_count"`
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
-	// The number of external MCP server assets.
-	ExternalMcpAssetCount int64 `form:"external_mcp_asset_count" json:"external_mcp_asset_count" xml:"external_mcp_asset_count"`
-	// The number of tools in the deployment generated from external MCP servers.
-	ExternalMcpToolCount int64 `form:"external_mcp_tool_count" json:"external_mcp_tool_count" xml:"external_mcp_tool_count"`
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpAssetCount *int64 `form:"external_mcp_asset_count,omitempty" json:"external_mcp_asset_count,omitempty" xml:"external_mcp_asset_count,omitempty"`
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpToolCount *int64 `form:"external_mcp_tool_count,omitempty" json:"external_mcp_tool_count,omitempty" xml:"external_mcp_tool_count,omitempty"`
 }
 
 // DeploymentLogEventResponseBody is used to define fields on response body
@@ -2451,16 +2433,6 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 		}
 	} else {
 		body.Packages = []*DeploymentPackageResponseBody{}
-	}
-	if res.ExternalMcps != nil {
-		body.ExternalMcps = make([]*DeploymentExternalMCPResponseBody, len(res.ExternalMcps))
-		for i, val := range res.ExternalMcps {
-			if val == nil {
-				body.ExternalMcps[i] = nil
-				continue
-			}
-			body.ExternalMcps[i] = marshalTypesDeploymentExternalMCPToDeploymentExternalMCPResponseBody(val)
-		}
 	}
 	return body
 }
@@ -4212,12 +4184,6 @@ func NewEvolvePayload(body *EvolveRequestBody, apikeyToken *string, sessionToken
 		v.ExcludeFunctions = make([]string, len(body.ExcludeFunctions))
 		for i, val := range body.ExcludeFunctions {
 			v.ExcludeFunctions[i] = val
-		}
-	}
-	if body.ExcludeExternalMcps != nil {
-		v.ExcludeExternalMcps = make([]string, len(body.ExcludeExternalMcps))
-		for i, val := range body.ExcludeExternalMcps {
-			v.ExcludeExternalMcps[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

@@ -45,6 +45,19 @@ func (s *stubGatewayActivityReader) GetTelemetryWatermark(context.Context, telem
 	return time.Now().UnixNano(), nil
 }
 
+type stubGatewayActivityAuthorizer struct {
+	stubOrgReadAuthorizer
+	readableProjects map[string]bool
+}
+
+func (s *stubGatewayActivityAuthorizer) FindMatched(_ context.Context, checks []authz.Check) ([]bool, error) {
+	matched := make([]bool, len(checks))
+	for i, check := range checks {
+		matched[i] = check.Scope == authz.ScopeProjectRead && s.readableProjects[check.ResourceID]
+	}
+	return matched, nil
+}
+
 func seedGatewayActivityServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, name string) uuid.UUID {
 	t.Helper()
 	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
@@ -71,12 +84,14 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 	projectIDs := make([]uuid.UUID, 0, 2)
+	projectSlugs := make([]string, 0, 2)
 	for range 2 {
 		project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 			Name: "Gateway activity project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: organizationID,
 		})
 		require.NoError(t, err)
 		projectIDs = append(projectIDs, project.ID)
+		projectSlugs = append(projectSlugs, project.Slug)
 	}
 	first := seedGatewayActivityServer(t, ctx, conn, projectIDs[0], "Alpha")
 	second := seedGatewayActivityServer(t, ctx, conn, projectIDs[1], "Beta")
@@ -89,7 +104,7 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 			{McpServerID: first.String(), ToolCalls: 1, ErrorCount: 0, LastCalledUnixNano: 1},
 		},
 	}}
-	authorizer := &stubOrgReadAuthorizer{}
+	authorizer := &stubGatewayActivityAuthorizer{readableProjects: map[string]bool{projectIDs[1].String(): true}}
 	service := NewOrganizationGatewayActivityService(conn, reader, authorizer, allowingBudget())
 	require.NotNil(t, service)
 
@@ -109,10 +124,77 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	require.EqualValues(t, 2, out.FailedCalls)
 	require.Equal(t, OrganizationGatewayDiscovery{ListServers: 3, DescribeServer: 2, DescribeTools: 1}, out.Discovery)
 	require.Equal(t, []OrganizationGatewayServer{
-		{Name: "Beta", MCPID: second.String(), ProjectID: projectIDs[1].String(), ToolCalls: 3, ErrorCount: 2},
-		{Name: "Alpha", MCPID: first.String(), ProjectID: projectIDs[0].String(), ToolCalls: 1, ErrorCount: 0},
-	}, out.TopServers, "servers no longer in the organization are left unnamed")
+		{Name: "Beta", MCPID: second.String(), ProjectID: projectIDs[1].String(), ProjectSlug: projectSlugs[1], ToolCalls: 3, ErrorCount: 2},
+		{Name: "Alpha", MCPID: first.String(), ProjectID: projectIDs[0].String(), ProjectSlug: "", ToolCalls: 1, ErrorCount: 0},
+	}, out.TopServers, "servers no longer in the organization are left unnamed, and an unreadable project's slug stays hidden")
 	require.False(t, out.Envelope.NoObservations)
+}
+
+func TestOrganizationGatewayActivityReportsOneProjectGateway(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_project_gateway_activity")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Project gateway activity organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	projectIDs := make([]uuid.UUID, 0, 2)
+	projectSlugs := make([]string, 0, 2)
+	for range 2 {
+		project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+			Name: "Project gateway activity project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: organizationID,
+		})
+		require.NoError(t, err)
+		projectIDs = append(projectIDs, project.ID)
+		projectSlugs = append(projectSlugs, project.Slug)
+	}
+	inProject := seedGatewayActivityServer(t, ctx, conn, projectIDs[0], "Alpha")
+	elsewhere := seedGatewayActivityServer(t, ctx, conn, projectIDs[1], "Beta")
+
+	reader := &stubGatewayActivityReader{usageResult: telemetryrepo.MetaMCPUsage{
+		Funnel: telemetryrepo.MetaMCPFunnelCounts{ListServers: 1, DescribeServer: 0, DescribeTools: 1, ExecuteTool: 5},
+		Members: []telemetryrepo.MetaMCPMemberUsageRow{
+			{McpServerID: elsewhere.String(), ToolCalls: 3, ErrorCount: 2, LastCalledUnixNano: 1},
+			{McpServerID: inProject.String(), ToolCalls: 2, ErrorCount: 0, LastCalledUnixNano: 1},
+		},
+	}}
+	authorizer := &stubGatewayActivityAuthorizer{readableProjects: map[string]bool{projectIDs[0].String(): true}}
+	service := NewOrganizationGatewayActivityService(conn, reader, authorizer, allowingBudget())
+	require.NotNil(t, service)
+
+	principal := Principal{UserID: "user_1", OrganizationID: organizationID, ConnectionID: "conn_1", Generation: "g1", ClientID: "client_1", Surface: SurfacePlatformMCP}
+	out, err := service.Get(ctx, principal, GetOrganizationGatewayActivityInput{Window: "7d", ProjectID: projectIDs[0].String()})
+	require.NoError(t, err)
+
+	require.Equal(t, []authz.Check{{Scope: authz.ScopeProjectRead, ResourceID: projectIDs[0].String()}}, authorizer.checks)
+	gatewayID := orggateway.ProjectGatewayID(organizationID, projectIDs[0]).String()
+	require.Equal(t, gatewayID, reader.summary.MetaMCPServerID)
+	require.Equal(t, gatewayID, reader.usage.MetaMCPServerID)
+	wantProjects := []string{projectIDs[0].String(), uuid.Nil.String()}
+	require.ElementsMatch(t, wantProjects, reader.summary.GramProjectIDs)
+	require.ElementsMatch(t, wantProjects, reader.usage.GramProjectIDs)
+	require.Equal(t, []OrganizationGatewayServer{
+		{Name: "Alpha", MCPID: inProject.String(), ProjectID: projectIDs[0].String(), ProjectSlug: projectSlugs[0], ToolCalls: 2, ErrorCount: 0},
+	}, out.TopServers, "only the project's servers are named")
+
+	// A real project of another organization reads as not found.
+	otherOrganizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: otherOrganizationID, Name: "Other organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	foreign, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other organization project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: otherOrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = service.Get(ctx, principal, GetOrganizationGatewayActivityInput{ProjectID: foreign.ID.String()})
+	require.ErrorIs(t, err, ErrProjectGatewayActivityProjectNotFound)
+	_, err = service.Get(ctx, principal, GetOrganizationGatewayActivityInput{ProjectID: "not-a-uuid"})
+	require.ErrorIs(t, err, ErrProjectGatewayActivityProjectInvalid)
 }
 
 // The dashboard tab requires org:read, so this surface must refuse the same
@@ -124,7 +206,7 @@ func TestOrganizationGatewayActivityRefusesWithoutLiveOrgRead(t *testing.T) {
 	require.NoError(t, err)
 	denied := errors.New("forbidden")
 	reader := &stubGatewayActivityReader{}
-	service := NewOrganizationGatewayActivityService(conn, reader, &stubOrgReadAuthorizer{err: denied}, allowingBudget())
+	service := NewOrganizationGatewayActivityService(conn, reader, &stubGatewayActivityAuthorizer{stubOrgReadAuthorizer: stubOrgReadAuthorizer{err: denied}}, allowingBudget())
 	require.NotNil(t, service)
 
 	for _, window := range []string{"", "1y"} {

@@ -1,7 +1,6 @@
 import { SplashScreen } from "@/components/ui/LogoLoader";
 import { useActiveDeployment } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
@@ -53,8 +52,6 @@ function legacySourceTargetHref(
       return routes.mcp.sources.detail.href(target.assetId);
     case "mcp-server":
       return routes.mcp.details.overview.href(target.routeParam);
-    case "toolset":
-      return routes.toolset.href(target.slug);
     case "sources-list":
       return routes.mcp.sources.href();
     case "mcp-list":
@@ -64,9 +61,8 @@ function legacySourceTargetHref(
 
 // The per-kind source pages are gone, but what they showed still has a home:
 // OpenAPI and function sources at /mcp/sources/:sourceId, remote, tunneled and
-// unproxied sources on the page of the server fronting them, and an
-// external MCP on the toolset carrying its tools. The old URL carried a slug,
-// so the new address has to be looked up before redirecting.
+// unproxied sources on the page of the server fronting them. The old URL
+// carried a slug, so the new address has to be looked up before redirecting.
 export function RedirectToSourceDetail(): JSX.Element {
   const routes = useRoutes();
   const { sourceKind, sourceSlug } = useParams<{
@@ -98,10 +94,6 @@ export function RedirectToSourceDetail(): JSX.Element {
     enabled: kind === "unproxiedmcp",
     throwOnError: false,
   });
-  const toolsetsQuery = useListToolsets(undefined, undefined, {
-    enabled: lookups.toolsets,
-    throwOnError: false,
-  });
 
   // isFetching is false for disabled queries, so only the lookups this kind
   // enabled hold the redirect. It covers a refetch as well as the first load:
@@ -114,7 +106,6 @@ export function RedirectToSourceDetail(): JSX.Element {
     remoteQuery,
     tunneledQuery,
     unproxiedQuery,
-    toolsetsQuery,
   ].some((query) => query.isFetching);
 
   if (resolving) {
@@ -127,7 +118,6 @@ export function RedirectToSourceDetail(): JSX.Element {
     remoteMcpServers: remoteQuery.data?.remoteMcpServers ?? [],
     tunneledMcpServers: tunneledQuery.data?.tunneledMcpServers ?? [],
     unproxiedMcpServers: unproxiedQuery.data?.unproxiedMcpServers ?? [],
-    toolsets: toolsetsQuery.data?.toolsets ?? [],
   });
 
   return <Navigate to={legacySourceTargetHref(routes, target)} replace />;

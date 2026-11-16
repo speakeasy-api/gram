@@ -1,5 +1,19 @@
 # server
 
+## 2.34.0
+
+### Minor Changes
+
+- 9f04e25: Administrators can attach an upstream OAuth client to one MCP server with `remoteSessions.attachServerClientAssociation`, including a server on a shared user session issuer, and detach now has an undo. The client must already be bound to the server's own issuer. Attach also binds it to the issuers of gateways fronting the server, so their consent can offer it, and detach removes that binding when the client stays on the server's own issuer and nothing else on the gateway's issuer signs in through it. The audit log names the new `remote-session-client:attach-mcp-server` action.
+- 8aa24a1: Consolidating one authorization server into another now shows how each affected MCP server's OAuth clients would change before you confirm, and keeps each server's working OAuth client explicit through the move. The preview runs the consolidation and rolls it back, so it reports exactly what confirming would do: servers that would start or stop asking people to connect an account, switch providers, or keep their current client. It blocks the consolidation when a server would end up with two OAuth clients for one provider, or with a client its upstream does not accept. Consolidation now carries over only the OAuth clients something still signs in through, never a deleted one, and lists the rest. Previewing a consolidation now requires organization admin access, because it takes the same locks a consolidation does.
+
+### Patch Changes
+
+- 90df6a1: Add configurable assistant reasoning effort with a Medium default and Off, Low, and High options. Preserve the selected effort through runtime inference requests and explain reasoning compatibility limits for Kit runtimes.
+- e492b91: Admit Pi's stable and per-server OAuth client metadata documents as verified clients, and identify both forms as Pi for Shadow MCP access decisions.
+- 773a6c1: Publishing plugins now gives the plugin's MCP key permission to connect to the servers it is published for and to use the project's shared auth clients, so newly published plugins keep working in organizations that enforce upstream auth.
+- 305e284: Okta connections, MCP approval, MCP research and employee identity folding in cost analytics are now on for every organization. Their rollout flags are removed; the research stop control stays.
+
 ## 2.33.0
 
 ### Minor Changes

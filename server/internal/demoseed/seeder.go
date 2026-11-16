@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,8 +28,12 @@ type seeder struct {
 	// name it, or runtime provisioning in the project cannot find or create
 	// its own registration.
 	assistantIssuer string
-	q               *repo.Queries
-	logger          *slog.Logger
+	// serverURL is the deployment's own URL (GRAM_SERVER_URL). Linear's seeded
+	// client is a metadata document Speakeasy serves there, and sign-ins
+	// return to it.
+	serverURL *url.URL
+	q         *repo.Queries
+	logger    *slog.Logger
 	// now is the Postgres transaction's now(), read once at the start of the
 	// run, so Go-computed timestamps agree with any now() a query still uses
 	// and ClickHouse rows line up with the Postgres ones.
@@ -95,6 +100,7 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		{"agent owner sessions", s.seedAgentOwnerSessions},
 		{"signal conversations", s.seedSignalConversations},
 		{"channels", s.seedChannels},
+		{"fixture servers", s.seedFixtureServers},
 		{"postflight", s.postflight},
 	}
 	for _, p := range phases {

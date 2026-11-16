@@ -84,9 +84,10 @@ func (s *ChatSearchService) valid() bool {
 
 // SearchChatsInput selects an explicit project and date interval.
 type SearchChatsInput struct {
-	ProjectID string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 
-	ProjectSlug string `json:"project_slug,omitempty"`
+	ProjectSlug string `json:"project_slug"`
 
 	From string `json:"from"`
 
@@ -400,9 +401,10 @@ func containsFold(text, query string) bool {
 
 // ReadChatInput anchors a small context window on one captured message.
 type ReadChatInput struct {
-	ProjectID string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 
-	ProjectSlug string `json:"project_slug,omitempty"`
+	ProjectSlug string `json:"project_slug"`
 
 	ChatID string `json:"chat_id"`
 

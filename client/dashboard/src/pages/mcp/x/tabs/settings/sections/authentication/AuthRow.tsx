@@ -55,12 +55,18 @@ export function AuthRow({
 export function RowSave({
   visible,
   children,
+  className,
 }: {
   visible: boolean;
   children: ReactNode;
+  className?: string;
 }): JSX.Element | null {
   if (!visible) return null;
-  return <div className="flex items-center gap-3 pt-1">{children}</div>;
+  return (
+    <div className={cn("flex items-center gap-3 pt-1", className)}>
+      {children}
+    </div>
+  );
 }
 
 /**
