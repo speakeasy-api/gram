@@ -1,0 +1,23 @@
+server/database/schema.sql
+  s_b13b8d12c606f6::t_b0b9767eb318a9 9810
+server/migrations/20261116115045_drop_principal_grants_effect.sql
+  s_b13b8d12c606f6::t_380b567f36be29 1-7
+server/migrations/atlas.sum
+  s_b13b8d12c606f6::t_310c8af75fc64c 1,542
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71e67c9700478f50eade79d0e696e6801baf1924",
+  "prompts": {},
+  "sessions": {
+    "s_b13b8d12c606f6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fb7763a-cb15-4cb3-88c8-8df7cabbcdbc",
+        "model": "unknown"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
