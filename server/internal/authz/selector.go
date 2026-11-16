@@ -143,6 +143,53 @@ func scopeAllowsSelectorKey(scope Scope, key string) bool {
 	return scopeSelectorKeys[scope][key]
 }
 
+// storedLimitScopes are the scopes that could once be saved with a tool or
+// disposition limit and no longer can. Limits belong to connect, where a tool
+// is being called; viewing or managing a server names no tool.
+var storedLimitScopes = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPBlockedRead, ScopeMCPBlockedWrite}
+
+// StoredSelectorInEffect returns the selector a stored grant takes effect
+// with, and false when the grant has no effect at all. Both follow from how
+// checks are matched: no check for viewing or managing a server names a tool,
+// so a limited allow already matches as if it had no limit, and a limited
+// block never matches. Loading grants this way changes no decision; it lets
+// everything after the load treat limits as a connect-only idea.
+func StoredSelectorInEffect(scope Scope, sel Selector) (Selector, bool) {
+	if !slices.Contains(storedLimitScopes, scope) {
+		return sel, true
+	}
+	_, hasTool := sel[SelectorKeyTool]
+	_, hasDisposition := sel[SelectorKeyDisposition]
+	if !hasTool && !hasDisposition {
+		return sel, true
+	}
+	if IsBlocklistScope(scope) {
+		return nil, false
+	}
+	unlimited := maps.Clone(sel)
+	delete(unlimited, SelectorKeyTool)
+	delete(unlimited, SelectorKeyDisposition)
+	return unlimited, true
+}
+
+// ValidateStoredSelector is ValidateSelector for a selector read back from
+// storage. It also accepts a tool or disposition limit on the scopes in
+// storedLimitScopes, because rows saved before limits moved to connect still
+// carry one and must keep the effect they have today. Use ValidateSelector for
+// anything a caller is asking to save.
+func ValidateStoredSelector(scope Scope, sel Selector) error {
+	if !slices.Contains(storedLimitScopes, scope) {
+		return ValidateSelector(scope, sel)
+	}
+	if disposition, ok := sel[SelectorKeyDisposition]; ok && !validDispositions[disposition] {
+		return fmt.Errorf("invalid disposition value %q", disposition)
+	}
+	unlimited := maps.Clone(sel)
+	delete(unlimited, SelectorKeyTool)
+	delete(unlimited, SelectorKeyDisposition)
+	return ValidateSelector(scope, unlimited)
+}
+
 // ValidateSelector checks that a selector is well-formed for the given scope.
 // Rules:
 //   - resource_kind and resource_id must both be present

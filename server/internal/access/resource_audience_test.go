@@ -757,30 +757,46 @@ func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingOwn(
 	require.NoError(t, err)
 }
 
-// A narrowed view rule still satisfies the page's server-level read, so it
-// keeps the caller in as well as an unnarrowed one.
-func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingNarrowedOwn(t *testing.T) {
+// Tools and annotations limit the use of a server. A view or manage rule is
+// about the server as a whole, so one that names a tool is refused.
+func TestService_SetResourceAudience_RefusesToolLimitsOnViewAndManage(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAccessService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
+	for _, level := range []string{"view", "manage", "blocked_view", "blocked_manage"} {
+		for _, limit := range []string{"tools", "annotations"} {
+			t.Run(level+" limited by "+limit, func(t *testing.T) {
+				t.Parallel()
 
-	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-	callerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+				ctx, ti := newTestAccessService(t)
+				authCtx, ok := contextvalues.GetAuthContext(ctx)
+				require.True(t, ok)
 
-	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
-		ResourceKind: "mcp",
-		ResourceID:   serverID,
-		Entries: []*gen.SetResourceAudienceEntry{
-			{PrincipalUrn: "*", Level: "blocked_view"},
-			{PrincipalUrn: callerPrincipal.String(), Level: "view", Tools: []string{"search"}},
-		},
-		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
-		SessionToken:    nil,
-		ApikeyToken:     nil,
-	})
-	require.NoError(t, err)
+				serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+				entry := &gen.SetResourceAudienceEntry{
+					PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String(),
+					Level:        level,
+					Tools:        nil,
+					Dispositions: nil,
+				}
+				if limit == "tools" {
+					entry.Tools = []string{"search"}
+				} else {
+					entry.Dispositions = []string{"read_only"}
+				}
+
+				_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+					ResourceKind:    "mcp",
+					ResourceID:      serverID,
+					Entries:         []*gen.SetResourceAudienceEntry{entry},
+					ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+					SessionToken:    nil,
+					ApikeyToken:     nil,
+				})
+				requireOopsCode(t, err, oops.CodeInvalid)
+				require.ErrorContains(t, err, "can only limit use of a server")
+			})
+		}
+	}
 }
 
 // A role block outranks every grant except one made to a person by name for

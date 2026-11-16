@@ -58,6 +58,10 @@ var audienceLevelScopes = map[string]authz.Scope{
 	audienceLevelBlockedManage: authz.ScopeMCPBlockedWrite,
 }
 
+// The levels a rule may limit to some tools or annotations: using a server
+// and being kept from using it.
+var audienceLimitableLevels = []string{audienceLevelUse, audienceLevelBlocked}
+
 // The block that takes away the read rendering this page, so a caller cannot
 // write one against themselves and lose the means to undo it. Blocking
 // connect or manage leaves the page readable, so neither needs a guard.
@@ -256,6 +260,11 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 				return nil, oops.E(oops.CodeInvalid, err, "unknown principal %q", entry.PrincipalUrn)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, s.logger)
+		}
+		// Limits name tools, and only using a server calls one. Viewing or
+		// managing a server is about the server as a whole.
+		if (len(entry.Tools) > 0 || len(entry.Dispositions) > 0) && !slices.Contains(audienceLimitableLevels, entry.Level) {
+			return nil, oops.E(oops.CodeInvalid, nil, "tools and annotations can only limit use of a server, not %q access; remove them from the rule for %q", entry.Level, entry.PrincipalUrn)
 		}
 		selectors, err := audienceSelectors(audienceLevelScopes[entry.Level], payload.ResourceID, entry.Tools, entry.Dispositions)
 		if err != nil {
