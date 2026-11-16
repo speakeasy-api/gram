@@ -49,6 +49,9 @@ type CommandresourceindexitemView struct {
 	RouteSelector *string
 	// Compact alternate names used for local matching.
 	Keywords []string
+	// Whether the caller may change this resource; currently emitted only for
+	// registered agent identities.
+	CanWrite *bool
 }
 
 var (
@@ -75,6 +78,7 @@ var (
 			"name",
 			"route_selector",
 			"keywords",
+			"can_write",
 		},
 	}
 )
@@ -152,12 +156,9 @@ func ValidateCommandresourceindexitemView(result *CommandresourceindexitemView) 
 		err = goa.MergeErrors(err, goa.MissingFieldError("route_selector", "result"))
 	}
 	if result.Kind != nil {
-		if !(*result.Kind == "assistant" || *result.Kind == "environment" || *result.Kind == "gateway" || *result.Kind == "mcp" || *result.Kind == "plugin" || *result.Kind == "rule" || *result.Kind == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.kind", *result.Kind, []any{"assistant", "environment", "gateway", "mcp", "plugin", "rule", "skill"}))
+		if !(*result.Kind == "agent_identity" || *result.Kind == "assistant" || *result.Kind == "environment" || *result.Kind == "gateway" || *result.Kind == "mcp" || *result.Kind == "person" || *result.Kind == "plugin" || *result.Kind == "rule" || *result.Kind == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.kind", *result.Kind, []any{"agent_identity", "assistant", "environment", "gateway", "mcp", "person", "plugin", "rule", "skill"}))
 		}
-	}
-	if result.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("result.id", *result.ID, goa.FormatUUID))
 	}
 	return
 }

@@ -336,6 +336,49 @@ describe("resource command search", () => {
     ]);
   });
 
+  it("maps people and writable agents to canonical identity actions", () => {
+    const href = (section: string) => (identity: string) =>
+      `/identities/${identity}/${section}`;
+    const candidates = mapResourceSearchItems(
+      [
+        { id: "user-1", kind: "person", name: "Ada", routeSelector: "user-1" },
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          kind: "agent_identity",
+          name: "Release bot",
+          routeSelector: "11111111-1111-4111-8111-111111111111",
+          canWrite: true,
+        },
+      ],
+      {
+        identities: {
+          detail: {
+            overview: { href: href("overview") },
+            credentials: { href: href("credentials") },
+            mcpSignIn: { href: href("mcp-sign-in") },
+            permissions: { href: href("permissions") },
+          },
+        },
+      } as never,
+      mocks.navigate,
+      "?from=now-7d&to=now",
+    );
+
+    expect(candidates.map((candidate) => candidate.id)).toEqual([
+      "person:user-1",
+      "agent-identity:11111111-1111-4111-8111-111111111111",
+      "agent-sign-in:11111111-1111-4111-8111-111111111111",
+      "agent-mcp-sign-in:11111111-1111-4111-8111-111111111111",
+      "agent-inference-access:11111111-1111-4111-8111-111111111111",
+    ]);
+    for (const candidate of candidates) void candidate.run("open");
+    expect(
+      mocks.navigate.mock.calls.every(([target]) =>
+        String(target).includes("from=now-7d"),
+      ),
+    ).toBe(true);
+  });
+
   it("maps gateways and encoded detection-rule selectors to exact routes", () => {
     const gatewayGoTo = vi.fn();
     const candidates = mapResourceSearchItems(

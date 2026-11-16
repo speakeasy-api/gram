@@ -1,5 +1,6 @@
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { useRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
@@ -37,10 +38,12 @@ type PayloadByteBucket =
   | "over_250k";
 
 const MIGRATED_RESOURCE_KINDS = [
+  "agent_identity",
   "assistant",
   "environment",
   "gateway",
   "mcp",
+  "person",
   "plugin",
   "rule",
   "skill",
@@ -54,6 +57,7 @@ interface ResourceSearchItem {
   routeSelector: string;
   /** Compact server-provided aliases used for local matching. */
   keywords?: readonly string[];
+  canWrite?: boolean;
 }
 
 export interface ResourceSearchMetrics {
@@ -127,10 +131,12 @@ const KIND_PRESENTATION: Record<
   MigratedResourceKind,
   { detail: string; group: string; icon: LauncherCandidate["icon"] }
 > = {
+  agent_identity: { detail: "Registered agent", group: "People", icon: "bot" },
   assistant: { detail: "Assistant", group: "Assistants", icon: "bot" },
   environment: { detail: "Environment", group: "Environments", icon: "blocks" },
   gateway: { detail: "MCP gateway", group: "Gateways", icon: "network" },
   mcp: { detail: "MCP server", group: "MCP Servers", icon: "network" },
+  person: { detail: "Member", group: "People", icon: "user" },
   plugin: { detail: "Plugin", group: "Plugins", icon: "puzzle" },
   rule: {
     detail: "Detection rule",
@@ -151,6 +157,7 @@ export function mapResourceSearchItems(
   items: readonly ResourceSearchItem[],
   routes: ReturnType<typeof useRoutes>,
   navigate: ReturnType<typeof useNavigate>,
+  identitySearch = "",
 ): LauncherCandidate[] {
   return items.flatMap((item): LauncherCandidate[] => {
     if (!MIGRATED_RESOURCE_KINDS.includes(item.kind as MigratedResourceKind)) {
@@ -169,6 +176,18 @@ export function mapResourceSearchItems(
     const selector = item.routeSelector;
     let run: () => void;
     switch (kind) {
+      case "agent_identity":
+        run = () => {
+          void navigate(
+            withIdentityWindow(
+              routes.identities.detail.overview.href(
+                encodeIdentityUrn(`agent:${selector}`),
+              ),
+              identitySearch,
+            ),
+          );
+        };
+        break;
       case "assistant":
         run = () => routes.assistants.detail.goTo(selector);
         break;
@@ -180,6 +199,18 @@ export function mapResourceSearchItems(
         break;
       case "mcp":
         run = () => routes.mcp.details.overview.goTo(selector);
+        break;
+      case "person":
+        run = () => {
+          void navigate(
+            withIdentityWindow(
+              routes.identities.detail.overview.href(
+                encodeIdentityUrn(`user:${selector}`),
+              ),
+              identitySearch,
+            ),
+          );
+        };
         break;
       case "plugin":
         run = () => routes.plugins.detail.goTo(selector);
@@ -196,27 +227,104 @@ export function mapResourceSearchItems(
         break;
     }
 
-    return [
-      {
-        id: `${kind}:${item.id}`,
-        kind: kind === "mcp" ? "mcp_server" : kind,
-        title: item.name,
-        detail: presentation.detail,
-        keywords: [
-          ...new Set([
-            kind,
-            selector,
-            item.id,
-            ...(item.keywords ?? []).filter(validField).slice(0, 32),
-          ]),
-        ],
-        resourceIdentity: { id: item.id, routeSelector: selector },
-        verbs: ["open"],
-        icon: presentation.icon,
-        group: presentation.group,
-        run,
-      },
-    ];
+    const candidate: LauncherCandidate = {
+      id: `${kind}:${item.id}`,
+      kind:
+        kind === "mcp"
+          ? "mcp_server"
+          : kind === "agent_identity"
+            ? "person"
+            : kind,
+      title: item.name,
+      detail: presentation.detail,
+      keywords: [
+        ...new Set([
+          kind,
+          selector,
+          item.id,
+          ...(item.keywords ?? []).filter(validField).slice(0, 32),
+        ]),
+      ],
+      resourceIdentity: { id: item.id, routeSelector: selector },
+      verbs: ["open"],
+      icon: presentation.icon,
+      group: presentation.group,
+      run,
+    };
+    if (kind !== "agent_identity") return [candidate];
+
+    const urn = encodeIdentityUrn(`agent:${selector}`);
+    const identity: LauncherCandidate = {
+      ...candidate,
+      id: `agent-identity:${item.id}`,
+      detail: "Agent identity",
+      group: "Identities",
+    };
+    const signIn: LauncherCandidate = {
+      ...identity,
+      id: `agent-sign-in:${item.id}`,
+      title: `${item.name} · Agent sign-in`,
+      detail: "API keys · issue a key",
+      keywords: [
+        ...identity.keywords,
+        "sign-in",
+        "credentials",
+        "api key",
+        "key",
+      ],
+      run: () =>
+        void navigate(
+          withIdentityWindow(
+            routes.identities.detail.credentials.href(urn),
+            identitySearch,
+          ),
+        ),
+    };
+    if (!item.canWrite) return [identity, signIn];
+    const mcpSignIn: LauncherCandidate = {
+      ...identity,
+      id: `agent-mcp-sign-in:${item.id}`,
+      title: `${item.name} · MCP sign-in`,
+      detail: "Change MCP servers · reconnect expired sign-ins",
+      keywords: [
+        ...identity.keywords,
+        "mcp",
+        "servers",
+        "sign-in",
+        "connection",
+        "connections",
+        "reconnect",
+        "review",
+        "change",
+      ],
+      run: () =>
+        void navigate(
+          withIdentityWindow(
+            routes.identities.detail.mcpSignIn.href(urn),
+            identitySearch,
+          ),
+        ),
+    };
+    const permissions: LauncherCandidate = {
+      ...identity,
+      id: `agent-inference-access:${item.id}`,
+      title: `${item.name} · Permissions`,
+      detail: "Edit permissions · inference project access",
+      keywords: [
+        ...identity.keywords,
+        "inference",
+        "inference:execute",
+        "permissions",
+      ],
+      run: () =>
+        void navigate(
+          withIdentityWindow(
+            routes.identities.detail.permissions.href(urn),
+            identitySearch,
+          ),
+        ),
+    };
+    return [identity, signIn, mcpSignIn, permissions];
   });
 }
 
@@ -305,7 +413,12 @@ export function useResourceSearchCandidates({
     const data = result.data;
     if (data.schemaVersion !== COMMAND_SEARCH_SCHEMA_VERSION) return null;
     const startedAt = performance.now();
-    const candidates = mapResourceSearchItems(data.items, routes, navigate);
+    const candidates = mapResourceSearchItems(
+      data.items,
+      routes,
+      navigate,
+      window.location.search,
+    );
     return {
       candidates,
       failedKinds: migratedKinds(data.failedKinds),

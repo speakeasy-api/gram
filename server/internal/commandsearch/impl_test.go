@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/command_search"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/commandsearch/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -39,6 +41,8 @@ type fakeStore struct {
 	gateways          []repo.ListCommandIndexGatewaysRow
 	plugins           []repo.ListCommandIndexPluginsRow
 	rules             []repo.ListCommandIndexCustomRulesRow
+	people            []repo.ListCommandIndexPeopleRow
+	agentIdentities   []repo.ListCommandIndexAgentIdentitiesRow
 }
 
 func (f *fakeStore) call(ctx context.Context, kind string) error {
@@ -57,6 +61,28 @@ func (f *fakeStore) call(ctx context.Context, kind string) error {
 		return fmt.Errorf("wait for blocked fake query: %w", ctx.Err())
 	}
 	return nil
+}
+
+func (f *fakeStore) ListCommandIndexPeople(ctx context.Context, _ repo.ListCommandIndexPeopleParams) ([]repo.ListCommandIndexPeopleRow, error) {
+	return f.people, f.call(ctx, "person")
+}
+func (f *fakeStore) ListCommandIndexAgentIdentities(ctx context.Context, params repo.ListCommandIndexAgentIdentitiesParams) ([]repo.ListCommandIndexAgentIdentitiesRow, error) {
+	if err := f.call(ctx, "agent_identity"); err != nil {
+		return nil, err
+	}
+	start := 0
+	if params.CursorName.Valid && params.CursorID.Valid {
+		for start < len(f.agentIdentities) {
+			row := f.agentIdentities[start]
+			name := strings.ToLower(row.Name)
+			if name > params.CursorName.String || (name == params.CursorName.String && row.ID.String() > params.CursorID.UUID.String()) {
+				break
+			}
+			start++
+		}
+	}
+	end := min(start+int(params.ResultLimit), len(f.agentIdentities))
+	return f.agentIdentities[start:end], nil
 }
 
 func (f *fakeStore) ListCommandIndexAssistants(ctx context.Context, params repo.ListCommandIndexAssistantsParams) ([]repo.ListCommandIndexAssistantsRow, error) {
@@ -134,9 +160,23 @@ func (f fakeFeatures) IsFeatureEnabled(context.Context, string, productfeatures.
 	return f.enabled, f.err
 }
 
+type fakeAgentIdentityAuth struct {
+	permissions func(agentsrepo.Agent) agentmanagement.AgentPermissions
+}
+
+func (fakeAgentIdentityAuth) RequireHuman(context.Context, agentsrepo.DBTX) (agentmanagement.HumanContext, error) {
+	return agentmanagement.HumanContext{}, nil
+}
+func (f fakeAgentIdentityAuth) Permissions(_ context.Context, _ agentmanagement.HumanContext, agent agentsrepo.Agent) (agentmanagement.AgentPermissions, error) {
+	if f.permissions != nil {
+		return f.permissions(agent), nil
+	}
+	return agentmanagement.AgentPermissions{Read: true}, nil
+}
+
 func service(t *testing.T, store *fakeStore, authorizer fakeAuthz) *Service {
 	t.Helper()
-	return &Service{logger: testenv.NewLogger(t), repo: store, authz: authorizer, features: fakeFeatures{enabled: true}, budget: time.Second}
+	return &Service{logger: testenv.NewLogger(t), repo: store, agentAuth: fakeAgentIdentityAuth{}, authz: authorizer, features: fakeFeatures{enabled: true}, budget: time.Second}
 }
 func storeWithAllKinds() *fakeStore {
 	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()}
@@ -225,6 +265,39 @@ func TestSearchPluginUsesIDSelectorAndSlugKeyword(t *testing.T) {
 	t.Fatal("plugin not found")
 }
 
+func TestSearchAuthorizesPeopleForOrganizationOrProjectReaders(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		orgRead     bool
+		projectRead bool
+		wantCalls   int
+	}{
+		{name: "organization reader", orgRead: true, wantCalls: 1},
+		{name: "project reader", projectRead: true, wantCalls: 1},
+		{name: "neither", wantCalls: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := storeWithAllKinds()
+			authorizer := fakeAuthz{evaluate: func(check authz.Check) bool {
+				switch check.Scope {
+				case authz.ScopeOrgRead:
+					return tc.orgRead
+				case authz.ScopeProjectRead:
+					return tc.projectRead
+				default:
+					return true
+				}
+			}}
+			_, err := service(t, store, authorizer).Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "pe"})
+			require.NoError(t, err)
+			require.Equal(t, tc.wantCalls, store.calls["person"])
+		})
+	}
+}
+
 func TestMakePrefixBoundsUsesSingleNormalizedLowerRange(t *testing.T) {
 	t.Parallel()
 
@@ -264,6 +337,60 @@ func TestMatchRankExactThenAliasPrefixThenNamePrefix(t *testing.T) {
 	require.Equal(t, 0, matchRank(&gen.Commandresourceindexitem{Name: "Other", Keywords: []string{"CAT"}}, query))
 	require.Equal(t, 1, matchRank(&gen.Commandresourceindexitem{Name: "Other", Keywords: []string{"catalog"}}, query))
 	require.Equal(t, 2, matchRank(&gen.Commandresourceindexitem{Name: "Catalog"}, query))
+}
+
+func TestSearchFiltersAgentIdentityRowsBeforeApplyingResultLimit(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{calls: map[string]int{}}
+	readable := map[uuid.UUID]bool{}
+	for i := range perKindQueryLimit + 4 {
+		id := uuid.New()
+		store.agentIdentities = append(store.agentIdentities, repo.ListCommandIndexAgentIdentitiesRow{ID: id, OrganizationID: "org_test", OwnerUserID: "owner", Name: fmt.Sprintf("Agent %02d", i)})
+		if i >= perKindQueryLimit {
+			readable[id] = true
+		}
+	}
+	svc := service(t, store, fakeAuthz{})
+	svc.agentAuth = fakeAgentIdentityAuth{permissions: func(agent agentsrepo.Agent) agentmanagement.AgentPermissions {
+		return agentmanagement.AgentPermissions{Read: readable[agent.ID]}
+	}}
+
+	result, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ag"})
+	require.NoError(t, err)
+	var identities int
+	for _, item := range result.Items {
+		if item.Kind == "agent_identity" {
+			identities++
+		}
+	}
+	require.Equal(t, 4, identities)
+	require.NotContains(t, result.TruncatedKinds, "agent_identity")
+}
+
+func TestSearchPaginatesPastDeniedAgentIdentityRows(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{calls: map[string]int{}}
+	readableID := uuid.New()
+	for i := range agentSearchBatchSize + 1 {
+		id := uuid.New()
+		if i == agentSearchBatchSize {
+			id = readableID
+		}
+		store.agentIdentities = append(store.agentIdentities, repo.ListCommandIndexAgentIdentitiesRow{
+			ID: id, OrganizationID: "org_test", OwnerUserID: "owner", Name: fmt.Sprintf("Agent %03d", i),
+		})
+	}
+	svc := service(t, store, fakeAuthz{})
+	svc.agentAuth = fakeAgentIdentityAuth{permissions: func(agent agentsrepo.Agent) agentmanagement.AgentPermissions {
+		return agentmanagement.AgentPermissions{Read: agent.ID == readableID}
+	}}
+
+	result, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ag"})
+	require.NoError(t, err)
+	require.Equal(t, []string{readableID.String()}, itemIDs(result.Items, "agent_identity"))
+	require.Equal(t, 2, store.calls["agent_identity"])
 }
 
 func TestSearchFiltersAssistantRowsBeforeApplyingResultLimit(t *testing.T) {

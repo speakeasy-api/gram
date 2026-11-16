@@ -224,6 +224,9 @@ type CommandresourceindexitemResponseBody struct {
 	RouteSelector *string `form:"route_selector,omitempty" json:"route_selector,omitempty" xml:"route_selector,omitempty"`
 	// Compact alternate names used for local matching.
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// Whether the caller may change this resource; currently emitted only for
+	// registered agent identities.
+	CanWrite *bool `form:"can_write,omitempty" json:"can_write,omitempty" xml:"can_write,omitempty"`
 }
 
 // NewSearchCommandresourceindexOK builds a "commandSearch" service "search"
@@ -662,12 +665,9 @@ func ValidateCommandresourceindexitemResponseBody(body *Commandresourceindexitem
 		err = goa.MergeErrors(err, goa.MissingFieldError("route_selector", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "assistant" || *body.Kind == "environment" || *body.Kind == "gateway" || *body.Kind == "mcp" || *body.Kind == "plugin" || *body.Kind == "rule" || *body.Kind == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"assistant", "environment", "gateway", "mcp", "plugin", "rule", "skill"}))
+		if !(*body.Kind == "agent_identity" || *body.Kind == "assistant" || *body.Kind == "environment" || *body.Kind == "gateway" || *body.Kind == "mcp" || *body.Kind == "person" || *body.Kind == "plugin" || *body.Kind == "rule" || *body.Kind == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"agent_identity", "assistant", "environment", "gateway", "mcp", "person", "plugin", "rule", "skill"}))
 		}
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

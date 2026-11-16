@@ -107165,9 +107165,11 @@ components:
         Commandresourceindexitem:
             type: object
             properties:
+                can_write:
+                    type: boolean
+                    description: Whether the caller may change this resource; currently emitted only for registered agent identities.
                 id:
                     type: string
-                    format: uuid
                 keywords:
                     type: array
                     items:
@@ -107176,10 +107178,12 @@ components:
                 kind:
                     type: string
                     enum:
+                        - agent_identity
                         - assistant
                         - environment
                         - gateway
                         - mcp
+                        - person
                         - plugin
                         - rule
                         - skill

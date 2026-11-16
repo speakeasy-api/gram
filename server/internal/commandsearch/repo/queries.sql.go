@@ -12,6 +12,76 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const listCommandIndexAgentIdentities = `-- name: ListCommandIndexAgentIdentities :many
+SELECT
+  id,
+  organization_id,
+  owner_user_id,
+  name,
+  owner_reassignment_required_at
+FROM agents
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND LOWER(name) >= $2
+  AND LOWER(name) < $3
+  AND (
+    $4::text IS NULL
+    OR (LOWER(name), id) > ($4::text, $5::uuid)
+  )
+ORDER BY LOWER(name), id
+LIMIT $6
+`
+
+type ListCommandIndexAgentIdentitiesParams struct {
+	OrganizationID string
+	LowerBound     string
+	LowerCeiling   string
+	CursorName     pgtype.Text
+	CursorID       uuid.NullUUID
+	ResultLimit    int32
+}
+
+type ListCommandIndexAgentIdentitiesRow struct {
+	ID                          uuid.UUID
+	OrganizationID              string
+	OwnerUserID                 string
+	Name                        string
+	OwnerReassignmentRequiredAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListCommandIndexAgentIdentities(ctx context.Context, arg ListCommandIndexAgentIdentitiesParams) ([]ListCommandIndexAgentIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listCommandIndexAgentIdentities,
+		arg.OrganizationID,
+		arg.LowerBound,
+		arg.LowerCeiling,
+		arg.CursorName,
+		arg.CursorID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommandIndexAgentIdentitiesRow
+	for rows.Next() {
+		var i ListCommandIndexAgentIdentitiesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.OwnerReassignmentRequiredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCommandIndexAssistants = `-- name: ListCommandIndexAssistants :many
 SELECT id, name FROM assistants
 WHERE project_id = $1
@@ -306,6 +376,66 @@ func (q *Queries) ListCommandIndexMCPServers(ctx context.Context, arg ListComman
 			&i.Slug,
 			&i.RouteID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCommandIndexPeople = `-- name: ListCommandIndexPeople :many
+SELECT
+  u.id,
+  u.display_name,
+  u.email
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+  AND (
+    (LOWER(u.display_name) >= $2 AND LOWER(u.display_name) < $3)
+    OR (LOWER(u.email) >= $2 AND LOWER(u.email) < $3)
+  )
+ORDER BY CASE
+  WHEN LOWER(u.display_name) = $2 OR LOWER(u.email) = $2 THEN 0
+  WHEN LOWER(u.email) >= $2 AND LOWER(u.email) < $3 THEN 1
+  ELSE 2
+END, LOWER(COALESCE(NULLIF(u.display_name, ''), u.email)), u.id
+LIMIT $4
+`
+
+type ListCommandIndexPeopleParams struct {
+	OrganizationID string
+	LowerBound     string
+	LowerCeiling   string
+	ResultLimit    int32
+}
+
+type ListCommandIndexPeopleRow struct {
+	ID          string
+	DisplayName string
+	Email       string
+}
+
+func (q *Queries) ListCommandIndexPeople(ctx context.Context, arg ListCommandIndexPeopleParams) ([]ListCommandIndexPeopleRow, error) {
+	rows, err := q.db.Query(ctx, listCommandIndexPeople,
+		arg.OrganizationID,
+		arg.LowerBound,
+		arg.LowerCeiling,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommandIndexPeopleRow
+	for rows.Next() {
+		var i ListCommandIndexPeopleRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.Email); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

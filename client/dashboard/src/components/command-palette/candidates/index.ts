@@ -190,7 +190,7 @@ export function useLauncherCandidates({
     inProject,
   });
   const agentIdentities = useAgentIdentityCandidates({
-    enabled: remoteCandidatesEnabled,
+    enabled: remoteCandidatesEnabled && !inProject,
   });
   const environments = useEnvironmentCandidates({
     enabled: fallback("environment"),
@@ -217,7 +217,7 @@ export function useLauncherCandidates({
     enabled: projectRemoteCandidatesEnabled && canReadApprovals,
   });
   const people = usePersonCandidates({
-    enabled: remoteCandidatesEnabled && canReadPeople,
+    enabled: remoteCandidatesEnabled && !inProject && canReadPeople,
   });
   const devices = useManagedDeviceCandidates({
     enabled: remoteCandidatesEnabled && canReadDevices,
@@ -256,7 +256,7 @@ export function useLauncherCandidates({
       ...(fallback("plugin") && canListPlugins ? plugins : []),
       ...(fallback("assistant") && canReadAssistants ? assistants : []),
       ...(fallback("skill") && canReadSkills ? skills : []),
-      ...agentIdentities,
+      ...(!inProject ? agentIdentities : []),
       ...inferenceSetup,
       ...platformSetups,
       ...(fallback("environment") ? projectOnly(environments) : []),
@@ -266,7 +266,7 @@ export function useLauncherCandidates({
       ...adminOnly(builtinRules),
       ...(fallback("rule") ? adminOnly(rules) : []),
       ...(inProject && canReadApprovals ? accessRequests : []),
-      ...(canReadPeople ? people : []),
+      ...(!inProject && canReadPeople ? people : []),
       ...(canReadDevices ? devices : []),
       ...projects,
     ];

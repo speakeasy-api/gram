@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -18,6 +19,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/command_search"
 	srv "github.com/speakeasy-api/gram/server/gen/http/command_search/server"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -34,10 +37,16 @@ const (
 	perKindLimit            = 20
 	perKindQueryLimit       = perKindLimit + 1
 	rowAuthorizedQueryLimit = int32(1<<31 - 1)
-	globalLimit             = 40
+	agentSearchBatchSize    = 200
+	// Agent readability is evaluated in Go. Walk bounded keyset pages so denied
+	// rows cannot hide later readable matches without materializing the tenant's
+	// entire matching inventory in one query. Match the canonical agent roster's
+	// hard scan ceiling and fail rather than silently report exhaustion.
+	maxAgentSearchRowsScanned = 20_000
+	globalLimit               = 40
 )
 
-var allKinds = []string{"assistant", "environment", "gateway", "mcp", "plugin", "rule", "skill"}
+var allKinds = []string{"agent_identity", "assistant", "environment", "gateway", "mcp", "person", "plugin", "rule", "skill"}
 
 type queryStore interface {
 	ListCommandIndexAssistants(context.Context, repo.ListCommandIndexAssistantsParams) ([]repo.ListCommandIndexAssistantsRow, error)
@@ -47,6 +56,13 @@ type queryStore interface {
 	ListCommandIndexEnvironments(context.Context, repo.ListCommandIndexEnvironmentsParams) ([]repo.ListCommandIndexEnvironmentsRow, error)
 	ListCommandIndexGateways(context.Context, repo.ListCommandIndexGatewaysParams) ([]repo.ListCommandIndexGatewaysRow, error)
 	ListCommandIndexPlugins(context.Context, repo.ListCommandIndexPluginsParams) ([]repo.ListCommandIndexPluginsRow, error)
+	ListCommandIndexPeople(context.Context, repo.ListCommandIndexPeopleParams) ([]repo.ListCommandIndexPeopleRow, error)
+	ListCommandIndexAgentIdentities(context.Context, repo.ListCommandIndexAgentIdentitiesParams) ([]repo.ListCommandIndexAgentIdentitiesRow, error)
+}
+
+type agentIdentityAuthorizer interface {
+	RequireHuman(context.Context, agentsrepo.DBTX) (agentmanagement.HumanContext, error)
+	Permissions(context.Context, agentmanagement.HumanContext, agentsrepo.Agent) (agentmanagement.AgentPermissions, error)
 }
 
 type featureChecker interface {
@@ -60,17 +76,19 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	auth     *auth.Auth
-	repo     queryStore
-	authz    authorizer
-	features featureChecker
-	budget   time.Duration
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	auth      *auth.Auth
+	repo      queryStore
+	db        agentsrepo.DBTX
+	agentAuth agentIdentityAuthorizer
+	authz     authorizer
+	features  featureChecker
+	budget    time.Duration
 }
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, features featureChecker) *Service {
-	return &Service{tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/commandsearch"), logger: logger, auth: auth.New(logger, db, sessionManager, authzEngine), repo: repo.New(db), authz: authzEngine, features: features, budget: indexBudget}
+	return &Service{tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/commandsearch"), logger: logger, auth: auth.New(logger, db, sessionManager, authzEngine), repo: repo.New(db), db: db, agentAuth: agentmanagement.NewAuthorizer(authzEngine), authz: authzEngine, features: features, budget: indexBudget}
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -251,9 +269,73 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 	out := make([]adapter, 0, len(allKinds))
 	add := func(kind string, fn func(context.Context) ([]*gen.Commandresourceindexitem, error)) {
 		if allowed[kind] {
-			out = append(out, adapter{kind: kind, run: fn})
+			out = append(out, adapter{kind: kind, run: fn, rowCheck: nil})
 		}
 	}
+	add("agent_identity", func(ctx context.Context) ([]*gen.Commandresourceindexitem, error) {
+		if s.agentAuth == nil {
+			return nil, nil
+		}
+		human, e := s.agentAuth.RequireHuman(ctx, s.db)
+		if e != nil {
+			var denied *oops.ShareableError
+			if errors.As(e, &denied) && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeUnauthorized) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("authorize command search agent identities: %w", e)
+		}
+		x := make([]*gen.Commandresourceindexitem, 0, perKindQueryLimit)
+		var cursorName pgtype.Text
+		var cursorID uuid.NullUUID
+		scanned := 0
+		for len(x) < perKindQueryLimit {
+			rows, e := s.repo.ListCommandIndexAgentIdentities(ctx, repo.ListCommandIndexAgentIdentitiesParams{
+				OrganizationID: org, LowerBound: bounds.lower, LowerCeiling: bounds.lowerCeiling,
+				CursorName: cursorName, CursorID: cursorID, ResultLimit: agentSearchBatchSize,
+			})
+			if e != nil {
+				return nil, fmt.Errorf("list command search agent identities: %w", e)
+			}
+			if len(rows) == 0 {
+				break
+			}
+			scanned += len(rows)
+			for _, r := range rows {
+				permissions, authErr := s.agentAuth.Permissions(ctx, human, agentsrepo.Agent{
+					ID: r.ID, OrganizationID: r.OrganizationID, OwnerUserID: r.OwnerUserID,
+					ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Name: r.Name,
+					SuspendedAt:                 pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+					RevokedAt:                   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+					OwnerReassignmentRequiredAt: r.OwnerReassignmentRequiredAt,
+					OwnerReassignmentReason:     pgtype.Text{String: "", Valid: false},
+					CreatedAt:                   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+					UpdatedAt:                   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+					DeletedAt:                   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+					Deleted:                     false,
+				})
+				if authErr != nil {
+					return nil, fmt.Errorf("authorize command search agent identity row: %w", authErr)
+				}
+				if permissions.Read {
+					canWrite := permissions.Write
+					x = append(x, &gen.Commandresourceindexitem{Kind: "agent_identity", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: nil, CanWrite: &canWrite})
+					if len(x) == perKindQueryLimit {
+						break
+					}
+				}
+			}
+			if len(x) == perKindQueryLimit || len(rows) < agentSearchBatchSize {
+				break
+			}
+			last := rows[len(rows)-1]
+			cursorName = pgtype.Text{String: strings.ToLower(last.Name), Valid: true}
+			cursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
+			if scanned >= maxAgentSearchRowsScanned {
+				return nil, fmt.Errorf("agent identity search exceeded %d matching rows; narrow the query", maxAgentSearchRowsScanned)
+			}
+		}
+		return x, nil
+	})
 	add("assistant", func(ctx context.Context) ([]*gen.Commandresourceindexitem, error) {
 		rows, e := s.repo.ListCommandIndexAssistants(ctx, repo.ListCommandIndexAssistantsParams{LowerBound: bounds.lower, LowerCeiling: bounds.lowerCeiling, ProjectID: project, ResultLimit: rowAuthorizedQueryLimit})
 		if e != nil {
@@ -261,7 +343,7 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
 		for _, r := range rows {
-			x = append(x, &gen.Commandresourceindexitem{Kind: "assistant", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: nil})
+			x = append(x, &gen.Commandresourceindexitem{Kind: "assistant", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: nil, CanWrite: nil})
 		}
 		return x, nil
 	})
@@ -272,7 +354,7 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
 		for _, r := range rows {
-			x = append(x, &gen.Commandresourceindexitem{Kind: "environment", ID: r.ID.String(), Name: r.Name, RouteSelector: r.Slug, Keywords: compactKeywords(r.Name, r.Slug)})
+			x = append(x, &gen.Commandresourceindexitem{Kind: "environment", ID: r.ID.String(), Name: r.Name, RouteSelector: r.Slug, Keywords: compactKeywords(r.Name, r.Slug), CanWrite: nil})
 		}
 		return x, nil
 	})
@@ -283,7 +365,7 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
 		for _, r := range rows {
-			x = append(x, &gen.Commandresourceindexitem{Kind: "gateway", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: nil})
+			x = append(x, &gen.Commandresourceindexitem{Kind: "gateway", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: nil, CanWrite: nil})
 		}
 		return x, nil
 	})
@@ -302,7 +384,22 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 			if isReservedMCPRoute(selector) || selector == "" {
 				selector = r.RouteID.String()
 			}
-			x = append(x, &gen.Commandresourceindexitem{Kind: "mcp", ID: r.ID.String(), Name: name, RouteSelector: selector, Keywords: compactKeywords(name, slug)})
+			x = append(x, &gen.Commandresourceindexitem{Kind: "mcp", ID: r.ID.String(), Name: name, RouteSelector: selector, Keywords: compactKeywords(name, slug), CanWrite: nil})
+		}
+		return x, nil
+	})
+	add("person", func(ctx context.Context) ([]*gen.Commandresourceindexitem, error) {
+		rows, e := s.repo.ListCommandIndexPeople(ctx, repo.ListCommandIndexPeopleParams{OrganizationID: org, LowerBound: bounds.lower, LowerCeiling: bounds.lowerCeiling, ResultLimit: limit})
+		if e != nil {
+			return nil, fmt.Errorf("list command search people: %w", e)
+		}
+		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
+		for _, r := range rows {
+			name := r.DisplayName
+			if name == "" {
+				name = r.Email
+			}
+			x = append(x, &gen.Commandresourceindexitem{Kind: "person", ID: r.ID, Name: name, RouteSelector: r.ID, Keywords: compactKeywords(name, r.Email), CanWrite: nil})
 		}
 		return x, nil
 	})
@@ -313,7 +410,7 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
 		for _, r := range rows {
-			x = append(x, &gen.Commandresourceindexitem{Kind: "plugin", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: compactKeywords(r.Name, r.Slug)})
+			x = append(x, &gen.Commandresourceindexitem{Kind: "plugin", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: compactKeywords(r.Name, r.Slug), CanWrite: nil})
 		}
 		return x, nil
 	})
@@ -324,7 +421,7 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
 		for _, r := range rows {
-			x = append(x, &gen.Commandresourceindexitem{Kind: "rule", ID: r.ID.String(), Name: r.Title, RouteSelector: r.RuleID, Keywords: compactKeywords(r.Title, r.RuleID, r.Severity)})
+			x = append(x, &gen.Commandresourceindexitem{Kind: "rule", ID: r.ID.String(), Name: r.Title, RouteSelector: r.RuleID, Keywords: compactKeywords(r.Title, r.RuleID, r.Severity), CanWrite: nil})
 		}
 		return x, nil
 	})
@@ -335,7 +432,7 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
 		for _, r := range rows {
-			x = append(x, &gen.Commandresourceindexitem{Kind: "skill", ID: r.ID.String(), Name: r.DisplayName, RouteSelector: r.ID.String(), Keywords: compactKeywords(r.DisplayName, r.Name)})
+			x = append(x, &gen.Commandresourceindexitem{Kind: "skill", ID: r.ID.String(), Name: r.DisplayName, RouteSelector: r.ID.String(), Keywords: compactKeywords(r.DisplayName, r.Name), CanWrite: nil})
 		}
 		return x, nil
 	})
@@ -376,20 +473,24 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 	}{
 		{[]string{"environment"}, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
 		{[]string{"gateway"}, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
+		// Match access.listMembers: organization readers and project readers can
+		// both use the active member roster. Duplicate kind checks are ORed below.
+		{[]string{"person"}, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
+		{[]string{"person"}, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
 		{[]string{"plugin"}, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
 		{[]string{"rule"}, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}},
 		{[]string{"skill"}, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
 	}
 	// Assistant and MCP rows are authorized after their bounded prefix queries,
 	// matching their list endpoints and allowing resource-specific grants.
-	result := map[string]bool{"assistant": true, "mcp": true}
+	result := map[string]bool{"agent_identity": true, "assistant": true, "mcp": true}
 	for _, candidate := range checks {
 		ok, err := s.authz.Evaluate(ctx, candidate.check)
 		if err != nil {
 			return nil, fmt.Errorf("authorize command search kind %s: %w", strings.Join(candidate.kinds, "/"), err)
 		}
 		for _, kind := range candidate.kinds {
-			result[kind] = ok
+			result[kind] = result[kind] || ok
 		}
 	}
 	if !result["plugin"] {

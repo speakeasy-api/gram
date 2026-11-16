@@ -254,6 +254,7 @@ func marshalCommandsearchviewsCommandresourceindexitemViewToCommandresourceindex
 		ID:            *v.ID,
 		Name:          *v.Name,
 		RouteSelector: *v.RouteSelector,
+		CanWrite:      v.CanWrite,
 	}
 	if v.Keywords != nil {
 		res.Keywords = make([]string, len(v.Keywords))

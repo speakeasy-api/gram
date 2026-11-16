@@ -50,10 +50,13 @@ var ResourceIndexResult = ResultType("CommandResourceIndex", func() {
 })
 
 var ResourceIndexItem = ResultType("CommandResourceIndexItem", func() {
-	Attribute("kind", String, func() { Enum("assistant", "environment", "gateway", "mcp", "plugin", "rule", "skill") })
-	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("kind", String, func() {
+		Enum("agent_identity", "assistant", "environment", "gateway", "mcp", "person", "plugin", "rule", "skill")
+	})
+	Attribute("id", String)
 	Attribute("name", String)
 	Attribute("route_selector", String, "Canonical selector used by the dashboard route for this resource kind.")
 	Attribute("keywords", ArrayOf(String), "Compact alternate names used for local matching.")
+	Attribute("can_write", Boolean, "Whether the caller may change this resource; currently emitted only for registered agent identities.")
 	Required("kind", "id", "name", "route_selector")
 })

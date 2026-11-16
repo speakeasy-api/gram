@@ -27,6 +27,46 @@ WHERE organization_id = @organization_id
 ORDER BY CASE WHEN lower(name) = @lower_bound::text THEN 0 ELSE 2 END, name, id
 LIMIT @result_limit;
 
+-- name: ListCommandIndexPeople :many
+SELECT
+  u.id,
+  u.display_name,
+  u.email
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+  AND (
+    (LOWER(u.display_name) >= @lower_bound AND LOWER(u.display_name) < @lower_ceiling)
+    OR (LOWER(u.email) >= @lower_bound AND LOWER(u.email) < @lower_ceiling)
+  )
+ORDER BY CASE
+  WHEN LOWER(u.display_name) = @lower_bound OR LOWER(u.email) = @lower_bound THEN 0
+  WHEN LOWER(u.email) >= @lower_bound AND LOWER(u.email) < @lower_ceiling THEN 1
+  ELSE 2
+END, LOWER(COALESCE(NULLIF(u.display_name, ''), u.email)), u.id
+LIMIT @result_limit;
+
+-- name: ListCommandIndexAgentIdentities :many
+SELECT
+  id,
+  organization_id,
+  owner_user_id,
+  name,
+  owner_reassignment_required_at
+FROM agents
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND LOWER(name) >= @lower_bound
+  AND LOWER(name) < @lower_ceiling
+  AND (
+    sqlc.narg('cursor_name')::text IS NULL
+    OR (LOWER(name), id) > (sqlc.narg('cursor_name')::text, sqlc.narg('cursor_id')::uuid)
+  )
+ORDER BY LOWER(name), id
+LIMIT @result_limit;
+
 -- name: ListCommandIndexPlugins :many
 SELECT id, name, slug FROM plugins
 WHERE organization_id = @organization_id

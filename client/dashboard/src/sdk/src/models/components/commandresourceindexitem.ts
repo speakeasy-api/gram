@@ -11,10 +11,12 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export const CommandresourceindexitemKind = {
+  AgentIdentity: "agent_identity",
   Assistant: "assistant",
   Environment: "environment",
   Gateway: "gateway",
   Mcp: "mcp",
+  Person: "person",
   Plugin: "plugin",
   Rule: "rule",
   Skill: "skill",
@@ -24,6 +26,10 @@ export type CommandresourceindexitemKind = OpenEnum<
 >;
 
 export type Commandresourceindexitem = {
+  /**
+   * Whether the caller may change this resource; currently emitted only for registered agent identities.
+   */
+  canWrite?: boolean | undefined;
   id: string;
   /**
    * Compact alternate names used for local matching.
@@ -49,6 +55,7 @@ export const Commandresourceindexitem$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    can_write: z.optional(z.boolean()),
     id: z.string(),
     keywords: z.optional(z.array(z.string())),
     kind: CommandresourceindexitemKind$inboundSchema,
@@ -57,6 +64,7 @@ export const Commandresourceindexitem$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "can_write": "canWrite",
       "route_selector": "routeSelector",
     });
   }),

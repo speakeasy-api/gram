@@ -225,6 +225,9 @@ type CommandresourceindexitemResponseBody struct {
 	RouteSelector string `form:"route_selector" json:"route_selector" xml:"route_selector"`
 	// Compact alternate names used for local matching.
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// Whether the caller may change this resource; currently emitted only for
+	// registered agent identities.
+	CanWrite *bool `form:"can_write,omitempty" json:"can_write,omitempty" xml:"can_write,omitempty"`
 }
 
 // NewSearchResponseBody builds the HTTP response body from the result of the

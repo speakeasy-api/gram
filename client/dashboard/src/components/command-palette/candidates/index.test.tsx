@@ -1235,7 +1235,8 @@ describe("useMarketplaceCandidate", () => {
 });
 
 describe("usePersonCandidates", () => {
-  it("yields person candidates for org readers", () => {
+  it("yields person candidates for org readers in the organization shell", () => {
+    mocks.inProject = false;
     mocks.scopes = ["org:read"];
     mocks.members = [
       {
@@ -1645,7 +1646,6 @@ describe("useLauncherCandidates", () => {
       "gateway",
       "catalog",
       "rule",
-      "person",
       "project",
     ]);
   });
@@ -2028,7 +2028,7 @@ describe("new resource source wiring", () => {
     const { result } = renderCandidates();
     expect(result.current.some((c) => c.id === "skill:test")).toBe(true);
     expect(result.current.some((c) => c.id === "agent-identity:test")).toBe(
-      true,
+      false,
     );
     expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: true });
     expect(mocks.rbacCalls).toContainEqual({

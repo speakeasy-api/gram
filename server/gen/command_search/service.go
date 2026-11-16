@@ -71,6 +71,9 @@ type Commandresourceindexitem struct {
 	RouteSelector string
 	// Compact alternate names used for local matching.
 	Keywords []string
+	// Whether the caller may change this resource; currently emitted only for
+	// registered agent identities.
+	CanWrite *bool
 }
 
 // SearchPayload is the payload type of the commandSearch service search method.
@@ -235,7 +238,9 @@ func newCommandresourceindexView(res *Commandresourceindex) *commandsearchviews.
 // newCommandresourceindexitem converts projected type Commandresourceindexitem
 // to service type Commandresourceindexitem.
 func newCommandresourceindexitem(vres *commandsearchviews.CommandresourceindexitemView) *Commandresourceindexitem {
-	res := &Commandresourceindexitem{}
+	res := &Commandresourceindexitem{
+		CanWrite: vres.CanWrite,
+	}
 	if vres.Kind != nil {
 		res.Kind = *vres.Kind
 	}
@@ -266,6 +271,7 @@ func newCommandresourceindexitemView(res *Commandresourceindexitem) *commandsear
 		ID:            &res.ID,
 		Name:          &res.Name,
 		RouteSelector: &res.RouteSelector,
+		CanWrite:      res.CanWrite,
 	}
 	if res.Keywords != nil {
 		vres.Keywords = make([]string, len(res.Keywords))
@@ -288,6 +294,7 @@ func transformCommandsearchviewsCommandresourceindexitemViewToCommandresourceind
 		ID:            *v.ID,
 		Name:          *v.Name,
 		RouteSelector: *v.RouteSelector,
+		CanWrite:      v.CanWrite,
 	}
 	if v.Keywords != nil {
 		res.Keywords = make([]string, len(v.Keywords))
@@ -308,6 +315,7 @@ func transformCommandresourceindexitemToCommandsearchviewsCommandresourceindexit
 		ID:            &v.ID,
 		Name:          &v.Name,
 		RouteSelector: &v.RouteSelector,
+		CanWrite:      v.CanWrite,
 	}
 	if v.Keywords != nil {
 		res.Keywords = make([]string, len(v.Keywords))

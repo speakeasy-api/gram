@@ -27,6 +27,27 @@ func TestSearchQueriesUseScopedBoundedPrefixRanges(t *testing.T) {
 	}
 }
 
+func TestIdentitySearchQueriesAreOrganizationScopedPrefixRanges(t *testing.T) {
+	t.Parallel()
+
+	people := strings.ToLower(listCommandIndexPeople)
+	require.Contains(t, people, "our.organization_id = $1")
+	require.Contains(t, people, "our.deleted_at is null")
+	require.Contains(t, people, "u.deleted_at is null")
+	require.Contains(t, people, "lower(u.display_name) >=")
+	require.Contains(t, people, "lower(u.email) >=")
+	require.Contains(t, people, "limit $4")
+	require.NotContains(t, people, "project_id")
+
+	agents := strings.ToLower(listCommandIndexAgentIdentities)
+	require.Contains(t, agents, "organization_id = $1")
+	require.Contains(t, agents, "deleted is false")
+	require.Contains(t, agents, "lower(name) >=")
+	require.Contains(t, agents, "(lower(name), id) > ($4::text, $5::uuid)")
+	require.Contains(t, agents, "limit $6")
+	require.NotContains(t, agents, "project_id")
+}
+
 func TestMCPSearchRequiresDesignatedListableHost(t *testing.T) {
 	t.Parallel()
 
