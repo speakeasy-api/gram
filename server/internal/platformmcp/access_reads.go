@@ -775,7 +775,7 @@ func (s *AccessReadService) accessTools(ctx context.Context, row platformrepo.Ge
 				if tool == nil || tool.Name == "" {
 					continue
 				}
-				tools = append(tools, MCPAccessTool{Name: tool.Name, Disposition: conv.DispositionFromAnnotations(tool.Annotations)})
+				tools = append(tools, MCPAccessTool{Name: tool.Name, Disposition: annotationDisposition(tool.Annotations)})
 			}
 		}
 	case row.RemoteMcpServerID.Valid || row.TunneledMcpServerID.Valid:
@@ -791,7 +791,7 @@ func (s *AccessReadService) accessTools(ctx context.Context, row platformrepo.Ge
 		for _, tool := range rows {
 			tools = append(tools, MCPAccessTool{
 				Name: tool.ToolName,
-				Disposition: conv.DispositionFromAnnotations(conv.AnnotationsFromColumns(
+				Disposition: annotationDisposition(conv.AnnotationsFromColumns(
 					tool.ReadOnlyHint, tool.DestructiveHint, tool.IdempotentHint, tool.OpenWorldHint,
 				)),
 			})
@@ -1116,4 +1116,15 @@ func authClientRole(role *accessgen.Role) *accessgen.Role {
 
 func anyAuthClientRule(access []MCPRoleAuthClientAccess) bool {
 	return slices.ContainsFunc(access, func(a MCPRoleAuthClientAccess) bool { return a.Access != "not_granted" })
+}
+
+// annotationDisposition is the disposition a call to a tool with these
+// annotations carries.
+func annotationDisposition(a *types.ToolAnnotations) string {
+	if a == nil {
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
+	}
+	disposition, _ := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	return disposition
 }

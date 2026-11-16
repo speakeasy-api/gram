@@ -11,14 +11,13 @@ type MCPToolCallDimensions struct {
 }
 
 // MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
-// dims.ProjectID is required: evaluation rejects an MCP check without one.
+// dims.ProjectID is required: evaluation rejects an MCP check without one. An
+// empty dims.Disposition is a tool with no annotations and is carried as
+// DispositionUnannotated; classify with DispositionFromHints.
 func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
-	dimensions := map[string]string{}
+	dimensions := map[string]string{SelectorKeyDisposition: toolCallDisposition(dims.Disposition)}
 	if dims.Tool != "" {
 		dimensions[SelectorKeyTool] = dims.Tool
-	}
-	if dims.Disposition != "" {
-		dimensions[SelectorKeyDisposition] = dims.Disposition
 	}
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID
