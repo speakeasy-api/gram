@@ -1,6 +1,6 @@
 ---
 name: gram-rbac
-description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `RequireAny` / `RequireAnyUnblocked` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Project(p).Environments().Create()`, `authz.Check{...}` literals, `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck`, adding or changing a scope, permission, resource type, block or dimension in `authz.Model` (`registry_resources.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `registry_tables.golden.yaml`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
+description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `RequireAny` / `RequireAnyUnblocked` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Environments(p).Read()`, `authz.Check{...}` literals, `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck`, adding or changing a scope, permission, resource type, block or dimension in `authz.Model` (`registry_resources.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `registry_tables.golden.yaml`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
 metadata:
   relevant_files:
     - "server/internal/authz/**/*.go"
@@ -16,7 +16,7 @@ metadata:
 
 # Speakeasy RBAC
 
-The whole permission model is one Go value, `authz.Model` in `server/internal/authz/registry_resources.go`. The scope constants (`scopes_gen.go`), the typed request refs (`refs_gen.go`; the project collections and `ToolCall` are hand-written in `refs.go`), the expansion and block tables, the selector key allowlists, the scope catalogue, the scope enum in the Goa design and the `docs/rbac.md` scope table are all derived from it. One server-side evaluator, `authz.Engine`, is canonical. Two list queries still mirror most of its matching and precedence in SQL (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`); a change to matching or blocks must update them too, until the SQL prefilter replaces them. They are not exact mirrors: the skill list leaves out a skill whose only grant is `skill:write` blocked by `skill:blocked_write`, although the engine still allows `skill:read` on it (kept on purpose; see the query's comment). **Change the model, regenerate, and let the tests tell you what else moved.** Never hand-edit a derived table.
+The whole permission model is one Go value, `authz.Model` in `server/internal/authz/registry_resources.go`. The scope constants (`scopes_gen.go`), the typed request refs (`refs_gen.go`, including a project collection for `mcp`, `environment` and `assistant`; only `ToolCall` is hand-written in `refs.go`), the expansion and block tables, the selector key allowlists, the scope catalogue, the scope enum in the Goa design and the `docs/rbac.md` scope table are all derived from it. One server-side evaluator, `authz.Engine`, is canonical. Two list queries still mirror most of its matching and precedence in SQL (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`); a change to matching or blocks must update them too, until the SQL prefilter replaces them. They are not exact mirrors: the skill list leaves out a skill whose only grant is `skill:write` blocked by `skill:blocked_write`, although the engine still allows `skill:read` on it (kept on purpose; see the query's comment). **Change the model, regenerate, and let the tests tell you what else moved.** Never hand-edit a derived table.
 
 ## Mental model
 
@@ -37,11 +37,11 @@ The whole permission model is one Go value, `authz.Model` in `server/internal/au
 if err := s.authz.Require(ctx, authz.MCPServer(id, project).Write()); err != nil {
 	return err
 }
-// no resource yet (create), or a lookup that missed (do not leak existence)
-if err := s.authz.Require(ctx, authz.Project(p).Environments().Create()); err != nil {
+// no single resource to name (create), or a lookup that missed (do not leak existence); a list uses Read()
+if err := s.authz.Require(ctx, authz.Environments(p).Write()); err != nil {
 	return err
 }
-if err := s.authz.Require(ctx, authz.Project(p).Environments().Read()); err != nil {
+if err := s.authz.Require(ctx, authz.Environments(p).Read()); err != nil {
 	return err
 }
 // a project-wide grant OR a grant on the resource, and a block on either refuses
@@ -62,17 +62,17 @@ ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
 | Narrow a list                                    | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
 | MCP tool call                                    | `authz.MCPServer(id, p).ToolCall(tool, disposition)`. A tool with no annotations carries no disposition.                                                               |
 
-Ref constructors take each id as you hold it, a `uuid.UUID` or a string: `authz.Environment(env.ID, projectID)`. The argument order is always the resource, then its project. A project collection (`Project(p).Environments()`, `.MCPServers()`, `.Assistants()`) builds a check on the resource type whose resource id is the project id, exactly what `EnvironmentCheck(scope, p, p)` built before, so existing grants match it the same way and `Filter` returns the project id for it.
+Ref constructors take each id as you hold it, a `uuid.UUID` or a string: `authz.Environment(env.ID, projectID)`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, exactly what `EnvironmentCheck(scope, p, p)` built before, so existing grants match it the same way and `Filter` returns the project id for it.
 
 When migrating a package from the old constructors:
 
-| Before                                      | After                                                               |
-| ------------------------------------------- | ------------------------------------------------------------------- |
-| `EnvironmentCheck(s, envID, p)`             | `authz.Environment(envID, p).Read()` / `.Write()`                   |
-| `EnvironmentCheck(s, p, p)`                 | `authz.Project(p).Environments().Read()` / `.Write()` / `.Create()` |
-| `MCPCheck(ScopeMCPWrite, p, p)`             | `authz.Project(p).MCPServers().Create()`                            |
-| `AssistantCheck(ScopeAssistantWrite, p, p)` | `authz.Project(p).Assistants().Create()`                            |
-| `MCPToolCallCheck(...)`                     | `authz.MCPServer(id, p).ToolCall(tool, disposition)`                |
+| Before                                      | After                                                |
+| ------------------------------------------- | ---------------------------------------------------- |
+| `EnvironmentCheck(s, envID, p)`             | `authz.Environment(envID, p).Read()` / `.Write()`    |
+| `EnvironmentCheck(s, p, p)`                 | `authz.Environments(p).Read()` / `.Write()`          |
+| `MCPCheck(ScopeMCPWrite, p, p)`             | `authz.MCPServers(p).Write()`                        |
+| `AssistantCheck(ScopeAssistantWrite, p, p)` | `authz.Assistants(p).Write()`                        |
+| `MCPToolCallCheck(...)`                     | `authz.MCPServer(id, p).ToolCall(tool, disposition)` |
 
 Keep `Require` and its `CodeForbidden` branch where the code already has one. Swapping it for `Can` keeps enforcement the same but stops logging the challenge, so do that only where the denial is not a refusal the user sees.
 
