@@ -1313,8 +1313,9 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		}
 		// Surface-specificity merge: the OTEL path caches "cowork" from the
 		// resource service.name, which must survive this event's re-cache —
-		// cowork ships the same "claude-code-desktop" adapter slug as Claude
-		// Code Desktop, so the adapter alone can never downgrade it. See
+		// Cowork events from the desktop hook client carry no session.surface
+		// and ship the same "claude-code-desktop" adapter slug as Claude Code
+		// Desktop, so the adapter alone can never downgrade it. See
 		// claudeServiceNameSpecificity for the full ranking.
 		metadata.ServiceName = preferClaudeServiceName(metadata.ServiceName, cached.ServiceName)
 		metadata.Provider = cached.Provider
