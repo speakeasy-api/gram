@@ -208,7 +208,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	}
 	var checks []authz.Check
 	for _, server := range []string{serverA, serverB, serverC, serverD, uuid.NewString()} {
-		for _, project := range []string{projectA, projectB, ""} {
+		for _, project := range []string{projectA, projectB, uuid.NewString()} {
 			checks = append(checks, authz.MCPCheck(authz.ScopeMCPConnect, server, project))
 			for _, tool := range []string{"search", "deploy", "other"} {
 				for _, disposition := range []string{"", authz.DispositionReadOnly, authz.DispositionDestructive} {
