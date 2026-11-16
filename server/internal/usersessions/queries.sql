@@ -359,6 +359,7 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id::uuid
     SELECT 1 FROM projects AS client_project
     WHERE client_project.id = client.project_id
       AND client_project.organization_id = @organization_id::text
+      AND client_project.deleted IS FALSE
   ))
 ORDER BY client.id;
 
