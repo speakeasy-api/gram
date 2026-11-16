@@ -159,11 +159,6 @@ Done. The table records where each piece came from.
 | `pages/remote-identity-providers/ScopeBadge.tsx`      | `components/ScopeBadge.tsx`               |
 | `remoteSessionScopeTier` in `lib/sources.ts`          | `model/provider.ts`                       |
 
-`RemoteIdentitySummary` stayed in `components/mcp/McpDetailRows.tsx`.
-It is a rail-shaped composition of this module's parts rather than a part of
-its own, and it now reads the derivation from here instead of reaching five
-directories deep into a settings tab for it.
-
 ## How it landed
 
 The moves were mechanical and noisy, so they did not ride along with behaviour

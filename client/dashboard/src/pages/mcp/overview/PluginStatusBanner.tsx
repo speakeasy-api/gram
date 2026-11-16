@@ -496,7 +496,7 @@ function WritablePluginStatusBanner({
           </div>
           {/* Unpublished, the story is the subtitle; once published the
               subtitle lists the plugins, and the story follows it. */}
-          {memberPlugins.length > 0 ? (
+          {isTrulyPublished ? (
             <Text
               variant="small"
               className="text-muted-foreground/90 max-w-xl pl-6"

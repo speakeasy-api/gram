@@ -102,7 +102,6 @@ vi.mock("@/lib/remote-identity", () => ({
   useUpstreamProbe: () => "unknown",
   deriveIdentityMode: () => "none",
   findPassThroughAuthorizationHeader: () => undefined,
-  IdentityExplainerDialog: () => null,
 }));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({ data: state.server ?? REMOTE_SERVER }),
