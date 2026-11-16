@@ -105,6 +105,9 @@ var noRawAuthzChecksPackages = []string{
 	"github.com/speakeasy-api/gram/server/internal/modelkeys",
 	"github.com/speakeasy-api/gram/server/internal/litellm",
 	"github.com/speakeasy-api/gram/server/internal/otel",
+	"github.com/speakeasy-api/gram/server/internal/projects",
+	"github.com/speakeasy-api/gram/server/internal/keys",
+	"github.com/speakeasy-api/gram/server/cmd/gram",
 }
 
 // noRawAuthzCheckConstructors are the authz constructors a typed ref
