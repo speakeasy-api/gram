@@ -30,9 +30,9 @@ const (
 	// load; 30s covers that without letting abandoned work pile up.
 	legacyClaudeHookDetachedDecisionTimeout = 30 * time.Second
 
-	// hooksFailOpenLookupTimeout bounds the posture read that runs alongside
-	// the handler. The read is normally a cache hit; a slow one fails closed
-	// instead of delaying the fallback.
+	// hooksFailOpenLookupTimeout bounds the posture read after the budget
+	// fires. The read is normally a cache hit; a slow one must not use up the
+	// headroom the budget leaves for the client.
 	hooksFailOpenLookupTimeout = time.Second
 )
 
@@ -68,21 +68,13 @@ type claudeHookVerdict struct {
 // The handler runs on a detached context either way, so an overrun handler
 // still finishes its scan and telemetry after the response is sent, then logs
 // the verdict it would have returned. The event itself is persisted before
-// dispatch (recordHook), so an overrun never drops it. The posture is read
-// alongside the handler, so the fallback can claim the answer, and mark a
-// pass-through superseded, as soon as the budget fires.
+// dispatch (recordHook), so an overrun never drops it.
 func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog.Logger, start time.Time, hookEvent any, hookEventName string) (*gen.ClaudeHookResult, bool, error) {
 	ctx, superseded := withVerdictSupersededFlag(ctx)
 	// answered goes to whichever side responds: the handler's verdict or the
 	// budget fallback. Exactly one side wins it.
 	answered := new(atomic.Bool)
 	verdicts := make(chan claudeHookVerdict, 1)
-
-	noun, organizationID, blockable := claudeBlockableEvent(hookEvent)
-	postures := make(chan bool, 1)
-	s.claudeDecisionDrains.Go(func() {
-		postures <- !blockable || s.hooksFailOpen(ctx, organizationID)
-	})
 
 	decisionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), legacyClaudeHookDetachedDecisionTimeout)
 	s.claudeDecisionDrains.Go(func() {
@@ -111,10 +103,10 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 	case <-budget.C:
 	}
 
-	// The read started with the handler, so it is normally done by now.
-	failOpen := <-postures
+	noun, organizationID, blockable := claudeBlockableEvent(hookEvent)
+	failOpen := !blockable || s.hooksFailOpen(ctx, organizationID)
 	if !answered.CompareAndSwap(false, true) {
-		// The verdict landed while the fallback waited on the posture, so it still answers.
+		// The verdict landed while the posture was read, so it still answers.
 		verdict := <-verdicts
 		return verdict.result, false, verdict.err
 	}
@@ -166,28 +158,26 @@ func claudeBudgetFallback(hookEventName, noun string, failOpen bool) *gen.Claude
 	))
 }
 
-// hooksFailOpen reports whether the organization's hooks fail-open setting,
-// the posture the hooks binary mirrors from the ingest response's org
-// settings, is known to be on. The read is detached from the request and
-// bounded by hooksFailOpenLookupTimeout. An unknown organization, a missing
-// feature client or a failed read leaves the posture unresolved and fails
-// closed: the organization may have chosen to block unverified events, and the
-// shadow-MCP guard can deny a tool call even when the request carries no
-// organization.
+// hooksFailOpen reads the organization's hooks fail-open setting, the posture
+// the hooks binary mirrors from the ingest response's org settings. The read
+// is detached from the request and bounded by hooksFailOpenLookupTimeout. An
+// unknown organization, a missing feature client or a failed read resolves to
+// fail-open, the default for new organizations, which matches how the session
+// quarantine gate treats an unreadable setting.
 func (s *Service) hooksFailOpen(ctx context.Context, organizationID string) bool {
 	if organizationID == "" || s.productFeatures == nil {
-		return false
+		return true
 	}
 	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hooksFailOpenLookupTimeout)
 	defer cancel()
 	failOpen, err := s.productFeatures.IsFeatureEnabled(lookupCtx, organizationID, productfeatures.FeatureHooksFailOpen)
 	if err != nil {
-		s.logger.WarnContext(ctx, "read hooks fail-open setting; failing closed",
+		s.logger.WarnContext(ctx, "read hooks fail-open setting; failing open",
 			attr.SlogEvent("claude_hook_fail_open_lookup_failed"),
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 		)
-		return false
+		return true
 	}
 	return failOpen
 }
