@@ -137,6 +137,8 @@ func (n NetworkIngressResourceNames) Validate() error {
 	if err != nil {
 		return err
 	}
+	// The runtime comes from the row, not the owner id, so it is not compared.
+	expected.Runtime = n.Runtime
 	if n != expected {
 		return fmt.Errorf("%w: resource identities do not match owner", ErrNetworkIngressInvalidDesiredState)
 	}
