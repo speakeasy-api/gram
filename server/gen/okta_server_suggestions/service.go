@@ -21,15 +21,13 @@ import (
 // audited.
 type Service interface {
 	// List the catalog servers suggested from the Okta applications snapshot.
-	// Requires org:admin, the okta-connections rollout and a verified identity
-	// provider connection.
+	// Requires org:admin and a verified identity provider connection.
 	List(context.Context, *ListPayload) (res *ListOktaServerSuggestionsResult, err error)
 	// Dismiss a suggestion currently made to the organization. Remembered until
-	// restored, even across Okta reconnects. Requires org:admin and the
-	// okta-connections rollout.
+	// restored, even across Okta reconnects. Requires org:admin.
 	Dismiss(context.Context, *DismissPayload) (res *OktaServerSuggestion, err error)
 	// Restore a dismissed suggestion currently made to the organization. Requires
-	// org:admin and the okta-connections rollout.
+	// org:admin.
 	Restore(context.Context, *RestorePayload) (res *OktaServerSuggestion, err error)
 }
 

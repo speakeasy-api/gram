@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -33,6 +34,7 @@ func TestMCPConnectionMutationToolsHaveSameInputSchemaWhenUnavailable(t *testing
 	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "connection-mutation-unavailable", Version: "0.0.1"}, nil))
 	registerMCPConnectionMutationTools(live, &MCPConnectionMutationService{})
 	registerMCPConnectionMutationTools(unavailable, nil)
+	unavailable.withProjects(slugProjects{"project": uuid.New()})
 
 	for _, name := range []string{setMCPAddressToolName, setMCPNetworkAccessToolName} {
 		liveDescriptor := descriptorByName(t, live, name)
@@ -45,11 +47,11 @@ func TestMCPConnectionMutationToolsHaveSameInputSchemaWhenUnavailable(t *testing
 		require.Contains(t, liveDescriptor.Description, "requests publication", name)
 		require.Contains(t, liveDescriptor.Description, "not that publication", name)
 		require.Contains(t, unavailableDescriptor.Description, "requests publication", name)
-		args := []byte(`{"project_id":"project","target_kind":"mcp_server","target_id":"target","slug":"slug","expected_version":"version","idempotency_key":"key","confirmed":true}`)
+		args := []byte(`{"project_slug":"project","target_kind":"mcp_server","target_id":"target","slug":"slug","expected_version":"version","idempotency_key":"key","confirmed":true}`)
 		if name == setMCPNetworkAccessToolName {
-			args = []byte(`{"project_id":"project","target_kind":"mcp_server","target_id":"target","mode":"private_only","expected_version":"version","idempotency_key":"key","confirmed":true}`)
+			args = []byte(`{"project_slug":"project","target_kind":"mcp_server","target_id":"target","mode":"private_only","expected_version":"version","idempotency_key":"key","confirmed":true}`)
 		}
-		_, err := unavailableDescriptor.Invoke(t.Context(), args)
+		_, err := unavailableDescriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), args)
 		var refusal *ToolRefusalError
 		require.ErrorAs(t, err, &refusal, name)
 		require.Equal(t, unavailableCode, refusal.Code, name)

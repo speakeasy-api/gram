@@ -214,6 +214,8 @@ func TestWorkloadOwnerEffectiveExclusionsAndDirectPrecedence(t *testing.T) {
 	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
 	seedGrant(t, t.Context(), f.db, f.organizationID, agent, authz.ScopeMCPWrite, "*")
 	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), authz.ScopeMCPWrite, "*")
+	seedGrant(t, t.Context(), f.db, f.organizationID, agent, authz.ScopeMCPConnect, "*")
+	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), authz.ScopeMCPConnect, "*")
 	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), authz.ScopeMCPBlockedConnect, "selected-server")
 	policy, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
 	require.NoError(t, err)
@@ -226,8 +228,8 @@ func TestWorkloadOwnerEffectiveExclusionsAndDirectPrecedence(t *testing.T) {
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, actor, contextvalues.PrincipalCredential{
 		DelegatedGrants: raw, DelegatedGrantsVersion: int32(CurrentDelegatedPolicyVersion),
 	})
-	selected := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "selected-server"}
-	other := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "other-server"}
+	selected := authz.MCPCheck(authz.ScopeMCPConnect, "selected-server", f.projectID)
+	other := authz.MCPCheck(authz.ScopeMCPConnect, "other-server", f.projectID)
 	prepared, err := f.engine.PrepareContext(ctx)
 	require.NoError(t, err)
 	requireRuntimeForbidden(t, f.engine, prepared, selected)

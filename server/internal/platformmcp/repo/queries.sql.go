@@ -1952,7 +1952,9 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 }
 
 const getPlatformChatSearchChat = `-- name: GetPlatformChatSearchChat :one
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, c.agent_id,
+       (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id IS NOT NULL)::boolean AS agent_only,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
@@ -1968,16 +1970,22 @@ type GetPlatformChatSearchChatParams struct {
 type GetPlatformChatSearchChatRow struct {
 	ID               uuid.UUID
 	OwnerUserID      string
+	AgentID          uuid.NullUUID
+	AgentOnly        bool
 	Title            string
 	TitleManuallySet bool
 }
 
+// agent_only is the shape the search predicate above admits for an owner: a NULL
+// user_id, not the empty string UpsertChat leaves on a demoted mixed session.
 func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
 	var i GetPlatformChatSearchChatRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerUserID,
+		&i.AgentID,
+		&i.AgentOnly,
 		&i.Title,
 		&i.TitleManuallySet,
 	)
@@ -2325,28 +2333,6 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Cont
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const getPlatformMCPCatalogRegistrationProject = `-- name: GetPlatformMCPCatalogRegistrationProject :one
-SELECT project_id
-FROM platform_mcp_catalog_registrations
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-`
-
-type GetPlatformMCPCatalogRegistrationProjectParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// The project a live registration belongs to, so a caller can name the
-// server it added by registration ID alone.
-func (q *Queries) GetPlatformMCPCatalogRegistrationProject(ctx context.Context, arg GetPlatformMCPCatalogRegistrationProjectParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPCatalogRegistrationProject, arg.ID, arg.OrganizationID)
-	var project_id uuid.UUID
-	err := row.Scan(&project_id)
-	return project_id, err
 }
 
 const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
@@ -3705,6 +3691,96 @@ func (q *Queries) GetPlatformMCPServer(ctx context.Context, arg GetPlatformMCPSe
 		&i.Slug,
 		&i.Visibility,
 	)
+	return i, err
+}
+
+const getPlatformMCPServerProject = `-- name: GetPlatformMCPServerProject :one
+SELECT m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.id = $2
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerProjectParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+// The live project a live MCP server belongs to, so a caller can name a
+// server by its ID alone.
+func (q *Queries) GetPlatformMCPServerProject(ctx context.Context, arg GetPlatformMCPServerProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerProject, arg.OrganizationID, arg.McpServerID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
+const getPlatformMCPServerRegistrationForCaller = `-- name: GetPlatformMCPServerRegistrationForCaller :one
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(
+        registration.user_id = $1
+        OR (registration.user_id IS NULL AND created_connection.subject_urn = $2),
+        FALSE
+    )::boolean AS added_by_caller
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $3
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.user_id, registration.connection_id
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = $3
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN platform_mcp_connections AS created_connection
+  ON created_connection.id = registration.connection_id
+ AND created_connection.organization_id = $3
+WHERE m.id = $4
+  AND m.project_id = $5
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerRegistrationForCallerParams struct {
+	UserID         pgtype.Text
+	SubjectUrn     string
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPServerRegistrationForCallerRow struct {
+	McpServerID    uuid.UUID
+	RegistrationID uuid.UUID
+	AddedByCaller  bool
+}
+
+// The Platform setup record behind an MCP server named by its ID: the newest
+// live registration of that server, as GetPlatformMCPInventoryItem picks it.
+// registration_id is the nil UUID when the server was not added through
+// Platform setup. added_by_caller applies the same ownership rule as
+// GetPlatformMCPCatalogRegistrationForLifecycle, so a refusal can say the
+// server belongs to another member instead of calling it unknown.
+func (q *Queries) GetPlatformMCPServerRegistrationForCaller(ctx context.Context, arg GetPlatformMCPServerRegistrationForCallerParams) (GetPlatformMCPServerRegistrationForCallerRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerRegistrationForCaller,
+		arg.UserID,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	var i GetPlatformMCPServerRegistrationForCallerRow
+	err := row.Scan(&i.McpServerID, &i.RegistrationID, &i.AddedByCaller)
 	return i, err
 }
 
@@ -9115,32 +9191,37 @@ WHERE m.project_id = $1::uuid
   AND c.deleted IS FALSE AND p.deleted IS FALSE
   AND m.created_at >= $3 AND m.created_at < $4
   AND (cardinality($5::uuid[]) = 0 OR m.chat_id = ANY($5::uuid[]))
-  AND ($6::text = '' OR c.user_id = $6)
-  AND ($7::text = '' OR m.source = $7)
-  AND ($8::text = ''
-       OR (octet_length(m.content) <= 131072 AND m.content ILIKE $8 ESCAPE '\')
-       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $8 ESCAPE '\')
-       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $8 ESCAPE '\')
-       OR c.title ILIKE $8 ESCAPE '\'
+  -- Own-scope visibility for a member without chat:read, the predicate the chat
+  -- ListChats query applies: their sessions plus agent-only sessions of agents
+  -- they own. Every other filter only narrows it further.
+  AND ($6::text = '' OR c.user_id = $6
+       OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($7::uuid[])))
+  AND ($8::text = '' OR c.user_id = $8)
+  AND ($9::text = '' OR m.source = $9)
+  AND ($10::text = ''
+       OR (octet_length(m.content) <= 131072 AND m.content ILIKE $10 ESCAPE '\')
+       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $10 ESCAPE '\')
+       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $10 ESCAPE '\')
+       OR c.title ILIKE $10 ESCAPE '\'
        -- A stored cron envelope is shown as "Cron: <job name>" (chattitle.Display),
        -- so a search for the shown title matches it too.
        OR (NOT c.title_manually_set
-           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE $8 ESCAPE '\'))
-  AND ($9::text = ''
-       OR ($10::text = '' AND m.user_id = $9)
+           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE $10 ESCAPE '\'))
+  AND ($11::text = ''
+       OR ($12::text = '' AND m.user_id = $11)
        OR EXISTS (
          SELECT 1 FROM chat_message_participants cp
          WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
-           AND (cp.user_id = $9 OR cp.provider_user_id = $9)
-           AND ($10 = '' OR cp.provider = $10)))
-  AND (NOT $11::boolean
-       OR ($12::boolean AND (m.created_at, m.id) > ($13::timestamptz, $14::uuid))
-       OR (NOT $12 AND (m.created_at, m.id) < ($13, $14)))
-ORDER BY CASE WHEN $12 THEN m.created_at END ASC,
-         CASE WHEN $12 THEN m.id END ASC,
-         CASE WHEN NOT $12 THEN m.created_at END DESC,
-         CASE WHEN NOT $12 THEN m.id END DESC
-LIMIT $15::integer
+           AND (cp.user_id = $11 OR cp.provider_user_id = $11)
+           AND ($12 = '' OR cp.provider = $12)))
+  AND (NOT $13::boolean
+       OR ($14::boolean AND (m.created_at, m.id) > ($15::timestamptz, $16::uuid))
+       OR (NOT $14 AND (m.created_at, m.id) < ($15, $16)))
+ORDER BY CASE WHEN $14 THEN m.created_at END ASC,
+         CASE WHEN $14 THEN m.id END ASC,
+         CASE WHEN NOT $14 THEN m.created_at END DESC,
+         CASE WHEN NOT $14 THEN m.id END DESC
+LIMIT $17::integer
 `
 
 type SearchPlatformChatMessagesParams struct {
@@ -9149,6 +9230,8 @@ type SearchPlatformChatMessagesParams struct {
 	FromTime            pgtype.Timestamptz
 	ToTime              pgtype.Timestamptz
 	ChatIds             []uuid.UUID
+	OwnUserID           string
+	OwnedAgentIds       []uuid.UUID
 	OwnerUserID         string
 	Source              string
 	Pattern             string
@@ -9189,6 +9272,8 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 		arg.FromTime,
 		arg.ToTime,
 		arg.ChatIds,
+		arg.OwnUserID,
+		arg.OwnedAgentIds,
 		arg.OwnerUserID,
 		arg.Source,
 		arg.Pattern,

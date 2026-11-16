@@ -19,7 +19,6 @@ type Client struct {
 	ListAssistantsEndpoint            goa.Endpoint
 	GetAssistantEndpoint              goa.Endpoint
 	CreateAssistantEndpoint           goa.Endpoint
-	UpgradeAssistantIdentityEndpoint  goa.Endpoint
 	UpdateAssistantEndpoint           goa.Endpoint
 	DeleteAssistantEndpoint           goa.Endpoint
 	SendMessageEndpoint               goa.Endpoint
@@ -31,12 +30,11 @@ type Client struct {
 }
 
 // NewClient initializes a "assistants" service client given the endpoints.
-func NewClient(listAssistants, getAssistant, createAssistant, upgradeAssistantIdentity, updateAssistant, deleteAssistant, sendMessage, interruptTurn, getManagedAssistant, ensureManagedAssistant, listExecutionProfiles, setExecutionProfileChoice goa.Endpoint) *Client {
+func NewClient(listAssistants, getAssistant, createAssistant, updateAssistant, deleteAssistant, sendMessage, interruptTurn, getManagedAssistant, ensureManagedAssistant, listExecutionProfiles, setExecutionProfileChoice goa.Endpoint) *Client {
 	return &Client{
 		ListAssistantsEndpoint:            listAssistants,
 		GetAssistantEndpoint:              getAssistant,
 		CreateAssistantEndpoint:           createAssistant,
-		UpgradeAssistantIdentityEndpoint:  upgradeAssistantIdentity,
 		UpdateAssistantEndpoint:           updateAssistant,
 		DeleteAssistantEndpoint:           deleteAssistant,
 		SendMessageEndpoint:               sendMessage,
@@ -110,29 +108,6 @@ func (c *Client) GetAssistant(ctx context.Context, p *GetAssistantPayload) (res 
 func (c *Client) CreateAssistant(ctx context.Context, p *CreateAssistantPayload) (res *types.Assistant, err error) {
 	var ires any
 	ires, err = c.CreateAssistantEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.Assistant), nil
-}
-
-// UpgradeAssistantIdentity calls the "upgradeAssistantIdentity" endpoint of
-// the "assistants" service.
-// UpgradeAssistantIdentity may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) UpgradeAssistantIdentity(ctx context.Context, p *UpgradeAssistantIdentityPayload) (res *types.Assistant, err error) {
-	var ires any
-	ires, err = c.UpgradeAssistantIdentityEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

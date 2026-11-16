@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -29,12 +30,17 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 			db, err := infra.CloneTestDatabase(t, "testdb")
 			require.NoError(t, err)
 
+			// The second run starts with upstream auth already enforced, which
+			// is the state a daily reseed of the demo org runs in.
 			seedLocalPostgres(ctx, t, db, spec)
+			enforced, err := authenforcement.ReadEnforced(ctx, db, spec.OrgID)
+			require.NoError(t, err)
+			require.True(t, enforced, "the seed must enforce upstream auth")
 			seedLocalPostgres(ctx, t, db, spec)
 
 			require.NoError(t, upstreamAuthReadiness(ctx, testenv.NewLogger(t), db, spec.OrgID))
 
-			clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
+			clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0, TypedOnly: true})
 			require.NoError(t, err)
 			require.NotEmpty(t, clients.Results, "the seed records no typed auth clients; readiness is vacuous")
 			for _, result := range clients.Results {
@@ -60,7 +66,7 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 // shared token. Each agent attachment grant is bound to the agent's owner and
 // the attachment's upstream client.
 func expectedSeedAuthGrants() []string {
-	sharedClients := []string{"Static credential", "Your own GitHub token", "Engineering automation token", "Acme Wiki", "Acme Tracker"}
+	sharedClients := []string{"Static credential", "Shared service token", "Acme Wiki", "Acme Tracker"}
 	var out []string
 	shared := func(principal, kind string, clients ...string) {
 		for _, client := range clients {
@@ -71,22 +77,24 @@ func expectedSeedAuthGrants() []string {
 		out = append(out, principal+" | mcp:auth | * | type=remote_session | owner=$represented_user | upstream= | personal_default")
 	}
 	attachment := func(principal, owner string) {
-		out = append(out, fmt.Sprintf("%s | mcp:auth | * | type=remote_session | owner=%s | upstream=attachment-client | attachment", principal, owner))
+		out = append(out, fmt.Sprintf("%s | mcp:auth | * | type=remote_session | owner=%s | upstream=linear-client | attachment", principal, owner))
 	}
 
-	for _, role := range []string{"analyst", "collaborator", "environment-manager", "read-only-tools", "temporary-escalation"} {
+	// Environment Manager holds mcp:read without mcp:connect, so it reaches no
+	// server and is owed no shared client.
+	for _, role := range []string{"analyst", "collaborator", "read-only-tools", "temporary-escalation"} {
 		shared("role "+role, "shared_client", sharedClients...)
 	}
-	shared("role engineer", "shared_client", "Static credential", "Your own GitHub token", "Acme Wiki", "Acme Tracker")
-	shared("role engineer", "", "Engineering automation token")
+	shared("role engineer", "shared_client", "Static credential", "Acme Wiki", "Acme Tracker")
+	shared("role engineer", "", "Shared service token")
 	shared("role support-desk", "shared_client", "Static credential")
-	out = append(out, "role contractors | mcp:blocked_auth | Engineering automation token | type= | owner= | upstream= | ")
+	out = append(out, "role contractors | mcp:blocked_auth | Shared service token | type= | owner= | upstream= | ")
 	personal("role automation-agent")
 	personal("role read-only-tools")
 
 	personal("user:all")
 	shared("user mateo", "shared_client", sharedClients...)
-	shared("user priya", "shared_client", "Your own GitHub token", "Engineering automation token")
+	shared("user priya", "shared_client", "Static credential")
 
 	personal("agent Identity-bound assistant agent")
 	shared("agent Identity-bound assistant agent", "shared_client", sharedClients...)
@@ -96,7 +104,7 @@ func expectedSeedAuthGrants() []string {
 	} {
 		personal("agent " + agent.name)
 		attachment("agent "+agent.name, agent.owner)
-		shared("agent "+agent.name, "shared_client", "Engineering automation token")
+		shared("agent "+agent.name, "shared_client", "Shared service token")
 	}
 	return out
 }
@@ -114,8 +122,8 @@ func authGrantLabel(s *seeder, g testrepo.ListDemoSeedAuthGrantsFixtureRow) stri
 		principal = "user " + strings.TrimPrefix(principal, "user:"+s.spec.UserPrefix)
 	}
 	upstream := g.UpstreamClient
-	if upstream == s.det("attachment-client").String() {
-		upstream = "attachment-client"
+	if upstream == s.det("remote-identity-client-linear").String() {
+		upstream = "linear-client"
 	}
 	return fmt.Sprintf("%s | %s | %s | type=%s | owner=%s | upstream=%s | %s",
 		principal, g.Scope, g.AuthClient, g.ClientType, strings.TrimPrefix(g.ConnectionOwner, s.spec.UserPrefix), upstream, g.ProvisionKind)

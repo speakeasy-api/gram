@@ -99,8 +99,9 @@ var redactedQueryParams = map[string]bool{
 	// agents that still append `?email=` (current agents send a header).
 	"email": true,
 
-	// Chat search terms, which are user-typed free text.
+	// Search terms, which are user-typed free text and may contain resource names.
 	"search": true,
+	"q":      true,
 
 	// Product analytics session id forwarded by the sign-up page on
 	// auth.login. It joins a browser session (and its replay) to an identified
@@ -346,6 +347,10 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			filtered := conv.Default(rw.Header().Get(constants.HeaderFilteredResponse), "0")
 			if ok, err := strconv.ParseBool(filtered); err == nil && ok {
 				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseFiltered(true))
+			}
+
+			if encoding := rw.Header().Get(constants.HeaderContentEncoding); encoding != "" {
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseHeaderContentEncoding(encoding))
 			}
 
 			wide.Push(ctx, responseAttrs...)

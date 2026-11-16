@@ -16,12 +16,15 @@ import (
 // through every branch of evaluateCanonicalHook.
 type blockEffectCollector struct {
 	effect *wire.BlockEffect
+	// ask turns the deny into an "ask": the client asks the person to allow
+	// the call in its own permission prompt (Claude Cowork tool calls).
+	ask bool
 }
 
 type blockEffectCollectorKey struct{}
 
 func withBlockEffectCollector(ctx context.Context) (context.Context, *blockEffectCollector) {
-	collector := &blockEffectCollector{effect: nil}
+	collector := &blockEffectCollector{effect: nil, ask: false}
 	return context.WithValue(ctx, blockEffectCollectorKey{}, collector), collector
 }
 
@@ -30,6 +33,13 @@ func withBlockEffectCollector(ctx context.Context) (context.Context, *blockEffec
 func setBlockEffect(ctx context.Context, effect wire.BlockEffect) {
 	if collector, ok := ctx.Value(blockEffectCollectorKey{}).(*blockEffectCollector); ok {
 		collector.effect = &effect
+	}
+}
+
+// setAskDecision answers the current event with "ask" instead of "deny".
+func setAskDecision(ctx context.Context) {
+	if collector, ok := ctx.Value(blockEffectCollectorKey{}).(*blockEffectCollector); ok {
+		collector.ask = true
 	}
 }
 

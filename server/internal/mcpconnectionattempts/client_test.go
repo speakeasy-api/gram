@@ -13,6 +13,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -144,9 +145,8 @@ func TestRecorder_StoresTheReportedClient(t *testing.T) {
 	recorder := NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, WithDeviceKeys(keys))
 	scope := testScope()
 	attempt := Begin(scope)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := requestWithClientIP("203.0.113.9")
 	req.Header.Set("User-Agent", "python-httpx/0.28.1")
-	req.Header.Set("X-Forwarded-For", "203.0.113.9")
 
 	recorder.Once(t.Context(), scope, StepMCPRequest, CodeProviderServerError, FromRequest(req), ReportedClient(func() (string, string) { return "claude-code", "2.4.0" }))
 	recorder.End(t.Context(), attempt, StepMCPRequest, CodeProviderServerError, ReportedClient(func() (string, string) { return "claude-code", "2.4.0" }), FromRequest(req))
@@ -413,10 +413,13 @@ func TestFromRequest_HostileHeadersNeverPanic(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header["User-Agent"] = []string{value}
 		req.Header["X-Forwarded-For"] = []string{value}
+		req.Header["X-Client-Ip"] = []string{value}
+		req.RemoteAddr = ""
+		req = req.WithContext(requestip.WithContext(req.Context(), requestip.Resolve(req)))
 		row, err := RowAt(Begin(testScope()), StepMCPRequest, ResultAllowed, false, time.Now(), FromRequest(req))
 		require.NoError(t, err)
 		require.LessOrEqual(t, len(row.client.userAgent), maxUserAgentBytes)
-		require.LessOrEqual(t, len(row.client.forwardedFor), maxForwardedForBytes)
+		require.Empty(t, row.client.ipAddress, "hostile headers must not be retained")
 
 		recorder.stampClient(&row)
 		requireBoundedClient(t, row.ClientFamily, row.ClientVersion)

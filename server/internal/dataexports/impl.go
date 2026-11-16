@@ -42,6 +42,7 @@ type Service struct {
 	authz      *authz.Engine
 	audit      *audit.Logger
 	encryption *encryption.Client
+	routeTests *RouteTestCore
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -55,6 +56,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
+	routeTests *RouteTestCore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("dataexports.api"))
 	return &Service{
@@ -65,6 +67,7 @@ func NewService(
 		authz:      authzEngine,
 		audit:      auditLogger,
 		encryption: encryptionClient,
+		routeTests: routeTests,
 	}
 }
 
@@ -131,7 +134,7 @@ func (s *Service) ListForOrg(ctx context.Context, _ *gen.ListForOrgPayload) (*ge
 	}
 	routes := make([]*gen.DataExportRoute, 0, len(routeRows))
 	for _, row := range routeRows {
-		routes = append(routes, buildDataExportRouteView(row))
+		routes = append(routes, buildDataExportRouteView(row.DataExportRoute, conv.PtrEmpty(RouteMinSeverity(row.DataExportRoute.DataSource, row.MinSeverity))))
 	}
 
 	return &gen.ListDataExportsForOrgResult{
@@ -497,7 +500,8 @@ func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*ge
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
-	rows, err := repo.New(s.db).ListDataExportRoutes(ctx, repo.ListDataExportRoutesParams{
+	queries := repo.New(s.db)
+	rows, err := queries.ListDataExportRoutes(ctx, repo.ListDataExportRoutesParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 	})
@@ -507,7 +511,7 @@ func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*ge
 
 	result := &gen.ListDataExportRoutesResult{Routes: make([]*gen.DataExportRoute, 0, len(rows))}
 	for _, row := range rows {
-		result.Routes = append(result.Routes, buildDataExportRouteView(row))
+		result.Routes = append(result.Routes, buildDataExportRouteView(row.DataExportRoute, conv.PtrEmpty(RouteMinSeverity(row.DataExportRoute.DataSource, row.MinSeverity))))
 	}
 	return result, nil
 }
@@ -524,6 +528,14 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 	source, err := NormalizeDataSource(payload.DataSource)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
+	}
+	var minSeverity *string
+	if payload.MinSeverity != nil {
+		level, err := NormalizeMinSeverity(source, *payload.MinSeverity)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "%s", err.Error())
+		}
+		minSeverity = &level
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	dbtx, err := s.db.Begin(ctx)
@@ -551,6 +563,10 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create data export route").LogError(ctx, logger)
 	}
+	routeLevel, err := s.writeRouteMinSeverity(ctx, queries, authCtx, row, minSeverity)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := s.audit.LogDataExportRouteCreate(ctx, dbtx, audit.LogDataExportRouteCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -560,13 +576,14 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 		ActorSlug:        nil,
 		RouteURN:         urn.NewDataExportRoute(row.ID),
 		DataSource:       row.DataSource,
+		RouteSnapshot:    routeSnapshot(row, routeLevel),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log data export route creation").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit data export route creation").LogError(ctx, logger)
 	}
-	return buildDataExportRouteView(row), nil
+	return buildDataExportRouteView(row, routeLevel), nil
 }
 
 func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePayload) (*gen.DataExportRoute, error) {
@@ -585,6 +602,14 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	source, err := NormalizeDataSource(payload.DataSource)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
+	}
+	var minSeverity *string
+	if payload.MinSeverity != nil {
+		level, err := NormalizeMinSeverity(source, *payload.MinSeverity)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "%s", err.Error())
+		}
+		minSeverity = &level
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	dbtx, err := s.db.Begin(ctx)
@@ -610,6 +635,20 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	if err != nil {
 		return nil, err
 	}
+	beforeLevel, err := s.readRouteMinSeverity(ctx, queries, authCtx, before)
+	if err != nil {
+		return nil, err
+	}
+	// The settings foreign key pins the data source, so they go before the route moves off it.
+	if before.DataSource == DataSourceMCPConnectionLogs && source != DataSourceMCPConnectionLogs {
+		if err := queries.DeleteMCPConnectionLogRouteSettings(ctx, repo.DeleteMCPConnectionLogRouteSettingsParams{
+			OrganizationID:    authCtx.ActiveOrganizationID,
+			ProjectID:         *authCtx.ProjectID,
+			DataExportRouteID: before.ID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "remove MCP connection log settings").LogError(ctx, logger)
+		}
+	}
 	after, err := queries.UpdateDataExportRoute(ctx, repo.UpdateDataExportRouteParams{
 		DataSource:        source,
 		Enabled:           payload.Enabled,
@@ -625,9 +664,11 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update data export route").LogError(ctx, logger)
 	}
+	afterLevel, err := s.writeRouteMinSeverity(ctx, queries, authCtx, after, minSeverity)
+	if err != nil {
+		return nil, err
+	}
 
-	beforeSnapshot := routeSnapshot(before)
-	afterSnapshot := routeSnapshot(after)
 	if err := s.audit.LogDataExportRouteUpdate(ctx, dbtx, audit.LogDataExportRouteUpdateEvent{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
@@ -636,15 +677,15 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 		ActorSlug:           nil,
 		RouteURN:            urn.NewDataExportRoute(after.ID),
 		DataSource:          after.DataSource,
-		RouteSnapshotBefore: beforeSnapshot,
-		RouteSnapshotAfter:  afterSnapshot,
+		RouteSnapshotBefore: routeSnapshot(before, beforeLevel),
+		RouteSnapshotAfter:  routeSnapshot(after, afterLevel),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log data export route update").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit data export route update").LogError(ctx, logger)
 	}
-	return buildDataExportRouteView(after), nil
+	return buildDataExportRouteView(after, afterLevel), nil
 }
 
 func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePayload) error {
@@ -696,6 +737,71 @@ func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePaylo
 	return nil
 }
 
+func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) (*gen.TestDataExportRouteResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	routeID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid route id")
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
+	if s.routeTests == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "Speakeasy can't send test events right now. Try again shortly.").LogError(ctx, logger)
+	}
+	result, err := s.routeTests.SendTest(ctx, SendRouteTestParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		RouteID:          routeID,
+		Expect:           nil,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+	})
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrRouteNotFound):
+		return nil, oops.E(oops.CodeNotFound, err, "This export no longer exists. Reload the page.")
+	case errors.Is(err, ErrRouteTestUnsupported):
+		return nil, oops.E(oops.CodeInvalid, err, "This data source has no test event.")
+	case errors.Is(err, ErrRouteDestinationRequired):
+		return nil, oops.E(oops.CodeInvalid, err, "This export has no destination. Choose one and save first.")
+	case errors.Is(err, ErrRouteDestinationInactive):
+		return nil, oops.E(oops.CodeInvalid, err, "This export's destination was deleted. Choose another and save first.")
+	case errors.Is(err, ErrRouteTestRateLimited):
+		return nil, oops.E(oops.CodeRateLimitExceeded, err, "Too many test events were sent just now. Try again in a minute.")
+	case errors.Is(err, ErrRouteTestUnavailable):
+		return nil, oops.E(oops.CodeUnavailable, err, "Speakeasy can't send test events right now. Try again shortly.").LogError(ctx, logger)
+	default:
+		message := "send test event"
+		if invalid, ok := errors.AsType[*routeDestinationInvalidError](err); ok {
+			message = invalid.reason
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
+	}
+
+	signals := make([]*gen.TestDataExportRouteSignalResult, len(result.Signals))
+	for i, signal := range result.Signals {
+		signals[i] = &gen.TestDataExportRouteSignalResult{
+			Signal:     string(signal.Signal),
+			Outcome:    string(signal.Outcome),
+			StatusCode: conv.PtrEmpty(signal.StatusCode),
+			Message:    signal.Message,
+		}
+	}
+	return &gen.TestDataExportRouteResult{
+		Outcome:     string(result.Outcome),
+		StatusCode:  conv.PtrEmpty(result.StatusCode),
+		Message:     result.Message,
+		Signals:     signals,
+		TestEventID: result.TestEventID,
+	}, nil
+}
+
 func (s *Service) validateRouteDestination(
 	ctx context.Context,
 	queries *repo.Queries,
@@ -708,7 +814,7 @@ func (s *Service) validateRouteDestination(
 	if err != nil {
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "invalid otel_destination_id")
 	}
-	switch err := checkRouteDestination(ctx, queries, s.encryption, organizationID, projectID, ref, enabled); {
+	switch _, err := checkRouteDestination(ctx, queries, s.encryption, organizationID, projectID, ref, enabled); {
 	case err == nil:
 	case errors.Is(err, ErrRouteDestinationRequired):
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "otel_destination_id is required when the route is enabled")
@@ -730,10 +836,54 @@ func (s *Service) validateRouteDestination(
 	return ref, nil
 }
 
-func routeSnapshot(row repo.DataExportRoute) *audit.DataExportRouteSnapshot {
+func routeSnapshot(row repo.DataExportRoute, minSeverity *string) *audit.DataExportRouteSnapshot {
 	return &audit.DataExportRouteSnapshot{
 		DataSource:        row.DataSource,
 		Enabled:           row.Enabled,
 		OtelDestinationID: conv.FromNullableUUID(row.OtelDestinationID),
+		MinSeverity:       minSeverity,
 	}
+}
+
+// readRouteMinSeverity returns the stored level of an MCP connection logs route, or nil for other sources.
+func (s *Service) readRouteMinSeverity(ctx context.Context, queries *repo.Queries, authCtx *contextvalues.AuthContext, row repo.DataExportRoute) (*string, error) {
+	level, err := routeMinSeverity(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID, row)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read MCP connection log level").LogError(ctx, s.logger)
+	}
+	return level, nil
+}
+
+// routeMinSeverity returns the stored level of an MCP connection logs route, or nil for other sources.
+func routeMinSeverity(ctx context.Context, queries *repo.Queries, organizationID string, projectID uuid.UUID, row repo.DataExportRoute) (*string, error) {
+	if row.DataSource != DataSourceMCPConnectionLogs {
+		return nil, nil
+	}
+	level, err := queries.GetMCPConnectionLogRouteMinSeverity(ctx, repo.GetMCPConnectionLogRouteMinSeverityParams{
+		DefaultMinSeverity: DefaultMCPConnectionLogMinSeverity,
+		OrganizationID:     organizationID,
+		ProjectID:          projectID,
+		DataExportRouteID:  row.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read MCP connection log level: %w", err)
+	}
+	return &level, nil
+}
+
+// writeRouteMinSeverity stores a requested level and returns the route's level after the write.
+func (s *Service) writeRouteMinSeverity(ctx context.Context, queries *repo.Queries, authCtx *contextvalues.AuthContext, row repo.DataExportRoute, minSeverity *string) (*string, error) {
+	if minSeverity == nil || row.DataSource != DataSourceMCPConnectionLogs {
+		return s.readRouteMinSeverity(ctx, queries, authCtx, row)
+	}
+	level, err := queries.UpsertMCPConnectionLogRouteSettings(ctx, repo.UpsertMCPConnectionLogRouteSettingsParams{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		MinSeverity:       *minSeverity,
+		DataExportRouteID: row.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "set MCP connection log level").LogError(ctx, s.logger)
+	}
+	return &level, nil
 }

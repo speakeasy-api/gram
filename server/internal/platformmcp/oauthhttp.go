@@ -1645,10 +1645,7 @@ func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, 
 }
 
 func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
-	formAction := "'self'"
-	if uri, err := url.Parse(redirectURI); err == nil && (uri.Scheme == "http" || uri.Scheme == "https") && uri.Host != "" {
-		formAction += " " + uri.Scheme + "://" + uri.Host
-	}
+	formAction := consentpage.FormActionSources(redirectURI)
 	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
 }
 

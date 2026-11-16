@@ -28,6 +28,7 @@ type Server struct {
 	CreateRoute       http.Handler
 	UpdateRoute       http.Handler
 	DeleteRoute       http.Handler
+	TestRoute         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -66,6 +67,7 @@ func New(
 			{"CreateRoute", "POST", "/rpc/dataExports.createRoute"},
 			{"UpdateRoute", "POST", "/rpc/dataExports.updateRoute"},
 			{"DeleteRoute", "DELETE", "/rpc/dataExports.deleteRoute"},
+			{"TestRoute", "POST", "/rpc/dataExports.testRoute"},
 		},
 		ListDestinations:  NewListDestinationsHandler(e.ListDestinations, mux, decoder, encoder, errhandler, formatter),
 		ListForOrg:        NewListForOrgHandler(e.ListForOrg, mux, decoder, encoder, errhandler, formatter),
@@ -76,6 +78,7 @@ func New(
 		CreateRoute:       NewCreateRouteHandler(e.CreateRoute, mux, decoder, encoder, errhandler, formatter),
 		UpdateRoute:       NewUpdateRouteHandler(e.UpdateRoute, mux, decoder, encoder, errhandler, formatter),
 		DeleteRoute:       NewDeleteRouteHandler(e.DeleteRoute, mux, decoder, encoder, errhandler, formatter),
+		TestRoute:         NewTestRouteHandler(e.TestRoute, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -93,6 +96,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRoute = m(s.CreateRoute)
 	s.UpdateRoute = m(s.UpdateRoute)
 	s.DeleteRoute = m(s.DeleteRoute)
+	s.TestRoute = m(s.TestRoute)
 }
 
 // MethodNames returns the methods served.
@@ -109,6 +113,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRouteHandler(mux, h.CreateRoute)
 	MountUpdateRouteHandler(mux, h.UpdateRoute)
 	MountDeleteRouteHandler(mux, h.DeleteRoute)
+	MountTestRouteHandler(mux, h.TestRoute)
 }
 
 // Mount configures the mux to serve the dataExports endpoints.
@@ -570,6 +575,59 @@ func NewDeleteRouteHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteRoute")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTestRouteHandler configures the mux to serve the "dataExports" service
+// "testRoute" endpoint.
+func MountTestRouteHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/dataExports.testRoute", f)
+}
+
+// NewTestRouteHandler creates a HTTP handler which loads the HTTP request and
+// calls the "dataExports" service "testRoute" endpoint.
+func NewTestRouteHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTestRouteRequest(mux, decoder)
+		encodeResponse = EncodeTestRouteResponse(encoder)
+		encodeError    = EncodeTestRouteError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "testRoute")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
 		payload, err := decodeRequest(r)
 		if err != nil {

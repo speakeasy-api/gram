@@ -136,6 +136,7 @@ func TestAgentMCPAccessListsGrantedServersAndCredentialModes(t *testing.T) {
 	require.NoError(t, err)
 	unreached := seedAgentAccessServer(t, f.conn, other.ID, "Agent unreached server")
 	readable := seedAgentAccessServer(t, f.conn, other.ID, "Agent read-grant server")
+	connectable := seedAgentAccessServer(t, f.conn, other.ID, "Agent connect-grant server")
 	passThrough := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent pass-through server")
 
 	fixtures := testrepo.New(f.conn)
@@ -150,6 +151,7 @@ func TestAgentMCPAccessListsGrantedServersAndCredentialModes(t *testing.T) {
 	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(authz.WildcardResource, f.project.ID.String()))
 	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(uuid.NewString(), ""))
 	f.grant(t, authz.ScopeMCPRead, mcpConnectSelector(readable.String(), other.ID.String()))
+	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(connectable.String(), other.ID.String()))
 	f.grant(t, authz.ScopeMCPAuth, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource})
 
 	callerCtx, principal := f.callerContext(t, f.principal.UserID)
@@ -166,10 +168,11 @@ func TestAgentMCPAccessListsGrantedServersAndCredentialModes(t *testing.T) {
 
 	byID := agentServersByID(output)
 	require.NotContains(t, byID, unreached.String(), "a project-wide grant reaches only its own project")
-	require.Contains(t, byID, readable.String(), "mcp:read reaches the one server it names, in another project")
-	require.True(t, hasUseRule(byID[readable.String()].Rules, "agent", "resource"), "mcp:read includes connecting")
-	require.Equal(t, other.ID.String(), byID[readable.String()].ProjectID)
-	require.Equal(t, "Other project", byID[readable.String()].ProjectName)
+	require.NotContains(t, byID, readable.String(), "mcp:read does not include connecting")
+	require.Contains(t, byID, connectable.String(), "mcp:connect reaches the one server it names, in another project")
+	require.True(t, hasUseRule(byID[connectable.String()].Rules, "agent", "resource"))
+	require.Equal(t, other.ID.String(), byID[connectable.String()].ProjectID)
+	require.Equal(t, "Other project", byID[connectable.String()].ProjectName)
 	require.Equal(t, agentCredentialCallerProvided, byID[passThrough.String()].CredentialMode, "a pass-through server uses what the agent's client sends")
 	require.Contains(t, byID, shared.String())
 	require.Contains(t, byID, personal.String())

@@ -1599,7 +1599,10 @@ const lockUserSessionIssuerForMetaMCP = `-- name: LockUserSessionIssuerForMetaMC
 SELECT id
 FROM user_session_issuers
 WHERE id = $1
-  AND project_id = $2::uuid
+  AND (
+    project_id = $2::uuid
+    OR (project_id IS NULL AND organization_id = $3::text)
+  )
   AND deleted IS FALSE
 FOR UPDATE
 `
@@ -1607,13 +1610,14 @@ FOR UPDATE
 type LockUserSessionIssuerForMetaMCPParams struct {
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
+	OrganizationID      string
 }
 
-// Lock a live user session issuer in the caller's project. Meta MCP
-// create/update hold this lock while validating the reference so a concurrent
-// issuer delete cannot race the attach.
+// Lock a live issuer owned by the caller's project or shared by its organization.
+// Gateway create/update hold this lock while validating the reference so a
+// concurrent issuer delete cannot race the attach.
 func (q *Queries) LockUserSessionIssuerForMetaMCP(ctx context.Context, arg LockUserSessionIssuerForMetaMCPParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

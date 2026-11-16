@@ -48,7 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -836,7 +836,7 @@ func validateUserSessionBearerAudiences(
 // organization, before its subject is stamped: the organization's metadata,
 // the project when there is one, and the session id when there is one.
 func (s *Service) sessionAuthContext(ctx context.Context, organizationID string, projectID *uuid.UUID, sessionID string) (*contextvalues.AuthContext, error) {
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, organizationID)
+	orgMetadata, err := orgaccount.Describe(ctx, s.logger, s.orgsRepo, s.billingRepository, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
 	}

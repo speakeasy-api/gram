@@ -59,7 +59,7 @@ export type OktaServerSuggestionsQueryError =
  * list oktaServerSuggestions
  *
  * @remarks
- * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+ * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.
  */
 export function useOktaServerSuggestions(
   request?: ListOktaServerSuggestionsRequest | undefined,
@@ -88,7 +88,7 @@ export function useOktaServerSuggestions(
  * list oktaServerSuggestions
  *
  * @remarks
- * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+ * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.
  */
 export function useOktaServerSuggestionsSuspense(
   request?: ListOktaServerSuggestionsRequest | undefined,

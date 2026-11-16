@@ -196,7 +196,7 @@ func registerOrganizationGatewayTool(reg *Registrar, service *OrganizationGatewa
 
 // GetMyProjectGatewayInput selects one exact project in the caller's organization.
 type GetMyProjectGatewayInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"Exact slug of a project in your organization; required, with no default project fallback"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 }
 
 // GetProject returns the same organization-authorized connection limited to one

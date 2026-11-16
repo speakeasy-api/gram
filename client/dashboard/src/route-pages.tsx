@@ -6,6 +6,8 @@ import type {
   OrgRouteStructure,
   RouteStructure,
 } from "./routes";
+import { SetupTaskRedirect, SetupWizard } from "./route-pages.lazy";
+import Channels from "./pages/channels/Channels";
 import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
 import NewAssistantPage from "./pages/assistants/NewAssistant";
@@ -58,7 +60,9 @@ import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
 import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
 import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
-import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
+import OrganizationGatewayPage, {
+  ProjectGatewayPage,
+} from "./pages/mcp/OrganizationGateway";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { ToolsetSlugRedirectPage } from "./pages/mcp/ToolsetRedirect";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
@@ -125,6 +129,11 @@ import {
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
+import { SyncFromOkta } from "./pages/mcp/sync-from-okta/SyncFromOkta";
+import {
+  McpSessionsConfiguration,
+  McpSessionsProviderDetail,
+} from "./pages/user-session-issuers/McpSessionsConfiguration";
 import {
   UserSessionIssuersPage,
   UserSessionIssuersRoot,
@@ -170,11 +179,6 @@ import {
   KillswitchIndexRedirect,
   KillswitchRecordRedirect,
 } from "./pages/killswitch/KillswitchesRoot";
-
-const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
-const SetupTaskRedirect = React.lazy(
-  () => import("./pages/setup/SetupTaskRedirect"),
-);
 
 /**
  * The page each route renders. Route paths, titles and the `useRoutes` /
@@ -248,6 +252,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
     },
   },
+  channels: { component: Channels },
   assistants: {
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,
@@ -323,6 +328,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           function: {
             component: FunctionsOnboarding,
           },
+          okta: {
+            component: SyncFromOkta,
+          },
         },
       },
       catalog: {
@@ -349,6 +357,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
       organizationGateway: {
         component: OrganizationGatewayPage,
+      },
+      projectGateway: {
+        component: ProjectGatewayPage,
       },
       gateway: {
         component: GatewayDetailPage,
@@ -416,7 +427,19 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     indexComponent: InsightsHooksPage,
   },
   mcpSessions: {
-    component: UserSessions,
+    component: Outlet,
+    indexComponent: UserSessions,
+    subPages: {
+      configuration: {
+        component: UserSessionIssuersRoot,
+        indexComponent: McpSessionsConfiguration,
+        subPages: {
+          issuerDetail: {
+            component: McpSessionsProviderDetail,
+          },
+        },
+      },
+    },
   },
   remoteIdentityProviders: {
     component: RemoteIdentityProvidersRoot,

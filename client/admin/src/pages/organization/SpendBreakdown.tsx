@@ -1,5 +1,9 @@
 import { useMemo, useState, type JSX } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { RefreshCw, RotateCcw } from "lucide-react";
 
@@ -33,6 +37,8 @@ const ALL_PRODUCT_IDS: SpendProductID[] = [
   "mcp_egress",
 ];
 
+class InvalidSpendBreakdownError extends Error {}
+
 export function SpendBreakdown({
   organizationID,
 }: {
@@ -44,14 +50,41 @@ export function SpendBreakdown({
   const cumulative = search.cumulative ?? false;
   const [selectedProductIDs, setSelectedProductIDs] =
     useState<SpendProductID[]>(ALL_PRODUCT_IDS);
+  const queryClient = useQueryClient();
+  const spendQuery = organizationSpendBreakdownQuery({
+    organizationId: organizationID,
+    from: search.from ? new Date(`${search.from}T00:00:00Z`) : undefined,
+    to: search.to ? new Date(exclusiveEnd(search.to)) : undefined,
+  });
+  const fetchSpend = spendQuery.queryFn;
+  const defaultRetry = queryClient.defaultQueryOptions(spendQuery).retry ?? 3;
   const query = useQuery({
-    ...organizationSpendBreakdownQuery({
-      organizationId: organizationID,
-      from: search.from ? new Date(`${search.from}T00:00:00Z`) : undefined,
-      to: search.to ? new Date(exclusiveEnd(search.to)) : undefined,
-    }),
+    ...spendQuery,
+    // Validate before caching: throwing selectors can repeatedly update observers.
+    queryFn:
+      typeof fetchSpend === "function"
+        ? async (context) => {
+            const response = await fetchSpend(context);
+            try {
+              return validateSpendBreakdown(response);
+            } catch (error) {
+              throw new InvalidSpendBreakdownError(errorMessage(error), {
+                cause: error,
+              });
+            }
+          }
+        : fetchSpend,
+    retry: (failureCount, error) => {
+      if (error instanceof InvalidSpendBreakdownError) return false;
+      if (typeof defaultRetry === "function") {
+        return defaultRetry(failureCount, error);
+      }
+      return (
+        defaultRetry === true ||
+        (typeof defaultRetry === "number" && failureCount < defaultRetry)
+      );
+    },
     placeholderData: keepPreviousData,
-    select: validateSpendBreakdown,
   });
   const [lastSuccessfulData, setLastSuccessfulData] =
     useState<AdminSpendBreakdown>();

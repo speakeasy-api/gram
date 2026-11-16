@@ -37,6 +37,8 @@ type RegistrationPersistence interface {
 	ResolveRegistrationPendingSecretFields(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, declared []CatalogConfigurationField) ([]CatalogConfigurationField, error)
 	ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error)
 	ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error)
+	ResolveRegistrationMCPID(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (uuid.UUID, error)
+	RegistrationIDForMCP(ctx context.Context, principal Principal, projectSlug, mcpID, operation string) (string, error)
 	IssueSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, now time.Time) (IssuedSetupHandoff, error)
 	GetProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID) (Readiness, bool, error)
 }
@@ -67,6 +69,10 @@ type RegisterCatalogMCPResult struct {
 	Receipt             OperationReceipt
 	Registration        string
 	SecretFieldsPending []CatalogConfigurationField
+
+	// MCPID is the MCP server the registration created, the ID agents use.
+	MCPID string
+
 	// NextAction is the one required setup step left, or nextActionReady.
 	NextAction string
 
@@ -306,6 +312,15 @@ func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, p
 		return CatalogCandidate{}, ErrRegistrationUnavailable
 	}
 	return s.store.ResolveRegistrationCatalogIdentity(ctx, principal, project, registrationID)
+}
+
+// registrationIDForMCP resolves the Platform setup record behind the MCP
+// server an agent names by mcp_id, for the tool named by operation.
+func (s *RegistrationService) registrationIDForMCP(ctx context.Context, principal Principal, projectSlug, mcpID, operation string) (string, error) {
+	if s == nil || s.store == nil {
+		return "", ErrRegistrationUnavailable
+	}
+	return s.store.RegistrationIDForMCP(ctx, principal, projectSlug, mcpID, operation)
 }
 
 // DashboardSetupURL returns the existing Remote MCP server Authentication
@@ -581,6 +596,10 @@ type RegisterRemoteMCPResult struct {
 	Registration      string
 	NextAction        string
 	DashboardSetupURL string
+
+	// MCPID is the MCP server the registration created, the ID agents use.
+	MCPID string
+
 	// AutomaticClientRegistration says how an OAuth client is obtained from the
 	// server's provider; empty when the server needs no sign-in.
 	AutomaticClientRegistration string
@@ -685,8 +704,12 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
 	}
+	mcpID, err := s.store.ResolveRegistrationMCPID(ctx, principal, project, receipt.RegistrationID.UUID)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote registration server: %w", err)
+	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
-	return RegisterRemoteMCPResult{Project: project, ServerName: displayName, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection)}, nil
+	return RegisterRemoteMCPResult{Project: project, ServerName: displayName, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), MCPID: mcpID.String(), NextAction: nextAction, DashboardSetupURL: setupURL, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection)}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
@@ -783,8 +806,14 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		ready = found && readiness.Fresh && readiness.State == ReadinessReady
 	}
 
+	mcpID, err := s.store.ResolveRegistrationMCPID(ctx, principal, project, receipt.RegistrationID.UUID)
+	if err != nil {
+		return RegisterCatalogMCPResult{}, fmt.Errorf("resolve catalog registration server: %w", err)
+	}
+
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
+		MCPID:               mcpID.String(),
 		NextAction:          catalogNextAction(catalog.ProviderKey, catalog.AuthSetup, len(pendingSecretFields) > 0, ready),
 		Project:             project,
 		ServerName:          configuration.displayName,

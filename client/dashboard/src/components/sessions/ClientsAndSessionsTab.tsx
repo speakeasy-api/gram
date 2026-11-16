@@ -42,11 +42,11 @@ type ClientsAndSessionsTabProps = {
   authTabPath?: string;
   /**
    * Lists the sessions authorized through a gateway instead of every session
-   * `issuerId` issued, filtered and paginated on the server. Without an id the
-   * listing covers every gateway in the organization, independent of the
-   * working project.
+   * `issuerId` issued, filtered and paginated on the server: a stored gateway
+   * by `id`, or a project's Project Gateway by `projectId`. With neither the
+   * listing covers the whole Organization Gateway.
    */
-  gateway?: { id?: string };
+  gateway?: { id?: string; projectId?: string };
 };
 
 /**
@@ -64,7 +64,11 @@ export function ClientsAndSessionsTab({
   ...props
 }: ClientsAndSessionsTabProps): JSX.Element {
   return gateway ? (
-    <GatewayClientsAndSessions {...props} gatewayId={gateway.id} />
+    <GatewayClientsAndSessions
+      {...props}
+      gatewayId={gateway.id}
+      projectId={gateway.projectId}
+    />
   ) : (
     <IssuerClientsAndSessions {...props} />
   );
@@ -207,20 +211,26 @@ function IssuerClientsAndSessions({
 
 function GatewayClientsAndSessions({
   gatewayId,
+  projectId,
   issuerId,
   authTabPath = "settings",
   attachedSessions,
 }: Omit<ClientsAndSessionsTabProps, "gateway" | "originatingMcpServerId"> & {
   gatewayId: string | undefined;
+  projectId: string | undefined;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  // One gateway's registrations belong to its issuer in its project; the
-  // organization-wide listing has neither to scope them to.
+  // One stored gateway's registrations belong to its issuer in its project;
+  // the Organization and Project Gateways share the organization's issuer, so
+  // they have no registrations of their own to show.
   const projectScoped = Boolean(gatewayId);
   // Without an issuer a gateway cannot establish sessions, so nothing is read
   // behind the empty state below.
   const hasNothingToList = projectScoped && !issuerId;
-  const listing = useGatewaySessionListing(gatewayId, !hasNothingToList);
+  const listing = useGatewaySessionListing(
+    { gatewayId, projectId },
+    !hasNothingToList,
+  );
   const { query } = listing;
   const clients = useIssuerClients(issuerId, projectScoped && !!issuerId);
 

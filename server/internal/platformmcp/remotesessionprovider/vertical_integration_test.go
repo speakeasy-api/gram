@@ -195,7 +195,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	fingerprint, err := testrepo.New(conn).GetPlatformMCPReadinessFingerprintFixture(ctx, registration.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, fingerprint)
-	require.NotContains(t, fingerprint, remoteSession.AccessTokenEncrypted)
+	require.NotContains(t, fingerprint, remoteSession.AccessTokenEncrypted.String)
 
 	require.NoError(t, testrepo.New(conn).ExpireRemoteSessionAccessTokenFixture(ctx, remoteSession.ID))
 	refreshed, err := store.ProbeProviderReadiness(ctx, principal, project.ID, registration.ID, adapters)
