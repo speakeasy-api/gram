@@ -134,6 +134,19 @@ export function useOwnerConnections(
         issuer.userSessionIssuerId === server.issuerId,
     );
   /**
+   * What people call each upstream registration, read from the auth clients
+   * of every listed server. An issuer shared across the organization lists
+   * registrations that belong to other servers, and those servers' own auth
+   * clients are where the name a person recognizes, such as "Stripe", lives.
+   */
+  const signInNames = new Map<string, string>();
+  for (const read of auth) {
+    for (const client of read.data?.clients ?? []) {
+      if (client.remoteSessionClientId && client.name)
+        signInNames.set(client.remoteSessionClientId, client.name);
+    }
+  }
+  /**
    * The upstream sign-ins a server asks for, once its auth is read: from its
    * own auth clients when enforced, else from its issuer's registrations.
    */
@@ -148,7 +161,14 @@ export function useOwnerConnections(
         : undefined;
     if (typed) return { data: typed, isError: false };
     const read = clients[issuerIndex(server)];
-    return { data: read?.data, isError: !!read?.isError };
+    return {
+      data: read?.data?.map((client) => ({
+        id: client.id,
+        credentialOwner: client.credentialOwner,
+        name: signInNames.get(client.id) ?? client.displayName,
+      })),
+      isError: !!read?.isError,
+    };
   };
   const byServer = new Map<string, ServerConnection>();
   for (const server of personal) {

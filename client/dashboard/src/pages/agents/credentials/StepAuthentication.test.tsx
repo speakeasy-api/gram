@@ -132,6 +132,42 @@ describe("authentication assignment warnings", () => {
   });
 });
 
+describe("a server still missing other sign-ins", () => {
+  it("names them on the row, not only that it requires a connection", () => {
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [
+              server.id,
+              {
+                status: "missing",
+                signIns: [
+                  { id: "stripe", credentialOwner: "subject", name: "Stripe" },
+                  { id: "vercel", credentialOwner: "subject", name: "Vercel" },
+                ],
+              },
+            ],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    );
+    expect(
+      screen.getByText("Still needs a connection to Stripe and Vercel."),
+    ).toBeTruthy();
+  });
+});
+
 describe("create connection reauthentication", () => {
   it.each(["ready", "ended", "missing"] as const)(
     "targets the known upstream client for %s connections",

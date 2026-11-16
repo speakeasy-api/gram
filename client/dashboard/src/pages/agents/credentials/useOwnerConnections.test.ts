@@ -87,7 +87,11 @@ it("still asks for a connection when the server offers each person's sign-in", (
   });
   const { result } = renderHook(() => useOwnerConnections([server], true));
   const connection = result.current.byServer.get(server.id);
-  expect(connection).toEqual({ status: "missing" });
+  expect(connection).toEqual({
+    status: "missing",
+    signIns: [otherServersSignIn],
+    connected: 0,
+  });
   expect(connectionSelectable(connection)).toBe(false);
 });
 
@@ -175,6 +179,8 @@ describe("a server sharing an org-wide issuer with another server", () => {
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
       status: "missing",
+      signIns: [otherServersSignIn],
+      connected: 0,
     });
   });
 
@@ -186,6 +192,8 @@ describe("a server sharing an org-wide issuer with another server", () => {
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
       status: "missing",
+      signIns: [otherServersSignIn],
+      connected: 0,
     });
   });
 
@@ -200,6 +208,44 @@ describe("a server sharing an org-wide issuer with another server", () => {
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
       status: "missing",
+      signIns: [otherServersSignIn],
+      connected: 0,
+    });
+  });
+
+  it("names a missing sign-in after the server it belongs to", () => {
+    // The other server's own auth client is where a person's name for the
+    // registration lives, so the row can say "Stripe" rather than nothing.
+    const other = { ...server, id: "server_other" };
+    mocks.clients = [
+      otherServersSignIn,
+      { id: "client_own", credentialOwner: "subject" },
+    ];
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [{ ...ownSignIn, name: "Linear" }],
+      },
+    });
+    mocks.auth.set(other.id, {
+      data: {
+        status: "configured",
+        clients: [
+          {
+            ...ownSignIn,
+            remoteSessionClientId: "client_other",
+            name: "Stripe",
+          },
+        ],
+      },
+    });
+    const { result } = renderHook(() =>
+      useOwnerConnections([server, other], true),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "missing",
+      signIns: [{ ...otherServersSignIn, name: "Stripe" }],
+      connected: 1,
     });
   });
 

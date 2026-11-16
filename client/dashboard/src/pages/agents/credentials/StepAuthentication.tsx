@@ -19,6 +19,7 @@ import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
 import {
   displayedConnections,
+  missingSignInsSentence,
   serversNeedingConnection,
 } from "./connectionAttention";
 import { KeyCredentialChoice } from "./KeyCredentialChoice";
@@ -149,6 +150,7 @@ export function StepAuthentication({
                   : connection.status === "error"
                     ? "Could not check connection"
                     : "Requires connection";
+          const missingSignIns = missingSignInsSentence(server, connection);
           return (
             <AccordionItem
               key={server.id}
@@ -257,6 +259,11 @@ export function StepAuthentication({
                       {session && (
                         <Text small muted className="mt-1 text-xs">
                           {connectionLifetimeLabel(connectionLifetime(session))}
+                        </Text>
+                      )}
+                      {missingSignIns && (
+                        <Text small muted className="mt-1 text-xs">
+                          {missingSignIns}
                         </Text>
                       )}
                     </div>

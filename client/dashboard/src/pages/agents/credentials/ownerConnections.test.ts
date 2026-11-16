@@ -7,6 +7,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import {
   attachOwnerConnections,
   connectionSelectable,
+  missingSignInNames,
   offersPersonalSignIn,
   serverConnection,
   serverSignIns,
@@ -158,7 +159,11 @@ describe("serverConnection", () => {
         [session({})],
         now,
       ),
-    ).toEqual({ status: "missing" });
+    ).toEqual({
+      status: "missing",
+      signIns: [client("client_two")],
+      connected: 1,
+    });
     // The attachment endpoint accepts only sessions made through this
     // server's own issuer.
     const elsewhere = serverConnection(
@@ -167,8 +172,39 @@ describe("serverConnection", () => {
       [session({ userSessionIssuerId: "issuer_other" })],
       now,
     );
-    expect(elsewhere).toEqual({ status: "missing" });
+    expect(elsewhere).toEqual({
+      status: "missing",
+      signIns: [client("client_one")],
+      connected: 0,
+    });
     expect(connectionSelectable(elsewhere)).toBe(false);
+  });
+
+  it("lists every sign-in still missing, not only the first", () => {
+    // An issuer shared across the organization: the server's own sign-in is
+    // connected, and two registrations from other servers are not.
+    const connection = serverConnection(
+      "issuer_one",
+      [
+        { id: "client_one", credentialOwner: "subject", name: "Linear" },
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+        { id: "client_three", credentialOwner: "subject" },
+      ],
+      [session({})],
+      now,
+    );
+    expect(connection).toEqual({
+      status: "missing",
+      signIns: [
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+        { id: "client_three", credentialOwner: "subject" },
+      ],
+      connected: 1,
+    });
+    expect(missingSignInNames(connection)).toEqual({
+      names: ["Stripe"],
+      unnamed: 1,
+    });
   });
 
   it("prefers a working connection over one that has ended", () => {
@@ -499,6 +535,17 @@ describe("serverSignIns", () => {
         ],
       }),
     ).toEqual([{ id: "client_own", credentialOwner: "subject" }]);
+  });
+
+  it("carries each auth client's name, so a missing sign-in can be named", () => {
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [{ ...base, name: "Linear" }],
+      }),
+    ).toEqual([
+      { id: "client_own", credentialOwner: "subject", name: "Linear" },
+    ]);
   });
 
   it("has no answer while a personal auth client names no registration", () => {

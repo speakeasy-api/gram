@@ -1051,6 +1051,28 @@ describe("Federating a platform's own tokens", () => {
     ).toBeTruthy();
   });
 
+  it("says up front that a platform's link needs permission to trust it", () => {
+    // The Claude Tag button and shared links name the platform. Without
+    // workload:write the Agent sign-in step refuses the setup, so the reader
+    // learns it before choosing servers and signing in to them.
+    mocks.canFederate = false;
+    mocks.canReadWorkloads = false;
+    setup("claude-tag");
+    expect(
+      screen.getByText(/Setting up Claude Tag needs permission/),
+    ).toBeTruthy();
+  });
+
+  it("adds no permission notice for someone who can trust a platform", () => {
+    mocks.platforms.mockReturnValue([platform]);
+    setup("claude-tag");
+    expect(
+      screen.queryByText(
+        /needs permission to manage workload identities, and your role/,
+      ),
+    ).toBeNull();
+  });
+
   it("offers the API key alone, with no error, to someone who cannot read the catalog", async () => {
     // Reading the catalog is refused without workload access, so the request
     // is never made. Before the presets moved up front this went unnoticed;

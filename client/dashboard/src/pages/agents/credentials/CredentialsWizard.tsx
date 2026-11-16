@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -107,6 +108,7 @@ import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
 import { connectionSelectable } from "./ownerConnections";
+import { missingSignInsSentence } from "./connectionAttention";
 import { attachOwnerConnections } from "./ownerConnections";
 import {
   WizardFooter,
@@ -427,6 +429,16 @@ export function CredentialsWizard({
   // is delivered. Every step is a destination because none of them creates
   // anything until the key is issued.
   const existing = agent !== undefined;
+  // A link that names a platform, such as the Claude Tag button, can reach
+  // someone who may not trust one. Say so before they choose servers and sign
+  // in, rather than only at Agent sign-in, which refuses them.
+  const presetRefused =
+    initialPlatformKey !== undefined &&
+    !editing &&
+    !existing &&
+    !rbacLoading &&
+    !rbacError &&
+    !canFederate;
   // An agent opened again usually has a working key already. The install
   // step cannot show it, but must not read as if the agent were unconnected.
   // Same options and permission gate as the agent's own pages, so all of them
@@ -2260,6 +2272,29 @@ export function CredentialsWizard({
     }
   };
 
+  // The selected servers Continue waits on. Named in the footer, since every
+  // row on the sign-in step starts closed and a bare "the servers that need
+  // authentication" left the reader to find them.
+  const unconnected = selected
+    .map((entry) => entry.server)
+    .filter(
+      (server) =>
+        server.issuerId &&
+        !connectionSelectable(connections.byServer.get(server.id)),
+    );
+  const unconnectedNote = (() => {
+    const only = unconnected.length === 1 ? unconnected[0]! : undefined;
+    const needs = only
+      ? missingSignInsSentence(only, connections.byServer.get(only.id))
+      : null;
+    const names = new Intl.ListFormat("en", { type: "conjunction" }).format(
+      unconnected.map((server) => server.name),
+    );
+    return needs
+      ? `Connect or remove ${names}. ${needs}`
+      : `Connect or remove ${names}.`;
+  })();
+
   const blocked = authStop
     ? authStop
     : step === 0
@@ -2279,14 +2314,8 @@ export function CredentialsWizard({
         : step === 2 &&
             offersConnections &&
             !allServers &&
-            selected.some(
-              (entry) =>
-                entry.server.issuerId &&
-                !connectionSelectable(
-                  connections.byServer.get(entry.server.id),
-                ),
-            )
-          ? "Connect or remove the servers that need authentication."
+            unconnected.length > 0
+          ? unconnectedNote
           : step === 2 && !editing && !allServers && selected.length === 0
             ? "Select at least one MCP server."
             : null;
@@ -2631,6 +2660,20 @@ export function CredentialsWizard({
           );
         }}
       />
+      {presetRefused && (
+        <Alert variant="warning" title={null}>
+          {/* The catalog that names the platform needs workload access too,
+              so the one preset the agents page links to is named here. */}
+          Setting up{" "}
+          {platform?.displayName ??
+            (initialPlatformKey === "claude-tag"
+              ? "Claude Tag"
+              : "a platform's sign-in")}{" "}
+          needs permission to manage workload identities, and your role does not
+          include it. Ask an organization admin to set it up, or to give you
+          that permission.
+        </Alert>
+      )}
       {errorAlert}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-16">
         <div>{body()}</div>

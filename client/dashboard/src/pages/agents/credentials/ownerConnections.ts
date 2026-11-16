@@ -20,8 +20,14 @@ export type ServerConnection =
   | { status: "error" }
   /** The server asks for no personal upstream sign-in, so a key alone works. */
   | { status: "not-required" }
-  /** At least one upstream sign-in has no usable assigned or personal connection. */
-  | { status: "missing" }
+  /**
+   * At least one upstream sign-in has no usable assigned or personal
+   * connection. `signIns` lists each one, and `connected` counts the ones that
+   * do have a connection, so the reader is told what is left to connect
+   * rather than only that something is. Both are absent where the cause is
+   * not a sign-in, such as an assignment whose session is gone.
+   */
+  | { status: "missing"; signIns?: ServerSignIn[]; connected?: number }
   /** Every sign-in is connected, but one of them no longer works. */
   | { status: "ended"; sessions: RemoteSession[] }
   | { status: "ready"; sessions: RemoteSession[] };
@@ -51,6 +57,7 @@ export function serverConnection(
   );
   if (personal.length === 0) return { status: "not-required" };
   const found: RemoteSession[] = [];
+  const missing: ServerSignIn[] = [];
   for (const client of personal) {
     const matching = sessions.filter(
       (candidate) =>
@@ -62,9 +69,14 @@ export function serverConnection(
       matching.find(
         (candidate) => connectionLifetime(candidate, now).kind !== "ended",
       ) ?? matching[0];
-    if (!session) return { status: "missing" };
+    if (!session) {
+      missing.push(client);
+      continue;
+    }
     found.push(session);
   }
+  if (missing.length > 0)
+    return { status: "missing", signIns: missing, connected: found.length };
   if (
     found.some((session) => connectionLifetime(session, now).kind === "ended")
   )
@@ -91,8 +103,38 @@ export function offersPersonalSignIn(
   );
 }
 
-/** An upstream sign-in a server asks for: its OAuth registration and who owns it. */
-export type ServerSignIn = Pick<RemoteSessionClient, "id" | "credentialOwner">;
+/**
+ * An upstream sign-in a server asks for: its OAuth registration, who owns it,
+ * and, when known, the name a person recognizes it by, such as "Stripe".
+ */
+export type ServerSignIn = Pick<
+  RemoteSessionClient,
+  "id" | "credentialOwner"
+> & {
+  name?: string;
+};
+
+/**
+ * The names of the sign-ins a missing connection still needs, in the order the
+ * server asks for them, for a sentence such as "Still needs Stripe and Vercel".
+ * A sign-in with no known name counts as one more, so the total stays true.
+ */
+export function missingSignInNames(connection: ServerConnection | undefined): {
+  names: string[];
+  unnamed: number;
+} {
+  if (connection?.status !== "missing" || !connection.signIns)
+    return { names: [], unnamed: 0 };
+  const names = [
+    ...new Set(
+      connection.signIns.flatMap((signIn) =>
+        signIn.name ? [signIn.name] : [],
+      ),
+    ),
+  ];
+  const unnamed = connection.signIns.filter((signIn) => !signIn.name).length;
+  return { names, unnamed };
+}
 
 /**
  * The upstream sign-ins a server asks each person for, read from its own auth
@@ -115,6 +157,7 @@ export function serverSignIns(
   return personal.map((client) => ({
     id: client.remoteSessionClientId!,
     credentialOwner: "subject",
+    name: client.name,
   }));
 }
 
