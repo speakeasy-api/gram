@@ -197,8 +197,8 @@ type LogDataExportRouteTestEvent struct {
 	StatusCode int
 	// Signals is each signal's own outcome, one per OTLP request the test sent.
 	Signals []DataExportRouteTestSignal
-	// TestEventMarker is the speakeasy.test_event_id value every record of this
-	// test carries. It names no stored resource, so it is not a URN.
+	// TestEventMarker is the speakeasy.test_event_id on this test's logs and spans; metrics carry only the marker.
+	// It names no stored resource, so it is not a URN.
 	TestEventMarker string
 }
 
