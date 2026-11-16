@@ -64,9 +64,6 @@ type EvolveRequestBody struct {
 	// The functions, identified by slug, to exclude from the new deployment when
 	// cloning a previous deployment.
 	ExcludeFunctions []string `form:"exclude_functions,omitempty" json:"exclude_functions,omitempty" xml:"exclude_functions,omitempty"`
-	// Has no effect: new deployments never include external MCP servers. Accepted
-	// so existing callers keep working.
-	ExcludeExternalMcps []string `form:"exclude_external_mcps,omitempty" json:"exclude_external_mcps,omitempty" xml:"exclude_external_mcps,omitempty"`
 }
 
 // RedeployRequestBody is the type of the "deployments" service "redeploy"
@@ -126,15 +123,14 @@ type GetDeploymentResponseBody struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
-	// The number of tools in the deployment generated from external MCP servers.
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
 	ExternalMcpToolCount *int64 `form:"external_mcp_tool_count,omitempty" json:"external_mcp_tool_count,omitempty" xml:"external_mcp_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
-	// The external MCP servers that were deployed.
-	ExternalMcps []*DeploymentExternalMCPResponseBody `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // GetLatestDeploymentResponseBody is the type of the "deployments" service
@@ -2149,21 +2145,6 @@ type DeploymentPackageResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
-// DeploymentExternalMCPResponseBody is used to define fields on response body
-// types.
-type DeploymentExternalMCPResponseBody struct {
-	// The ID of the deployment external MCP record.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the external MCP registry the server is from.
-	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The display name for the external MCP server.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// A URL-friendly identifier used for tool prefixing.
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The canonical server name used to look up the server in the registry.
-	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
-}
-
 // DeploymentResponseBody is used to define fields on response body types.
 type DeploymentResponseBody struct {
 	// The ID to of the deployment.
@@ -2201,15 +2182,14 @@ type DeploymentResponseBody struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
-	// The number of tools in the deployment generated from external MCP servers.
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
 	ExternalMcpToolCount *int64 `form:"external_mcp_tool_count,omitempty" json:"external_mcp_tool_count,omitempty" xml:"external_mcp_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
-	// The external MCP servers that were deployed.
-	ExternalMcps []*DeploymentExternalMCPResponseBody `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // AddOpenAPIv3DeploymentAssetFormRequestBody is used to define fields on
@@ -2279,9 +2259,11 @@ type DeploymentSummaryResponseBody struct {
 	FunctionsAssetCount *int64 `form:"functions_asset_count,omitempty" json:"functions_asset_count,omitempty" xml:"functions_asset_count,omitempty"`
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
-	// The number of external MCP server assets.
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
 	ExternalMcpAssetCount *int64 `form:"external_mcp_asset_count,omitempty" json:"external_mcp_asset_count,omitempty" xml:"external_mcp_asset_count,omitempty"`
-	// The number of tools in the deployment generated from external MCP servers.
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
 	ExternalMcpToolCount *int64 `form:"external_mcp_tool_count,omitempty" json:"external_mcp_tool_count,omitempty" xml:"external_mcp_tool_count,omitempty"`
 }
 
@@ -2497,12 +2479,6 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 			body.ExcludeFunctions[i] = val
 		}
 	}
-	if p.ExcludeExternalMcps != nil {
-		body.ExcludeExternalMcps = make([]string, len(p.ExcludeExternalMcps))
-		for i, val := range p.ExcludeExternalMcps {
-			body.ExcludeExternalMcps[i] = val
-		}
-	}
 	return body
 }
 
@@ -2545,7 +2521,7 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 		ClonedFrom:           body.ClonedFrom,
 		Openapiv3ToolCount:   *body.Openapiv3ToolCount,
 		FunctionsToolCount:   *body.FunctionsToolCount,
-		ExternalMcpToolCount: *body.ExternalMcpToolCount,
+		ExternalMcpToolCount: body.ExternalMcpToolCount,
 	}
 	v.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(body.Openapiv3Assets))
 	for i, val := range body.Openapiv3Assets {
@@ -2572,16 +2548,6 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 			continue
 		}
 		v.Packages[i] = unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage(val)
-	}
-	if body.ExternalMcps != nil {
-		v.ExternalMcps = make([]*types.DeploymentExternalMCP, len(body.ExternalMcps))
-		for i, val := range body.ExternalMcps {
-			if val == nil {
-				v.ExternalMcps[i] = nil
-				continue
-			}
-			v.ExternalMcps[i] = unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP(val)
-		}
 	}
 
 	return v
@@ -4269,9 +4235,6 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	if body.FunctionsToolCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("functions_tool_count", "body"))
 	}
-	if body.ExternalMcpToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_tool_count", "body"))
-	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -4292,13 +4255,6 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	for _, e := range body.Packages {
 		if e != nil {
 			if err2 := ValidateDeploymentPackageResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcps {
-		if e != nil {
-			if err2 := ValidateDeploymentExternalMCPResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6945,32 +6901,6 @@ func ValidateDeploymentPackageResponseBody(body *DeploymentPackageResponseBody) 
 	return
 }
 
-// ValidateDeploymentExternalMCPResponseBody runs the validations defined on
-// DeploymentExternalMCPResponseBody
-func ValidateDeploymentExternalMCPResponseBody(body *DeploymentExternalMCPResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.RegistryServerSpecifier == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("registry_server_specifier", "body"))
-	}
-	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.Slug != nil {
-		if utf8.RuneCountInString(*body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
-		}
-	}
-	return
-}
-
 // ValidateDeploymentResponseBody runs the validations defined on
 // DeploymentResponseBody
 func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
@@ -7004,9 +6934,6 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	if body.FunctionsToolCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("functions_tool_count", "body"))
 	}
-	if body.ExternalMcpToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_tool_count", "body"))
-	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -7027,13 +6954,6 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	for _, e := range body.Packages {
 		if e != nil {
 			if err2 := ValidateDeploymentPackageResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcps {
-		if e != nil {
-			if err2 := ValidateDeploymentExternalMCPResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -7107,12 +7027,6 @@ func ValidateDeploymentSummaryResponseBody(body *DeploymentSummaryResponseBody) 
 	}
 	if body.FunctionsToolCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("functions_tool_count", "body"))
-	}
-	if body.ExternalMcpAssetCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_asset_count", "body"))
-	}
-	if body.ExternalMcpToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

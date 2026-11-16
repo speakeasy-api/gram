@@ -42,12 +42,13 @@ type Service interface {
 	// Discovery funnel and per-member execution breakdown for one gateway (meta
 	// MCP server), from gateway-attributed telemetry.
 	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
-	// Observability overview metrics for calls dispatched through the caller's
-	// Organization Gateway, across every project in the organization.
-	GetOrganizationGatewayOverview(context.Context, *GetOrganizationGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error)
-	// Discovery funnel and per-server execution breakdown for the caller's
-	// Organization Gateway, across every project in the organization.
-	GetOrganizationGatewayUsage(context.Context, *GetOrganizationGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
+	// Observability overview metrics for calls dispatched through the selected
+	// project's Project Gateway: the Organization Gateway limited to that
+	// project's servers.
+	GetProjectGatewayOverview(context.Context, *GetProjectGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Discovery funnel and per-server execution breakdown for the selected
+	// project's Project Gateway.
+	GetProjectGatewayUsage(context.Context, *GetProjectGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
@@ -150,7 +151,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [39]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "getOrgMcpServerActivity", "listHooksTraces"}
+var MethodNames = [39]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getProjectGatewayOverview", "getProjectGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "getOrgMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -472,20 +473,22 @@ type GetOrgMcpServerActivityResult struct {
 	RecentWindowDays int
 }
 
-// GetOrganizationGatewayOverviewPayload is the payload type of the telemetry
-// service getOrganizationGatewayOverview method.
-type GetOrganizationGatewayOverviewPayload struct {
-	SessionToken *string
+// GetProjectGatewayOverviewPayload is the payload type of the telemetry
+// service getProjectGatewayOverview method.
+type GetProjectGatewayOverviewPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
 	// Start time in ISO 8601 format
 	From string
 	// End time in ISO 8601 format
 	To string
 }
 
-// GetOrganizationGatewayUsagePayload is the payload type of the telemetry
-// service getOrganizationGatewayUsage method.
-type GetOrganizationGatewayUsagePayload struct {
-	SessionToken *string
+// GetProjectGatewayUsagePayload is the payload type of the telemetry service
+// getProjectGatewayUsage method.
+type GetProjectGatewayUsagePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
 	// Start time in ISO 8601 format
 	From string
 	// End time in ISO 8601 format

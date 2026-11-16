@@ -134,7 +134,7 @@ func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) 
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   old.UserSessionIssuerID,
 		RemoteSessionClientID: env.clientID,
-		AccessTokenEncrypted:  old.AccessTokenEncrypted,
+		AccessTokenEncrypted:  old.AccessTokenEncrypted.String,
 		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(-time.Second)),
 		RefreshTokenEncrypted: old.RefreshTokenEncrypted,
 		Scopes:                []string{},
@@ -203,7 +203,7 @@ func TestConnectionOutage_RecordedOnFailureClearedBySuccessAndReconnect(t *testi
 	old := active()
 	_, err = env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn: env.subject, UserSessionIssuerID: old.UserSessionIssuerID, RemoteSessionClientID: env.clientID,
-		AccessTokenEncrypted: old.AccessTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		AccessTokenEncrypted: old.AccessTokenEncrypted.String, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 		RefreshTokenEncrypted: old.RefreshTokenEncrypted, Scopes: []string{},
 	})
 	require.NoError(t, err)

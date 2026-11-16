@@ -89,34 +89,61 @@ export function useGatewayConnectionCandidates({
     if (!enabled) return [];
     const result: LauncherCandidate[] = [];
     if (canReadOrg) {
+      // Opened from the organization's settings, so it is findable by name.
       result.push({
-        id: `gateway-connections:organization:${organization.id}`,
+        id: `gateway:organization:${organization.id}`,
         kind: "page",
-        title: "Organization Gateway Connections",
-        detail: "Sessions across projects",
-        keywords: ["gateway", "sessions", "connections", "organization"],
+        title: "Organization Gateway",
+        detail: "Every server your team can reach",
+        keywords: ["gateway", "organization", "mcp", "overview"],
         verbs: ["open"],
         icon: "network",
         group: "Pages",
         run: () => {
-          void navigate(
-            `${routes.mcp.organizationGateway.href()}?tab=connections`,
-          );
+          void navigate(routes.mcp.organizationGateway.href());
+        },
+      });
+    }
+    if (canReadProject) {
+      // The project's MCP list leads with this gateway by name. Its page needs
+      // only access to the project.
+      result.push({
+        id: `gateway:project:${project.id}`,
+        kind: "page",
+        title: "Project Gateway",
+        detail: "Every server in this project your team can reach",
+        keywords: ["gateway", "project", "mcp", "overview"],
+        verbs: ["open"],
+        icon: "network",
+        group: "Pages",
+        run: () => {
+          void navigate(routes.mcp.projectGateway.href());
         },
       });
       result.push({
-        id: `gateway-activity:organization:${organization.id}`,
+        id: `gateway-connections:project:${project.id}`,
         kind: "page",
-        title: "Organization Gateway Activity",
-        detail: "Calls across projects",
-        keywords: ["gateway", "activity", "usage", "calls", "organization"],
+        title: "Project Gateway Connections",
+        detail: "Sessions through this project's gateway",
+        keywords: ["gateway", "sessions", "connections", "project"],
         verbs: ["open"],
         icon: "network",
         group: "Pages",
         run: () => {
-          void navigate(
-            `${routes.mcp.organizationGateway.href()}?tab=activity`,
-          );
+          void navigate(`${routes.mcp.projectGateway.href()}?tab=connections`);
+        },
+      });
+      result.push({
+        id: `gateway-activity:project:${project.id}`,
+        kind: "page",
+        title: "Project Gateway Activity",
+        detail: "Calls through this project's gateway",
+        keywords: ["gateway", "activity", "usage", "calls", "project"],
+        verbs: ["open"],
+        icon: "network",
+        group: "Pages",
+        run: () => {
+          void navigate(`${routes.mcp.projectGateway.href()}?tab=activity`);
         },
       });
     }
@@ -163,8 +190,10 @@ export function useGatewayConnectionCandidates({
   }, [
     enabled,
     canReadOrg,
+    canReadProject,
     canReadGateways,
     organization.id,
+    project.id,
     gateways.data,
     gateways.isError,
     clients.data,

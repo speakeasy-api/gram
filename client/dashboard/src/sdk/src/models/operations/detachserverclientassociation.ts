@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  DetachServerClientAssociationRequestBody,
-  DetachServerClientAssociationRequestBody$Outbound,
-  DetachServerClientAssociationRequestBody$outboundSchema,
-} from "../components/detachserverclientassociationrequestbody.js";
+  ServerClientAssociationForm,
+  ServerClientAssociationForm$Outbound,
+  ServerClientAssociationForm$outboundSchema,
+} from "../components/serverclientassociationform.js";
 
 export type DetachServerClientAssociationSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -38,8 +38,7 @@ export type DetachServerClientAssociationRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  detachServerClientAssociationRequestBody:
-    DetachServerClientAssociationRequestBody;
+  serverClientAssociationForm: ServerClientAssociationForm;
 };
 
 /** @internal */
@@ -159,8 +158,7 @@ export type DetachServerClientAssociationRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  DetachServerClientAssociationRequestBody:
-    DetachServerClientAssociationRequestBody$Outbound;
+  ServerClientAssociationForm: ServerClientAssociationForm$Outbound;
 };
 
 /** @internal */
@@ -172,16 +170,14 @@ export const DetachServerClientAssociationRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    detachServerClientAssociationRequestBody:
-      DetachServerClientAssociationRequestBody$outboundSchema,
+    serverClientAssociationForm: ServerClientAssociationForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
-      detachServerClientAssociationRequestBody:
-        "DetachServerClientAssociationRequestBody",
+      serverClientAssociationForm: "ServerClientAssociationForm",
     });
   }),
 );

@@ -94,7 +94,7 @@ func (s *seeder) seedDeploymentStack(ctx context.Context) error {
 			Summary:             "Acme " + strings.ReplaceAll(name, "_", " "),
 			Description:         "Calls the Acme internal API operation " + name + ".",
 			HttpMethod:          method,
-			Path:                "/" + strings.ReplaceAll(name, "_", "/"),
+			Path:                toolPaths[name],
 			ReadOnlyHint:        name != "process_refund",
 			DestructiveHint:     name == "process_refund",
 		}); err != nil {
@@ -108,8 +108,9 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 	proj := s.projectID()
 	externalOAuthID := s.det("external-oauth-discovery")
 
-	// Keep a metadata-based External OAuth row so the authentication page can
-	// demonstrate the proactive recommendation without contacting a provider.
+	// The OpenAPI Server's external OAuth server: callers bring a token from
+	// the API's own authorization server (the MCP fixture's, pointed at by the
+	// fixture servers phase).
 	if err := s.q.DeployInsertExternalOAuthMetadata(ctx, repo.DeployInsertExternalOAuthMetadataParams{
 		ID:        externalOAuthID,
 		ProjectID: proj,
@@ -121,9 +122,6 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 		Toolset1:              s.toolset1(),
 		OrganizationID:        s.orgID(),
 		ProjectID:             proj,
-		Toolset2:              s.toolset2(),
-		Toolset3:              s.toolset3(),
-		Toolset4:              s.toolset4(),
 		ExternalOauthServerID: externalOAuthID,
 	}); err != nil {
 		return fmt.Errorf("insert demo toolsets: %w", err)
@@ -139,12 +137,6 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 	if err := s.q.DeployInsertToolsetVersions(ctx, repo.DeployInsertToolsetVersionsParams{
 		Toolset1:     s.toolset1(),
 		Toolset1Urns: urns(0, 1, 2, 3, 4, 5, 6, 7),
-		Toolset2:     s.toolset2(),
-		Toolset2Urns: urns(0, 1, 4, 6, 7),
-		Toolset3:     s.toolset3(),
-		Toolset3Urns: urns(0, 2, 3),
-		Toolset4:     s.toolset4(),
-		Toolset4Urns: urns(0),
 	}); err != nil {
 		return fmt.Errorf("insert demo toolset versions: %w", err)
 	}

@@ -30,14 +30,15 @@ The preflight does not replace the backfill's locked validation.
 ## Release boundaries and continuous write freeze
 
 This release A checkout contains only the generated expand migration and
-expand-compatible code. Release B delivers the separately approved contract
-migration and final backend capabilities. Never apply contract to unbackfilled data.
+expand-compatible code. The future contract ships in a separately approved
+migration PR, distinct from backend release B. Release B delivers final backend
+capabilities. Never apply contract to unbackfilled data.
 Prepare the entire green, approved release stack **before** draining writers.
 There are no new flags, application backfill hooks, arbitrary-version fallback,
 or temporary `AdoptPublishedDefault` behavior.
 
 1. Ship schema-only expand PR **9076** first:
-   `20261113192306_registry_server_identities.sql`. Entry linkage remains nullable
+   `20261116173332_registry_server_identities.sql`. Entry linkage remains nullable
    and name-only uniqueness remains. Package migrations separately from application
    behavior; do not accidentally include the contract migration in this release.
 2. Pass the **pre-freeze name preflight** below with zero invalid names before
@@ -58,12 +59,13 @@ or temporary `AdoptPublishedDefault` behavior.
    a nonzero count is a stop condition requiring investigation and reconciliation. A must preserve final
    immutable-version and no-auto-default semantics, not introduce transitional
    republish behavior. Nullable SQLc outputs must be generated, not transplanted.
-5. **Release B handoff, not executable from this A checkout:** still frozen,
-   obtain B's separately approved generated contract schema artifact
-   `*_registry_server_versions.sql`. In that B artifact, discover it with `find server/migrations -maxdepth 1 -name '*_registry_server_versions.sql'`;
+5. **Separate contract migration PR handoff, not executable from this A checkout:** still frozen,
+   obtain the separately approved contract migration PR artifact
+   `*_registry_server_versions.sql`. In that migration PR artifact, discover it with `find server/migrations -maxdepth 1 -name '*_registry_server_versions.sql'`;
    require **exactly one** result before applying it. Zero results is expected in A;
    do not create or apply a contract migration from A. The unshipped contract timestamp
-   may change on regeneration; the shipped expand filename above remains fixed. Revalidate linkage, default ownership/publication, NOT NULL, removal
+   may change on regeneration; the approved, regenerated expand filename above is
+   the exact artifact for A. Revalidate linkage, default ownership/publication, NOT NULL, removal
    of name-only uniqueness, and validity of exact-version uniqueness. Stop on any
    failure. Do not regenerate a duplicate contract migration.
 6. Deploy **B** (final backend/API/Admin MCP version/default/visibility operations)
@@ -159,7 +161,7 @@ failed transaction before retrying; never alter historical JSON or replace IDs
 to force success. An unpublished legacy default needs explicit operator
 reconciliation, not repeated backfill or fallback selection.
 
-Release B only, after applying B's contract artifact:
+Contract stage only, after applying the separate contract migration PR artifact:
 
 ```sql
 SELECT attnotnull FROM pg_attribute
@@ -256,10 +258,11 @@ executes the operator backfill twice, and checks preservation, existing default
 choices and zero linkage/default invariant counts. `TestExpandLinkageRejectsInvalidOwnership`
 checks the actual expand ownership constraints. Neither test applies contract.
 
-**Release B** must deliver `TestVersionMigrationTransition` with its actual
-contract migration and verify NOT NULL, index validity, name-only index removal,
-and version uniqueness. B's exact-one migration-discovery gate above must pass
-against B's artifact, not this checkout. These are B delivery requirements, not
+**The separate contract migration PR** must deliver `TestVersionMigrationTransition`
+with its actual contract migration and verify NOT NULL, index validity, name-only
+index removal, and version uniqueness. The exact-one migration-discovery gate above
+must pass against that migration PR artifact, not A or backend B. These are
+contract migration PR delivery requirements, not
 claims about tests or migration files present in A.
 
 These tests never use the configured application database. Migration lint must

@@ -348,6 +348,10 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseFiltered(true))
 			}
 
+			if encoding := rw.Header().Get(constants.HeaderContentEncoding); encoding != "" {
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseHeaderContentEncoding(encoding))
+			}
+
 			wide.Push(ctx, responseAttrs...)
 		})
 	}

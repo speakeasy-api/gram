@@ -2479,6 +2479,49 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getUserSessionIssuerMigrationSignInReach = `-- name: GetUserSessionIssuerMigrationSignInReach :one
+SELECT (
+         SELECT count(*)
+         FROM user_sessions AS session
+         WHERE session.user_session_issuer_id = $1::uuid
+           AND (session.organization_id IS NULL OR session.organization_id = $2::text)
+           AND session.deleted IS FALSE
+           AND session.refresh_expires_at > clock_timestamp()
+           AND session.tool_selection IS NULL
+       )::bigint AS unscoped_session_count,
+       (
+         SELECT count(*)
+         FROM mcp_servers AS server
+         JOIN projects AS project
+           ON project.id = server.project_id
+          AND project.deleted IS FALSE
+         WHERE server.user_session_issuer_id = $3::uuid
+           AND server.deleted IS FALSE
+           AND project.organization_id = $2::text
+       )::bigint AS target_server_count
+`
+
+type GetUserSessionIssuerMigrationSignInReachParams struct {
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+	TargetIssuerID uuid.UUID
+}
+
+type GetUserSessionIssuerMigrationSignInReachRow struct {
+	UnscopedSessionCount int64
+	TargetServerCount    int64
+}
+
+// How far the source's sign-ins reach once they move: its live sign-ins with
+// no tool selection, which every server on their issuer accepts, and the live
+// servers already on the target that they will reach for the first time.
+func (q *Queries) GetUserSessionIssuerMigrationSignInReach(ctx context.Context, arg GetUserSessionIssuerMigrationSignInReachParams) (GetUserSessionIssuerMigrationSignInReachRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionIssuerMigrationSignInReach, arg.SourceIssuerID, arg.OrganizationID, arg.TargetIssuerID)
+	var i GetUserSessionIssuerMigrationSignInReachRow
+	err := row.Scan(&i.UnscopedSessionCount, &i.TargetServerCount)
+	return i, err
+}
+
 const getUserSessionPolicyByJTI = `-- name: GetUserSessionPolicyByJTI :one
 SELECT tool_selection, expires_at,
        COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable,
@@ -2598,7 +2641,11 @@ const insertTargetRemoteSessionClientIssuerLinks = `-- name: InsertTargetRemoteS
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 SELECT link.remote_session_client_id, $1
 FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client
+  ON client.id = link.remote_session_client_id
+ AND client.deleted IS FALSE
 WHERE link.user_session_issuer_id = $2
+  AND link.remote_session_client_id = ANY($3::uuid[])
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -2606,21 +2653,30 @@ WHERE link.user_session_issuer_id = $2
     WHERE issuer.id IN ($2, $1)
       AND issuer.deleted IS FALSE
       AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+        (issuer.project_id IS NULL AND issuer.organization_id = $4::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $4::text AND project.deleted IS FALSE)
       )
   )
 ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING
 `
 
 type InsertTargetRemoteSessionClientIssuerLinksParams struct {
-	TargetIssuerID uuid.UUID
-	SourceIssuerID uuid.UUID
-	OrganizationID string
+	TargetIssuerID         uuid.UUID
+	SourceIssuerID         uuid.UUID
+	RemoteSessionClientIds []uuid.UUID
+	OrganizationID         string
 }
 
+// Copies the named source bindings to the target. Consolidation names only the
+// bindings something still signs in through after the move, and never a
+// deleted client's.
 func (q *Queries) InsertTargetRemoteSessionClientIssuerLinks(ctx context.Context, arg InsertTargetRemoteSessionClientIssuerLinksParams) (int64, error) {
-	result, err := q.db.Exec(ctx, insertTargetRemoteSessionClientIssuerLinks, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, insertTargetRemoteSessionClientIssuerLinks,
+		arg.TargetIssuerID,
+		arg.SourceIssuerID,
+		arg.RemoteSessionClientIds,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -3324,6 +3380,75 @@ func (q *Queries) ListMCPServersForUserSessionIssuerMigration(ctx context.Contex
 	return items, nil
 }
 
+const listMCPServersOnClaimingOrganizationIssuerForMigration = `-- name: ListMCPServersOnClaimingOrganizationIssuerForMigration :many
+WITH organization_issuer AS (
+    SELECT (array_agg(issuer.id))[1] AS id
+    FROM user_session_issuers AS issuer
+    WHERE issuer.organization_id = $1::text
+      AND issuer.project_id IS NULL
+      AND issuer.deleted IS FALSE
+      AND issuer.id <> $3::uuid
+    HAVING count(*) = 1
+)
+SELECT server.id, server.project_id, organization_issuer.id::uuid AS user_session_issuer_id
+FROM organization_issuer
+JOIN mcp_servers AS server
+  ON server.user_session_issuer_id = organization_issuer.id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = server.project_id
+ AND project.deleted IS FALSE
+ AND project.organization_id = $1::text
+WHERE organization_issuer.id <> $2::uuid
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS shared
+    JOIN remote_session_client_user_session_issuers AS ours
+      ON ours.remote_session_client_id = shared.remote_session_client_id
+    WHERE shared.user_session_issuer_id = organization_issuer.id
+      AND ours.user_session_issuer_id IN ($3::uuid, $2::uuid)
+  )
+ORDER BY server.id
+`
+
+type ListMCPServersOnClaimingOrganizationIssuerForMigrationParams struct {
+	OrganizationID string
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+}
+
+type ListMCPServersOnClaimingOrganizationIssuerForMigrationRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Live servers on the organization's only organization-level issuer once the
+// source is retired, when that issuer is neither the source nor the target
+// and binds a client either of them binds. Serving counts an association with
+// such a client, from a server anywhere in the organization, as a claim on
+// that issuer, so a consolidation that associates it changes what these
+// servers require.
+func (q *Queries) ListMCPServersOnClaimingOrganizationIssuerForMigration(ctx context.Context, arg ListMCPServersOnClaimingOrganizationIssuerForMigrationParams) ([]ListMCPServersOnClaimingOrganizationIssuerForMigrationRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServersOnClaimingOrganizationIssuerForMigration, arg.OrganizationID, arg.TargetIssuerID, arg.SourceIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServersOnClaimingOrganizationIssuerForMigrationRow
+	for rows.Next() {
+		var i ListMCPServersOnClaimingOrganizationIssuerForMigrationRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMergeableCimdClientPairs = `-- name: ListMergeableCimdClientPairs :many
 
 SELECT source.id AS source_client_id, target.id AS target_client_id
@@ -3996,6 +4121,176 @@ func (q *Queries) ListSharedUserSessionIssuersInOrganization(ctx context.Context
 	return items, nil
 }
 
+const listSourceClientLinksForUserSessionIssuerMigration = `-- name: ListSourceClientLinksForUserSessionIssuerMigration :many
+SELECT link.remote_session_client_id,
+       client.client_id,
+       client.deleted AS client_deleted,
+       provider.id AS provider_id,
+       provider.issuer AS provider_issuer,
+       EXISTS (
+         SELECT 1
+         FROM remote_session_client_user_session_issuers AS existing
+         WHERE existing.user_session_issuer_id = $1::uuid
+           AND existing.remote_session_client_id = link.remote_session_client_id
+       )::boolean AS already_on_target,
+       COALESCE(client.deleted IS FALSE AND (
+         COALESCE(link.remote_session_client_id = ANY($2::uuid[]), FALSE)
+         OR EXISTS (
+           SELECT 1
+           FROM mcp_server_remote_session_clients AS association
+           JOIN mcp_servers AS server
+             ON server.id = association.mcp_server_id
+            AND server.deleted IS FALSE
+           WHERE association.remote_session_client_id = link.remote_session_client_id
+             AND association.organization_id = $3::text
+             AND association.deleted IS FALSE
+             AND (
+               server.user_session_issuer_id IN ($4::uuid, $1::uuid)
+               OR (target.project_id IS NULL AND (
+                 SELECT count(*)
+                 FROM user_session_issuers AS organization_issuer
+                 WHERE organization_issuer.organization_id = $3::text
+                   AND organization_issuer.project_id IS NULL
+                   AND organization_issuer.deleted IS FALSE
+                   AND organization_issuer.id <> $4::uuid
+               ) = 1)
+               OR EXISTS (
+                 SELECT 1
+                 FROM meta_mcp_server_members AS member
+                 JOIN meta_mcp_servers AS gateway
+                   ON gateway.id = member.meta_mcp_server_id
+                  AND gateway.deleted IS FALSE
+                 WHERE member.mcp_server_id = server.id
+                   AND member.deleted IS FALSE
+                   AND gateway.organization_id = $3::text
+                   AND gateway.user_session_issuer_id IN ($4::uuid, $1::uuid)
+               )
+             )
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM principal_remote_session_bindings AS binding
+           WHERE binding.remote_session_client_id = link.remote_session_client_id
+             AND binding.user_session_issuer_id = $4::uuid
+             AND binding.organization_id = $3::text
+             AND binding.revoked_at IS NULL
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM remote_session_ema_bindings AS binding
+           WHERE binding.remote_session_client_id = link.remote_session_client_id
+             AND binding.user_session_issuer_id = $4::uuid
+             AND binding.organization_id = $3::text
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM okta_identity_provider_connections AS connection
+           WHERE connection.remote_session_client_id = link.remote_session_client_id
+             AND connection.organization_id = $3::text
+             AND connection.deleted IS FALSE
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM user_session_issuers AS trusting
+           WHERE trusting.id IN ($4::uuid, $1::uuid)
+             AND trusting.trusted_remote_session_client_id = link.remote_session_client_id
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM meta_mcp_servers AS gateway
+           JOIN projects AS gateway_project
+             ON gateway_project.id = gateway.project_id
+            AND gateway_project.deleted IS FALSE
+           WHERE gateway.user_session_issuer_id = $4::uuid
+             AND gateway.organization_id = $3::text
+             AND gateway.deleted IS FALSE
+         )
+       ), FALSE)::boolean AS needed
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS target
+  ON target.id = $1::uuid
+JOIN remote_session_clients AS client
+  ON client.id = link.remote_session_client_id
+LEFT JOIN projects AS client_project
+  ON client_project.id = client.project_id
+LEFT JOIN remote_session_issuers AS provider
+  ON provider.id = client.remote_session_issuer_id
+WHERE link.user_session_issuer_id = $4::uuid
+  AND (client_project.organization_id = $3::text
+       OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = $3::text)))
+ORDER BY link.remote_session_client_id
+`
+
+type ListSourceClientLinksForUserSessionIssuerMigrationParams struct {
+	TargetIssuerID    uuid.UUID
+	RequiredClientIds []uuid.UUID
+	OrganizationID    string
+	SourceIssuerID    uuid.UUID
+}
+
+type ListSourceClientLinksForUserSessionIssuerMigrationRow struct {
+	RemoteSessionClientID uuid.UUID
+	ClientID              string
+	ClientDeleted         bool
+	ProviderID            uuid.NullUUID
+	ProviderIssuer        pgtype.Text
+	AlreadyOnTarget       bool
+	Needed                bool
+}
+
+// Every client the source issuer binds, with whether consolidation carries the
+// binding to the target. A binding is needed when something still signs in
+// through it after the move:
+//
+//   - a client the caller found a server on the source requiring
+//     (required_client_ids), which covers servers that resolve the issuer's
+//     bindings without an association;
+//   - a live association of a server on the source or target issuer, of a
+//     member of a gateway on either, or of any server in the organization
+//     when the target is the organization's only organization-level issuer
+//     once the source is retired, since the organization gateway then fronts
+//     every server through it;
+//   - an agent attachment, EMA binding or Okta connection naming the client
+//     through the source issuer;
+//   - either issuer's trusted client;
+//   - any binding at all while a live gateway signs in through the source,
+//     since a gateway resolves every client its issuer binds and routes each
+//     member by its recorded resource, associated or not.
+//
+// A deleted client's binding is never needed.
+func (q *Queries) ListSourceClientLinksForUserSessionIssuerMigration(ctx context.Context, arg ListSourceClientLinksForUserSessionIssuerMigrationParams) ([]ListSourceClientLinksForUserSessionIssuerMigrationRow, error) {
+	rows, err := q.db.Query(ctx, listSourceClientLinksForUserSessionIssuerMigration,
+		arg.TargetIssuerID,
+		arg.RequiredClientIds,
+		arg.OrganizationID,
+		arg.SourceIssuerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceClientLinksForUserSessionIssuerMigrationRow
+	for rows.Next() {
+		var i ListSourceClientLinksForUserSessionIssuerMigrationRow
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.ClientID,
+			&i.ClientDeleted,
+			&i.ProviderID,
+			&i.ProviderIssuer,
+			&i.AlreadyOnTarget,
+			&i.Needed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUpstreamClientSelections = `-- name: ListUpstreamClientSelections :many
 SELECT sel.mcp_server_id,
        sel.remote_session_client_id,
@@ -4417,6 +4712,203 @@ func (q *Queries) ListUserSessionIssuerClientIDConflicts(ctx context.Context, ar
 			return nil, err
 		}
 		items = append(items, client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessionIssuerMigrationImpactAssociations = `-- name: ListUserSessionIssuerMigrationImpactAssociations :many
+SELECT a.mcp_server_id,
+       a.remote_session_client_id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND (c.project_id = a.project_id
+      OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+JOIN remote_session_issuers AS provider
+  ON provider.id = c.remote_session_issuer_id
+ AND provider.deleted IS FALSE
+ AND (provider.project_id = a.project_id
+      OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+WHERE a.mcp_server_id = ANY($1::uuid[])
+  AND a.organization_id = $2::text
+  AND a.deleted IS FALSE
+ORDER BY a.mcp_server_id, a.remote_session_client_id
+`
+
+type ListUserSessionIssuerMigrationImpactAssociationsParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+type ListUserSessionIssuerMigrationImpactAssociationsRow struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// The live client associations of each server, counted the way serving counts
+// them: a live client and provider visible to the association's own project,
+// its organization, or globally.
+func (q *Queries) ListUserSessionIssuerMigrationImpactAssociations(ctx context.Context, arg ListUserSessionIssuerMigrationImpactAssociationsParams) ([]ListUserSessionIssuerMigrationImpactAssociationsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerMigrationImpactAssociations, arg.McpServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionIssuerMigrationImpactAssociationsRow
+	for rows.Next() {
+		var i ListUserSessionIssuerMigrationImpactAssociationsRow
+		if err := rows.Scan(&i.McpServerID, &i.RemoteSessionClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessionIssuerMigrationImpactClients = `-- name: ListUserSessionIssuerMigrationImpactClients :many
+SELECT c.id,
+       c.client_id,
+       provider.id AS provider_id,
+       provider.issuer AS provider_issuer
+FROM remote_session_clients AS c
+LEFT JOIN projects AS client_project
+  ON client_project.id = c.project_id
+JOIN remote_session_issuers AS provider
+  ON provider.id = c.remote_session_issuer_id
+WHERE c.id = ANY($1::uuid[])
+  AND (client_project.organization_id = $2::text
+       OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+ORDER BY c.id
+`
+
+type ListUserSessionIssuerMigrationImpactClientsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	OrganizationID         string
+}
+
+type ListUserSessionIssuerMigrationImpactClientsRow struct {
+	ID             uuid.UUID
+	ClientID       string
+	ProviderID     uuid.UUID
+	ProviderIssuer string
+}
+
+// The provider of each named client, for labelling a consolidation preview.
+func (q *Queries) ListUserSessionIssuerMigrationImpactClients(ctx context.Context, arg ListUserSessionIssuerMigrationImpactClientsParams) ([]ListUserSessionIssuerMigrationImpactClientsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerMigrationImpactClients, arg.RemoteSessionClientIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionIssuerMigrationImpactClientsRow
+	for rows.Next() {
+		var i ListUserSessionIssuerMigrationImpactClientsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientID,
+			&i.ProviderID,
+			&i.ProviderIssuer,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessionIssuerMigrationImpactServers = `-- name: ListUserSessionIssuerMigrationImpactServers :many
+SELECT s.id,
+       s.project_id,
+       p.name AS project_name,
+       s.name,
+       s.slug,
+       s.user_session_issuer_id,
+       (s.toolset_id IS NOT NULL)::boolean AS hosted,
+       rp.authorization_servers
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT protected.authorization_servers
+  FROM remote_protected_resources AS protected
+  WHERE r.id IS NOT NULL
+    AND protected.project_id = s.project_id
+    AND protected.organization_id = p.organization_id
+    AND protected.deleted IS FALSE
+    AND protected.metadata_fetched_at IS NOT NULL
+    AND protected.metadata_last_error IS NULL
+    AND (protected.resource_identifier = r.url
+         OR (rtrim(protected.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(protected.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
+  ORDER BY protected.metadata_fetched_at DESC, protected.id
+  LIMIT 1
+) AS rp ON TRUE
+WHERE s.id = ANY($1::uuid[])
+  AND s.deleted IS FALSE
+  AND p.organization_id = $2::text
+ORDER BY s.id
+`
+
+type ListUserSessionIssuerMigrationImpactServersParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+type ListUserSessionIssuerMigrationImpactServersRow struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	ProjectName          string
+	Name                 pgtype.Text
+	Slug                 pgtype.Text
+	UserSessionIssuerID  uuid.NullUUID
+	Hosted               bool
+	AuthorizationServers []string
+}
+
+// What a consolidation preview reports about each affected server: where it
+// lives, whether it is hosted, and the authorization servers its upstream
+// advertises.
+// authorization_servers comes from the newest valid protected resource record
+// for the remote server's URL, matched the way ListEMABindingServers matches
+// it; it is NULL when there is no such record, which means unknown rather than
+// an empty list.
+func (q *Queries) ListUserSessionIssuerMigrationImpactServers(ctx context.Context, arg ListUserSessionIssuerMigrationImpactServersParams) ([]ListUserSessionIssuerMigrationImpactServersRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerMigrationImpactServers, arg.McpServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionIssuerMigrationImpactServersRow
+	for rows.Next() {
+		var i ListUserSessionIssuerMigrationImpactServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.Name,
+			&i.Slug,
+			&i.UserSessionIssuerID,
+			&i.Hosted,
+			&i.AuthorizationServers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -6922,6 +7414,19 @@ func (q *Queries) SetUserSessionClientCIMDFetchedAt(ctx context.Context, arg Set
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setUserSessionIssuerMigrationPreviewLockTimeout = `-- name: SetUserSessionIssuerMigrationPreviewLockTimeout :exec
+SET LOCAL lock_timeout = '5s'
+`
+
+// Bounds how long a consolidation preview waits for the locks a consolidation
+// takes. A preview that would queue behind another writer fails fast and asks
+// the caller to retry; five seconds covers ordinary writes on the
+// organization's servers without holding a dashboard request open.
+func (q *Queries) SetUserSessionIssuerMigrationPreviewLockTimeout(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, setUserSessionIssuerMigrationPreviewLockTimeout)
+	return err
 }
 
 const softDeleteMigratedUserSessionIssuer = `-- name: SoftDeleteMigratedUserSessionIssuer :one
