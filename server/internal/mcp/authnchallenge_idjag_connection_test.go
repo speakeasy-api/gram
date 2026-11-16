@@ -2,6 +2,10 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,20 +15,28 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -163,14 +175,23 @@ func TestIDJAGExchangeRecordsRefusals(t *testing.T) {
 			status: http.StatusBadRequest, body: `{"error":"invalid_grant","error_description":"assertion is invalid"}`,
 			what: mcpconnectionattempts.CodeAssertionInvalid, who: mcpconnectionattempts.WhoApp, detail: "assertion_audience_mismatch",
 		},
-		"assertion from an untrusted issuer": {
+		"assertion without an email": {
 			granted: true,
 			sign: func(t *testing.T, f idJAGOutageFixture, jti string) string {
 				t.Helper()
-				return f.signer.sign(t, "https://other-identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, jti)
+				return f.signer.sign(t, idJAGOutageIssuer, f.resource, f.resource, f.clientID, "", jti)
 			},
 			status: http.StatusBadRequest, body: `{"error":"invalid_grant","error_description":"assertion is invalid"}`,
-			what: mcpconnectionattempts.CodeIssuerNotTrusted, who: mcpconnectionattempts.WhoAdmin, detail: "assertion_issuer_mismatch",
+			what: mcpconnectionattempts.CodeInvalidIdentity, who: mcpconnectionattempts.WhoAdmin, detail: "assertion_email_missing",
+		},
+		"assertion for another server": {
+			granted: true,
+			sign: func(t *testing.T, f idJAGOutageFixture, jti string) string {
+				t.Helper()
+				return f.signer.sign(t, idJAGOutageIssuer, f.resource, "https://other.example.test/mcp", f.clientID, mockidp.MockUserEmail, jti)
+			},
+			status: http.StatusBadRequest, body: `{"error":"invalid_grant","error_description":"assertion is invalid"}`,
+			what: mcpconnectionattempts.CodeResourceMismatch, who: mcpconnectionattempts.WhoApp, detail: "assertion_resource_mismatch",
 		},
 		"person not in the directory": {
 			granted: true,
@@ -276,39 +297,222 @@ func TestIDJAGExchangeRecordsKeyOutage(t *testing.T) {
 	require.Empty(t, row.ProviderHost)
 }
 
-// A trust link that is missing for the endpoint's organization is the admin's to add.
-func TestIDJAGExchangeRecordsMissingTrust(t *testing.T) {
+// refusalsWithoutRow reads mcp.connection.refusals_without_row as reason -> count.
+func refusalsWithoutRow(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	counts := map[string]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "mcp.connection.refusals_without_row" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				reason, _ := point.Attributes.Value(attr.OAuthFailureReasonKey)
+				counts[reason.AsString()] += point.Value
+			}
+		}
+	}
+	return counts
+}
+
+// Until the assertion's signature verifies, nothing proves who sent it, so a refusal is a metric, never a row.
+func TestIDJAGExchangeUnverifiedRefusalsWriteNoRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newIDJAGOutageFixture(t, true)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	forger, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	require.NoError(t, err)
+	forgerSigner, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES384, Key: forger},
+		(&jose.SignerOptions{}).WithType(jose.ContentType(idjag.Type)).WithHeader(jose.HeaderKey("kid"), "id-jag-test-key"),
+	)
+	require.NoError(t, err)
+	unknownKey, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES384, Key: forger},
+		(&jose.SignerOptions{}).WithType(jose.ContentType(idjag.Type)).WithHeader(jose.HeaderKey("kid"), "someone-elses-key"),
+	)
+	require.NoError(t, err)
+
+	for _, assertion := range []string{
+		"not-a-jwt",
+		f.signer.sign(t, "https://other-identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString()),
+		forgeSignature(t, f.signer.sign(t, idJAGOutageIssuer, f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())),
+		idJAGTestAssertion{signer: forgerSigner, jwks: nil}.sign(t, idJAGOutageIssuer, f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString()),
+		idJAGTestAssertion{signer: unknownKey, jwks: nil}.sign(t, idJAGOutageIssuer, f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString()),
+	} {
+		w := postIDJAGForm(t, ctx, f.ti, f.slug, idJAGForm(f.clientID, assertion))
+		requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
+	}
+
+	rec.RequireNothing()
+	require.Equal(t, map[string]int64{
+		"token_assertion_malformed":         1,
+		"token_assertion_issuer_mismatch":   1,
+		"token_assertion_signature_invalid": 1,
+		"token_assertion_key_unusable":      1,
+		"token_assertion_key_unknown":       1,
+	}, refusalsWithoutRow(t, f.reader))
+}
+
+// idJAGTrustFixture is a toolset on an organization issuer an app has a client
+// for, recording connection rows and metrics.
+type idJAGTrustFixture struct {
+	ctx      context.Context //nolint:containedctx // test fixture
+	ti       *testInstance
+	slug     string
+	clientID string
+	resource string
+	reader   *sdkmetric.ManualReader
+	rec      *mcpconnectionattemptstest.Recording
+}
+
+func newIDJAGTrustFixture(t *testing.T, rootCAs *x509.CertPool, issuer func(ctx context.Context, ti *testInstance, organizationID string) uuid.UUID) idJAGTrustFixture {
+	t.Helper()
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), guardian.WithTLSRootCAs(rootCAs))
+	authCtx := requireProjectAuthContext(t, ctx)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	issuerID := issuer(ctx, ti, authCtx.ActiveOrganizationID)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuerID)
+	client := seedCIMDClient(t, ctx, ti, issuerID, codexCIMDClientID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	return idJAGTrustFixture{ctx: ctx, ti: ti, slug: toolset.McpSlug.String, clientID: client.ClientID, resource: resource, reader: reader, rec: rec}
+}
+
+// An organization that never set up company-managed sign-in has no trust link; that is no one's failure.
+func TestIDJAGExchangeWithoutTrustLinkWritesNoRow(t *testing.T) {
+	t.Parallel()
+
+	f := newIDJAGTrustFixture(t, x509.NewCertPool(), func(ctx context.Context, ti *testInstance, organizationID string) uuid.UUID {
+		issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+			OrganizationID:               conv.ToPGText(organizationID),
+			Slug:                         "id-jag-" + uuid.NewString(),
+			AuthnChallengeMode:           "chain",
+			SessionDuration:              pgtype.Interval{Microseconds: int64((8 * time.Hour) / time.Microsecond), Valid: true},
+			TrustedRemoteSessionIssuerID: uuid.NullUUID{},
+		})
+		require.NoError(t, err)
+		return issuer.ID
+	})
+	signer := newIDJAGTestAssertion(t)
+	assertion := signer.sign(t, "https://identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())
+
+	w := postIDJAGForm(t, f.ctx, f.ti, f.slug, idJAGForm(f.clientID, assertion))
+	requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
+
+	f.rec.RequireNothing()
+	require.Equal(t, map[string]int64{"token_trusted_issuer_not_configured": 1}, refusalsWithoutRow(t, f.reader))
+}
+
+// A trust link to an issuer with no key set is an administrator's unfinished setup.
+func TestIDJAGExchangeRecordsTrustLinkWithoutKeys(t *testing.T) {
+	t.Parallel()
+
+	f := newIDJAGTrustFixture(t, x509.NewCertPool(), func(ctx context.Context, ti *testInstance, organizationID string) uuid.UUID {
+		return createTrustedIDJAGIssuer(t, ctx, ti, organizationID, "https://identity.example.test", "").ID
+	})
+	signer := newIDJAGTestAssertion(t)
+	jti := uuid.NewString()
+	assertion := signer.sign(t, "https://identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, jti)
+
+	w := postIDJAGForm(t, f.ctx, f.ti, f.slug, idJAGForm(f.clientID, assertion))
+	requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
+
+	row := requireOneIDJAGRow(t, f.rec, mcpconnectionattempts.CodeIssuerNotTrusted, assertion, jti)
+	requireRefusedBy(t, row, mcpconnectionattempts.WhoAdmin, "trusted_issuer_unavailable")
+	require.Empty(t, row.SubjectURN)
+}
+
+// A key set address that answers 404 is not the app's fault, and is counted apart from a caller's bad key.
+func TestIDJAGExchangeUnusableKeySetWritesNoRow(t *testing.T) {
+	t.Parallel()
+
+	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(jwksServer.Close)
+	rootCAs := x509.NewCertPool()
+	rootCAs.AddCert(jwksServer.Certificate())
+	f := newIDJAGTrustFixture(t, rootCAs, func(ctx context.Context, ti *testInstance, organizationID string) uuid.UUID {
+		return createTrustedIDJAGIssuer(t, ctx, ti, organizationID, "https://identity.example.test", jwksServer.URL).ID
+	})
+	signer := newIDJAGTestAssertion(t)
+	assertion := signer.sign(t, "https://identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())
+
+	w := postIDJAGForm(t, f.ctx, f.ti, f.slug, idJAGForm(f.clientID, assertion))
+	requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
+
+	f.rec.RequireNothing()
+	require.Equal(t, map[string]int64{"token_assertion_key_set_unusable": 1}, refusalsWithoutRow(t, f.reader))
+}
+
+// A person who can use none of a gateway's servers has no server to connect to.
+func TestIDJAGExchangeRecordsGatewayWithoutServers(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, toolset.McpSlug.String, "mcp")
-	require.NoError(t, err)
+	const upstreamIssuer = "https://identity.example.test"
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
+	slug := "id-jag-meta-" + uuid.NewString()
+	projectIssuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, projectIssuerID)
+	seedHostedMetaMember(t, ctx, ti, meta.ID, "private ID-JAG member", 1, mcpservers.VisibilityPrivate, "member_tool")
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 
-	otherOrganizationID := "org_" + uuid.NewString()
-	require.NoError(t, orgsrepo.New(ti.conn).CreateOrganizationMetadata(ctx, orgsrepo.CreateOrganizationMetadataParams{
-		ID: otherOrganizationID, Name: "Other organization", Slug: "other-" + uuid.NewString(),
-	}))
-	const upstreamIssuer = "https://other-identity.example.test"
-	otherIssuer := createTrustedIDJAGIssuer(t, ctx, ti, otherOrganizationID, upstreamIssuer, jwksURL)
-	client := seedCIMDClient(t, ctx, ti, otherIssuer.ID, codexCIMDClientID)
-	endpoint.UserSessionIssuerID = otherIssuer.ID
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	endpoint.UserSessionIssuerID = issuer.ID
 	resource, err := endpoint.RootURL(ti.serverURL.String())
 	require.NoError(t, err)
 	jti := uuid.NewString()
 	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, jti)
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(idJAGForm(client.ClientID, assertion).Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/token", strings.NewReader(idJAGForm(client.ClientID, assertion).Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.ServeToken(w, req.WithContext(ctx), endpoint))
+	require.NoError(t, ti.service.ServeToken(w, req.WithContext(authztest.WithExactGrants(t, ctx)), endpoint))
 	requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
 
-	row := requireOneIDJAGRow(t, rec, mcpconnectionattempts.CodeIssuerNotTrusted, assertion, jti)
-	requireRefusedBy(t, row, mcpconnectionattempts.WhoAdmin, "trusted_issuer_unavailable")
-	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID)
+	row := requireOneIDJAGRow(t, rec, mcpconnectionattempts.CodeResourceNotAvailable, assertion, jti)
+	requireRefusedBy(t, row, mcpconnectionattempts.WhoAdmin, "subject_not_authorized")
+	require.Equal(t, urn.NewUserSubject(mockidp.MockUserID).String(), row.SubjectURN)
+	require.Equal(t, meta.ID.String(), row.ServerID)
+}
+
+// A caller that hangs up while its client metadata document is fetched has not shown that the fetch failed.
+func TestIDJAGExchangeClientDisconnectDuringClientCheckWritesNoRow(t *testing.T) {
+	t.Parallel()
+
+	f := newIDJAGClientFixture(t)
+	setOrganizationIssuerAdmissionMode(t, f.ctx, f.ti, f.issuer, admission.ModeOpen)
+	ctx, cancel := context.WithCancel(f.ctx)
+	defer cancel()
+	assertion := f.signer.sign(t, "https://identity.example.test", f.resource, f.resource, f.ds.clientID, mockidp.MockUserEmail, uuid.NewString())
+
+	// Holding the document server's lock keeps the fetch in flight until the caller hangs up.
+	f.ds.mu.Lock()
+	done := make(chan *httptest.ResponseRecorder)
+	go func() { done <- postIDJAGForm(t, ctx, f.ti, f.slug, idJAGForm(f.ds.clientID, assertion)) }()
+	require.Eventually(t, func() bool { return f.ds.requests.Load() == 1 }, 10*time.Second, 10*time.Millisecond)
+	cancel()
+	w := <-done
+	f.ds.mu.Unlock()
+
+	requireTokenResponse(t, w, http.StatusServiceUnavailable, `{"error":"temporarily_unavailable","error_description":"failed to fetch client metadata document"}`)
+	f.rec.RequireNothing()
 }
 
 // Client refusals on the ID-JAG grant write the rows an authorization code's do; a
