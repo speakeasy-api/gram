@@ -34,7 +34,8 @@ import { useNavigate, useParams } from "react-router";
 import { AuthenticationHostDialog } from "./AuthenticationHostDialog";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
-import { ProviderSettingsForm } from "./ProviderSettingsForm";
+import { ClientAccessSection } from "./ClientAccessSection";
+import { SessionLengthSection } from "./SessionLengthSection";
 import {
   authorizationServerModeLabel,
   consolidationTargets,
@@ -114,17 +115,27 @@ export function IssuerDetailContent({
         issuer
           ? [
               {
-                id: "settings",
-                label: "Settings",
+                id: "session-length",
+                label: "Session length",
                 content: (
                   // The first section: the scroll layout leaves no room
                   // under the hero.
                   <div className="pt-8">
-                    <ProviderSettingsForm
+                    <SessionLengthSection
                       issuer={issuer}
                       editableProjectId={editableProjectId}
                     />
                   </div>
+                ),
+              },
+              {
+                id: "client-access",
+                label: "Client access",
+                content: (
+                  <ClientAccessSection
+                    issuer={issuer}
+                    editableProjectId={editableProjectId}
+                  />
                 ),
               },
               {

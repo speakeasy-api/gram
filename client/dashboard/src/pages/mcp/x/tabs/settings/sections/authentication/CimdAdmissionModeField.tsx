@@ -214,7 +214,7 @@ export function CimdAdmissionModeField({
 
 // The button's own label, so the counts an operator is about to manage are
 // visible before the modal opens.
-export function AllowedClientsSummary(): JSX.Element {
+function AllowedClientsSummary(): JSX.Element {
   const { data, isLoading, isError } = useCimdClientPresets();
   const verified = (data?.items ?? []).filter((preset) => preset.enabled);
 
