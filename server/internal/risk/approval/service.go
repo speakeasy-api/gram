@@ -169,9 +169,16 @@ func (s *Service) RequestURL() string {
 // nothing and the loop keeps polling.
 func (s *Service) waitCommand(token string) string {
 	watchURL := s.serverURL.JoinPath(WatchPath)
-	watchURL.RawQuery = "format=text"
-	return fmt.Sprintf(`while :; do s=$(curl -s --max-time 10 -H 'Authorization: Bearer %s' '%s'); case "$s" in APPROVED*|DENIED*|EXPIRED*|BLOCKED*|INVALID*) echo "$s"; break;; esac; sleep %d; done`,
-		token, watchURL.String(), watchIntervalSeconds)
+	watchURL.RawQuery = url.Values{"format": {"text"}, RequestTokenParam: {token}}.Encode()
+	return fmt.Sprintf(`while :; do s=$(curl -s --max-time 10 '%s'); case "$s" in APPROVED*|DENIED*|EXPIRED*|BLOCKED*|INVALID*) echo "$s"; break;; esac; sleep %d; done`,
+		watchURL.String(), watchIntervalSeconds)
+}
+
+// requestURLFor is the request endpoint with the token as its query parameter.
+func (s *Service) requestURLFor(token string) string {
+	requestURL := s.serverURL.JoinPath(RequestPath)
+	requestURL.RawQuery = url.Values{RequestTokenParam: {token}}.Encode()
+	return requestURL.String()
 }
 
 // HoldInput is one MCP tool call a require_approval policy covers.
@@ -672,10 +679,10 @@ When it prints APPROVED, retry this exact call with the same arguments. On anyth
 	}
 	return fmt.Sprintf(`Blocked: calling %s needs approval under risk policy %q.
 1. Request approval with this command. Replace the reason with one sentence telling the approver why the call is needed, without single quotes:
-   curl -sS -X POST '%s' -H 'Authorization: Bearer %s' -H 'Content-Type: application/json' -d '{"reason":"Why this call is needed."}'
+   curl -sS -X POST '%s' -H 'Content-Type: application/json' -d '{"reason":"Why this call is needed."}'
    To wait longer or shorter than 30 minutes, add "expires_in" in seconds (60 to 86400) to the JSON.
 2. Its response tells you how to wait for the decision. Do not retry this call before it is approved.`,
-		toolName, policyName, s.RequestURL(), row.Token)
+		toolName, policyName, s.requestURLFor(row.Token))
 }
 
 // scopeDocument is the stored form of a requested or granted scope.

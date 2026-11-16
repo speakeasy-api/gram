@@ -122,12 +122,22 @@ var watchLines = map[Status]string{
 	StatusExpired:  "EXPIRED: nobody decided in time; do not retry; tell the user",
 }
 
-// bearerToken reads a request token from the Authorization header. Tokens are
-// read only from the header so they never appear in a URL.
+// RequestTokenParam is the query parameter that carries a request token.
+// Agents such as OpenClaw mask Authorization header values in the transcript
+// their model reads, so the token travels in a parameter whose name their
+// secret masking does not match.
+const RequestTokenParam = "request"
+
+// bearerToken reads a request token from the Authorization header, or else
+// from the request query parameter.
 func bearerToken(req *http.Request) (string, bool) {
 	kind, token, ok := strings.Cut(req.Header.Get("Authorization"), " ")
 	token = strings.TrimSpace(token)
-	if !ok || !strings.EqualFold(kind, "Bearer") || !IsToken(token) {
+	if ok && strings.EqualFold(kind, "Bearer") && IsToken(token) {
+		return token, true
+	}
+	token = strings.TrimSpace(req.URL.Query().Get(RequestTokenParam))
+	if !IsToken(token) {
 		return "", false
 	}
 	return token, true
@@ -160,7 +170,7 @@ func (r *Runtime) HandleWatch(w http.ResponseWriter, req *http.Request) error {
 	}
 	token, ok := bearerToken(req)
 	if !ok {
-		return oops.E(oops.CodeUnauthorized, nil, "missing request token: send the apr_ token from the block message in the header \"Authorization: Bearer apr_...\", not in the URL")
+		return oops.E(oops.CodeUnauthorized, nil, "missing request token: send the apr_ token from the block message as the URL parameter ?request=apr_...")
 	}
 	allowed, err := r.allow(ctx, w, r.watchLimiter, token)
 	if err != nil {
@@ -171,7 +181,7 @@ func (r *Runtime) HandleWatch(w http.ResponseWriter, req *http.Request) error {
 	}
 	status, err := r.service.WatchStatus(ctx, token)
 	if errors.Is(err, ErrNotFound) {
-		return oops.E(oops.CodeUnauthorized, nil, "unknown request token: send the exact apr_ token from the block message as \"Authorization: Bearer apr_...\"")
+		return oops.E(oops.CodeUnauthorized, nil, "unknown request token: send the exact apr_ token from the block message as the URL parameter ?request=apr_...")
 	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "read approval status").LogError(ctx, r.service.logger)
@@ -188,7 +198,7 @@ func (r *Runtime) HandleWatch(w http.ResponseWriter, req *http.Request) error {
 func (r *Runtime) watchText(ctx context.Context, w http.ResponseWriter, req *http.Request) error {
 	token, ok := bearerToken(req)
 	if !ok {
-		return writeLine(w, http.StatusUnauthorized, `INVALID: missing request token; send the apr_ token from the block message as the header "Authorization: Bearer apr_..."; tell the user if this keeps happening`)
+		return writeLine(w, http.StatusUnauthorized, `INVALID: missing request token; send the apr_ token from the block message as the URL parameter ?request=apr_...; tell the user if this keeps happening`)
 	}
 	allowed, err := r.allow(ctx, w, r.watchLimiter, token)
 	if err != nil {
@@ -232,7 +242,7 @@ func (r *Runtime) HandleRequest(w http.ResponseWriter, req *http.Request) error 
 	w.Header().Set("Cache-Control", "no-store")
 	token, ok := bearerToken(req)
 	if !ok {
-		return oops.E(oops.CodeUnauthorized, nil, "missing request token: send the apr_ token from the block message in the header \"Authorization: Bearer apr_...\"")
+		return oops.E(oops.CodeUnauthorized, nil, "missing request token: send the apr_ token from the block message as the URL parameter ?request=apr_...")
 	}
 	allowed, err := r.allow(ctx, w, r.requestLimiter, token)
 	if err != nil {
