@@ -24,8 +24,9 @@ WHERE c.organization_id = @organization_id
 WITH mapped AS MATERIALIZED (
     SELECT e.id AS registry_entry_id, (n.value #>> '{}')::text AS name
     FROM mcp_registry_entries AS e
+    JOIN mcp_registry_servers AS s ON s.id = e.server_id AND s.default_entry_id = e.id
     CROSS JOIN LATERAL jsonb_array_elements(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') AS n(value)
-    WHERE e.published
+    WHERE e.published AND s.visible
       AND jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
       AND jsonb_typeof(n.value) = 'string'
 )
@@ -64,10 +65,11 @@ WHERE a.organization_id = @organization_id
 ORDER BY m.registry_entry_id, a.label, a.okta_app_id;
 
 -- name: ListMappedEntries :many
-SELECT id, data
-FROM mcp_registry_entries
-WHERE id = ANY(@ids::uuid[])
-  AND published;
+SELECT e.id, e.data
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id AND s.default_entry_id = e.id
+WHERE e.id = ANY(@ids::uuid[])
+  AND e.published AND s.visible;
 
 -- name: ListDismissals :many
 SELECT registry_entry_id, created_at

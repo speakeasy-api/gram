@@ -310,7 +310,13 @@ WHERE c.project_id = @project_id AND e.published;
 DELETE FROM projects WHERE id = @project_id;
 
 -- name: DeletePromotionRegistryEntryFixture :exec
-DELETE FROM mcp_registry_entries WHERE id = @id;
+-- Test fixture: clear default ownership and delete atomically; the deferred FK
+-- checks the final statement state, not sibling CTE snapshot visibility.
+WITH cleared AS (
+ UPDATE mcp_registry_servers SET default_entry_id = NULL WHERE default_entry_id = @id
+ RETURNING mcp_registry_servers.id
+)
+DELETE FROM mcp_registry_entries e WHERE e.id = @id;
 
 -- name: RepointPromotionSourceFixture :exec
 WITH replacement AS (

@@ -220,3 +220,35 @@ func TestOktaMappingConcurrentClaims(t *testing.T) {
 		})
 	}
 }
+
+func TestOktaHiddenParentKeepsOwnership(t *testing.T) {
+	t.Parallel()
+	ctx, s, db := newTestService(t)
+	owner, err := s.Create(ctx, []byte(oktaRecord("example.test/owner", "linear")))
+	require.NoError(t, err)
+	require.NoError(t, repo.New(db).HideRegistryServerFixture(ctx, owner.ServerID))
+	_, err = s.Save(ctx, owner.ID, Token(owner), owner.Data)
+	require.NoError(t, err)
+	_, err = s.Create(ctx, []byte(oktaRecord("example.test/other", "linear")))
+	var invalid *InvalidError
+	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, []Issue{{Path: oktaNamespacePath + "/oinNames/0", Message: "OIN name is already mapped by entry example.test/owner"}}, invalid.Issues)
+}
+
+func TestOktaUnlinkedLegacyClaimBlocksCreateAndSave(t *testing.T) {
+	t.Parallel()
+	ctx, s, db := newTestService(t)
+	require.NoError(t, repo.New(db).InsertRegistryUnlinkedEntryFixture(ctx, repo.InsertRegistryUnlinkedEntryFixtureParams{ID: uuid.New(), Data: []byte(oktaRecord("example.test/legacy", "reserved")), Published: false}))
+	_, err := s.Create(ctx, []byte(oktaRecord("example.test/new", "reserved")))
+	var invalid *InvalidError
+	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, []Issue{{Path: oktaNamespacePath + "/oinNames/0", Message: "OIN name is already mapped by entry example.test/legacy"}}, invalid.Issues)
+	other, err := s.Create(ctx, []byte(oktaRecord("example.test/other", "available")))
+	require.NoError(t, err)
+	_, err = s.Save(ctx, other.ID, Token(other), []byte(oktaRecord("example.test/other", "reserved")))
+	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, []Issue{{Path: oktaNamespacePath + "/oinNames/0", Message: "OIN name is already mapped by entry example.test/legacy"}}, invalid.Issues)
+	retained, err := s.Get(ctx, other.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, string(other.Data), string(retained.Data))
+}

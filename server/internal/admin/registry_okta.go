@@ -34,15 +34,24 @@ func (s *Service) observedOktaNames(ctx context.Context) ([]oktamatch.Observed, 
 	return observed, nil
 }
 
-// oktaMappings returns which entry claims each OIN name.
-func (s *Service) oktaMappings(ctx context.Context) (map[string]string, error) {
+type oktaMappingOwner struct {
+	id   uuid.UUID
+	name string
+}
+
+// oktaMappings returns the stable server that claims each OIN name. Retained
+// rows can predate duplicate rejection, so the byte-ordered smallest server
+// name owns a shared claim, matching the registry's name ordering.
+func (s *Service) oktaMappings(ctx context.Context) (map[string]oktaMappingOwner, error) {
 	rows, err := repo.New(s.db).AdminListRegistryOktaMappings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list registry okta mappings: %w", err)
 	}
-	claimed := make(map[string]string, len(rows))
+	claimed := make(map[string]oktaMappingOwner, len(rows))
 	for _, row := range rows {
-		claimed[row.OinName] = row.EntryName
+		if current, ok := claimed[row.OinName]; !ok || row.EntryName < current.name {
+			claimed[row.OinName] = oktaMappingOwner{id: row.RegistryServerID, name: row.EntryName}
+		}
 	}
 	return claimed, nil
 }
@@ -68,10 +77,10 @@ func (s *Service) GetRegistryOktaCandidates(ctx context.Context, p *gen.GetRegis
 	candidates := make([]*gen.AdminRegistryOktaCandidate, 0)
 	for _, c := range oktamatch.Match(facts, observed) {
 		var mappedBy *string
-		if holder, ok := claimed[c.Name]; ok && holder != facts.Name {
-			mappedBy = conv.PtrEmpty(holder)
+		if holder, ok := claimed[c.Name]; ok && holder.id != entry.ServerID {
+			mappedBy = conv.PtrEmpty(holder.name)
 		} else if ok {
-			// Already on this entry; nothing to propose.
+			// Already claimed by this server, including historical versions.
 			continue
 		}
 		candidates = append(candidates, &gen.AdminRegistryOktaCandidate{

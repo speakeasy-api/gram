@@ -92,3 +92,25 @@ func TestNativeDashboardDetailsRejectUnpublishedSelection(t *testing.T) {
 	_, err = ti.service.GetServerDetails(ctx, payload)
 	require.Error(t, err, "new preinstall details must recheck publication")
 }
+
+func TestNativeHiddenAndUnlinkedEntriesRemainEvidenceOnly(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestExternalMCPService(t)
+	validator, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	reader := externalmcp.NewNativeRegistryReader(mcpregistry.New(ti.conn, validator))
+	registry := externalmcp.Registry{ID: externalmcp.NativeCatalogRegistryID}
+	id := uuid.New()
+	raw := []byte(`{"server":{"name":"io.example/hidden","description":"Hidden","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://hidden.example.test/mcp"}]}}`)
+	require.NoError(t, registryrepo.New(ti.conn).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: id, Data: raw, Published: true}))
+	require.NoError(t, registryrepo.New(ti.conn).HideRegistryServerFixture(ctx, id))
+	raw = []byte(`{"server":{"name":"io.example/unlinked","description":"Unlinked","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://unlinked.example.test/mcp"}]}}`)
+	require.NoError(t, registryrepo.New(ti.conn).InsertRegistryUnlinkedEntryFixture(ctx, registryrepo.InsertRegistryUnlinkedEntryFixtureParams{ID: uuid.New(), Data: raw, Published: true}))
+	list, err := reader.ListServers(ctx, registry, externalmcp.ListServersParams{})
+	require.NoError(t, err)
+	require.Empty(t, list.Servers)
+	evidence, err := reader.ListEvidenceServers(ctx, registry)
+	require.NoError(t, err)
+	require.Len(t, evidence.Servers, 2)
+	require.ElementsMatch(t, []string{"io.example/hidden", "io.example/unlinked"}, []string{evidence.Servers[0].RegistrySpecifier, evidence.Servers[1].RegistrySpecifier})
+}

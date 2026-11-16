@@ -169,3 +169,40 @@ func TestRegistryOktaCandidatesAndUnmapped(t *testing.T) {
 	require.False(t, unmapped.Names[2].Integrator)
 	require.Nil(t, unmapped.Names[3].SuggestedEntryID)
 }
+
+func TestRegistryOktaHiddenOwnersRetainedUnlinkedExcluded(t *testing.T) {
+	t.Parallel()
+	ctx, _, db := newTestAdminService(t)
+	hidden := uuid.New()
+	raw := json.RawMessage(`{"server":{"name":"example.test/hidden","version":"1"},"_meta":{"com.speakeasy.ai/okta":{"oinNames":["hidden-app"]}}}`)
+	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: hidden, Data: raw, Published: true}))
+	require.NoError(t, registryrepo.New(db).HideRegistryServerFixture(ctx, hidden))
+	raw = json.RawMessage(`{"server":{"name":"example.test/unlinked","version":"1"},"_meta":{"com.speakeasy.ai/okta":{"oinNames":["unlinked-app"]}}}`)
+	require.NoError(t, registryrepo.New(db).InsertRegistryUnlinkedEntryFixture(ctx, registryrepo.InsertRegistryUnlinkedEntryFixtureParams{ID: uuid.New(), Data: raw, Published: true}))
+	mappings, err := repo.New(db).AdminListRegistryOktaMappings(ctx)
+	require.NoError(t, err)
+	require.Len(t, mappings, 1)
+	require.Equal(t, hidden, mappings[0].RegistryServerID)
+	require.Equal(t, "example.test/hidden", mappings[0].EntryName)
+	require.Equal(t, "hidden-app", mappings[0].OinName)
+	facts, err := repo.New(db).AdminListRegistryEntryFacts(ctx)
+	require.NoError(t, err)
+	require.Len(t, facts, 1)
+	require.Equal(t, hidden, facts[0].RegistryEntryID)
+}
+
+func TestRegistryOktaDuplicateRetainedOwnerIsDeterministic(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	// Writers reject new duplicates, but retained rows may predate that check.
+	// The smaller UUID belongs to the later name so row order cannot pick the owner.
+	first := uuid.MustParse("00000000-0000-4000-8000-000000000001")
+	second := uuid.MustParse("00000000-0000-4000-8000-000000000002")
+	for id, name := range map[uuid.UUID]string{first: "example.test/b", second: "example.test/a"} {
+		raw := json.RawMessage(`{"server":{"name":"` + name + `","version":"1"},"_meta":{"com.speakeasy.ai/okta":{"oinNames":["dup-app"]}}}`)
+		require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: id, Data: raw, Published: true}))
+	}
+	claimed, err := svc.oktaMappings(ctx)
+	require.NoError(t, err)
+	require.Equal(t, oktaMappingOwner{id: second, name: "example.test/a"}, claimed["dup-app"])
+}

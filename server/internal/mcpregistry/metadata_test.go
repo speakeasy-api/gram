@@ -92,7 +92,26 @@ func TestReservedPublicationMetadataAndPrecision(t *testing.T) {
 	page, err := s.Discover(ctx, DiscoveryOptions{Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, page.Records, 1)
-	require.JSONEq(t, string(e.Data), string(page.Records[0]))
+	require.Contains(t, string(page.Records[0]), "9007199254740993")
+	require.Contains(t, string(page.Records[0]), "1.234567890123456789")
+	var discovered, stored map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(page.Records[0], &discovered))
+	require.NoError(t, json.Unmarshal(e.Data, &stored))
+	var discoveredMeta, storedMeta map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(discovered["_meta"], &discoveredMeta))
+	require.NoError(t, json.Unmarshal(stored["_meta"], &storedMeta))
+	require.JSONEq(t, `{"isLatest":true}`, string(discoveredMeta["io.modelcontextprotocol.registry/official"]))
+	delete(discoveredMeta, "io.modelcontextprotocol.registry/official")
+	require.Len(t, discoveredMeta, len(storedMeta))
+	for key, value := range storedMeta {
+		require.JSONEq(t, string(value), string(discoveredMeta[key]), key)
+	}
+	delete(discovered, "_meta")
+	delete(stored, "_meta")
+	require.Len(t, discovered, len(stored))
+	for key, value := range stored {
+		require.JSONEq(t, string(value), string(discovered[key]), key)
+	}
 }
 
 func TestCatalogDocumentationMetadata(t *testing.T) {

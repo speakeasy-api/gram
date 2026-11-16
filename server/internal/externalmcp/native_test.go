@@ -236,7 +236,7 @@ type nativeEvidenceTestSource struct {
 	evidencePages   []mcpregistry.Page
 	evidenceOptions []mcpregistry.ListOptions
 	listErr         error
-	names           []string
+	ids             []uuid.UUID
 }
 
 func (s *nativeEvidenceTestSource) List(_ context.Context, opts mcpregistry.ListOptions) (mcpregistry.Page, error) {
@@ -249,15 +249,15 @@ func (s *nativeEvidenceTestSource) List(_ context.Context, opts mcpregistry.List
 	return page, nil
 }
 
-func (s *nativeEvidenceTestSource) GetByName(ctx context.Context, name string) (mcpregistry.Entry, error) {
-	s.names = append(s.names, name)
-	return s.nativeTestSource.GetByName(ctx, name)
+func (s *nativeEvidenceTestSource) Get(_ context.Context, id uuid.UUID) (mcpregistry.Entry, error) {
+	s.ids = append(s.ids, id)
+	return s.entry, s.err
 }
 
 func TestNativeListEvidenceServers(t *testing.T) {
 	t.Parallel()
 	const valid = `{"server":{"name":"io.example/evidence","description":"Evidence server","version":"1","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"status":"active"}}}`
-	summary := mcpregistry.Summary{Name: "io.example/evidence"}
+	summary := mcpregistry.Summary{ID: uuid.New(), Name: "io.example/evidence"}
 	sourceErr := errors.New("evidence source unavailable")
 	for _, tc := range []struct {
 		name        string
@@ -293,9 +293,9 @@ func TestNativeListEvidenceServers(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.Len(t, result.Servers, tc.wantCount)
-			require.Len(t, source.names, tc.wantLookups)
-			for _, name := range source.names {
-				require.Equal(t, summary.Name, name)
+			require.Len(t, source.ids, tc.wantLookups)
+			for _, id := range source.ids {
+				require.Equal(t, summary.ID, id)
 			}
 			require.Len(t, source.evidenceOptions, len(tc.cursors))
 			for i, cursor := range tc.cursors {

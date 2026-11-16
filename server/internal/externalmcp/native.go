@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 )
 
@@ -99,6 +101,7 @@ func (r *NativeRegistryReader) GetServerDetails(ctx context.Context, _ Registry,
 func (r *NativeRegistryReader) ListEvidenceServers(ctx context.Context, registry Registry) (ListServersResult, error) {
 	source, ok := r.source.(interface {
 		List(context.Context, mcpregistry.ListOptions) (mcpregistry.Page, error)
+		Get(context.Context, uuid.UUID) (mcpregistry.Entry, error)
 	})
 	if !ok {
 		return ListServersResult{}, fmt.Errorf("native retained evidence reader unavailable")
@@ -118,7 +121,7 @@ func (r *NativeRegistryReader) ListEvidenceServers(ctx context.Context, registry
 			if len(summary.Issues) != 0 {
 				continue
 			}
-			entry, err := r.source.GetByName(ctx, summary.Name)
+			entry, err := source.Get(ctx, summary.ID)
 			if err != nil {
 				return ListServersResult{}, fmt.Errorf("read retained evidence: %w", err)
 			}
