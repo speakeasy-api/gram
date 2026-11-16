@@ -65,13 +65,23 @@ func dataExportTestEventToolResult(err error) (*mcp.CallToolResult, bool) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
 }
 
+// dataExportTestSignalNames names what one test sends on each signal.
+var dataExportTestSignalNames = map[dataexports.Signal]string{
+	dataexports.SignalLogs:    "one test log",
+	dataexports.SignalTraces:  "one trace",
+	dataexports.SignalMetrics: "one metric",
+}
+
+// dataExportTestSignalName never returns an empty name, even for a signal added without one.
+func dataExportTestSignalName(signal dataexports.Signal) string {
+	if name, ok := dataExportTestSignalNames[signal]; ok {
+		return name
+	}
+	return "one test event on " + string(signal)
+}
+
 // dataExportTestSignalsDescription says what each data source's test sends, from the source registry.
 func dataExportTestSignalsDescription() string {
-	signalNames := map[dataexports.Signal]string{
-		dataexports.SignalLogs:    "one test log",
-		dataexports.SignalTraces:  "one trace",
-		dataexports.SignalMetrics: "one metric",
-	}
 	var others []string
 	for _, source := range dataexports.Sources() {
 		if slices.Equal(source.Signals, []dataexports.Signal{dataexports.SignalLogs}) {
@@ -79,7 +89,7 @@ func dataExportTestSignalsDescription() string {
 		}
 		names := make([]string, len(source.Signals))
 		for i, signal := range source.Signals {
-			names[i] = signalNames[signal]
+			names[i] = dataExportTestSignalName(signal)
 		}
 		list := names[len(names)-1]
 		if len(names) > 1 {
@@ -90,5 +100,18 @@ func dataExportTestSignalsDescription() string {
 	if len(others) == 0 {
 		return "Every data source sends one test log. "
 	}
-	return "Every data source sends one test log, except " + strings.Join(others, "; and ") + ", and gets one result for each. "
+	return "Every data source sends one test log, except " + listClauses(others) + ", and gets one result for each. "
+}
+
+// listClauses lists clauses that contain commas: "A", "A and B", "A; B; and C".
+func listClauses(clauses []string) string {
+	switch len(clauses) {
+	case 0:
+		return ""
+	case 1:
+		return clauses[0]
+	case 2:
+		return clauses[0] + " and " + clauses[1]
+	}
+	return strings.Join(clauses[:len(clauses)-1], "; ") + "; and " + clauses[len(clauses)-1]
 }
