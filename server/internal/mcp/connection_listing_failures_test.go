@@ -305,6 +305,44 @@ func TestGatewayDirectListingKeepsAnAnswerPastTheListingTime(t *testing.T) {
 	requireListingRow(t, row, listingCase{who: mcpconnectionattempts.WhoProvider, named: true}, member.ID, upstream.URL)
 }
 
+// A retry that got its own answer keeps it, even when cleaning up its session runs past the listing time.
+func TestGatewayDirectListingRetryAnswerStandsPastTheListingTime(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	var first atomic.Int64
+	var rejected atomic.Bool
+	// The first try is unavailable; the retry is refused, minting a session whose cleanup hangs past the listing time.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		first.CompareAndSwap(0, time.Now().UnixNano())
+		switch {
+		case r.Method == http.MethodDelete:
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
+		case time.Since(time.Unix(0, first.Load())) < 300*time.Millisecond:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			rejected.Store(true)
+			w.Header().Set("Mcp-Session-Id", "orphan")
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	seedListingMember(t, ti, *authCtx.ProjectID, gateway.ID, listingCase{}, upstream.URL)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+
+	_, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.True(t, rejected.Load(), "the member was retried")
+	require.Empty(t, discoveryReasons(rec), "a member with no credential to send writes no row, as before")
+}
+
 func happenedReason(what mcpconnectionattempts.Happened) string {
 	if code, ok := what.(mcpconnectionattempts.Code); ok {
 		return code.String()

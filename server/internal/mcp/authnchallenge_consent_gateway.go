@@ -154,7 +154,7 @@ var unavailableCauses = map[mcpconnectionattempts.Code]string{
 	mcpconnectionattempts.CodeProviderRateLimited:      "it's limiting requests",
 	mcpconnectionattempts.CodeProviderServerError:      "it had an error",
 	mcpconnectionattempts.CodeProviderUnreachable:      "it didn't answer",
-	mcpconnectionattempts.CodeRemoteSessionUnavailable: "its sign-in service didn't answer",
+	mcpconnectionattempts.CodeRemoteSessionUnavailable: "its sign-in service is temporarily unavailable",
 	mcpconnectionattempts.CodeSharedCredentialRejected: "it rejected the credential set up for it",
 	mcpconnectionattempts.CodeStaticKeyRejected:        "it rejected the credential set up for it",
 	mcpconnectionattempts.CodeCredentialMisconfigured:  "its connection isn't set up correctly",

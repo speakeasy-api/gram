@@ -785,7 +785,7 @@ func TestListingFailureNamesAnAddressOnly(t *testing.T) {
 	member := metaMember{slug: "member", serverID: uuid.New()}
 	lost := func(dialErr error) error {
 		attempt := newMemberAttempt(nil)
-		attempt.recordFailure(true, false, dialErr)
+		attempt.recordFailure(true, false, false, dialErr)
 		return memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, member, dialErr)
 	}
 	for _, tc := range []struct {

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -117,8 +118,8 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 		result.catalog, result.err = s.describeMetaMember(memberCtx, logger, gate, member)
 		cancel()
 		slots.Release(1)
-		// A retry the listing's time cut short keeps the upstream's own earlier answer.
-		if attempt > 1 && result.catalog == nil && listingBudgetSpent(ctx) {
+		// A retry the listing's time cut off with no answer of its own keeps the earlier one.
+		if _, cut := errors.AsType[listingCutError](result.err); cut && attempt > 1 {
 			return previous
 		}
 		failure, ok := errors.AsType[memberDiscoveryError](result.err)
@@ -151,11 +152,22 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 // listingBudgetKey holds a whole listing's own deadline on its context.
 type listingBudgetKey struct{}
 
-// listingBudgetSpent reports the listing's own time ran out.
-func listingBudgetSpent(ctx context.Context) bool {
+// listingCutOff reports the listing's own time had run out when an operation that got no answer ended; call it as it ends.
+func listingCutOff(ctx context.Context, answered bool) bool {
 	budget, ok := ctx.Value(listingBudgetKey{}).(context.Context)
-	return ok && budget.Err() != nil
+	return !answered && ok && budget.Err() != nil
 }
+
+// tokenEndpointAnswered reports a credential exchange the token endpoint answered.
+func tokenEndpointAnswered(err error) bool {
+	answered, ok := errors.AsType[*remotesessions.TokenEndpointError](err)
+	return ok && answered.StatusCode != 0
+}
+
+// listingCutError is a member operation the listing's own time ended, which says nothing about the member.
+type listingCutError struct{ error }
+
+func (e listingCutError) Unwrap() error { return e.error }
 
 // retryFitsListing reports whether a retry starting after wait still has
 // minMemberRetryBudget before ctx's deadline.

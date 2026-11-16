@@ -175,9 +175,12 @@ type stubMemberOutcome struct {
 	code      int
 	tunnelErr string
 	answered  bool
+	cut       bool
 }
 
 func (o stubMemberOutcome) failure() error { return o.err }
+
+func (o stubMemberOutcome) cutByListing() bool { return o.cut }
 
 func (o stubMemberOutcome) rejection() (int, bool) { return o.rejected, o.rejected != 0 }
 
@@ -912,28 +915,76 @@ func TestListingFailureReadsAsACall(t *testing.T) {
 	}
 }
 
-// The listing's own time running out is no member's failure, unless the upstream had already answered.
+// What the listing's own time ended is decided as the operation ends, not when it is classified.
 func TestMemberClientFailure_ListingTimeIsNotTheUpstreams(t *testing.T) {
 	t.Parallel()
 
-	budget, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
-	defer cancel()
-	ctx := context.WithValue(budget, listingBudgetKey{}, budget)
+	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	t.Cleanup(cancel)
 	dial := memberDial{provider: "https://member.example.com/mcp"}
 	member := metaMember{slug: "fixture", serverID: uuid.New()}
+	gate := &metaGateContext{}
+	tokenOutage := fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, fmt.Errorf("%w: %w", remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: 0}))
+	for _, tc := range []struct {
+		name    string
+		outcome stubMemberOutcome
+		want    mcpconnectionattempts.Code
+		named   bool
+	}{
+		{name: "cut off with no answer", outcome: stubMemberOutcome{cut: true}, want: mcpconnectionattempts.CodeMemberToolsMissing},
+		{name: "credential exchange cut off", outcome: stubMemberOutcome{err: tokenOutage, cut: true}, want: mcpconnectionattempts.CodeMemberToolsMissing},
+		{name: "own timeout before the listing's", outcome: stubMemberOutcome{answered: true}, want: mcpconnectionattempts.CodeProviderUnreachable, named: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := memberClientFailure(expired, testenv.NewLogger(t), tc.outcome, dial, member, context.DeadlineExceeded)
+			code, recorded := gate.listingFailureHappened(member, err)
+			require.True(t, recorded)
+			require.Equal(t, tc.want, code)
+			if tc.named {
+				require.Equal(t, dial.provider, memberUpstreamHost(err))
+			} else {
+				require.Empty(t, memberUpstreamHost(err))
+			}
+		})
+	}
 
-	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{answered: true}, dial, member, context.DeadlineExceeded)
-	_, classified := errors.AsType[memberConnectionError](err)
-	require.False(t, classified)
-	code, recorded := (&metaGateContext{}).listingFailureHappened(member, err)
+	// A refresh before the dial that the listing's time cut off is ours, though it reads as the provider's.
+	refresh := listingCutError{memberConnectionError{newMemberUnavailableError("renew", nil), mcpconnectionattempts.CodeRemoteSessionUnavailable}}
+	code, recorded := gate.listingFailureHappened(member, refresh)
 	require.True(t, recorded)
 	require.Equal(t, mcpconnectionattempts.CodeMemberToolsMissing, code)
-	require.Empty(t, memberUpstreamHost(err))
+	require.False(t, tokenEndpointAnswered(tokenOutage))
+	require.True(t, tokenEndpointAnswered(&remotesessions.TokenEndpointError{StatusCode: http.StatusServiceUnavailable}))
+}
 
-	err = memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{code: http.StatusTooManyRequests}, dial, member, errors.New("rate limited"))
-	failure, classified := errors.AsType[memberConnectionError](err)
-	require.True(t, classified)
-	require.Equal(t, mcpconnectionattempts.CodeProviderRateLimited, failure.code, "an answer already received stands")
+// A listing failure leaves the member's status as before: a rejected key beside nothing to connect stays not set up, with its warning.
+func TestListingFailureStatus(t *testing.T) {
+	t.Parallel()
+
+	rejectedKey := memberConnectionError{memberCredentialError{&metaMemberError{message: "rejected"}}, mcpconnectionattempts.CodeStaticKeyRejected}
+	for configured, want := range map[gatewayServerStatus]gatewayServerStatus{
+		gatewayServerNoSignIn:     gatewayServerNotSetUp,
+		gatewayServerNotSetUp:     gatewayServerNotSetUp,
+		gatewayServerNotConnected: gatewayServerNotConnected,
+		gatewayServerConnected:    gatewayServerReconnect,
+		gatewayServerChainPending: gatewayServerChainPending,
+		gatewayServerChained:      gatewayServerChainPending,
+		gatewayServerReconnect:    gatewayServerReconnect,
+		gatewayServerUnavailable:  gatewayServerUnavailable,
+		gatewayServerNoAccess:     gatewayServerUnavailable,
+	} {
+		got := listingFailureStatus(rejectedKey, configured)
+		require.Equal(t, want, got, string(configured))
+		if got == gatewayServerNotSetUp {
+			server := gatewayServer{Status: got}
+			require.True(t, server.NeedsAttention(), "warning styling as before")
+			require.True(t, server.NotSetUp(), "the View link as before")
+			require.Equal(t, "Sign-in not set up", server.StatusLabel())
+		}
+	}
+	require.Equal(t, gatewayServerNoAccess, listingFailureStatus(oops.E(oops.CodeForbidden, nil, "no"), gatewayServerNoSignIn))
+	require.Equal(t, gatewayServerUnavailable, listingFailureStatus(errors.New("down"), gatewayServerNoSignIn))
 }
 
 // An agent's missing connection is not a person's sign-in to come: the listing records it, as a call does.

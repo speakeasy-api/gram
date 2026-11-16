@@ -847,6 +847,9 @@ func (g *metaGateContext) listingFailureHappened(member metaMember, err error) (
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
 		return mcpconnectionattempts.Code{}, false
 	}
+	if _, cut := errors.AsType[listingCutError](err); cut {
+		return mcpconnectionattempts.CodeMemberToolsMissing, true
+	}
 	if address, _ := memberAddressCause(err); address != guardian.AddressFine {
 		return mcpconnectionattempts.AddressCode(address)
 	}
@@ -865,16 +868,6 @@ func (g *metaGateContext) listingFailureHappened(member metaMember, err error) (
 func adminCredentialRejected(err error) (mcpconnectionattempts.Code, bool) {
 	failure, ok := errors.AsType[memberConnectionError](err)
 	return failure.code, ok && (failure.code == mcpconnectionattempts.CodeSharedCredentialRejected || failure.code == mcpconnectionattempts.CodeStaticKeyRejected)
-}
-
-// personConnects reports a member status the person fixes by connecting.
-func personConnects(status gatewayServerStatus) bool {
-	switch status {
-	case gatewayServerConnected, gatewayServerReconnect, gatewayServerNotConnected, gatewayServerChained, gatewayServerChainPending:
-		return true
-	case gatewayServerUnavailable, gatewayServerNoAccess, gatewayServerNoSignIn, gatewayServerNotSetUp:
-	}
-	return false
 }
 
 // memberAddressCause is the address Speakeasy did not dial that stopped a member, and whether it is its sign-in provider's.

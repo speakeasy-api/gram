@@ -48,6 +48,28 @@ type consentMemberOutcome struct {
 	host  string
 }
 
+// listingFailureStatus is a member's status after its listing failed with lost; configured is what its cards say.
+func listingFailureStatus(lost error, configured gatewayServerStatus) gatewayServerStatus {
+	if _, credential := errors.AsType[memberCredentialError](lost); credential {
+		switch configured {
+		case gatewayServerConnected, gatewayServerReconnect:
+			return gatewayServerReconnect
+		case gatewayServerNoSignIn, gatewayServerNotSetUp:
+			return gatewayServerNotSetUp
+		case gatewayServerNotConnected:
+			return gatewayServerNotConnected
+		case gatewayServerChained, gatewayServerChainPending:
+			return gatewayServerChainPending
+		case gatewayServerUnavailable, gatewayServerNoAccess:
+		}
+		return gatewayServerUnavailable
+	}
+	if denied, ok := errors.AsType[*oops.ShareableError](lost); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
+		return gatewayServerNoAccess
+	}
+	return gatewayServerUnavailable
+}
+
 // captureGatewayConsentInventory captures one complete attempt before rendering
 // either the server list or tool picker.
 //
@@ -289,27 +311,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		} else if member.authClient != nil && member.authClient.reason == authClientReasonAmbiguous {
 			status = gatewayServerNotSetUp
 		} else if lost := failures[member.slug]; lost != nil {
-			_, credential := errors.AsType[memberCredentialError](lost)
-			// An admin's rejected key fails the member only when the person has nothing to connect.
-			if _, rejected := adminCredentialRejected(lost); rejected && !personConnects(configuredStatus[member.slug]) {
-				credential = false
-			}
-			if credential {
-				switch configuredStatus[member.slug] {
-				case gatewayServerConnected, gatewayServerReconnect:
-					status = gatewayServerReconnect
-				case gatewayServerNoSignIn, gatewayServerNotSetUp:
-					status = gatewayServerNotSetUp
-				case gatewayServerNotConnected:
-					status = gatewayServerNotConnected
-				case gatewayServerChained, gatewayServerChainPending:
-					status = gatewayServerChainPending
-				default:
-					status = gatewayServerUnavailable
-				}
-			} else if denied, ok := errors.AsType[*oops.ShareableError](lost); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
-				status = gatewayServerNoAccess
-			}
+			status = listingFailureStatus(lost, configuredStatus[member.slug])
 		}
 		address, signInAddress := guardian.AddressFine, false
 		cause, host := mcpconnectionattempts.Code{}, ""

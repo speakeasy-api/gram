@@ -57,6 +57,8 @@ type memberAttempt struct {
 	lastRetryAfter string
 	// lastErr is the transport failure of the latest recorded exchange, if any.
 	lastErr error
+	// lastCut marks a latest exchange the listing's own time ended, decided as it failed.
+	lastCut bool
 	// refused marks a tools/call the member itself answered with a JSON-RPC error.
 	refused bool
 	// sentCall marks a tools/call handed to the member's proxy. A call on a
@@ -69,7 +71,7 @@ type memberAttempt struct {
 type memberAttemptKey struct{}
 
 func newMemberAttempt(build memberProxyBuilder) *memberAttempt {
-	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}, lastStatus: 0, lastTunnelError: "", lastForwarded: false, lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
+	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}, lastStatus: 0, lastTunnelError: "", lastForwarded: false, lastRetryAfter: "", lastErr: nil, lastCut: false, refused: false, sentCall: false}
 }
 
 func (a *memberAttempt) memberRefused() bool {
@@ -95,6 +97,7 @@ type memberOutcome interface {
 	tunnelError() string
 	forwarded() bool
 	retryAfter(now time.Time) time.Duration
+	cutByListing() bool
 }
 
 // memberRoundTripper runs every SDK request through the member's proxy builder,
@@ -167,7 +170,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	p, err := attempt.build(ctx)
 	if err != nil {
 		err = fmt.Errorf("%w: %w", errMemberUnroutable, err)
-		attempt.recordFailure(record, false, err)
+		attempt.recordFailure(record, false, listingCutOff(ctx, tokenEndpointAnswered(err)), err)
 		return nil, err
 	}
 	if capture, ok := ctx.Value(memberToolResultKey{}).(*memberToolResult); ok {
@@ -220,7 +223,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		exchangeErr = errMemberResponseTooLarge
 	}
 	if exchangeErr != nil {
-		attempt.recordFailure(record, forwarded, exchangeErr)
+		attempt.recordFailure(record, forwarded, listingCutOff(ctx, answeredStatus != 0), exchangeErr)
 		// A 401 or 403 whose body then failed is still the member's answer.
 		attempt.recordRejection(record, answeredStatus, answered)
 		return nil, exchangeErr
@@ -232,6 +235,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		attempt.lastForwarded = forwarded
 		attempt.lastRetryAfter = rec.header.Get("Retry-After")
 		attempt.lastErr = nil
+		attempt.lastCut = false
 	}
 	attempt.mu.Unlock()
 	attempt.recordRejection(record, rec.status, answered)
@@ -255,8 +259,8 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 // recordFailure marks the latest exchange as unanswered, so classification
 // does not report the status of an earlier exchange for it. forwarded keeps
-// that a tunnel client had started answering it.
-func (a *memberAttempt) recordFailure(record, forwarded bool, err error) {
+// that a tunnel client had started answering it, and cut that the listing's own time ended it.
+func (a *memberAttempt) recordFailure(record, forwarded, cut bool, err error) {
 	if !record {
 		return
 	}
@@ -267,6 +271,13 @@ func (a *memberAttempt) recordFailure(record, forwarded bool, err error) {
 	a.lastForwarded = forwarded
 	a.lastRetryAfter = ""
 	a.lastErr = err
+	a.lastCut = cut
+}
+
+func (a *memberAttempt) cutByListing() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastCut
 }
 
 func (a *memberAttempt) recordRejection(record bool, status int, answer memberRejection) {
@@ -486,6 +497,9 @@ func memberDeadlineRanOut(ctx context.Context, rt memberOutcome, dial memberDial
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
 func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutcome, dial memberDial, member metaMember, err error) error {
+	if rt.cutByListing() {
+		return listingCutError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}, status: 0, retryable: false, retryAfter: 0}}
+	}
 	// The SDK need not wrap a transport error, so consult the recorded
 	// exchange before reducing a credential failure to an upstream status.
 	exchangeErr := rt.failure()
@@ -531,10 +545,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	case errors.Is(ctx.Err(), context.Canceled):
 		// The caller went away, so this says nothing about the member.
 		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
-	case listingBudgetSpent(ctx) && status == 0:
-		// The listing's own time ran out, not the member's.
-		return upstreamFailure(fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug), false)
-	case (ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded)) && !listingBudgetSpent(ctx):
+	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
 		if memberDeadlineRanOut(ctx, rt, dial, err, exchangeErr) {
 			code = mcpconnectionattempts.CodeProviderUnreachable

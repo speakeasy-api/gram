@@ -455,7 +455,7 @@ func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testi
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			attempt := newMemberAttempt(nil)
-			attempt.recordFailure(true, false, tc.err)
+			attempt.recordFailure(true, false, false, tc.err)
 			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
 			require.EqualError(t, got, tc.text)
 			failure, ok := errors.AsType[memberDiscoveryError](got)
