@@ -179,6 +179,24 @@ type UpdateRouteResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// TestRouteResponseBody is the type of the "dataExports" service "testRoute"
+// endpoint HTTP response body.
+type TestRouteResponseBody struct {
+	// accepted when every signal was accepted. Otherwise the worst signal's
+	// outcome, in this order: unreachable, refused, not_found, error.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// HTTP status of the signal that set the outcome. Omitted when it did not
+	// answer.
+	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
+	// What happened, in plain language.
+	Message string `form:"message" json:"message" xml:"message"`
+	// One result for each signal the route's data source exports.
+	Signals []*TestDataExportRouteSignalResultResponseBody `form:"signals" json:"signals" xml:"signals"`
+	// The speakeasy.test_event.id this test's logs and traces carry, to find them
+	// in the destination. Metrics carry only speakeasy.test_event=true.
+	TestEventID string `form:"test_event_id" json:"test_event_id" xml:"test_event_id"`
+}
+
 // ListDestinationsUnauthorizedResponseBody is the type of the "dataExports"
 // service "listDestinations" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1848,6 +1866,225 @@ type DeleteRouteGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// TestRouteRateLimitExceededResponseBody is the type of the "dataExports"
+// service "testRoute" endpoint HTTP response body for the
+// "rate_limit_exceeded" error.
+type TestRouteRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteUnavailableResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "unavailable" error.
+type TestRouteUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteUnauthorizedResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "unauthorized" error.
+type TestRouteUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteForbiddenResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "forbidden" error.
+type TestRouteForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteBadRequestResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "bad_request" error.
+type TestRouteBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteNotFoundResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "not_found" error.
+type TestRouteNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteConflictResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "conflict" error.
+type TestRouteConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteUnsupportedMediaResponseBody is the type of the "dataExports"
+// service "testRoute" endpoint HTTP response body for the "unsupported_media"
+// error.
+type TestRouteUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteInvalidResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "invalid" error.
+type TestRouteInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteInvariantViolationResponseBody is the type of the "dataExports"
+// service "testRoute" endpoint HTTP response body for the
+// "invariant_violation" error.
+type TestRouteInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteUnexpectedResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "unexpected" error.
+type TestRouteUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteGatewayErrorResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "gateway_error" error.
+type TestRouteGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DestinationResponseBody is used to define fields on response body types.
 type DestinationResponseBody struct {
 	// Destination ID.
@@ -1906,6 +2143,21 @@ type DataExportRouteResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// TestDataExportRouteSignalResultResponseBody is used to define fields on
+// response body types.
+type TestDataExportRouteSignalResultResponseBody struct {
+	// The OTLP signal.
+	Signal string `form:"signal" json:"signal" xml:"signal"`
+	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
+	// answer, such as a timeout or refused connection, or an address Speakeasy may
+	// not send to. error: any other answer.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// HTTP status the destination answered with. Omitted when it did not answer.
+	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
+	// What happened, in plain language.
+	Message string `form:"message" json:"message" xml:"message"`
 }
 
 // CreateOtelDestinationInputRequestBody is used to define fields on request
@@ -2078,6 +2330,30 @@ func NewUpdateRouteResponseBody(res *dataexports.DataExportRoute) *UpdateRouteRe
 		MinSeverity:       res.MinSeverity,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
+	}
+	return body
+}
+
+// NewTestRouteResponseBody builds the HTTP response body from the result of
+// the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteResponseBody(res *dataexports.TestDataExportRouteResult) *TestRouteResponseBody {
+	body := &TestRouteResponseBody{
+		Outcome:     res.Outcome,
+		StatusCode:  res.StatusCode,
+		Message:     res.Message,
+		TestEventID: res.TestEventID,
+	}
+	if res.Signals != nil {
+		body.Signals = make([]*TestDataExportRouteSignalResultResponseBody, len(res.Signals))
+		for i, val := range res.Signals {
+			if val == nil {
+				body.Signals[i] = nil
+				continue
+			}
+			body.Signals[i] = marshalDataexportsTestDataExportRouteSignalResultToTestDataExportRouteSignalResultResponseBody(val)
+		}
+	} else {
+		body.Signals = []*TestDataExportRouteSignalResultResponseBody{}
 	}
 	return body
 }
@@ -3364,6 +3640,174 @@ func NewDeleteRouteGatewayErrorResponseBody(res *goa.ServiceError) *DeleteRouteG
 	return body
 }
 
+// NewTestRouteRateLimitExceededResponseBody builds the HTTP response body from
+// the result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteRateLimitExceededResponseBody(res *goa.ServiceError) *TestRouteRateLimitExceededResponseBody {
+	body := &TestRouteRateLimitExceededResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteUnavailableResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteUnavailableResponseBody(res *goa.ServiceError) *TestRouteUnavailableResponseBody {
+	body := &TestRouteUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteUnauthorizedResponseBody(res *goa.ServiceError) *TestRouteUnauthorizedResponseBody {
+	body := &TestRouteUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteForbiddenResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteForbiddenResponseBody(res *goa.ServiceError) *TestRouteForbiddenResponseBody {
+	body := &TestRouteForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteBadRequestResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteBadRequestResponseBody(res *goa.ServiceError) *TestRouteBadRequestResponseBody {
+	body := &TestRouteBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteNotFoundResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteNotFoundResponseBody(res *goa.ServiceError) *TestRouteNotFoundResponseBody {
+	body := &TestRouteNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteConflictResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteConflictResponseBody(res *goa.ServiceError) *TestRouteConflictResponseBody {
+	body := &TestRouteConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteUnsupportedMediaResponseBody(res *goa.ServiceError) *TestRouteUnsupportedMediaResponseBody {
+	body := &TestRouteUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteInvalidResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteInvalidResponseBody(res *goa.ServiceError) *TestRouteInvalidResponseBody {
+	body := &TestRouteInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteInvariantViolationResponseBody(res *goa.ServiceError) *TestRouteInvariantViolationResponseBody {
+	body := &TestRouteInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteUnexpectedResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteUnexpectedResponseBody(res *goa.ServiceError) *TestRouteUnexpectedResponseBody {
+	body := &TestRouteUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteGatewayErrorResponseBody(res *goa.ServiceError) *TestRouteGatewayErrorResponseBody {
+	body := &TestRouteGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListDestinationsPayload builds a dataExports service listDestinations
 // endpoint payload.
 func NewListDestinationsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.ListDestinationsPayload {
@@ -3492,6 +3936,17 @@ func NewUpdateRoutePayload(body *UpdateRouteRequestBody, id string, sessionToken
 // payload.
 func NewDeleteRoutePayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.DeleteRoutePayload {
 	v := &dataexports.DeleteRoutePayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewTestRoutePayload builds a dataExports service testRoute endpoint payload.
+func NewTestRoutePayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.TestRoutePayload {
+	v := &dataexports.TestRoutePayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

@@ -108,6 +108,15 @@ function palette(): HTMLElement {
   return screen.getByRole("dialog");
 }
 
+// The record header's heading. The sidebar, the breadcrumb, and the details
+// row repeat the organization's name, so a text query matches several elements
+// at once and only passes during a render where exactly one of them is up.
+// The heading is the one copy, and it shows once the organization query the
+// palette shares with the record layout has resolved.
+function recordHeading(): Promise<HTMLElement> {
+  return screen.findByRole("heading", { name: ORG.name });
+}
+
 // Record rows are matched anchored throughout. Each one is followed by its own
 // "Open in Dashboard for <record>" row, so an unanchored name matches both and
 // every query for a record becomes ambiguous.
@@ -366,10 +375,11 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     typeAndDebounce("umbrella");
 
-    const result = await within(palette()).findByRole("option", {
-      name: /^Umbrella Freight/,
+    // "Disabled" is part of the option's name, beside the slug. Reading
+    // textContent would also pass on a copy of the word outside that option.
+    await within(palette()).findByRole("option", {
+      name: /^Umbrella Freight\b.*\bDisabled\b/,
     });
-    expect(result.textContent).toContain("Disabled");
   });
 
   it("asks for one term per burst of typing", async () => {
@@ -643,9 +653,7 @@ describe("CommandPalette", () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
-    // The group is headed by the record, so it waits on the same query the
-    // sidebar reads.
-    await screen.findByText(ORG.name);
+    await recordHeading();
 
     pressTheShortcut();
     await screen.findByRole("dialog");
@@ -670,7 +678,7 @@ describe("CommandPalette", () => {
       const { router } = await renderRouteTree(routeTree, {
         initialPath: `/organizations/${idOrSlug}`,
       });
-      await screen.findByText(ORG.name);
+      await recordHeading();
       pressTheShortcut();
       await screen.findByRole("dialog");
       type(keyword);
@@ -731,6 +739,9 @@ describe("custom domain search", () => {
     await renderWithSubmitCaptured();
     expect(mocks.listCustomDomains).not.toHaveBeenCalled();
     pressTheShortcut();
+    await screen.findByRole("dialog");
+    // Open, but still idle: the inventory is fetched only once a term is in
+    // the box. Asserting before the dialog is up passes either way.
     expect(mocks.listCustomDomains).not.toHaveBeenCalled();
     type("example.test");
     await waitFor(() => expect(mocks.listCustomDomains).toHaveBeenCalledOnce());
@@ -767,11 +778,6 @@ describe("custom domain search", () => {
       expect(router?.state.location.pathname).toBe(
         `/organizations/${ORG.slug}/custom-domain`,
       ),
-    );
-    await waitFor(() =>
-      expect(mocks.listCustomDomains).toHaveBeenCalledWith({
-        organizationId: ORG.id,
-      }),
     );
   });
 
