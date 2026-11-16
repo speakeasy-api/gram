@@ -707,16 +707,14 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	}
 	for _, role := range roles.Roles {
 		grants, unevaluated := roleAuthzGrants(role)
-		serverCheck := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), projectID.String())
+		serverCheck := authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)).Connect()
 		canEnter, err := authz.GrantsAuthorize(grants, serverCheck)
 		if err != nil {
 			return GetMCPAccessOutput{}, fmt.Errorf("evaluate server access for role %q: %w", role.Name, err)
 		}
 		allowedTools := make([]string, 0, len(tools))
 		for _, tool := range tools {
-			allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(row.McpServerID.String(), authz.MCPToolCallDimensions{
-				Tool: tool.Name, Disposition: tool.Disposition, ProjectID: projectID.String(),
-			}))
+			allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)).ToolCall(tool.Name, tool.Disposition))
 			if err != nil {
 				return GetMCPAccessOutput{}, fmt.Errorf("evaluate tool access for role %q: %w", role.Name, err)
 			}

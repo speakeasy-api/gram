@@ -364,10 +364,10 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 	if err != nil {
 		return fail(fmt.Errorf("resolve live connection mutation project: %w", err))
 	}
-	if err := s.authorizer.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, project.ID.String(), project.ID.String())); err != nil {
+	if err := s.authorizer.Require(ctx, authz.MCPServers(authz.ProjectIDOf(project.ID)).Write()); err != nil {
 		return fail(connectionMutationAuthorizationError(err, authz.ScopeMCPWrite))
 	}
-	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authorizer.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()); err != nil {
 		return fail(connectionMutationAuthorizationError(err, authz.ScopeOrgAdmin))
 	}
 	settings, err := s.settings.Get(ctx, principal, GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: parsedTarget.String()})

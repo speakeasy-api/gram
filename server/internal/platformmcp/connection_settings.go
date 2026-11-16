@@ -167,7 +167,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 	if !ok {
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
-	admin, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil})
+	admin, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings admin: %w", err)
 	}
@@ -175,7 +175,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
 	}
 	if input.TargetKind == MCPConnectionSettingsMCPServer {
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, targetID.String(), projectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(targetID), authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings target: %w", err)
 		}
