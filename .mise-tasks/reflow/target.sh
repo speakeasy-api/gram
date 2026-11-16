@@ -28,8 +28,8 @@ group="${usage_group:-local-$(basename "$PWD")}"
 dir="${usage_dir:-$HOME/.reflow/gram/$group}"
 
 origin() {
-  # scheme://host:port, without any path.
-  printf '%s' "$1" | sed -E 's#^([a-z]+://[^/]+).*#\1#'
+  # scheme://host:port, without any path, query or fragment.
+  printf '%s' "$1" | sed -E 's|^([a-z]+://[^/?#]+).*|\1|'
 }
 
 site_url="$(origin "$GRAM_SITE_URL")"
@@ -42,15 +42,21 @@ mkdir -p "$dir"
 chmod 700 "$dir"
 
 # The Reflow PostgreSQL plugin refuses the search_path query parameter that
-# GRAM_DATABASE_URL carries, so keep only sslmode.
-dsn="${GRAM_DATABASE_URL%%\?*}?sslmode=disable"
+# GRAM_DATABASE_URL carries, so keep only its sslmode. The local stack's
+# Postgres has no TLS, so a URL without one gets sslmode=disable.
+sslmode=""
+case "$GRAM_DATABASE_URL" in
+*\?*) sslmode="$(printf '%s' "${GRAM_DATABASE_URL#*\?}" | tr '&' '\n' | sed -n 's/^sslmode=//p' | head -n1)" ;;
+esac
+dsn="${GRAM_DATABASE_URL%%\?*}?sslmode=${sslmode:-disable}"
 
-jq -n \
+# The DSN carries the database password, so it reaches jq through the
+# environment rather than its command line.
+DSN="$dsn" jq -n \
   --arg site "$site_url" \
-  --arg dsn "$dsn" \
   '{
     site: {provider: "Browser", configuration: {targetUrl: $site, browser: "chromium", width: 1440, height: 900}},
-    db: {provider: "PostgreSQL", configuration: {connectionString: $dsn, allowWrites: false}}
+    db: {provider: "PostgreSQL", configuration: {connectionString: env.DSN, allowWrites: false}}
   }' >"$dir/bindings.json"
 
 jq -n --arg host "$server_host" '{gramServerHost: $host}' >"$dir/inputs.json"

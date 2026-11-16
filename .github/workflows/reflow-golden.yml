@@ -38,7 +38,6 @@ jobs:
       pull-requests: write # sticky report comment
     env:
       GOMAXPROCS: 8
-      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
       REFLOW_COLLECTION: ${{ vars.REFLOW_COLLECTION_ID }}
     steps:
       - name: Checkout
@@ -71,6 +70,8 @@ jobs:
           git config user.name "Reflow Golden"
 
       - name: Boot the stack
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: ./zero --agent
 
       - name: Install Reflow
@@ -143,16 +144,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           OUTCOME: ${{ steps.golden.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           report="$RUNNER_TEMP/reflow-ci/report.md"
-          [ -f "$report" ] || exit 0
           marker='<!-- reflow-golden -->'
           body="$RUNNER_TEMP/reflow-comment.md"
           {
             echo "$marker"
-            echo "## Reflow golden flows: ${OUTCOME}"
-            echo
-            cat "$report"
+            if [ -f "$report" ]; then
+              echo "## Reflow golden flows: ${OUTCOME}"
+              echo
+              cat "$report"
+            else
+              echo "## Reflow golden flows: no report"
+              echo
+              echo "The job stopped before the golden flows reported. See [the run]($RUN_URL)."
+            fi
           } > "$body"
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
             --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
@@ -162,12 +169,15 @@ jobs:
             gh pr comment "$PR_NUMBER" --body-file "$body"
           fi
 
+      - name: Collect stack logs
+        if: failure()
+        run: mise exec -- pitchfork logs --raw > "$RUNNER_TEMP/stack.log" 2>&1 || true
+
       - name: Upload stack logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: reflow-golden-stack-logs
-          path: |
-            .git/gram-stack-*.log
+          path: ${{ runner.temp }}/stack.log
           retention-days: 7
           if-no-files-found: ignore

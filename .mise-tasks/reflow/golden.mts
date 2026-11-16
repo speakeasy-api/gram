@@ -73,6 +73,11 @@ function shards<T>(items: T[], size: number): T[][] {
 async function run() {
   await fs.mkdir(outDir, { recursive: true });
   const slugs = await goldenSlugs();
+  if (slugs.length === 0) {
+    throw new Error(
+      "The collection has no golden flows, so there is nothing to gate on",
+    );
+  }
   const groups = shards(slugs, shardSize);
   console.log(`${slugs.length} golden flows in ${groups.length} shards`);
 
@@ -98,6 +103,8 @@ async function run() {
       ...(branch ? ["--branch", branch] : []),
       ...(ciContext ? ["--ci-context", ciContext] : []),
     ];
+    // A result file left by an earlier invocation must not stand in for this run.
+    await fs.rm(resultFile, { force: true });
     const ran = await $`reflow ci run ${runArgs}`.nothrow();
     process.stdout.write(ran.stdout);
     process.stderr.write(ran.stderr);
@@ -123,7 +130,15 @@ async function run() {
       ...(publish ? ["--publish"] : []),
     ];
     const rendered = await $`reflow ci report ${reportArgs}`.nothrow();
-    report.push(`### ${name}\n\n${rendered.stdout}`);
+    if (rendered.exitCode !== 0) {
+      failed = true;
+      process.stderr.write(rendered.stderr);
+      report.push(
+        `### ${name}\n\nThe report for CI run \`${result.ci_run_id}\` failed (exit ${rendered.exitCode}).\n`,
+      );
+    } else {
+      report.push(`### ${name}\n\n${rendered.stdout}`);
+    }
 
     const gate =
       await $`reflow ci gate --ci-run ${result.ci_run_id} ${baseArgs}`.nothrow();
