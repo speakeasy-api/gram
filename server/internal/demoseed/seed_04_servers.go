@@ -806,7 +806,7 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 			RemoteSessionClientID: s.det("ema-client-tracker"),
 			UserSessionIssuerID:   usi,
 		}); err != nil {
-			return fmt.Errorf("bind demo ema vendor client: %w", err)
+			return fmt.Errorf("bind demo ema vendor client to issuer %s: %w", usi, err)
 		}
 	}
 	// The server is associated with the one client of the authorization

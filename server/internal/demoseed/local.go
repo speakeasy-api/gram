@@ -143,6 +143,10 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return err
 	}
 
+	// The dev-idp calls happen before the transaction opens, so a slow
+	// dev-idp never holds the transaction's locks.
+	emaProvisioned := provisionLocalEMA(ctx, logger, opts.Upstreams)
+
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin local fixtures transaction: %w", err)
@@ -180,7 +184,9 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 			return q.LocalAdoptDeveloper(ctx, repo.LocalAdoptDeveloperParams{OrganizationID: spec.OrgID, UserID: dev.ID, WorkosUserID: workosID})
 		}},
 		{"provision developer in the directory", func() error {
-			return q.LocalProvisionDeveloperDirectoryUser(ctx, repo.LocalProvisionDeveloperDirectoryUserParams{OrganizationID: spec.OrgID, UserID: dev.ID, Email: dev.Email, DisplayName: dev.Name})
+			// A directory stores given and family names apart.
+			first, last := splitDemoName(dev.Name)
+			return q.LocalProvisionDeveloperDirectoryUser(ctx, repo.LocalProvisionDeveloperDirectoryUserParams{OrganizationID: spec.OrgID, UserID: dev.ID, Email: dev.Email, FirstName: first, LastName: last})
 		}},
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
@@ -253,7 +259,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 			return q.LocalAttachMCPAppToToolset(ctx, repo.LocalAttachMCPAppToToolsetParams{OrganizationID: spec.OrgID, ToolUrn: mcpAppToolURN(), ResourceUrn: mcpAppResourceURN(), ToolsetSlug: MCPAppToolsetSlug})
 		}},
 		{"local upstreams", func() error {
-			return wireLocalUpstreams(ctx, logger, tx, opts.Upstreams)
+			return wireLocalUpstreams(ctx, logger, tx, opts.Upstreams, emaProvisioned)
 		}},
 	} {
 		if err := step.run(); err != nil {

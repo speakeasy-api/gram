@@ -3,8 +3,10 @@ package gram
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -281,17 +283,23 @@ func localUpstreamOptions(c *cli.Context) (demoseed.LocalUpstreamOptions, error)
 	}
 	opts.ServerURL = serverURL
 	opts.Encryption = encryptionClient
-	opts.DevIDPURL = c.String("local-devidp-url")
+	devIDPURL, err := parseDevIDPURL(c.String("local-devidp-url"))
+	if err != nil {
+		return opts, fmt.Errorf("GRAM_DEVIDP_EXTERNAL_URL: %w", err)
+	}
+	opts.DevIDPURL = devIDPURL
 	opts.DevIDPClientID = c.String("local-devidp-client-id")
 	// The dev-idp listens on localhost, which the default egress policy
-	// refuses; the local seed only ever calls the developer's own dev-idp.
-	policy, err := guardian.NewUnsafePolicy(otel.GetTracerProvider(), []string{})
+	// refuses, so only its client skips the policy; the local seed only ever
+	// calls the developer's own dev-idp with it.
+	unsafePolicy, err := guardian.NewUnsafePolicy(otel.GetTracerProvider(), []string{})
 	if err != nil {
 		return opts, fmt.Errorf("create the dev-idp egress policy: %w", err)
 	}
-	opts.HTTPClient = policy.Client()
+	opts.HTTPClient = unsafePolicy.Client()
 	opts.HTTPClient.Timeout = 10 * time.Second
-	opts.Policy = policy
+	// Linear and Notion are public hosts the default egress policy allows.
+	opts.Policy = guardian.NewDefaultPolicy(otel.GetTracerProvider())
 	opts.CacheDir = c.String("local-cache-dir")
 	return opts, nil
 }
@@ -310,6 +318,32 @@ func parseOrigin(raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("%q must be an origin, without a path, query or fragment", raw)
 	}
 	return u, nil
+}
+
+// parseDevIDPURL reads the local dev-idp's external URL. Empty or "unset"
+// disables the dev-idp wiring. Otherwise it must be an absolute origin, over
+// HTTPS unless the host is loopback: identity traffic goes there.
+func parseDevIDPURL(raw string) (string, error) {
+	if raw == "" || raw == "unset" {
+		return "", nil
+	}
+	u, err := parseOrigin(raw)
+	if err != nil {
+		return "", err
+	}
+	if u.Scheme != "https" && !isLoopbackHostname(u.Hostname()) {
+		return "", fmt.Errorf("%q must use HTTPS unless it is on a loopback host", raw)
+	}
+	return strings.TrimRight(u.String(), "/"), nil
+}
+
+// isLoopbackHostname reports whether host is localhost or a loopback address.
+func isLoopbackHostname(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // validateMockMCPURL accepts an empty value, which leaves the mock MCP server

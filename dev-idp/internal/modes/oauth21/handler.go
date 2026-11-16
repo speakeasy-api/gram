@@ -101,9 +101,10 @@ type Handler struct {
 	// learn the keys a CIMD client authenticates with.
 	cimd *cimd.Resolver
 	// nonces holds each pending auth code's OIDC nonce until the code is
-	// redeemed. Codes live minutes and a restart voids them anyway, so memory
-	// is enough and the stored schema stays unchanged.
-	nonces sync.Map // auth code -> nonce
+	// redeemed or expires. Codes live minutes, so memory is enough and the
+	// stored schema stays unchanged; a dev-idp restart mid sign-in drops the
+	// nonce, and the client retries the sign-in.
+	nonces sync.Map // auth code -> pendingNonce
 }
 
 func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
@@ -425,7 +426,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if nonce != "" {
-		h.nonces.Store(code, nonce)
+		h.storeNonce(code, nonce)
 	}
 
 	rq := target.Query()
@@ -522,10 +523,7 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	}
 
 	scope := pgTextOrEmpty(stored.Scope)
-	nonce := ""
-	if v, ok := h.nonces.LoadAndDelete(code); ok {
-		nonce, _ = v.(string)
-	}
+	nonce := h.takeNonce(code)
 	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, scope, "", nonce)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "issue token set", slog.Any("error", err))
@@ -845,4 +843,37 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 		"error":             code,
 		"error_description": description,
 	})
+}
+
+// pendingNonce is an auth code's OIDC nonce, kept until the code expires.
+type pendingNonce struct {
+	nonce   string
+	expires time.Time
+}
+
+// storeNonce keeps code's nonce for the code's lifetime, and drops the nonces
+// of codes that expired unredeemed, so abandoned sign-ins do not pile up.
+func (h *Handler) storeNonce(code, nonce string) {
+	now := time.Now()
+	h.nonces.Range(func(k, v any) bool {
+		if p, ok := v.(pendingNonce); ok && now.After(p.expires) {
+			h.nonces.Delete(k)
+		}
+		return true
+	})
+	h.nonces.Store(code, pendingNonce{nonce: nonce, expires: now.Add(authCodeLifetime)})
+}
+
+// takeNonce returns and forgets code's nonce, or "" when it has none or it
+// expired.
+func (h *Handler) takeNonce(code string) string {
+	v, ok := h.nonces.LoadAndDelete(code)
+	if !ok {
+		return ""
+	}
+	p, ok := v.(pendingNonce)
+	if !ok || time.Now().After(p.expires) {
+		return ""
+	}
+	return p.nonce
 }

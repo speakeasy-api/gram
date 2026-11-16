@@ -57,13 +57,32 @@ const localEMAProviderName = "Acme Identity (local dev-idp)"
 // is fixed.
 //
 // A dev-idp that cannot be reached leaves the server display-only.
-func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions, base string) error {
-	if opts.DevIDPURL == "" || opts.DevIDPURL == "unset" || opts.DevIDPClientID == "" || opts.DevIDPClientID == "unset" {
-		logger.InfoContext(ctx, "the dev-idp URL or login client id is not set; the Enterprise Sign-In (ID-JAG) Server stays display-only")
-		return nil
+//
+// provisionLocalEMA makes the dev-idp calls and runs before the local
+// fixtures' transaction opens, so a slow dev-idp never holds its locks;
+// wireLocalEMA then points the seeded rows at it inside the transaction.
+func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstreamOptions) bool {
+	if opts.ServerURL == nil || opts.DevIDPURL == "" || opts.DevIDPURL == "unset" || opts.DevIDPClientID == "" || opts.DevIDPClientID == "unset" {
+		logger.InfoContext(ctx, "the server URL, dev-idp URL or login client id is not set; the Enterprise Sign-In (ID-JAG) Server stays display-only")
+		return false
 	}
 	if opts.HTTPClient == nil {
-		return errors.New("wire local ema: an HTTP client is required to reach the dev-idp")
+		logger.WarnContext(ctx, "no HTTP client to reach the dev-idp; the Enterprise Sign-In (ID-JAG) Server stays display-only")
+		return false
+	}
+	devIDP := strings.TrimRight(opts.DevIDPURL, "/")
+	resource := fixtureauth.Resource(fixtureauth.BaseURL(opts.ServerURL), fixtureauth.PathEMAMCP)
+	idp := devIDPControl{base: devIDP, client: opts.HTTPClient}
+	if err := idp.provisionEMA(ctx, opts.DevIDPClientID, resource, devIDP+devIDPOAuth21Prefix); err != nil {
+		logger.WarnContext(ctx, "could not set up the dev-idp for the Enterprise Sign-In (ID-JAG) Server; it stays display-only", attr.SlogError(err))
+		return false
+	}
+	return true
+}
+
+func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions, base string, provisioned bool) error {
+	if !provisioned {
+		return nil
 	}
 	devIDP := strings.TrimRight(opts.DevIDPURL, "/")
 	identityProvider := devIDP + devIDPOAuth21Prefix
@@ -71,12 +90,6 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 	resource := fixtureauth.Resource(base, fixtureauth.PathEMAMCP)
 	scopes := []string{fixtureauth.EMAScope}
 	clientID := opts.DevIDPClientID
-
-	idp := devIDPControl{base: devIDP, client: opts.HTTPClient}
-	if err := idp.provisionEMA(ctx, clientID, resource, identityProvider); err != nil {
-		logger.WarnContext(ctx, "could not set up the dev-idp for the Enterprise Sign-In (ID-JAG) Server; it stays display-only", attr.SlogError(err))
-		return nil
-	}
 
 	spec := LocalSpec()
 	s := &seeder{spec: spec, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
@@ -160,10 +173,6 @@ type devIDPEMAResource struct {
 	ResourceIdentifier string `json:"resource_identifier"`
 }
 
-type devIDPEMATrustRule struct {
-	ID string `json:"id"`
-}
-
 // provisionEMA registers, idempotently, what the dev-idp needs to mint and
 // redeem ID-JAGs for the fixture's /mcp/ema endpoint on behalf of the
 // developer (the dev-idp's current OAuth 2.1 user).
@@ -193,15 +202,11 @@ func (c devIDPControl) provisionEMA(ctx context.Context, clientID, resource, ide
 	if err != nil {
 		return fmt.Errorf("encode allowed client ids: %w", err)
 	}
-	var rule devIDPEMATrustRule
+	// Create upserts on (resource, trusted issuer), so a reseed rewrites the
+	// rule's clients, scopes and enabled flag in place.
 	if err := c.call(ctx, "emaTrustRules.create", map[string]any{
 		"resource_id": res.ID, "trusted_issuer": identityProvider,
 		"allowed_client_ids": string(allowed), "allowed_scopes": fixtureauth.EMAScope, "enabled": true,
-	}, &rule); err != nil {
-		return err
-	}
-	if err := c.call(ctx, "emaTrustRules.update", map[string]any{
-		"id": rule.ID, "allowed_client_ids": string(allowed), "allowed_scopes": fixtureauth.EMAScope, "enabled": true,
 	}, nil); err != nil {
 		return err
 	}

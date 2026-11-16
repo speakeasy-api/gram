@@ -59,6 +59,8 @@ func (f *fakeDevIDP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "emaApps.update":
 		app := f.apps[str("id")]
 		app["client_secret"] = str("client_secret")
+		app["jwks"] = str("jwks")
+		app["enabled"] = in["enabled"]
 		out = app
 	case "emaResources.list":
 		items := []any{}
@@ -75,13 +77,17 @@ func (f *fakeDevIDP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		res["resource_identifier"] = str("resource_identifier")
 		out = res
 	case "emaTrustRules.create":
+		// Upserts on (resource, trusted issuer), as the dev-idp does.
 		key := str("resource_id") + " " + str("trusted_issuer")
-		if _, ok := f.rules[key]; !ok {
-			f.rules[key] = map[string]any{"id": uuid.NewString(), "allowed_scopes": str("allowed_scopes"), "allowed_client_ids": str("allowed_client_ids")}
+		rule, ok := f.rules[key]
+		if !ok {
+			rule = map[string]any{"id": uuid.NewString(), "resource_id": str("resource_id"), "trusted_issuer": str("trusted_issuer")}
+			f.rules[key] = rule
 		}
-		out = f.rules[key]
-	case "emaTrustRules.update":
-		out = map[string]any{"id": str("id")}
+		rule["allowed_client_ids"] = str("allowed_client_ids")
+		rule["allowed_scopes"] = str("allowed_scopes")
+		rule["enabled"] = in["enabled"]
+		out = rule
 	case "emaAppAssignments.create":
 		f.assignments[str("app_id")+" "+str("user_id")+" "+str("resource_id")] = str("granted_scopes")
 		out = map[string]any{"id": uuid.NewString()}
@@ -130,7 +136,22 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 	s := &seeder{spec: spec}
 	q := testrepo.New(db)
 	resource := fixtureauth.Resource(base, fixtureauth.PathEMAMCP)
-	for range 2 {
+	for run := range 2 {
+		if run == 1 {
+			// Someone edited the dev-idp between seeds: the reseed must put
+			// the app, the resource and the trust rule back.
+			idp.mu.Lock()
+			for _, app := range idp.apps {
+				app["client_secret"], app["enabled"] = "edited", false
+			}
+			for _, res := range idp.resources {
+				res["resource_identifier"] = "https://elsewhere.example.test/mcp/ema"
+			}
+			for _, rule := range idp.rules {
+				rule["allowed_scopes"], rule["allowed_client_ids"], rule["enabled"] = "edited", "[]", false
+			}
+			idp.mu.Unlock()
+		}
 		seedLocalPostgres(ctx, t, db, spec)
 		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, nil, opts))
 
@@ -158,13 +179,22 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 	for _, app := range idp.apps {
 		require.Equal(t, clientID, app["client_id"])
 		require.Equal(t, localEMAClientSecret, app["client_secret"])
+		require.Equal(t, true, app["enabled"])
 	}
 	require.Len(t, idp.resources, 1)
 	for _, res := range idp.resources {
 		require.Equal(t, fixtureauth.EMAResourceSlug, res["slug"])
 		require.Equal(t, resource, res["resource_identifier"])
 	}
+	// The trust rule is what lets the resource authorization server redeem
+	// the dev-idp's ID-JAGs for this client.
 	require.Len(t, idp.rules, 1)
+	for _, rule := range idp.rules {
+		require.Equal(t, devIDP.URL+devIDPOAuth21Prefix, rule["trusted_issuer"])
+		require.Equal(t, `["`+clientID+`"]`, rule["allowed_client_ids"])
+		require.Equal(t, fixtureauth.EMAScope, rule["allowed_scopes"])
+		require.Equal(t, true, rule["enabled"])
+	}
 	require.Len(t, idp.assignments, 1)
 	for _, scopes := range idp.assignments {
 		require.Equal(t, fixtureauth.EMAScope, scopes)

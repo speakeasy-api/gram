@@ -138,7 +138,7 @@ func TestAuthorizationCodeGrantEchoesNonceIntoIDToken(t *testing.T) {
 		ExpiresAt:           time.Now().Add(time.Hour),
 	})
 	require.NoError(t, err)
-	h.nonces.Store("nonce-code", "n-0S6_WzA2Mj")
+	h.storeNonce("nonce-code", "n-0S6_WzA2Mj")
 
 	rec := h.postForm(t, "/token", url.Values{
 		"grant_type": {"authorization_code"},
@@ -154,4 +154,18 @@ func TestAuthorizationCodeGrantEchoesNonceIntoIDToken(t *testing.T) {
 	_, _, err = jwt.NewParser().ParseUnverified(body.IDToken, &claims)
 	require.NoError(t, err)
 	require.Equal(t, "n-0S6_WzA2Mj", claims.Nonce)
+}
+
+func TestExpiredNoncesAreDropped(t *testing.T) {
+	t.Parallel()
+
+	h := newDBHandler(t)
+	h.nonces.Store("abandoned-code", pendingNonce{nonce: "old", expires: time.Now().Add(-time.Minute)})
+	h.storeNonce("fresh-code", "new")
+
+	_, kept := h.nonces.Load("abandoned-code")
+	require.False(t, kept, "storing a nonce drops the nonces of expired codes")
+	require.Empty(t, h.takeNonce("abandoned-code"))
+	require.Equal(t, "new", h.takeNonce("fresh-code"))
+	require.Empty(t, h.takeNonce("fresh-code"), "a nonce is used once")
 }

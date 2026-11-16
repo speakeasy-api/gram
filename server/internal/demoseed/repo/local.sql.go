@@ -485,12 +485,14 @@ func (q *Queries) LocalLinkWorkOSOrg(ctx context.Context, arg LocalLinkWorkOSOrg
 const localProvisionDeveloperDirectoryUser = `-- name: LocalProvisionDeveloperDirectoryUser :exec
 INSERT INTO directory_users
   (organization_id, user_id, workos_directory_user_id, email, first_name,
-   workos_created_at, workos_updated_at)
+   last_name, workos_created_at, workos_updated_at)
 VALUES ($1::text, $2::text, 'devidp_dir_' || $2::text,
-        $3::text, $4::text, clock_timestamp(), clock_timestamp())
+        $3::text, $4::text, NULLIF($5::text, ''),
+        clock_timestamp(), clock_timestamp())
 ON CONFLICT (workos_directory_user_id) DO UPDATE
 SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
     email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
     deleted_at = NULL, workos_deleted_at = NULL,
     workos_updated_at = clock_timestamp(), updated_at = clock_timestamp()
 `
@@ -499,7 +501,8 @@ type LocalProvisionDeveloperDirectoryUserParams struct {
 	OrganizationID string
 	UserID         string
 	Email          string
-	DisplayName    string
+	FirstName      string
+	LastName       string
 }
 
 // Provisions the developer in the local org's directory, linked to their
@@ -510,7 +513,8 @@ func (q *Queries) LocalProvisionDeveloperDirectoryUser(ctx context.Context, arg 
 		arg.OrganizationID,
 		arg.UserID,
 		arg.Email,
-		arg.DisplayName,
+		arg.FirstName,
+		arg.LastName,
 	)
 	return err
 }

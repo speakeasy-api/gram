@@ -312,12 +312,14 @@ WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
 -- name: LocalProvisionDeveloperDirectoryUser :exec
 INSERT INTO directory_users
   (organization_id, user_id, workos_directory_user_id, email, first_name,
-   workos_created_at, workos_updated_at)
+   last_name, workos_created_at, workos_updated_at)
 VALUES (@organization_id::text, @user_id::text, 'devidp_dir_' || @user_id::text,
-        @email::text, @display_name::text, clock_timestamp(), clock_timestamp())
+        @email::text, @first_name::text, NULLIF(@last_name::text, ''),
+        clock_timestamp(), clock_timestamp())
 ON CONFLICT (workos_directory_user_id) DO UPDATE
 SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
     email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
     deleted_at = NULL, workos_deleted_at = NULL,
     workos_updated_at = clock_timestamp(), updated_at = clock_timestamp();
 

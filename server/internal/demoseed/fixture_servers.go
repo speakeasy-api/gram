@@ -228,7 +228,7 @@ func (s *seeder) seedFixtureServers(ctx context.Context) error {
 // developer's machine: the Enterprise Sign-In (ID-JAG) Server through the
 // dev-idp, and Linear and Notion through clients registered there. The
 // public demo org keeps them as the shared seed writes them.
-func wireLocalUpstreams(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions) error {
+func wireLocalUpstreams(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions, emaProvisioned bool) error {
 	if opts.ServerURL == nil {
 		logger.InfoContext(ctx, "GRAM_SERVER_URL is not set; Enterprise Sign-In, Linear and Notion keep the shared seed's setup")
 		return nil
@@ -242,7 +242,7 @@ func wireLocalUpstreams(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opt
 	// The Enterprise Sign-In (ID-JAG) Server: signed in through the dev-idp,
 	// it reaches the fixture's EMA endpoint with a token Speakeasy obtains by
 	// exchanging that identity for an ID-JAG.
-	if err := wireLocalEMA(ctx, logger, tx, opts, fixtureauth.BaseURL(opts.ServerURL)); err != nil {
+	if err := wireLocalEMA(ctx, logger, tx, opts, fixtureauth.BaseURL(opts.ServerURL), emaProvisioned); err != nil {
 		return err
 	}
 	// Linear and Notion: real vendors, with clients the seed registers there.
