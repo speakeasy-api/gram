@@ -41,7 +41,7 @@ const (
 	daysAgoRepublishFails = 12
 	daysAgoEndingProvider = 27
 	daysAgoAdminReason    = 22
-	daysAgoUsedToken      = 17
+	daysAgoUsedToken      = 14
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
