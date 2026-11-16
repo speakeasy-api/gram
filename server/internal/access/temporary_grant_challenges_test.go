@@ -288,3 +288,72 @@ func TestListScopes_ReportsTemporaryGrantable(t *testing.T) {
 		}
 	}
 }
+
+func TestTemporaryGrant_RefusesChallengeAnExclusionStillBlocks(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+	recipient := seedTemporaryGrantRecipient(t, ctx, ti.conn, orgID)
+
+	environmentID := uuid.NewString()
+	seedGrant(t, ctx, ti.conn, orgID, recipient, authz.ScopeEnvironmentBlockedRead, environmentID)
+	challengeID := uuid.NewString()
+	insertCHChallengeRow(t, ti, orgID, challengeID, "deny", recipient.String(), string(authz.ScopeEnvironmentRead), authz.ResourceKindEnvironment, environmentID, nil, nil)
+
+	_, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{
+		SessionToken: nil,
+		PrincipalUrn: recipient.String(),
+		Scope:        string(authz.ScopeEnvironmentRead),
+		Selector:     nil,
+		ExpiresAt:    inOneHour(),
+		Reason:       nil,
+		ChallengeIds: []string{challengeID},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	requireNoResolutions(t, ctx, ti, orgID, []string{challengeID})
+	for _, grant := range listPrincipalGrants(t, ctx, ti.conn, orgID, recipient) {
+		require.NotEqual(t, string(authz.ScopeEnvironmentRead), grant.Scope, "the grant is rolled back with the refused resolution")
+	}
+}
+
+func TestTemporaryGrant_ChallengesOnlyWithAGrantToOneMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+	challengeID := insertChatReadDenial(t, ti, orgID, userPrincipalURN("someone"), uuid.NewString())
+
+	_, err := createChatReadGrantForChallenges(ctx, ti, "user:all", nil, []string{challengeID})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	requireNoResolutions(t, ctx, ti, orgID, []string{challengeID})
+}
+
+func TestTemporaryGrant_RestartedGrantLeavesEarlierResolutionExpired(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+	recipient := seedTemporaryGrantRecipient(t, ctx, ti.conn, orgID)
+
+	chatID := uuid.NewString()
+	first := insertChatReadDenial(t, ti, orgID, recipient.String(), chatID)
+	grant, err := createChatReadGrantForChallenges(ctx, ti, recipient.String(), chatSelector(chatID), []string{first})
+	require.NoError(t, err)
+	expireTemporaryGrant(t, ctx, ti.conn, grant.ID)
+
+	// The same access given again restarts the expired row under the same ID.
+	second := insertChatReadDenial(t, ti, orgID, recipient.String(), chatID)
+	restarted, err := createChatReadGrantForChallenges(ctx, ti, recipient.String(), chatSelector(chatID), []string{second})
+	require.NoError(t, err)
+	require.Equal(t, grant.ID, restarted.ID)
+
+	byID := map[string]*gen.AuthzChallenge{}
+	for _, challenge := range listChallengesByIDs(t, ctx, ti, []string{first, second}) {
+		byID[challenge.ID] = challenge
+	}
+	require.Equal(t, "expired", byID[first].ResolutionTemporaryGrant.Status, "the earlier grant ended")
+	require.Nil(t, byID[first].ResolutionTemporaryGrant.ExpiresAt, "the later grant's deadline is not the earlier one's")
+	require.Equal(t, "active", byID[second].ResolutionTemporaryGrant.Status)
+	require.NotNil(t, byID[second].ResolutionTemporaryGrant.ExpiresAt)
+}

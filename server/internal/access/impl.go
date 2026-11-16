@@ -1015,10 +1015,10 @@ func (s *Service) lookupResolutions(ctx context.Context, orgID string, challenge
 	return m, nil
 }
 
-// lookupResolutionTemporaryGrants batch-fetches the deadlines of the temporary
-// grants that resolved challenges point at. A grant missing from the result was
-// revoked.
-func (s *Service) lookupResolutionTemporaryGrants(ctx context.Context, orgID string, resolutions []repo.AuthzChallengeResolution) (map[uuid.UUID]time.Time, error) {
+// lookupResolutionTemporaryGrants batch-fetches the temporary grants that
+// resolved challenges point at, keyed by grant ID. A grant missing from the
+// result was revoked.
+func (s *Service) lookupResolutionTemporaryGrants(ctx context.Context, orgID string, resolutions []repo.AuthzChallengeResolution) (map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow, error) {
 	ids := make([]uuid.UUID, 0, len(resolutions))
 	for _, r := range resolutions {
 		if r.TemporaryGrantID.Valid {
@@ -1026,7 +1026,7 @@ func (s *Service) lookupResolutionTemporaryGrants(ctx context.Context, orgID str
 		}
 	}
 	if len(ids) == 0 {
-		return map[uuid.UUID]time.Time{}, nil
+		return map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow{}, nil
 	}
 	rows, err := repo.New(s.db).ListChallengeResolutionTemporaryGrants(ctx, repo.ListChallengeResolutionTemporaryGrantsParams{
 		OrganizationID: orgID,
@@ -1035,30 +1035,35 @@ func (s *Service) lookupResolutionTemporaryGrants(ctx context.Context, orgID str
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolution temporary grants").LogError(ctx, s.logger)
 	}
-	m := make(map[uuid.UUID]time.Time, len(rows))
+	m := make(map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow, len(rows))
 	for _, row := range rows {
-		m[row.ID] = row.ExpiresAt.Time
+		m[row.ID] = row
 	}
 	return m, nil
 }
 
 // resolutionTemporaryGrantView describes the temporary grant a resolution
-// points at: active until its deadline, then expired, or revoked once the row
-// is gone.
-func resolutionTemporaryGrantView(r repo.AuthzChallengeResolution, deadlines map[uuid.UUID]time.Time) *gen.ChallengeTemporaryGrant {
+// points at: active until its deadline by the database clock, then expired,
+// or revoked once the row is gone. A grant restarted after the resolution was
+// written is a later grant on the same row, so the resolution's own grant is
+// reported as expired, without the later grant's deadline.
+func resolutionTemporaryGrantView(r repo.AuthzChallengeResolution, grants map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow) *gen.ChallengeTemporaryGrant {
 	if !r.TemporaryGrantID.Valid {
 		return nil
 	}
 	id := r.TemporaryGrantID.UUID
-	deadline, ok := deadlines[id]
+	grant, ok := grants[id]
 	if !ok {
 		return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: temporaryGrantStatusRevoked, ExpiresAt: nil}
 	}
-	status := temporaryGrantStatusActive
-	if !deadline.After(time.Now()) {
-		status = temporaryGrantStatusExpired
+	if grant.CreatedAt.Time.After(r.CreatedAt.Time) {
+		return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: temporaryGrantStatusExpired, ExpiresAt: nil}
 	}
-	expiresAt := deadline.UTC().Format(time.RFC3339)
+	status := temporaryGrantStatusExpired
+	if grant.Active {
+		status = temporaryGrantStatusActive
+	}
+	expiresAt := grant.ExpiresAt.Time.UTC().Format(time.RFC3339)
 	return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: status, ExpiresAt: &expiresAt}
 }
 

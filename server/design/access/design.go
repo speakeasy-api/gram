@@ -2049,10 +2049,10 @@ var ChallengeTemporaryGrantModel = Type("ChallengeTemporaryGrant", func() {
 	Attribute("id", String, "Temporary grant ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("status", String, "active: authorizing requests. expired: its deadline passed. revoked: ended early, so the grant no longer exists.", func() {
+	Attribute("status", String, "active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.", func() {
 		Enum("active", "expired", "revoked")
 	})
-	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests. Absent once revoked.", func() {
+	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests. Absent once revoked, and once the same access was given again later.", func() {
 		Format(FormatDateTime)
 	})
 })
@@ -2524,7 +2524,7 @@ var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
 	Attribute("reason", String, "Why the access is needed, recorded in the audit log.", func() {
 		MaxLength(1000)
 	})
-	Attribute("challenge_ids", ArrayOf(String), "Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope for this principal that the grant's selector covers; they are resolved as temporary_grant in the same transaction. Only member (user:<id>) and agent principals can have challenges.", func() {
+	Attribute("challenge_ids", ArrayOf(String), "Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).", func() {
 		MaxLength(200)
 	})
 })

@@ -254,7 +254,7 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 		return nil, oops.E(oops.CodeUnexpected, err, "log temporary grant creation").LogError(ctx, logger)
 	}
 
-	if err := s.resolveChallengesWithTemporaryGrant(ctx, dbtx, ac.ActiveOrganizationID, ac.UserID, ac.Email, answered, row.ID); err != nil {
+	if err := s.resolveChallengesWithTemporaryGrant(ctx, dbtx, ac.ActiveOrganizationID, recipientPrincipal, actor, ac.Email, answered, row.ID); err != nil {
 		return nil, err
 	}
 
@@ -683,6 +683,11 @@ func (s *Service) challengesAnsweredByTemporaryGrant(ctx context.Context, organi
 	if len(rawIDs) == 0 {
 		return nil, nil
 	}
+	// Answering a denial means checking the recipient's whole resulting access,
+	// exclusions included, which is resolved here for members only.
+	if recipient.Type != urn.PrincipalTypeUser || recipient.ID == urn.AllUsersPrincipalID {
+		return nil, oops.E(oops.CodeBadRequest, nil, "challenge_ids can only be given with a grant to one member").LogError(ctx, s.logger)
+	}
 	challengeIDs, err := uniqueChallengeIDs(rawIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "challenge_ids must contain distinct, non-empty IDs").LogError(ctx, s.logger)
@@ -718,23 +723,13 @@ func validateChallengesForTemporaryGrant(challenges []chrepo.ChallengeSummary, c
 		if challenge.Scope != string(scope) {
 			return fmt.Errorf("challenge %s is for scope %q, not %q", challenge.ID, challenge.Scope, scope)
 		}
-		if challenge.Selector == "" {
-			return fmt.Errorf("challenge %s is too old to be answered by a grant; retry the denied action", challenge.ID)
-		}
-		checkSelector, err := challengeSelector(challenge)
+		check, err := deniedChallengeCheck(challenge)
 		if err != nil {
-			return fmt.Errorf("challenge %s: %w", challenge.ID, err)
+			return err
 		}
 		// The same strict check the role-assignment resolution uses: the grant
 		// alone must authorize exactly the check that was denied.
-		dimensions := make(map[string]string, len(checkSelector))
-		for key, value := range checkSelector {
-			if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID {
-				dimensions[key] = value
-			}
-		}
-		check := authz.Check{Scope: scope, ResourceKind: challenge.ResourceKind, ResourceID: challenge.ResourceID, Dimensions: dimensions}
-		allowed, err := authz.GrantsAuthorize([]authz.Grant{authz.NewGrantWithSelector(scope, selector)}, check.WithStrictSelectorMatch())
+		allowed, err := authz.GrantsAuthorize([]authz.Grant{authz.NewGrantWithSelector(scope, selector)}, check)
 		if err != nil {
 			return fmt.Errorf("challenge %s cannot be evaluated against the grant: %w", challenge.ID, err)
 		}
@@ -745,13 +740,60 @@ func validateChallengesForTemporaryGrant(challenges []chrepo.ChallengeSummary, c
 	return nil
 }
 
+// deniedChallengeCheck rebuilds the check a challenge recorded as denied, with
+// strict selector matching. Rows written before selectors were recorded
+// cannot be rebuilt and are refused.
+func deniedChallengeCheck(challenge chrepo.ChallengeSummary) (authz.Check, error) {
+	if challenge.Selector == "" {
+		return authz.Check{}, fmt.Errorf("challenge %s is too old to be answered by a grant; retry the denied action", challenge.ID)
+	}
+	checkSelector, err := challengeSelector(challenge)
+	if err != nil {
+		return authz.Check{}, fmt.Errorf("challenge %s: %w", challenge.ID, err)
+	}
+	dimensions := make(map[string]string, len(checkSelector))
+	for key, value := range checkSelector {
+		if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID {
+			dimensions[key] = value
+		}
+	}
+	check := authz.Check{Scope: authz.Scope(challenge.Scope), ResourceKind: challenge.ResourceKind, ResourceID: challenge.ResourceID, Dimensions: dimensions}
+	return check.WithStrictSelectorMatch(), nil
+}
+
 // resolveChallengesWithTemporaryGrant records each answered challenge as
 // resolved by the temporary grant, inside the grant's own transaction, so a
 // grant and its resolutions are written together or not at all.
-func (s *Service) resolveChallengesWithTemporaryGrant(ctx context.Context, dbtx database.DBTX, organizationID string, userID string, actorEmail *string, challenges []chrepo.ChallengeSummary, grantID uuid.UUID) error {
+func (s *Service) resolveChallengesWithTemporaryGrant(ctx context.Context, dbtx database.DBTX, organizationID string, recipient urn.Principal, actor urn.Principal, actorEmail *string, challenges []chrepo.ChallengeSummary, grantID uuid.UUID) error {
 	if len(challenges) == 0 {
 		return nil
 	}
+
+	// The grant alone covering a denial is not enough: an exclusion the member
+	// holds still wins over it. Check the member's whole access as it stands
+	// with the new grant, inside the same transaction.
+	principals, err := authz.ResolveUserPrincipals(ctx, dbtx, organizationID, recipient.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve recipient principals").LogError(ctx, s.logger)
+	}
+	resulting, err := authz.LoadGrants(ctx, dbtx, organizationID, principals)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load recipient grants").LogError(ctx, s.logger)
+	}
+	for _, challenge := range challenges {
+		check, err := deniedChallengeCheck(challenge)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+		}
+		allowed, err := authz.GrantsAuthorize(resulting, check)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "challenge %s cannot be evaluated", challenge.ID).LogError(ctx, s.logger)
+		}
+		if !allowed {
+			return oops.E(oops.CodeBadRequest, nil, "an exclusion still blocks the access challenge %s was denied; the grant would not let it through", challenge.ID).LogError(ctx, s.logger)
+		}
+	}
+
 	queries := repo.New(dbtx)
 	if err := queries.LockChallengeResolutions(ctx, organizationID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock challenge resolutions").LogError(ctx, s.logger)
@@ -785,7 +827,6 @@ func (s *Service) resolveChallengesWithTemporaryGrant(ctx context.Context, dbtx 
 		groups[key] = append(groups[key], challenge)
 	}
 
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, userID)
 	for _, key := range order {
 		group := groups[key]
 		groupIDs := make([]string, len(group))

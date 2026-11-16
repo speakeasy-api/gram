@@ -555,11 +555,12 @@ type ChallengeResolution struct {
 type ChallengeTemporaryGrant struct {
 	// Temporary grant ID.
 	ID string
-	// active: authorizing requests. expired: its deadline passed. revoked: ended
-	// early, so the grant no longer exists.
+	// active: authorizing requests. expired: its deadline passed, or the same
+	// access was given again later as a new grant. revoked: ended early, so the
+	// grant no longer exists.
 	Status string
 	// When the grant stops, or stopped, authorizing new requests. Absent once
-	// revoked.
+	// revoked, and once the same access was given again later.
 	ExpiresAt *string
 }
 
@@ -602,9 +603,10 @@ type CreateTemporaryGrantPayload struct {
 	// Why the access is needed, recorded in the audit log.
 	Reason *string
 	// Denied authorization challenges this grant answers. Each must be an
-	// unresolved deny of this scope for this principal that the grant's selector
-	// covers; they are resolved as temporary_grant in the same transaction. Only
-	// member (user:<id>) and agent principals can have challenges.
+	// unresolved deny of this scope by this principal that the grant's selector
+	// covers and that no exclusion still blocks; they are resolved as
+	// temporary_grant in the same transaction. Only accepted with a grant to one
+	// member (user:<id>).
 	ChallengeIds []string
 }
 

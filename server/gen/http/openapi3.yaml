@@ -105971,7 +105971,7 @@ components:
             properties:
                 expires_at:
                     type: string
-                    description: When the grant stops, or stopped, authorizing new requests. Absent once revoked.
+                    description: When the grant stops, or stopped, authorizing new requests. Absent once revoked, and once the same access was given again later.
                     format: date-time
                 id:
                     type: string
@@ -105979,7 +105979,7 @@ components:
                     format: uuid
                 status:
                     type: string
-                    description: 'active: authorizing requests. expired: its deadline passed. revoked: ended early, so the grant no longer exists.'
+                    description: 'active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.'
                     enum:
                         - active
                         - expired
@@ -109234,7 +109234,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope for this principal that the grant's selector covers; they are resolved as temporary_grant in the same transaction. Only member (user:<id>) and agent principals can have challenges.
+                    description: Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).
                     maxItems: 200
                 expires_at:
                     type: string

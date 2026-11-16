@@ -11,7 +11,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * active: authorizing requests. expired: its deadline passed. revoked: ended early, so the grant no longer exists.
+ * active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.
  */
 export const ChallengeTemporaryGrantStatus = {
   Active: "active",
@@ -19,7 +19,7 @@ export const ChallengeTemporaryGrantStatus = {
   Revoked: "revoked",
 } as const;
 /**
- * active: authorizing requests. expired: its deadline passed. revoked: ended early, so the grant no longer exists.
+ * active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.
  */
 export type ChallengeTemporaryGrantStatus = OpenEnum<
   typeof ChallengeTemporaryGrantStatus
@@ -27,7 +27,7 @@ export type ChallengeTemporaryGrantStatus = OpenEnum<
 
 export type ChallengeTemporaryGrant = {
   /**
-   * When the grant stops, or stopped, authorizing new requests. Absent once revoked.
+   * When the grant stops, or stopped, authorizing new requests. Absent once revoked, and once the same access was given again later.
    */
   expiresAt?: Date | undefined;
   /**
@@ -35,7 +35,7 @@ export type ChallengeTemporaryGrant = {
    */
   id: string;
   /**
-   * active: authorizing requests. expired: its deadline passed. revoked: ended early, so the grant no longer exists.
+   * active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.
    */
   status: ChallengeTemporaryGrantStatus;
 };

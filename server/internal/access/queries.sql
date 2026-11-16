@@ -322,10 +322,12 @@ ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING *;
 
 -- name: ListChallengeResolutionTemporaryGrants :many
--- Returns the deadline of each temporary grant a challenge resolution points at,
--- expired ones included. A grant that is missing was revoked (revocation
--- deletes the row).
-SELECT id, expires_at
+-- Returns each temporary grant a challenge resolution points at, expired ones
+-- included. A grant that is missing was revoked (revocation deletes the row).
+-- active compares the deadline with the database clock, the same clock
+-- authorization reads grants with. created_at moves when an expired grant is
+-- restarted, which tells a resolution of the earlier grant from the new one.
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND id = ANY(@ids::uuid[])

@@ -12,7 +12,7 @@ import {
 
 export type CreateTemporaryGrantForm = {
   /**
-   * Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope for this principal that the grant's selector covers; they are resolved as temporary_grant in the same transaction. Only member (user:<id>) and agent principals can have challenges.
+   * Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).
    */
   challengeIds?: Array<string> | undefined;
   /**

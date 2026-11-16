@@ -2270,7 +2270,7 @@ func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID strin
 }
 
 const listChallengeResolutionTemporaryGrants = `-- name: ListChallengeResolutionTemporaryGrants :many
-SELECT id, expires_at
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
 FROM principal_grants
 WHERE organization_id = $1
   AND id = ANY($2::uuid[])
@@ -2285,11 +2285,15 @@ type ListChallengeResolutionTemporaryGrantsParams struct {
 type ListChallengeResolutionTemporaryGrantsRow struct {
 	ID        uuid.UUID
 	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+	Active    bool
 }
 
-// Returns the deadline of each temporary grant a challenge resolution points at,
-// expired ones included. A grant that is missing was revoked (revocation
-// deletes the row).
+// Returns each temporary grant a challenge resolution points at, expired ones
+// included. A grant that is missing was revoked (revocation deletes the row).
+// active compares the deadline with the database clock, the same clock
+// authorization reads grants with. created_at moves when an expired grant is
+// restarted, which tells a resolution of the earlier grant from the new one.
 func (q *Queries) ListChallengeResolutionTemporaryGrants(ctx context.Context, arg ListChallengeResolutionTemporaryGrantsParams) ([]ListChallengeResolutionTemporaryGrantsRow, error) {
 	rows, err := q.db.Query(ctx, listChallengeResolutionTemporaryGrants, arg.OrganizationID, arg.Ids)
 	if err != nil {
@@ -2299,7 +2303,12 @@ func (q *Queries) ListChallengeResolutionTemporaryGrants(ctx context.Context, ar
 	var items []ListChallengeResolutionTemporaryGrantsRow
 	for rows.Next() {
 		var i ListChallengeResolutionTemporaryGrantsRow
-		if err := rows.Scan(&i.ID, &i.ExpiresAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.Active,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
