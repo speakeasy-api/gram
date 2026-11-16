@@ -215,7 +215,11 @@ func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Gran
 		return invalid, false
 	}
 	selector, err := authz.SelectorFromRow(row.Selectors)
-	if err != nil || authz.ValidateSelector(scope, selector) != nil {
+	if err != nil || authz.ValidateStoredSelector(scope, selector) != nil {
+		return invalid, false
+	}
+	selector, inEffect := authz.StoredSelectorInEffect(scope, selector)
+	if !inEffect {
 		return invalid, false
 	}
 	return authz.Grant{

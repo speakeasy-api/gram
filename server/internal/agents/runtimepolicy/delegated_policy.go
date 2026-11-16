@@ -91,7 +91,10 @@ func NewDelegatedPolicy(version DelegatedPolicyVersion, requested []authz.Grant)
 		if err := ValidateRuntimeScope(RuntimeScopeRegistryVersion(version), grant.Scope); err != nil {
 			return DelegatedPolicy{}, invalidDelegatedPolicy("validate requested scope %q: %v", grant.Scope, err)
 		}
-		if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
+		// The grants come from the owner's stored rules, so a limit saved
+		// before limits moved to connect is still accepted here. The agent
+		// policy API refuses a new one.
+		if err := authz.ValidateStoredSelector(grant.Scope, grant.Selector); err != nil {
 			return DelegatedPolicy{}, invalidDelegatedPolicy("validate requested selector for %q: %v", grant.Scope, err)
 		}
 
@@ -263,7 +266,7 @@ func validateStoredDelegatedPolicyGrant(version DelegatedPolicyVersion, grant De
 	if definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 		return fmt.Errorf("scope %q is not agent-runtime-safe", grant.Scope)
 	}
-	if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
+	if err := authz.ValidateStoredSelector(grant.Scope, grant.Selector); err != nil {
 		return fmt.Errorf("validate delegated policy selector: %w", err)
 	}
 	return nil

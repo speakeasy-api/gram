@@ -146,7 +146,10 @@ func GrantsContainSelector(grants []Grant, scope Scope, selector Selector) bool 
 // GrantsContainSelectorFor is GrantsContainSelector acting for representedUser,
 // so a $represented_user grant covers that user's own connection.
 func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scope, selector Selector) bool {
-	if selector[SelectorKeyResourceID] == "" || ValidateSelector(scope, selector) != nil {
+	// The candidate may be narrowed from a stored grant, so a limit saved
+	// before limits moved to connect is still accepted. Callers that take a
+	// selector from a request validate it with ValidateSelector first.
+	if selector[SelectorKeyResourceID] == "" || ValidateStoredSelector(scope, selector) != nil {
 		return false
 	}
 	dimensions := maps.Clone(selector)

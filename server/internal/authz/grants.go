@@ -395,6 +395,12 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 		if err != nil {
 			return nil, err
 		}
+		// Shown as the effect it has, so a role read here and saved back
+		// never carries a limit that is no longer accepted.
+		selectors, inEffect := StoredSelectorInEffect(scope, selectors)
+		if !inEffect {
+			continue
+		}
 		grantRows = append(grantRows, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        scope,
