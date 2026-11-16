@@ -22,7 +22,7 @@ describe("AuthenticationSetupActions", () => {
       screen.getByText("OAuth metadata was not advertised by this server."),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Use Discovered" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Configure Manually" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure manually" }));
     expect(defaultProps.onStartManual).toHaveBeenCalledOnce();
   });
 });

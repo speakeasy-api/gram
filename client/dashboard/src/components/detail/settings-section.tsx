@@ -5,69 +5,96 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { SaveIcon } from "lucide-react";
-import { createContext, type ComponentProps, use } from "react";
+import {
+  createContext,
+  type ComponentProps,
+  use,
+  useMemo,
+  useState,
+} from "react";
+import {
+  READINESS_BORDER,
+  ReadinessIssueMarker,
+  useReadinessIssuesFor,
+} from "./readiness-issues";
+import { useSettingsSectionHeading } from "./settings-layout";
 
 type SettingsSectionTone = "default" | "danger";
 type SettingsSectionContextValue = {
   tone: SettingsSectionTone;
+  /** The section's anchor, which header readiness checks link to. */
+  id?: string;
+  /** The section's root, where the settings index links to it. */
+  element: HTMLElement | null;
 };
 type SettingsSectionSlotProps = {
   children?: React.ReactNode;
   className?: string;
 };
 
-const DEFAULT_SETTINGS_SECTION_CONTEXT: SettingsSectionContextValue = {
+const SettingsSectionContext = createContext<SettingsSectionContextValue>({
   tone: "default",
-};
-const DANGER_SETTINGS_SECTION_CONTEXT: SettingsSectionContextValue = {
-  tone: "danger",
-};
-const SettingsSectionContext = createContext(DEFAULT_SETTINGS_SECTION_CONTEXT);
+  id: undefined,
+  element: null,
+});
 
-function SettingsSectionRoot({
+function SettingsSectionShell({
   children,
   id,
+  tone,
 }: {
   children: React.ReactNode;
   id?: string;
+  tone: SettingsSectionTone;
 }) {
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const context = useMemo(() => ({ tone, id, element }), [tone, id, element]);
+
   return (
-    <SettingsSectionContext.Provider value={DEFAULT_SETTINGS_SECTION_CONTEXT}>
-      <section id={id} className="space-y-3 scroll-mt-4">
+    <SettingsSectionContext.Provider value={context}>
+      <section ref={setElement} id={id} className="space-y-3 scroll-mt-4">
         {children}
       </section>
     </SettingsSectionContext.Provider>
   );
 }
 
-function DangerSettingsSectionRoot({
-  children,
-  id,
-}: {
+function SettingsSectionRoot(props: {
   children: React.ReactNode;
   id?: string;
 }) {
-  return (
-    <SettingsSectionContext.Provider value={DANGER_SETTINGS_SECTION_CONTEXT}>
-      <section id={id} className="space-y-3 scroll-mt-4">
-        {children}
-      </section>
-    </SettingsSectionContext.Provider>
-  );
+  return <SettingsSectionShell {...props} tone="default" />;
+}
+
+function DangerSettingsSectionRoot(props: {
+  children: React.ReactNode;
+  id?: string;
+}) {
+  return <SettingsSectionShell {...props} tone="danger" />;
 }
 
 function SettingsSectionHeader({
   children,
   className,
 }: SettingsSectionSlotProps) {
-  return <div className={cn("space-y-1", className)}>{children}</div>;
+  const { id } = use(SettingsSectionContext);
+  // A header issue that links here gets its sign under the title, and the
+  // panel takes its colour, so following "1 issue" lands on what is wrong.
+  return (
+    <div className={cn("space-y-1", className)}>
+      {children}
+      <ReadinessIssueMarker anchorId={id} className="pt-1" />
+    </div>
+  );
 }
 
 function SettingsSectionTitle({
   children,
   className,
 }: SettingsSectionSlotProps) {
-  const { tone } = use(SettingsSectionContext);
+  const { tone, element } = use(SettingsSectionContext);
+  // The settings index lists the section under the words its title shows.
+  useSettingsSectionHeading(textOf(children).trim(), element);
 
   return (
     <Heading
@@ -81,6 +108,13 @@ function SettingsSectionTitle({
       {children}
     </Heading>
   );
+}
+
+/** The plain text of a title, leaving out badges and other elements. */
+function textOf(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  return "";
 }
 
 function SettingsSectionDescription({
@@ -98,13 +132,15 @@ function SettingsSectionPanel({
   children,
   className,
 }: SettingsSectionSlotProps) {
-  const { tone } = use(SettingsSectionContext);
+  const { tone, id } = use(SettingsSectionContext);
+  const issue = useReadinessIssuesFor(id).tone;
 
   return (
     <div
       className={cn(
         "overflow-hidden border bg-card",
         tone === "danger" && "border-destructive/30",
+        issue && READINESS_BORDER[issue],
         className,
       )}
     >

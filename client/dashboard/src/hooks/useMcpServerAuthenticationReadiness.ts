@@ -9,6 +9,7 @@ import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
+import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 
 /**
  * Whether an MCP server's Authentication setup step is done, and the line that
@@ -53,7 +54,33 @@ export function useMcpServerAuthenticationReadiness(
     { userSessionIssuerId },
     { enabled: !!userSessionIssuerId },
   );
-  const hasRemoteIdentityProvider = remoteSessionClients.length > 0;
+  // The issuer's clients may belong to other servers sharing it. A remote
+  // server's identity is the clients it says its callers need, as Settings
+  // reads it, so the two never disagree.
+  const associations = useServerClientAssociations(
+    { mcpServerId: mcpServer?.id ?? "" },
+    undefined,
+    {
+      enabled: remoteMcpServerId !== "" && !!mcpServer?.id,
+      throwOnError: false,
+    },
+  );
+  const requiredClientIds =
+    remoteMcpServerId !== ""
+      ? new Set(associations.data?.requiredClientIds)
+      : null;
+  const ownClients = requiredClientIds
+    ? remoteSessionClients.filter((client) => requiredClientIds.has(client.id))
+    : remoteSessionClients;
+  // A service account client is the Shared credential choice, not a
+  // per-user sign-in.
+  const selfClient = ownClients.find(
+    (client) => client.credentialOwner === "self",
+  );
+  const subjectClientCount = ownClients.filter(
+    (client) => client.credentialOwner !== "self",
+  ).length;
+  const hasRemoteIdentityProvider = ownClients.length > 0;
   const {
     data: remoteHeadersResult,
     isLoading: isLoadingRemoteHeaders,
@@ -62,14 +89,15 @@ export function useMcpServerAuthenticationReadiness(
     enabled: remoteMcpServerId !== "",
   });
   const remoteHeaders = remoteHeadersResult?.headers ?? [];
-  const remoteIdentityMode = deriveIdentityMode(
-    remoteSessionClients.length,
-    remoteHeaders,
-  );
+  const remoteIdentityMode: IdentityMode = selfClient
+    ? "agent"
+    : deriveIdentityMode(subjectClientCount, remoteHeaders);
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
-    isRemoteSessionClientsError || isRemoteHeadersError;
+    isRemoteSessionClientsError ||
+    isRemoteHeadersError ||
+    (remoteMcpServerId !== "" && associations.isError);
   // Enforcing organizations configure upstream identity through credentials,
   // so the summary reads their status instead of the legacy identity mode.
   const upstreamAuth = useUpstreamAuthEnforcement();
@@ -150,7 +178,9 @@ export function useMcpServerAuthenticationReadiness(
     (isTunneledBacked && !!userSessionIssuerId);
 
   const isLoadingRemoteIdentity =
-    isLoadingRemoteSessionClients || isLoadingRemoteHeaders;
+    isLoadingRemoteSessionClients ||
+    isLoadingRemoteHeaders ||
+    (remoteMcpServerId !== "" && associations.isLoading);
   // Whether the answer can still change once the queries settle, so a caller
   // never reports a step as open, or done, before the data is in.
   const loading =

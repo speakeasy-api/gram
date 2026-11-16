@@ -286,7 +286,7 @@ export function ServerUrlSection({
             <FieldGroup className="gap-6">
               {/* Hosted (platform) addresses. */}
               <Field>
-                <FieldLabel>Hosted Address</FieldLabel>
+                <FieldLabel>Hosted address</FieldLabel>
                 {platformEndpoints.map((endpoint) => (
                   <AddressRow
                     key={endpoint.id}
@@ -355,7 +355,7 @@ export function ServerUrlSection({
               {/* Custom-domain addresses: zero or more. */}
               <Field>
                 <div className="flex items-center gap-2">
-                  <FieldLabel>Custom Address</FieldLabel>
+                  <FieldLabel>Custom address</FieldLabel>
                 </div>
                 {customDomainEndpoints.map((endpoint) => (
                   <AddressRow
@@ -408,7 +408,7 @@ export function ServerUrlSection({
                   privateUrlsError ||
                   privateMcpUrls.length > 0) && (
                   <Field>
-                    <FieldLabel>Private Address</FieldLabel>
+                    <FieldLabel>Private address</FieldLabel>
                     {isLoadingPrivateUrls ? (
                       <Text muted small>
                         Loading…
