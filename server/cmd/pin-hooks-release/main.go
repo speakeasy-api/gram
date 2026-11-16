@@ -185,7 +185,7 @@ func readPins(path string) (pins, error) {
 		return pins{}, fmt.Errorf("parse pins: %w", err)
 	}
 
-	out := pins{BinaryVersion: "", SHA256s: map[string]string{}, Retired: map[string]map[string]string{}}
+	out := pins{BinaryVersion: "", SHA256s: map[string]string{}, Retired: map[string]map[string]string{}, Providers: nil}
 	for _, decl := range file.Decls {
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok {
