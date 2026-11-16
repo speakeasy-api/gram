@@ -613,6 +613,12 @@
         "runs": 3
       }
     },
+    "mcp-setup-handoff-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
     "memory-docs-github-oauth": {
       "progressive": {
         "passes": 3,

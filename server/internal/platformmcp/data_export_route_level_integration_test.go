@@ -137,6 +137,50 @@ func TestSetDataExportMinSeverityRefusals(t *testing.T) {
 	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteUpdate))
 }
 
+func TestSetDataExportMinSeverityUnconfirmedPreviewsAndRefusesLikeTheConfirmedCall(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_level_preview")
+	created := f.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: f.destination, Valid: true})
+	f.setLevel(t, ctx, created.ID, dataexports.MinSeverityError)
+
+	input := f.levelInput(created.ID, dataexports.MinSeverityWarn, "level-unconfirmed")
+	input.Confirmed = false
+	_, err := f.service.SetMinSeverity(ctx, f.principal, input)
+	preview := requireDataExportLevelPreview(t, err)
+	require.Equal(t, created.ID.String(), preview.Route.ID)
+	require.Equal(t, f.project.Slug, preview.Route.ProjectSlug)
+	require.Equal(t, dataexports.MinSeverityError, preview.Route.MinSeverity)
+	require.Equal(t, dataexports.MinSeverityError, preview.MinSeverityBefore)
+	require.Equal(t, dataexports.MinSeverityWarn, preview.MinSeverityAfter)
+	require.Equal(t, dataExportOutcomeLevelChanged, preview.Outcome)
+	require.Equal(t, dataexports.MinSeverityError, readRouteWith(ctx, f.conn, f.principal, f.project, created.ID).MinSeverity, "a preview writes nothing")
+	require.False(t, f.receiptStored(t, ctx, operationSetDataExportMinSeverity, "level-unconfirmed"))
+	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteUpdate))
+
+	// A preview refuses what the confirmed call refuses.
+	telemetry := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+	other := f.levelInput(telemetry.ID, dataexports.MinSeverityWarn, "level-other-source")
+	other.Confirmed = false
+	_, err = f.service.SetMinSeverity(ctx, f.principal, other)
+	requireDataExportToggleCode(t, err, "invalid_input")
+
+	input.Confirmed = true
+	changed, err := f.service.SetMinSeverity(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.Equal(t, dataExportOutcomeLevelChanged, changed.Outcome)
+	require.Equal(t, dataexports.MinSeverityWarn, readRouteWith(ctx, f.conn, f.principal, f.project, created.ID).MinSeverity)
+	require.True(t, f.receiptStored(t, ctx, operationSetDataExportMinSeverity, "level-unconfirmed"))
+
+	// A preview with a key that already completed this change points at its
+	// stored result instead of previewing against the state it moved on.
+	input.Confirmed = false
+	_, err = f.service.SetMinSeverity(ctx, f.principal, input)
+	message := requireDataExportToggleCode(t, err, "conflict")
+	require.Contains(t, message, "already completed this exact change")
+}
+
 func TestSetDataExportMinSeverityUnavailableManifestMatchesLive(t *testing.T) {
 	t.Parallel()
 

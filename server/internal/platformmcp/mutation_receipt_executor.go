@@ -80,9 +80,12 @@ func executeChargedMutationReceipt[T any](ctx context.Context, charge func(conte
 
 // checkPreviewReceipt refuses a preview whose idempotency key the confirmed
 // call would refuse: a key already used with different input, or a receipt
-// with no usable result. It is the unlocked lookup alone, so it stores and
-// charges nothing. A replay or a miss passes: the confirmed call answers the
-// first from its receipt and decides the second under the lock.
+// with no usable result. It also refuses a key that already completed this
+// exact change: the rolled-back write would run against state that change
+// moved on, and could refuse what the confirmed call answers from its
+// receipt, so the caller is told to read that result instead. It is the
+// unlocked lookup alone, so it stores and charges nothing. A miss passes: the
+// confirmed call decides it under the lock.
 func checkPreviewReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) error {
 	_, check, err := completedMutationReceipt(ctx, execution)
 	if err != nil {
@@ -95,7 +98,9 @@ func checkPreviewReceipt[T any](ctx context.Context, execution mutationReceiptEx
 		return execution.Conflict(receiptIncompleteMessage)
 	case receiptUnreadable:
 		return execution.Unavailable(errStoredReceiptInvalid)
-	case receiptMiss, receiptReplay:
+	case receiptReplay:
+		return execution.Conflict(receiptAlreadyCompletedMessage)
+	case receiptMiss:
 	}
 	return nil
 }
@@ -154,6 +159,9 @@ const (
 const (
 	receiptKeyReusedMessage  = "The idempotency key was already used with different input."
 	receiptIncompleteMessage = "The matching mutation has no completed replay result."
+	// receiptAlreadyCompletedMessage answers a preview whose key already
+	// completed the same change.
+	receiptAlreadyCompletedMessage = "This idempotency key already completed this exact change, so there is nothing to preview. Call again with confirmed: true to read its stored result, or use a new key for a new change."
 )
 
 var errStoredReceiptInvalid = errors.New("stored receipt payload is invalid")

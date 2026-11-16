@@ -259,7 +259,20 @@ func TestResumeDataExportRefusesWithoutAUsableDestination(t *testing.T) {
 func requireDataExportTogglePreview(t *testing.T, err error) DataExportTogglePreview {
 	t.Helper()
 	text := requireDataExportToggleCode(t, err, "confirmation_required")
-	var refusal dataExportToggleRefusal
+	var refusal struct {
+		Preview *DataExportTogglePreview `json:"preview"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text), &refusal))
+	require.NotNil(t, refusal.Preview, text)
+	return *refusal.Preview
+}
+
+func requireDataExportLevelPreview(t *testing.T, err error) DataExportLevelPreview {
+	t.Helper()
+	text := requireDataExportToggleCode(t, err, "confirmation_required")
+	var refusal struct {
+		Preview *DataExportLevelPreview `json:"preview"`
+	}
 	require.NoError(t, json.Unmarshal([]byte(text), &refusal))
 	require.NotNil(t, refusal.Preview, text)
 	return *refusal.Preview
