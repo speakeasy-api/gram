@@ -124,19 +124,73 @@ so target the flag only once the gateway runs in that environment.
 
 ## Running locally
 
-The daemon needs a real tailnet, so it is opt-in. It also needs organization
-encryption, which `./zero` configures (`mise run zero:org-encryption`).
-Provision an ingress through
-the dashboard with the `tag:speakeasy` policy, then set in `mise.local.toml`:
+The whole path (tailnet client → gateway → private listener → MCP handler)
+runs without Kubernetes in the opt-in `private-network` pitchfork group:
 
-```toml
-GRAM_TAILNET_GATEWAY_UPSTREAM_URL = "https://localhost:<private-listener-port>"
-GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE = "<absolute path to the listener CA>"
-GRAM_TAILNET_GATEWAY_TOKEN_PATH = "<absolute path to a file holding the attestation token>"
-```
+- `network-ingress-server`: the private listener on
+  `https://localhost:$GRAM_NETINGRESS_PORT`, with its own mkcert certificate.
+- `network-ingress-worker`: the reconciler, gateway provider only, one slot.
+- `tailnet-gateway`: this daemon, forwarding to the listener.
 
-and start it with `pitchfork start tailnet-gateway`. Readiness is served on
-`http://localhost:$GRAM_TAILNET_GATEWAY_CONTROL_PORT/readyz`.
+In a cluster the gateway attests with its projected service-account token and
+the listener checks it with Kubernetes TokenReview. Locally the gateway
+presents an HMAC-signed token with the same claims (subject
+`system:serviceaccount:gram-local:gram-tailnet-gateway`, audience
+`gram-netingress`, 24-hour expiry), and the listener verifies it with
+`netingress.LocalTokenReviewer`. Everything after the token review is the
+production code path. The key and token live in `local/netingress/`, are
+created on first start, and the token is re-minted on every gateway start.
+The listener accepts local tokens only in the `local` environment.
+
+### Isolation from production
+
+The local stack may join a tailnet that production gateways also serve, so
+everything it creates there is named after `GRAM_NETWORK_INGRESS_DEV_ID`, a
+four-character id in `mise.local.toml` derived from your git email, the
+machine's hostname and the main checkout's path. `mise run zero:network-ingress`
+writes it; `./zero`, new worktrees and the first start of the API server,
+reconciler or gateway run that task.
+
+The id is the same in every worktree of a checkout, so reuse one connection
+hostname rather than choosing a new one per worktree. Every new hostname
+needs a new certificate from the tailnet's Let's Encrypt allowance (50 a week,
+shared with everyone on the tailnet), while re-issuing an existing name counts
+as a renewal. Because worktrees share the names, run the private network
+group in one worktree at a time.
+
+Naming lives behind `networkingress.Namer`, one method per artifact.
+`LocalNamer` gives:
+
+| Artifact                                 | Production            | Local                                          |
+| ---------------------------------------- | --------------------- | ---------------------------------------------- |
+| Connection hostname                      | as requested          | `local-<id>-<requested>` (the API prefixes it) |
+| Tailscale Service                        | `svc:<hostname>`      | `svc:local-<id>-<hostname>`                    |
+| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-local-<id>-<slot>`               |
+| Service comment and auth key description | Speakeasy             | name `local-<id>`                              |
+
+Beyond naming, a local stack never touches a hostname without its prefix. The
+reconciler refuses to define its service and leaves it alone on rename and
+teardown, and the gateway never hosts it. That covers connections created
+before the stack had an id. The reconciler and gateway refuse to start in
+local development without an id, and an id outside the `local` environment
+is rejected. Devices are always deleted by the node id the local database
+recorded, so they need no ownership check. Local machines still carry
+`tag:speakeasy`, so the tailnet's rules for that tag apply to them.
+
+1. Make sure `./zero` has configured organization encryption
+   (`mise run zero:org-encryption`).
+2. Grant your local organization the `network_ingress` feature on its
+   Features page in the admin dashboard.
+3. Start the group: `pitchfork start --group private-network`.
+4. On the dashboard's Domains page, connect Tailscale with an OAuth client
+   from a test tailnet and the `tag:speakeasy` policy the setup sheet shows.
+
+Readiness is served on `http://127.0.0.1:$GRAM_NETINGRESS_CONTROL_PORT/healthz`
+(which also reviews the gateway's token),
+`http://127.0.0.1:$GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT/healthz` and
+`http://localhost:$GRAM_TAILNET_GATEWAY_CONTROL_PORT/readyz`. To point the
+gateway at another listener, set `GRAM_TAILNET_GATEWAY_UPSTREAM_URL` and
+`GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE` in `mise.local.toml`.
 
 The pod needs outbound HTTPS to `controlplane.tailscale.com`,
 `login.tailscale.com` and the DERP relays (`*.tailscale.com:443`). UDP 41641

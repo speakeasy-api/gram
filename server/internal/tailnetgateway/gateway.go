@@ -76,6 +76,11 @@ type Config struct {
 	// Tag is the ACL tag every node advertises.
 	Tag string
 
+	// Namer names this gateway's machines and services and decides which
+	// connections it may host, so a local development gateway never hosts
+	// production's.
+	Namer networkingress.Namer
+
 	// Upstream is the private listener the gateway proxies to.
 	Upstream *url.URL
 
@@ -119,6 +124,9 @@ func (c Config) Validate() error {
 	if err := ValidateTag(c.Tag); err != nil {
 		return err
 	}
+	if c.Namer == nil {
+		return errors.New("tailnet gateway namer is required")
+	}
 	if c.Upstream == nil || c.Upstream.Scheme != "https" || c.Upstream.Host == "" {
 		return errors.New("tailnet gateway upstream must be an https url")
 	}
@@ -143,6 +151,10 @@ type desiredIngress struct {
 	organizationSlug string
 	label            string
 	updatedAt        time.Time
+
+	// serviceName is the Tailscale Service the slot's node advertises, as the
+	// gateway's Namer names it for label.
+	serviceName string
 }
 
 // Slot state machine
@@ -260,7 +272,7 @@ func wakes(from, to NodeStatus) bool {
 
 // probeTransition maps one status probe of a running node to the slot's next
 // state.
-func probeTransition(from NodeStatus, label string, state NodeState, err error) transition {
+func probeTransition(from NodeStatus, serviceName string, state NodeState, err error) transition {
 	t := transition{to: NodeStatusStarting, message: state.BackendState, wake: false}
 	switch {
 	case err != nil:
@@ -271,7 +283,7 @@ func probeTransition(from NodeStatus, label string, state NodeState, err error) 
 		t.to = NodeStatusNeedsLogin
 	case state.AwaitingApproval:
 		t.to = NodeStatusAwaitingApproval
-		t.message = "the tailnet has not approved this node to host " + ServiceName(label)
+		t.message = "the tailnet has not approved this node to host " + serviceName
 	case state.AwaitingCertificate:
 		t.to = NodeStatusAwaitingCertificate
 		t.message = state.CertificateStatus
@@ -415,9 +427,29 @@ func (g *Gateway) Poll(ctx context.Context) {
 	}
 	desired := make(map[uuid.UUID]desiredIngress, len(rows))
 	for _, row := range rows {
+		// Hosting a hostname this stack does not own would advertise a
+		// service that, on a shared tailnet, can be production's. A failed
+		// check skips the ingress too.
+		owned, err := g.cfg.Namer.OwnsHostname(ctx, row.Hostname)
+		if err != nil {
+			g.logger.ErrorContext(ctx, "check tailnet ingress hostname ownership",
+				attr.SlogNetworkIngressID(row.ID.String()), attr.SlogHostName(row.Hostname), attr.SlogError(err))
+			continue
+		}
+		if !owned {
+			g.logger.WarnContext(ctx, "skip tailnet ingress whose hostname this gateway does not own",
+				attr.SlogNetworkIngressID(row.ID.String()), attr.SlogHostName(row.Hostname))
+			continue
+		}
+		serviceName, err := g.cfg.Namer.ServiceName(ctx, row.Hostname)
+		if err != nil {
+			g.logger.ErrorContext(ctx, "name tailnet ingress service",
+				attr.SlogNetworkIngressID(row.ID.String()), attr.SlogHostName(row.Hostname), attr.SlogError(err))
+			continue
+		}
 		desired[row.ID] = desiredIngress{
 			id: row.ID, organizationID: row.OrganizationID, organizationSlug: row.OrganizationSlug,
-			label: row.Hostname, updatedAt: row.UpdatedAt.Time,
+			label: row.Hostname, updatedAt: row.UpdatedAt.Time, serviceName: serviceName,
 		}
 	}
 
@@ -647,11 +679,18 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 		authKey = plaintext
 	}
 
+	machineName, err := g.cfg.Namer.MachineName(ctx, g.cfg.Ordinal)
+	if err != nil {
+		logger.ErrorContext(ctx, "name tailnet machine", attr.SlogError(err))
+		g.fail(ctx, s, "machine name unavailable", false)
+		return
+	}
+
 	g.settle(ctx, s, hold(NodeStatusStarting, ""))
 	startedAt := g.now()
 	node, err := g.runtime.Start(ctx, NodeSpec{
 		IngressID: want.id, OrganizationID: want.organizationID, Slot: g.cfg.Ordinal,
-		Hostname: NodeHostname(g.cfg.Ordinal), ServiceName: ServiceName(want.label), Tag: g.cfg.Tag,
+		Hostname: machineName, ServiceName: want.serviceName, Tag: g.cfg.Tag,
 		AuthKey: authKey, Store: store, StateDir: filepath.Join(g.cfg.StateDir, want.id.String()),
 		ControlURL: g.cfg.ControlURL, StartTimeout: g.cfg.StartTimeout,
 		CertificateEvents: func(ctx context.Context, operation CertificateOperation, result CertificateResult) {
@@ -767,7 +806,7 @@ func (g *Gateway) probe(ctx context.Context, s *slot) NodeStatus {
 		s.dnsName = state.FQDN
 	}
 
-	t := probeTransition(s.state, s.ingress.label, state, err)
+	t := probeTransition(s.state, s.ingress.serviceName, state, err)
 	g.move(ctx, s, t)
 
 	if t.to == NodeStatusOnline {

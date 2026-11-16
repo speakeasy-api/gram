@@ -76,6 +76,11 @@ func newTailnetGatewayCommand() *cli.Command {
 			EnvVars: []string{"GRAM_TAILNET_GATEWAY_TAG"},
 		},
 		&cli.StringFlag{
+			Name:    networkIngressDevIDFlag,
+			Usage:   "Local development only: name this gateway's devices speakeasy-gw-local-<id>-<slot> and host only local-<id>-... hostnames",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
+		},
+		&cli.StringFlag{
 			Name:     "upstream-url",
 			Usage:    "Speakeasy private listener URL",
 			EnvVars:  []string{"GRAM_TAILNET_GATEWAY_UPSTREAM_URL"},
@@ -313,12 +318,18 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		}
 	}
 
+	namer, err := localDevelopmentNamer(c.String("environment"), c.String(networkIngressDevIDFlag))
+	if err != nil {
+		return tailnetgateway.Config{}, err
+	}
+
 	config := tailnetgateway.Config{
 		Ordinal:            ordinal,
 		PodName:            podName,
 		Shard:              c.String("shard"),
 		StateDir:           stateDir,
 		Tag:                c.String("tag"),
+		Namer:              namer,
 		Upstream:           upstream,
 		UpstreamTransport:  transport,
 		TokenPath:          c.String("token-path"),

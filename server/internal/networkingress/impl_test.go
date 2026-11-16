@@ -268,3 +268,30 @@ func TestCreateDefaultsHostnameToSpeakeasy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, networkingress.DefaultHostname, created.Hostname)
 }
+
+func TestLocalNamerPrefixesCreatedAndRenamedHostnames(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	namer, err := networkingress.NewLocalNamer("ab12")
+	require.NoError(t, err)
+	ti.service.UseNamer(namer)
+
+	created, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: nil, OauthClientID: "client", OauthClientSecret: "secret"})
+	require.NoError(t, err)
+	require.Equal(t, "local-ab12-speakeasy", created.Hostname, "the default hostname is qualified too")
+
+	renamed, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Hostname: new("tools")})
+	require.NoError(t, err)
+	require.Equal(t, "local-ab12-tools", renamed.Hostname)
+
+	kept, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Hostname: new("local-ab12-tools")})
+	require.NoError(t, err)
+	require.Equal(t, "local-ab12-tools", kept.Hostname, "an already qualified hostname is not prefixed twice")
+}
+
+func TestCreateRefusesHostnamesReservedForLocalDevelopment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("local-ab12-tools"), OauthClientID: "client", OauthClientSecret: "secret"})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

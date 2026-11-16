@@ -40,10 +40,8 @@ func TestParsePodOrdinal(t *testing.T) {
 	}
 }
 
-func TestNodeNaming(t *testing.T) {
+func TestNodeValidation(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "speakeasy-gw-0", tailnetgateway.NodeHostname(0))
-	require.Equal(t, "svc:speakeasy", tailnetgateway.ServiceName("speakeasy"))
 	require.NoError(t, tailnetgateway.ValidateTag("tag:speakeasy"))
 	require.Error(t, tailnetgateway.ValidateTag("speakeasy"))
 	require.Error(t, tailnetgateway.ValidateTag("tag:"))

@@ -66,21 +66,7 @@ const (
 	// DefaultTag is the ACL tag every gateway node advertises. Customers own it
 	// in their policy file and scope the OAuth client to it.
 	DefaultTag = "tag:speakeasy"
-
-	// nodeHostnamePrefix precedes the slot number in a node's hostname.
-	nodeHostnamePrefix = "speakeasy-gw-"
 )
-
-// NodeHostname is the tailnet hostname of the node hosting one slot. Node and
-// service names share MagicDNS, so it is distinct from the service label.
-func NodeHostname(slot int32) string {
-	return fmt.Sprintf("%s%d", nodeHostnamePrefix, slot)
-}
-
-// ServiceName is the Tailscale Service advertised for one ingress label.
-func ServiceName(label string) string {
-	return "svc:" + label
-}
 
 // ValidateTag accepts a Tailscale ACL tag such as tag:speakeasy.
 func ValidateTag(value string) error {

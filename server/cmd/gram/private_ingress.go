@@ -25,7 +25,6 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -108,15 +107,14 @@ func newNetworkIngressServerCommand() *cli.Command {
 				[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: deps.DB}},
 				[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: deps.Redis}}, temporalHealth)
 			stopControl, err := controlServer.Start(ctx, privateIngressReadinessHandler(
-				deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
-				"/var/run/secrets/kubernetes.io/serviceaccount/token", healthHandler))
+				deps.TokenReviewer, c.String("netingress-readiness-token-file"), healthHandler))
 			if err != nil {
 				return fmt.Errorf("start private ingress control server: %w", err)
 			}
 			defer func() { _ = runShutdown(logger, ctx, []func(context.Context) error{stopControl}) }()
 			return servePrivateIngress(ctx, privateIngressServerDependencies{
 				Logger: logger, MeterProvider: otel.GetMeterProvider(), DB: deps.DB,
-				Kubernetes: deps.Kubernetes, Runtime: deps.Runtime,
+				TokenReviewer: deps.TokenReviewer, Runtime: deps.Runtime,
 				GatewayNamespace: c.String("netingress-gateway-namespace"), GatewayServiceAccount: c.String("netingress-gateway-service-account"),
 			}, c.String("netingress-address"), c.String("netingress-tls-cert-file"), c.String("netingress-tls-key-file"))
 		},
@@ -144,6 +142,17 @@ func privateIngressServerFlags() []cli.Flag {
 			Name:    "netingress-tls-key-file",
 			Usage:   "TLS private key file for the private network ingress listener",
 			EnvVars: []string{"GRAM_NETINGRESS_TLS_KEY_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-readiness-token-file",
+			Usage:   "Token the readiness probe reviews to confirm token review works; the pod's own service-account token in a cluster",
+			Value:   "/var/run/secrets/kubernetes.io/serviceaccount/token",
+			EnvVars: []string{"GRAM_NETINGRESS_READINESS_TOKEN_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-local-token-key-file",
+			Usage:   "Local development only: verify attestation tokens signed with this HMAC key instead of Kubernetes TokenReview",
+			EnvVars: []string{"GRAM_NETINGRESS_LOCAL_TOKEN_KEY_FILE"},
 		},
 		&cli.StringFlag{
 			Name:    "netingress-gateway-namespace",
@@ -185,8 +194,10 @@ type privateIngressServerDependencies struct {
 	Logger        *slog.Logger
 	MeterProvider metric.MeterProvider
 	DB            *pgxpool.Pool
-	Kubernetes    *k8s.KubernetesClients
 	Runtime       *mcpServerRuntime
+
+	// TokenReviewer verifies the attestation token on every private request.
+	TokenReviewer netingress.TokenReviewer
 
 	// GatewayNamespace and GatewayServiceAccount identify the tailnet gateway
 	// whose requests resolve their ingress by host. Both empty disables it.
@@ -201,8 +212,8 @@ func servePrivateIngress(
 	certFile string,
 	keyFile string,
 ) error {
-	if deps.Kubernetes == nil || deps.Kubernetes.Clientset == nil {
-		return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
+	if deps.TokenReviewer == nil {
+		return errors.New("private network ingress listener requires an attestation token reviewer")
 	}
 	if deps.Runtime == nil {
 		return errors.New("private network ingress listener requires an MCP server runtime")
@@ -228,7 +239,7 @@ func servePrivateIngress(
 	mux.Use(middleware.NewHTTPLoggingMiddleware(deps.Logger))
 	mux.Use(middleware.NewRecovery(deps.Logger))
 	verifier := netingress.NewAttestationVerifier(
-		deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
+		deps.TokenReviewer,
 		netingress.NewIngressLookup(deps.DB),
 		netingress.DefaultTokenAudience,
 		30*time.Second,
