@@ -54,7 +54,7 @@
     "@types/tr46": "^5.0.1",
     "@vitejs/plugin-react": "catalog:",
     "happy-dom": "^21.0.4",
-    "oxlint": "^1.92.0",
+    "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2006",
     "react-grab": "^0.2.0",
     "typescript": "catalog:",
