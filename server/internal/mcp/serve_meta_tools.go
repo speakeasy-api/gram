@@ -415,6 +415,9 @@ type memberCatalog struct {
 	entries    []*toolListEntry
 	byName     map[string]*toolListEntry
 	incomplete bool
+	// description is the member's own one-line description of itself, when
+	// it gave one. It is third-party text: memberDescription bounds it.
+	description string
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -445,7 +448,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, description: memberDescription(conv.PtrValOr(described.Description, ""))}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		entry := toolToListEntry(tool)

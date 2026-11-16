@@ -18,6 +18,15 @@ func TestBuiltInInstructionsMatchDashboardCopy(t *testing.T) {
 	require.Equal(t, Instructions, string(canonical), "update client/dashboard/src/pages/mcp/gateway/builtin-gateway-instructions.txt after editing metamcp.Instructions")
 }
 
+func TestDirectInstructionsMatchDashboardCopy(t *testing.T) {
+	t.Parallel()
+	canonical, err := os.ReadFile("../../../../client/dashboard/src/pages/mcp/gateway/builtin-gateway-direct-instructions.txt")
+	require.NoError(t, err)
+	// Only the file's final newline is not part of the served instructions.
+	require.True(t, strings.HasSuffix(string(canonical), "\n"), "builtin-gateway-direct-instructions.txt must end with a newline")
+	require.Equal(t, ResolveDiscoveryInstructions(nil, DiscoveryModeDirect, nil), strings.TrimSuffix(string(canonical), "\n"))
+}
+
 func TestCodeInstructionsMatchDashboardCopy(t *testing.T) {
 	t.Parallel()
 	canonical, err := os.ReadFile("../../../../client/dashboard/src/pages/mcp/gateway/builtin-gateway-code-instructions.txt")

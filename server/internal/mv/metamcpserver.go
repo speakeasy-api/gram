@@ -20,12 +20,13 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
 		Visibility:          types.MetaMcpServerVisibility(server.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
-		Instructions:        conv.FromPGText[string](server.Instructions),
-		CodeModeEnabled:     nil,
-		DiscoveryMode:       string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode)),
-		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
-		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
-		MemberCount:         nil,
+		// A stored copy of a built-in text is not the owner's own text.
+		Instructions:    metamcp.CustomInstructions(conv.FromPGText[string](server.Instructions)),
+		CodeModeEnabled: nil,
+		DiscoveryMode:   string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode)),
+		CreatedAt:       conv.FromPGTimestamptz(server.CreatedAt),
+		UpdatedAt:       conv.FromPGTimestamptz(server.UpdatedAt),
+		MemberCount:     nil,
 	}
 }
 

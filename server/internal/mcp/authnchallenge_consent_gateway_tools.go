@@ -312,7 +312,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			}
 			authBinding = &connectionCatalogAuth{ClientID: clientID, RegistrationID: member.chosenClientID}
 		}
-		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, Auth: authBinding}
+		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, Auth: authBinding, Description: captured[member.slug].description}
 	}
 	for _, tool := range inventory {
 		var hints []string

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -303,6 +304,12 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	instructions := conv.PtrToPGTextTrimmed(conv.PtrStripNUL(payload.Instructions))
 	if utf8.RuneCountInString(instructions.String) > 10000 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "instructions must not exceed 10000 characters after normalization")
+	}
+	// Saving a built-in text, as the settings page's copy button invites,
+	// keeps the gateway on the built-in instructions rather than freezing it
+	// on that copy.
+	if instructions.Valid && !gatewaymcp.HasCustomInstructions(&instructions.String) {
+		instructions = pgtype.Text{String: "", Valid: false}
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
