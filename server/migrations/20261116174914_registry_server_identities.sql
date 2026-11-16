@@ -21,7 +21,7 @@ CREATE UNIQUE INDEX "mcp_registry_servers_name_key" ON "mcp_registry_servers" ("
 -- Set comment to column: "id" on table: "mcp_registry_servers"
 COMMENT ON COLUMN "mcp_registry_servers"."id" IS '@access: confidential';
 -- Set comment to column: "name" on table: "mcp_registry_servers"
-COMMENT ON COLUMN "mcp_registry_servers"."name" IS '@access: confidential';
+COMMENT ON COLUMN "mcp_registry_servers"."name" IS '@access: opaque-confidential';
 -- Set comment to column: "visible" on table: "mcp_registry_servers"
 COMMENT ON COLUMN "mcp_registry_servers"."visible" IS '@access: confidential';
 -- Set comment to column: "default_entry_id" on table: "mcp_registry_servers"

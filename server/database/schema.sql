@@ -9316,7 +9316,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_servers_name_key
   ON mcp_registry_servers (name);
 
 COMMENT ON COLUMN mcp_registry_servers.id IS '@access: confidential';
-COMMENT ON COLUMN mcp_registry_servers.name IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_servers.name IS '@access: opaque-confidential';
 COMMENT ON COLUMN mcp_registry_servers.visible IS '@access: confidential';
 COMMENT ON COLUMN mcp_registry_servers.default_entry_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_registry_servers.created_at IS '@access: confidential';

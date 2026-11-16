@@ -51,7 +51,7 @@ func TestExpandMigrationTransition(t *testing.T) {
  ('00000000-0000-0000-0000-000000000004', '{"server":{"name":"example.test/existing","version":"1.0.0"}}', true, '2025-01-01', '2024-01-01', '2025-01-01')`)
 	var before, after string
 	require.NoError(t, query(`SELECT jsonb_agg(to_jsonb(e) ORDER BY id)::text FROM mcp_registry_entries e`).Scan(&before))
-	migration("20261116173332_registry_server_identities.sql")
+	migration("20261116174914_registry_server_identities.sql")
 	// An operator-created parent must not acquire a default or become visible.
 	exec(`INSERT INTO mcp_registry_servers(id, name, visible) VALUES ('00000000-0000-0000-0000-000000000005', 'example.test/existing', false)`)
 	exec(registryBackfillSQL)

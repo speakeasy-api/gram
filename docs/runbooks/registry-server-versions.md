@@ -38,7 +38,7 @@ There are no new flags, application backfill hooks, arbitrary-version fallback,
 or temporary `AdoptPublishedDefault` behavior.
 
 1. Ship schema-only expand PR **9076** first:
-   `20261116173332_registry_server_identities.sql`. Entry linkage remains nullable
+   `20261116174914_registry_server_identities.sql`. Entry linkage remains nullable
    and name-only uniqueness remains. Package migrations separately from application
    behavior; do not accidentally include the contract migration in this release.
 2. Pass the **pre-freeze name preflight** below with zero invalid names before
