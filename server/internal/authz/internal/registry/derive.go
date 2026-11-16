@@ -10,7 +10,7 @@ import (
 
 // The functions in this file derive, from Definitions, every table the
 // evaluator and the catalogue read; authzgen writes their results into
-// package  They hold no policy of their own: a question about what a
+// package authz. They hold no policy of their own: a question about what a
 // scope means is answered in definitions.go.
 
 // Visibility says whether a scope is shown to people as a permission or only

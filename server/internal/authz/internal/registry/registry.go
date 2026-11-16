@@ -38,8 +38,8 @@ var VocabularySource string
 //     policy and names another declared permission.
 
 // Scope is the stored string a grant carries, as the model writes it. Package
-// authz has its own Scope type for the evaluator; the generator writes one
-// from the other.
+// authz has its own hand-written Scope type for the evaluator; the generator
+// writes these values into authz as Scope constants and table entries.
 type Scope string
 
 // split cuts a scope into its prefix and action at the first colon.
@@ -79,7 +79,7 @@ type AgentEligibility struct {
 // Policies stored at an older version keep reading it as unsafe.
 func SafeSince(version int) AgentEligibility {
 	if version < 1 {
-		panic("SafeSince: version must be at least 1; use AgentUnsafe for a scope that is never agent-safe")
+		panic("registry.SafeSince: version must be at least 1; use AgentUnsafe for a scope that is never agent-safe")
 	}
 	return AgentEligibility{safeSince: version}
 }

@@ -292,7 +292,10 @@ func TestDefinitions_MemberIsASubsetOfAdmin(t *testing.T) {
 	t.Parallel()
 
 	admin := Definitions.SystemRoles[SystemRoleAdmin]
-	for _, scope := range Definitions.SystemRoles[SystemRoleMember] {
+	member := Definitions.SystemRoles[SystemRoleMember]
+	require.NotEmpty(t, admin, "the admin role is seeded with nothing")
+	require.NotEmpty(t, member, "the member role is seeded with nothing")
+	for _, scope := range member {
 		require.Contains(t, admin, scope, "member is seeded with %s, which admin is not", scope)
 	}
 }
