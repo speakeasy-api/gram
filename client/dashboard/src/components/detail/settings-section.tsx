@@ -14,7 +14,7 @@ import {
 } from "react";
 import {
   READINESS_BORDER,
-  ReadinessIssueMarker,
+  ReadinessStatusRow,
   useReadinessIssuesFor,
 } from "./readiness-issues";
 import { useSettingsSectionHeading } from "./settings-layout";
@@ -77,15 +77,9 @@ function SettingsSectionHeader({
   children,
   className,
 }: SettingsSectionSlotProps) {
-  const { id } = use(SettingsSectionContext);
-  // A header issue that links here gets its sign under the title, and the
-  // panel takes its colour, so following "1 issue" lands on what is wrong.
-  return (
-    <div className={cn("space-y-1", className)}>
-      {children}
-      <ReadinessIssueMarker anchorId={id} className="pt-1" />
-    </div>
-  );
+  // A header issue that links here opens the panel with a status row, and
+  // the panel takes its colour, so following "1 issue" lands on what is wrong.
+  return <div className={cn("space-y-1", className)}>{children}</div>;
 }
 
 function SettingsSectionTitle({
@@ -144,6 +138,7 @@ function SettingsSectionPanel({
         className,
       )}
     >
+      <ReadinessStatusRow anchorId={id} />
       {children}
     </div>
   );

@@ -414,8 +414,8 @@ const credential = (enabled: boolean) => ({
 });
 
 it.each([
-  [[true, true], "2 credentials"],
-  [[true, false], "1 credential"],
+  [[true, true], "2 credentials configured"],
+  [[true, false], "1 credential configured"],
 ])(
   "counts the turned-on credentials under enforced upstream auth",
   (enabled, label) => {

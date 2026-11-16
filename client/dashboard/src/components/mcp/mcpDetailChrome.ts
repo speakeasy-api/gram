@@ -1,3 +1,4 @@
+import type { StatusDotTone } from "@/components/ui/StatusDot";
 import type { ReactNode } from "react";
 import type { DetailSidebarNavItem } from "@/components/detail/detail-sidebar-nav";
 import type { ReadinessCheck } from "@/components/mcp-server-readiness-bar";
@@ -21,7 +22,13 @@ export interface McpDetailChrome {
   /** Every address the server answers on, when it has more than one. */
   addresses?: { url: string; label: string }[];
   /** Whose account the server acts as, for servers that sign in upstream. */
-  identity?: { label: string; href: string; warn?: boolean };
+  identity?: {
+    label: string;
+    href: string;
+    warn?: boolean;
+    /** The dot beside the label; none while the state is unsettled. */
+    tone?: StatusDotTone;
+  };
   readinessChecks: McpReadinessCheck[];
   /** Opens the Setup modal over Overview, when this server offers Setup. */
   setupHref?: string;

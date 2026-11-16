@@ -266,6 +266,9 @@ function HeaderControls({
           aria-label={`Upstream auth: ${chrome.identity.label}. Open authentication settings`}
           className={HEADER_CONTROL_BUTTON}
         >
+          {chrome.identity.tone ? (
+            <StatusDot tone={chrome.identity.tone} />
+          ) : null}
           <span
             className={cn(
               "min-w-0 flex-1 truncate text-left",
@@ -295,7 +298,7 @@ function HeaderControls({
   return (
     // A soft wash of the card color behind the rows lifts their labels off
     // the halftone sea.
-    <dl className="before:bg-card/85 relative isolate grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 before:absolute before:-inset-y-5 before:-right-5 before:-left-12 before:-z-10 before:rounded-3xl before:blur-xl sm:w-[300px]">
+    <dl className="before:bg-card/85 relative isolate grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 before:absolute before:-inset-y-5 before:-right-5 before:-left-12 before:-z-10 before:rounded-3xl before:blur-xl sm:w-[360px]">
       {rows.map((row) => (
         <div key={row.key} className="contents">
           <dt className="text-eyebrow">{row.label}</dt>

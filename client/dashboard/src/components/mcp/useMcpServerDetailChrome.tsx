@@ -600,15 +600,20 @@ function identitySummary(
   // identity queries must not hold it at "Checking…" or fail it.
   if (auth.upstreamAuth === "enforced") {
     const { data, isError } = auth.upstreamAuthQuery;
-    if (isError) return { label: "Couldn't check", href, warn: true };
+    if (isError)
+      return { label: "Couldn't check", href, warn: true, tone: "warning" };
     if (!data) return { label: "Checking…", href };
     if (data.status === "configured") {
       // The credentials turned on, as Settings' Credentials list shows them.
       const count = data.clients.filter((client) => client.enabled).length;
       if (count > 0) {
         return {
-          label: count === 1 ? "1 credential" : `${count} credentials`,
+          label:
+            count === 1
+              ? "1 credential configured"
+              : `${count} credentials configured`,
           href,
+          tone: "success",
         };
       }
     }
@@ -621,13 +626,15 @@ function identitySummary(
       label: presentation.label,
       href,
       warn: presentation.tone === "warning",
+      // No credential turned on, so callers reach the upstream without one.
+      tone: presentation.tone === "warning" ? "warning" : "destructive",
     };
   }
   if (auth.loading || auth.isLoadingRemoteIdentity) {
     return { label: "Checking…", href };
   }
   if (auth.unavailable || auth.identityUnavailable) {
-    return { label: "Couldn't check", href, warn: true };
+    return { label: "Couldn't check", href, warn: true, tone: "warning" };
   }
   return {
     label: auth.passThroughAuthorization
@@ -635,6 +642,11 @@ function identitySummary(
       : IDENTITY_LABEL[auth.remoteIdentityMode],
     href,
     warn: !!auth.passThroughAuthorization,
+    tone: auth.passThroughAuthorization
+      ? "warning"
+      : auth.remoteIdentityMode === "none"
+        ? "neutral"
+        : "success",
   };
 }
 

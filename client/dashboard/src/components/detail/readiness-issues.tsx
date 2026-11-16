@@ -2,6 +2,8 @@
 import type { ReadinessCheck } from "@/components/mcp-server-readiness-bar";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Text } from "@/components/ui/Text";
 import { createContext, use, type ReactNode } from "react";
 
 /**
@@ -48,12 +50,9 @@ export function useReadinessIssuesFor(anchorId: string | undefined): {
           check.href?.split("#")[1] === anchorId,
       )
     : [];
-  const tone =
-    issues.length === 0
-      ? undefined
-      : issues.some((issue) => issue.broken)
-        ? "error"
-        : "warning";
+  // Every required step left blocks the server, so each one reads as an
+  // error; optional steps never reach here.
+  const tone = issues.length === 0 ? undefined : "error";
   return { issues, tone };
 }
 
@@ -110,6 +109,64 @@ export function ReadinessIssueMarker({
           </ul>
         )}
       </Alert>
+    </div>
+  );
+}
+
+/**
+ * The header's issues for one section, as the first row of its panel: a
+ * status badge and what to do, laid out like the rows beneath it, so the
+ * section opens on what is wrong rather than a callout above it.
+ */
+export function ReadinessStatusRow({
+  anchorId,
+}: {
+  anchorId: string | undefined;
+}): JSX.Element | null {
+  const checks = use(ReadinessIssuesContext).filter(
+    (check) =>
+      !!anchorId && !check.optional && check.href?.split("#")[1] === anchorId,
+  );
+  const { issues } = useReadinessIssuesFor(anchorId);
+  // Nothing settled yet, or nothing here the header checks: no row.
+  if (checks.length === 0 || checks.some((check) => check.ready === null)) {
+    return null;
+  }
+  const done = issues.length === 0;
+  return (
+    <div
+      data-readiness-issue={done ? undefined : ""}
+      className="grid gap-2 border-b px-6 py-5 sm:grid-cols-[minmax(200px,280px)_1fr] sm:gap-8"
+    >
+      <Text small className="font-medium">
+        Status
+      </Text>
+      <div className="space-y-2">
+        <Badge variant={done ? "success" : "destructive"}>
+          {done ? "Done" : "Action needed"}
+        </Badge>
+        {done ? (
+          <Text muted small className="block">
+            {checks.map((check) => here(check.description)).join(" ")}
+          </Text>
+        ) : null}
+        {done ? null : issues.length === 1 ? (
+          <Text muted small className="block">
+            {here(issues[0]!.description)}
+          </Text>
+        ) : (
+          <ul className="text-muted-foreground list-disc space-y-1 pl-4 text-sm">
+            {issues.map((issue) => (
+              <li key={issue.key}>
+                <span className="text-foreground font-medium">
+                  {issue.label}.
+                </span>{" "}
+                {here(issue.description)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
