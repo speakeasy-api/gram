@@ -209,6 +209,16 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	if err != nil {
 		return observation, err
 	}
+	// The labels recorded before this pass: replacePreviousServices forgets
+	// each one whose service it deletes. The row also proves the ingress
+	// belongs to the desired organization before anything is minted.
+	previous, err := p.owner(ctx, desired.ID)
+	if err != nil {
+		return errorObservation(operationErrorCode(err)), err
+	}
+	if previous.organizationID != desired.OrganizationID {
+		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: ingress belongs to another organization", k8s.ErrNetworkIngressInvalidDesiredState)
+	}
 	// Auth keys and node state are sealed under the organization's key, so
 	// make sure it has one before minting anything.
 	if err := p.keys.EnsureUseCase(ctx, desired.OrganizationID, EncryptionUseCase, orgencryption.SystemActor()); err != nil {
@@ -228,15 +238,6 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	serviceComment, err := p.cfg.Namer.ServiceComment(ctx)
 	if err != nil {
 		return errorObservation(""), fmt.Errorf("describe gateway service: %w", err)
-	}
-	// The labels recorded before this pass: replacePreviousServices forgets
-	// each one whose service it deletes.
-	previous, err := p.owner(ctx, desired.ID)
-	if err != nil {
-		return errorObservation(operationErrorCode(err)), err
-	}
-	if previous.organizationID != desired.OrganizationID {
-		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: ingress belongs to another organization", k8s.ErrNetworkIngressInvalidDesiredState)
 	}
 	queries := repo.New(p.db)
 	// An ingress the gateway served before it recorded any label learns its

@@ -739,6 +739,53 @@ func TestProvisionerRenamesWhileDeletesFailLeaveNoService(t *testing.T) {
 		"the middle name's service is deleted although the hostname moved past it")
 }
 
+func TestProvisionerRetriesAReportedLabelsServiceUntilItIsDeleted(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovreportedlabel")
+	creds := tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "csecret"}
+	report := func(dnsName string) {
+		t.Helper()
+		_, err := repo.New(f.db).HeartbeatNetworkIngressNode(ctx, repo.HeartbeatNetworkIngressNodeParams{
+			PodName: conv.ToPGText("gram-tailnet-gateway-0"), Status: string(tailnetgateway.NodeStatusOnline), NodeID: conv.ToPGText("nONE"),
+			DnsName: conv.ToPGText(dnsName), LastError: conv.ToPGTextEmpty(""),
+			NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0,
+		})
+		require.NoError(t, err)
+	}
+
+	// An ingress the gateway served as "old" before it recorded any label:
+	// only a host's reported FQDN names the old service.
+	require.NoError(t, f.api.UpsertService(ctx, creds, tailscaleapi.Service{Name: "svc:old", Ports: []string{"tcp:443"}, Tags: nil, Comment: ""}))
+	require.NoError(t, repo.New(f.db).EnsureNetworkIngressNodeSlot(ctx, repo.EnsureNetworkIngressNodeSlotParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0}))
+	report("old.example.ts.net")
+
+	f.api.RejectServiceDeletes = tailscaleapi.ErrForbidden
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.Error(t, err)
+	require.Contains(t, f.api.Services(), "svc:old")
+
+	// The host now reports the new name, but the failed delete is retried.
+	report("private.example.ts.net")
+	f.api.RejectServiceDeletes = nil
+	_, err = f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.NotContains(t, f.api.Services(), "svc:old", "a reported label is recorded, so its failed delete is retried")
+	require.Contains(t, f.api.Services(), "svc:private")
+}
+
+func TestProvisionerApplyRefusesAnIngressOfAnotherOrganization(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovotherorg")
+	desired := f.desired(t)
+	desired.OrganizationID = "org_other"
+
+	observation, err := f.provisioner.Apply(t.Context(), desired)
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressInvalidDesiredState)
+	require.Equal(t, k8s.NetworkIngressErrorInvalidDesiredState, observation.ErrorCode)
+	require.Empty(t, f.api.Services())
+}
+
 func TestProvisionerObserveOwnerReadFailureIsRetryable(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovobserveowner")
