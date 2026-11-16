@@ -67,6 +67,20 @@ vi.mock("@/pages/catalog/hooks", () => ({
     isLoading: false,
   }),
 }));
+vi.mock("./CatalogOfficialSheet", () => ({
+  CatalogOfficialSheet: ({
+    open,
+    entry,
+  }: {
+    open: boolean;
+    entry: { registrySpecifier: string };
+  }) =>
+    open ? (
+      <div role="dialog" aria-label="Catalog sheet">
+        {entry.registrySpecifier}
+      </div>
+    ) : null,
+}));
 vi.mock("./MakeOfficialSheet", () => ({
   MakeOfficialSheet: ({ open }: { open: boolean }) =>
     open ? <div role="dialog" aria-label="Make official sheet" /> : null,
@@ -225,7 +239,7 @@ describe("OfficialServerPanel", () => {
     expect((requested as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("sends a manual sign-in to the catalog entry for the same URL", async () => {
+  it("adds a manual sign-in server from the catalog in a sheet", async () => {
     mocks.catalogServers = [
       {
         registrySpecifier: "com.example/tracker",
@@ -242,23 +256,41 @@ describe("OfficialServerPanel", () => {
     renderPanel(server());
 
     expect(
-      await screen.findByText("Set it up from the Speakeasy catalog"),
+      await screen.findByText("In the Speakeasy catalog as “Tracker Cloud”"),
     ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: "Set up from the catalog" })
-        .getAttribute("href"),
-    ).toBe("/acme/projects/default/mcp/catalog/com.example%2Ftracker");
+    // The catalog stands in for the manual-setup warning, and nothing
+    // leaves the page.
     expect(screen.queryByText("This server needs a manual setup")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Request help" }));
-    expect(mocks.capture).toHaveBeenCalledWith(
-      "shadow_mcp_onboarding_requested",
-      expect.objectContaining({
-        blocker: "sign_in_manual",
-        catalog_specifier: "com.example/tracker",
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Add from catalog" }));
+    expect(
+      screen.getByRole("dialog", { name: "Catalog sheet" }).textContent,
+    ).toBe("com.example/tracker");
+  });
+
+  it("prefers the catalog version even when a custom server would work", async () => {
+    mocks.catalogServers = [
+      {
+        registrySpecifier: "com.example/tracker",
+        title: "Tracker Cloud",
+        remotes: [{ url: "https://tracker.example.com/mcp" }],
+      },
+    ];
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    renderPanel(server());
+
+    expect(
+      await screen.findByRole("button", { name: "Add from catalog" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Recommended")).toBeTruthy();
+    // A new server is still one step away, under Advanced.
+    expect(screen.queryByRole("button", { name: "Make official" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("button", { name: "Make official" }));
+    expect(
+      screen.getByRole("dialog", { name: "Make official sheet" }),
+    ).toBeTruthy();
   });
 
   it("asks for a manual setup when the catalog has no entry", async () => {
@@ -375,7 +407,15 @@ describe("OfficialServerPanel", () => {
     );
   });
 
-  it("links a server the project already serves at the same URL", async () => {
+  it("recommends the server that already serves the URL, others under Advanced", async () => {
+    mocks.catalogServers = [
+      {
+        registrySpecifier: "com.example/tracker",
+        title: "Tracker Cloud",
+        remotes: [{ url: "https://tracker.example.com/mcp" }],
+      },
+    ];
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
     renderPanel(
       server({
         suggestedOfficialServer: {
@@ -387,8 +427,18 @@ describe("OfficialServerPanel", () => {
     );
 
     expect(screen.getByText("Already served as “Tracker Cloud”")).toBeTruthy();
-    // Nothing needs checking: the server is already served.
-    expect(mocks.probe).not.toHaveBeenCalled();
+    expect(screen.getByText("Recommended")).toBeTruthy();
+    // The catalog and a new server stay one step away.
+    expect(
+      screen.queryByRole("button", { name: "Add from catalog" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(
+      await screen.findByRole("button", { name: "Add from catalog" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Make official" })).toBeTruthy();
+    expect(screen.getByText("Link another server")).toBeTruthy();
+
     fireEvent.click(screen.getByRole("button", { name: "Link it" }));
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenCalledWith({

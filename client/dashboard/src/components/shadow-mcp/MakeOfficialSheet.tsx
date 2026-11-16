@@ -39,7 +39,7 @@ import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSaveShadowMCPOfficialServer } from "./useSaveShadowMCPOfficialServer";
 
-type Created = {
+export type Created = {
   name: string;
   serverHref: string;
   settingsHref: string;
@@ -317,13 +317,13 @@ export function MakeOfficialSheet({
   );
 }
 
-function CreatedSummary({
+export function CreatedSummary({
   created,
   shadowName,
 }: {
   created: Created;
   shadowName: string;
-}) {
+}): JSX.Element {
   return (
     <Stack gap={4}>
       <div className="border-border flex items-center justify-between gap-3 border p-4">

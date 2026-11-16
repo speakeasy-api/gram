@@ -288,7 +288,46 @@ export function shadowMCPCatalogMatch<T extends ShadowMCPCatalogCandidate>(
   return match ?? null;
 }
 
-/** Whether the catalog can help: only a sign-in that needs a manual setup. */
-export function catalogCanHelpWith(blockerCode: string | undefined): boolean {
-  return blockerCode === "sign_in_manual" || blockerCode === "sign_in_unknown";
+/** The remote of a catalog entry that serves this Shadow MCP server's URL. */
+export function shadowMCPCatalogRemote<R extends { url: string }>(
+  remotes: readonly R[] | undefined,
+  serverUrl: string,
+): R | null {
+  const target = comparableServerUrl(serverUrl);
+  return (
+    (remotes ?? []).find(
+      (remote) => comparableServerUrl(remote.url) === target,
+    ) ?? null
+  );
+}
+
+/**
+ * The ways a Shadow MCP server can get an official version, quickest first:
+ * link the project server that already serves its URL, add its catalog
+ * entry, make a new server when Speakeasy can register itself with the
+ * sign-in provider, or set a new one up by hand.
+ */
+export type OnboardOption = "link" | "catalog" | "quick" | "manual";
+
+/**
+ * The one option the page recommends. The others stay available under
+ * Advanced. Null while what decides it is still loading, so the page does
+ * not recommend one option and then swap it for another.
+ */
+export function recommendedOnboardOption({
+  hasSuggestedServer,
+  hasCatalogEntry,
+  catalogPending,
+  readiness,
+}: {
+  hasSuggestedServer: boolean;
+  hasCatalogEntry: boolean;
+  catalogPending: boolean;
+  readiness: Pick<OnboardReadiness, "ready"> | null;
+}): OnboardOption | null {
+  if (hasSuggestedServer) return "link";
+  if (catalogPending) return null;
+  if (hasCatalogEntry) return "catalog";
+  if (!readiness) return null;
+  return readiness.ready ? "quick" : "manual";
 }

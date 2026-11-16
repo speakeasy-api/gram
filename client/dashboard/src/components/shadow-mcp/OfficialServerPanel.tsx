@@ -23,6 +23,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
+import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ProbeURLResult } from "@gram/client/models/components/probeurlresult.js";
@@ -31,15 +32,16 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProbeRemoteMcpURLMutation } from "@gram/client/react-query/probeRemoteMcpURL.js";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { CatalogOfficialSheet } from "./CatalogOfficialSheet";
 import { MakeOfficialSheet } from "./MakeOfficialSheet";
 import {
-  catalogCanHelpWith,
   onboardReadiness,
   SHADOW_MCP_MAKE_OFFICIAL_PARAM,
   SHADOW_MCP_OFFICIAL_STATE_LABEL,
   type OnboardCheck,
+  recommendedOnboardOption,
   shadowMCPCatalogMatch,
   shadowMCPOfficialServerDescription,
 } from "./shadowMCPOfficialServer";
@@ -74,7 +76,9 @@ export function OfficialServerPanel({
   const [sheet, setSheet] = useState<{
     open: boolean;
     probe: ProbeURLResult | null;
-  }>({ open: false, probe: null });
+    /** Set when the catalog version is being added. */
+    entry: CatalogServer | null;
+  }>({ open: false, probe: null, entry: null });
   // A local command has no URL to serve; it never reaches this page, and
   // the guard keeps the panel honest if that changes.
   if (server.targetKind === "stdio_command") return null;
@@ -85,20 +89,38 @@ export function OfficialServerPanel({
       ) : (
         <UnlinkedPanel
           server={server}
-          onMakeOfficial={(probe) => setSheet({ open: true, probe })}
+          onMakeOfficial={(probe) =>
+            setSheet({ open: true, probe, entry: null })
+          }
+          onAddFromCatalog={(entry, probe) =>
+            setSheet({ open: true, probe, entry })
+          }
         />
       )}
       <MakeOfficialSheet
         server={server}
         probe={sheet.probe}
-        open={sheet.open}
+        open={sheet.open && !sheet.entry}
         onOpenChange={(open) => setSheet((current) => ({ ...current, open }))}
       />
+      {sheet.entry ? (
+        <CatalogOfficialSheet
+          server={server}
+          entry={sheet.entry}
+          probe={sheet.probe}
+          open={sheet.open}
+          onOpenChange={(open) => setSheet((current) => ({ ...current, open }))}
+        />
+      ) : null}
     </>
   );
 }
 
 type MakeOfficialHandler = (probe: ProbeURLResult | null) => void;
+type AddFromCatalogHandler = (
+  entry: CatalogServer,
+  probe: ProbeURLResult | null,
+) => void;
 
 function PanelHeading({
   title,
@@ -325,96 +347,82 @@ function ChecksSkeleton() {
   );
 }
 
-function UnlinkedPanel({
-  server,
-  onMakeOfficial,
-}: {
-  server: ShadowMCPInventoryServer;
-  onMakeOfficial: MakeOfficialHandler;
-}) {
-  const suggested = server.suggestedOfficialServer;
+function RecommendedBadge() {
   return (
-    <section aria-label="Make this server official" className={PANEL_CLASS}>
-      {suggested ? (
-        <SuggestedLink server={server} />
-      ) : (
-        <MakeOfficial server={server} onMakeOfficial={onMakeOfficial} />
+    <Badge variant="success" size="sm">
+      <Badge.Text>Recommended</Badge.Text>
+    </Badge>
+  );
+}
+
+/** One way to an official server: what it is, and the button that does it. */
+function OptionRow({
+  icon,
+  title,
+  description,
+  recommended,
+  children,
+  actions,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  recommended?: boolean;
+  children?: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "space-y-3 p-3",
+        recommended ? "border-border border" : "border-border border-t pt-4",
       )}
-      <LinkAnotherServer server={server} />
-    </section>
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="text-muted-foreground mt-0.5 shrink-0">{icon}</div>
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Text variant="small" className="font-medium">
+                {title}
+              </Text>
+              {recommended ? <RecommendedBadge /> : null}
+            </div>
+            <Text muted small className="max-w-xl">
+              {description}
+            </Text>
+          </div>
+        </div>
+        {actions ? (
+          <div className="flex items-center gap-2">{actions}</div>
+        ) : null}
+      </div>
+      {children}
+    </div>
   );
 }
 
 /**
- * The project already serves this URL, so making it official is one click:
- * no new server, no setup.
+ * A Shadow MCP server without a link. Every way to an official version is
+ * available, but the page recommends one, quickest first: the project
+ * server that already serves the URL, its catalog entry, a new server
+ * Speakeasy can register by itself, then a new one set up by hand. The rest
+ * sit under Advanced, with linking any other server.
  */
-function SuggestedLink({ server }: { server: ShadowMCPInventoryServer }) {
-  const { save, isPending } = useSaveShadowMCPOfficialServer();
-  const suggested = server.suggestedOfficialServer;
-  if (!suggested) return null;
-
-  const linkIt = async () => {
-    try {
-      await save({
-        serverUrl: server.canonicalServerUrl,
-        mcpServerId: suggested.mcpServerId,
-        allowDirectAccess: false,
-      });
-      toast.success(`Linked to “${suggested.name}”`);
-    } catch {
-      toast.error("Could not link the server. Try again.");
-    }
-  };
-
-  return (
-    <>
-      <PanelHeading
-        title="Make this an official server"
-        description="Link it to the version Speakeasy serves, so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
-      />
-      <div className="border-border flex flex-wrap items-center justify-between gap-4 border p-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <Icon
-            name="link"
-            className="text-muted-foreground mt-0.5 size-4 shrink-0"
-          />
-          <div className="min-w-0 space-y-0.5">
-            <Text variant="small" className="font-medium">
-              {`Already served as “${suggested.name}”`}
-            </Text>
-            <Text muted small className="max-w-xl">
-              A server in this project proxies the same URL. Link it to make it
-              the official version.
-            </Text>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <OpenServerButton
-            mcpServerId={suggested.mcpServerId}
-            slug={suggested.slug}
-          />
-          <Button size="sm" disabled={isPending} onClick={() => void linkIt()}>
-            <Button.Text>{isPending ? "Linking" : "Link it"}</Button.Text>
-          </Button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function MakeOfficial({
+function UnlinkedPanel({
   server,
   onMakeOfficial,
+  onAddFromCatalog,
 }: {
   server: ShadowMCPInventoryServer;
   onMakeOfficial: MakeOfficialHandler;
+  onAddFromCatalog: AddFromCatalogHandler;
 }) {
-  const routes = useRoutes();
   const organization = useOrganization();
   const project = useProject();
   const telemetry = useTelemetry();
   const probe = useProbeRemoteMcpURLMutation();
+  const { save, isPending: linking } = useSaveShadowMCPOfficialServer();
   const [result, setResult] = useState<ProbeURLResult | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -426,6 +434,8 @@ function MakeOfficial({
     false,
   );
   const url = server.canonicalServerUrl;
+  const serverName = server.serverName || server.urlHost || url;
+  const suggested = server.suggestedOfficialServer;
   const { mutateAsync } = probe;
   const latestUrl = useRef(url);
   latestUrl.current = url;
@@ -444,8 +454,8 @@ function MakeOfficial({
       });
   };
 
-  // The checks answer "can this be made official?", which is why the admin
-  // opened the page, so they run without being asked. Once per server URL.
+  // The checks say whether a new server can be set up quickly, and give the
+  // sheets their defaults, so they run without being asked. Once per URL.
   useEffect(() => {
     runChecks(url);
     // runChecks closes over setters and a stable mutateAsync only.
@@ -453,43 +463,54 @@ function MakeOfficial({
   }, [url]);
 
   const readiness = result ? onboardReadiness(result) : null;
-  const serverName =
-    server.serverName || server.urlHost || server.canonicalServerUrl;
+  const catalog = useListMCPCatalog();
+  const catalogEntry = catalog.data?.servers
+    ? shadowMCPCatalogMatch(catalog.data.servers as CatalogServer[], url)
+    : null;
+  const recommended = recommendedOnboardOption({
+    hasSuggestedServer: !!suggested,
+    hasCatalogEntry: !!catalogEntry,
+    catalogPending: catalog.isLoading,
+    readiness: checkFailed ? { ready: false } : readiness,
+  });
 
-  // The list's "Make official" lands here with the sheet asked for. It opens
-  // once the checks pass, and the flag is dropped so a reload does not
-  // reopen it.
+  // The list's "Make official" lands here with the sheet asked for. It
+  // opens the recommended sheet once that is known, and the flag is
+  // dropped so a reload does not reopen it.
   const wantsSheet = searchParams.get(SHADOW_MCP_MAKE_OFFICIAL_PARAM) === "1";
   useEffect(() => {
-    if (!wantsSheet || !readiness) return;
-    if (readiness.ready) onMakeOfficial(result);
+    if (!wantsSheet || recommended === null) return;
+    if (recommended === "catalog" && catalogEntry) {
+      onAddFromCatalog(catalogEntry, result);
+    }
+    if (recommended === "quick") onMakeOfficial(result);
     const next = new URLSearchParams(searchParams);
     next.delete(SHADOW_MCP_MAKE_OFFICIAL_PARAM);
     setSearchParams(next, { replace: true });
   }, [
     wantsSheet,
-    readiness,
+    recommended,
+    catalogEntry,
     result,
     onMakeOfficial,
+    onAddFromCatalog,
     searchParams,
     setSearchParams,
   ]);
 
-  // A server whose sign-in needs a hand-registered client may still be in the
-  // catalog, whose page walks through that setup. The catalog is only read
-  // when it can help.
-  const catalogCanHelp =
-    readiness !== null &&
-    !readiness.ready &&
-    catalogCanHelpWith(readiness.blockerCode);
-  const catalog = useListMCPCatalog(undefined, undefined, {
-    enabled: catalogCanHelp,
-  });
-  const catalogEntry =
-    catalogCanHelp && catalog.data?.servers
-      ? shadowMCPCatalogMatch(catalog.data.servers as CatalogServer[], url)
-      : null;
-  const catalogPending = catalogCanHelp && catalog.isLoading;
+  const linkSuggested = async () => {
+    if (!suggested) return;
+    try {
+      await save({
+        serverUrl: url,
+        mcpServerId: suggested.mcpServerId,
+        allowDirectAccess: false,
+      });
+      toast.success(`Linked to “${suggested.name}”`);
+    } catch {
+      toast.error("Could not link the server. Try again.");
+    }
+  };
 
   const requestHelp = () => {
     // The URL is the canonical form the inventory already shows: no query
@@ -497,7 +518,7 @@ function MakeOfficial({
     telemetry.capture(ONBOARDING_REQUEST_EVENT, {
       organization_slug: organization.slug,
       project_slug: project.slug,
-      server_url: server.canonicalServerUrl,
+      server_url: url,
       server_name: serverName,
       blocker: readiness?.blockerCode ?? "check_failed",
       catalog_specifier: catalogEntry?.registrySpecifier ?? null,
@@ -508,22 +529,9 @@ function MakeOfficial({
     toast.success("Request sent. Speakeasy will contact you to set it up.");
   };
 
-  return (
+  const checks = (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PanelHeading
-          title="Make this an official server"
-          description="Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
-        />
-        {readiness?.ready ? (
-          <Button size="sm" onClick={() => onMakeOfficial(result)}>
-            <Button.Text>Make official</Button.Text>
-          </Button>
-        ) : null}
-      </div>
-
       {probe.isPending && !result ? <ChecksSkeleton /> : null}
-
       {readiness ? (
         <ul className="space-y-2">
           {readiness.checks.map((check) => (
@@ -531,7 +539,6 @@ function MakeOfficial({
           ))}
         </ul>
       ) : null}
-
       {checkFailed ? (
         <div className="flex flex-wrap items-center gap-3">
           <Text muted small>
@@ -542,88 +549,159 @@ function MakeOfficial({
           </Button>
         </div>
       ) : null}
+    </>
+  );
 
-      {readiness && !readiness.ready && catalogEntry ? (
-        <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <Icon
-              name="book-open"
-              className="text-muted-foreground mt-0.5 size-4 shrink-0"
-            />
-            <div className="min-w-0 space-y-1">
-              <Text variant="small" className="font-medium">
-                Set it up from the Speakeasy catalog
-              </Text>
-              <Text muted small className="max-w-xl">
-                {`${catalogEntry.title || serverName} is in the catalog. Add it from there, then enter the client you registered with its sign-in provider. Once it is on, link it here.`}
-              </Text>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={requested}
-              onClick={requestHelp}
-            >
-              <Button.Text>
-                {requested ? "Help requested" : "Request help"}
-              </Button.Text>
-            </Button>
-            <Button size="sm" asChild>
-              <Link
-                to={routes.mcp.catalog.detail.href(
-                  encodeURIComponent(catalogEntry.registrySpecifier),
-                )}
+  const options: Record<
+    "link" | "catalog" | "new",
+    (recommended: boolean) => React.ReactNode
+  > = {
+    link: (isRecommended) =>
+      suggested ? (
+        <OptionRow
+          key="link"
+          recommended={isRecommended}
+          icon={<Icon name="link" className="size-4" />}
+          title={`Already served as “${suggested.name}”`}
+          description="A server in this project proxies the same URL. Link it to make it the official version: no new server, no setup."
+          actions={
+            <>
+              <OpenServerButton
+                mcpServerId={suggested.mcpServerId}
+                slug={suggested.slug}
+              />
+              <Button
+                size="sm"
+                variant={isRecommended ? "primary" : "secondary"}
+                disabled={linking}
+                onClick={() => void linkSuggested()}
               >
-                <Button.Text>Set up from the catalog</Button.Text>
-              </Link>
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {readiness && !readiness.ready && !catalogEntry && !catalogPending ? (
-        <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <div className="min-w-0 space-y-1">
-            <Text variant="small" className="font-medium">
-              This server needs a manual setup
-            </Text>
-            <Text muted small className="max-w-xl">
-              {requested
-                ? "Your request is with Speakeasy. We will contact you to set it up."
-                : "It cannot be made official automatically. Ask Speakeasy and we will set it up with you."}
-            </Text>
-          </div>
-          <div className="flex items-center gap-2">
+                <Button.Text>{linking ? "Linking" : "Link it"}</Button.Text>
+              </Button>
+            </>
+          }
+        />
+      ) : null,
+    catalog: (isRecommended) =>
+      catalogEntry ? (
+        <OptionRow
+          key="catalog"
+          recommended={isRecommended}
+          icon={<CatalogLogo server={catalogEntry} className="size-5" />}
+          title={`In the Speakeasy catalog as “${catalogEntry.title || serverName}”`}
+          description="Its setup is known, so it is added here in one step and linked as soon as it is on."
+          actions={
             <Button
-              variant="tertiary"
               size="sm"
+              variant={isRecommended ? "primary" : "secondary"}
+              onClick={() => onAddFromCatalog(catalogEntry, result)}
+            >
+              <Button.Text>Add from catalog</Button.Text>
+            </Button>
+          }
+        />
+      ) : null,
+    new: (isRecommended) => (
+      <OptionRow
+        key="new"
+        recommended={isRecommended && recommended === "quick"}
+        icon={<Icon name="plus" className="size-4" />}
+        title={
+          recommended === "manual" && isRecommended
+            ? "This server needs a manual setup"
+            : "Make a new server with this URL"
+        }
+        description={
+          recommended === "manual" && isRecommended
+            ? requested
+              ? "Your request is with Speakeasy. We will contact you to set it up."
+              : "It cannot be made official automatically. Set it up yourself, or ask Speakeasy and we will set it up with you."
+            : readiness?.ready
+              ? "Speakeasy can register itself with its sign-in provider, so it is ready in one step."
+              : "Speakeasy serves this URL as a new server. Sign-in may need a client you register by hand."
+        }
+        actions={
+          recommended === "manual" && isRecommended ? (
+            <>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => onMakeOfficial(result)}
+              >
+                <Button.Text>Set it up myself</Button.Text>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={requested}
+                onClick={requestHelp}
+              >
+                <Button.Text>
+                  {requested ? "Help requested" : "Request help"}
+                </Button.Text>
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant={isRecommended ? "primary" : "secondary"}
               onClick={() => onMakeOfficial(result)}
             >
-              <Button.Text>Set it up myself</Button.Text>
+              <Button.Text>Make official</Button.Text>
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={requested}
-              onClick={requestHelp}
-            >
-              <Button.Text>
-                {requested ? "Help requested" : "Request help"}
-              </Button.Text>
-            </Button>
-          </div>
-        </div>
-      ) : null}
-    </>
+          )
+        }
+      >
+        {checks}
+      </OptionRow>
+    ),
+  };
+
+  const primaryKey =
+    recommended === "link"
+      ? "link"
+      : recommended === "catalog"
+        ? "catalog"
+        : recommended === null
+          ? null
+          : "new";
+  const others = (["link", "catalog", "new"] as const).filter(
+    (key) => key !== primaryKey,
+  );
+
+  return (
+    <section aria-label="Make this server official" className={PANEL_CLASS}>
+      <PanelHeading
+        title="Make this an official server"
+        description="Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
+      />
+      {primaryKey ? options[primaryKey](true) : <ChecksSkeleton />}
+      <Advanced>
+        {others.map((key) => options[key](false))}
+        <LinkAnotherServer server={server} />
+      </Advanced>
+    </section>
+  );
+}
+
+/** Every option the page does not recommend, closed until asked for. */
+function Advanced({ children }: { children: React.ReactNode }) {
+  return (
+    <Collapsible className="border-border border-t pt-3">
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+        <Icon name="chevron-right" className="size-3.5" aria-hidden />
+        Advanced
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-3 space-y-3">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
 /**
- * The escape hatch for an admin who knows better than the suggestion: link
- * any server in the project as the official version. Closed by default,
- * since most admins never need it.
+ * The escape hatch for an admin who knows better than the suggestions:
+ * link any server in the project as the official version.
  */
 function LinkAnotherServer({
   server,
@@ -631,9 +709,7 @@ function LinkAnotherServer({
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
   const gramProject = useProjectSlugForRequests();
-  const [open, setOpen] = useState(false);
   const serversQuery = useMcpServers({ gramProject }, undefined, {
-    enabled: open,
     throwOnError: false,
   });
   const { save, isPending } = useSaveShadowMCPOfficialServer();
@@ -674,47 +750,33 @@ function LinkAnotherServer({
   };
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className="border-border border-t pt-3"
+    <OptionRow
+      icon={<Icon name="server" className="size-4" />}
+      title="Link another server"
+      description="Link any server in this project as the official version, for example one at a different URL."
     >
-      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
-        <Icon name="chevron-right" className="size-3.5" aria-hidden />
-        Advanced
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-4 max-w-xl space-y-1.5">
-        <Text variant="small" className="font-medium">
-          Link another server
-        </Text>
-        <Text muted small>
-          Link any server in this project as the official version, for example
-          one at a different URL. Agents are sent to it when a direct connection
-          is blocked.
-        </Text>
-        <div className="flex items-center gap-2 pt-1">
-          <Select value={selected} onValueChange={setSelected}>
-            <SelectTrigger aria-label="Server to link" className="w-full">
-              <SelectValue placeholder="Choose a server" />
-            </SelectTrigger>
-            <SelectContent>
-              {candidates.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={selected === "" || isPending}
-            onClick={() => void onLink()}
-          >
-            <Button.Text>{isPending ? "Linking" : "Link"}</Button.Text>
-          </Button>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+      <div className="flex max-w-xl items-center gap-2">
+        <Select value={selected} onValueChange={setSelected}>
+          <SelectTrigger aria-label="Server to link" className="w-full">
+            <SelectValue placeholder="Choose a server" />
+          </SelectTrigger>
+          <SelectContent>
+            {candidates.map((candidate) => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {candidate.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={selected === "" || isPending}
+          onClick={() => void onLink()}
+        >
+          <Button.Text>{isPending ? "Linking" : "Link"}</Button.Text>
+        </Button>
+      </div>
+    </OptionRow>
   );
 }

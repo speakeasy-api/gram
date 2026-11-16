@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  catalogCanHelpWith,
   shadowMCPCatalogMatch,
+  shadowMCPCatalogRemote,
+  recommendedOnboardOption,
   canMakeShadowMCPServerOfficial,
   shadowMCPOfficialState,
   onboardReadiness,
@@ -266,11 +267,65 @@ describe("shadowMCPCatalogMatch", () => {
   });
 });
 
-describe("catalogCanHelpWith", () => {
-  it("helps only with sign-in that needs a manual setup", () => {
-    expect(catalogCanHelpWith("sign_in_manual")).toBe(true);
-    expect(catalogCanHelpWith("sign_in_unknown")).toBe(true);
-    expect(catalogCanHelpWith("unreachable:timeout")).toBe(false);
-    expect(catalogCanHelpWith(undefined)).toBe(false);
+describe("shadowMCPCatalogRemote", () => {
+  it("picks the remote that serves the Shadow MCP server's URL", () => {
+    const remotes = [
+      { url: "https://mcp.example.com/sse" },
+      { url: "https://MCP.example.com/mcp/" },
+    ];
+    expect(
+      shadowMCPCatalogRemote(remotes, "https://mcp.example.com/mcp")?.url,
+    ).toBe("https://MCP.example.com/mcp/");
+    expect(shadowMCPCatalogRemote(remotes, "https://other.example.com")).toBe(
+      null,
+    );
+  });
+});
+
+describe("recommendedOnboardOption", () => {
+  const base = {
+    hasSuggestedServer: false,
+    hasCatalogEntry: false,
+    catalogPending: false,
+    readiness: { ready: true },
+  };
+
+  it("puts the server that already serves the URL first", () => {
+    expect(
+      recommendedOnboardOption({
+        ...base,
+        hasSuggestedServer: true,
+        hasCatalogEntry: true,
+        catalogPending: true,
+        readiness: null,
+      }),
+    ).toBe("link");
+  });
+
+  it("puts the catalog before a new server, whatever the checks say", () => {
+    expect(recommendedOnboardOption({ ...base, hasCatalogEntry: true })).toBe(
+      "catalog",
+    );
+    expect(
+      recommendedOnboardOption({
+        ...base,
+        hasCatalogEntry: true,
+        readiness: { ready: false },
+      }),
+    ).toBe("catalog");
+  });
+
+  it("recommends a quick new server, then a manual one", () => {
+    expect(recommendedOnboardOption(base)).toBe("quick");
+    expect(
+      recommendedOnboardOption({ ...base, readiness: { ready: false } }),
+    ).toBe("manual");
+  });
+
+  it("waits instead of recommending one option and swapping it", () => {
+    expect(recommendedOnboardOption({ ...base, catalogPending: true })).toBe(
+      null,
+    );
+    expect(recommendedOnboardOption({ ...base, readiness: null })).toBe(null);
   });
 });
