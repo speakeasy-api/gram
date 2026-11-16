@@ -155,7 +155,6 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		FunctionsToolCount:   dep.FunctionsToolCount,
 		ExternalMcpToolCount: dep.ExternalMcpToolCount,
 		FunctionsAssets:      dep.FunctionsAssets,
-		ExternalMcps:         dep.ExternalMcps,
 	}, nil
 }
 
@@ -358,8 +357,8 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 			Openapiv3ToolCount:    r.Openapiv3ToolCount,
 			FunctionsAssetCount:   r.FunctionsAssetCount,
 			FunctionsToolCount:    r.FunctionsToolCount,
-			ExternalMcpAssetCount: r.ExternalMcpAssetCount,
-			ExternalMcpToolCount:  r.ExternalMcpToolCount,
+			ExternalMcpAssetCount: new(int64(0)),
+			ExternalMcpToolCount:  new(int64(0)),
 		})
 	}
 
@@ -648,11 +647,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	packagesChanged := len(packagesToUpsert) > 0 || len(packagesToExclude) > 0
 	openapiChanged := len(openapiv3ToUpsert) > 0 || len(openapiv3ToExclude) > 0
 	functionsChanged := len(functionsToUpsert) > 0 || len(functionsToExclude) > 0
-	// Excluding an external MCP still yields a new deployment, which drops the
-	// attachments the latest deployment carries.
-	externalMCPsExcluded := len(form.ExcludeExternalMcps) > 0
 
-	if !packagesChanged && !openapiChanged && !functionsChanged && !externalMCPsExcluded {
+	if !packagesChanged && !openapiChanged && !functionsChanged {
 		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package to upsert or exclude is required").LogError(ctx, logger)
 	}
 

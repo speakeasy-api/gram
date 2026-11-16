@@ -41,6 +41,9 @@ var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus"
 	Attribute("unresolved_servers", ArrayOf(AdminUpstreamOAuthMigrationServer), "Servers whose upstream OAuth client must be associated by an administrator.")
 	Attribute("credentials", Int64, "Live user session credentials scanned.")
 	Attribute("pending_selections", Int64, "Credential choices the configuration decides that are not yet recorded.")
+	// Optional: replicas older than it omit it during a rolling deploy, and a
+	// client must still read the rest.
+	Attribute("consent_scoped_selections", Int64, "Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent when the serving replica predates the field, which is not a reported zero.")
 	Attribute("reconnect_credentials", Int64, "Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.")
 	Attribute("auth_clients", AdminUpstreamOAuthMigrationAuthClients, "Where the organization stands in recording typed auth clients. Separate from migrated: it never gates the upstream OAuth cutover. Absent when its check failed.")
 	Attribute("execution_profiles", AdminUpstreamOAuthMigrationExecutionProfiles, "Where the organization stands in recording the auth client choices its assistants' turns use. Separate from migrated. Absent when its check failed.")
@@ -69,9 +72,12 @@ var AdminUpstreamOAuthMigrationExecutionProfiles = Type("AdminUpstreamOAuthMigra
 	Description("Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.")
 	Required("complete", "targets", "pending_versions", "gaps")
 
-	Attribute("complete", Boolean, "Whether every profile is recorded and holds a choice for every server its assistant reaches.")
+	Attribute("complete", Boolean, "Whether every profile that is pending is recorded and each holds a choice for every server its assistant reaches.")
 	Attribute("targets", Int64, "Assistant and trigger pairs, each with a profile per execution context.")
 	Attribute("pending_versions", Int64, "Profile versions not yet recorded.")
+	// Optional: replicas older than it omit it during a rolling deploy, and a
+	// client must still read the rest.
+	Attribute("unexercised_versions", Int64, "Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent when the serving replica predates the field, which is not a reported zero.")
 	Attribute("gaps", ArrayOf(AdminUpstreamOAuthMigrationExecutionProfileGap), "Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server's auth clients.")
 })
 

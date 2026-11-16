@@ -222,19 +222,26 @@ func TestGeminiExportResultCounts(t *testing.T) {
 
 func TestGeminiExportArchiveLimitsAndCancellation(t *testing.T) {
 	t.Parallel()
-	for name, file := range map[string]geminiExportFile{
-		"not zip":      {Name: "bad.zip", Content: []byte("bad")},
-		"traversal":    syntheticGeminiZIP(t, geminiExportFile{Name: "../content.xml", Content: []byte("<Export/>")}),
-		"unknown file": syntheticGeminiZIP(t, geminiExportFile{Name: "content.json", Content: []byte(`{}`)}),
-		"oversize":     syntheticGeminiZIP(t, geminiExportFile{Name: "content.xml", Content: bytes.Repeat([]byte("x"), geminiMaxFileBytes+1)}),
-		"ratio":        syntheticGeminiZIP(t, geminiExportFile{Name: "content.xml", Content: bytes.Repeat([]byte("x"), 2<<20)}),
+	for name, tc := range map[string]struct {
+		file geminiExportFile
+		// tooLarge errors make the sync split the export window.
+		tooLarge bool
+	}{
+		"not zip":      {file: geminiExportFile{Name: "bad.zip", Content: []byte("bad")}},
+		"traversal":    {file: syntheticGeminiZIP(t, geminiExportFile{Name: "../content.xml", Content: []byte("<Export/>")})},
+		"unknown file": {file: syntheticGeminiZIP(t, geminiExportFile{Name: "content.json", Content: []byte(`{}`)})},
+		"oversize":     {file: syntheticGeminiZIP(t, geminiExportFile{Name: "content.xml", Content: bytes.Repeat([]byte("x"), geminiMaxFileBytes+1)}), tooLarge: true},
+		"ratio":        {file: syntheticGeminiZIP(t, geminiExportFile{Name: "content.xml", Content: bytes.Repeat([]byte("x"), 2<<20)})},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := collectGeminiExport(t, file)
+			_, err := collectGeminiExport(t, tc.file)
 			require.Error(t, err)
+			require.Equal(t, tc.tooLarge, errors.Is(err, errGeminiExportTooLarge))
 		})
 	}
+	tooMany := make([]geminiExportFile, geminiMaxFiles+1)
+	require.ErrorIs(t, parseGeminiExport(context.Background(), tooMany, func(geminiTurn) error { return nil }), errGeminiExportTooLarge)
 	valid := syntheticGeminiZIP(t, geminiExportFile{Name: "content.xml", Content: []byte(syntheticGeminiDocument("user@example.invalid", "conversation", syntheticGeminiTurn))})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

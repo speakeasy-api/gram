@@ -269,7 +269,7 @@ type SkillsInsertMCPSkillLinksParams struct {
 
 // Skills served over MCP: the refunds and triage skills on Acme Support
 // Tools' own server (its id is the toolset id), triage and the runbook on the
-// Acme Agent Gateway, and the runbook on the organization gateway. Links
+// Multi-Server Gateway, and the runbook on the organization gateway. Links
 // cascade with the project and with the gateway, which both clear every run.
 func (q *Queries) SkillsInsertMCPSkillLinks(ctx context.Context, arg SkillsInsertMCPSkillLinksParams) (int64, error) {
 	result, err := q.db.Exec(ctx, skillsInsertMCPSkillLinks,

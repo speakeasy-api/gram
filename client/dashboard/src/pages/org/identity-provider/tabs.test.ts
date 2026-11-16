@@ -26,4 +26,16 @@ describe("identity links", () => {
       `?tab=identity-providers&provider=okta&view=${view}#section`,
     );
   });
+
+  it("carries an EMA setup in progress", () => {
+    const href = new URLSearchParams(
+      oktaViewHref("setup", undefined, {
+        providerName: "acme-workforce",
+        path: "/org/x?tab=y",
+      }),
+    );
+    expect(href.get("view")).toBe("setup");
+    expect(href.get("emaFor")).toBe("acme-workforce");
+    expect(href.get("emaReturn")).toBe("/org/x?tab=y");
+  });
 });

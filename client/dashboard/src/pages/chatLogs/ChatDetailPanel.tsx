@@ -81,7 +81,8 @@ import {
   ExclusionEditor,
   type ExclusionSheetState,
 } from "@/pages/security/exclusion-sheet";
-import { TRANSCRIPT_DENIED_REASON } from "@/pages/security/unmask";
+import { TRANSCRIPT_DENIED_NOTE } from "@/pages/security/unmask";
+import { ChatReadAccess } from "@/pages/security/finding-drawer-parts";
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
@@ -1821,8 +1822,9 @@ function ChatDetailPanel({
         <SheetTitle>Permission denied</SheetTitle>
         <SheetDescription className="text-warning mt-2 flex items-start gap-2">
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
-          <span>{TRANSCRIPT_DENIED_REASON}</span>
+          <span>{TRANSCRIPT_DENIED_NOTE}</span>
         </SheetDescription>
+        <ChatReadAccess chatId={chatId} className="mt-4" />
       </div>
     ) : (
       <div className="p-8">

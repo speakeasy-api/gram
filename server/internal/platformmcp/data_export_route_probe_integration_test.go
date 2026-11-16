@@ -131,7 +131,7 @@ func TestSendDataExportTestEventRefusesWithoutConfirmationOrAMatchingDestination
 	unconfirmed := f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, f.destination)
 	unconfirmed.Confirmed = false
 	_, err := f.tests.Send(ctx, f.principal, unconfirmed)
-	requireDataExportTestCode(t, err, "invalid_request")
+	requireDataExportTestCode(t, err, "confirmation_required")
 
 	_, err = f.tests.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, uuid.New()))
 	requireDataExportTestCode(t, err, "route_changed")
@@ -263,6 +263,7 @@ func TestDataExportTestEventUnavailableManifestMatchesLive(t *testing.T) {
 	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event_manifest", http.StatusOK)
 	describe := func(service *DataExportTestEventService) Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "data-export-test-event", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: f.conn, icons: nil})
 		registerDataExportTestEventTool(registrar, service)
 		descriptors := registrar.Descriptors()
 		require.Len(t, descriptors, 1)
@@ -285,9 +286,9 @@ func TestDataExportTestEventUnavailableManifestMatchesLive(t *testing.T) {
 		Required []string `json:"required"`
 	}
 	require.NoError(t, json.Unmarshal(unavailable.InputSchema, &schema))
-	require.Subset(t, schema.Required, []string{"project_id", "route_id", "expected_data_source", "expected_destination_id", "confirmed"})
+	require.Subset(t, schema.Required, []string{"project_slug", "route_id", "expected_data_source", "expected_destination_id", "confirmed"})
 
-	refusal := invokeUnavailable(t, unavailable, map[string]any{"project_id": f.project.ID.String(), "route_id": uuid.NewString(), "expected_data_source": dataexports.DataSourceMCPConnectionLogs, "expected_destination_id": uuid.NewString(), "confirmed": true})
+	refusal := invokeUnavailable(t, ContextWithPrincipal(ctx, f.principal), unavailable, map[string]any{"project_slug": f.project.Slug, "route_id": uuid.NewString(), "expected_data_source": dataexports.DataSourceMCPConnectionLogs, "expected_destination_id": uuid.NewString(), "confirmed": true})
 	require.Contains(t, refusal, `"feature":"data_export_test_event"`)
 }
 

@@ -45,6 +45,13 @@ type NetworkIngress struct {
 	// @access: confidential
 	ConnectedSince pgtype.Timestamptz
 	// @access: confidential
+	Runtime pgtype.Text
+	// @access: confidential
+	GatewayShard string
+	// Label of the Tailscale Service the gateway last defined for this ingress; a copy of a former hostname.
+	// @access: restricted
+	GatewayServiceHostname pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz

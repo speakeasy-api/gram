@@ -1449,6 +1449,7 @@ func marshalNetworkingressNetworkIngressToNetworkIngressResponseBody(v *networki
 		OrganizationID:        v.OrganizationID,
 		Provider:              v.Provider,
 		Hostname:              v.Hostname,
+		Runtime:               v.Runtime,
 		EndpointNamespaceKind: v.EndpointNamespaceKind,
 		CustomDomainID:        v.CustomDomainID,
 		Enabled:               v.Enabled,

@@ -1039,16 +1039,14 @@ func (q *Queries) PostflightCountShadowPolicyGrants(ctx context.Context, arg Pos
 	return count, err
 }
 
-const postflightCountTunnelEndpoints = `-- name: PostflightCountTunnelEndpoints :one
-SELECT count(*)
-FROM mcp_endpoints e
-JOIN mcp_servers s ON s.id = e.mcp_server_id
-WHERE e.project_id = $1::uuid AND e.deleted IS FALSE
-  AND s.tunneled_mcp_server_id IS NOT NULL
+const postflightCountToolMetadata = `-- name: PostflightCountToolMetadata :one
+SELECT count(*) FROM mcp_server_tool_metadata
+WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
-func (q *Queries) PostflightCountTunnelEndpoints(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightCountTunnelEndpoints, projectID)
+// The Inspect tab's stored annotations for Linear, Slack and GitHub.
+func (q *Queries) PostflightCountToolMetadata(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountToolMetadata, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

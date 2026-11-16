@@ -22,6 +22,8 @@ type CreateAssistantRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -40,18 +42,6 @@ type CreateAssistantRequestBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
-// UpgradeAssistantIdentityRequestBody is the type of the "assistants" service
-// "upgradeAssistantIdentity" endpoint HTTP request body.
-type UpgradeAssistantIdentityRequestBody struct {
-	// The assistant ID.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// An existing agent of the project to use instead of creating one. Requires
-	// owning the agent or agent:authorize on it.
-	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The name of the new agent. Cannot be combined with agent_id.
-	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
-}
-
 // UpdateAssistantRequestBody is the type of the "assistants" service
 // "updateAssistant" endpoint HTTP request body.
 type UpdateAssistantRequestBody struct {
@@ -61,6 +51,8 @@ type UpdateAssistantRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -162,6 +154,8 @@ type GetAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -206,50 +200,8 @@ type CreateAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
-	// The system instructions for the assistant.
-	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
-	// slug.
-	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached to the assistant that are not hosted (toolset-backed);
-	// hosted servers are listed under toolsets.
-	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
-	// Skills attached to the assistant.
-	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
-	// Warm runtime TTL in seconds.
-	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
-	// Maximum active warm runtimes for the assistant.
-	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
-	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Runtime changes require a settled assistant and available destination.
-	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
-	// The assistant status.
-	Status string `form:"status" json:"status" xml:"status"`
-	// Creation timestamp.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// Last update timestamp.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// UpgradeAssistantIdentityResponseBody is the type of the "assistants" service
-// "upgradeAssistantIdentity" endpoint HTTP response body.
-type UpgradeAssistantIdentityResponseBody struct {
-	// The assistant ID.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The project ID owning the assistant.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The ID of the user who created the assistant, if known.
-	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
-	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
-	// revoked, or deleted. This is configuration state, not permission to execute.
-	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The assistant's dedicated agent ID, when it has one.
-	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The assistant name.
-	Name string `form:"name" json:"name" xml:"name"`
-	// The model identifier used by the assistant.
-	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -294,6 +246,8 @@ type UpdateAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -363,6 +317,8 @@ type GetManagedAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -407,6 +363,8 @@ type EnsureManagedAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -991,196 +949,6 @@ type CreateAssistantUnexpectedResponseBody struct {
 // service "createAssistant" endpoint HTTP response body for the
 // "gateway_error" error.
 type CreateAssistantGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityUnauthorizedResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "unauthorized" error.
-type UpgradeAssistantIdentityUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityForbiddenResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "forbidden" error.
-type UpgradeAssistantIdentityForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityBadRequestResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "bad_request" error.
-type UpgradeAssistantIdentityBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityNotFoundResponseBody is the type of the "assistants"
-// service "upgradeAssistantIdentity" endpoint HTTP response body for the
-// "not_found" error.
-type UpgradeAssistantIdentityNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityConflictResponseBody is the type of the "assistants"
-// service "upgradeAssistantIdentity" endpoint HTTP response body for the
-// "conflict" error.
-type UpgradeAssistantIdentityConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityUnsupportedMediaResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "unsupported_media" error.
-type UpgradeAssistantIdentityUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityInvalidResponseBody is the type of the "assistants"
-// service "upgradeAssistantIdentity" endpoint HTTP response body for the
-// "invalid" error.
-type UpgradeAssistantIdentityInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityInvariantViolationResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "invariant_violation" error.
-type UpgradeAssistantIdentityInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityUnexpectedResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "unexpected" error.
-type UpgradeAssistantIdentityUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpgradeAssistantIdentityGatewayErrorResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "gateway_error" error.
-type UpgradeAssistantIdentityGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2712,6 +2480,8 @@ type AssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -2881,6 +2651,7 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -2939,65 +2710,7 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
-		Instructions:    res.Instructions,
-		WarmTTLSeconds:  res.WarmTTLSeconds,
-		MaxConcurrency:  res.MaxConcurrency,
-		RuntimeVersion:  res.RuntimeVersion,
-		Status:          res.Status,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
-	}
-	if res.Toolsets != nil {
-		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
-		for i, val := range res.Toolsets {
-			if val == nil {
-				body.Toolsets[i] = nil
-				continue
-			}
-			body.Toolsets[i] = marshalTypesAssistantToolsetRefToAssistantToolsetRefResponseBody(val)
-		}
-	} else {
-		body.Toolsets = []*AssistantToolsetRefResponseBody{}
-	}
-	if res.McpServers != nil {
-		body.McpServers = make([]*AssistantMCPServerRefResponseBody, len(res.McpServers))
-		for i, val := range res.McpServers {
-			if val == nil {
-				body.McpServers[i] = nil
-				continue
-			}
-			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(val)
-		}
-	} else {
-		body.McpServers = []*AssistantMCPServerRefResponseBody{}
-	}
-	if res.Skills != nil {
-		body.Skills = make([]*AssistantSkillRefResponseBody, len(res.Skills))
-		for i, val := range res.Skills {
-			if val == nil {
-				body.Skills[i] = nil
-				continue
-			}
-			body.Skills[i] = marshalTypesAssistantSkillRefToAssistantSkillRefResponseBody(val)
-		}
-	} else {
-		body.Skills = []*AssistantSkillRefResponseBody{}
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityResponseBody builds the HTTP response body from
-// the result of the "upgradeAssistantIdentity" endpoint of the "assistants"
-// service.
-func NewUpgradeAssistantIdentityResponseBody(res *types.Assistant) *UpgradeAssistantIdentityResponseBody {
-	body := &UpgradeAssistantIdentityResponseBody{
-		ID:              res.ID,
-		ProjectID:       res.ProjectID,
-		CreatedByUserID: res.CreatedByUserID,
-		IdentityState:   res.IdentityState,
-		AgentID:         res.AgentID,
-		Name:            res.Name,
-		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -3056,6 +2769,7 @@ func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantRespon
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -3136,6 +2850,7 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -3194,6 +2909,7 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -3700,156 +3416,6 @@ func NewCreateAssistantUnexpectedResponseBody(res *goa.ServiceError) *CreateAssi
 // service.
 func NewCreateAssistantGatewayErrorResponseBody(res *goa.ServiceError) *CreateAssistantGatewayErrorResponseBody {
 	body := &CreateAssistantGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityUnauthorizedResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityUnauthorizedResponseBody {
-	body := &UpgradeAssistantIdentityUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityForbiddenResponseBody builds the HTTP response
-// body from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityForbiddenResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityForbiddenResponseBody {
-	body := &UpgradeAssistantIdentityForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityBadRequestResponseBody builds the HTTP response
-// body from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityBadRequestResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityBadRequestResponseBody {
-	body := &UpgradeAssistantIdentityBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityNotFoundResponseBody builds the HTTP response
-// body from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityNotFoundResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityNotFoundResponseBody {
-	body := &UpgradeAssistantIdentityNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityConflictResponseBody builds the HTTP response
-// body from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityConflictResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityConflictResponseBody {
-	body := &UpgradeAssistantIdentityConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "upgradeAssistantIdentity" endpoint of
-// the "assistants" service.
-func NewUpgradeAssistantIdentityUnsupportedMediaResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityUnsupportedMediaResponseBody {
-	body := &UpgradeAssistantIdentityUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityInvalidResponseBody builds the HTTP response body
-// from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityInvalidResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityInvalidResponseBody {
-	body := &UpgradeAssistantIdentityInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "upgradeAssistantIdentity" endpoint of
-// the "assistants" service.
-func NewUpgradeAssistantIdentityInvariantViolationResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityInvariantViolationResponseBody {
-	body := &UpgradeAssistantIdentityInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityUnexpectedResponseBody builds the HTTP response
-// body from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityUnexpectedResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityUnexpectedResponseBody {
-	body := &UpgradeAssistantIdentityUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "upgradeAssistantIdentity" endpoint of the
-// "assistants" service.
-func NewUpgradeAssistantIdentityGatewayErrorResponseBody(res *goa.ServiceError) *UpgradeAssistantIdentityGatewayErrorResponseBody {
-	body := &UpgradeAssistantIdentityGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5059,6 +4625,12 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *s
 		MaxConcurrency: body.MaxConcurrency,
 		Status:         body.Status,
 	}
+	if body.ReasoningEffort != nil {
+		v.ReasoningEffort = *body.ReasoningEffort
+	}
+	if body.ReasoningEffort == nil {
+		v.ReasoningEffort = "medium"
+	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
 		if val == nil {
@@ -5083,20 +4655,6 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *s
 	return v
 }
 
-// NewUpgradeAssistantIdentityPayload builds a assistants service
-// upgradeAssistantIdentity endpoint payload.
-func NewUpgradeAssistantIdentityPayload(body *UpgradeAssistantIdentityRequestBody, sessionToken *string, projectSlugInput *string) *assistants.UpgradeAssistantIdentityPayload {
-	v := &assistants.UpgradeAssistantIdentityPayload{
-		ID:        *body.ID,
-		AgentID:   body.AgentID,
-		AgentName: body.AgentName,
-	}
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v
-}
-
 // NewUpdateAssistantPayload builds a assistants service updateAssistant
 // endpoint payload.
 func NewUpdateAssistantPayload(body *UpdateAssistantRequestBody, sessionToken *string, projectSlugInput *string) *assistants.UpdateAssistantPayload {
@@ -5104,6 +4662,7 @@ func NewUpdateAssistantPayload(body *UpdateAssistantRequestBody, sessionToken *s
 		ID:                     *body.ID,
 		Name:                   body.Name,
 		Model:                  body.Model,
+		ReasoningEffort:        body.ReasoningEffort,
 		Instructions:           body.Instructions,
 		WarmTTLSeconds:         body.WarmTTLSeconds,
 		MaxConcurrency:         body.MaxConcurrency,
@@ -5257,6 +4816,11 @@ func ValidateCreateAssistantRequestBody(body *CreateAssistantRequestBody) (err e
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefRequestBody(e); err2 != nil {
@@ -5279,31 +4843,6 @@ func ValidateCreateAssistantRequestBody(body *CreateAssistantRequestBody) (err e
 	return
 }
 
-// ValidateUpgradeAssistantIdentityRequestBody runs the validations defined on
-// UpgradeAssistantIdentityRequestBody
-func ValidateUpgradeAssistantIdentityRequestBody(body *UpgradeAssistantIdentityRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.AgentID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
-	}
-	if body.AgentName != nil {
-		if utf8.RuneCountInString(*body.AgentName) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 1, true))
-		}
-	}
-	if body.AgentName != nil {
-		if utf8.RuneCountInString(*body.AgentName) > 120 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 120, false))
-		}
-	}
-	return
-}
-
 // ValidateUpdateAssistantRequestBody runs the validations defined on
 // UpdateAssistantRequestBody
 func ValidateUpdateAssistantRequestBody(body *UpdateAssistantRequestBody) (err error) {
@@ -5312,6 +4851,11 @@ func ValidateUpdateAssistantRequestBody(body *UpdateAssistantRequestBody) (err e
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {

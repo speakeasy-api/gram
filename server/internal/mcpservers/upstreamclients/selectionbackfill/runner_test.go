@@ -379,6 +379,70 @@ func TestRunBackfillsLiveCredentials(t *testing.T) {
 	require.Len(t, rerun.Gaps, 1)
 }
 
+// A credential issued for the servers approved at consent has choices for those
+// servers only. What the rest of its issuer's reach could be decided as is
+// counted apart from a credential that is missing its choices.
+func TestRunCountsAConsentScopedCredentialsUndecidedReachApart(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	client := f.client(issuer)
+	approved := f.server(issuer, client)
+	f.server(issuer, client)
+	f.server(issuer)
+
+	scoped := f.session(issuer)
+	require.NoError(t, f.q.ApproveConsentCatalogFixture(t.Context(), ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
+	_, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuer,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        scoped,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  []uuid.UUID{},
+		PickedClientIds:     []uuid.UUID{},
+		PickedAuthClientIds: nil,
+		ScopeMcpServerIds:   []uuid.UUID{approved},
+		TypedOnly:           false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{approved: client}, f.selections(scoped))
+
+	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.Pairs[OutcomeSelected])
+	require.Equal(t, 1, preview.Pairs[OutcomeClient])
+	require.Equal(t, 1, preview.Pairs[OutcomeNoAuth])
+	require.Equal(t, 2, preview.ConsentScoped, "the servers outside the approved catalog are not missing choices")
+
+	unscoped := f.session(issuer)
+	preview, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 3, preview.Pairs[OutcomeClient])
+	require.Equal(t, 2, preview.Pairs[OutcomeNoAuth])
+	require.Equal(t, 2, preview.ConsentScoped, "a credential with no consent catalog is missing every choice")
+	require.Empty(t, f.selections(unscoped))
+}
+
+// A no-auth choice recorded for an approved server stops serving once the
+// server is given a client, and a run replaces it. That pair is pending, not
+// outside what the credential was issued for.
+func TestRunKeepsAConsentScopedCredentialsReplaceableChoicePending(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	approved := f.server(issuer)
+
+	scoped := f.session(issuer)
+	require.NoError(t, f.q.ApproveConsentCatalogFixture(t.Context(), ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
+	require.Equal(t, int64(1), f.record(issuer, scoped))
+	f.associate(approved, f.client(issuer))
+
+	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.Pairs[OutcomeClient])
+	require.Zero(t, preview.ConsentScoped)
+}
+
 func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -386,13 +450,13 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 		row  ListUpstreamClientSelectionCoverageRow
 		want Outcome
 	}{
-		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, ChoseClient: true, EligibleClients: 2, AssociatedClients: 2}, OutcomeSelected},
-		{"chosen client no longer usable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, ChoseClient: true, EligibleClients: 1, AssociatedClients: 1}, OutcomeUnusableClient},
-		{"no-auth choice the server's new client makes unusable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, ChoseClient: false, EligibleClients: 1, AssociatedClients: 1}, OutcomeClient},
-		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2}, OutcomeClient},
-		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2}, OutcomeAmbiguous},
-		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1}, OutcomeUnreachableClient},
-		{"no associated client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0}, OutcomeNoAuth},
+		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: true, ChoseClient: true, EligibleClients: 2, AssociatedClients: 2}, OutcomeSelected},
+		{"chosen client no longer usable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, ChoseClient: true, EligibleClients: 1, AssociatedClients: 1}, OutcomeUnusableClient},
+		{"no-auth choice the server's new client makes unusable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, ChoseClient: false, EligibleClients: 1, AssociatedClients: 1}, OutcomeClient},
+		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 1, AssociatedClients: 2}, OutcomeClient},
+		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 2, AssociatedClients: 2}, OutcomeAmbiguous},
+		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 0, AssociatedClients: 1}, OutcomeUnreachableClient},
+		{"no associated client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 0, AssociatedClients: 0}, OutcomeNoAuth},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

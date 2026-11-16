@@ -23,7 +23,9 @@ const (
 )
 
 type SendDataExportTestEventInput struct {
-	ProjectID             string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID             string `json:"-"`
 	RouteID               string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
 	ExpectedDataSource    string `json:"expected_data_source" jsonschema:"the route's data_source exactly as list_data_exports returned it and the user confirmed"`
 	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed; empty only when the list showed no destination"`
@@ -98,11 +100,11 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 		return SendDataExportTestEventOutput{}, errors.New("data export test event service is not composed")
 	}
 	if !input.Confirmed {
-		return SendDataExportTestEventOutput{}, dataExportInvalid("Confirm the exact project, route, data source, and destination with the user before sending a test event to it.")
+		return SendDataExportTestEventOutput{}, &DataExportRefusalError{Code: "confirmation_required", Message: "Nothing was sent. Show the user the exact project, route, data source, and destination, then call again with the same input and confirmed: true once they confirm.", Cause: ErrDataExportRequestInvalid}
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide the explicit project ID that owns the route.")
+		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide the slug of the project that owns the route.")
 	}
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {

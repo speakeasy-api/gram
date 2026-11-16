@@ -61,7 +61,7 @@ export function AuthenticationHostDialog({
     error =
       move.error instanceof GramError &&
       (move.error.statusCode === 409 || move.error.statusCode === 400)
-        ? "Speakeasy manages this authorization server, or this deployment has no authentication host, so it can't be moved."
+        ? "Speakeasy manages this MCP Authentication Provider, or this deployment has no authentication host, so it can't be moved."
         : "Couldn't move it. Try again.";
   }
 

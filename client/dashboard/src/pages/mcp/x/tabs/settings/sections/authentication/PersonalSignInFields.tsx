@@ -108,7 +108,7 @@ export function PersonalSignInFields({
   return (
     <div className="space-y-4">
       <RadioRows
-        label="Sign-in"
+        label="Sign-in (required)"
         value={f.source}
         onValueChange={(value) => f.setSource(value as PersonalSignInSource)}
         rows={[
@@ -129,7 +129,9 @@ export function PersonalSignInFields({
       {f.source === "existing" ? (
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="credential-starting-sign-in">Start from</Label>
+            <Label htmlFor="credential-starting-sign-in">
+              Start from (required)
+            </Label>
             {existingBody}
             {!signIns.isLoading &&
             !signIns.isError &&

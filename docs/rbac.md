@@ -366,7 +366,8 @@ Example:
   "resource_kind": "mcp",
   "resource_id": "toolset_123",
   "tool": "search_docs",
-  "disposition": "read_only"
+  "disposition": "read_only",
+  "project_id": "project_456"
 }
 ```
 
@@ -908,6 +909,7 @@ Today, dimensions are used for MCP tool calls:
 if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
 	Tool:        params.Name,
 	Disposition: disposition,
+	ProjectID:   toolset.ProjectID,
 })); err != nil {
 	return nil, err
 }
@@ -920,7 +922,8 @@ That check becomes a selector like:
   "resource_kind": "mcp",
   "resource_id": "toolset_123",
   "tool": "search_docs",
-  "disposition": "read_only"
+  "disposition": "read_only",
+  "project_id": "project_456"
 }
 ```
 
@@ -985,6 +988,8 @@ Result: denied.
 
 One nuance: if a grant has a key that the check does not include, matching skips that key. This allows a more specific grant to satisfy a broader connection-level check that does not yet constrain that dimension. Be aware of this when deciding whether a handler should use a plain resource check or a dimensional check.
 
+Because of that, some resource kinds require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project would otherwise pass it in any project. Build MCP checks with `authz.MCPCheck(scope, resourceID, projectID)` or `authz.MCPToolCallCheck` with `ProjectID` set. Project-level operations name the project as both the resource and the `project_id`.
+
 #### Auth client checks
 
 `mcp:auth` and `mcp:blocked_auth` protect the `mcp_auth_client` resource kind: the upstream identity Speakeasy presents to an MCP server. They have no server dimension, so a block on a shared client applies on every server that uses it. A caller will need `mcp:connect` on the server and `mcp:auth` on the selected client; neither implies the other, except that a delegated policy older than version 5 reads its `mcp:connect` grants as an auth client ceiling (below). No request is enforced against `mcp:auth` yet, and no system role holds it. `Require` denies every auth-client check where the engine does not enforce RBAC, such as for legacy API keys; the mandatory check evaluates them against their own policy (below).
@@ -1034,9 +1039,9 @@ Before enabling enforcement: turn on `mandatory-authz-shadow`, note the `mcp.aut
 
 #### Enabling enforcement
 
-Enforcement is per organization: it is on once staff turn it on from the admin dashboard's upstream OAuth migration page (`enableUpstreamAuthEnforcement`), which sets the organization's `upstream_auth_enforced` feature. It applies whatever the `auth-client-resolver` flags say, so a flag change never skips its readiness checks, and the generic product feature toggle cannot set it. The flags alone only shadow. If the enforcement state cannot be read, the request is refused. Under enforcement the typed auth client resolver serves the organization's direct proxied servers and gateway members, and an assistant turn's credential is served only through the execution-selection profile version it binds (a turn credential that binds none is refused); using the resolved client requires `mcp:auth` through the mandatory check, so a caller the generic check skips is still evaluated, and a check that cannot be evaluated refuses. An unmapped or ambiguous choice, one that names no auth client and is not an explicit no-auth choice, reconnects rather than falling back (an explicit no-auth choice stays anonymous), and a client the resolver hands back to the upstream client choice (stale headers, an EMA, headers on a tunneled server) is used only after the same check for that client. A caller authenticated to another organization is refused on every public serving path, ungated or issuer-gated, remote, hosted or gateway, before any upstream credential is used. A caller with no organization is served as an anonymous caller.
+Enforcement is per organization: it is on once staff turn it on from the admin dashboard's upstream OAuth migration page (`enableUpstreamAuthEnforcement`), which sets the organization's `upstream_auth_enforced` feature. The one exception is the demo seed (`server/internal/demoseed`), which sets the feature directly for the demo organization and each developer's local organization, with no audit record or blocker checks; its own readiness check fails the seed run if the typed auth it records is incomplete. It applies whatever the `auth-client-resolver` flags say, so a flag change never skips its readiness checks, and the generic product feature toggle cannot set it. The flags alone only shadow. If the enforcement state cannot be read, the request is refused. Under enforcement the typed auth client resolver serves the organization's direct proxied servers and gateway members, and an assistant turn's credential is served only through the execution-selection profile version it binds (a turn credential that binds none is refused); using the resolved client requires `mcp:auth` through the mandatory check, so a caller the generic check skips is still evaluated, and a check that cannot be evaluated refuses. An unmapped or ambiguous choice, one that names no auth client and is not an explicit no-auth choice, reconnects rather than falling back (an explicit no-auth choice stays anonymous), and a client the resolver hands back to the upstream client choice (stale headers, an EMA, headers on a tunneled server) is used only after the same check for that client. A caller authenticated to another organization is refused on every public serving path, ungated or issuer-gated, remote, hosted or gateway, before any upstream credential is used. A caller with no organization is served as an anonymous caller.
 
-Turn enforcement on for an organization only after every server replica runs a release that reads `upstream_auth_enforced`: an older replica does not read the feature and keeps serving the upstream client choice. Deploying such a release changes nothing on its own; the feature defaults off and nothing sets it except the enable endpoint.
+Turn enforcement on for an organization only after every server replica runs a release that reads `upstream_auth_enforced`: an older replica does not read the feature and keeps serving the upstream client choice. Deploying such a release changes nothing on its own; the feature defaults off and nothing sets it except the enable endpoint and the demo seed.
 
 Staff can turn enforcement on only when the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that one auth client can serve names it, and its assistant profiles are recorded. Choices several clients could serve, and profile servers with no choice, do not block it: those credentials are asked to reconnect and those turns fail with an actionable error, never served with a guessed client. Staff also confirm that the organization's `mcp.authz.mandatory_shadow` shows no unexplained new denial, and that the organization was told about the one intended change: a valid credential from another organization on one of its ungated public servers is refused with an organization mismatch instead of being served anonymously, and is never retried as anonymous.
 

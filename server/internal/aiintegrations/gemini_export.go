@@ -49,6 +49,10 @@ type geminiTurn struct {
 // errGeminiPartialExport marks proven Vault-side failures, not parser errors.
 var errGeminiPartialExport = errors.New("gemini export contains partial account or conversation failures")
 
+// errGeminiExportTooLarge marks an export that exceeds an import bound. A
+// shorter export window can fit, so the sync splits the window and retries.
+var errGeminiExportTooLarge = errors.New("gemini export exceeds the import size limit")
+
 type geminiExportFile struct {
 	Name    string
 	Content []byte
@@ -69,8 +73,11 @@ const (
 // An empty window succeeds only with successful zero counts and an error report.
 // All validation precedes callbacks; callback failures are not transactional.
 func parseGeminiExport(ctx context.Context, files []geminiExportFile, visit func(geminiTurn) error) error {
-	if visit == nil || len(files) == 0 || len(files) > geminiMaxFiles {
+	if visit == nil || len(files) == 0 {
 		return errors.New("parse error: Gemini export requires files and a visitor")
+	}
+	if len(files) > geminiMaxFiles {
+		return fmt.Errorf("parse error: Gemini export has too many files: %w", errGeminiExportTooLarge)
 	}
 	var turns []geminiTurn
 	var summaries, reports [][]byte
@@ -79,11 +86,11 @@ func parseGeminiExport(ctx context.Context, files []geminiExportFile, visit func
 	fileCount, total, compressed := 0, 0, 0
 	consume := func(name string, data []byte) error {
 		if len(data) > geminiMaxFileBytes {
-			return errors.New("parse error: Gemini export file exceeds limit")
+			return fmt.Errorf("parse error: Gemini export file exceeds limit: %w", errGeminiExportTooLarge)
 		}
 		total += len(data)
 		if total > geminiMaxTotalBytes {
-			return errors.New("parse error: Gemini export expanded size exceeds limit")
+			return fmt.Errorf("parse error: Gemini export expanded size exceeds limit: %w", errGeminiExportTooLarge)
 		}
 		name = strings.ToLower(path.Base(name))
 		switch {
@@ -107,7 +114,7 @@ func parseGeminiExport(ctx context.Context, files []geminiExportFile, visit func
 				turns = append(turns, turn)
 				counts[turn.OwnerEmail]++
 				if len(turns) > geminiMaxTurns {
-					return errors.New("parse error: Gemini export has too many turns")
+					return fmt.Errorf("parse error: Gemini export has too many turns: %w", errGeminiExportTooLarge)
 				}
 			}
 		case strings.HasSuffix(name, ".md5"):
@@ -123,7 +130,7 @@ func parseGeminiExport(ctx context.Context, files []geminiExportFile, visit func
 		}
 		fileCount++
 		if fileCount > geminiMaxFiles {
-			return errors.New("parse error: Gemini export has too many files")
+			return fmt.Errorf("parse error: Gemini export has too many files: %w", errGeminiExportTooLarge)
 		}
 		if !strings.HasSuffix(strings.ToLower(file.Name), ".zip") {
 			if err := consume(file.Name, file.Content); err != nil {
@@ -133,7 +140,7 @@ func parseGeminiExport(ctx context.Context, files []geminiExportFile, visit func
 		}
 		compressed += len(file.Content)
 		if compressed > geminiMaxArchiveBytes {
-			return errors.New("parse error: Gemini export compressed size exceeds limit")
+			return fmt.Errorf("parse error: Gemini export compressed size exceeds limit: %w", errGeminiExportTooLarge)
 		}
 		zr, err := zip.NewReader(bytes.NewReader(file.Content), int64(len(file.Content)))
 		if err != nil {
@@ -142,7 +149,7 @@ func parseGeminiExport(ctx context.Context, files []geminiExportFile, visit func
 		for _, entry := range zr.File {
 			fileCount++
 			if fileCount > geminiMaxFiles {
-				return errors.New("parse error: Gemini export has too many files")
+				return fmt.Errorf("parse error: Gemini export has too many files: %w", errGeminiExportTooLarge)
 			}
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("parse Gemini export: %w", err)
@@ -154,7 +161,7 @@ func parseGeminiExport(ctx context.Context, files []geminiExportFile, visit func
 				continue
 			}
 			if entry.UncompressedSize64 > geminiMaxFileBytes || entry.UncompressedSize64 > uint64(geminiMaxTotalBytes-total) {
-				return errors.New("parse error: Gemini export expanded size exceeds limit")
+				return fmt.Errorf("parse error: Gemini export expanded size exceeds limit: %w", errGeminiExportTooLarge)
 			}
 			if entry.UncompressedSize64 > 1<<20 && (entry.CompressedSize64 == 0 || entry.UncompressedSize64/entry.CompressedSize64 > 1000) {
 				return errors.New("parse error: Gemini export suspicious compression ratio")
@@ -247,7 +254,10 @@ func readGeminiXML(ctx context.Context, data []byte) (*geminiXMLNode, error) {
 		switch t := token.(type) {
 		case xml.StartElement:
 			nodes++
-			if nodes > geminiMaxXMLNodes || len(stack) >= geminiMaxXMLDepth {
+			if nodes > geminiMaxXMLNodes {
+				return nil, fmt.Errorf("parse error: Gemini XML complexity exceeds limit: %w", errGeminiExportTooLarge)
+			}
+			if len(stack) >= geminiMaxXMLDepth {
 				return nil, errors.New("parse error: Gemini XML complexity exceeds limit")
 			}
 			n := &geminiXMLNode{name: geminiFieldName(t.Name.Local), value: nil, children: nil}

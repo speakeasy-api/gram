@@ -231,20 +231,37 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 			reconnect[gap.CredentialID] = true
 		}
 	}
-	pendingSelections := int64(selections.Pairs[selectionbackfill.OutcomeClient] + selections.Pairs[selectionbackfill.OutcomeNoAuth])
+	// A credential issued for the servers approved at consent has choices for
+	// those servers only and is refused anywhere else, so the rest of its
+	// issuer's reach is not pending.
+	consentScopedSelections := int64(selections.ConsentScoped)
+	pendingSelections := int64(selections.Pairs[selectionbackfill.OutcomeClient]+selections.Pairs[selectionbackfill.OutcomeNoAuth]) - consentScopedSelections
+
+	// Both sections read enforcement, so they are decided from one read. A
+	// failed read leaves both out, as a failed check of either does.
+	var authClients *gen.AdminUpstreamOAuthMigrationAuthClients
+	var executionProfiles *gen.AdminUpstreamOAuthMigrationExecutionProfiles
+	enforced, err := s.productFeatures.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
+	if err != nil {
+		logger.ErrorContext(ctx, "read upstream auth enforcement", attr.SlogError(err))
+	} else {
+		authClients = s.authClientMigrationStatus(ctx, organizationID, enforced)
+		executionProfiles = s.executionProfileMigrationStatus(ctx, organizationID, enforced)
+	}
 
 	status := &gen.AdminUpstreamOAuthMigrationStatus{
-		AuthClients:          s.authClientMigrationStatus(ctx, organizationID),
-		ExecutionProfiles:    s.executionProfileMigrationStatus(ctx, organizationID),
-		Enforcement:          nil,
-		OrganizationID:       organizationID,
-		Migrated:             pendingAssociations == 0 && len(unresolved) == 0 && pendingSelections == 0,
-		Servers:              int64(associations.Servers),
-		PendingAssociations:  pendingAssociations,
-		UnresolvedServers:    unresolved,
-		Credentials:          int64(selections.Credentials),
-		PendingSelections:    pendingSelections,
-		ReconnectCredentials: int64(len(reconnect)),
+		AuthClients:             authClients,
+		ExecutionProfiles:       executionProfiles,
+		Enforcement:             nil,
+		OrganizationID:          organizationID,
+		Migrated:                pendingAssociations == 0 && len(unresolved) == 0 && pendingSelections == 0,
+		Servers:                 int64(associations.Servers),
+		PendingAssociations:     pendingAssociations,
+		UnresolvedServers:       unresolved,
+		Credentials:             int64(selections.Credentials),
+		PendingSelections:       pendingSelections,
+		ConsentScopedSelections: new(consentScopedSelections),
+		ReconnectCredentials:    int64(len(reconnect)),
 	}
 	status.Enforcement = s.upstreamAuthEnforcement(ctx, status)
 	return status, nil
@@ -253,13 +270,8 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 // authClientMigrationStatus dry-runs the typed auth client backfill. It is
 // reported apart from migrated and never gates the cutover, so a failure only
 // leaves it out, and a failed phase is named beside the others' counts.
-func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationAuthClients {
+func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string, enforced bool) *gen.AdminUpstreamOAuthMigrationAuthClients {
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
-	enforced, err := s.productFeatures.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
-	if err != nil {
-		logger.ErrorContext(ctx, "read upstream auth enforcement", attr.SlogError(err))
-		return nil
-	}
 	report, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: enforced})
 	switch {
 	case errors.Is(err, authclientbackfill.ErrRunInProgress):
@@ -409,7 +421,7 @@ func selectionCoverage(report authclientbackfill.Report) ([]*gen.AdminUpstreamOA
 
 // executionProfileMigrationStatus dry-runs the execution-selection profile
 // backfill. A failure only leaves it out.
-func (s *Service) executionProfileMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationExecutionProfiles {
+func (s *Service) executionProfileMigrationStatus(ctx context.Context, organizationID string, enforced bool) *gen.AdminUpstreamOAuthMigrationExecutionProfiles {
 	report, err := executionprofiles.Backfill(ctx, s.db, organizationID, false)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "check execution selection profiles", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
@@ -430,11 +442,21 @@ func (s *Service) executionProfileMigrationStatus(ctx context.Context, organizat
 			})
 		}
 	}
+	// Before enforcement a run records every profile from the configuration
+	// that serves turns today, so none is left to be decided differently
+	// later. Under enforcement a turn's own bind decides exactly what a run
+	// would, so a profile no turn has run under yet is not pending.
+	unexercised := 0
+	if enforced {
+		unexercised = report.FirstVersions
+	}
+	pending := report.VersionsWritten - unexercised
 	return &gen.AdminUpstreamOAuthMigrationExecutionProfiles{
-		Complete:        report.VersionsWritten == 0 && len(gaps) == 0,
-		Targets:         int64(report.Targets),
-		PendingVersions: int64(report.VersionsWritten),
-		Gaps:            gaps,
+		Complete:            pending == 0 && len(gaps) == 0,
+		Targets:             int64(report.Targets),
+		PendingVersions:     int64(pending),
+		UnexercisedVersions: new(int64(unexercised)),
+		Gaps:                gaps,
 	}
 }
 

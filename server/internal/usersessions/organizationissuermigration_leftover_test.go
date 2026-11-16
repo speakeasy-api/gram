@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -46,7 +47,7 @@ func TestOrganizationUserSessionIssuerMigrateCreatesNoAuthClientForTypedServers(
 			require.NoError(t, err)
 			require.Len(t, before, 2)
 
-			_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+			_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 			require.NoError(t, err)
 
 			after, err := typed.ListLiveAuthClientIDsFixture(ctx, auth.ActiveOrganizationID)
@@ -62,12 +63,12 @@ func TestOrganizationUserSessionIssuerMigrateCreatesNoAuthClientForTypedServers(
 }
 
 // A registration still bound to a source issuer that no live server uses was
-// left behind by earlier configuration. Under enforcement consolidation must
-// not offer it on the target's only server, which never signed in through it.
-// Without enforcement the issuer's bindings are what that server serves from,
-// so the binding is captured. Without a leftover binding the same consolidation
-// changes nothing about that server.
-func TestOrganizationUserSessionIssuerMigrateCapturesLeftoverSourceBindingOnlyWithoutEnforcement(t *testing.T) {
+// left behind by earlier configuration. Consolidation leaves that binding
+// behind, enforced or not, and the preview lists it as dropped: carried to the
+// target, it would become a client the target's only server serves from
+// without anyone having configured it there. Without a leftover binding the
+// same consolidation changes nothing about that server.
+func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
 		for _, leftover := range []bool{false, true} {
@@ -90,29 +91,40 @@ func TestOrganizationUserSessionIssuerMigrateCapturesLeftoverSourceBindingOnlyWi
 				require.NoError(t, err)
 				require.Len(t, clientsBefore, 1)
 
-				_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+				preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
 				require.NoError(t, err)
-
-				// Without enforcement the issuer's bindings are still what a sole
-				// consumer serves from, so the binding the target gained is captured.
-				captured := leftover && !enforced
-				want := []uuid.UUID{targetRegistration}
-				if captured {
-					want = append(want, stale)
-					slices.SortFunc(want, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+				require.True(t, preflight.ImpactPreviewed)
+				assert.Empty(t, preflight.ServerImpacts, "the target's server keeps the client it uses")
+				if leftover {
+					require.Len(t, preflight.DroppedClientLinks, 1)
+					assert.Equal(t, stale.String(), preflight.DroppedClientLinks[0].RemoteSessionClientID)
+					assert.NotEmpty(t, preflight.WarningsFingerprint, "a dropped link needs confirming")
+				} else {
+					assert.Empty(t, preflight.DroppedClientLinks)
+					assert.Empty(t, preflight.WarningsFingerprint)
 				}
+
+				result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
+				require.NoError(t, err)
+				assert.Len(t, result.DroppedClientLinks, len(preflight.DroppedClientLinks))
+
 				registrations, err := typed.ListOAuthClientsOfServers(ctx, authclientbackfill.ListOAuthClientsOfServersParams{OrganizationID: auth.ActiveOrganizationID, McpServerIds: []uuid.UUID{targetServer}})
 				require.NoError(t, err)
-				assert.Equal(t, want, registrations, "an enforced server is associated only with what was configured for it")
+				assert.Equal(t, []uuid.UUID{targetRegistration}, registrations, "a server is associated only with what was configured for it")
 				offered, err := typed.ListServerAuthClientsFixture(ctx, targetServer)
 				require.NoError(t, err)
-				assert.Len(t, offered, len(want))
+				assert.Len(t, offered, 1)
 				clientsAfter, err := typed.ListLiveAuthClientIDsFixture(ctx, auth.ActiveOrganizationID)
 				require.NoError(t, err)
-				assert.Len(t, clientsAfter, len(want))
+				assert.Len(t, clientsAfter, 1)
+				if leftover {
+					bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
+					require.NoError(t, err)
+					assert.Zero(t, bound, "the leftover binding stays behind with the source")
+				}
 
 				// A credential issued after consolidation takes the path issuance
-				// takes. It stays decidable only while the server offers one client.
+				// takes, and still has one decidable client on the target's server.
 				issued, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("leftover-issued"))
 				require.NoError(t, err)
 				credentialID := issued.ID
@@ -127,14 +139,10 @@ func TestOrganizationUserSessionIssuerMigrateCapturesLeftoverSourceBindingOnlyWi
 				require.NoError(t, err)
 				choices, err := selectionbackfill.New(ti.conn).ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID})
 				require.NoError(t, err)
-				if captured {
-					assert.Empty(t, choices, "two eligible clients leave the choice to the consent page")
-				} else if assert.Len(t, choices, 1, "a new sign-in still has one decidable client on the target's only server") {
+				if assert.Len(t, choices, 1, "a new sign-in still has one decidable client on the target's only server") {
 					assert.Equal(t, targetRegistration, choices[0].RemoteSessionClientID.UUID)
 				}
 
-				// What enforcement withholds is the only association the backfill
-				// still decides for the server, so migration status must not count it.
 				report, err := associationbackfill.Run(ctx, ti.conn, associationbackfill.Options{OrganizationID: auth.ActiveOrganizationID, Apply: false, PageSize: 0})
 				require.NoError(t, err)
 				assert.Equal(t, report.Enforced, report.Decided)
@@ -160,7 +168,7 @@ func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourc
 	targetRegistration := leftoverSeedBoundRegistration(t, ctx, ti, targetID)
 	leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
 
-	_, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	_, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 
 	want := []uuid.UUID{ownRegistration, targetRegistration}

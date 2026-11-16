@@ -67,10 +67,6 @@ vi.mock("@/components/user-session-issuer-select", () => ({
   ),
 }));
 
-vi.mock("@/lib/remote-identity", () => ({
-  ScopeBadge: () => null,
-}));
-
 vi.mock("@gram/client/react-query/userSessionIssuerAttachImpact.js", () => ({
   useUserSessionIssuerAttachImpact: (request: unknown) => {
     testState.impactRequests.push(request);
@@ -136,6 +132,9 @@ vi.mock("@gram/client/react-query/userSessionIssuers.js", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "missing" }),
+}));
 
 function issuer(id: string): UserSessionIssuer {
   return {
@@ -212,7 +211,9 @@ describe("UserSessionIssuerField", () => {
 
     chooseCandidateAndSave();
 
-    expect(screen.getByText("Change user session issuer?")).toBeDefined();
+    expect(
+      screen.getByText("Change MCP Authentication Provider?"),
+    ).toBeDefined();
     expect(link).not.toHaveBeenCalled();
     expect(testState.impactRequests).toContainEqual({
       toolsetId: "toolset-1",
@@ -224,7 +225,11 @@ describe("UserSessionIssuerField", () => {
       ),
     ).toBeDefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Change issuer" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Change MCP Authentication Provider",
+      }),
+    );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
   });
 
@@ -246,7 +251,11 @@ describe("UserSessionIssuerField", () => {
     chooseCandidateAndSave();
 
     expect(screen.getByText(/Couldn't check whether/)).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Change issuer" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Change MCP Authentication Provider",
+      }),
+    );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
   });
 
@@ -280,7 +289,7 @@ describe("UserSessionIssuerField", () => {
 
     expect(
       screen
-        .getByRole("button", { name: "Change issuer" })
+        .getByRole("button", { name: "Change MCP Authentication Provider" })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
@@ -298,7 +307,9 @@ describe("UserSessionIssuerField", () => {
     expect(screen.getByText("bob@example.com")).toBeDefined();
     // The row badge, and the note explaining it.
     expect(screen.getAllByText("Shared sign-in")).toHaveLength(2);
-    const confirm = screen.getByRole("button", { name: "Change issuer" });
+    const confirm = screen.getByRole("button", {
+      name: "Change MCP Authentication Provider",
+    });
     expect(confirm.hasAttribute("disabled")).toBe(true);
 
     fireEvent.change(screen.getByLabelText("Type the server name to confirm"), {

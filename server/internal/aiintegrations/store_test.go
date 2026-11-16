@@ -801,7 +801,7 @@ func TestGeminiSettingsRoundTripAndHoldSyncWithoutOrgUnit(t *testing.T) {
 	}))
 }
 
-func TestGeminiPollSuccessPreservesPendingWatermarkAndHourlyCadence(t *testing.T) {
+func TestGeminiPollSuccessPreservesWatermarkAndSchedulesByExportState(t *testing.T) {
 	t.Parallel()
 	ctx, conn, store, orgID := newStoreTestDB(t)
 	matterID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
@@ -810,11 +810,17 @@ func TestGeminiPollSuccessPreservesPendingWatermarkAndHourlyCadence(t *testing.T
 	require.Equal(t, map[string]string{ScheduleGeminiCompliance: SyncKindCursor}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 	watermark := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	pollTime := watermark.Add(30 * 24 * time.Hour)
-	const cursor = `{"export_id":"export-placeholder"}`
-	require.NoError(t, store.RecordGeminiPollSuccess(ctx, created.Config.SyncID, watermark, cursor, pollTime))
-	cfg, _, err := store.GetUsagePollConfigBySyncID(ctx, created.Config.SyncID)
-	require.NoError(t, err)
-	require.Equal(t, watermark, cfg.PollWatermarkAt)
-	require.WithinDuration(t, pollTime.Add(time.Hour), cfg.NextPollAfter, time.Microsecond)
-	require.JSONEq(t, cursor, cfg.LastCursor)
+	for _, tc := range []struct {
+		name    string
+		pending bool
+		next    time.Duration
+	}{{"pending export rechecks soon", true, geminiPendingRecheck}, {"caught up waits an hour", false, time.Hour}} {
+		const cursor = `{"export_id":"export-placeholder"}`
+		require.NoError(t, store.RecordGeminiPollSuccess(ctx, created.Config.SyncID, watermark, cursor, pollTime, tc.pending), tc.name)
+		cfg, _, err := store.GetUsagePollConfigBySyncID(ctx, created.Config.SyncID)
+		require.NoError(t, err, tc.name)
+		require.Equal(t, watermark, cfg.PollWatermarkAt, tc.name)
+		require.WithinDuration(t, pollTime.Add(tc.next), cfg.NextPollAfter, time.Microsecond, tc.name)
+		require.JSONEq(t, cursor, cfg.LastCursor, tc.name)
+	}
 }

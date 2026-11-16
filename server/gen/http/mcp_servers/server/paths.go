@@ -32,6 +32,11 @@ func UpdateMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.update"
 }
 
+// SetSetupGuideCompletedMcpServersPath returns the URL path to the mcpServers service setSetupGuideCompleted HTTP endpoint.
+func SetSetupGuideCompletedMcpServersPath() string {
+	return "/rpc/mcpServers.setSetupGuideCompleted"
+}
+
 // ListToolFiltersMcpServersPath returns the URL path to the mcpServers service listToolFilters HTTP endpoint.
 func ListToolFiltersMcpServersPath() string {
 	return "/rpc/mcpServers.listToolFilters"
