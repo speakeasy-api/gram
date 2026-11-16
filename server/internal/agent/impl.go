@@ -228,7 +228,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if !ok || authCtx == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).DeviceAgentSync()); err != nil {
 		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
 	}
 	return ctx, nil
@@ -262,7 +262,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 	if !ok || authCtx == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(admitted, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).DeviceAgentSync()); err != nil {
 		err = fmt.Errorf("authorize workload device sync: %w", err)
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
@@ -685,7 +685,7 @@ func (s *Service) ListSyncedUsers(ctx context.Context, _ *gen.ListSyncedUsersPay
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -716,12 +716,7 @@ func (s *Service) GetConfiguration(ctx context.Context, _ *gen.GetConfigurationP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -745,12 +740,7 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 

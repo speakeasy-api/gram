@@ -23,7 +23,7 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 	}
 	checks := make([]authz.Check, len(ids))
 	for i, id := range ids {
-		checks[i] = authz.ChatReadCheck(id)
+		checks[i] = authz.Chat(authz.ChatIDFrom(id)).Read()
 	}
 	granted, err := s.authz.Filter(ctx, checks)
 	if err != nil {

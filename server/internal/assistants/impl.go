@@ -114,7 +114,7 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 
 	checks := make([]authz.Check, len(items))
 	for i, item := range items {
-		checks[i] = authz.AssistantCheck(authz.ScopeAssistantRead, item.ID.String(), authCtx.ProjectID.String())
+		checks[i] = authz.Assistant(authz.AssistantIDOf(item.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
 	allowedIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(assistantID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -168,7 +168,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistants(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 	if err := s.requireRuntimeAvailable(ctx); err != nil {
@@ -223,7 +223,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(assistantID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 	// Switching runtime versions stops and retires the current runtime, which
@@ -278,7 +278,7 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(assistantID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 	if authCtx.UserID == "" {
@@ -299,14 +299,14 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(assistantID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	if err := s.requireRuntimeAvailable(ctx); err != nil {
 		return nil, err
 	}
 	if len(payload.SkillIds) > 0 {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Skills(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 	}
@@ -418,7 +418,7 @@ func (s *Service) InterruptTurn(ctx context.Context, payload *gen.InterruptTurnP
 	}
 	// Gated exactly like sendMessage: stopping a reply you started is part of
 	// talking to an assistant, so a caller who can send must be able to stop.
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(assistantID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	if err := s.requireRuntimeAvailable(ctx); err != nil {
@@ -464,7 +464,7 @@ func (s *Service) GetManagedAssistant(ctx context.Context, _ *gen.GetManagedAssi
 		}
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "get project assistant")
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, record.ID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(record.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	view, err := toHTTPAssistant(record)
@@ -479,7 +479,7 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistants(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 	if err := s.requireRuntimeAvailable(ctx); err != nil {
@@ -521,8 +521,8 @@ func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UU
 	connectChecks := make([]authz.Check, len(ids))
 	writeChecks := make([]authz.Check, len(ids))
 	for i, id := range ids {
-		connectChecks[i] = authz.MCPCheck(authz.ScopeMCPConnect, id.String(), projectID.String())
-		writeChecks[i] = authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String())
+		connectChecks[i] = authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(projectID)).Connect()
+		writeChecks[i] = authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(projectID)).Write()
 	}
 	if err := s.authz.Require(ctx, connectChecks...); err != nil {
 		return nil, err
