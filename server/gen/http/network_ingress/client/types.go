@@ -16,11 +16,11 @@ import (
 // "createIngress" endpoint HTTP request body.
 type CreateIngressRequestBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
-	// Lowercase DNS label
-	Hostname          string `form:"hostname" json:"hostname" xml:"hostname"`
-	OauthClientID     string `form:"oauth_client_id" json:"oauth_client_id" xml:"oauth_client_id"`
-	OauthClientSecret string `form:"oauth_client_secret" json:"oauth_client_secret" xml:"oauth_client_secret"`
-	IdentityRequired  *bool  `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
+	// Lowercase DNS label; defaults to speakeasy
+	Hostname          *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	OauthClientID     string  `form:"oauth_client_id" json:"oauth_client_id" xml:"oauth_client_id"`
+	OauthClientSecret string  `form:"oauth_client_secret" json:"oauth_client_secret" xml:"oauth_client_secret"`
+	IdentityRequired  *bool   `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
 }
 
 // UpdateIngressRequestBody is the type of the "networkIngress" service
@@ -55,6 +55,10 @@ type CreateIngressResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -88,6 +92,10 @@ type UpdateIngressResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -121,6 +129,10 @@ type RotateCredentialsResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -163,6 +175,10 @@ type CheckHealthResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -1527,6 +1543,10 @@ type NetworkIngressResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -1752,6 +1772,7 @@ func NewCreateIngressNetworkIngressOK(body *CreateIngressResponseBody) *networki
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -1927,6 +1948,7 @@ func NewUpdateIngressNetworkIngressOK(body *UpdateIngressResponseBody) *networki
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -2102,6 +2124,7 @@ func NewRotateCredentialsNetworkIngressOK(body *RotateCredentialsResponseBody) *
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -2590,6 +2613,7 @@ func NewCheckHealthNetworkIngressOK(body *CheckHealthResponseBody) *networkingre
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -2798,6 +2822,9 @@ func ValidateCreateIngressResponseBody(body *CreateIngressResponseBody) (err err
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -2825,6 +2852,11 @@ func ValidateCreateIngressResponseBody(body *CreateIngressResponseBody) (err err
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -2865,6 +2897,9 @@ func ValidateUpdateIngressResponseBody(body *UpdateIngressResponseBody) (err err
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -2892,6 +2927,11 @@ func ValidateUpdateIngressResponseBody(body *UpdateIngressResponseBody) (err err
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -2932,6 +2972,9 @@ func ValidateRotateCredentialsResponseBody(body *RotateCredentialsResponseBody) 
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -2959,6 +3002,11 @@ func ValidateRotateCredentialsResponseBody(body *RotateCredentialsResponseBody) 
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -3017,6 +3065,9 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -3044,6 +3095,11 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -4788,6 +4844,9 @@ func ValidateNetworkIngressResponseBody(body *NetworkIngressResponseBody) (err e
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -4815,6 +4874,11 @@ func ValidateNetworkIngressResponseBody(body *NetworkIngressResponseBody) (err e
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {

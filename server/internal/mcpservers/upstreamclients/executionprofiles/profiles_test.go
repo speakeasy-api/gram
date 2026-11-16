@@ -264,6 +264,7 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, dry.Targets)
 	require.Equal(t, len(Contexts), dry.VersionsWritten)
+	require.Equal(t, len(Contexts), dry.FirstVersions, "no turn has run under either profile")
 	for _, execCtx := range Contexts {
 		_, err := f.q.GetProfile(t.Context(), GetProfileParams{
 			OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant,
@@ -275,10 +276,19 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 	applied, err := Backfill(t.Context(), f.pool, f.orgID, true)
 	require.NoError(t, err)
 	require.Equal(t, len(Contexts), applied.VersionsWritten)
+	require.Equal(t, len(Contexts), applied.FirstVersions)
 
 	again, err := Backfill(t.Context(), f.pool, f.orgID, false)
 	require.NoError(t, err)
 	require.Zero(t, again.VersionsWritten)
+	require.Zero(t, again.FirstVersions)
+
+	added := f.server(unstored)
+	f.authClient(added, typeServiceAccount, f.registration(added))
+	stale, err := Backfill(t.Context(), f.pool, f.orgID, false)
+	require.NoError(t, err)
+	require.Equal(t, len(Contexts), stale.VersionsWritten, "a recorded profile gains a choice for the new server")
+	require.Zero(t, stale.FirstVersions)
 }
 
 func TestBindNeverGivesAUserlessTurnAPersonalClient(t *testing.T) {

@@ -26,6 +26,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { SelfGrantAccess } from "./temporary-access";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
@@ -235,21 +236,74 @@ type RequestScopeAccessProps = {
   /** When true, every missing scope is requested, not only the first. */
   all?: boolean;
   resourceId?: string;
+  /** The project the gated resource belongs to, for project-wide grants. */
+  projectId?: string;
+  /**
+   * For an admin who can give themselves the access: names the resource for
+   * the "covers" choice (this one, or every one of its kind).
+   */
+  coverage?: { one: string; all: string };
+  /** Runs once an admin has given themselves the access. */
+  onGranted?: () => void;
+  className?: string;
 };
 
 /**
- * Asks an organization admin for the scopes the viewer is missing, and says
- * how that went. Renders nothing when every requestable scope is already held.
+ * The one missing scope an organization admin can give themselves for a
+ * limited time, or null. An all-scopes gate qualifies only when a single
+ * scope is missing: granting one of several would still leave the page shut.
+ */
+function useSelfGrantableScope(
+  scopes: Scope[],
+  all: boolean,
+  resourceId: string | undefined,
+  projectId: string | undefined,
+): Scope | null {
+  const { hasScope } = useRBAC();
+  const { catalogue } = useScopeCatalogue();
+  if (!hasScope("org:admin")) return null;
+  // A gate on "anything in this project" has no single resource to grant, and
+  // a grant on every resource would reach past the project. Ask instead.
+  if (projectId && (resourceId === undefined || resourceId === "*")) {
+    return null;
+  }
+  const missing = scopes.filter((s) => !hasScope(s, resourceId, projectId));
+  if (all && missing.length !== 1) return null;
+  return missing.find((s) => catalogue.get(s)?.temporaryGrantable) ?? null;
+}
+
+/**
+ * Gets the viewer the scopes they are missing. An organization admin gives
+ * themselves a scope for a few hours when the API allows it; anyone else asks
+ * an admin, and is told how that went. Renders nothing when every requestable
+ * scope is already held.
  */
 export function RequestScopeAccess(
   props: RequestScopeAccessProps,
 ): React.JSX.Element | null {
+  const selfGrantScope = useSelfGrantableScope(
+    props.scopes,
+    props.all ?? false,
+    props.resourceId,
+    props.projectId,
+  );
+  if (selfGrantScope) {
+    return (
+      <SelfGrantAccess
+        scope={selfGrantScope}
+        resourceId={props.resourceId}
+        coverage={props.coverage}
+        onGranted={props.onGranted}
+        className={props.className}
+      />
+    );
+  }
   // A request is for one resource and one set of scopes. The key remounts
   // the form when either changes, so "Request sent" for one project does not
   // carry over to the next.
   return (
     <RequestScopeAccessForm
-      key={`${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
+      key={`${props.projectId ?? ""}|${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
       {...props}
     />
   );
@@ -259,6 +313,8 @@ function RequestScopeAccessForm({
   scopes,
   all = false,
   resourceId,
+  projectId,
+  className,
 }: RequestScopeAccessProps): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
     "idle" | "sending" | "sent" | "no-admin" | "error"
@@ -268,7 +324,7 @@ function RequestScopeAccessForm({
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
   const requestableScopes = getRequestableScopes(scopes).filter(
-    (s) => !hasScope(s, resourceId),
+    (s) => !hasScope(s, resourceId, projectId),
   );
   if (requestableScopes.length === 0) return null;
 
@@ -308,6 +364,7 @@ function RequestScopeAccessForm({
         <Button
           variant="secondary"
           size="sm"
+          className={className}
           onClick={() => void handleRequestAccess()}
           disabled={requestAccessMutation.isPending}
         >
@@ -387,7 +444,12 @@ function Unauthorized({
         <h2 className="text-lg font-medium">{title}</h2>
         <p className="text-muted-foreground text-sm">{description}</p>
 
-        <RequestScopeAccess scopes={scopes} all={all} resourceId={resourceId} />
+        <RequestScopeAccess
+          scopes={scopes}
+          all={all}
+          resourceId={resourceId}
+          projectId={projectId}
+        />
 
         {scopes.length > 0 && (
           /* The wrapper keeps the collapsed height (h-7 == trigger height) in

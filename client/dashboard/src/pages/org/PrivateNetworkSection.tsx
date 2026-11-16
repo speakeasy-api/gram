@@ -61,6 +61,13 @@ function statusVariant(
   }
 }
 
+// The tailnet has not approved Speakeasy's gateway to host the service.
+const SERVICE_NOT_APPROVED = "provider_service_not_approved";
+
+// The gateway is approved but Tailscale has not obtained the service's TLS
+// certificate from Let's Encrypt yet; the gateway retries on its own.
+const CERTIFICATE_UNAVAILABLE = "provider_certificate_unavailable";
+
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
@@ -166,6 +173,8 @@ function ConfiguredPrivateNetwork({
   const queryClient = useQueryClient();
   const [rotateOpen, setRotateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const serviceNotApproved = ingress.lastError === SERVICE_NOT_APPROVED;
+  const certificateUnavailable = ingress.lastError === CERTIFICATE_UNAVAILABLE;
   const update = useUpdateNetworkIngressMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
@@ -259,41 +268,83 @@ function ConfiguredPrivateNetwork({
             </dd>
           </div>
         </dl>
-        {ingress.lastError && (
+        {serviceNotApproved ? (
           <Alert variant="error" dismissible={false}>
-            Latest check: {statusLabel(ingress.lastError)}
-          </Alert>
-        )}
-        {ingress.status === "error" && (
-          <Alert variant="warning" dismissible={false}>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Text small>
-                Tailscale could not be connected. Check your OAuth client and
-                tailnet policy, then retry provisioning. If it still fails, our
-                team can help.
+                Your tailnet hasn&apos;t approved Speakeasy to host{" "}
+                <code>svc:{ingress.hostname}</code>, so devices can&apos;t reach
+                it yet. Approve the <code>speakeasy-gw</code> hosts on the
+                service&apos;s page in the Tailscale admin console, or add{" "}
+                <code>
+                  &quot;svc:{ingress.hostname}&quot;:
+                  [&quot;tag:speakeasy&quot;]
+                </code>{" "}
+                to <code>autoApprovers.services</code> in your tailnet policy.
+                This page updates on its own once the hosts are approved.
               </Text>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={!entitled || health.isPending}
-                  onClick={() =>
-                    health.mutate({
-                      security: { sessionHeaderGramSession: "" },
-                    })
-                  }
+              <Button asChild variant="secondary" size="sm">
+                <a
+                  href="https://login.tailscale.com/admin/services"
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
-                  {health.isPending ? "Retrying..." : "Retry provisioning"}
-                </Button>
-                <Button asChild variant="tertiary" size="sm">
-                  <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
-                    Contact support
-                  </a>
-                </Button>
-              </div>
+                  Open Tailscale services
+                </a>
+              </Button>
             </div>
           </Alert>
+        ) : certificateUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <Text small>
+              Speakeasy&apos;s gateway is approved, but Tailscale hasn&apos;t
+              obtained an HTTPS certificate for <code>{ingress.hostname}</code>{" "}
+              yet, so devices can&apos;t connect. This usually means your
+              tailnet has used its weekly allowance of new certificates from
+              Let&apos;s Encrypt, which every machine and service on the tailnet
+              shares. Speakeasy retries on its own and this page updates once
+              the certificate is issued; there&apos;s nothing to change.
+            </Text>
+          </Alert>
+        ) : (
+          ingress.lastError && (
+            <Alert variant="error" dismissible={false}>
+              Latest check: {statusLabel(ingress.lastError)}
+            </Alert>
+          )
         )}
+        {ingress.status === "error" &&
+          !serviceNotApproved &&
+          !certificateUnavailable && (
+            <Alert variant="warning" dismissible={false}>
+              <div className="space-y-3">
+                <Text small>
+                  Tailscale could not be connected. Check your OAuth client and
+                  tailnet policy, then retry provisioning. If it still fails,
+                  our team can help.
+                </Text>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!entitled || health.isPending}
+                    onClick={() =>
+                      health.mutate({
+                        security: { sessionHeaderGramSession: "" },
+                      })
+                    }
+                  >
+                    {health.isPending ? "Retrying..." : "Retry provisioning"}
+                  </Button>
+                  <Button asChild variant="tertiary" size="sm">
+                    <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
+                      Contact support
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </Alert>
+          )}
         <div className="flex items-start justify-between gap-6 border-t pt-4">
           <div className="space-y-1">
             <Text variant="subheading">Require user identity</Text>
@@ -397,8 +448,16 @@ export function PrivateNetworkSection(): JSX.Element | null {
     enabled: canManageIngress,
     retry: (failureCount) => failureCount < 2,
     throwOnError: false,
-    refetchInterval: (query) =>
-      query.state.data?.ingress?.status === "deleting" ? 5_000 : false,
+    refetchInterval: (query) => {
+      const current = query.state.data?.ingress;
+      if (current?.status === "deleting") return 5_000;
+      // Admins approve the host in Tailscale's console, so pick that up
+      // without a reload.
+      if (current?.lastError === SERVICE_NOT_APPROVED) return 10_000;
+      // The gateway retries the certificate on its own; show it once issued.
+      if (current?.lastError === CERTIFICATE_UNAVAILABLE) return 30_000;
+      return false;
+    },
   });
   const ingress = ingressResult.data?.ingress;
   const unsupportedProvider = ingress && ingress.provider !== "tailscale";

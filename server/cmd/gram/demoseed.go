@@ -14,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
@@ -64,6 +66,11 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_ENCRYPTION_KEY"},
 			},
 			&cli.StringFlag{
+				Name:    "local-mock-mcp-url",
+				Usage:   "With --local, the URL of the local mock MCP server (server/cmd/mock-mcp) to register as a working remote MCP server; empty leaves it out",
+				EnvVars: []string{"GRAM_MOCK_MCP_URL"},
+			},
+			&cli.StringFlag{
 				Name:    "local-slack-bot-token",
 				Usage:   "Bot token of your Slack test app; with --local, connects the local org to its workspace (see mise run zero:slack)",
 				EnvVars: []string{"GRAM_DEV_SLACK_BOT_TOKEN"},
@@ -74,6 +81,22 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_DEV_SLACK_EMAIL"},
 			},
 			&cli.StringFlag{
+				Name:    "local-cache-dir",
+				Usage:   "Directory that keeps the Linear and Notion clients the local seed registers, so reseeding reuses them",
+				EnvVars: []string{"GRAM_DEMOSEED_CACHE_DIR"},
+			},
+			&cli.StringFlag{
+				Name:    "server-url",
+				Usage:   "Speakeasy's own URL: it hosts the MCP fixture the seeded servers reach, serves the seeded clients' metadata documents, and takes their sign-ins back",
+				EnvVars: []string{"GRAM_SERVER_URL"},
+			},
+			&cli.StringFlag{
+				Name:     "authz-issuer-url",
+				Usage:    "Speakeasy platform signing issuer origin, under which the seeded assistant triggers are registered",
+				EnvVars:  []string{"GRAM_AUTHZ_ISSUER_URL"},
+				Required: true,
+			},
+			&cli.StringFlag{
 				Name:    "environment",
 				Usage:   "Deployment environment, which decides the API key prefix the local fixtures mint",
 				EnvVars: []string{"GRAM_ENVIRONMENT"},
@@ -82,13 +105,30 @@ func newDemoSeedCommand() *cli.Command {
 		}, append(clickHouseFlags(), redisFlags()...)...),
 		Action: func(c *cli.Context) error {
 			var siteURL *url.URL
+			var upstreams demoseed.LocalUpstreamOptions
 			if c.Bool("local") {
 				var err error
 				siteURL, err = parseSiteURL(c.String("site-url"))
 				if err != nil {
 					return fmt.Errorf("local seed site-url: %w", err)
 				}
+				// Validate before the seed writes anything, so a bad setting
+				// cannot leave the org reseeded without its local fixtures.
+				upstreams, err = localUpstreamOptions(c)
+				if err != nil {
+					return err
+				}
+				if err := validateMockMCPURL(c.String("local-mock-mcp-url")); err != nil {
+					return fmt.Errorf("local seed local-mock-mcp-url: %w", err)
+				}
 			}
+			// HTTP is only for an environment explicitly declared local: the
+			// environment flag's default must not relax the issuer check.
+			issuerURL := c.String("authz-issuer-url")
+			allowHTTP := c.IsSet("environment") && c.String("environment") == "local"
+			inv.Require("demo seed assistant trigger issuer",
+				"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, allowHTTP),
+			)
 			ctx := c.Context
 			logger := PullLogger(ctx)
 
@@ -121,7 +161,7 @@ func newDemoSeedCommand() *cli.Command {
 			}
 
 			if !c.Bool("local") {
-				if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.DefaultSpec()); err != nil {
+				if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, c.String("server-url"), demoseed.DefaultSpec()); err != nil {
 					return fmt.Errorf("apply seed: %w", err)
 				}
 				return nil
@@ -137,7 +177,7 @@ func newDemoSeedCommand() *cli.Command {
 			// one that lifts the BookDemo gate, so a demo-org failure
 			// (ClickHouse is the flaky half locally) leaves a usable
 			// environment behind.
-			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.LocalSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, c.String("server-url"), demoseed.LocalSpec()); err != nil {
 				return fmt.Errorf("apply seed: %w", err)
 			}
 
@@ -177,11 +217,14 @@ func newDemoSeedCommand() *cli.Command {
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
 				Slack:          slack,
+				Upstreams:      upstreams,
+				ClickHouse:     ch,
+				MockMCPURL:     c.String("local-mock-mcp-url"),
 			}); err != nil {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
 
-			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.DefaultSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, c.String("server-url"), demoseed.DefaultSpec()); err != nil {
 				return fmt.Errorf("apply demo org seed: %w", err)
 			}
 
@@ -207,4 +250,59 @@ func newDemoSeedCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// localUpstreamOptions reads the settings of the servers the local seed
+// wires through the developer's machine. Without a server URL they keep the
+// shared seed's setup.
+func localUpstreamOptions(c *cli.Context) (demoseed.LocalUpstreamOptions, error) {
+	opts := demoseed.LocalUpstreamOptions{ServerURL: nil, Policy: nil, CacheDir: ""}
+	raw := c.String("server-url")
+	if raw == "" || raw == "unset" {
+		return opts, nil
+	}
+	serverURL, err := parseOrigin(raw)
+	if err != nil {
+		return opts, fmt.Errorf("GRAM_SERVER_URL: %w", err)
+	}
+	opts.ServerURL = serverURL
+	// Linear and Notion are public hosts the default egress policy allows.
+	opts.Policy = guardian.NewDefaultPolicy(otel.GetTracerProvider())
+	opts.CacheDir = c.String("local-cache-dir")
+	return opts, nil
+}
+
+// parseOrigin accepts an absolute http(s) origin: a scheme and host, with no
+// path, query or fragment.
+func parseOrigin(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse %q: %w", raw, err)
+	}
+	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return nil, fmt.Errorf("%q is not an absolute http(s) URL", raw)
+	}
+	if u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return nil, fmt.Errorf("%q must be an origin, without a path, query or fragment", raw)
+	}
+	return u, nil
+}
+
+// validateMockMCPURL accepts an empty value, which leaves the mock MCP server
+// out of the local fixtures, or an absolute http or https URL with a host.
+func validateMockMCPURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse %q: %w", raw, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%q must be an absolute http or https URL", raw)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("%q has no host", raw)
+	}
+	return nil
 }

@@ -17,6 +17,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { replaceAdminServerUrl } from "./src/lib/admin-server-url.ts";
 import { blankPreviewRuntimeValues } from "./src/lib/preview-runtime-values.ts";
 import { withoutLocalDevSlot } from "./dev-slot-plugin.ts";
+import { stableFonts } from "./stable-fonts-plugin.ts";
 
 // The address the Vite dev server listens on. It follows GRAM_BIND_IP so it
 // binds the same address as the other local daemons: loopback by default, the
@@ -449,6 +450,7 @@ export default defineConfig(async (env) => {
           return blankPreviewRuntimeValues(html);
         },
       },
+      stableFonts(),
       themeInitPlugin(),
       devReadoutPlugin(),
       // Dev only: a production build must not carry a developer's local slot,

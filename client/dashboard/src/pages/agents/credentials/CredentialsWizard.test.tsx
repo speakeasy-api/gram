@@ -1496,7 +1496,9 @@ describe("Connecting a GKE cluster", () => {
       { target: { value: "GitHub" } },
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "Change issuer" }),
+      await screen.findByRole("button", {
+        name: "Change MCP Authentication Provider",
+      }),
     );
 
     await waitFor(() =>

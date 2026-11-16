@@ -47,7 +47,9 @@ type MemberMCPConnectionReader interface {
 }
 
 type GetMyMCPStatusInput struct {
-	ProjectID string `json:"project_id" jsonschema:"explicit project ID that owns the MCP server"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	MCPID     string `json:"mcp_id" jsonschema:"exact configured MCP server ID"`
 }
 

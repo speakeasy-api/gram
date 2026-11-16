@@ -126,7 +126,7 @@ func (s *seeder) seedRiskPolicies(ctx context.Context) error {
 			[]string{},
 			riskJSON(map[string]any{
 				"tool_annotations": []string{"destructiveHint"},
-				"servers":          []map[string]string{{"mcp_server_id": s.det("mcpserver-support").String()}},
+				"servers":          []map[string]string{{"mcp_server_id": s.supportServer().String()}},
 			}),
 			true, "flag", none, false, 8.8),
 		// MCP security best practices: unapproved / unsandboxed MCP servers.
