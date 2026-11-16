@@ -56,11 +56,39 @@ func TestParseRemoteSessionsOrganizationFlagsRequiresTLSForWrites(t *testing.T) 
 		return ""
 	}
 
-	_, err := parseRemoteSessionsOrganizationFlags([]string{"-environment=local"}, getenv)
-	require.NoError(t, err, "a dry run may use a plaintext connection")
-
-	_, err = parseRemoteSessionsOrganizationFlags([]string{"-apply", "-environment=local", "-confirm-environment=local", "-confirm-target=db.internal:5432/gram", "-confirm-apply=remote-sessions-organization"}, getenv)
+	_, err := parseRemoteSessionsOrganizationFlags([]string{"-apply", "-environment=local", "-confirm-environment=local", "-confirm-target=db.internal:5432/gram", "-confirm-apply=remote-sessions-organization"}, getenv)
 	require.ErrorContains(t, err, "TLS")
+}
+
+func TestParseRemoteSessionsOrganizationFlagsPreviewTLS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{name: "remote plaintext", url: "postgres://user@db.internal:5432/gram?sslmode=disable", wantErr: true},
+		{name: "remote prefer", url: "postgres://user@db.internal:5432/gram?sslmode=prefer", wantErr: true},
+		{name: "remote TLS", url: "postgres://user@db.internal:5432/gram?sslmode=require", wantErr: false},
+		{name: "loopback plaintext", url: "postgres://user@127.0.0.1:5432/gram?sslmode=disable", wantErr: false},
+		{name: "localhost plaintext", url: "postgres://user@localhost:5432/gram?sslmode=disable", wantErr: false},
+		{name: "socket plaintext", url: "host=/tmp user=user dbname=gram sslmode=disable", wantErr: false},
+		{name: "loopback with a remote fallback", url: "postgres://user@127.0.0.1:5432,db.internal:5432/gram?sslmode=disable", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			getenv := func(string) string { return tc.url }
+
+			_, err := parseRemoteSessionsOrganizationFlags([]string{"-environment=staging"}, getenv)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "TLS")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestParseRemoteSessionsOrganizationFlagsRejectsOtherFallbackHosts(t *testing.T) {

@@ -23,7 +23,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations remote-sessions-organization
   -environment=staging
 ```
 
-Counts sessions by category. Writes nothing.
+Counts sessions by category. Writes nothing. A preview still sends credentials, so it requires TLS too unless every host in `GRAM_DATABASE_URL` is on this machine (loopback, `localhost`, or a Unix socket).
 
 ## Apply
 
@@ -41,14 +41,14 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations remote-sessions-organization
 After applying, run the preview again and confirm `pending=0`. If it is not 0, apply again. Two things can leave sessions behind without any data being wrong:
 
 - Concurrent sign-ins fill sessions themselves. If one fills every row a batch picked, the batch updates nothing, and the run moves on to the next organization early.
-- An organization deleted during the run fails it with a foreign key error. Its sessions are deleted with it, so running again completes.
+- An organization deleted during the run fails it with a foreign key error. Running again completes. Sessions of the organization's own clients are deleted along with those clients. Sessions of its project clients survive, because projects have no foreign key to the organization: they keep a NULL `organization_id` and are counted as `missing_organization` from then on.
 
 ## Output
 
 `mode=… environment=… filled=N pending=N global_client=N missing_organization=N mismatched=N`
 
 - `filled`: sessions this run updated. Always 0 in a preview.
-- `pending`: sessions an apply fills. 0 after a successful apply, unless an older image wrote sessions in the meantime.
+- `pending`: sessions still waiting to be filled, counted after the run. In a preview that is what an apply would fill; after an apply it is what remains, which is 0 unless something listed above left sessions behind or an older image wrote sessions in the meantime.
 - `global_client`: sessions under a global client. They stay NULL.
 - `missing_organization`: sessions whose client's organization has no metadata row. They stay NULL. Investigate them before finalizing any organization on its own key.
 - `mismatched`: sessions whose `organization_id` differs from their client's organization. No writer produces these, and the backfill leaves them alone. Investigate any nonzero count.

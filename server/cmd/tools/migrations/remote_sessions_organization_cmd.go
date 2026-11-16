@@ -9,6 +9,7 @@ import (
 	"net"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/jackc/pgx/v5"
@@ -76,6 +77,11 @@ func parseRemoteSessionsOrganizationFlags(args []string, getenv func(string) str
 	if *apply && !requiresTLS(dbConfig) {
 		return remoteSessionsOrganizationConfig{}, errors.New("writes require a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
 	}
+	// A preview still sends credentials, so it needs TLS too unless every
+	// host it may dial is on this machine.
+	if !*apply && !requiresTLS(dbConfig) && !onlyLocalHosts(dbConfig) {
+		return remoteSessionsOrganizationConfig{}, errors.New("a remote database requires a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
+	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *apply && *confirmTarget != target {
 		return remoteSessionsOrganizationConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
@@ -84,6 +90,27 @@ func parseRemoteSessionsOrganizationFlags(args []string, getenv func(string) str
 		return remoteSessionsOrganizationConfig{}, errors.New("writes require -confirm-apply=" + remoteSessionsOrganizationName)
 	}
 	return remoteSessionsOrganizationConfig{dbURL: dbURL, environment: *environment, apply: *apply, batchSize: int32(*batchSize)}, nil
+}
+
+// onlyLocalHosts reports whether every host pgx would dial, fallbacks
+// included, is a loopback address, localhost, or a Unix socket directory.
+func onlyLocalHosts(config *pgx.ConnConfig) bool {
+	isLocal := func(host string) bool {
+		if strings.HasPrefix(host, "/") || host == "localhost" {
+			return true
+		}
+		ip := net.ParseIP(host)
+		return ip != nil && ip.IsLoopback()
+	}
+	if !isLocal(config.Host) {
+		return false
+	}
+	for _, fallback := range config.Fallbacks {
+		if !isLocal(fallback.Host) {
+			return false
+		}
+	}
+	return true
 }
 
 func formatRemoteSessionsOrganizationReport(mode, environment string, report remotesessionsorganization.Report) string {

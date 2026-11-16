@@ -2744,7 +2744,8 @@ WITH link AS (
      WHERE client.id = @remote_session_client_id),
     'fixture-not-a-token')
   ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
-  DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted
+  DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted,
+    organization_id = EXCLUDED.organization_id
   RETURNING id, grant_generation, user_session_issuer_id
 )
 INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
