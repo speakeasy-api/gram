@@ -40,9 +40,10 @@ func TestProjectGatewayActivity(t *testing.T) {
 	// A server no longer in the project still counts as a dispatch but is
 	// left out of the breakdown.
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: deleted, tool: "ping", status: 200, at: at})
-	// The whole-organization gateway, another project's gateway, another
-	// organization's gateway for this project, and a call not dispatched
-	// through a gateway: none may count.
+	// The whole-organization gateway, this gateway's id recorded in another
+	// project, another project's gateway, another organization's gateway for
+	// this project, and a call not dispatched through a gateway: none may count.
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: otherProject.ID.String(), gatewayID: gatewayID, memberID: member, tool: "ping", status: 200, at: at})
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: orggateway.GatewayID(ti.orgID).String(), memberID: member, tool: "ping", status: 200, at: at})
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: nilProject, gatewayID: orggateway.ProjectGatewayID(ti.orgID, otherProject.ID).String(), memberID: "", tool: "list_servers", status: 200, at: at})
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: otherProject.ID.String(), gatewayID: orggateway.ProjectGatewayID(ti.orgID, otherProject.ID).String(), memberID: member, tool: "ping", status: 200, at: at})

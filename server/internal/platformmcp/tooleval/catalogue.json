@@ -1223,17 +1223,21 @@
     },
     {
       "name": "list_gateway_sessions",
-      "description": "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, or an exact project gateway ID. Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
+      "description": "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, an exact gateway ID, or an exact project ID to list that project's Project Gateway (the Organization Gateway limited to the project's servers). Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
       "input_schema": {
         "type": "object",
         "properties": {
           "scope": {
             "type": "string",
-            "description": "organization or gateway; gateway requires gateway_id"
+            "description": "organization, gateway, or project; gateway requires gateway_id and project requires project_id"
           },
           "gateway_id": {
             "type": ["null", "string"],
-            "description": "exact project gateway UUID; omit for organization scope"
+            "description": "exact gateway UUID for gateway scope; omit otherwise"
+          },
+          "project_id": {
+            "type": ["null", "string"],
+            "description": "exact project UUID for project scope, selecting that project's Project Gateway; omit otherwise"
           },
           "search": {
             "type": ["null", "string"],
@@ -5635,13 +5639,17 @@
     },
     {
       "name": "get_organization_gateway_activity",
-      "description": "Summarize calls dispatched through this organization's Organization Gateway across every project over a recent window: dispatched and failed calls, the discovery steps agents took (list_servers, describe_server, describe_tools), and the busiest MCP servers with their errors. Each server carries its mcp_id and project_id for use with get_mcp and the diagnostics tools. Constraints: aggregated server-side; carries the window it covers, how fresh the observations are, and whether there were any. No users, clients, or tokens are returned.",
+      "description": "Summarize calls dispatched through this organization's Organization Gateway across every project, or through one project's Project Gateway when project_id is set, over a recent window: dispatched and failed calls, the discovery steps agents took (list_servers, describe_server, describe_tools), and the busiest MCP servers with their errors. Each server carries its mcp_id and project_id for use with get_mcp and the diagnostics tools. Constraints: aggregated server-side; carries the window it covers, how fresh the observations are, and whether there were any. No users, clients, or tokens are returned.",
       "input_schema": {
         "type": "object",
         "properties": {
           "window": {
             "type": "string",
             "description": "observation window: 1h, 24h (default), 7d, or 30d"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "exact project UUID to report that project's Project Gateway; omit for the Organization Gateway"
           }
         },
         "additionalProperties": false

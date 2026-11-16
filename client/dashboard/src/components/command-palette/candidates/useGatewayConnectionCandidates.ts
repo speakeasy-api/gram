@@ -104,8 +104,9 @@ export function useGatewayConnectionCandidates({
         },
       });
     }
-    if (canReadOrg && canReadProject) {
-      // The project's MCP list leads with this gateway by name.
+    if (canReadProject) {
+      // The project's MCP list leads with this gateway by name. Its page needs
+      // only access to the project.
       result.push({
         id: `gateway:project:${project.id}`,
         kind: "page",

@@ -74,9 +74,9 @@ type ListGatewaySessionFacetsPayload struct {
 	// Project gateway id. Omit, along with project_id, for the Organization
 	// Gateway; organization access is then required.
 	GatewayID *string
-	// Project whose Project Gateway, the Organization Gateway limited to that
-	// project's servers, to read. Not combined with gateway_id; project access is
-	// then required.
+	// Lists the sessions of this project's Project Gateway, which is the
+	// Organization Gateway limited to the project's MCP servers. Cannot be
+	// combined with gateway_id. Requires project access.
 	ProjectID    *string
 	SessionToken *string
 	ApikeyToken  *string
@@ -88,9 +88,9 @@ type ListGatewaySessionsPayload struct {
 	// Project gateway id. Omit, along with project_id, for the Organization
 	// Gateway; organization access is then required.
 	GatewayID *string
-	// Project whose Project Gateway, the Organization Gateway limited to that
-	// project's servers, to read. Not combined with gateway_id; project access is
-	// then required.
+	// Lists the sessions of this project's Project Gateway, which is the
+	// Organization Gateway limited to the project's MCP servers. Cannot be
+	// combined with gateway_id. Requires project access.
 	ProjectID    *string
 	SessionToken *string
 	ApikeyToken  *string

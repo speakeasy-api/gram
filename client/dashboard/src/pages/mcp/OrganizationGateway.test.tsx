@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   setOn: vi.fn(),
   error: false,
   admin: true,
+  orgRead: true,
   permissionsLoading: false,
   gatewayLoading: false,
   available: true,
@@ -102,8 +103,10 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string, organizationId: string) =>
-      scope === "org:admin" && organizationId === "test-org" && state.admin,
+    hasScope: (scope: string, resourceId: string) =>
+      (scope === "org:admin" && resourceId === "test-org" && state.admin) ||
+      (scope === "org:read" && resourceId === "test-org" && state.orgRead) ||
+      scope === "project:read",
     isLoading: state.permissionsLoading,
   }),
 }));
@@ -132,6 +135,21 @@ vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
     isPending: false,
   }),
 }));
+vi.mock("@gram/client/react-query/projectGateway.js", () => ({
+  useProjectGateway: () => ({
+    isLoading: state.gatewayLoading,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+    data:
+      state.on && state.available
+        ? {
+            available: true,
+            url: "https://api.example.test/mcp/gateway/test/projects/sales",
+          }
+        : { available: false, unavailableReason: "turned_off" },
+  }),
+}));
 vi.mock(
   "@/components/mcp/organization-gateway-setting",
   async (importOriginal) => ({
@@ -157,6 +175,7 @@ afterEach(cleanup);
 beforeEach(() => {
   state.error = false;
   state.admin = true;
+  state.orgRead = true;
   state.permissionsLoading = false;
   state.gatewayLoading = false;
   state.available = true;
@@ -377,4 +396,22 @@ it("points the Organization Gateway page at Project Gateways", () => {
     screen.getByRole("button", { name: "Open Project Gateway" }),
   ).toBeTruthy();
   expect(screen.queryByRole("tab")).toBeNull();
+});
+
+it("serves a project member without organization access their project's gateway", async () => {
+  state.on = true;
+  state.admin = false;
+  state.orgRead = false;
+  render(<ProjectGatewayPage />);
+  expect(
+    screen.getByText(
+      "https://api.example.test/mcp/gateway/test/projects/sales",
+    ),
+  ).toBeTruthy();
+  // The switch turns every gateway on or off, so it needs organization access.
+  expect(
+    screen.queryByRole("switch", { name: "Organization Gateway" }),
+  ).toBeNull();
+  await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
+  expect(screen.getByText("Project gateway activity")).toBeTruthy();
 });

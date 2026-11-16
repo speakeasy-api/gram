@@ -52,7 +52,7 @@ export type ListGatewaySessionsRequest = {
    */
   gatewayId?: string | undefined;
   /**
-   * Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.
+   * Lists the sessions of this project's Project Gateway, which is the Organization Gateway limited to the project's MCP servers. Cannot be combined with gateway_id. Requires project access.
    */
   projectId?: string | undefined;
   /**

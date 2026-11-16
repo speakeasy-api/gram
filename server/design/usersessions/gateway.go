@@ -57,7 +57,7 @@ var _ = Service("gatewaySessions", func() {
 
 func gatewayScopePayload() {
 	Attribute("gateway_id", String, "Project gateway id. Omit, along with project_id, for the Organization Gateway; organization access is then required.", func() { Format(FormatUUID) })
-	Attribute("project_id", String, "Project whose Project Gateway, the Organization Gateway limited to that project's servers, to read. Not combined with gateway_id; project access is then required.", func() { Format(FormatUUID) })
+	Attribute("project_id", String, "Lists the sessions of this project's Project Gateway, which is the Organization Gateway limited to the project's MCP servers. Cannot be combined with gateway_id. Requires project access.", func() { Format(FormatUUID) })
 	security.SessionPayload()
 	security.ByKeyPayload()
 }

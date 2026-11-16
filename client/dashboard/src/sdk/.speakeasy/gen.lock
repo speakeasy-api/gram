@@ -516,6 +516,7 @@ trackedFiles:
   src/funcs/organizationsGet.ts: {}
   src/funcs/organizationsGetGateway.ts: {}
   src/funcs/organizationsGetOnboardingStatus.ts: {}
+  src/funcs/organizationsGetProjectGateway.ts: {}
   src/funcs/organizationsListInvites.ts: {}
   src/funcs/organizationsListSetupTasks.ts: {}
   src/funcs/organizationsListUsers.ts: {}
@@ -1764,6 +1765,7 @@ trackedFiles:
   src/models/components/productfeatures.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
+  src/models/components/projectgateway.ts: {}
   src/models/components/projectmcpenduser.ts: {}
   src/models/components/projectmcpserveractivity.ts: {}
   src/models/components/projectmcptoolusage.ts: {}
@@ -2617,6 +2619,7 @@ trackedFiles:
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
   src/models/operations/getproject.ts: {}
+  src/models/operations/getprojectgateway.ts: {}
   src/models/operations/getprojectgatewayoverview.ts: {}
   src/models/operations/getprojectgatewayusage.ts: {}
   src/models/operations/getprojectmetricssummary.ts: {}
@@ -3927,6 +3930,8 @@ trackedFiles:
   src/react-query/productFeatures.ts: {}
   src/react-query/project.core.ts: {}
   src/react-query/project.ts: {}
+  src/react-query/projectGateway.core.ts: {}
+  src/react-query/projectGateway.ts: {}
   src/react-query/projectsSetOrganizationWhitelist.ts: {}
   src/react-query/promoteMcpApprovalRequest.ts: {}
   src/react-query/publishJsonWebKey.ts: {}
@@ -8478,6 +8483,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getProjectGateway:
+    speakeasy-default-get-project-gateway:
+      responses:
+        "200":
+          application/json: {"available": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getProjectGatewayOverview:
     speakeasy-default-get-project-gateway-overview:
       requestBody:
