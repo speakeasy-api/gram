@@ -76,6 +76,16 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_DEV_SLACK_EMAIL"},
 			},
 			&cli.StringFlag{
+				Name:    "local-devidp-url",
+				Usage:   "External URL of the local dev-idp; the Enterprise Sign-In (ID-JAG) Server signs in and exchanges identities through it",
+				EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
+			},
+			&cli.StringFlag{
+				Name:    "local-devidp-client-id",
+				Usage:   "The dev-idp's static login client id, which Speakeasy's dev-idp registration for the Enterprise Sign-In (ID-JAG) Server reuses",
+				EnvVars: []string{"GRAM_IDP_CLIENT_ID"},
+			},
+			&cli.StringFlag{
 				Name:    "local-cache-dir",
 				Usage:   "Directory that keeps the Linear and Notion clients the local seed registers, so reseeding reuses them",
 				EnvVars: []string{"GRAM_DEMOSEED_CACHE_DIR"},
@@ -246,7 +256,7 @@ func newDemoSeedCommand() *cli.Command {
 // wires through the developer's machine. Without a server URL they keep the
 // shared seed's setup.
 func localUpstreamOptions(c *cli.Context) (demoseed.LocalUpstreamOptions, error) {
-	opts := demoseed.LocalUpstreamOptions{ServerURL: nil, Policy: nil, CacheDir: ""}
+	opts := demoseed.LocalUpstreamOptions{ServerURL: nil, Encryption: nil, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil, Policy: nil, CacheDir: ""}
 	raw := c.String("server-url")
 	if raw == "" || raw == "unset" {
 		return opts, nil
@@ -255,9 +265,23 @@ func localUpstreamOptions(c *cli.Context) (demoseed.LocalUpstreamOptions, error)
 	if err != nil {
 		return opts, fmt.Errorf("GRAM_SERVER_URL: %w", err)
 	}
+	encryptionClient, err := encryption.New(c.String("encryption-key"))
+	if err != nil {
+		return opts, fmt.Errorf("create encryption client for the local upstreams: %w", err)
+	}
 	opts.ServerURL = serverURL
-	// Linear and Notion are public hosts the default egress policy allows.
-	opts.Policy = guardian.NewDefaultPolicy(otel.GetTracerProvider())
+	opts.Encryption = encryptionClient
+	opts.DevIDPURL = c.String("local-devidp-url")
+	opts.DevIDPClientID = c.String("local-devidp-client-id")
+	// The dev-idp listens on localhost, which the default egress policy
+	// refuses; the local seed only ever calls the developer's own dev-idp.
+	policy, err := guardian.NewUnsafePolicy(otel.GetTracerProvider(), []string{})
+	if err != nil {
+		return opts, fmt.Errorf("create the dev-idp egress policy: %w", err)
+	}
+	opts.HTTPClient = policy.Client()
+	opts.HTTPClient.Timeout = 10 * time.Second
+	opts.Policy = policy
 	opts.CacheDir = c.String("local-cache-dir")
 	return opts, nil
 }

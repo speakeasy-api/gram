@@ -2,12 +2,14 @@ package oauth21
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
@@ -118,4 +120,38 @@ func TestAuthorizationCodeGrantWrongClientDoesNotConsumeCode(t *testing.T) {
 	form.Set("client_id", "right-client")
 	rec = h.postForm(t, "/token", form)
 	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+}
+
+func TestAuthorizationCodeGrantEchoesNonceIntoIDToken(t *testing.T) {
+	t.Parallel()
+
+	h := newDBHandler(t)
+	user := h.seedUser(t, "nonce@devidptest.local")
+	_, err := h.queries.CreateAuthCode(t.Context(), repo.CreateAuthCodeParams{
+		Code:                "nonce-code",
+		UserID:              user.ID,
+		ClientID:            "test-login-client",
+		RedirectUri:         "https://app.example/cb",
+		CodeChallenge:       sql.NullString{String: "", Valid: false},
+		CodeChallengeMethod: sql.NullString{String: "", Valid: false},
+		Scope:               sql.NullString{String: "openid email", Valid: true},
+		ExpiresAt:           time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+	h.nonces.Store("nonce-code", "n-0S6_WzA2Mj")
+
+	rec := h.postForm(t, "/token", url.Values{
+		"grant_type": {"authorization_code"},
+		"code":       {"nonce-code"},
+		"client_id":  {"test-login-client"},
+	})
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+	var body struct {
+		IDToken string `json:"id_token"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	var claims idTokenClaims
+	_, _, err = jwt.NewParser().ParseUnverified(body.IDToken, &claims)
+	require.NoError(t, err)
+	require.Equal(t, "n-0S6_WzA2Mj", claims.Nonce)
 }

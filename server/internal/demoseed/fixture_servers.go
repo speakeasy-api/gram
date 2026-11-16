@@ -16,18 +16,32 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// LocalUpstreamOptions configures the local-only upstream wiring: clients
-// registered with Linear and Notion (vendor_apps.go). The fixture-backed
-// servers need none of it: the shared seed points them at the fixture the
-// Speakeasy server hosts (seedFixtureServers).
+// LocalUpstreamOptions configures the local-only upstream wiring: the
+// Enterprise Sign-In (ID-JAG) Server through the developer's dev-idp
+// (local_ema.go), and clients registered with Linear and Notion
+// (vendor_apps.go). The fixture-backed servers need none of it: the shared
+// seed points them at the fixture the Speakeasy server hosts
+// (seedFixtureServers).
 type LocalUpstreamOptions struct {
 	// ServerURL is Speakeasy's own URL (GRAM_SERVER_URL). Nil skips the
 	// local upstream wiring.
 	ServerURL *url.URL
+	// Encryption encrypts the Enterprise Sign-In client secret the way
+	// Speakeasy stores it.
+	Encryption *encryption.Client
+	// DevIDPURL is the dev-idp's external URL (GRAM_DEVIDP_EXTERNAL_URL). With
+	// DevIDPClientID it makes the Enterprise Sign-In (ID-JAG) Server work
+	// (local_ema.go); empty leaves that server display-only.
+	DevIDPURL string
+	// DevIDPClientID is the dev-idp's static login client (GRAM_IDP_CLIENT_ID).
+	DevIDPClientID string
+	// HTTPClient reaches the dev-idp's management API.
+	HTTPClient *guardian.HTTPClient
 	// Policy is the egress policy the seed registers its vendor clients
 	// through (vendor_apps.go). Nil leaves the vendors' metadata document
 	// clients, which they cannot fetch from localhost.
@@ -326,13 +340,26 @@ func (s *seeder) seedFixtureAutoConfigured(ctx context.Context) error {
 }
 
 // wireLocalUpstreams wires, in the local org only, the servers that need the
-// developer's machine: Linear and Notion, through clients registered there.
-// The public demo org keeps them as the shared seed writes them.
+// developer's machine: the Enterprise Sign-In (ID-JAG) Server through the
+// dev-idp, and Linear and Notion through clients registered there. The
+// public demo org keeps them as the shared seed writes them.
 func wireLocalUpstreams(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions) error {
 	if opts.ServerURL == nil {
-		logger.InfoContext(ctx, "GRAM_SERVER_URL is not set; Linear and Notion keep the shared seed's metadata document clients")
+		logger.InfoContext(ctx, "GRAM_SERVER_URL is not set; Enterprise Sign-In, Linear and Notion keep the shared seed's setup")
 		return nil
 	}
-	s := &seeder{spec: LocalSpec(), q: repo.New(tx), logger: logger, enc: nil, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
+	if opts.Encryption == nil {
+		return errors.New("wire local upstreams: an encryption client is required")
+	}
+	spec := LocalSpec()
+	s := &seeder{spec: spec, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
+
+	// The Enterprise Sign-In (ID-JAG) Server: signed in through the dev-idp,
+	// it reaches the fixture's EMA endpoint with a token Speakeasy obtains by
+	// exchanging that identity for an ID-JAG.
+	if err := wireLocalEMA(ctx, logger, tx, opts, fixtureauth.BaseURL(opts.ServerURL)); err != nil {
+		return err
+	}
+	// Linear and Notion: real vendors, with clients the seed registers there.
 	return wireLocalVendorApps(ctx, logger, s, opts)
 }

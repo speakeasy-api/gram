@@ -57,7 +57,7 @@ func TestReseedCleansVisitorEMABindings(t *testing.T) {
 	}
 	seedLocalPostgres(ctx, t, db, DefaultSpec())
 	seeded := countBindings()
-	require.EqualValues(t, 2, seeded, "the seed's own EMA bindings")
+	require.EqualValues(t, 1, seeded, "the seed's own EMA binding")
 	plantBindings(DefaultSpec())
 	seedLocalPostgres(ctx, t, db, DefaultSpec())
 
