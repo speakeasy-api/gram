@@ -121,8 +121,8 @@ export function SendTestEventSection({
                 <code className="font-mono text-xs whitespace-nowrap">
                   speakeasy.test_event=true
                 </code>
-                , which real data never carries. Filter on it to keep tests
-                out of dashboards and monitors.
+                , which real data never carries. Filter on it to keep tests out
+                of dashboards and monitors.
               </Text>
             )}
           </div>
