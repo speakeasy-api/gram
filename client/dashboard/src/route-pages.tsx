@@ -129,6 +129,11 @@ import {
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
+import { SyncFromOkta } from "./pages/mcp/sync-from-okta/SyncFromOkta";
+import {
+  McpSessionsConfiguration,
+  McpSessionsProviderDetail,
+} from "./pages/user-session-issuers/McpSessionsConfiguration";
 import {
   UserSessionIssuersPage,
   UserSessionIssuersRoot,
@@ -323,6 +328,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           function: {
             component: FunctionsOnboarding,
           },
+          okta: {
+            component: SyncFromOkta,
+          },
         },
       },
       catalog: {
@@ -419,7 +427,19 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     indexComponent: InsightsHooksPage,
   },
   mcpSessions: {
-    component: UserSessions,
+    component: Outlet,
+    indexComponent: UserSessions,
+    subPages: {
+      configuration: {
+        component: UserSessionIssuersRoot,
+        indexComponent: McpSessionsConfiguration,
+        subPages: {
+          issuerDetail: {
+            component: McpSessionsProviderDetail,
+          },
+        },
+      },
+    },
   },
   remoteIdentityProviders: {
     component: RemoteIdentityProvidersRoot,

@@ -13,6 +13,9 @@ export const FEATURE_FLAGS = {
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",
+  // UI-only rollout gate for the Sync from Okta option of Add MCP server; the
+  // Okta application and suggestion APIs behind it are not gated.
+  oktaMcpImport: "okta-mcp-import",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine

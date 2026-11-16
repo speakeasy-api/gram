@@ -23,7 +23,7 @@ import type { OktaIdentityProviderConnection } from "@gram/client/models/compone
 import { useIdentityProviderConnectionApplications } from "@gram/client/react-query/identityProviderConnectionApplications.js";
 import { useSyncIdentityProviderConnectionApplicationsMutation } from "@gram/client/react-query/syncIdentityProviderConnectionApplications.js";
 
-import { ConnectionGate } from "../../ConnectionGate";
+import { ConnectionGate } from "@/pages/org/identity-provider/ConnectionGate";
 import { OktaServerSuggestions } from "./OktaServerSuggestions";
 import {
   applicationStatusVariant,
@@ -36,7 +36,7 @@ import {
   inlineError,
   invalidateIdentityProviderQueries,
   SESSION_SECURITY,
-} from "../../identityProviderQueries";
+} from "@/pages/org/identity-provider/identityProviderQueries";
 
 type Application = IdentityProviderConnectionApplication;
 
@@ -412,8 +412,13 @@ function ApplicationsSnapshot({
 
 export function ApplicationsTab({
   connection,
+  projectSlug,
+  setupHref,
 }: {
   connection: OktaIdentityProviderConnection;
+  /** The project suggested servers are added to. */
+  projectSlug: string;
+  setupHref: (search: string) => string;
 }): JSX.Element {
   return (
     <ConnectionGate
@@ -421,9 +426,10 @@ export function ApplicationsTab({
       requires="verified"
       icon="layout-grid"
       purpose="to view your Okta applications"
+      setupHref={setupHref}
     >
       <div className="flex min-w-0 flex-col gap-10">
-        <OktaServerSuggestions />
+        <OktaServerSuggestions projectSlug={projectSlug} />
         <ApplicationsSnapshot connection={connection} />
       </div>
     </ConnectionGate>

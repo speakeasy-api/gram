@@ -101,7 +101,7 @@ export function GatewayNotServed({
   const organization = useOrganization();
   const { hasScope } = useRBAC();
   const canManage = hasScope("org:admin", organization.id);
-  // Speakeasy Authorization Servers can make a project's server
+  // The MCP Authentication page can make a project's server
   // organization-wide and consolidate one server into another (removing the
   // source). It is rolled out behind a flag and its actions need org:admin;
   // without both, point to an admin or support instead.
@@ -109,7 +109,7 @@ export function GatewayNotServed({
     useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
       "enabled" && canManage ? (
       <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
-        Speakeasy Authorization Servers
+        MCP Authentication
       </Link>
     ) : null;
   const askFor = canManage
