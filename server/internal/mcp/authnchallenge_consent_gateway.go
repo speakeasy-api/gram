@@ -159,19 +159,17 @@ var unavailableCauses = map[mcpconnectionattempts.Code]string{
 	mcpconnectionattempts.CodeSharedCredentialRejected: "the service rejected its saved sign-in details",
 	mcpconnectionattempts.CodeStaticKeyRejected:        "the service rejected its saved sign-in details",
 	mcpconnectionattempts.CodeCredentialMisconfigured:  "its sign-in isn't set up correctly",
-	mcpconnectionattempts.CodeTunnelUnavailable:        "its tunnel is down",
+	mcpconnectionattempts.CodeTunnelUnavailable:        "its private network tunnel is down",
 }
 
 // unavailableLabel says why a member did not list its tools and who acts.
 func unavailableLabel(cause mcpconnectionattempts.Code) string {
 	clause, named := unavailableCauses[cause]
-	meaning, known := mcpconnectionattempts.MeaningOf(cause.String())
-	switch {
-	case !named || !known:
-	case meaning.WhoFixes == mcpconnectionattempts.WhoProvider:
-		return "Unavailable · " + clause + " · try again in a few minutes"
-	case meaning.WhoFixes == mcpconnectionattempts.WhoAdmin:
+	if adminFixesCause(cause) {
 		return adminLabel(clause)
+	}
+	if meaning, known := mcpconnectionattempts.MeaningOf(cause.String()); named && known && meaning.WhoFixes == mcpconnectionattempts.WhoProvider {
+		return "Unavailable · " + clause + " · try again in a few minutes"
 	}
 	return unavailableGenericLabel
 }

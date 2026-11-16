@@ -462,7 +462,7 @@ func TestConsentTemplate_AdminFixedCardWarns(t *testing.T) {
 	})
 	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
 
-	require.Contains(t, page, `class="text-xs text-default-warning" data-gateway-server-status="unavailable" >Can&#39;t connect · its tunnel is down · ask your administrator`)
+	require.Contains(t, page, `class="text-xs text-default-warning" data-gateway-server-status="unavailable" >Can&#39;t connect · its private network tunnel is down · ask your administrator`)
 	require.Contains(t, page, `class="text-xs text-muted-foreground" data-gateway-server-status="unavailable" >Unavailable · it had an error · try again in a few minutes`)
 	for _, server := range view.Servers {
 		require.False(t, server.NeedsAttention(), "%s: styling changes no controls", server.Slug)
