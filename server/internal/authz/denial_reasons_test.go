@@ -44,3 +44,20 @@ func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []DenialReason{DenialReasonDisposition}, reasons)
 }
+
+// A call refused because it names no tool while the grant is limited to one
+// is not a disposition refusal: no other disposition would allow it.
+func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeMCPConnect, "toolset_1")
+	selector[SelectorKeyTool] = "search"
+	selector[SelectorKeyDisposition] = DispositionIdempotent
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
+
+	call := MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "", Disposition: DispositionDestructive, ProjectID: authProjectP})
+	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	require.NoError(t, err)
+	require.Equal(t, []DenialReason{DenialReasonNotGranted}, reasons)
+}
