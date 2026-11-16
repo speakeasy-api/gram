@@ -1885,7 +1885,7 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 	{
 		err = json.Unmarshal([]byte(accessCreateTemporaryGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }'")
 		}
 		if body.Selector != nil {
 			if err2 := ValidateSelectorRequestBody(body.Selector); err2 != nil {
@@ -1897,6 +1897,9 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 			if utf8.RuneCountInString(*body.Reason) > 1000 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1000, false))
 			}
+		}
+		if len(body.ChallengeIds) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.challenge_ids", body.ChallengeIds, len(body.ChallengeIds), 200, false))
 		}
 		if err != nil {
 			return nil, err
@@ -1916,6 +1919,12 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 	}
 	if body.Selector != nil {
 		v.Selector = marshalSelectorRequestBodyToAccessSelector(body.Selector)
+	}
+	if body.ChallengeIds != nil {
+		v.ChallengeIds = make([]string, len(body.ChallengeIds))
+		for i, val := range body.ChallengeIds {
+			v.ChallengeIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 

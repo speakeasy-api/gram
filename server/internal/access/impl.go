@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -364,17 +365,20 @@ func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
 	}
 
 	return &gen.ScopeDefinition{
-		Slug:           string(entry.Scope),
-		Label:          entry.Label,
-		Description:    entry.Description,
-		ResourceType:   entry.ResourceType,
-		Category:       string(entry.Category),
-		Visibility:     visibility,
-		AgentEligible:  agentEligible,
-		ExclusionScope: exclusionScope,
-		Sensitive:      entry.Sensitive(),
-		Sensitivity:    sensitivity,
-		SubScopes:      entry.SubScopes(),
+		Slug:          string(entry.Scope),
+		Label:         entry.Label,
+		Description:   entry.Description,
+		ResourceType:  entry.ResourceType,
+		Category:      string(entry.Category),
+		Visibility:    visibility,
+		AgentEligible: agentEligible,
+		// Mirrors createTemporaryGrant's own check, so the dashboard offers
+		// temporary access only where the API accepts it.
+		TemporaryGrantable: ValidateTemporaryGrantScope(entry.Scope) == nil,
+		ExclusionScope:     exclusionScope,
+		Sensitive:          entry.Sensitive(),
+		Sensitivity:        sensitivity,
+		SubScopes:          entry.SubScopes(),
 	}
 }
 
@@ -1011,6 +1015,53 @@ func (s *Service) lookupResolutions(ctx context.Context, orgID string, challenge
 	return m, nil
 }
 
+// lookupResolutionTemporaryGrants batch-fetches the deadlines of the temporary
+// grants that resolved challenges point at. A grant missing from the result was
+// revoked.
+func (s *Service) lookupResolutionTemporaryGrants(ctx context.Context, orgID string, resolutions []repo.AuthzChallengeResolution) (map[uuid.UUID]time.Time, error) {
+	ids := make([]uuid.UUID, 0, len(resolutions))
+	for _, r := range resolutions {
+		if r.TemporaryGrantID.Valid {
+			ids = append(ids, r.TemporaryGrantID.UUID)
+		}
+	}
+	if len(ids) == 0 {
+		return map[uuid.UUID]time.Time{}, nil
+	}
+	rows, err := repo.New(s.db).ListChallengeResolutionTemporaryGrants(ctx, repo.ListChallengeResolutionTemporaryGrantsParams{
+		OrganizationID: orgID,
+		Ids:            ids,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolution temporary grants").LogError(ctx, s.logger)
+	}
+	m := make(map[uuid.UUID]time.Time, len(rows))
+	for _, row := range rows {
+		m[row.ID] = row.ExpiresAt.Time
+	}
+	return m, nil
+}
+
+// resolutionTemporaryGrantView describes the temporary grant a resolution
+// points at: active until its deadline, then expired, or revoked once the row
+// is gone.
+func resolutionTemporaryGrantView(r repo.AuthzChallengeResolution, deadlines map[uuid.UUID]time.Time) *gen.ChallengeTemporaryGrant {
+	if !r.TemporaryGrantID.Valid {
+		return nil
+	}
+	id := r.TemporaryGrantID.UUID
+	deadline, ok := deadlines[id]
+	if !ok {
+		return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: temporaryGrantStatusRevoked, ExpiresAt: nil}
+	}
+	status := temporaryGrantStatusActive
+	if !deadline.After(time.Now()) {
+		status = temporaryGrantStatusExpired
+	}
+	expiresAt := deadline.UTC().Format(time.RFC3339)
+	return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: status, ExpiresAt: &expiresAt}
+}
+
 // buildChallengeResult enriches CH challenge summaries with PG resolution + user data and builds the API response.
 func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalues.AuthContext, challenges []chrepo.ChallengeSummary, total int) (*gen.ListChallengesResult, error) {
 	if len(challenges) == 0 {
@@ -1018,6 +1069,14 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 	}
 
 	resolutionMap, err := s.lookupResolutions(ctx, authCtx.ActiveOrganizationID, challenges)
+	if err != nil {
+		return nil, err
+	}
+	resolved := make([]repo.AuthzChallengeResolution, 0, len(resolutionMap))
+	for _, r := range resolutionMap {
+		resolved = append(resolved, r)
+	}
+	resolutionGrants, err := s.lookupResolutionTemporaryGrants(ctx, authCtx.ActiveOrganizationID, resolved)
 	if err != nil {
 		return nil, err
 	}
@@ -1052,6 +1111,7 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 			pResolutionType *string
 			pResolvedBy     *string
 			pResolutionSlug *string
+			pResolutionTG   *gen.ChallengeTemporaryGrant
 		)
 
 		if c.ProjectID != "" {
@@ -1091,31 +1151,33 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 			if r.RoleSlug.Valid {
 				pResolutionSlug = &r.RoleSlug.String
 			}
+			pResolutionTG = resolutionTemporaryGrantView(r, resolutionGrants)
 		}
 
 		result = append(result, &gen.AuthzChallenge{
-			ID:                  c.ID,
-			Timestamp:           c.Timestamp,
-			OrganizationID:      c.OrganizationID,
-			ProjectID:           pProjectID,
-			PrincipalUrn:        c.PrincipalURN,
-			PrincipalType:       c.PrincipalType,
-			UserEmail:           pUserEmail,
-			PhotoURL:            pPhotoURL,
-			Operation:           c.Operation,
-			Outcome:             c.Outcome,
-			Reason:              c.Reason,
-			Scope:               c.Scope,
-			ResourceKind:        pResourceKind,
-			ResourceID:          pResourceID,
-			Selector:            selector,
-			RoleSlugs:           roleSlugs,
-			EvaluatedGrantCount: int(c.EvaluatedGrantCount),
-			MatchedGrantCount:   int(c.MatchedGrantCount), //nolint:gosec // small number
-			ResolvedAt:          pResolvedAt,
-			ResolutionType:      pResolutionType,
-			ResolvedBy:          pResolvedBy,
-			ResolutionRoleSlug:  pResolutionSlug,
+			ID:                       c.ID,
+			Timestamp:                c.Timestamp,
+			OrganizationID:           c.OrganizationID,
+			ProjectID:                pProjectID,
+			PrincipalUrn:             c.PrincipalURN,
+			PrincipalType:            c.PrincipalType,
+			UserEmail:                pUserEmail,
+			PhotoURL:                 pPhotoURL,
+			Operation:                c.Operation,
+			Outcome:                  c.Outcome,
+			Reason:                   c.Reason,
+			Scope:                    c.Scope,
+			ResourceKind:             pResourceKind,
+			ResourceID:               pResourceID,
+			Selector:                 selector,
+			RoleSlugs:                roleSlugs,
+			EvaluatedGrantCount:      int(c.EvaluatedGrantCount),
+			MatchedGrantCount:        int(c.MatchedGrantCount), //nolint:gosec // small number
+			ResolvedAt:               pResolvedAt,
+			ResolutionType:           pResolutionType,
+			ResolvedBy:               pResolvedBy,
+			ResolutionRoleSlug:       pResolutionSlug,
+			ResolutionTemporaryGrant: pResolutionTG,
 		})
 	}
 
@@ -1204,6 +1266,10 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	for _, r := range resolutions {
 		resolutionMap[r.ChallengeID] = r
 	}
+	resolutionGrants, err := s.lookupResolutionTemporaryGrants(ctx, authCtx.ActiveOrganizationID, resolutions)
+	if err != nil {
+		return nil, err
+	}
 
 	// Batch-lookup user photos from PG.
 	userIDs := make([]string, 0, len(buckets))
@@ -1238,6 +1304,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 			pResolutionType *string
 			pResolvedBy     *string
 			pResolutionSlug *string
+			pResolutionTG   *gen.ChallengeTemporaryGrant
 		)
 
 		if b.ProjectID != "" {
@@ -1270,33 +1337,35 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 			if r.RoleSlug.Valid {
 				pResolutionSlug = &r.RoleSlug.String
 			}
+			pResolutionTG = resolutionTemporaryGrantView(r, resolutionGrants)
 		}
 
 		result = append(result, &gen.ChallengeBucket{
-			ID:                  b.ID,
-			LastSeen:            b.LastSeen,
-			FirstSeen:           b.FirstSeen,
-			OrganizationID:      b.OrganizationID,
-			ProjectID:           pProjectID,
-			PrincipalUrn:        b.PrincipalURN,
-			PrincipalType:       b.PrincipalType,
-			UserEmail:           pUserEmail,
-			PhotoURL:            pPhotoURL,
-			Operation:           b.Operation,
-			Outcome:             b.Outcome,
-			Reason:              b.Reason,
-			Scope:               b.Scope,
-			ResourceKind:        pResourceKind,
-			ResourceID:          pResourceID,
-			RoleSlugs:           roleSlugs,
-			EvaluatedGrantCount: int(b.EvaluatedGrantCount),
-			MatchedGrantCount:   int(b.MatchedGrantCount), //nolint:gosec // small number
-			ChallengeCount:      int(b.ChallengeCount),    //nolint:gosec // small number
-			ChallengeIds:        challengeIDs,
-			ResolvedAt:          pResolvedAt,
-			ResolutionType:      pResolutionType,
-			ResolvedBy:          pResolvedBy,
-			ResolutionRoleSlug:  pResolutionSlug,
+			ID:                       b.ID,
+			LastSeen:                 b.LastSeen,
+			FirstSeen:                b.FirstSeen,
+			OrganizationID:           b.OrganizationID,
+			ProjectID:                pProjectID,
+			PrincipalUrn:             b.PrincipalURN,
+			PrincipalType:            b.PrincipalType,
+			UserEmail:                pUserEmail,
+			PhotoURL:                 pPhotoURL,
+			Operation:                b.Operation,
+			Outcome:                  b.Outcome,
+			Reason:                   b.Reason,
+			Scope:                    b.Scope,
+			ResourceKind:             pResourceKind,
+			ResourceID:               pResourceID,
+			RoleSlugs:                roleSlugs,
+			EvaluatedGrantCount:      int(b.EvaluatedGrantCount),
+			MatchedGrantCount:        int(b.MatchedGrantCount), //nolint:gosec // small number
+			ChallengeCount:           int(b.ChallengeCount),    //nolint:gosec // small number
+			ChallengeIds:             challengeIDs,
+			ResolvedAt:               pResolvedAt,
+			ResolutionType:           pResolutionType,
+			ResolvedBy:               pResolvedBy,
+			ResolutionRoleSlug:       pResolutionSlug,
+			ResolutionTemporaryGrant: pResolutionTG,
 		})
 	}
 

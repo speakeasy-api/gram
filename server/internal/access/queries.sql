@@ -313,13 +313,23 @@ SELECT pg_advisory_xact_lock(hashtextextended(
 -- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
-  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+  resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by
 )
 SELECT
   @organization_id, unnest(@challenge_ids::text[]), @principal_urn, @scope,
-  @resource_kind, @resource_id, @resolution_type, @role_slug, @resolved_by
+  @resource_kind, @resource_id, @resolution_type, @role_slug, sqlc.narg(temporary_grant_id)::uuid, @resolved_by
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING *;
+
+-- name: ListChallengeResolutionTemporaryGrants :many
+-- Returns the deadline of each temporary grant a challenge resolution points at,
+-- expired ones included. A grant that is missing was revoked (revocation
+-- deletes the row).
+SELECT id, expires_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[])
+  AND expires_at IS NOT NULL;
 
 -- name: GetGlobalRoleBySlug :one
 SELECT *

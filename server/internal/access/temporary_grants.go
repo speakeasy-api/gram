@@ -28,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+
+	chrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 )
 
 const (
@@ -42,6 +44,10 @@ const (
 	temporaryGrantStatusActive  = "active"
 	temporaryGrantStatusExpired = "expired"
 	temporaryGrantStatusRevoked = "revoked"
+
+	// challengeResolutionTemporaryGrant marks a denied challenge answered by a
+	// temporary grant given with createTemporaryGrant.
+	challengeResolutionTemporaryGrant = "temporary_grant"
 )
 
 // temporaryGrantScopes are the scopes that can be given temporarily: the
@@ -186,6 +192,13 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 		return nil, err
 	}
 
+	// ClickHouse holds the denial facts, so the challenges are read and
+	// checked before the transaction opens.
+	answered, err := s.challengesAnsweredByTemporaryGrant(ctx, ac.ActiveOrganizationID, payload.ChallengeIds, recipientPrincipal, scope, selector)
+	if err != nil {
+		return nil, err
+	}
+
 	actor := temporaryGrantActor(ctx, ac.UserID)
 
 	dbtx, err := s.db.Begin(ctx)
@@ -239,6 +252,10 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 		TemporaryGrantSnapshotAfter: result,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log temporary grant creation").LogError(ctx, logger)
+	}
+
+	if err := s.resolveChallengesWithTemporaryGrant(ctx, dbtx, ac.ActiveOrganizationID, ac.UserID, ac.Email, answered, row.ID); err != nil {
+		return nil, err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -656,4 +673,157 @@ func otherAccessFor(grants []authz.Grant, holder string, scope authz.Scope, sele
 	}
 	slices.Sort(principals)
 	return principals
+}
+
+// challengesAnsweredByTemporaryGrant reads the denied challenges a new temporary
+// grant is meant to answer and checks each one is a deny of the grant's scope,
+// raised by the grant's recipient, on a resource the grant's selector covers.
+// It returns nil when no challenge IDs were given.
+func (s *Service) challengesAnsweredByTemporaryGrant(ctx context.Context, organizationID string, rawIDs []string, recipient urn.Principal, scope authz.Scope, selector authz.Selector) ([]chrepo.ChallengeSummary, error) {
+	if len(rawIDs) == 0 {
+		return nil, nil
+	}
+	challengeIDs, err := uniqueChallengeIDs(rawIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "challenge_ids must contain distinct, non-empty IDs").LogError(ctx, s.logger)
+	}
+
+	challenges, err := chrepo.New(s.chConn).ListChallengesByIDs(ctx, organizationID, challengeIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "denied challenges could not be verified yet").LogError(ctx, s.logger)
+	}
+	if err := validateChallengesForTemporaryGrant(challenges, challengeIDs, recipient, scope, selector); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+	return challenges, nil
+}
+
+func validateChallengesForTemporaryGrant(challenges []chrepo.ChallengeSummary, challengeIDs []string, recipient urn.Principal, scope authz.Scope, selector authz.Selector) error {
+	if len(challenges) != len(challengeIDs) {
+		return errors.New("one or more challenges are no longer available")
+	}
+	seen := make(map[string]struct{}, len(challenges))
+	for _, challenge := range challenges {
+		if _, ok := seen[challenge.ID]; ok {
+			return errors.New("duplicate challenge data")
+		}
+		seen[challenge.ID] = struct{}{}
+
+		if challenge.Outcome != string(chrepo.OutcomeDeny) {
+			return fmt.Errorf("challenge %s was not denied", challenge.ID)
+		}
+		if challenge.PrincipalURN != recipient.String() {
+			return fmt.Errorf("challenge %s was raised by another principal", challenge.ID)
+		}
+		if challenge.Scope != string(scope) {
+			return fmt.Errorf("challenge %s is for scope %q, not %q", challenge.ID, challenge.Scope, scope)
+		}
+		if challenge.Selector == "" {
+			return fmt.Errorf("challenge %s is too old to be answered by a grant; retry the denied action", challenge.ID)
+		}
+		checkSelector, err := challengeSelector(challenge)
+		if err != nil {
+			return fmt.Errorf("challenge %s: %w", challenge.ID, err)
+		}
+		// The same strict check the role-assignment resolution uses: the grant
+		// alone must authorize exactly the check that was denied.
+		dimensions := make(map[string]string, len(checkSelector))
+		for key, value := range checkSelector {
+			if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID {
+				dimensions[key] = value
+			}
+		}
+		check := authz.Check{Scope: scope, ResourceKind: challenge.ResourceKind, ResourceID: challenge.ResourceID, Dimensions: dimensions}
+		allowed, err := authz.GrantsAuthorize([]authz.Grant{authz.NewGrantWithSelector(scope, selector)}, check.WithStrictSelectorMatch())
+		if err != nil {
+			return fmt.Errorf("challenge %s cannot be evaluated against the grant: %w", challenge.ID, err)
+		}
+		if !allowed {
+			return fmt.Errorf("the grant's selector does not cover the resource of challenge %s", challenge.ID)
+		}
+	}
+	return nil
+}
+
+// resolveChallengesWithTemporaryGrant records each answered challenge as
+// resolved by the temporary grant, inside the grant's own transaction, so a
+// grant and its resolutions are written together or not at all.
+func (s *Service) resolveChallengesWithTemporaryGrant(ctx context.Context, dbtx database.DBTX, organizationID string, userID string, actorEmail *string, challenges []chrepo.ChallengeSummary, grantID uuid.UUID) error {
+	if len(challenges) == 0 {
+		return nil
+	}
+	queries := repo.New(dbtx)
+	if err := queries.LockChallengeResolutions(ctx, organizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock challenge resolutions").LogError(ctx, s.logger)
+	}
+
+	ids := make([]string, len(challenges))
+	for i, challenge := range challenges {
+		ids[i] = challenge.ID
+	}
+	existing, err := queries.ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+		OrganizationID: organizationID,
+		ChallengeIds:   ids,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list challenge resolutions").LogError(ctx, s.logger)
+	}
+	if len(existing) > 0 {
+		return oops.E(oops.CodeConflict, nil, "some challenges were already resolved; refresh and try again").LogError(ctx, s.logger)
+	}
+
+	// One insert per resource: a grant covering every chat can answer denials
+	// on several chats, and each resolution keeps its own challenge's resource.
+	type resourceKey struct{ kind, id string }
+	groups := make(map[resourceKey][]chrepo.ChallengeSummary)
+	order := make([]resourceKey, 0, len(challenges))
+	for _, challenge := range challenges {
+		key := resourceKey{kind: challenge.ResourceKind, id: challenge.ResourceID}
+		if _, ok := groups[key]; !ok {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], challenge)
+	}
+
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, userID)
+	for _, key := range order {
+		group := groups[key]
+		groupIDs := make([]string, len(group))
+		for i, challenge := range group {
+			groupIDs[i] = challenge.ID
+		}
+		rows, err := queries.InsertChallengeResolutions(ctx, repo.InsertChallengeResolutionsParams{
+			OrganizationID:   organizationID,
+			ChallengeIds:     groupIDs,
+			PrincipalUrn:     group[0].PrincipalURN,
+			Scope:            group[0].Scope,
+			ResourceKind:     key.kind,
+			ResourceID:       key.id,
+			ResolutionType:   challengeResolutionTemporaryGrant,
+			RoleSlug:         pgtype.Text{String: "", Valid: false},
+			TemporaryGrantID: uuid.NullUUID{UUID: grantID, Valid: true},
+			ResolvedBy:       actor.String(),
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").LogError(ctx, s.logger)
+		}
+		if len(rows) != len(groupIDs) {
+			return oops.E(oops.CodeConflict, nil, "one or more challenges were resolved concurrently").LogError(ctx, s.logger)
+		}
+		for _, row := range rows {
+			if err := s.audit.LogAccessChallengeResolve(ctx, dbtx, audit.LogAccessChallengeResolveEvent{
+				OrganizationID:   organizationID,
+				Actor:            actor,
+				ActorDisplayName: actorEmail,
+				ChallengeID:      row.ChallengeID,
+				PrincipalURN:     row.PrincipalUrn,
+				Scope:            row.Scope,
+				ResolutionType:   row.ResolutionType,
+				RoleSlug:         nil,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "log access challenge resolve").LogError(ctx, s.logger)
+			}
+		}
+	}
+	return nil
 }
