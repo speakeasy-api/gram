@@ -220,6 +220,11 @@ export const AUDIT_ACTIONS = [
   "organization_encryption_config:rollback_switch",
   "organization_encryption_config:suspend",
   "organization_encryption_config:switch_key",
+  "organization_encryption_transition:clear_platform_copies",
+  "organization_encryption_transition:enroll",
+  "organization_encryption_transition:finalize",
+  "organization_encryption_transition:rollback",
+  "organization_encryption_transition:start_org_kms",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
@@ -1200,6 +1205,18 @@ export function staticActionPhrase(action: AuditAction): string {
       return "suspended";
     case "organization_encryption_config:resume":
       return "resumed";
+    // Internal staff-only entries; the subject names the use case being moved,
+    // as "Organization encryption: <use case>".
+    case "organization_encryption_transition:enroll":
+      return "enrolled";
+    case "organization_encryption_transition:rollback":
+      return "rolled back";
+    case "organization_encryption_transition:finalize":
+      return "finalized";
+    case "organization_encryption_transition:start_org_kms":
+      return "started using organization keys for";
+    case "organization_encryption_transition:clear_platform_copies":
+      return "cleared platform-key copies for";
 
     default:
       return assertNever(action);
