@@ -116,13 +116,21 @@ func (f AddressFailure) EndUserMessage(subject string, owner AddressOwner) strin
 	return subject + " can't connect: " + cause + ". Waiting won't fix this. Ask your administrator to " + ask + "."
 }
 
-// CardStatus is the connect page's short status line for f.
+// cardSubjects names each owner's address at the start of a card sentence.
+var cardSubjects = map[AddressOwner]string{
+	OwnAddress:        "This server's address",
+	SignInAddress:     "This server's sign-in address",
+	ThisSignInAddress: "This sign-in's address",
+}
+
+// CardStatus is the connect page's status line for f: what is wrong, then what to do.
 func (f AddressFailure) CardStatus(owner AddressOwner) string {
-	cause := " doesn't exist"
+	subject := cardSubjects[owner]
+	problem := subject + " doesn't exist."
 	if f == AddressNotAllowed {
-		cause = " is private or internal"
+		problem = subject + " is private or internal, so Speakeasy can't reach it."
 	}
-	return "Can't connect · " + string(owner) + cause + " · ask your administrator"
+	return "Can't connect · " + problem + " Ask your administrator to fix it."
 }
 
 // redirectHopError is a dial to an address an upstream redirected to, not one configured here.
