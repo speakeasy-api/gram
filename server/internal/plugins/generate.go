@@ -2704,7 +2704,7 @@ type VibeObservabilityStatus struct {
 // project has never published).
 func VibeObservabilityStatusFor(cfg GenerateConfig, publishedHooksVersion string) VibeObservabilityStatus {
 	available := VibeObservabilityPluginAvailable(cfg)
-	st := VibeObservabilityStatus{Available: available}
+	st := VibeObservabilityStatus{Available: available, Published: false, Plugin: ""}
 	if available && publishedHooksVersion == hooksGeneratorVersion {
 		st.Published = true
 		st.Plugin = naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
