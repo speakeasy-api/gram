@@ -176,6 +176,9 @@ type StructuredCall struct {
 	// Timeout bounds the call; judges reading whole transcripts should allow the
 	// same 60 seconds the efficacy judge does.
 	Timeout time.Duration
+	// UsageSource tags the call's spend. Empty means chat-analysis. The key slot
+	// and rate-limit bucket stay chat-analysis either way.
+	UsageSource billing.ModelUsageSource
 }
 
 // CallStructured performs one structured-output completion on the platform's
@@ -200,6 +203,11 @@ func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.
 		return "", "", fmt.Errorf("chat analysis judge call: %w", ErrRetryable)
 	}
 
+	usageSource := call.UsageSource
+	if usageSource == "" {
+		usageSource = billing.ModelUsageSourceChatAnalysis
+	}
+
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        call.SchemaName,
@@ -215,13 +223,14 @@ func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.
 
 	response, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		MaxTokens:    nil,
+		ChatID:       in.ChatID,
 		OrgID:        in.OrgID,
 		ProjectID:    in.ProjectID,
 		Model:        call.Model,
 		SystemPrompt: call.SystemPrompt,
 		Prompt:       call.Prompt,
 		Temperature:  &temperature,
-		UsageSource:  billing.ModelUsageSourceChatAnalysis,
+		UsageSource:  usageSource,
 		// Platform-initiated inference: bill the org's internal key, never the
 		// customer-facing chat key's monthly cap.
 		KeyType:                openrouter.KeyTypeInternal,

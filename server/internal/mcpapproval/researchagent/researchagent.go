@@ -709,6 +709,7 @@ func (r *Runner) extract(ctx context.Context, input RunInput, transcript string,
 	temperature := 0.0
 	response, err := r.completions.GetObjectCompletion(ctx, openrouter.ObjectCompletionRequest{
 		MaxTokens:    nil,
+		ChatID:       uuid.Nil,
 		OrgID:        input.OrgID,
 		ProjectID:    input.ProjectID.String(),
 		Model:        extractionModel,

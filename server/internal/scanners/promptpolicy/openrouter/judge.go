@@ -13,6 +13,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -248,6 +249,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		MaxTokens:              new(maxVerdictTokens),
+		ChatID:                 uuid.Nil,
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,
 		Model:                  judgeModel,

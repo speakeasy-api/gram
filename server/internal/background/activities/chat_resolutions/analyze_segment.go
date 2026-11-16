@@ -324,6 +324,7 @@ If there are no tool calls, return an empty array.`, userPromptText)
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{
 			MaxTokens:              nil,
+			ChatID:                 uuid.Nil,
 			OrgID:                  orgID,
 			ProjectID:              projectID.String(),
 			Model:                  "", // Use default model

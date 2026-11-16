@@ -129,7 +129,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 
 	var captureSession CaptureSession
 	if c.messageCaptureStrategy != nil {
-		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
+		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req.forChatCapture())
 		if err != nil {
 			return nil, fmt.Errorf("start or resume chat: %w", err)
 		}
@@ -289,7 +289,7 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSession, req CompletionRequest, response CompletionResponse, customerKey bool) {
 	// Apply message capture strategy
 	if c.messageCaptureStrategy != nil {
-		if err := c.messageCaptureStrategy.CaptureMessage(ctx, session, req, response); err != nil {
+		if err := c.messageCaptureStrategy.CaptureMessage(ctx, session, req.forChatCapture(), response); err != nil {
 			// Log error but don't fail the request
 			c.logger.ErrorContext(ctx, "failed to capture message", attr.SlogError(err))
 		}
@@ -333,7 +333,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 
 	// Schedule chat title generation.
 	// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
-	if c.chatTitleGenerator != nil && req.ChatID != uuid.Nil {
+	if c.chatTitleGenerator != nil && req.recordsChat() {
 		if err := c.chatTitleGenerator.ScheduleChatTitleGeneration(
 			context.WithoutCancel(ctx),
 			req.ChatID.String(),
@@ -609,7 +609,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,
-		ChatID:                    uuid.Nil,
+		ChatID:                    req.ChatID,
 		APIKeyID:                  "",
 		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,

@@ -144,6 +144,7 @@ func TestChatClient_GetObjectCompletion_PropagatesKeyType(t *testing.T) {
 	client, provisioner := newKeyTypeTestClient(t)
 
 	_, err := client.GetObjectCompletion(t.Context(), ObjectCompletionRequest{
+		ChatID:      uuid.Nil,
 		OrgID:       "org-kt",
 		ProjectID:   uuid.NewString(),
 		Model:       "openai/gpt-5.4",

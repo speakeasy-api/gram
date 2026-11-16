@@ -158,8 +158,11 @@ type WebSearchOptions struct {
 }
 
 type ObjectCompletionRequest struct {
-	OrgID          string
-	ProjectID      string
+	OrgID     string
+	ProjectID string
+	// ChatID attributes the call's usage and telemetry to a chat. uuid.Nil
+	// leaves it unattributed.
+	ChatID         uuid.UUID
 	Model          string
 	SystemPrompt   string
 	Prompt         string
@@ -235,4 +238,22 @@ type MessageCaptureStrategy interface {
 // (e.g. an aborted stream) and the strategy is expected to no-op.
 type UsageTrackingStrategy interface {
 	TrackUsage(ctx context.Context, usage *ModelUsage, orgID, projectID string, source billing.ModelUsageSource, chatID string) error
+}
+
+// recordsChat reports whether the request is a customer chat turn: its
+// messages are captured into the chat named by ChatID and may title it.
+// Platform-initiated calls on the internal key (memory judges, summaries) set
+// ChatID only to attribute their usage and telemetry to the chat they read.
+func (r CompletionRequest) recordsChat() bool {
+	return r.ChatID != uuid.Nil && r.KeyType.OrDefault() == KeyTypeChat
+}
+
+// forChatCapture returns the request as the message capture strategy should
+// see it: unchanged for a customer chat turn, otherwise with ChatID cleared so
+// nothing is written into the chat's transcript.
+func (r CompletionRequest) forChatCapture() CompletionRequest {
+	if !r.recordsChat() {
+		r.ChatID = uuid.Nil
+	}
+	return r
 }
