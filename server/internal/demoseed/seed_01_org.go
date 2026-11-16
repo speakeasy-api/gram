@@ -390,8 +390,11 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	// authz.ShouldEnforce is false and chatVisibilityScope falls back to
 	// own-sessions-only, hiding every seeded chat (owned by the seeded users).
 	if err := s.q.OrgInsertFeatures(ctx, repo.OrgInsertFeaturesParams{
-		OrgID:    org,
-		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence"},
+		OrgID: org,
+		// upstream_auth_enforced: the seed describes an organization on typed
+		// upstream auth, which is the state every organization migrates to, so
+		// the demo and local orgs never exercise the legacy resolver.
+		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence", "upstream_auth_enforced"},
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
 	}
