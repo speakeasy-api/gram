@@ -1371,9 +1371,9 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 
 // remoteSessionUnavailableError returns the 503 for a required token endpoint that failed; only an outage sets its own Retry-After.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
-	if remotesessions.OutageAddress(err) != guardian.AddressFine {
+	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
 		// Still a 503, but without Retry-After: waiting does not fix an address.
-		return oops.E(oops.CodeUnavailable, err, "This server can't sign in to the service it uses because of how it is set up. Ask your administrator to fix it.")
+		return oops.E(oops.CodeUnavailable, err, "%s", address.EndUserMessage("This server", guardian.SignInAddress))
 	}
 	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
 		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+". If it keeps happening, ask your administrator.")

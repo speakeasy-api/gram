@@ -89,6 +89,42 @@ func (f AddressFailure) Problem() string {
 	}
 }
 
+// AddressOwner is whose address failed, as an end user reads it.
+type AddressOwner string
+
+const (
+	// OwnAddress is the server's own address.
+	OwnAddress AddressOwner = "its address"
+
+	// SignInAddress is the address of the server's sign-in.
+	SignInAddress AddressOwner = "its sign-in address"
+
+	// ThisSignInAddress is the address of the sign-in a connect page card shows.
+	ThisSignInAddress AddressOwner = "this sign-in's address"
+)
+
+// EndUserMessage tells an end user in everyday words what failed, that waiting won't help, and what to ask for.
+func (f AddressFailure) EndUserMessage(subject string, owner AddressOwner) string {
+	ask := "fix the server's address"
+	if owner != OwnAddress {
+		ask = "fix the server's sign-in address"
+	}
+	cause := string(owner) + " doesn't exist"
+	if f == AddressNotAllowed {
+		cause = string(owner) + " is a private or internal one that Speakeasy can't reach"
+	}
+	return subject + " can't connect: " + cause + ". Waiting won't fix this. Ask your administrator to " + ask + "."
+}
+
+// CardStatus is the connect page's short status line for f.
+func (f AddressFailure) CardStatus(owner AddressOwner) string {
+	cause := " doesn't exist"
+	if f == AddressNotAllowed {
+		cause = " is private or internal"
+	}
+	return "Can't connect · " + string(owner) + cause + " · ask your administrator"
+}
+
 // redirectHopError is a dial to an address an upstream redirected to, not one configured here.
 type redirectHopError struct{ err error }
 

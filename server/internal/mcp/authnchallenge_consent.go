@@ -1373,14 +1373,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, consentRefreshAttribution(r, endpoint, pickState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, err)
-				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
-				if remotesessions.OutageAddress(err) != guardian.AddressFine {
-					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, oauthui.ReasonSignInAddress))
-				}
-				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
-					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
-				}
-				return outage
+				return agentConnectionsOutage(remoteSessionUnavailableError(w, err).LogWarn(ctx, logger), err)
 			}
 			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 				t.Refuse(ctx, mcpconnectionattempts.CodeCredentialMisconfigured)
@@ -1884,6 +1877,17 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
+// agentConnectionsOutage presents an agent's connection outage on the sign-in error page; an address cause adds its problem to Technical details only.
+func agentConnectionsOutage(outage *oops.ShareableError, err error) error {
+	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+		return fmt.Errorf("check agent connections: %w", oops.WithBrowserAdminDetail(oops.WithBrowserReason(outage, remotesessions.SignInAddressReason(address)), remotesessions.SignInAddressDetail(address)))
+	}
+	if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
+		return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
+	}
+	return outage
+}
+
 // connectionDown reports a connected card whose credential can't be renewed right now: an outage, or an address an admin must fix.
 func (c remoteSessionCard) connectionDown() bool {
 	return c.Unavailable || c.SignInAddress
@@ -1891,7 +1895,7 @@ func (c remoteSessionCard) connectionDown() bool {
 
 // SignInAddressStatus is the card's status line when its sign-in setup stops it; the reason stays on the connection row.
 func (c remoteSessionCard) SignInAddressStatus() string {
-	return "Can't connect · this sign-in isn't set up correctly · ask your administrator"
+	return c.signInAddressFailure.CardStatus(guardian.ThisSignInAddress)
 }
 
 // needsAction reports a card with a reconnect or verification still open.

@@ -447,8 +447,8 @@ func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testi
 	}{
 		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true, text: noAnswer},
 		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false, text: noAnswer},
-		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false, text: `server "fixture" can't connect because of how it is set up. Ask your administrator to fix it`},
-		"no such host":     {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}, retryable: false, text: `server "fixture" can't connect because of how it is set up. Ask your administrator to fix it`},
+		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false, text: `server "fixture" can't connect: its address is a private or internal one that Speakeasy can't reach. Waiting won't fix this. Ask your administrator to fix the server's address.`},
+		"no such host":     {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}, retryable: false, text: `server "fixture" can't connect: its address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's address.`},
 		"lookup failing":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "server misbehaving", Name: "member.example.com", IsTemporary: true}}, retryable: true, text: noAnswer},
 		"lookup timeout":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true, IsTemporary: true}}, retryable: false, text: noAnswer},
 	} {

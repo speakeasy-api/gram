@@ -390,3 +390,8 @@ func NewExportingConnectionRecorder(t *testing.T) (recorder *mcpconnectionattemp
 		return slices.Clone(sink.records)
 	}
 }
+
+// AgentConnectionsOutageError is the consent page's answer when an agent's connection is in an outage.
+func AgentConnectionsOutageError(w http.ResponseWriter, err error) error {
+	return agentConnectionsOutage(remoteSessionUnavailableError(w, err), err)
+}

@@ -111,6 +111,9 @@ type AuthorizationError struct {
 
 	// ProviderName names the sign-in provider on ReasonProviderUnavailable, when known.
 	ProviderName string
+
+	// AdminDetail says what is wrong for an administrator, shown only under Technical details and never sent to the client.
+	AdminDetail string
 }
 
 // Reason describes what the person can do about a browser failure.
@@ -151,8 +154,10 @@ const (
 	ReasonSignInUnavailable Reason = "sign-in-unavailable"
 	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
 	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
-	// ReasonSignInAddress identifies a sign-in whose setup stops it; an administrator fixes it.
+	// ReasonSignInAddress identifies a sign-in address that is private or internal; an administrator fixes it.
 	ReasonSignInAddress Reason = "sign-in-address"
+	// ReasonSignInAddressMissing identifies a sign-in address that doesn't exist; an administrator fixes it.
+	ReasonSignInAddressMissing Reason = "sign-in-address-missing"
 )
 
 // check reports a failed server connection check, rather than a failed connection.
@@ -160,7 +165,7 @@ func (r Reason) check() bool {
 	switch r {
 	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNotAllowed:
 		return true
-	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInAddress:
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInAddress, ReasonSignInAddressMissing:
 		return false
 	default:
 		return false
@@ -248,6 +253,9 @@ type authorizationErrorView struct {
 	// ProviderName mirrors AuthorizationError.
 	ProviderName string
 
+	// AdminDetail mirrors AuthorizationError.
+	AdminDetail string
+
 	// Code and Description are the OAuth error, shown under Technical details.
 	Code        string
 	Description string
@@ -291,6 +299,7 @@ func technicalDetailsText(view authorizationErrorView) string {
 		{"Time", view.Time},
 		{"Error", view.Code},
 		{"Error description", view.Description},
+		{"Problem", view.AdminDetail},
 		{"MCP client", view.ClientName},
 		{"MCP client ID", view.ClientID},
 		{"Client verified from", view.ClientIDOrigin},
@@ -379,6 +388,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		ClientID:       page.ClientID,
 		ClientIDOrigin: page.ClientIDOrigin,
 		ProviderName:   page.ProviderName,
+		AdminDetail:    page.AdminDetail,
 		Code:           page.Code,
 		Description:    page.Description,
 		// Native application schemes require template.URL after scheme validation;

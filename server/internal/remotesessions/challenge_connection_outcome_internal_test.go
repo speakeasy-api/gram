@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -70,15 +71,41 @@ func TestExchangeToBlockedAddressIsNotProviderFailure(t *testing.T) {
 	}).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback", nil))
 	text := strings.Join(strings.Fields(page.Body.String()), " ")
 	require.Equal(t, http.StatusBadGateway, page.Code, "the status is unchanged")
-	require.Contains(t, text, "because of how its sign-in is set up. This isn't something you did.")
-	require.Contains(t, text, "Ask your IT administrators to fix this server's sign-in.")
-	require.Contains(t, text, "the sign-in provider uses a private or internal address", "the technical details keep the reason")
+	require.Contains(t, text, "because its sign-in address is a private or internal one that Speakeasy can't reach. This isn't something you did.")
+	require.Contains(t, text, "Ask your IT administrators to fix this server's sign-in address.")
+	require.Contains(t, html.UnescapeString(text), "Problem: The sign-in provider uses a private or internal address Speakeasy can't reach.", "Technical details name the problem")
 	require.NotContains(t, text, "isn't available right now")
 	require.NotContains(t, text, "idp.example.com isn't")
 
 	failure := exchangeFailure(t.Context(), testenv.NewLogger(t), err, false)
 	require.Equal(t, oops.CodeGatewayError, failure.Code, "the status is unchanged")
 	require.Equal(t, "token exchange failed: the sign-in provider uses a private or internal address Speakeasy can't reach. Ask your administrator to check the sign-in provider's address", failure.Error())
+}
+
+// A missing token endpoint reads the same plain words; only Technical details say it does not point anywhere.
+func TestExchangeToMissingAddressNamesItOnlyInTechnicalDetails(t *testing.T) {
+	t.Parallel()
+
+	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
+		return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	}})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithResolver(resolver))
+	require.NoError(t, err)
+
+	manager := &ChallengeManager{}
+	_, err = manager.exchangeCode(t.Context(), policy.Client(), RemoteLoginState{TokenEndpoint: "https://token.example.invalid/token"}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodNone}, "", "code")
+	require.Error(t, err)
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotFound, exchangeHappened(err, false))
+
+	page := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return exchangeFailureAnswer(t.Context(), testenv.NewLogger(t), err, false, func() string { return "idp.example.com" })
+	}).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback", nil))
+	text := html.UnescapeString(strings.Join(strings.Fields(page.Body.String()), " "))
+	require.Equal(t, http.StatusBadGateway, page.Code)
+	require.Contains(t, text, "because its sign-in address doesn't exist. This isn't something you did.")
+	require.Contains(t, text, "Problem: The sign-in provider uses an address that does not point anywhere.")
+	require.NotContains(t, text, "private or internal")
 }
 
 // A lookup that fails for now, through the real resolver path, stays the provider's.

@@ -63,7 +63,8 @@ func TestToolsCallConnections_BlockedAddressIsNotTheProviders(t *testing.T) {
 	shared := postToolsCallThrough(t, recordingConnections(rec, "token"), policy, upstream.URL)
 
 	require.Equal(t, oops.CodeGatewayError, shared.Code)
-	require.Equal(t, "This server can't connect because of how it is set up. Ask your administrator to fix it.", shared.Error())
+	require.Equal(t, "This server can't connect: its address is a private or internal one that Speakeasy can't reach. Waiting won't fix this. Ask your administrator to fix the server's address.", shared.Error())
+	require.NotRegexp(t, `(?i)provider|credential|token|url|tunnel`, shared.Error())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotAllowed)
 	require.Equal(t, "provider.example.com", row.ProviderHost, "the configured host, never the address it resolved to")
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
@@ -77,7 +78,8 @@ func TestToolsCallConnections_HostThatDoesNotExist(t *testing.T) {
 	shared := postToolsCallThrough(t, recordingConnections(rec, "token"), resolvingPolicy(t, notFound), "http://mcp.example.invalid/mcp")
 
 	require.Equal(t, oops.CodeGatewayError, shared.Code)
-	require.Equal(t, "This server can't connect because of how it is set up. Ask your administrator to fix it.", shared.Error())
+	require.Equal(t, "This server can't connect: its address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's address.", shared.Error())
+	require.NotRegexp(t, `(?i)provider|credential|token|url|tunnel`, shared.Error())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotFound)
 	require.Equal(t, "provider.example.com", row.ProviderHost)
 }
