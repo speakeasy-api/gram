@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
+	"github.com/speakeasy-api/gram/server/internal/commandsearch"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -1801,6 +1802,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL).
 				WithFeatureProvider(featureFlags)
 			skills.Attach(mux, skillsService)
+			commandsearch.Attach(mux, commandsearch.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures))
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil, upstreamRevoker).WithNetworkAccessEligibility(networkIngressAdmission).
 				WithPublicationRequests(publicationEmit)
 			mcpMetadataService.WithPluginPublication(publicationEmit, pluginsPublishSignaler)

@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addNetworkIngressGatewayServiceHostname = `-- name: AddNetworkIngressGatewayServiceHostname :exec
+UPDATE network_ingresses
+SET gateway_service_hostnames = array_append(gateway_service_hostnames, $1::text)
+WHERE id = $2
+  AND organization_id = $3
+  AND NOT ($1::text = ANY (gateway_service_hostnames))
+`
+
+type AddNetworkIngressGatewayServiceHostnameParams struct {
+	Hostname       string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Records a label before the gateway defines its service, so every service the
+// gateway defined is recorded. updated_at is the desired-state version and is
+// deliberately not touched.
+func (q *Queries) AddNetworkIngressGatewayServiceHostname(ctx context.Context, arg AddNetworkIngressGatewayServiceHostnameParams) error {
+	_, err := q.db.Exec(ctx, addNetworkIngressGatewayServiceHostname, arg.Hostname, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const claimNetworkIngressCertificateIssuance = `-- name: ClaimNetworkIngressCertificateIssuance :execrows
 INSERT INTO network_ingress_certificate_states (network_ingress_id, organization_id, state_key, value_encrypted)
 VALUES ($1, $2, $3, $4)
@@ -242,19 +264,20 @@ func (q *Queries) GetNetworkIngressCertificateState(ctx context.Context, arg Get
 }
 
 const getNetworkIngressGatewayOwner = `-- name: GetNetworkIngressGatewayOwner :one
-SELECT organization_id, hostname, runtime, gateway_service_hostname
+SELECT organization_id, hostname, runtime, gateway_service_hostname, gateway_service_hostnames
 FROM network_ingresses
 WHERE id = $1
 `
 
 type GetNetworkIngressGatewayOwnerRow struct {
-	OrganizationID         string
-	Hostname               string
-	Runtime                pgtype.Text
-	GatewayServiceHostname pgtype.Text
+	OrganizationID          string
+	Hostname                string
+	Runtime                 pgtype.Text
+	GatewayServiceHostname  pgtype.Text
+	GatewayServiceHostnames []string
 }
 
-// Tombstones are included: teardown needs the owner and label after soft delete.
+// Tombstones are included: teardown needs the owner and labels after soft delete.
 func (q *Queries) GetNetworkIngressGatewayOwner(ctx context.Context, id uuid.UUID) (GetNetworkIngressGatewayOwnerRow, error) {
 	row := q.db.QueryRow(ctx, getNetworkIngressGatewayOwner, id)
 	var i GetNetworkIngressGatewayOwnerRow
@@ -263,6 +286,7 @@ func (q *Queries) GetNetworkIngressGatewayOwner(ctx context.Context, id uuid.UUI
 		&i.Hostname,
 		&i.Runtime,
 		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 	)
 	return i, err
 }
@@ -659,6 +683,25 @@ func (q *Queries) ReleaseNetworkIngressCertificateIssuance(ctx context.Context, 
 	return err
 }
 
+const removeNetworkIngressGatewayServiceHostname = `-- name: RemoveNetworkIngressGatewayServiceHostname :exec
+UPDATE network_ingresses
+SET gateway_service_hostnames = array_remove(gateway_service_hostnames, $1::text)
+WHERE id = $2
+  AND organization_id = $3
+`
+
+type RemoveNetworkIngressGatewayServiceHostnameParams struct {
+	Hostname       string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Forgets a label once its service is deleted. updated_at is not touched.
+func (q *Queries) RemoveNetworkIngressGatewayServiceHostname(ctx context.Context, arg RemoveNetworkIngressGatewayServiceHostnameParams) error {
+	_, err := q.db.Exec(ctx, removeNetworkIngressGatewayServiceHostname, arg.Hostname, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const retireNetworkIngressNodes = `-- name: RetireNetworkIngressNodes :exec
 UPDATE network_ingress_nodes
 SET retired_at = COALESCE(retired_at, clock_timestamp()),
@@ -680,26 +723,6 @@ type RetireNetworkIngressNodesParams struct {
 // later slot count increase recreates it as a fresh identity.
 func (q *Queries) RetireNetworkIngressNodes(ctx context.Context, arg RetireNetworkIngressNodesParams) error {
 	_, err := q.db.Exec(ctx, retireNetworkIngressNodes, arg.NetworkIngressID, arg.OrganizationID, arg.MinSlot)
-	return err
-}
-
-const setNetworkIngressGatewayServiceHostname = `-- name: SetNetworkIngressGatewayServiceHostname :exec
-UPDATE network_ingresses
-SET gateway_service_hostname = $1
-WHERE id = $2
-  AND organization_id = $3
-`
-
-type SetNetworkIngressGatewayServiceHostnameParams struct {
-	Hostname       pgtype.Text
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// Records the label of the service the gateway just defined. updated_at is the
-// desired-state version and is deliberately not touched.
-func (q *Queries) SetNetworkIngressGatewayServiceHostname(ctx context.Context, arg SetNetworkIngressGatewayServiceHostnameParams) error {
-	_, err := q.db.Exec(ctx, setNetworkIngressGatewayServiceHostname, arg.Hostname, arg.ID, arg.OrganizationID)
 	return err
 }
 
