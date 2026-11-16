@@ -86,7 +86,8 @@ func (p Permission) Block() (Exclusion, bool) {
 // Implied returns every action on t that a grant of action satisfies, action
 // itself excluded.
 func (t ResourceType) Implied(action Action) []Action {
-	seen := map[Action]bool{action: true}
+	seen := make(map[Action]bool)
+	seen[action] = true
 	queue := []Action{action}
 	var out []Action
 	for len(queue) > 0 {

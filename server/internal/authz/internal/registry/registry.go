@@ -4,19 +4,41 @@
 // typed refs and every derived table into package authz, which never imports
 // this package, and this package imports nothing from authz: the generated Go
 // is the only thing that passes between them. The names both sides use are
-// declared once, in vocabulary.go.
+// declared once, in the vocabulary files (see VocabularyFiles).
 package registry
 
 import (
-	_ "embed"
+	"embed"
 	"strings"
 )
 
-// VocabularySource is vocabulary.go as written. authzgen copies its
-// declarations into package authz.
-//
-//go:embed vocabulary.go
-var VocabularySource string
+// VocabularyFile is one registry source file that authzgen copies into
+// package authz.
+type VocabularyFile struct {
+	// Name is the file's name in this package, for example "selectors.go".
+	Name string
+	// Source is the file as written.
+	Source string
+}
+
+//go:embed scopes.go selectors.go sensitivity.go grant_source.go roles.go match_mode.go
+var vocabularyFS embed.FS
+
+// VocabularyFiles returns the files that declare the names shared with
+// package authz, in a fixed order. Each holds one subject, so a new selector
+// key goes in selectors.go and a new action in scopes.go.
+func VocabularyFiles() []VocabularyFile {
+	names := []string{"scopes.go", "selectors.go", "sensitivity.go", "grant_source.go", "roles.go", "match_mode.go"}
+	files := make([]VocabularyFile, 0, len(names))
+	for _, name := range names {
+		source, err := vocabularyFS.ReadFile(name)
+		if err != nil {
+			panic("registry: embedded vocabulary file " + name + ": " + err.Error())
+		}
+		files = append(files, VocabularyFile{Name: name, Source: string(source)})
+	}
+	return files
+}
 
 // This file holds the types of the authorization model. The model itself, one
 // Go literal describing every resource type and its permissions, is
@@ -47,13 +69,6 @@ func (s Scope) split() (prefix, action string) {
 	prefix, action, _ = strings.Cut(string(s), ":")
 	return prefix, action
 }
-
-// Kind names a resource type, for example "mcp".
-type Kind string
-
-// Action names what a permission allows on its resource type, for example
-// "write".
-type Action string
 
 // ExclusionKind distinguishes exclusions that take access away from ones that
 // exempt a holder from a policy.

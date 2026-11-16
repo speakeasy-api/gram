@@ -25,7 +25,7 @@ var Definitions = Registry{
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(7), "organization read access"),
@@ -38,9 +38,9 @@ var Definitions = Registry{
 					Agent:       SafeSince(7),
 				},
 				{
-					Action:      "admin",
+					Action:      ActionAdmin,
 					LegacyScope: "",
-					Implies:     []Action{"read", "device_agent_sync", "hooks_ingest"},
+					Implies:     []Action{ActionRead, ActionDeviceAgentSync, ActionHooksIngest},
 					Exclusions:  Blocked(SafeSince(7), "organization admin access"),
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -51,7 +51,7 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "device_agent_sync",
+					Action:      ActionDeviceAgentSync,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -64,7 +64,7 @@ var Definitions = Registry{
 					Agent:       SafeSince(2),
 				},
 				{
-					Action:      "hooks_ingest",
+					Action:      ActionHooksIngest,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -93,7 +93,7 @@ var Definitions = Registry{
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -106,9 +106,9 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
-					Implies:     []Action{"read"},
+					Implies:     []Action{ActionRead},
 					Exclusions:  nil,
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -131,7 +131,7 @@ var Definitions = Registry{
 					// R1 (parked): stored as channels:connect, checked on a project.
 					// The three Channels permissions are independent of each other and
 					// of every MCP permission.
-					Action:      "channels_connect",
+					Action:      ActionChannelsConnect,
 					LegacyScope: "channels:connect",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -145,7 +145,7 @@ var Definitions = Registry{
 				},
 				{
 					// R1 (parked): stored as channels:admin, checked on a project.
-					Action:      "channels_admin",
+					Action:      ActionChannelsAdmin,
 					LegacyScope: "channels:admin",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -161,7 +161,7 @@ var Definitions = Registry{
 					// R1 (parked): stored as channels:read_all, checked on a project.
 					// Not an Admin default: it discloses other members' private
 					// conversations and is granted explicitly.
-					Action:      "channels_read_all",
+					Action:      ActionChannelsReadAll,
 					LegacyScope: "channels:read_all",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -174,7 +174,7 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "project read access"),
@@ -187,9 +187,9 @@ var Definitions = Registry{
 					Agent:       SafeSince(1),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
-					Implies:     []Action{"read"},
+					Implies:     []Action{ActionRead},
 					Exclusions:  Blocked(SafeSince(4), "project write access"),
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -201,7 +201,7 @@ var Definitions = Registry{
 				},
 				{
 					// R1 (parked): stored as plugin:write, checked on a project.
-					Action:      "plugin_write",
+					Action:      ActionPluginWrite,
 					LegacyScope: "plugin:write",
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "plugin write access"),
@@ -216,7 +216,7 @@ var Definitions = Registry{
 				{
 					// R1 (parked): stored as log:read, checked on a project.
 					// Neither project:* nor org:admin implies it.
-					Action:      "log_read",
+					Action:      ActionLogRead,
 					LegacyScope: "log:read",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -230,7 +230,7 @@ var Definitions = Registry{
 				},
 				{
 					// R1 (parked): stored as memory:read, checked on a project.
-					Action:      "memory_read",
+					Action:      ActionMemoryRead,
 					LegacyScope: "memory:read",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -244,9 +244,9 @@ var Definitions = Registry{
 				},
 				{
 					// R1 (parked): stored as memory:write, checked on a project.
-					Action:      "memory_write",
+					Action:      ActionMemoryWrite,
 					LegacyScope: "memory:write",
-					Implies:     []Action{"memory_read"},
+					Implies:     []Action{ActionMemoryRead},
 					Exclusions:  nil,
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -276,7 +276,7 @@ var Definitions = Registry{
 			},
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP read access"),
@@ -289,9 +289,9 @@ var Definitions = Registry{
 					Agent:       SafeSince(1),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
-					Implies:     []Action{"read"},
+					Implies:     []Action{ActionRead},
 					Exclusions:  Blocked(SafeSince(4), "MCP write access"),
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -304,7 +304,7 @@ var Definitions = Registry{
 				{
 					// Standalone: viewing or managing a server is not
 					// permission to call its tools.
-					Action:      "connect",
+					Action:      ActionConnect,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP connect access"),
@@ -334,7 +334,7 @@ var Definitions = Registry{
 			},
 			Permissions: []Permission{
 				{
-					Action:      "auth",
+					Action:      ActionAuth,
 					LegacyScope: "mcp:auth",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(5), "auth client use"),
@@ -361,7 +361,7 @@ var Definitions = Registry{
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "environment read access"),
@@ -374,9 +374,9 @@ var Definitions = Registry{
 					Agent:       SafeSince(1),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
-					Implies:     []Action{"read"},
+					Implies:     []Action{ActionRead},
 					Exclusions:  Blocked(SafeSince(4), "environment write access"),
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -396,7 +396,7 @@ var Definitions = Registry{
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "skill read access"),
@@ -409,9 +409,9 @@ var Definitions = Registry{
 					Agent:       SafeSince(1),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
-					Implies:     []Action{"read"},
+					Implies:     []Action{ActionRead},
 					Exclusions:  Blocked(SafeSince(4), "skill write access"),
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -431,7 +431,7 @@ var Definitions = Registry{
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "assistant read access"),
@@ -444,9 +444,9 @@ var Definitions = Registry{
 					Agent:       SafeSince(3),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
-					Implies:     []Action{"read"},
+					Implies:     []Action{ActionRead},
 					Exclusions:  Blocked(SafeSince(4), "assistant write access"),
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,
@@ -469,12 +469,12 @@ var Definitions = Registry{
 			},
 			Permissions: []Permission{
 				{
-					Action:      "evaluate",
+					Action:      ActionEvaluate,
 					LegacyScope: "",
 					Implies:     nil,
 					// An exemption, not a block: direct grants never cancel a
 					// bypass.
-					Exclusions:  []Exclusion{{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}},
+					Exclusions:  []Exclusion{{Kind: ExclusionExemption, Action: ActionBypass, Agent: AgentUnsafe(), Subject: ""}},
 					Dimensions:  nil,
 					Source:      GrantSourceRiskPolicy,
 					Category:    "",
@@ -484,7 +484,7 @@ var Definitions = Registry{
 					Agent:       SafeSince(1),
 				},
 				{
-					Action:      "bypass",
+					Action:      ActionBypass,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -497,7 +497,7 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "block",
+					Action:      ActionBlock,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -519,7 +519,7 @@ var Definitions = Registry{
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 			Permissions: []Permission{
 				{
-					Action:      "execute",
+					Action:      ActionExecute,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -541,7 +541,7 @@ var Definitions = Registry{
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -554,7 +554,7 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -567,7 +567,7 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "authorize",
+					Action:      ActionAuthorize,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -580,7 +580,7 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "transfer",
+					Action:      ActionTransfer,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
@@ -605,7 +605,7 @@ var Definitions = Registry{
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
-					Action:      "read",
+					Action:      ActionRead,
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "workload read access"),
@@ -618,9 +618,9 @@ var Definitions = Registry{
 					Agent:       AgentUnsafe(),
 				},
 				{
-					Action:      "write",
+					Action:      ActionWrite,
 					LegacyScope: "",
-					Implies:     []Action{"read"},
+					Implies:     []Action{ActionRead},
 					Exclusions:  Blocked(AgentUnsafe(), "workload write access"),
 					Dimensions:  nil,
 					Source:      GrantSourceRoles,

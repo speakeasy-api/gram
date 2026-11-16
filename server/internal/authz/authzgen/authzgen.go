@@ -48,16 +48,15 @@ func Render(r registry.Registry) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
-	vocabulary, err := renderVocabulary(registry.VocabularySource)
+	vocabulary, err := renderVocabulary(registry.VocabularyFiles())
 	if err != nil {
 		return nil, err
 	}
-	return []File{
-		{Path: "internal/authz/vocabulary_gen.go", Content: vocabulary},
+	return append(vocabulary, []File{
 		{Path: "internal/authz/scopes_gen.go", Content: scopes},
 		{Path: "internal/authz/refs_gen.go", Content: refs},
 		{Path: "internal/authz/tables_gen.go", Content: tables},
-	}, nil
+	}...), nil
 }
 
 // identifierAcronyms are scope name parts written in capitals in Go
@@ -131,26 +130,39 @@ func renderScopeConstants(r registry.Registry) ([]byte, error) {
 	return formatted, nil
 }
 
+// vocabularyOutputs names the generated file of each vocabulary file. The
+// default is <name>_gen.go; scopes.go differs because scopes_gen.go is the
+// scope constants.
+var vocabularyOutputs = map[string]string{"scopes.go": "scopes_vocabulary_gen.go"}
+
 // renderVocabulary writes the registry's vocabulary into package authz: the
-// declarations of vocabulary.go as they stand, under package authz. The
-// evaluator gets the same names and values as the model with no import
+// declarations of each vocabulary file as they stand, under package authz.
+// The evaluator gets the same names and values as the model with no import
 // between them.
-func renderVocabulary(source string) ([]byte, error) {
-	const packageLine = "package registry\n"
-	_, declarations, ok := strings.Cut(source, packageLine)
-	if !ok {
-		return nil, fmt.Errorf("registry vocabulary.go has no %q line", strings.TrimSpace(packageLine))
+func renderVocabulary(files []registry.VocabularyFile) ([]File, error) {
+	out := make([]File, 0, len(files))
+	for _, f := range files {
+		const packageLine = "package registry\n"
+		_, declarations, ok := strings.Cut(f.Source, packageLine)
+		if !ok {
+			return nil, fmt.Errorf("registry %s has no %q line", f.Name, strings.TrimSpace(packageLine))
+		}
+		if strings.Contains("\n"+declarations, "\nimport") {
+			return nil, fmt.Errorf("registry %s must not import anything: it is copied into package authz", f.Name)
+		}
+		name, ok := vocabularyOutputs[f.Name]
+		if !ok {
+			name = strings.TrimSuffix(f.Name, ".go") + "_gen.go"
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "// Code generated from registry/%s by authzgen. DO NOT EDIT.\n// Regenerate with `mise run gen:authz`.\n\n", f.Name)
+		b.WriteString("package authz\n")
+		b.WriteString(declarations)
+		formatted, err := format.Source([]byte(b.String()))
+		if err != nil {
+			return nil, fmt.Errorf("format %s: %w", name, err)
+		}
+		out = append(out, File{Path: "internal/authz/" + name, Content: formatted})
 	}
-	if strings.Contains("\n"+declarations, "\nimport") {
-		return nil, fmt.Errorf("registry vocabulary.go must not import anything: it is copied into package authz")
-	}
-	var b strings.Builder
-	b.WriteString("// Code generated from registry/vocabulary.go by authzgen. DO NOT EDIT.\n// Regenerate with `mise run gen:authz`.\n\n")
-	b.WriteString("package authz\n")
-	b.WriteString(declarations)
-	formatted, err := format.Source([]byte(b.String()))
-	if err != nil {
-		return nil, fmt.Errorf("format vocabulary_gen.go: %w", err)
-	}
-	return formatted, nil
+	return out, nil
 }
