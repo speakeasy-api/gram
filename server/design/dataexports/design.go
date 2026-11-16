@@ -394,7 +394,7 @@ var TestDataExportRouteResult = Type("TestDataExportRouteResult", func() {
 	Attribute("status_code", Int, "HTTP status of the signal that set the outcome. Omitted when it did not answer.")
 	Attribute("message", String, "What happened, in plain language.")
 	Attribute("signals", ArrayOf(TestDataExportRouteSignalResult), "One result for each signal the route's data source exports.")
-	Attribute("test_event_id", String, "The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.")
+	Attribute("test_event_id", String, "The speakeasy.test_event_id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.")
 	Required("outcome", "message", "signals", "test_event_id")
 })
 
