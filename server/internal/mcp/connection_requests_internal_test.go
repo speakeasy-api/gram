@@ -1063,10 +1063,10 @@ func TestUnavailableLabelWording(t *testing.T) {
 		mcpconnectionattempts.CodeProviderServerError:      "Unavailable · it had an error · try again in a few minutes",
 		mcpconnectionattempts.CodeProviderUnreachable:      "Unavailable · it didn't answer · try again in a few minutes",
 		mcpconnectionattempts.CodeRemoteSessionUnavailable: "Unavailable · its sign-in service is down · try again in a few minutes",
-		mcpconnectionattempts.CodeSharedCredentialRejected: "Can't connect · it isn't set up correctly · ask your administrator",
-		mcpconnectionattempts.CodeStaticKeyRejected:        "Can't connect · it isn't set up correctly · ask your administrator",
-		mcpconnectionattempts.CodeCredentialMisconfigured:  "Can't connect · it isn't set up correctly · ask your administrator",
-		mcpconnectionattempts.CodeTunnelUnavailable:        "Can't connect · it can't be reached · ask your administrator",
+		mcpconnectionattempts.CodeSharedCredentialRejected: "Can't connect · the service rejected its saved sign-in details · ask your administrator",
+		mcpconnectionattempts.CodeStaticKeyRejected:        "Can't connect · the service rejected its saved sign-in details · ask your administrator",
+		mcpconnectionattempts.CodeCredentialMisconfigured:  "Can't connect · its sign-in isn't set up correctly · ask your administrator",
+		mcpconnectionattempts.CodeTunnelUnavailable:        "Can't connect · its tunnel is down · ask your administrator",
 		mcpconnectionattempts.CodeMemberToolsMissing:       unavailableGenericLabel,
 	} {
 		require.Equal(t, want, unavailableLabel(code), code.String())

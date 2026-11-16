@@ -121,7 +121,7 @@ func (g gatewayServer) StatusLabel() string {
 		if g.address == guardian.AddressFine {
 			return unavailableLabel(g.cause)
 		}
-		return adminLabel(notSetUpCorrectly)
+		return "Can't connect · it isn't set up correctly · ask your administrator"
 	case gatewayServerNoAccess:
 		return "No access"
 	case gatewayServerNoSignIn:
@@ -145,9 +145,6 @@ func (g gatewayServer) StatusLabel() string {
 // unavailableGenericLabel is the card for a cause it does not name.
 const unavailableGenericLabel = "Unavailable · try again shortly, or ask your administrator"
 
-// notSetUpCorrectly is the one clause for anything an administrator must set right, addresses included.
-const notSetUpCorrectly = "it isn't set up correctly"
-
 // adminLabel is a card an administrator acts on.
 func adminLabel(clause string) string {
 	return "Can't connect · " + clause + " · ask your administrator"
@@ -159,10 +156,10 @@ var unavailableCauses = map[mcpconnectionattempts.Code]string{
 	mcpconnectionattempts.CodeProviderServerError:      "it had an error",
 	mcpconnectionattempts.CodeProviderUnreachable:      "it didn't answer",
 	mcpconnectionattempts.CodeRemoteSessionUnavailable: "its sign-in service is down",
-	mcpconnectionattempts.CodeSharedCredentialRejected: notSetUpCorrectly,
-	mcpconnectionattempts.CodeStaticKeyRejected:        notSetUpCorrectly,
-	mcpconnectionattempts.CodeCredentialMisconfigured:  notSetUpCorrectly,
-	mcpconnectionattempts.CodeTunnelUnavailable:        "it can't be reached",
+	mcpconnectionattempts.CodeSharedCredentialRejected: "the service rejected its saved sign-in details",
+	mcpconnectionattempts.CodeStaticKeyRejected:        "the service rejected its saved sign-in details",
+	mcpconnectionattempts.CodeCredentialMisconfigured:  "its sign-in isn't set up correctly",
+	mcpconnectionattempts.CodeTunnelUnavailable:        "its tunnel is down",
 }
 
 // unavailableLabel says why a member did not list its tools and who acts.

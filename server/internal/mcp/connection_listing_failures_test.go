@@ -232,7 +232,7 @@ func TestGatewayConsentSavedKeyBesideASignIn(t *testing.T) {
 	require.Equal(t, "not_connected", outcomes[0].Status)
 	require.Equal(t, "Not connected", outcomes[0].Label)
 	require.Equal(t, []string{mcpconnectionattempts.CodeNeedsSignIn.String()}, discoveryReasons(rec))
-	require.NotContains(t, page, "isn't set up correctly")
+	require.NotContains(t, page, "rejected its saved sign-in details")
 }
 
 // The gateway listing's own time running out is no member's failure: a slow member, and one that never got a turn, keep member_tools_missing.
