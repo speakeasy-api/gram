@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"maps"
+	"slices"
 )
 
 // DenialReason says why the caller is not authorized for a check.
@@ -99,17 +100,23 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 			}
 		}
 
-		// Asked as a probe, so a grant limited to another disposition still
-		// matches the call with its disposition left out.
-		withoutDisposition := c.Probe()
-		withoutDisposition.Dimensions = maps.Clone(c.Dimensions)
-		delete(withoutDisposition.Dimensions, SelectorKeyDisposition)
-		evaluation, err = authorization.evaluate(withoutDisposition)
-		if err != nil {
-			return nil, e.mapError(ctx, err)
-		}
-		if evaluation.Grant != nil {
-			reasons[i] = DenialReasonDisposition
+		// Refused only for its disposition when some other disposition, with
+		// every other value unchanged, would be allowed.
+		for _, other := range slices.Sorted(maps.Keys(validDispositions)) {
+			if other == disposition || other == DispositionReadOnly {
+				continue
+			}
+			asOther := c
+			asOther.Dimensions = maps.Clone(c.Dimensions)
+			asOther.Dimensions[SelectorKeyDisposition] = other
+			evaluation, err = authorization.evaluate(asOther)
+			if err != nil {
+				return nil, e.mapError(ctx, err)
+			}
+			if evaluation.Grant != nil {
+				reasons[i] = DenialReasonDisposition
+				break
+			}
 		}
 	}
 
