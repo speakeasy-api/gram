@@ -19,8 +19,9 @@ import (
 // caller pair any scope with any resource and leave out dimensions the model
 // requires; the refs make those mistakes unrepresentable.
 //
-// The rule applies to every package outside internal/authz, which builds the
-// typed refs from these literals.
+// The rule applies to every package except internal/authz itself, which builds
+// the typed refs from these literals. Its subpackages are covered like any
+// other package. Test files may build checks to assert on them.
 
 const (
 	noRawAuthzChecksAnalyzer       = "norawauthzchecks"
@@ -56,7 +57,7 @@ func newNoRawAuthzChecksAnalyzer(rule noRawAuthzChecksSettings) *analysis.Analyz
 		if len(rule.Packages) > 0 {
 			return packageMatches(path, rule.Packages)
 		}
-		return !packageMatches(path, []string{authzPkgPath})
+		return path != authzPkgPath
 	}
 
 	return &analysis.Analyzer{
