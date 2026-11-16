@@ -24,11 +24,7 @@ describe("pageLabel", () => {
 
   it("uses a human slug on detail pages", () => {
     expect(
-      pageLabel(
-        "Sources",
-        `${BASE}/sources`,
-        `${BASE}/sources/openapi/notion`,
-      ),
+      pageLabel("Sources", `${BASE}/sources`, `${BASE}/sources/openapi/notion`),
     ).toBe("notion");
   });
 
