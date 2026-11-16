@@ -95,9 +95,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    `custom.env_secret_dump`, `custom.ssrf_metadata_endpoint`), each opening
    with a populated CEL expression that the editor reports as valid, and each
    carrying findings rather than sitting at zero.
-9. **Watchdog** — needs the `gram-risk-watchdog` flag on for the org (locally:
-   a row in the CSV `GRAM_LOCAL_FEATURE_FLAGS_CSV` points at, keyed by your
-   organization id). Over 7 days: ~13 signals spanning **Critical → Low**, not
+9. **Watchdog** — always available to organization admins; no feature flag is
+   needed. Over 7 days: ~13 signals spanning **Critical → Low**, not
    one severity; the KPI row shows a non-zero critical count and a findings
    trend against the previous window; grouping by **Team** and by **App**
    both produce named groups (empty groups mean the `team` / `chat_source`
