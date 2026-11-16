@@ -256,7 +256,14 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 		if form.Effect != "allow" {
 			return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "delegated grants must use allow effect")
 		}
-		requested = append(requested, authz.NewGrantWithSelector(authz.Scope(form.Scope), selectorFromForm(form.Selector)))
+		grant := authz.NewGrantWithSelector(authz.Scope(form.Scope), selectorFromForm(form.Selector))
+		// A new key is held to the rules for new grants. The policy
+		// constructor below also reads stored policies, so it still accepts a
+		// tool or disposition limit on viewing or managing a server.
+		if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
+			return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "invalid delegated grants")
+		}
+		requested = append(requested, grant)
 	}
 	if !slices.ContainsFunc(requested, func(grant authz.Grant) bool { return !authz.IsBlocklistScope(grant.Scope) }) {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "agent keys require at least one allowed grant")
