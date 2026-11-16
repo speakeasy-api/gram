@@ -515,11 +515,11 @@ importers:
         specifier: ^10.6.6
         version: 10.6.6(@types/react@19.3.0)
       svix:
-        specifier: 2.9.1
-        version: 2.9.1
+        specifier: 2.10.0
+        version: 2.10.0
       svix-react:
         specifier: ^1.13.9
-        version: 1.13.9(react@19.3.1)(react-dom@19.3.1(react@19.3.1))(svix@2.9.1)
+        version: 1.13.9(react@19.3.1)(react-dom@19.3.1(react@19.3.1))(svix@2.10.0)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -7073,8 +7073,8 @@ packages:
       react-dom: '>=16'
       svix: '>=1.26.0'
 
-  svix@2.9.1:
-    resolution: {integrity: sha512-qeIouYbC4b2nnMAG9hKxglGh1hYlLyMt6HIg+pNqdNkj5T99a9tnhw4pV/mROPSCVGXv1rCBTUVdym3Y5R+UDA==}
+  svix@2.10.0:
+    resolution: {integrity: sha512-dlRV27sT8XSRU9izvxXUKPor923DDLEXzPgMPYe+JrCjQ8w0w4lNipKeXFhhVKvNPyrkmXe/1ynVhzm24Nem3Q==}
     engines: {node: '>=22'}
 
   swr@2.5.0:
@@ -14252,13 +14252,13 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  svix-react@1.13.9(react@19.3.1)(react-dom@19.3.1(react@19.3.1))(svix@2.9.1):
+  svix-react@1.13.9(react@19.3.1)(react-dom@19.3.1(react@19.3.1))(svix@2.10.0):
     dependencies:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
-      svix: 2.9.1
+      svix: 2.10.0
 
-  svix@2.9.1:
+  svix@2.10.0:
     dependencies:
       standardwebhooks: 1.1.1
 
