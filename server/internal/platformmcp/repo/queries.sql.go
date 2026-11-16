@@ -2335,28 +2335,6 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Cont
 	return i, err
 }
 
-const getPlatformMCPCatalogRegistrationProject = `-- name: GetPlatformMCPCatalogRegistrationProject :one
-SELECT project_id
-FROM platform_mcp_catalog_registrations
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-`
-
-type GetPlatformMCPCatalogRegistrationProjectParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// The project a live registration belongs to, so a caller can name the
-// server it added by registration ID alone.
-func (q *Queries) GetPlatformMCPCatalogRegistrationProject(ctx context.Context, arg GetPlatformMCPCatalogRegistrationProjectParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPCatalogRegistrationProject, arg.ID, arg.OrganizationID)
-	var project_id uuid.UUID
-	err := row.Scan(&project_id)
-	return project_id, err
-}
-
 const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
 SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id, client.revoked_at AS client_revoked_at
 FROM platform_mcp_connections AS connection
@@ -3713,6 +3691,96 @@ func (q *Queries) GetPlatformMCPServer(ctx context.Context, arg GetPlatformMCPSe
 		&i.Slug,
 		&i.Visibility,
 	)
+	return i, err
+}
+
+const getPlatformMCPServerProject = `-- name: GetPlatformMCPServerProject :one
+SELECT m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.id = $2
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerProjectParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+// The live project a live MCP server belongs to, so a caller can name a
+// server by its ID alone.
+func (q *Queries) GetPlatformMCPServerProject(ctx context.Context, arg GetPlatformMCPServerProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerProject, arg.OrganizationID, arg.McpServerID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
+const getPlatformMCPServerRegistrationForCaller = `-- name: GetPlatformMCPServerRegistrationForCaller :one
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(
+        registration.user_id = $1
+        OR (registration.user_id IS NULL AND created_connection.subject_urn = $2),
+        FALSE
+    )::boolean AS added_by_caller
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $3
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.user_id, registration.connection_id
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = $3
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN platform_mcp_connections AS created_connection
+  ON created_connection.id = registration.connection_id
+ AND created_connection.organization_id = $3
+WHERE m.id = $4
+  AND m.project_id = $5
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerRegistrationForCallerParams struct {
+	UserID         pgtype.Text
+	SubjectUrn     string
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPServerRegistrationForCallerRow struct {
+	McpServerID    uuid.UUID
+	RegistrationID uuid.UUID
+	AddedByCaller  bool
+}
+
+// The Platform setup record behind an MCP server named by its ID: the newest
+// live registration of that server, as GetPlatformMCPInventoryItem picks it.
+// registration_id is the nil UUID when the server was not added through
+// Platform setup. added_by_caller applies the same ownership rule as
+// GetPlatformMCPCatalogRegistrationForLifecycle, so a refusal can say the
+// server belongs to another member instead of calling it unknown.
+func (q *Queries) GetPlatformMCPServerRegistrationForCaller(ctx context.Context, arg GetPlatformMCPServerRegistrationForCallerParams) (GetPlatformMCPServerRegistrationForCallerRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerRegistrationForCaller,
+		arg.UserID,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	var i GetPlatformMCPServerRegistrationForCallerRow
+	err := row.Scan(&i.McpServerID, &i.RegistrationID, &i.AddedByCaller)
 	return i, err
 }
 

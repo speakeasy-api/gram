@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +34,8 @@ func TestRedeployDeploymentToolManifest(t *testing.T) {
 		Required   []string                   `json:"required"`
 	}
 	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
-	require.ElementsMatch(t, []string{"project_id", "idempotency_key", "confirmed"}, schema.Required)
-	require.ElementsMatch(t, []string{"project_id", "deployment_id", "expected_active_deployment_id", "idempotency_key", "confirmed"}, mapKeys(schema.Properties))
+	require.ElementsMatch(t, []string{"project_slug", "idempotency_key", "confirmed"}, schema.Required)
+	require.ElementsMatch(t, []string{"project_slug", "deployment_id", "expected_active_deployment_id", "idempotency_key", "confirmed"}, mapKeys(schema.Properties))
 }
 
 func TestRedeployDeploymentToolUnavailableKeepsSchemaAndHidesSecrets(t *testing.T) {
@@ -44,6 +45,7 @@ func TestRedeployDeploymentToolUnavailableKeepsSchemaAndHidesSecrets(t *testing.
 	service, _, _, _, _, _, _ := newRedeployServiceFixture(t)
 	registerDeploymentRedeployTool(live, service)
 	registerDeploymentRedeployTool(unavailable, nil)
+	unavailable.withProjects(slugProjects{"redeploy-project": uuid.MustParse("00000000-0000-0000-0000-000000000001")})
 
 	liveDescriptor := descriptorByName(t, live, redeployDeploymentToolName)
 	unavailableDescriptor := descriptorByName(t, unavailable, redeployDeploymentToolName)
@@ -51,7 +53,7 @@ func TestRedeployDeploymentToolUnavailableKeepsSchemaAndHidesSecrets(t *testing.
 	require.Equal(t, liveDescriptor.Meta, unavailableDescriptor.Meta)
 	require.Equal(t, liveDescriptor.Annotations, unavailableDescriptor.Annotations)
 
-	_, err := unavailableDescriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","deployment_id":"00000000-0000-0000-0000-000000000002","expected_active_deployment_id":"00000000-0000-0000-0000-000000000003","idempotency_key":"secret-looking-key","confirmed":true}`))
+	_, err := unavailableDescriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(`{"project_slug":"redeploy-project","deployment_id":"00000000-0000-0000-0000-000000000002","expected_active_deployment_id":"00000000-0000-0000-0000-000000000003","idempotency_key":"secret-looking-key","confirmed":true}`))
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.NotContains(t, strings.ToLower(refusal.Payload), "secret-looking-key")

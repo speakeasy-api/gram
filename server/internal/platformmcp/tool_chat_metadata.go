@@ -61,7 +61,7 @@ func chatMetadataToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result operationBudgetResult
 	switch {
 	case errors.Is(err, ErrChatListInvalid), errors.Is(err, ErrRiskReadInvalid), errors.Is(err, ErrDiagnosticWindowInvalid), errors.Is(err, ErrDiagnosticWindowTooLong):
-		result = operationBudgetResult{Code: "invalid_request", Message: "That chat listing request is not valid. Use one project selector, a window of 1h, 24h, 7d, or 30d, a risk filter of with_findings or without_findings, and a source label, assistant ID, or agent ID from a previous result."}
+		result = operationBudgetResult{Code: "invalid_request", Message: "That chat listing request is not valid. Name the project by its slug or omit it for the Default project, use a window of 1h, 24h, 7d, or 30d, a risk filter of with_findings or without_findings, and a source label, assistant ID, or agent ID from a previous result."}
 	case errors.Is(err, ErrRiskReadNotFound):
 		result = operationBudgetResult{Code: "not_found", Message: "That project is not one this organization holds. Choose one returned by list_projects."}
 	case errors.Is(err, ErrSubjectReferenceNotFound):

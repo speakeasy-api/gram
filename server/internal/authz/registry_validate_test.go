@@ -224,6 +224,14 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			want: `thing.read: at most one block per permission`,
 		},
 		{
+			name: "block and exemption on one permission",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("evaluate"), append(Blocked(AgentUnsafe(), "thing evaluate access"), Exclusion{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""})...),
+				validTestPermission("bypass"),
+			)),
+			want: `thing.evaluate: at most one exclusion per permission`,
+		},
+		{
 			name: "system role names a scope twice",
 			model: func() Registry {
 				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
