@@ -122,8 +122,13 @@ async function $do(
 
   const query = encodeFormQuery({
     "client_id": payload.client_id,
+    "created_after": payload.created_after,
+    "created_before": payload.created_before,
     "cursor": payload.cursor,
     "limit": payload.limit,
+    "search": payload.search,
+    "sort": payload.sort,
+    "status": payload.status,
   });
 
   const headers = new Headers(compactMap({

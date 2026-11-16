@@ -1,5 +1,5 @@
 import React from "react";
-import { StepState } from "./types";
+import type { StepState } from "./types";
 
 type StepContextApi = {
   step: number;

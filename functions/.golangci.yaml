@@ -108,7 +108,7 @@ linters:
     exhaustive:
       check:
         - switch
-        - map
+        - mapliteral
       default-signifies-exhaustive: true
     errcheck:
       exclude-functions:
@@ -139,3 +139,7 @@ linters:
         - "errors.New("
         - "errors.Join("
         - "fmt.Errorf("
+        # These constructors already wrap the cause in a typed method error.
+        - "github.com/speakeasy-api/gram/functions/internal/svc.Fault("
+        - "github.com/speakeasy-api/gram/functions/internal/svc.NewPermanentError("
+        - "github.com/speakeasy-api/gram/functions/internal/svc.NewTemporaryError("

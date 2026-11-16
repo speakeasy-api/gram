@@ -10,12 +10,10 @@ import (
 
 // Client is the Okta Management API surface used by Speakeasy.
 type Client interface {
-	ListUsers(ctx context.Context, req ListUsersRequest) ([]User, error)
 	ListApps(ctx context.Context, req ListAppsRequest) ([]App, error)
 	GetApp(ctx context.Context, appID string) (*App, error)
 	ListAppUsers(ctx context.Context, req ListAppUsersRequest) ([]AppUser, error)
 	ListAppGroups(ctx context.Context, req ListAppGroupsRequest) ([]AppGroup, error)
-	ListGroups(ctx context.Context, req ListGroupsRequest) ([]Group, error)
 	VerifyScopes(ctx context.Context, required []string) (*ScopeVerification, error)
 }
 
@@ -79,27 +77,6 @@ type AppGroup struct {
 	LastUpdated time.Time
 }
 
-// Group is an Okta group.
-type Group struct {
-	// ID is the Okta group id.
-	ID string
-
-	// Type is OKTA_GROUP, APP_GROUP, or BUILT_IN.
-	Type string
-
-	// Name is the group profile name.
-	Name string
-
-	// Description is the group profile description.
-	Description string
-
-	// Created is when the group was created.
-	Created time.Time
-
-	// LastUpdated is when the group profile was last modified.
-	LastUpdated time.Time
-}
-
 // ListAppsRequest filters an application listing.
 type ListAppsRequest struct {
 	// Query matches application label or name by prefix.
@@ -140,15 +117,6 @@ type ListAppGroupsRequest struct {
 	// MaxPages caps the pages followed for this call; zero uses the client cap.
 	// The pages fetched before the cap are returned with ErrTooManyPages.
 	MaxPages int
-}
-
-// ListGroupsRequest filters a group listing.
-type ListGroupsRequest struct {
-	// Search is plain text matched against group names by prefix.
-	Search string
-
-	// Limit is the page size; zero uses the Okta default.
-	Limit int
 }
 
 // ScopeVerification reports which required scopes the Okta application granted.
@@ -205,16 +173,4 @@ func (e *APIError) Error() string {
 func IsNotFound(err error) bool {
 	var apiErr *APIError
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
-}
-
-// User is an Okta directory user.
-type User struct {
-	ID string `json:"id"`
-}
-
-// ListUsersRequest reads only the first page of directory users.
-// This bounded read requires okta.users.read, not okta.apps.read.
-type ListUsersRequest struct {
-	// Limit is the page size; zero uses the Okta default.
-	Limit int
 }

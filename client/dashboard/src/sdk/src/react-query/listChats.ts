@@ -115,6 +115,7 @@ export function setListChatsData(
       userId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
+      agentId?: string | undefined;
       sourceKind?: string | undefined;
       excludeSourceKind?: string | undefined;
       hasRisk?: HasRisk | undefined;
@@ -127,6 +128,7 @@ export function setListChatsData(
       offset?: number | undefined;
       sortBy?: SortBy | undefined;
       sortOrder?: SortOrder | undefined;
+      pinnedFirst?: boolean | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
@@ -148,6 +150,7 @@ export function invalidateListChats(
       userId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
+      agentId?: string | undefined;
       sourceKind?: string | undefined;
       excludeSourceKind?: string | undefined;
       hasRisk?: HasRisk | undefined;
@@ -160,6 +163,7 @@ export function invalidateListChats(
       offset?: number | undefined;
       sortBy?: SortBy | undefined;
       sortOrder?: SortOrder | undefined;
+      pinnedFirst?: boolean | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;

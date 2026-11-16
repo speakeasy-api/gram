@@ -31,7 +31,7 @@ function AffectedUsers({
   ];
   if (affected.length === 0) return null;
   return (
-    <Alert variant="warning" dismissible={false} alignTop>
+    <Alert variant="warning" dismissible={false}>
       <Text small className="block">
         People signing in to these will sign in through Okta:
       </Text>

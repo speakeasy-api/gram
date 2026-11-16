@@ -19,6 +19,7 @@ from pystreams.risk.metering import MeterReadingPublisher, publish_meter_reading
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
     Detection,
+    ScanInputError,
     Scanner,
     ScanSlotTimeout,
 )
@@ -32,6 +33,15 @@ SOURCE_PRESIDIO = "presidio"
 # canonical rule_id carries the specific entity, so a consumer can resolve a
 # richer description from it.
 _FINDING_DESCRIPTION = "Identified potentially sensitive personal information."
+
+
+class RetryablePresidioError(RuntimeError):
+    """A transient scan or finding delivery failure that must nack the message."""
+
+
+def _is_deterministic_scan_error(exc: Exception) -> bool:
+    """Return whether retrying the same input cannot change the scan outcome."""
+    return isinstance(exc, (TimeoutError, ScanInputError))
 
 
 class PresidioHandler:
@@ -86,8 +96,8 @@ class PresidioHandler:
         # Time the whole handler end to end and record it as a distribution,
         # tagged with the terminal outcome. The timer starts here and is recorded
         # in the ``finally`` so every path — scan failure, nothing detected, or
-        # findings published — contributes, and ``outcome`` defaults to error so a
-        # swallowed scan failure (which returns early) is attributed correctly.
+        # findings published — contributes, and ``outcome`` defaults to error so
+        # an unexpected failure is attributed correctly.
         process_started = time.perf_counter()
         outcome = metrics.OUTCOME_ERROR
         try:
@@ -107,7 +117,7 @@ class PresidioHandler:
             except ScanSlotTimeout:
                 # The scan never started: the pool was backlogged for the whole
                 # slot budget and the content was never touched. Unlike the
-                # swallowed failures below this is not a property of the
+                # deterministic failures below this is not a property of the
                 # message, so re-raising to nack is safe (nothing scanned,
                 # nothing published — redelivery duplicates no work) and
                 # correct: the subscription's retry policy backs the message
@@ -118,26 +128,34 @@ class PresidioHandler:
                 outcome = metrics.OUTCOME_REQUEUED
                 raise
             except Exception as exc:
-                # This is best-effort shadow processing, and the PresidioAnalyzer
-                # subscription declares no dead-letter policy. Letting a scan
-                # failure escape would nack the message, and any input that
-                # deterministically trips the analyzer would then redeliver and
-                # fail again for the full retention window (30 days) — one bad
-                # message poisoning the subscription. Swallow it (so the message is
-                # acked) and log instead. Cancellation derives from BaseException,
-                # not Exception, so graceful shutdown still propagates. Only the
-                # exception *type* is logged: an error string or traceback could
-                # echo the scanned content, which this handler never emits (see the
-                # detection log below).
-                self.logger.warning(
-                    "presidio scan failed",
+                # Execution timeouts and validation failures are input-bound, so
+                # redelivery would repeat them for the full retention window.
+                # Only the exception type is logged: an error string or traceback
+                # could echo scanned content.
+                if _is_deterministic_scan_error(exc):
+                    outcome = metrics.OUTCOME_DROPPED
+                    self.logger.warning(
+                        "presidio scan rejected input",
+                        request_id=message.request_id,
+                        reply_urn=message.reply_urn,
+                        requested_entities=requested or [],
+                        error_type=type(exc).__name__,
+                        delivery_attempt=meta.delivery_attempt,
+                    )
+                    return
+
+                outcome = metrics.OUTCOME_REQUEUED
+                self.logger.error(
+                    "presidio scan failed, requeuing",
                     request_id=message.request_id,
                     reply_urn=message.reply_urn,
                     requested_entities=requested or [],
                     error_type=type(exc).__name__,
                     delivery_attempt=meta.delivery_attempt,
                 )
-                return
+                raise RetryablePresidioError(
+                    "transient presidio scan failure"
+                ) from None
 
             if not detections:
                 await self._publish_meter_reading(message, scan_started_at, meta)
@@ -157,9 +175,8 @@ class PresidioHandler:
             )
             published = await self._collect(message, pending)
             publish_ms = (time.perf_counter() - publish_started) * 1000
-            # Finding delivery is best effort and independent from usage. The
-            # scan is meterable once every result was constructed, even if one
-            # or more finding commits failed.
+            # Usage publishes only after all findings commit. Redelivery is safe
+            # because finding ids are deterministic.
             await self._publish_meter_reading(message, scan_started_at, meta)
             outcome = metrics.OUTCOME_DETECTED if published else metrics.OUTCOME_ERROR
 
@@ -191,6 +208,9 @@ class PresidioHandler:
                 scan_ms=round(scan_ms, 1),
                 publish_ms=round(publish_ms, 1),
             )
+        except RetryablePresidioError:
+            outcome = metrics.OUTCOME_REQUEUED
+            raise
         finally:
             metrics.record_process_duration(
                 time.perf_counter() - process_started, outcome, size_bucket
@@ -241,17 +261,14 @@ class PresidioHandler:
         the fired publishes for ``_collect`` to await. A message's findings are
         independent, so each publish is fired up front (``publish`` returns a
         future without waiting and the client batches the sends); in series N
-        findings would pay N Pub/Sub round-trips back to back. A publish that raises
-        *synchronously* (e.g. a stopped client) is logged and skipped here — the
-        same disposition ``_collect`` gives an async commit failure — so one
-        finding's failure neither aborts the rest nor escapes to nack (and
-        duplicate) the message.
+        findings would pay N Pub/Sub round-trips back to back. A synchronous
+        publish failure is logged and raised so the subscriber nacks the message.
         """
         # A fresh detection timestamp (UTC, RFC3339) stamped on every finding from
         # this delivery — when the scan ran, not when the request was created.
         created_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         # An explicit loop, not a comprehension: each publish needs its own
-        # try/except so a synchronous failure skips just that finding.
+        # try/except so a synchronous failure is logged without payload data.
         entity_types: dict[str, int] = {}
         pending: list[_PendingPublish] = []
         # Occurrence counter per deterministic base id, mirroring the Go
@@ -293,7 +310,7 @@ class PresidioHandler:
                 result = self.publisher.publish(finding)
             except Exception as exc:
                 self._log_publish_failure(message, rule_id, exc)
-                continue
+                raise RetryablePresidioError("risk finding publish failed") from None
             pending.append(_PendingPublish(rule_id=rule_id, result=result))
         return entity_types, pending
 
@@ -302,23 +319,20 @@ class PresidioHandler:
         message: presidio_analysis_pb2.PresidioAnalysis,
         pending: Sequence[_PendingPublish],
     ) -> int:
-        """Await each already-fired publish's commit; return how many landed.
-
-        A commit failure is logged and skipped rather than raised: this is
-        best-effort shadow processing, so a transient publish failure must not
-        redrive the whole scan. Deterministic finding ids mean a redelivery
-        would at least republish under the same ids (ClickHouse dedupes by id),
-        but acking keeps one flaky commit from re-running the scanner.
-        """
+        """Await every fired publish and raise when any commit fails."""
         published = 0
+        failed = False
         for p in pending:
             try:
                 await p.result.get()
             except Exception as exc:
                 self._log_publish_failure(message, p.rule_id, exc)
+                failed = True
                 continue
             published += 1
 
+        if failed:
+            raise RetryablePresidioError("risk finding commit failed")
         return published
 
     def _log_publish_failure(
@@ -329,8 +343,8 @@ class PresidioHandler:
     ) -> None:
         """Log one finding's publish failure (synchronous dispatch or async commit).
 
-        Never echo the finding — it carries the matched value — so only the request,
-        rule id, and exception type are logged.
+        Never echo the finding or exception text: an error string or traceback
+        could contain scanned content. Log only request, rule id, and exception type.
         """
         self.logger.error(
             "failed to publish risk finding",

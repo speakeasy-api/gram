@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FC } from "react";
+import type { FC } from "react";
 import { MacOSWindowFrame } from "./MacOSWindowFrame";
 
 interface PluginLoadingStateProps {

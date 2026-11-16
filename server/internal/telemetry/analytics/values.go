@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // Dimension value listing guardrails.
@@ -21,6 +22,10 @@ type ValuesRequest struct {
 	FromUnixNano int64
 	ToUnixNano   int64
 	Limit        int
+	// SignalScope is required for signal attribute discovery.
+	SignalScope *signalquery.Scope
+	// Attribute is an exact label key when Dimension is attribute.
+	Attribute string
 }
 
 // DimensionValue is one value and how many rows at the dataset's grain
@@ -28,13 +33,16 @@ type ValuesRequest struct {
 type DimensionValue struct {
 	Value string
 	Count int64
+	// Present distinguishes missing signal labels from present empty values.
+	Present *bool
 }
 
-// CompileValues turns a values request into SQL. Values are resolved after
-// the dataset collapses its observations, so a caller never sees a value no
-// row would actually match, and the empty value is never offered. The
-// dimension is read through its lookup, so the picker offers what a filter
-// will match.
+// CompileValues turns a values request into SQL. A dimension with a Typeahead
+// column is listed from the dataset's observations and counted at its grain,
+// so the listing never pays for the redelivery collapse. Any other dimension
+// is listed from the folded rows. The dimension is read through its lookup,
+// so the picker offers what a filter will match, and the empty value is never
+// offered.
 func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req ValuesRequest) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
@@ -59,11 +67,18 @@ func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Valu
 	}
 
 	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
+	source, count := ds.Source.Rows(qc), "count()"
+	if field.Typeahead != "" {
+		typeahead := *field
+		typeahead.Expr = field.Typeahead
+		field = &typeahead
+		source, count = ds.Source.Observations(qc), "uniqExact("+ds.Source.Key+")"
+	}
 	expr, args := readExpr(qc, field)
 	builder := sq.Select().
 		Column(expr+" AS value", args...).
-		Column("count() AS n").
-		FromSelect(ds.Source(qc), "src").
+		Column(count+" AS n").
+		FromSelect(source, "src").
 		Where(expr+" <> ?", append(slices.Clone(args), "")...).
 		GroupBy("value").
 		OrderBy("n DESC", "value ASC").
@@ -71,7 +86,7 @@ func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Valu
 
 	plan := &Plan{
 		Dataset: ds.Name,
-		Name:    ds.Name + ".agent_events",
+		Name:    ds.Name + "." + ds.Source.Table.planSuffix(),
 		SQL:     "",
 		Args:    nil,
 		Columns: []Column{{Name: "value", Kind: ColumnDimension}, {Name: "n", Kind: ColumnMeasure}},
@@ -94,7 +109,7 @@ func (p *Plan) RunValues(ctx context.Context, conn Querier) ([]DimensionValue, e
 		if err := rows.Scan(&value, &count); err != nil {
 			return nil, fmt.Errorf("scan dimension value: %w", err)
 		}
-		out = append(out, DimensionValue{Value: value, Count: int64(min(count, uint64(1<<63-1)))})
+		out = append(out, DimensionValue{Value: value, Count: int64(min(count, uint64(1<<63-1))), Present: nil})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read dimension values: %w", err)
@@ -109,6 +124,14 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 	if err != nil {
 		return nil, err
 	}
+	if err := s.authorizeDataset(ctx, authCtx, payload.Dataset); err != nil {
+		return nil, err
+	}
+	if payload.Dataset == signalquery.Dataset {
+		if err := s.requireSignals(ctx, authCtx.ActiveOrganizationID); err != nil {
+			return nil, err
+		}
+	}
 
 	from, to, err := ParseWindow(payload.From, payload.To)
 	if err != nil {
@@ -120,6 +143,11 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 		FromUnixNano: from,
 		ToUnixNano:   to,
 		Limit:        payload.Limit,
+		SignalScope:  nil,
+		Attribute:    deref(payload.Attribute),
+	}
+	if payload.SignalScope != nil {
+		req.SignalScope = &signalquery.Scope{SensorID: payload.SignalScope.SensorID, Trigger: payload.SignalScope.Trigger, RunID: deref(payload.SignalScope.RunID)}
 	}
 
 	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
@@ -130,7 +158,7 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 
 	out := make([]*gen.AnalyticsDimensionValue, 0, len(values))
 	for _, v := range values {
-		out = append(out, &gen.AnalyticsDimensionValue{Value: v.Value, Count: v.Count})
+		out = append(out, &gen.AnalyticsDimensionValue{Value: v.Value, Count: v.Count, Present: v.Present})
 	}
 	return &gen.AnalyticsDimensionValuesResult{Dataset: req.Dataset, Dimension: req.Dimension, Values: out}, nil
 }

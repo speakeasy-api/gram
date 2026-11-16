@@ -1,4 +1,5 @@
 import { Text } from "@/components/ui/Text";
+import { mcpServerRouteParam } from "@/lib/sources";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import {
   Blocks,
@@ -10,6 +11,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { Link } from "react-router";
+import type { ResourceLinkMaps } from "./useResourceLinkMaps";
 
 // Fallback for resource ids we cannot resolve to a display name (deleted
 // rows, kinds with no org-level lookup): a truncated mono chip with the full
@@ -32,15 +34,10 @@ export function ResourceLink({
   toolsetMap,
   mcpServerMap,
 }: {
-  challenge: ChallengeBucket;
+  /** A challenge bucket, or anything naming a resource the same way. */
+  challenge: Pick<ChallengeBucket, "resourceKind" | "resourceId" | "projectId">;
   orgSlug: string;
-  projectMap: Map<string, { slug: string; name: string }>;
-  toolsetMap: Map<string, { slug: string; name: string; projectId: string }>;
-  mcpServerMap: Map<
-    string,
-    { slug?: string; name?: string; projectId: string }
-  >;
-}): JSX.Element {
+} & ResourceLinkMaps): JSX.Element {
   const { resourceKind, resourceId, projectId } = challenge;
 
   if (!resourceKind || !resourceId) {
@@ -86,16 +83,19 @@ export function ResourceLink({
     if (toolset) {
       label = toolset.name;
       const proj = projectMap.get(toolset.projectId);
-      to = proj
-        ? `/${orgSlug}/projects/${proj.slug}/mcp/${toolset.slug}`
-        : null;
+      // The server's own page when its server is known. /toolsets/<slug>
+      // only redirects there, and is kept for a toolset no server serves.
+      const page = toolset.server
+        ? `mcp/${mcpServerRouteParam(toolset.server)}`
+        : `toolsets/${toolset.slug}`;
+      to = proj ? `/${orgSlug}/projects/${proj.slug}/${page}` : null;
     } else if (mcpServer) {
       label = mcpServer.name ?? mcpServer.slug ?? resourceId;
       const proj = projectMap.get(mcpServer.projectId);
-      to =
-        proj && mcpServer.slug
-          ? `/${orgSlug}/projects/${proj.slug}/mcp/x/${mcpServer.slug}`
-          : null;
+      // The route accepts the row id or slug, so a slugless row still links.
+      to = proj
+        ? `/${orgSlug}/projects/${proj.slug}/mcp/${mcpServerRouteParam({ id: resourceId, slug: mcpServer.slug })}`
+        : null;
     } else {
       label = resourceId;
     }

@@ -10,11 +10,15 @@ import { organizationRemoteSessionIssuersGetDeletePreflight } from "../funcs/org
 import { organizationRemoteSessionIssuersGetDuplicatePreflight } from "../funcs/organizationRemoteSessionIssuersGetDuplicatePreflight.js";
 import { organizationRemoteSessionIssuersGetMigratePreflight } from "../funcs/organizationRemoteSessionIssuersGetMigratePreflight.js";
 import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemoteSessionIssuersList.js";
+import { organizationRemoteSessionIssuersListEMAServices } from "../funcs/organizationRemoteSessionIssuersListEMAServices.js";
 import { organizationRemoteSessionIssuersMigrate } from "../funcs/organizationRemoteSessionIssuersMigrate.js";
 import { organizationRemoteSessionIssuersMove } from "../funcs/organizationRemoteSessionIssuersMove.js";
 import { organizationRemoteSessionIssuersRefreshMetadata } from "../funcs/organizationRemoteSessionIssuersRefreshMetadata.js";
+import { organizationRemoteSessionIssuersSetEMAProviders } from "../funcs/organizationRemoteSessionIssuersSetEMAProviders.js";
 import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { EMAProviderOrder } from "../models/components/emaproviderorder.js";
+import { ListEMAServicesResult } from "../models/components/listemaservicesresult.js";
 import { MigrateOrganizationRemoteSessionIssuerResult } from "../models/components/migrateorganizationremotesessionissuerresult.js";
 import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
 import { OrganizationIssuerMigratePreflight } from "../models/components/organizationissuermigratepreflight.js";
@@ -51,6 +55,10 @@ import {
   GetOrganizationRemoteSessionIssuerMigratePreflightSecurity,
 } from "../models/operations/getorganizationremotesessionissuermigratepreflight.js";
 import {
+  ListOrganizationRemoteSessionIssuerEMAServicesRequest,
+  ListOrganizationRemoteSessionIssuerEMAServicesSecurity,
+} from "../models/operations/listorganizationremotesessionissueremaservices.js";
+import {
   ListOrganizationRemoteSessionIssuersRequest,
   ListOrganizationRemoteSessionIssuersResponse,
   ListOrganizationRemoteSessionIssuersSecurity,
@@ -67,6 +75,10 @@ import {
   RefreshOrganizationRemoteSessionIssuerMetadataRequest,
   RefreshOrganizationRemoteSessionIssuerMetadataSecurity,
 } from "../models/operations/refreshorganizationremotesessionissuermetadata.js";
+import {
+  SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+  SetOrganizationRemoteSessionIssuerEMAProvidersSecurity,
+} from "../models/operations/setorganizationremotesessionissueremaproviders.js";
 import {
   UpdateOrganizationRemoteSessionIssuerRequest,
   UpdateOrganizationRemoteSessionIssuerSecurity,
@@ -245,6 +257,27 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
   }
 
   /**
+   * listEMAServices organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.
+   */
+  async listEMAServices(
+    request?: ListOrganizationRemoteSessionIssuerEMAServicesRequest | undefined,
+    security?:
+      | ListOrganizationRemoteSessionIssuerEMAServicesSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<ListEMAServicesResult> {
+    return unwrapAsync(organizationRemoteSessionIssuersListEMAServices(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * migrateIssuer organizationRemoteSessionIssuers
    *
    * @remarks
@@ -296,6 +329,27 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerRefresh> {
     return unwrapAsync(organizationRemoteSessionIssuersRefreshMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setEMAProviders organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Replace the EMA providers the vendor authorization server this issuer names accepts, the providers that may issue ID-JAGs for it. They are stored as an ordered list, but each endpoint can use only the provider its sign-in goes through: the sign-in's trusted external issuer, or the organization's Speakeasy issuer for a sign-in that trusts none. So the list acts as the set of accepted providers, and its order does not change who vouches; a list that leaves out an endpoint's provider leaves that endpoint with nobody to vouch. An empty list restores the derived default, which accepts every provider: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization's Speakeasy issuer when it has one. The list applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved list still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.
+   */
+  async setEMAProviders(
+    request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+    security?:
+      | SetOrganizationRemoteSessionIssuerEMAProvidersSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<EMAProviderOrder> {
+    return unwrapAsync(organizationRemoteSessionIssuersSetEMAProviders(
       this,
       request,
       security,

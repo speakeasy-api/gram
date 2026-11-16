@@ -7,6 +7,7 @@ import {
   type Telemetry,
 } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "./useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 type FeatureFlagsCallback = Parameters<Telemetry["onFeatureFlags"]>[0];
 type FeatureFlagOptions = Parameters<Telemetry["isFeatureEnabled"]>[1];
@@ -65,7 +66,7 @@ function renderFeatureFlag({
     );
   }
 
-  const hook = renderHook(() => useFeatureFlag("gram-rbac"), {
+  const hook = renderHook(() => useFeatureFlag(FEATURE_FLAGS.explore), {
     wrapper: Wrapper,
   });
 
@@ -105,7 +106,7 @@ describe("useFeatureFlag", () => {
     emitFlagResult(true);
 
     expect(result.current).toEqual({ status: "enabled" });
-    expect(isFeatureEnabled).toHaveBeenCalledWith("gram-rbac", {
+    expect(isFeatureEnabled).toHaveBeenCalledWith(FEATURE_FLAGS.explore, {
       fresh: true,
     });
   });

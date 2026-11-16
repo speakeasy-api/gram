@@ -20,9 +20,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -31,21 +35,62 @@ import (
 )
 
 const (
-	operationRegisterCatalogMCP  = "register_catalog_mcp"
-	receiptStatusPending         = "pending"
-	receiptStatusSucceeded       = "succeeded"
-	receiptResultRegistered      = "registered"
-	registrationStatusPending    = "pending"
-	registrationStatusRegistered = "registered"
-	receiptLifetime              = 24 * time.Hour
-	maxMCPEndpointSlugLength     = 128
+	operationRegisterCatalogMCP = "register_catalog_mcp"
+	receiptStatusPending        = "pending"
+	receiptStatusSucceeded      = "succeeded"
+	receiptResultRegistered     = "registered"
+	// receiptResultAlreadyRegistered completes a request that found the MCP
+	// server already fully added, so a replay reports the same outcome.
+	receiptResultAlreadyRegistered = "already_registered"
+	registrationStatusPending      = "pending"
+	registrationStatusRegistered   = "registered"
+	receiptLifetime                = 24 * time.Hour
+	maxMCPEndpointSlugLength       = 128
+
+	// readableSlugSuffixLength is the length of the random suffix a readable
+	// slug gets when the bare one is taken. Five characters from a 35-character
+	// set make a repeat collision unlikely while keeping the address short.
+	readableSlugSuffixLength = 5
+
+	// readableSlugAttempts is how many readable slugs a registration tries,
+	// the bare one included, before it falls back to a random slug.
+	readableSlugAttempts = 3
 )
 
 var (
 	ErrRegistrationConflict = errors.New("platform mcp registration idempotency conflict")
 	ErrRegistrationInvalid  = errors.New("invalid platform mcp registration input")
 	ErrTargetIneligible     = errors.New("platform mcp registration target is ineligible")
+
+	// ErrMCPServerNotFound is an mcp_id that names no live MCP server in the
+	// named project.
+	ErrMCPServerNotFound = errors.New("platform mcp server not found in project")
+
+	// ErrMCPNotAddedThroughSetup is an MCP server with no Platform setup
+	// record: it was built in the dashboard, from an OpenAPI document, or
+	// from functions, so the operations that act on that record do not apply.
+	ErrMCPNotAddedThroughSetup = errors.New("platform mcp server was not added through platform setup")
+
+	// ErrMCPAddedByAnotherMember is an MCP server whose Platform setup record
+	// another member created. Those operations act only for the member who
+	// added the server.
+	ErrMCPAddedByAnotherMember = errors.New("platform mcp server was added by another member")
 )
+
+// mcpTargetError refuses an operation on the MCP server an agent named by
+// mcp_id, and names that operation so the refusal can say what was refused.
+type mcpTargetError struct {
+	// err is ErrMCPServerNotFound, ErrMCPNotAddedThroughSetup, or
+	// ErrMCPAddedByAnotherMember.
+	err error
+
+	// operation is the name of the Platform MCP tool that was refused.
+	operation string
+}
+
+func (e *mcpTargetError) Error() string { return e.operation + ": " + e.err.Error() }
+
+func (e *mcpTargetError) Unwrap() error { return e.err }
 
 // CatalogRegistrationRequest is the normalized desired state behind one
 // register_catalog_mcp call. The caller resolves catalog details before passing
@@ -75,6 +120,9 @@ type OperationReceipt struct {
 	InputHash      string
 	ExpiresAt      time.Time
 	Replayed       bool
+	// AlreadyRegistered is set when this request found the MCP server already
+	// fully added to the project, so nothing new was created.
+	AlreadyRegistered bool
 	// Invalid when the receipt was written by a surface with no OAuth
 	// connection. Unwrapping these to a bare uuid.Nil would be read downstream
 	// as "connection missing" rather than "no connection applies".
@@ -87,13 +135,26 @@ type OperationReceipt struct {
 // create project components.
 type RegistrationStore struct {
 	db *pgxpool.Pool
+
+	// icons fetches a new MCP server's logo after it is added, the same way
+	// the dashboard does. Nil leaves new servers without a logo.
+	icons mcpservers.DefaultServerIconSetter
 }
 
 func NewRegistrationStore(db *pgxpool.Pool) (*RegistrationStore, error) {
 	if db == nil {
 		return nil, ErrRegistrationInvalid
 	}
-	return &RegistrationStore{db: db}, nil
+	return &RegistrationStore{db: db, icons: nil}, nil
+}
+
+// WithServerIcons fetches and stores a logo for each MCP server this store
+// adds, so result cards and the dashboard can show it.
+func (s *RegistrationStore) WithServerIcons(icons mcpservers.DefaultServerIconSetter) *RegistrationStore {
+	if s != nil {
+		s.icons = icons
+	}
+	return s
 }
 
 func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error) {
@@ -111,6 +172,65 @@ func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, 
 		return ResolvedProject{}, fmt.Errorf("resolve platform mcp registration project: %w", err)
 	}
 	return ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}, nil
+}
+
+// RegistrationIDForMCP resolves the Platform setup record behind the MCP
+// server an agent names by mcp_id, for the tool named by operation. Agents
+// never see that record: every tool that acts on it takes mcp_id and resolves
+// it here. The newest live record wins, as in the inventory. A server with no
+// record, or one another member added, is refused with a reason the agent can
+// relay. The operation itself still checks the caller's live connection.
+func (s *RegistrationStore) RegistrationIDForMCP(ctx context.Context, principal Principal, projectSlug, mcpID, operation string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", ErrRegistrationUnavailable
+	}
+	project, err := s.ResolveProject(ctx, principal.OrganizationID, projectSlug)
+	if err != nil {
+		return "", err
+	}
+	serverID, err := uuid.Parse(strings.TrimSpace(mcpID))
+	if err != nil {
+		return "", &mcpTargetError{err: ErrMCPServerNotFound, operation: operation}
+	}
+	row, err := platformrepo.New(s.db).GetPlatformMCPServerRegistrationForCaller(ctx, platformrepo.GetPlatformMCPServerRegistrationForCallerParams{
+		UserID:         conv.ToPGText(principal.UserID),
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		OrganizationID: principal.OrganizationID,
+		McpServerID:    serverID,
+		ProjectID:      project.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", &mcpTargetError{err: ErrMCPServerNotFound, operation: operation}
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve platform mcp server registration: %w", err)
+	}
+	switch {
+	case row.RegistrationID == uuid.Nil:
+		return "", &mcpTargetError{err: ErrMCPNotAddedThroughSetup, operation: operation}
+	case !row.AddedByCaller:
+		return "", &mcpTargetError{err: ErrMCPAddedByAnotherMember, operation: operation}
+	}
+	return row.RegistrationID.String(), nil
+}
+
+// ResolveRegistrationMCPID returns the MCP server a lifecycle-bound
+// registration created, which is the ID agents use for it.
+func (s *RegistrationStore) ResolveRegistrationMCPID(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (uuid.UUID, error) {
+	if s == nil || s.db == nil || registrationID == uuid.Nil {
+		return uuid.Nil, ErrRegistrationInvalid
+	}
+	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve platform mcp registration server: %w", err)
+	}
+	if !registration.McpServerID.Valid {
+		return uuid.Nil, ErrRegistrationUnavailable
+	}
+	return registration.McpServerID.UUID, nil
 }
 
 func (s *RegistrationStore) EligibleCatalogRegistrationTarget(ctx context.Context, organizationID string, project ResolvedProject) (bool, error) {
@@ -216,14 +336,11 @@ func (s *RegistrationStore) ResolveRegistrationDashboardSetup(ctx context.Contex
 	if !server.RemoteMcpServerID.Valid || server.RemoteMcpServerID.UUID != registration.RemoteMcpServerID.UUID || !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != registration.UserSessionIssuerID.UUID {
 		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
 	}
-	mcpServerRoute := server.Slug.String
-	if !server.Slug.Valid || mcpServerRoute == "" {
-		mcpServerRoute = server.ID.String()
-	}
+	mcpServerRoute := mcpservers.DashboardRouteParam(server.Slug.String, server.ID)
 	if organization.Slug == "" || mcpServerRoute == "" {
 		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
 	}
-	return RegistrationDashboardSetup{OrganizationSlug: organization.Slug, MCPServerRoute: mcpServerRoute}, nil
+	return RegistrationDashboardSetup{OrganizationSlug: organization.Slug, MCPServerRoute: mcpServerRoute, ServerName: server.Name.String}, nil
 }
 
 // BeginReceipt atomically establishes the 24-hour idempotency boundary. It
@@ -406,6 +523,37 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 		CatalogProvider:  request.CatalogProvider,
 		CatalogReference: request.CatalogReference,
 	})
+	if err == nil && registration.McpServerID.Valid {
+		// The MCP server may have been deleted outside Platform MCP, for example
+		// in the dashboard, which leaves this registration pointing at it.
+		// Reusing it would report a server nobody can see, so retire it and add
+		// the catalogue server again from scratch.
+		_, serverErr := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        registration.McpServerID.UUID,
+			ProjectID: project.ID,
+		})
+		switch {
+		case errors.Is(serverErr, pgx.ErrNoRows):
+			// Only the registration's owner may retire it, matching every other
+			// lifecycle action; anyone else falls through to the ownership check
+			// below and is refused as before.
+			if _, ownerErr := lifecycleRegistration(ctx, q, principal, project.ID, registration.ID); errors.Is(ownerErr, pgx.ErrNoRows) {
+				break
+			} else if ownerErr != nil {
+				return OperationReceipt{}, fmt.Errorf("authorize retiring platform mcp catalog registration: %w", ownerErr)
+			}
+			if err := q.RetirePlatformMCPCatalogRegistration(ctx, platformrepo.RetirePlatformMCPCatalogRegistrationParams{
+				ID:             registration.ID,
+				OrganizationID: principal.OrganizationID,
+				ProjectID:      project.ID,
+			}); err != nil {
+				return OperationReceipt{}, fmt.Errorf("retire platform mcp catalog registration with deleted server: %w", err)
+			}
+			err = pgx.ErrNoRows
+		case serverErr != nil:
+			return OperationReceipt{}, fmt.Errorf("check platform mcp catalog registration server: %w", serverErr)
+		}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		registration, err = q.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
 			OrganizationID:       principal.OrganizationID,
@@ -511,6 +659,13 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if storedReceipt.Status != receiptStatusPending {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
+	// Components written below include credential headers, which yield typed
+	// auth clients. Normal server creation takes this scope before the
+	// project row lock, so this does too: the reverse order lets a concurrent
+	// creation hold the project row while waiting for the scope.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp auth client writer scope: %w", err)
+	}
 	if _, err := q.LockLivePlatformMCPProjectForRegistration(ctx, platformrepo.LockLivePlatformMCPProjectForRegistrationParams{
 		ProjectID:      project.ID,
 		OrganizationID: principal.OrganizationID,
@@ -580,10 +735,14 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 
+	resultCode := receiptResultRegistered
+	if !componentsCreated {
+		resultCode = receiptResultAlreadyRegistered
+	}
 	completedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
 		RegistrationID: storedReceipt.RegistrationID,
 		Status:         receiptStatusSucceeded,
-		ResultCode:     optionalText(receiptResultRegistered),
+		ResultCode:     optionalText(resultCode),
 		ID:             storedReceipt.ID,
 		OrganizationID: principal.OrganizationID,
 	})
@@ -618,6 +777,13 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return OperationReceipt{}, fmt.Errorf("commit platform mcp component convergence: %w", err)
+	}
+	if componentsCreated && s.icons != nil {
+		// The result card shows the logo, so the fetch finishes before the
+		// card is built. It stores the image as a project asset, which needs
+		// the project-scoped auth context.
+		iconCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID})
+		s.icons.SetDefaultRemoteServerIcon(iconCtx, project.ID, registration.McpServerID.UUID, registration.RemoteMcpServerID.UUID)
 	}
 	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
 }
@@ -699,6 +865,16 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
 	}
 	serverSlug := "platform-mcp-" + suffix
+	endpointSlug := platformMCPEndpointSlug(organization.Slug, suffix)
+	if registration.SourceKind == directRemoteSourceKind {
+		readable, found, err := claimReadableRegistrationSlug(ctx, tx, project.ID, registration.OrganizationID, organization.Slug, displayName)
+		if err != nil {
+			return platformrepo.PlatformMcpCatalogRegistration{}, err
+		}
+		if found {
+			serverSlug, endpointSlug = readable, organization.Slug+"-"+readable
+		}
+	}
 	server, err := mcpserversrepo.New(tx).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  serverID,
 		ProjectID:           project.ID,
@@ -711,12 +887,23 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp server: %w", err)
 	}
-	// The slug embeds the 64-bit random registration suffix, so it cannot land
-	// on an existing toolsets.mcp_slug; no LockSlugScope/availability probe.
+	// A readable slug was locked and checked by claimReadableRegistrationSlug.
+	// The fallback embeds the 64-bit random registration suffix, so it cannot
+	// land on an existing toolsets.mcp_slug and needs no lock or probe.
+	// The source's credential headers and the new server's reach decide the
+	// typed auth clients it offers, recorded here rather than left to the
+	// offline backfill.
+	if err := authclientbackfill.SyncEMAServers(ctx, tx, registration.OrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("sync platform mcp server EMA clients: %w", err)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, tx, registration.OrganizationID, remote.ID); err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("sync platform mcp source auth clients: %w", err)
+	}
+
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
 		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
-		Slug:        platformMCPEndpointSlug(organization.Slug, suffix),
+		Slug:        endpointSlug,
 	})
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp endpoint: %w", err)
@@ -750,6 +937,88 @@ func platformMCPEndpointSlug(organizationSlug, suffix string) string {
 	suffixRunes := []rune("-platform-mcp-endpoint-" + suffix)
 	organizationRunes := []rune(organizationSlug)
 	return string(organizationRunes[:min(len(organizationRunes), maxMCPEndpointSlugLength-len(suffixRunes))]) + string(suffixRunes)
+}
+
+// claimReadableRegistrationSlug picks a slug derived from a remote MCP's
+// display name, such as "linear", for its MCP server, and claims
+// "<organization>-<slug>" as its endpoint address. It tries the bare slug
+// first and then a few with a short random suffix. A candidate is used only
+// when its address lock is held, the address is free in the unified MCP slug
+// namespace, the project has no server with that slug, and the dashboard can
+// route to it. found is false when no candidate qualifies, and the caller
+// keeps its random slugs.
+//
+// The lock is taken without waiting: the caller holds the project row lock,
+// and an endpoint write elsewhere can hold an address lock while it waits on
+// that row. A busy address counts as taken.
+func claimReadableRegistrationSlug(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, organizationID, organizationSlug, displayName string) (string, bool, error) {
+	prefix := organizationSlug + "-"
+	// The database allows 128 characters, but the dashboard's endpoint editor
+	// holds a platform address to 40, so a longer one could not be edited
+	// there without being shortened first.
+	bare := gatewayAddressSlug(displayName, len(prefix))
+	// A suffixed candidate cuts the name shorter so it still fits the address limit.
+	base := gatewayAddressSlug(displayName, len(prefix)+len("-")+readableSlugSuffixLength)
+	for attempt := range readableSlugAttempts {
+		candidate := bare
+		if attempt > 0 {
+			if base == "" {
+				break
+			}
+			suffix, err := conv.GenerateRandomSlug(readableSlugSuffixLength)
+			if err != nil {
+				return "", false, fmt.Errorf("generate platform mcp slug suffix: %w", err)
+			}
+			candidate = base + "-" + suffix
+		} else if bare == "" || mcpservers.DashboardRouteParam(bare, uuid.Nil) != bare {
+			// The dashboard cannot route to an empty or reserved slug such as "catalog".
+			continue
+		}
+		free, err := readableRegistrationSlugFree(ctx, tx, projectID, organizationID, candidate, prefix+candidate)
+		if err != nil {
+			return "", false, err
+		}
+		if free {
+			return candidate, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func readableRegistrationSlugFree(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, organizationID, serverSlug, endpointSlug string) (bool, error) {
+	// The project's server slugs need no address lock: the caller holds the
+	// project row lock, which serialises Platform MCP registrations in the
+	// project. A dashboard write of the same slug at the same moment makes the
+	// server create fail, and a retry with the same key picks another slug.
+	_, err := mcpserversrepo.New(tx).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(serverSlug), ProjectID: projectID})
+	switch {
+	case err == nil:
+		return false, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return false, fmt.Errorf("check platform mcp server slug: %w", err)
+	}
+	locked, err := mcpendpointsrepo.New(tx).TryLockPlatformSlugScope(ctx, endpointSlug)
+	if err != nil {
+		return false, fmt.Errorf("lock platform mcp endpoint address: %w", err)
+	}
+	if !locked {
+		return false, nil
+	}
+	available, err := mcpendpoints.CheckSlugAvailable(ctx, tx, mcpendpoints.SlugAvailabilityCheck{
+		Slug:                     endpointSlug,
+		CustomDomainID:           uuid.NullUUID{},
+		OrganizationID:           organizationID,
+		ExcludeToolsetID:         uuid.NullUUID{},
+		ExcludeMcpServerID:       uuid.NullUUID{},
+		SkipDomainOwnershipCheck: false,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check platform mcp endpoint address: %w", err)
+	}
+	if !available {
+		return false, nil
+	}
+	return true, nil
 }
 
 func newRegistrationComponentSuffix() (string, error) {
@@ -858,6 +1127,7 @@ func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, repla
 		InputHash:            row.InputHash,
 		ExpiresAt:            row.ExpiresAt.Time,
 		Replayed:             replayed,
+		AlreadyRegistered:    row.ResultCode.String == receiptResultAlreadyRegistered,
 		ConnectionID:         row.ConnectionID,
 		ConnectionGeneration: row.ConnectionGeneration,
 	}

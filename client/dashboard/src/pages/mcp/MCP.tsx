@@ -1,21 +1,28 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
-import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
-import { MCPServerCard } from "@/components/mcp/MCPServerCard";
+import { ProjectGatewayCard } from "@/components/mcp/ProjectGatewayCard";
+import { useProjectGatewayEntry } from "@/components/mcp/useProjectGatewayEntry";
+import {
+  MCPServerCard,
+  MCPServerCardSkeleton,
+} from "@/components/mcp/MCPServerCard";
+import {
+  listedMcpServers,
+  mcpServerDisplayName,
+} from "@/components/mcp/mcp-server-kind";
 import {
   GatewayTableRow,
   MCPServerTableRow,
-  MCPTableRow,
+  ProjectGatewayTableRow,
   MCPTableRowSkeleton,
 } from "@/components/mcp/mcp-table-rows";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/DotTable";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -26,7 +33,6 @@ import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Outlet, useSearchParams } from "react-router";
-import { useToolsets } from "../toolsets/useToolsets";
 import { McpTabs } from "./McpTabs";
 import { MCPEmptyState } from "./MCPEmptyState";
 import {
@@ -43,8 +49,6 @@ import {
   MCP_FILTER_OPTIONS,
   pluginFilterOptions,
   pluginMembership,
-  serverIdByToolsetId,
-  toolsetFacets,
 } from "./mcp-filter-schema";
 import { useAccessibleServerIds } from "./use-accessible-by";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
@@ -79,13 +83,8 @@ export const MCPPage = (): JSX.Element => {
 };
 
 function MCPOverview() {
-  const toolsets = useToolsets();
   const routes = useRoutes();
 
-  // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
-  // (toolset-backed) MCP servers also source from mcp_servers. Until then the
-  // listing merges two parallel collections — toolsets (Hosted) and
-  // mcp_servers (Remote-MCP-backed today) — in the same grid.
   // These listing fetches are non-critical: degrade to the last good (or empty)
   // data with an inline indicator instead of throwing to the page error
   // boundary and replacing the whole screen. Key them by project so a tolerated
@@ -100,11 +99,6 @@ function MCPOverview() {
   } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
-  // Gateways (meta MCP servers) are behind a rollout flag: opt-in, so an
-  // unresolved flag keeps them hidden. The flag gates discoverability only —
-  // the backend enforces mcp:read/mcp:write regardless.
-  const gatewayFlag = useFeatureFlag(FEATURE_FLAGS.gatewayEndpoints);
-  const gatewaysEnabled = gatewayFlag.status === "enabled";
   const {
     data: gatewaysResult,
     isLoading: isLoadingGateways,
@@ -113,7 +107,6 @@ function MCPOverview() {
     refetch: refetchGateways,
   } = useMetaMcpServers({ gramProject }, undefined, {
     throwOnError: false,
-    enabled: gatewaysEnabled,
   });
   const {
     data: endpointsResult,
@@ -123,7 +116,6 @@ function MCPOverview() {
     refetch: refetchEndpoints,
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
-    enabled: gatewaysEnabled,
   });
   // Plugin membership only drives the "Included in plugins" filter, so a failed
   // fetch degrades to an empty option list rather than breaking the listing.
@@ -133,7 +125,6 @@ function MCPOverview() {
     { throwOnError: false },
   );
   const handleRefresh = () => {
-    void toolsets.refetch();
     void refetchMcpServers();
     void refetchPlugins();
     // The reach reads and the member list back the "Accessible by" control, so
@@ -141,20 +132,11 @@ function MCPOverview() {
     // invisible here until some other refetch happened to run.
     void refetchMembers();
     refetchReach();
-    if (gatewaysEnabled) {
-      void refetchGateways();
-      void refetchEndpoints();
-    }
+    void refetchGateways();
+    void refetchEndpoints();
   };
-  // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
-    () =>
-      (mcpServersResult?.mcpServers ?? []).filter(
-        (server) =>
-          !!server.remoteMcpServerId ||
-          !!server.tunneledMcpServerId ||
-          !!server.unproxiedMcpServerId,
-      ),
+    () => listedMcpServers(mcpServersResult?.mcpServers ?? []),
     [mcpServersResult],
   );
   const gateways = useMemo(
@@ -224,18 +206,13 @@ function MCPOverview() {
   // "Accessible by" filter and no answer yet, every row is filtered out, and
   // rendering that as "no servers match" states a result we do not have.
   const isLoading =
-    toolsets.isLoading ||
     isLoadingMcpServers ||
     isLoadingGateways ||
     isLoadingEndpoints ||
     isLoadingReach;
 
   const hasRefreshError =
-    toolsets.isError ||
-    isMcpServersError ||
-    isGatewaysError ||
-    isEndpointsError ||
-    isReachError;
+    isMcpServersError || isGatewaysError || isEndpointsError || isReachError;
 
   // A failed reach read with the filter on leaves every row excluded for a
   // reason that is not the filter's answer, so the listing says so outright
@@ -257,16 +234,8 @@ function MCPOverview() {
     isFetchingMcpServers ||
     isFetchingGateways ||
     isFetchingEndpoints ||
-    toolsets.isFetching ||
     isFetchingMembers ||
     isFetchingReach;
-
-  // Built from the unfiltered list: the grid drops toolset-backed rows below,
-  // but those are exactly the ones whose server id a hosted row needs.
-  const hostedServerIds = useMemo(
-    () => serverIdByToolsetId(mcpServersResult?.mcpServers ?? []),
-    [mcpServersResult],
-  );
 
   const filterOptions = useMemo(
     () => ({
@@ -277,53 +246,31 @@ function MCPOverview() {
     [plugins, members, user.id],
   );
 
-  const filteredToolsets = useMemo(() => {
-    const query = search.toLowerCase();
-    return [...toolsets]
-      .filter((toolset) => {
-        if (
-          !matchesMcpFilters(
-            toolsetFacets(toolset, membership, hostedServerIds),
-            mcpFilters.values,
-            reachableServerIds,
-          )
-        )
-          return false;
-        if (!query) return true;
-        return (
-          toolset.name.toLowerCase().includes(query) ||
-          toolset.slug.toLowerCase().includes(query)
-        );
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [
-    toolsets,
-    search,
-    mcpFilters.values,
-    membership,
-    hostedServerIds,
-    reachableServerIds,
-  ]);
-
   const filteredMcpServers = useMemo(() => {
     const query = search.toLowerCase();
     return [...mcpServers]
-      .filter((server) => {
+      .filter((listed) => {
+        const { server } = listed;
         if (
           !matchesMcpFilters(
-            mcpServerFacets(server, membership),
+            mcpServerFacets(listed, membership),
             mcpFilters.values,
             reachableServerIds,
           )
         )
           return false;
         if (!query) return true;
-        return (
-          (server.name?.toLowerCase().includes(query) ?? false) ||
-          (server.slug?.toLowerCase().includes(query) ?? false)
-        );
+        return [
+          mcpServerDisplayName(server),
+          server.slug,
+          server.toolset?.slug,
+        ].some((value) => value?.toLowerCase().includes(query));
       })
-      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+      .sort((a, b) =>
+        mcpServerDisplayName(a.server).localeCompare(
+          mcpServerDisplayName(b.server),
+        ),
+      );
   }, [mcpServers, search, mcpFilters.values, membership, reachableServerIds]);
 
   const filteredGateways = useMemo(() => {
@@ -347,16 +294,35 @@ function MCPOverview() {
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an
   // active filter, not just a search query.
-  const hasItems = toolsets.length + mcpServers.length + gateways.length > 0;
+  const hasItems = mcpServers.length + gateways.length > 0;
+  const isNarrowed = search !== "" || hasActiveMcpFilters(mcpFilters.values);
   // Also shown when the list failed to load: the toolbar carries the retry and
-  // "Add new", which are exactly what you need when nothing came back.
-  const showFilters = !isLoading && (hasItems || hasRefreshError);
+  // "Add new", which are exactly what you need when nothing came back. And
+  // whenever a filter or search is set, so it can always be cleared from here.
+  const showFilters = !isLoading && (hasItems || hasRefreshError || isNarrowed);
+  // The Project Gateway is not one of this project's servers but all of them,
+  // so it leads the unfiltered list and steps aside once the list is narrowed —
+  // except to gateways alone, since it is one.
+  const projectGateway = useProjectGatewayEntry();
+  const onlyGatewaysSelected =
+    mcpFilters.values.source.length === 1 &&
+    mcpFilters.values.source[0] === "gateway";
+  const narrowedToGatewaysOnly =
+    onlyGatewaysSelected &&
+    !hasActiveMcpFilters({ ...mcpFilters.values, source: [] });
+  const showProjectGateway =
+    projectGateway.show &&
+    search === "" &&
+    (!hasActiveMcpFilters(mcpFilters.values) || narrowedToGatewaysOnly);
+  const projectGatewayCard = showProjectGateway && (
+    <ProjectGatewayCard isOff={projectGateway.isOff} />
+  );
   const showNoMatches =
     !isLoading &&
-    (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
-    filteredToolsets.length === 0 &&
+    isNarrowed &&
     filteredMcpServers.length === 0 &&
-    filteredGateways.length === 0;
+    filteredGateways.length === 0 &&
+    !showProjectGateway;
 
   const newMcpServerButton = (
     <RequireScope scope="mcp:write" level="component">
@@ -382,15 +348,23 @@ function MCPOverview() {
     </SimpleTooltip>
   );
 
+  // The empty state is for a project with nothing in it yet. A filter or search
+  // set from the URL still takes the list path, which carries the toolbar to
+  // clear it and keeps the Project Gateway out of "No MCP servers yet".
   if (
     !isLoading &&
     !hasRefreshError &&
-    toolsets.length === 0 &&
+    !isNarrowed &&
     mcpServers.length === 0 &&
     gateways.length === 0
   ) {
     return (
       <>
+        {projectGatewayCard && (
+          <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {projectGatewayCard}
+          </div>
+        )}
         <MCPEmptyState cta={newMcpServerButton} />
       </>
     );
@@ -422,6 +396,36 @@ function MCPOverview() {
               onClear={mcpFilters.clearValue as (id: string) => void}
               onClearAll={mcpFilters.clearAll}
             />
+            {/* A one-click shortcut for the Source filter's Gateway option. It
+                reads and writes that same filter, so the chip and the sheet
+                stay in step; any other source selection leaves both segments
+                unlit rather than claiming "All". It sits in the right cluster
+                so filter chips appearing on the left don't shift it. */}
+            <Page.Toolbar.Actions>
+              <SegmentedControl
+                ariaLabel="Quick filter by source"
+                value={
+                  mcpFilters.values.source.length === 0
+                    ? "all"
+                    : onlyGatewaysSelected
+                      ? "gateway"
+                      : null
+                }
+                onChange={(value) =>
+                  value === "gateway"
+                    ? mcpFilters.setValue("source", ["gateway"])
+                    : mcpFilters.clearValue("source")
+                }
+                options={[
+                  { value: "all", label: "All", tooltip: "Every source" },
+                  {
+                    value: "gateway",
+                    label: "Gateways",
+                    tooltip: "Only gateways",
+                  },
+                ]}
+              />
+            </Page.Toolbar.Actions>
             <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
             <Page.Toolbar.Refresh
               onRefresh={handleRefresh}
@@ -453,19 +457,17 @@ function MCPOverview() {
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {isLoading ? (
               <>
-                <MCPCardSkeleton />
-                <MCPCardSkeleton />
+                <MCPServerCardSkeleton />
+                <MCPServerCardSkeleton />
               </>
             ) : (
               <>
+                {projectGatewayCard}
                 {filteredGateways.map((gateway) => (
                   <GatewayCard key={gateway.id} gateway={gateway} />
                 ))}
-                {filteredToolsets.map((toolset) => (
-                  <MCPCard key={toolset.id} toolset={toolset} />
-                ))}
-                {filteredMcpServers.map((server) => (
-                  <MCPServerCard key={server.id} server={server} />
+                {filteredMcpServers.map(({ server, kind }) => (
+                  <MCPServerCard key={server.id} server={server} kind={kind} />
                 ))}
               </>
             )}
@@ -477,7 +479,7 @@ function MCPOverview() {
               { label: "Kind" },
               { label: "Address" },
               // Kind-dependent: tool count for hosted servers, member count
-              // for gateways, nothing yet for mcp_servers-backed rows.
+              // for gateways, nothing yet for the other backends.
               { label: "Contents" },
             ]}
           >
@@ -488,6 +490,12 @@ function MCPOverview() {
               </>
             ) : (
               <>
+                {showProjectGateway && (
+                  <ProjectGatewayTableRow
+                    url={projectGateway.url}
+                    isOff={projectGateway.isOff}
+                  />
+                )}
                 {filteredGateways.map((gateway) => (
                   <GatewayTableRow
                     key={gateway.id}
@@ -496,11 +504,12 @@ function MCPOverview() {
                     isLoadingEndpoints={isLoadingEndpoints}
                   />
                 ))}
-                {filteredToolsets.map((toolset) => (
-                  <MCPTableRow key={toolset.id} toolset={toolset} />
-                ))}
-                {filteredMcpServers.map((server) => (
-                  <MCPServerTableRow key={server.id} server={server} />
+                {filteredMcpServers.map(({ server, kind }) => (
+                  <MCPServerTableRow
+                    key={server.id}
+                    server={server}
+                    kind={kind}
+                  />
                 ))}
               </>
             )}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
 func dashboardRefusalOf(t *testing.T, result *mcp.CallToolResult) dashboardRefusal {
@@ -47,6 +48,7 @@ func TestDashboardToolErrorsAreReadable(t *testing.T) {
 		"forbidden":          {ErrForbidden, "permission_denied", "", "An authorized external user with project:read on the exact project is required."},
 		"layout rule":        {oops.E(oops.CodeBadRequest, nil, "operations[0] overlaps card x"), "invalid_request", "operations[0] overlaps card x", "Correct what the reason names and preview again."},
 		"not creator":        {oops.C(oops.CodeForbidden), widgetOwnerOrWriteRequired, "", "Only the dashboard's creator, or someone with project:write, may change it."},
+		"dataset restricted": {oops.E(oops.CodeForbidden, widgets.ErrDatasetRestricted, "only organization administrators can save widgets over risk_findings"), widgetDatasetRestricted, "", "This dashboard has widgets over a dataset only organization administrators can read, so only they can copy it."},
 		"not found":          {oops.E(oops.CodeNotFound, nil, "dashboard not found"), "not_found", "dashboard not found", "Use the ids list_dashboards and get_dashboard return."},
 		"unavailable":        {ErrUnavailable, unavailableCode, "", unavailable},
 		"unexpected failure": {fmt.Errorf("query dashboards: %w", errors.New("connection reset by 10.0.0.7")), unavailableCode, "", unavailable},
@@ -68,23 +70,24 @@ func TestDashboardToolErrorsAreReadable(t *testing.T) {
 func TestDashboardToolsWithoutAServiceAnswerUnavailable(t *testing.T) {
 	t.Parallel()
 
+	project := uuid.NewString()
 	reg := newRegistrar(newTestMCPServer())
+	reg.withProjects(slugProjects{"payments": uuid.MustParse(project)})
 	registerDashboardTools(reg, nil)
 	ctx := contextWithPrincipal(t.Context(), testPrincipal())
-	project := uuid.NewString()
 	// A create, a copy and an added card make another row per confirmed key.
 	idempotent := map[string]bool{
 		listDashboardsToolName: true, getDashboardToolName: true, deleteDashboardToolName: true, saveDashboardFiltersToolName: true,
 		saveDashboardToolName: false, duplicateDashboardToolName: false, editDashboardLayoutToolName: false,
 	}
 	for name, arguments := range map[string]string{
-		listDashboardsToolName:       `{"project_id":"` + project + `"}`,
-		getDashboardToolName:         `{"project_id":"` + project + `","dashboard_id":"mcp-tools"}`,
-		saveDashboardToolName:        `{"project_id":"` + project + `","name":"Usage","confirmed":false}`,
-		duplicateDashboardToolName:   `{"project_id":"` + project + `","dashboard_id":"mcp-tools","confirmed":false}`,
-		deleteDashboardToolName:      `{"project_id":"` + project + `","dashboard_id":"` + project + `","confirmed":false}`,
-		editDashboardLayoutToolName:  `{"project_id":"` + project + `","dashboard_id":"` + project + `","operations":[{"op":"remove_card","placement_id":"` + project + `"}],"confirmed":false}`,
-		saveDashboardFiltersToolName: `{"project_id":"` + project + `","dashboard_id":"` + project + `","filters":{},"confirmed":false}`,
+		listDashboardsToolName:       `{"project_slug":"payments"}`,
+		getDashboardToolName:         `{"project_slug":"payments","dashboard_id":"mcp-tools"}`,
+		saveDashboardToolName:        `{"project_slug":"payments","name":"Usage","confirmed":false}`,
+		duplicateDashboardToolName:   `{"project_slug":"payments","dashboard_id":"mcp-tools","confirmed":false}`,
+		deleteDashboardToolName:      `{"project_slug":"payments","dashboard_id":"` + project + `","confirmed":false}`,
+		editDashboardLayoutToolName:  `{"project_slug":"payments","dashboard_id":"` + project + `","operations":[{"op":"remove_card","placement_id":"` + project + `"}],"confirmed":false}`,
+		saveDashboardFiltersToolName: `{"project_slug":"payments","dashboard_id":"` + project + `","filters":{},"confirmed":false}`,
 	} {
 		descriptor := descriptorByName(t, reg, name)
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences, name)

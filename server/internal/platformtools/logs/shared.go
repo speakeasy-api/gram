@@ -3,11 +3,13 @@ package logs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // TelemetryService is the subset of the telemetry management service that the
@@ -60,6 +62,28 @@ func writeLogsDisabledResponse(wr io.Writer) error {
 	}
 	if err := json.NewEncoder(wr).Encode(body); err != nil {
 		return fmt.Errorf("encode logs disabled response: %w", err)
+	}
+	return nil
+}
+
+// isForbidden reports whether a telemetry read was refused by authorization.
+func isForbidden(err error) bool {
+	var shareable *oops.ShareableError
+	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
+}
+
+// writeLogReadRequiredResponse encodes a structured refusal for the tools that
+// return individual tool calls or raw log records. Those need log:read on the
+// project, which no system role holds, so the model is told how the user can
+// get it instead of surfacing a bare permission error.
+func writeLogReadRequiredResponse(wr io.Writer) error {
+	body := map[string]string{
+		"error":   "log_read_required",
+		"message": "Viewing this project's individual tool calls and logs requires the log:read permission on the project, which this caller does not hold.",
+		"hint":    "Tell the user an organization admin can grant log:read for this project through a custom role on the Access page. Aggregate usage tools still work without it.",
+	}
+	if err := json.NewEncoder(wr).Encode(body); err != nil {
+		return fmt.Errorf("encode log read required response: %w", err)
 	}
 	return nil
 }

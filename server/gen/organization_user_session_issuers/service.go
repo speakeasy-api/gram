@@ -20,12 +20,32 @@ import (
 type Service interface {
 	// Create an organization-owned user_session_issuer. Requires org:admin.
 	CreateIssuer(context.Context, *CreateIssuerPayload) (res *types.UserSessionIssuer, err error)
-	// List organization-owned user_session_issuers. Requires org:read.
+	// List the user_session_issuers in the caller's organization:
+	// organization-owned and project-specific, each project-specific issuer with
+	// its owning project name. Requires org:read.
 	ListIssuers(context.Context, *ListIssuersPayload) (res *ListOrganizationUserSessionIssuersResult, err error)
-	// Get an organization-owned user_session_issuer by id. Requires org:read.
+	// Get any user_session_issuer in the caller's organization, organization-owned
+	// or project-specific, by id. Requires org:read.
 	GetIssuer(context.Context, *GetIssuerPayload) (res *types.UserSessionIssuer, err error)
 	// Update an organization-owned user_session_issuer. Requires org:admin.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *types.UserSessionIssuer, err error)
+	// List the live MCP servers, toolsets, and meta MCP servers attached to a
+	// user_session_issuer in the caller's organization, organization-owned or
+	// project-specific. A toolset served through an MCP server is listed once, as
+	// that server. Requires org:read.
+	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListUserSessionIssuerMcpServersResult, err error)
+	// Preview moving a user_session_issuer in the caller's organization onto or
+	// off the deployment's authentication host: where clients sign in before and
+	// after, and how many MCP servers that affects. Requires org:read.
+	GetAuthenticationHostImpact(context.Context, *GetAuthenticationHostImpactPayload) (res *UserSessionIssuerAuthenticationHostImpact, err error)
+	// Move a user_session_issuer in the caller's organization onto or off the
+	// deployment's authentication host. A shared authorization server with a
+	// pinned issuer URL is re-pinned to the matching host, so its issuer URL and
+	// token endpoint change; other issuers announce their authorization servers on
+	// the new host. Clients and anything configured with the previous URLs must be
+	// updated. Refused when the deployment has no authentication host, and for
+	// issuers managed by Speakeasy. Requires org:admin.
+	SetAuthenticationHost(context.Context, *SetAuthenticationHostPayload) (res *types.UserSessionIssuer, err error)
 	// Report the clients, live sessions, MCP servers, and toolsets affected by
 	// deleting an organization-owned user_session_issuer. Requires org:read.
 	GetIssuerDeletePreflight(context.Context, *GetIssuerDeletePreflightPayload) (res *OrganizationUserSessionIssuerDeletePreflight, err error)
@@ -38,7 +58,11 @@ type Service interface {
 	// Requires org:admin.
 	MoveIssuer(context.Context, *MoveIssuerPayload) (res *types.UserSessionIssuer, err error)
 	// Report the impact, blockers, and configuration warnings for consolidating
-	// one user_session_issuer onto another. Requires org:read.
+	// one user_session_issuer onto another. When no hard blocker is present, it
+	// runs the consolidation in a transaction it rolls back and reports how each
+	// affected MCP server's upstream OAuth clients would change. That run takes
+	// the same locks a consolidation does, and returns 409 when another writer
+	// holds them for too long. Requires org:admin.
 	GetIssuerMigratePreflight(context.Context, *GetIssuerMigratePreflightPayload) (res *OrganizationUserSessionIssuerMigratePreflight, err error)
 	// Consolidate a source user_session_issuer onto a target issuer, preserving
 	// clients, sessions, attachments, and remote-session credentials before
@@ -86,7 +110,7 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+var MethodNames = [16]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "getAuthenticationHostImpact", "setAuthenticationHost", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationUserSessionIssuers service createCimdClient method.
@@ -104,12 +128,6 @@ type CreateCimdClientPayload struct {
 // organizationUserSessionIssuers service createIssuer method.
 type CreateIssuerPayload struct {
 	SessionToken *string
-	// Organization-level or global remote_session_issuer whose assertions this
-	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
-	TrustedRemoteSessionIssuerID *string
-	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
-	TrustedRemoteSessionClientID *string
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string
@@ -117,6 +135,13 @@ type CreateIssuerPayload struct {
 	AuthnChallengeMode string
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
+	TrustedRemoteSessionIssuerID *string
+	// Organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer for browser sign-in. Requires trusted_remote_session_issuer_id; the
+	// issuer alone accepts its identity assertions without changing sign-in.
+	TrustedRemoteSessionClientID *string
 }
 
 // CreateUserSessionIssuerCimdClientResult is the result type of the
@@ -139,6 +164,17 @@ type DeleteIssuerPayload struct {
 	// The user_session_issuer id.
 	ID           string
 	SessionToken *string
+}
+
+// GetAuthenticationHostImpactPayload is the payload type of the
+// organizationUserSessionIssuers service getAuthenticationHostImpact method.
+type GetAuthenticationHostImpactPayload struct {
+	// The user_session_issuer id.
+	ID string
+	// True to preview moving onto the authentication host, false to preview moving
+	// off it.
+	UseAuthenticationHost bool
+	SessionToken          *string
 }
 
 // GetCimdClientPayload is the payload type of the
@@ -194,6 +230,21 @@ type ListIssuersPayload struct {
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
+	Limit *int
+	// Only issuers from one tier: organization-owned (organization) or
+	// project-specific (project). Omitted lists both.
+	Tier         *string
+	SessionToken *string
+}
+
+// ListMcpServersPayload is the payload type of the
+// organizationUserSessionIssuers service listMcpServers method.
+type ListMcpServersPayload struct {
+	// The user_session_issuer whose attached MCP servers are listed.
+	UserSessionIssuerID string
+	// Pagination cursor: id of the last item from the previous page.
+	Cursor *string
+	// Page size (default 50, max 100).
 	Limit        *int
 	SessionToken *string
 }
@@ -214,6 +265,14 @@ type ListUserSessionIssuerCimdClientsResult struct {
 	NextCursor *string
 }
 
+// ListUserSessionIssuerMcpServersResult is the result type of the
+// organizationUserSessionIssuers service listMcpServers method.
+type ListUserSessionIssuerMcpServersResult struct {
+	Items []*UserSessionIssuerMcpServer
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
 // MigrateIssuerPayload is the payload type of the
 // organizationUserSessionIssuers service migrateIssuer method.
 type MigrateIssuerPayload struct {
@@ -222,7 +281,8 @@ type MigrateIssuerPayload struct {
 	// The surviving user_session_issuer.
 	TargetID string
 	// The exact warnings_fingerprint returned by the latest preflight. Required
-	// when that preflight reports warnings.
+	// when that preflight reports warnings, server impacts, or dropped client
+	// links.
 	ConfirmedWarningsFingerprint *string
 	SessionToken                 *string
 }
@@ -244,6 +304,11 @@ type MigrateOrganizationUserSessionIssuerResult struct {
 	RemoteSessionsMigrated int
 	// True when the source issuer was soft-deleted.
 	SourceDeleted bool
+	// How consolidation changed each affected MCP server's upstream OAuth clients,
+	// read in its transaction just before it committed.
+	ServerImpacts []*UserSessionIssuerMigrationServerImpact
+	// Clients the source bound that consolidation did not carry to the target.
+	DroppedClientLinks []*UserSessionIssuerMigrationClient
 }
 
 // MoveIssuerPayload is the payload type of the organizationUserSessionIssuers
@@ -273,6 +338,10 @@ type OrganizationUserSessionIssuerDeletePreflight struct {
 	// Active identity-chaining bindings that must be explicitly unlinked before
 	// deletion.
 	EmaBindingCount int64
+	// True when this is the organization's only organization-level issuer, so
+	// deleting it stops serving the organization gateway its members sign in to.
+	// Does not block deletion.
+	WithdrawsOrganizationGateway bool
 }
 
 // OrganizationUserSessionIssuerMigratePreflight is the result type of the
@@ -288,8 +357,11 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	CimdClientCount int
 	// Remote-session credentials whose issuer provenance would move.
 	RemoteSessionCount int
-	// Active OAuth client ids already present on both issuers. Non-empty blocks
-	// migration.
+	// Active OAuth client ids present on both issuers that cannot be merged.
+	// Non-empty blocks migration. A client resolved from the same Client ID
+	// Metadata Document on both issuers is not listed: it merges onto the target's
+	// client, keeping its sessions and consents, unless an issuance selection
+	// profile pins the source client to the source issuer.
 	ConflictingClientIds []string
 	// Active principal bindings that would violate target uniqueness. Non-zero
 	// blocks migration.
@@ -302,13 +374,42 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	PlatformOwned bool
 	// Configuration differences that do not block the migration. The target's
 	// values become authoritative for future authorization; existing sessions and
-	// refresh tokens are unaffected.
+	// refresh tokens are unaffected. Besides the issuer settings, this reports
+	// authorization_server_mode, use_authentication_host, and issuer_url (the
+	// shared authorization server's issuer identifier, empty when not served)
+	// whenever they differ: repointed MCP servers then direct clients to a
+	// different authorization server, so anything configured with the source's
+	// values, such as an identity provider or a federated platform, must be
+	// updated.
 	Warnings []*UserSessionIssuerFieldMismatch
-	// Stable fingerprint of the current warnings. Empty when there are no
-	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+	// Stable fingerprint of the current warnings, server impacts, and dropped
+	// client links. Empty when there are none; otherwise pass this exact value to
+	// migrateIssuer to confirm them. Counts that change on their own, such as
+	// unscoped_session_count, are not part of it.
 	WarningsFingerprint string
-	// True when no hard blocker is present.
+	// True when no hard blocker is present, including no server impact with
+	// blocker impact_severity.
 	CanMigrate bool
+	// True when the consolidation was run and rolled back to compute
+	// server_impacts and dropped_client_links. False when a hard blocker stopped
+	// it, in which case both are empty.
+	ImpactPreviewed bool
+	// The MCP servers whose upstream OAuth clients consolidation would change, and
+	// those it would pin. A server whose clients do not change and that is not
+	// pinned is not listed.
+	ServerImpacts []*UserSessionIssuerMigrationServerImpact
+	// Clients the source binds that consolidation would not carry to the target
+	// because nothing signs in through them afterwards. A deleted client is never
+	// carried and not listed. Users' grants for them still move to the target, so
+	// attaching a client to the target later makes its grants usable again.
+	DroppedClientLinks []*UserSessionIssuerMigrationClient
+	// Live sign-ins on the source with no tool selection. Every MCP server on
+	// their issuer accepts them, so after consolidation they also reach the
+	// target's servers. Informational; not part of the fingerprint.
+	UnscopedSessionCount int
+	// Live MCP servers already on the target that the source's unscoped sign-ins
+	// would reach for the first time. Informational; not part of the fingerprint.
+	NewlyReachableServerCount int
 }
 
 // A live project resource that references an organization-owned
@@ -324,6 +425,16 @@ type OrganizationUserSessionIssuerReference struct {
 	ProjectName string
 }
 
+// SetAuthenticationHostPayload is the payload type of the
+// organizationUserSessionIssuers service setAuthenticationHost method.
+type SetAuthenticationHostPayload struct {
+	// The user_session_issuer id.
+	ID string
+	// True to move onto the authentication host, false to move off it.
+	UseAuthenticationHost bool
+	SessionToken          *string
+}
+
 // UpdateIssuerPayload is the payload type of the
 // organizationUserSessionIssuers service updateIssuer method.
 type UpdateIssuerPayload struct {
@@ -333,8 +444,8 @@ type UpdateIssuerPayload struct {
 	// link.
 	TrustedRemoteSessionIssuerID *string
 	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Omit to leave unchanged; pass an empty string to clear the link. The
-	// resulting issuer and client must either both be configured or both be absent.
+	// issuer. Omit to leave unchanged; pass an empty string to clear the link. A
+	// client requires a trusted issuer; an issuer may be trusted without one.
 	TrustedRemoteSessionClientID *string
 	// The user_session_issuer id.
 	ID string
@@ -351,6 +462,26 @@ type UpdateIssuerPayload struct {
 	ClientIDMetadataAdmissionMode *string
 }
 
+// UserSessionIssuerAuthenticationHostImpact is the result type of the
+// organizationUserSessionIssuers service getAuthenticationHostImpact method.
+type UserSessionIssuerAuthenticationHostImpact struct {
+	// The issuer as it is now.
+	Issuer *types.UserSessionIssuer
+	// Where clients sign in now: the shared authorization server's issuer URL, or
+	// the origin that announces each MCP server's own authorization server. Empty
+	// for a shared issuer this deployment does not serve.
+	AuthorizationServerBefore string
+	// Where clients sign in after the move, in the same terms.
+	AuthorizationServerAfter string
+	// Whether the move changes where clients sign in. False when the issuer is
+	// already where it would move.
+	Changes bool
+	// Live MCP servers, toolsets, and meta MCP servers attached to the issuer.
+	// Those on a custom domain keep announcing their own authorization servers
+	// there.
+	McpServerCount int
+}
+
 // One user_session_issuer setting whose source and target values differ.
 type UserSessionIssuerFieldMismatch struct {
 	// The differing field name.
@@ -359,6 +490,83 @@ type UserSessionIssuerFieldMismatch struct {
 	SourceValue string
 	// The target issuer's rendered value. Empty when unset.
 	TargetValue string
+}
+
+// A live MCP server, toolset, or meta MCP server attached to a
+// user_session_issuer.
+type UserSessionIssuerMcpServer struct {
+	// Which kind of MCP server this is.
+	Kind string
+	// The MCP server, toolset, or meta MCP server id.
+	ID string
+	// The display name.
+	Name string
+	// The MCP server or toolset slug. Absent for meta MCP servers and MCP servers
+	// without one.
+	Slug *string
+	// The owning project id.
+	ProjectID string
+	// The owning project name.
+	ProjectName string
+}
+
+// An upstream OAuth client (remote session client) in a consolidation preview.
+type UserSessionIssuerMigrationClient struct {
+	// The remote session client.
+	RemoteSessionClientID string
+	// The client's OAuth client_id at its provider.
+	ClientID string
+	// The issuer URL of the client's provider. Empty when the provider is unknown.
+	ProviderIssuer string
+}
+
+// Why a consolidation preview lists an MCP server.
+type UserSessionIssuerMigrationImpactReason string
+
+// How a consolidation's change to one MCP server ranks.
+type UserSessionIssuerMigrationImpactSeverity string
+
+// How consolidation changes the upstream OAuth clients one MCP server uses. A
+// server's clients are the ones its callers must have connected: on an
+// organization enforcing upstream auth, the clients its auth clients offer;
+// otherwise, for a server on a user session issuer, the clients serving
+// requires of it, and for any other server, its associated clients.
+type UserSessionIssuerMigrationServerImpact struct {
+	// The MCP server.
+	McpServerID string
+	// The MCP server's display name.
+	McpServerName string
+	// The MCP server's slug.
+	McpServerSlug string
+	// The MCP server's project.
+	ProjectID string
+	// The MCP server's project name.
+	ProjectName string
+	// blocker stops the consolidation; warning needs confirming through the
+	// fingerprint; info only reports a pinned association.
+	ImpactSeverity UserSessionIssuerMigrationImpactSeverity
+	// Why the server is listed. multiple_clients_for_provider (blocker): it would
+	// use two or more clients of one provider. provider_not_in_metadata (blocker):
+	// it would gain a client whose provider its upstream's protected resource
+	// metadata does not list. gains_client: it uses no client today and would use
+	// some. loses_client: it would use none. changes_provider: the providers it
+	// uses would change. changes_clients: the same providers, different clients.
+	// pinned: consolidation associates it with the clients its current
+	// configuration proves it uses, so they stay its own after the move.
+	Reasons []UserSessionIssuerMigrationImpactReason
+	// The clients the server uses today.
+	ClientsBefore []*UserSessionIssuerMigrationClient
+	// The clients the server would use after consolidation.
+	ClientsAfter []*UserSessionIssuerMigrationClient
+	// Remote session clients consolidation associates with the server before the
+	// move.
+	PinnedClientIds []string
+	// True for a hosted server on an organization not enforcing upstream auth,
+	// which uses every OAuth client its user session issuer binds rather than the
+	// ones associated with it. Changing its clients then means changing that
+	// issuer's bindings; when enforcement is on, its clients are its auth clients'
+	// offers instead and this is false.
+	Hosted bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

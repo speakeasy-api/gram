@@ -137,10 +137,13 @@ func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
 			require.NoError(t, err)
 			p, err := pylon.NewPylon(ti.logger, "")
 			require.NoError(t, err)
+			// Failed listings still exhaust their retries, without the production backoff between them.
+			retryCfg := guardian.DefaultRetryConfig()
+			retryCfg.WaitMin, retryCfg.WaitMax = time.Millisecond, time.Millisecond
 			*resolver = *identity.NewResolver(
 				ti.logger, ti.tracerProvider, ti.cacheAdapter, remote.URL, "test-client",
 				identity.NewWorkOSAdapter(sdk),
-				workos.NewClient(policy, "test-key", workos.ClientOpts{Endpoint: remote.URL}),
+				workos.NewClient(policy, "test-key", workos.ClientOpts{Endpoint: remote.URL, RetryConfig: retryCfg}),
 				orgrepo.New(ti.conn), userrepo.New(ti.conn), p, nil, nil,
 				testenv.NewCacheSuffix(t, cache.Suffix("idp-callback")),
 			)
@@ -175,7 +178,18 @@ func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
 			err = ti.service.HandleIDPCallback(w, req)
 			require.EqualValues(t, 1, exchangeCalls.Load())
 			require.GreaterOrEqual(t, listingCalls.Load(), int32(1))
-			if scenario.wantError {
+			if scenario.wantError && !scenario.listingFailure {
+				require.NoError(t, err)
+				require.Equal(t, http.StatusFound, w.Code)
+				redirect, parseErr := url.Parse(w.Header().Get("Location"))
+				require.NoError(t, parseErr)
+				require.Equal(t, "localhost:3000", redirect.Host)
+				require.Equal(t, "/callback", redirect.Path)
+				require.Equal(t, "access_denied", redirect.Query().Get("error"))
+				require.Equal(t, "client-state", redirect.Query().Get("state"))
+				require.NotEmpty(t, redirect.Query().Get("iss"))
+				require.Empty(t, redirect.Query().Get("code"))
+			} else if scenario.wantError {
 				require.Error(t, err)
 				require.Empty(t, w.Header().Get("Location"))
 				var shared *oops.ShareableError

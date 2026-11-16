@@ -140,7 +140,7 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesRegisterIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_wildcard_admission\": false,\n      \"description\": \"abc123\",\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_assertion_reuse\": false,\n      \"allow_wildcard_admission\": false,\n      \"description\": \"abc123\",\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -176,6 +176,7 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 		Name:                   body.Name,
 		Issuer:                 body.Issuer,
 		JwksURI:                body.JwksURI,
+		AllowAssertionReuse:    body.AllowAssertionReuse,
 		AllowWildcardAdmission: body.AllowWildcardAdmission,
 		Description:            body.Description,
 		ProjectScoped:          body.ProjectScoped,
@@ -207,7 +208,7 @@ func BuildUpdateIssuerPayload(workloadIdentitiesUpdateIssuerBody string, workloa
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesUpdateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_assertion_reuse\": false,\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Name != nil {
@@ -246,10 +247,11 @@ func BuildUpdateIssuerPayload(workloadIdentitiesUpdateIssuerBody string, workloa
 		}
 	}
 	v := &workloadidentities.UpdateIssuerPayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		JwksURI:     body.JwksURI,
-		Description: body.Description,
+		ID:                  body.ID,
+		Name:                body.Name,
+		JwksURI:             body.JwksURI,
+		Description:         body.Description,
+		AllowAssertionReuse: body.AllowAssertionReuse,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
@@ -467,6 +469,112 @@ func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, wor
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateDeviceJoinTokenPayload builds the payload for the
+// workloadIdentities createDeviceJoinToken endpoint from CLI flags.
+func BuildCreateDeviceJoinTokenPayload(workloadIdentitiesCreateDeviceJoinTokenBody string, workloadIdentitiesCreateDeviceJoinTokenSessionToken string, workloadIdentitiesCreateDeviceJoinTokenApikeyToken string, workloadIdentitiesCreateDeviceJoinTokenProjectSlugInput string) (*workloadidentities.CreateDeviceJoinTokenPayload, error) {
+	var err error
+	var body CreateDeviceJoinTokenRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesCreateDeviceJoinTokenBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if body.ExpiresInSeconds < 60 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 60, true))
+		}
+		if body.ExpiresInSeconds > 86400 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 86400, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesCreateDeviceJoinTokenSessionToken != "" {
+			sessionToken = &workloadIdentitiesCreateDeviceJoinTokenSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesCreateDeviceJoinTokenApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesCreateDeviceJoinTokenApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesCreateDeviceJoinTokenProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesCreateDeviceJoinTokenProjectSlugInput
+		}
+	}
+	v := &workloadidentities.CreateDeviceJoinTokenPayload{
+		AgentID:          body.AgentID,
+		ExpiresInSeconds: body.ExpiresInSeconds,
+	}
+	{
+		var zero int
+		if v.ExpiresInSeconds == zero {
+			v.ExpiresInSeconds = 3600
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRegisterDevicePayload builds the payload for the workloadIdentities
+// registerDevice endpoint from CLI flags.
+func BuildRegisterDevicePayload(workloadIdentitiesRegisterDeviceBody string) (*workloadidentities.RegisterDevicePayload, error) {
+	var err error
+	var body RegisterDeviceRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesRegisterDeviceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"hostname\": \"aaa\",\n      \"join_token\": \"aa\",\n      \"public_jwk\": {\n         \"abc123\": \"abc123\"\n      },\n      \"serial\": \"aaa\"\n   }'")
+		}
+		if body.PublicJwk == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("public_jwk", "body"))
+		}
+		if utf8.RuneCountInString(body.JoinToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.join_token", body.JoinToken, utf8.RuneCountInString(body.JoinToken), 1, true))
+		}
+		if utf8.RuneCountInString(body.JoinToken) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.join_token", body.JoinToken, utf8.RuneCountInString(body.JoinToken), 512, false))
+		}
+		if body.Hostname != nil {
+			if utf8.RuneCountInString(*body.Hostname) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.hostname", *body.Hostname, utf8.RuneCountInString(*body.Hostname), 255, false))
+			}
+		}
+		if body.Serial != nil {
+			if utf8.RuneCountInString(*body.Serial) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.serial", *body.Serial, utf8.RuneCountInString(*body.Serial), 255, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &workloadidentities.RegisterDevicePayload{
+		JoinToken: body.JoinToken,
+		Hostname:  body.Hostname,
+		Serial:    body.Serial,
+	}
+	if body.PublicJwk != nil {
+		v.PublicJwk = make(map[string]any, len(body.PublicJwk))
+		for key, val := range body.PublicJwk {
+			tk := key
+			tv := val
+			v.PublicJwk[tk] = tv
+		}
+	}
 
 	return v, nil
 }

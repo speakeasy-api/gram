@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
@@ -40,6 +41,10 @@ const (
 
 // widgetOwnerOrWriteRequired refuses a change by anyone but the widget's creator or a project writer.
 const widgetOwnerOrWriteRequired = "owner_or_write_required"
+
+// widgetDatasetRestricted refuses a save or copy over a dataset the caller may
+// not read, such as risk_findings for anyone but an organization administrator.
+const widgetDatasetRestricted = "dataset_restricted"
 
 // widgetOperation also names the operation its receipts are stored under.
 type widgetOperation string
@@ -174,7 +179,9 @@ type widgetDefinition struct {
 }
 
 type listWidgetsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 }
 
 type listWidgetsOutput struct {
@@ -184,7 +191,9 @@ type listWidgetsOutput struct {
 }
 
 type getWidgetInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	WidgetID  string `json:"widget_id" jsonschema:"exact widget UUID from list_widgets"`
 }
 
@@ -196,7 +205,9 @@ type getWidgetOutput struct {
 // saveWidgetInput creates a widget when widget_id is omitted and replaces
 // every field of an existing one when it is given.
 type saveWidgetInput struct {
-	ProjectID       string         `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string         `json:"-"`
 	WidgetID        string         `json:"widget_id,omitempty" jsonschema:"widget to replace, from list_widgets; omit to create a new widget"`
 	Name            string         `json:"name" jsonschema:"display name, 1 to 200 characters"`
 	Description     *string        `json:"description,omitempty" jsonschema:"what the widget is for, at most 2000 characters"`
@@ -210,7 +221,9 @@ type saveWidgetInput struct {
 }
 
 type widgetTargetInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	WidgetID        string `json:"widget_id" jsonschema:"exact widget UUID from list_widgets"`
 	Confirmed       bool   `json:"confirmed" jsonschema:"false previews without changing anything; true only after the user confirmed the returned preview"`
 	ExpectedVersion string `json:"expected_version,omitempty" jsonschema:"version the preview returned; required to confirm"`
@@ -423,6 +436,14 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 		if err != nil {
 			return out, fmt.Errorf("read widget: %w", err)
 		}
+		if operation == operationDuplicateWidget {
+			// The preview refuses what its confirmation would.
+			if ds, ok := analytics.Default.Dataset(current.Widget.Dataset); ok {
+				if err := widgets.RequireDataset(ctx, s.engine, ds); err != nil {
+					return out, fmt.Errorf("check widget dataset: %w", err)
+				}
+			}
+		}
 		if operation == operationDuplicateWidget && current.Widget.InvalidReason != nil {
 			return out, &widgetToolError{Code: "invalid_request", Field: "widget_id", Message: "This widget cannot be duplicated until it is fixed: " + *current.Widget.InvalidReason + ". Save a corrected version with save_widget first.", Cause: nil}
 		}
@@ -483,7 +504,7 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 
 	id, err := uuid.Parse(projectID)
 	if err != nil || id == uuid.Nil {
-		return ctx, project, widgetInvalid("project_id", "Name exactly one project by its ID, as list_projects returns it.")
+		return ctx, project, widgetInvalid("project_slug", "Name one project by its slug, as list_projects returns it.")
 	}
 
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -648,6 +669,8 @@ func (s *WidgetService) boundaryError(ctx context.Context, tool string, err erro
 		return &widgetToolError{Code: previewExpiredCode, Field: "preview_token", Message: previewExpiredMessage, Cause: err}
 	case errors.Is(err, errPreviewUsed):
 		return &widgetToolError{Code: previewUsedCode, Field: "preview_token", Message: previewUsedMessage, Cause: err}
+	case errors.Is(err, widgets.ErrDatasetRestricted):
+		return &widgetToolError{Code: widgetDatasetRestricted, Field: "dataset", Message: "Only organization administrators can save or duplicate widgets over that dataset. Choose another dataset from describe_analytics_catalog, which lists only the ones this caller can read.", Cause: err}
 	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shareable.Code {

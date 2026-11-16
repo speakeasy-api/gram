@@ -40,6 +40,9 @@ export function useRunQuery(
       body === null ? null : queryKeyBody(body),
     ],
     enabled: body !== null,
+    // A failed query is shown on its own panel or card; thrown, one heavy
+    // card would take the whole dashboard down with it.
+    throwOnError: false,
     retry: false,
     staleTime: 60_000,
     queryFn: ({ signal }) =>

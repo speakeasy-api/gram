@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -45,6 +46,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		McpServerID:        targetID.String(),
+		TargetServerOnly:   new(true),
 		ProviderID:         nil,
 		CreateProvider:     serverIdentityProviderForm("manual-provider", nil, false),
 		ClientMode:         "manual",
@@ -166,6 +168,129 @@ func TestCommitServerIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, stored.RemoteSessionClient.ClientSecretEncrypted.Valid)
 	require.NotEqual(t, "registered-secret", stored.RemoteSessionClient.ClientSecretEncrypted.String)
+}
+
+// An automatically registered client stores no scope, but its registration
+// still names what logins discover for the server's protected resource.
+func TestCommitServerIdentityConfigurationNamesDiscoveredScopesAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-discovered-target")
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), closedTargetURL("dcr-discovered-target"), protectedResourceSeed{scopesSupported: []string{"files:read", "files:write"}})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "discovered-client",
+			"client_secret":              "discovered-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-discovered-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+
+	clientID, err := uuid.Parse(result.Client.ID)
+	require.NoError(t, err)
+	stored, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             clientID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stored.RemoteSessionClient.Scope, "the discovered scopes are not stored on the client")
+}
+
+// With no resource row the registration names what the login would then
+// request: the provider's scope override.
+func TestCommitServerIdentityConfigurationNamesProviderScopesWithoutResourceRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-override-target")
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "override-client",
+			"client_secret":              "override-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-override-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+	_, err := repo.New(ti.conn).UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
+		ScopeOverride: []string{"tickets:read"},
+		ID:            providerID,
+		ProjectID:     conv.ToNullUUID(projectIDFromContext(t, ctx)),
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "tickets:read", requestedScope.Load())
+}
+
+// A cached row past its last-good window does not decide: registration reads
+// the resource live, as the first login will.
+func TestCommitServerIdentityConfigurationReadsTheResourceLiveAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	resource, hits := fakeResource(t, []string{"files:read", "files:write"})
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-live-target-issuer")
+	targetID := createServerIdentityTargetAt(t, ctx, ti, "dcr-live-target", resource.URL, userIssuerID)
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), resource.URL, protectedResourceSeed{scopesSupported: []string{"old:read"}, fetchedAgo: 8 * 24 * time.Hour})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "live-client",
+			"client_secret":              "live-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-live-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+	require.EqualValues(t, 1, hits.Load())
 }
 
 func TestCommitServerIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
@@ -483,6 +608,12 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 	detachAuditAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
 	require.NoError(t, err)
 	require.Equal(t, detachAuditBefore+1, detachAuditAfter)
+	require.Equal(t, []uuid.UUID{replacementClient.ID}, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID),
+		"the replaced client's association goes with its binding")
+	require.Equal(t,
+		[]uuid.UUID{authclientbackfill.OAuthClientID(activeOrganizationID(t, ctx), replacementClient.ID, authclientbackfill.TypeRemoteSession)},
+		offeredAuthClients(t, ctx, ti.conn, targetID),
+		"and so does the typed link derived from it")
 }
 
 func TestCommitServerIdentityConfigurationLocksUserSessionIssuerBeforeReplacingBindings(t *testing.T) {
@@ -538,7 +669,19 @@ func createServerIdentityTarget(t *testing.T, ctx context.Context, ti *testInsta
 	return createServerIdentityTargetOnIssuer(t, ctx, ti, slug, userIssuerID), userIssuerID
 }
 
+// createServerIdentityTargetOnIssuer serves from loopback port 0, which no
+// listener can hold, so the live resource read at registration fails fast
+// without leaving the host.
 func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string, userIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return createServerIdentityTargetAt(t, ctx, ti, slug, closedTargetURL(slug), userIssuerID)
+}
+
+func closedTargetURL(slug string) string {
+	return "http://127.0.0.1:0/" + slug
+}
+
+func createServerIdentityTargetAt(t *testing.T, ctx context.Context, ti *testInstance, slug, serverURL string, userIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	projectID := projectIDFromContext(t, ctx)
 	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
@@ -547,7 +690,7 @@ func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *t
 		Name:          conv.ToPGText(slug),
 		Slug:          conv.ToPGText(slug),
 		TransportType: "streamable-http",
-		Url:           "https://mcp.example.com/" + slug,
+		Url:           serverURL,
 	})
 	require.NoError(t, err)
 	target, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
@@ -850,7 +993,7 @@ func requireClientBound(t *testing.T, ctx context.Context, ti *testInstance, cli
 	require.Equal(t, bound, slices.Contains(client.UserSessionIssuerIds, userIssuerID))
 }
 
-func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerBeforeDCR(t *testing.T) {
+func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerWithoutOrganizationAdminBeforeDCR(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -867,8 +1010,8 @@ func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerBe
 	t.Cleanup(registrationServer.Close)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "org-replace-next", registrationServer.URL, false, []string{"client_secret_basic"})
 
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, nextProviderID))
-	requireOopsCode(t, err, oops.CodeConflict)
+	_, err := ti.service.CommitServerIdentityConfiguration(withoutOrganizationAdmin(t, ctx), autoServerIdentityPayload(targetID, nextProviderID))
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	require.Zero(t, requests.Load(), "the refusal must come before an upstream client is registered")
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
@@ -899,7 +1042,7 @@ func TestCommitServerIdentityConfigurationRefusesReplacingClientWithLiveAgentBin
 	requireLiveAgentBindings(t, ctx, ti, currentClientID, userIssuerID)
 }
 
-func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuer(t *testing.T) {
+func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuerWithoutOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -908,10 +1051,61 @@ func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuer(t *
 	providerID := createServerIdentityProvider(t, ctx, ti, "org-link-provider", "", false, []string{"none"})
 	orgClientID := createServerIdentityClient(t, ctx, ti, "org-link-client", providerID, true)
 
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
-	requireOopsCode(t, err, oops.CodeConflict)
+	_, err := ti.service.CommitServerIdentityConfiguration(withoutOrganizationAdmin(t, ctx), existingServerIdentityPayload(targetID, providerID, orgClientID))
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+}
+
+// An organization admin may link an organization-level client to an
+// organization-level user session issuer, and every project's servers on the
+// issuer pick up its provider.
+func TestCommitServerIdentityConfigurationLinksOrgClientToOrgIssuerForOrganizationAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-admin-link-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-admin-link-target", userIssuerID)
+	otherProjectID := createProject(t, ctx, ti.conn, "org-admin-link-other")
+	otherServerID := createImpactServer(t, ctx, ti, otherProjectID, "org-admin-link-other-server", userIssuerID)
+	providerID := createServerIdentityProvider(t, ctx, ti, "org-admin-link-provider", "", false, []string{"none"})
+	orgClientID := createServerIdentityClient(t, ctx, ti, "org-admin-link-client", providerID, true)
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
+	require.NoError(t, err)
+	require.Equal(t, "linked", *result.Status)
+	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
+
+	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: otherServerID, ProjectID: otherProjectID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: providerID, Valid: true}, otherServer.RemoteSessionIssuerID)
+}
+
+func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientWithAgentBindingInAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-agent-replace-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-agent-replace-target", userIssuerID)
+	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-current", "", false, []string{"none"})
+	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-agent-replace-client", currentProviderID, userIssuerID, true)
+
+	// The agent is attached in another project, through the binding every
+	// project's servers on the issuer share.
+	otherProjectID := createProject(t, ctx, ti.conn, "org-agent-replace-other")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	otherAuth := *authCtx
+	otherAuth.ProjectID = &otherProjectID
+	seedLiveAgentBinding(t, contextvalues.SetAuthContext(ctx, &otherAuth), ti, orgClientID, userIssuerID)
+
+	nextProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-next", "", false, []string{"none"})
+	nextClientID := createServerIdentityClient(t, ctx, ti, "org-agent-replace-next-client", nextProviderID, true)
+
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, nextProviderID, nextClientID))
+	requireOopsCode(t, err, oops.CodeConflict)
+	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
+	requireLiveAgentBindings(t, ctx, ti, orgClientID, userIssuerID)
 }
 
 func TestCommitServerIdentityConfigurationKeepsAlreadyBoundOrgClientOnOrgIssuer(t *testing.T) {

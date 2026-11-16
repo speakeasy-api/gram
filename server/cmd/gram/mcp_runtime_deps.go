@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"log/slog"
 	"net/url"
@@ -34,6 +35,12 @@ type mcpRemoteSessionDependencies struct {
 	Refresher  *remotesessions.IssuerMetadataRefresher
 	Enricher   *remotesessions.SessionEnricher
 	Challenges *remotesessions.ChallengeManager
+
+	// OrgEncryption is the process's organization encryption. Every process
+	// serving OAuth flows builds it, so a missing configuration stops that
+	// process at startup.
+	// TODO(AIM-1001): seal and open OAuth credentials with it.
+	OrgEncryption orgEncryptionDeps
 }
 
 // Both listener processes must use identical identity verification and private
@@ -55,7 +62,7 @@ func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisC
 	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
 }
 
-func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner, protectedResources *protectedresource.Prober, features feature.Provider) (*mcpRemoteSessionDependencies, error) {
+func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner, protectedResources *protectedresource.Prober, features feature.Provider, connections *mcpconnectionattempts.Recorder, orgEncryption orgEncryptionDeps) (*mcpRemoteSessionDependencies, error) {
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	if err != nil {
 		return nil, fmt.Errorf("initialize remote session id token key resolver: %w", err)
@@ -78,7 +85,8 @@ func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.T
 		remotesessions.WithRegistrationAuditLogger(auditLogger),
 		remotesessions.WithTokenEndpointAssertionSigner(assertionSigner),
 		remotesessions.WithCallbackOrigins(callbackOrigins),
+		remotesessions.WithConnectionRecorder(connections),
 		remotesessions.WithProtectedResourceProber(protectedResources),
 		remotesessions.WithFeatureFlags(features))
-	return &mcpRemoteSessionDependencies{Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges}, nil
+	return &mcpRemoteSessionDependencies{Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges, OrgEncryption: orgEncryption}, nil
 }

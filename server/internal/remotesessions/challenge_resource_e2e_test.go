@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -136,7 +137,7 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 			UserSessionIssuerID: userIssuer,
 			Subject:             &subject,
 			McpSlug:             "res-" + slugSuffix,
-			RouteBase:           "mcp",
+			RouteBase:           mcproute.MCP,
 			FinalRedirectURI:    "",
 			Resource:            resource,
 		},

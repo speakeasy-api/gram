@@ -70,6 +70,9 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.AssistantID != nil {
 			values.Add("assistant_id", *p.AssistantID)
 		}
+		if p.AgentID != nil {
+			values.Add("agent_id", *p.AgentID)
+		}
 		if p.SourceKind != nil {
 			values.Add("source_kind", *p.SourceKind)
 		}
@@ -98,6 +101,7 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		values.Add("sort_by", p.SortBy)
 		values.Add("sort_order", p.SortOrder)
+		values.Add("pinned_first", fmt.Sprintf("%v", p.PinnedFirst))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3166,6 +3170,253 @@ func DecodeListSourcesResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// BuildCountByUserRequest instantiates a HTTP request object with method and
+// path set to call the "chat" service "countByUser" endpoint
+func (c *Client) BuildCountByUserRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CountByUserChatPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "countByUser", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCountByUserRequest returns an encoder for requests sent to the chat
+// countByUser server.
+func EncodeCountByUserRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.CountByUserPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "countByUser", "*chat.CountByUserPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
+		values := req.URL.Query()
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCountByUserResponse returns a decoder for responses returned by the
+// chat countByUser endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeCountByUserResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCountByUserResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CountByUserResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			res := NewCountByUserCountChatsByUserResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CountByUserUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CountByUserForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CountByUserBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CountByUserNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CountByUserConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CountByUserUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CountByUserInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CountByUserInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+				}
+				err = ValidateCountByUserInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+				}
+				return nil, NewCountByUserInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CountByUserUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+				}
+				err = ValidateCountByUserUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+				}
+				return nil, NewCountByUserUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "countByUser", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CountByUserGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "countByUser", err)
+			}
+			err = ValidateCountByUserGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "countByUser", err)
+			}
+			return nil, NewCountByUserGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "countByUser", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListSessionLinksRequest instantiates a HTTP request object with method
 // and path set to call the "chat" service "listSessionLinks" endpoint
 func (c *Client) BuildListSessionLinksRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3423,6 +3674,8 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		AssistantID:          v.AssistantID,
 		AssistantName:        v.AssistantName,
 		AssistantAgentID:     v.AssistantAgentID,
+		AgentID:              v.AgentID,
+		AgentName:            v.AgentName,
 		NumMessages:          *v.NumMessages,
 		Source:               v.Source,
 		OriginatingClient:    v.OriginatingClient,
@@ -3654,6 +3907,20 @@ func unmarshalChatTotalsResponseBodyToChatChatTotals(v *ChatTotalsResponseBody) 
 		ToolCalls:         *v.ToolCalls,
 		ToolResults:       *v.ToolResults,
 		RiskOnly:          *v.RiskOnly,
+	}
+
+	return res
+}
+
+// unmarshalChatUserSessionCountResponseBodyToChatChatUserSessionCount builds a
+// value of type *chat.ChatUserSessionCount from a value of type
+// *ChatUserSessionCountResponseBody.
+func unmarshalChatUserSessionCountResponseBodyToChatChatUserSessionCount(v *ChatUserSessionCountResponseBody) *chat.ChatUserSessionCount {
+	res := &chat.ChatUserSessionCount{
+		UserID:      *v.UserID,
+		Email:       *v.Email,
+		DisplayName: *v.DisplayName,
+		Count:       *v.Count,
 	}
 
 	return res

@@ -123,7 +123,6 @@ func TestReconcile_RuleIDLifecycle(t *testing.T) {
 	matching := chFinding(tenant, "secret.github_pat", "gitleaks")
 	unrelated := chFinding(tenant, "secret.aws_access_key", "gitleaks")
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{matching, unrelated}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	pgRepo := riskrepo.New(conn)
 	exclusion, err := pgRepo.CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
@@ -185,7 +184,6 @@ func TestReconcile_WindowDaysBoundsClickHouseSweep(t *testing.T) {
 	// chFinding writes two days back, outside a one-day window.
 	older := chFinding(tenant, "secret.github_pat", "gitleaks")
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{older}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	exclusion, err := riskrepo.New(conn).CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
 		ProjectID:      tenant.projectID,
@@ -240,7 +238,6 @@ func TestReconcile_DisabledClickHouse(t *testing.T) {
 	chQueries := chrepo.New(chConn)
 	matching := chFinding(tenant, "secret.github_pat", "gitleaks")
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{matching}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 	reconcile := risk_exclusion.NewReconcile(
 		testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
 		conn, chQueries, risk.Fingerprinter{}, nil, true,
@@ -285,7 +282,6 @@ func TestReconcile_ExactWithoutFingerprinterSkipsCH(t *testing.T) {
 	heldAtIngest.ExcludedAt = &heldAt
 	heldAtIngest.ExclusionID = &exclusion.ID
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{visible, heldAtIngest}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	reconcile := newReconcile(t, conn, chQueries)
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
@@ -372,7 +368,6 @@ func TestReconcile_RegexReversalNeverExposesUnprovableRows(t *testing.T) {
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		heldMatching, heldStale, heldOrphan, liveMatching,
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	reconcile := newReconcile(t, conn, chQueries)
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{

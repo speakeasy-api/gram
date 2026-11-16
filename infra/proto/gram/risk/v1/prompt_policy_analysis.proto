@@ -36,6 +36,7 @@ message PromptPolicyAnalysis {
   string policy_link_reason = 25;
   // Raw external conversation ID; independent of the persisted Speakeasy chat_id.
   string external_conversation_id = 26;
+  bool run_judge = 27;
 
   message ToolCall {
     string name = 1;

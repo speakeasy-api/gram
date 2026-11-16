@@ -29,7 +29,7 @@ function errorContent(error: unknown): ErrorContent | null {
   }
 
   return {
-    title: "Failed to attach identity provider",
+    title: "Failed to attach authorization server",
     message:
       error instanceof Error && error.message
         ? error.message

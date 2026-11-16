@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // inventoryTestDay anchors fixture timestamps to the recent past. The
@@ -73,8 +72,6 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 		},
 	}))
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
 		Limit:         50,
@@ -116,7 +113,6 @@ func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.
 		SeenAt:             firstSeen,
 		UpdatedAt:          firstSeen,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	updated, err := ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
 		GramProjectID:      projectID,
@@ -135,7 +131,6 @@ func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.
 		SeenAt:             firstSeen.Add(2 * time.Minute),
 		UpdatedAt:          firstSeen.Add(2 * time.Minute),
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
@@ -163,7 +158,6 @@ func TestShadowMCPInventoryURLs_NameOverrideCanBeCleared(t *testing.T) {
 		SeenAt:             seenAt,
 		UpdatedAt:          seenAt,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	updated, err := ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
 		GramProjectID:      projectID,
@@ -314,8 +308,6 @@ func TestShadowMCPInventoryURLs_ListBySlugHash(t *testing.T) {
 		},
 	}))
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.ListShadowMCPInventoryURLsBySlugHash(ctx, telemetryRepo.ListShadowMCPInventoryURLsBySlugHashParams{
 		GramProjectID: projectID,
 		SlugHash:      "30d7c46c",
@@ -362,8 +354,6 @@ func TestShadowMCPInventoryURLs_PaginatesLastSeen(t *testing.T) {
 		{GramProjectID: projectID, CanonicalServerURL: "https://beta.example.com/mcp", URLHost: "beta.example.com", ServerName: "Beta", SeenAt: base.Add(2 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
 		{GramProjectID: projectID, CanonicalServerURL: "https://delta.example.com/mcp", URLHost: "delta.example.com", ServerName: "Delta", SeenAt: base.Add(time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
 	}))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	firstPage, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
@@ -428,8 +418,6 @@ func TestShadowMCPInventoryURLs_PaginatesLastCalledThenLastSeen(t *testing.T) {
 		UserEmail:  "ada@example.com",
 		ObservedAt: base.Add(time.Minute),
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	firstPage, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
@@ -539,8 +527,6 @@ func TestShadowMCPInventoryUsage_FromTelemetry(t *testing.T) {
 		ObservedAt: base.Add(3 * time.Minute),
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
 		GramProjectID: projectID,
 		Limit:         50,
@@ -578,8 +564,6 @@ func TestShadowMCPInventoryUsage_FiltersToCanonicalURLsBeforeLimit(t *testing.T)
 		UserEmail:  "sam@example.com",
 		ObservedAt: base.Add(time.Hour),
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
 		GramProjectID:       projectID,
@@ -624,8 +608,6 @@ func TestListShadowMCPInventoryUsers_FromTelemetry(t *testing.T) {
 		UserEmail:  "grace@example.com",
 		ObservedAt: base.Add(2 * time.Minute),
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	users, err := ti.chClient.ListShadowMCPInventoryUsers(ctx, telemetryRepo.ListShadowMCPInventoryUsersParams{
 		GramProjectID:      projectID,
@@ -680,8 +662,6 @@ func TestListShadowMCPInventoryUsers_Paginates(t *testing.T) {
 		ObservedAt: base.Add(3 * time.Minute),
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	firstPage, err := ti.chClient.ListShadowMCPInventoryUsers(ctx, telemetryRepo.ListShadowMCPInventoryUsersParams{
 		GramProjectID:      projectID,
 		CanonicalServerURL: "https://mcp.speakeasy.com/mcp",
@@ -724,8 +704,6 @@ func TestLoggerUpsertShadowMCPInventoryURLs(t *testing.T) {
 			SeenAt:        seenAt,
 		},
 	}))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
@@ -839,8 +817,6 @@ func TestBackfillShadowMCPInventoryURLs_ExcludesHostedHostnames(t *testing.T) {
 		ObservedAt: observedAt.Add(2 * time.Minute),
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.BackfillShadowMCPInventoryURLs(ctx, telemetry.BackfillShadowMCPInventoryURLsParams{
 		GramProjectID:      projectID,
 		Limit:              50,
@@ -848,8 +824,6 @@ func TestBackfillShadowMCPInventoryURLs_ExcludesHostedHostnames(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InventoryURLCount)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
@@ -956,8 +930,6 @@ func TestListShadowMCPInventoryUsage_FiltersByUser(t *testing.T) {
 		ObservedAt: base.Add(2 * time.Minute),
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
 		OrganizationID:      uuid.NewString(),
 		GramProjectID:       projectID,
@@ -1009,8 +981,6 @@ func TestListShadowMCPInventoryUsage_FiltersByWindow(t *testing.T) {
 		UserEmail:  "ada@example.com",
 		ObservedAt: recentCall,
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	listWindow := func(from, to *time.Time) []telemetryRepo.ShadowMCPInventoryUsageRow {
 		t.Helper()
@@ -1086,8 +1056,6 @@ func TestListShadowMCPInventoryUsage_NoUserKeysIsUnnarrowed(t *testing.T) {
 		UserEmail:  "grace@example.com",
 		ObservedAt: base.Add(2 * time.Minute),
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
 		OrganizationID:      "",

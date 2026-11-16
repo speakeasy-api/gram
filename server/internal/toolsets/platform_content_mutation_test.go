@@ -46,7 +46,7 @@ func seedContentMutationMemberships(t *testing.T, ctx context.Context, ti *testI
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.NoError(t, tx.Commit(ctx))
-	_, err = q.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: manual.ID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, DisplayName: "Manual server", Policy: "optional"})
+	_, err = q.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: manual.ID, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true}, DisplayName: "Manual server", Policy: "optional"})
 	require.NoError(t, err)
 	return automatic.ID, manual.ID, role.RoleUrn
 }

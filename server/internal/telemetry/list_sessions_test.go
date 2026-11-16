@@ -27,10 +27,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "sessions-" + uuid.NewString()[:8],
@@ -132,7 +129,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	allSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	allSessions := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "total_cost",
@@ -157,7 +154,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.NotNil(t, allSessions.Sessions[2].Title)
 	require.Equal(t, "Fix flaky test", *allSessions.Sessions[2].Title)
 
-	filtered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	filtered := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
 		To:   to,
 		Filters: []*gen.QueryFilter{
@@ -198,7 +195,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.NotNil(t, session.Title)
 	require.Equal(t, "Fix flaky test", *session.Title)
 
-	byToolCalls := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	byToolCalls := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "tool_call_count",
@@ -210,7 +207,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	})
 	require.Equal(t, chatID1, byToolCalls.Sessions[0].GramChatID)
 
-	byMessages := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	byMessages := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "message_count",
@@ -222,7 +219,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	})
 	require.Equal(t, chatID1, byMessages.Sessions[0].GramChatID)
 
-	byDuration := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	byDuration := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "duration_seconds",
@@ -244,10 +241,7 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	chatID := uuid.NewString()
@@ -288,7 +282,7 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 
 	// department_name lives on one row, hook_source on another. A per-row AND
 	// would return nothing; the per-chat HAVING must still match the chat.
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
 		To:   to,
 		Filters: []*gen.QueryFilter{
@@ -320,10 +314,7 @@ func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	matchingChatID := uuid.NewString()
@@ -381,7 +372,7 @@ func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
 		To:   to,
 		Filters: []*gen.QueryFilter{
@@ -413,10 +404,7 @@ func TestListSessions_ExcludesAssistantChatCompletions(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	assistantChatID := uuid.NewString()
@@ -454,7 +442,7 @@ func TestListSessions_ExcludesAssistantChatCompletions(t *testing.T) {
 
 	// Once the Claude session is visible, the assistants chat must not be:
 	// its rows fail sessionSourceRowPredicate regardless of insert timing.
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "total_cost",
@@ -476,10 +464,7 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	chatIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
@@ -504,7 +489,7 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "total_cost",
@@ -552,7 +537,110 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	require.Equal(t, chatIDs[2], page3.Sessions[0].GramChatID)
 }
 
-func waitForListSessions(
+// A session row names its user and title, so rows come only from projects the
+// caller holds chat:read on. Without it the list carries the slice's totals
+// alone; with it on one project, that project's rows and org-wide totals.
+func TestListSessions_RowsNeedChatRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	orgRead := authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "sessions-" + uuid.NewString()[:8],
+		Slug:           "sessions-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	ownProjectChat := uuid.NewString()
+	otherProjectChat := uuid.NewString()
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-10 * time.Minute),
+		chatID:       ownProjectChat,
+		email:        "olivia@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		cost:         1.25,
+	})
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    otherProject.ID.String(),
+		timestamp:    now.Add(-8 * time.Minute),
+		chatID:       otherProjectChat,
+		email:        "sam@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  300,
+		outputTokens: 100,
+		cost:         3.0,
+	})
+
+	payload := func() *gen.ListSessionsPayload {
+		return &gen.ListSessionsPayload{
+			From:   now.Add(-time.Hour).Format(time.RFC3339),
+			To:     now.Add(time.Hour).Format(time.RFC3339),
+			SortBy: "total_cost",
+			Limit:  10,
+		}
+	}
+	requireOrgTotals := func(t *testing.T, totals *gen.SessionTotals) {
+		t.Helper()
+		require.NotNil(t, totals)
+		require.Equal(t, int64(2), totals.SessionCount)
+		require.Equal(t, int64(2), totals.MessageCount)
+		require.Equal(t, int64(0), totals.ToolCallCount)
+		require.Equal(t, int64(400), totals.TotalInputTokens)
+		require.Equal(t, int64(150), totals.TotalOutputTokens)
+		require.Equal(t, int64(550), totals.TotalTokens)
+		require.InDelta(t, 4.25, totals.TotalCost, 0.0001)
+	}
+
+	// org:read alone: totals, no rows.
+	orgReader := authztest.WithExactGrants(t, ctx, orgRead)
+	totalsOnly := requireListSessions(t, orgReader, ti, payload(), func(res *gen.ListSessionsResult) bool {
+		return res.Scoped && res.Totals != nil && res.Totals.SessionCount == 2
+	})
+	require.Empty(t, totalsOnly.Sessions)
+	require.Nil(t, totalsOnly.NextCursor)
+	requireOrgTotals(t, totalsOnly.Totals)
+
+	// chat:read on one project: that project's rows, org-wide totals.
+	partialReader := authztest.WithExactGrants(t, ctx, orgRead, authz.NewGrant(authz.ScopeChatRead, projectID))
+	partial := requireListSessions(t, partialReader, ti, payload(), func(res *gen.ListSessionsResult) bool {
+		return res.Scoped && len(res.Sessions) == 1
+	})
+	require.Equal(t, ownProjectChat, partial.Sessions[0].GramChatID)
+	requireOrgTotals(t, partial.Totals)
+
+	// chat:read everywhere: every row, no totals block.
+	fullReader := authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
+	full := requireListSessions(t, fullReader, ti, payload(), func(res *gen.ListSessionsResult) bool {
+		return !res.Scoped && len(res.Sessions) == 2
+	})
+	require.Nil(t, full.Totals)
+	require.Equal(t, otherProjectChat, full.Sessions[0].GramChatID)
+	require.Equal(t, ownProjectChat, full.Sessions[1].GramChatID)
+}
+
+// sessionReaderGrants is the grant shape that reads every session row in the
+// organization: org:read for the slice and an unrestricted chat:read for the
+// per-session rows.
+func sessionReaderGrants(authCtx *contextvalues.AuthContext) []authz.Grant {
+	return []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	}
+}
+
+func requireListSessions(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
@@ -561,13 +649,10 @@ func waitForListSessions(
 ) *gen.ListSessionsResult {
 	t.Helper()
 
-	var result *gen.ListSessionsResult
-	var err error
-	require.Eventually(t, func() bool {
-		result, err = ti.service.ListSessions(ctx, payload)
-		return err == nil && result != nil && ready(result)
-	}, 10*time.Second, 200*time.Millisecond, "expected list sessions result to become query-ready, err: %v", errors.Unwrap(err))
+	result, err := ti.service.ListSessions(ctx, payload)
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, result)
+	require.True(t, ready(result), "list sessions result did not match")
 	return result
 }
 

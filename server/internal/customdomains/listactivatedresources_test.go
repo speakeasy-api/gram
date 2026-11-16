@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -164,17 +165,58 @@ func TestGetCustomDomainRouteConfigExcludesDeletedProjectRoot(t *testing.T) {
 		CustomDomainID: domain.ID,
 	}))
 
-	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, endpoint.ID, route.RootMcpEndpointID)
 
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, projectID)
 	require.NoError(t, err)
 
-	route, err = ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err = ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
 	require.Empty(t, route.RootSlug)
+}
+
+func TestGetCustomDomainRouteConfigScopesToOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "route-config-org-" + uuid.NewString() + ".example.com",
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	_, err = ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: "other-org-" + uuid.NewString(),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// The reconcile workflow resolves the organization of deleted rows too,
+	// so it can clean up their resources through the scoped read.
+	require.NoError(t, ti.repo.DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID))
+	organizationID, err := ti.repo.GetCustomDomainOrganizationIDForReconcile(ctx, domain.ID)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, organizationID)
+	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	require.True(t, route.Deleted)
 }
 
 func TestListActivatedCustomDomainResourcesIgnoresSoftDeletedDomains(t *testing.T) {

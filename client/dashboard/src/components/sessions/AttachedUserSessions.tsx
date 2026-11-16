@@ -1,8 +1,5 @@
 import { sessionAccountLabel } from "./session-account-identity";
 import { useEffect, useRef, useState } from "react";
-import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
-import { firstPartyConnectUrl } from "@/lib/utils";
-import type { Toolset } from "@/lib/toolTypes";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   useIsPlatformAdmin,
@@ -94,7 +91,11 @@ function OwnedSessionBindings({
   };
   const agentsQuery = useQuery({
     queryKey: [...queryKeyAgents({}), ownerScope],
-    queryFn: ({ signal }) => sdk.agents.list(undefined, undefined, { signal }),
+    // Every agent the user may authorize, not the first page of them: the
+    // rows below are one per agent, and a missing agent silently drops the
+    // sessions attached to it.
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     retry: false,
     throwOnError: false,
   });
@@ -315,18 +316,4 @@ function OwnedSessionBindings({
       />
     </>
   );
-}
-
-export function ToolsetAttachedUserSessions({
-  toolset,
-}: {
-  toolset: Toolset;
-}): JSX.Element | null {
-  const target = useToolsetMcpTarget(toolset);
-  return target.userSessionIssuerId ? (
-    <AttachedUserSessions
-      issuerId={target.userSessionIssuerId}
-      connectUrl={firstPartyConnectUrl(target.url)}
-    />
-  ) : null;
 }

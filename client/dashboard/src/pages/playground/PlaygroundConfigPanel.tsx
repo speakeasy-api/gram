@@ -12,7 +12,8 @@ import { Slider } from "@/components/ui/Slider";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
+import type { Tool } from "@/lib/toolTypes";
+import { getToolSourceLabel } from "@/lib/toolTypes";
 import {
   ChevronDownIcon,
   ChevronRightIcon,

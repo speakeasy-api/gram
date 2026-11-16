@@ -224,7 +224,6 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, nil)
@@ -252,7 +251,6 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, nil)

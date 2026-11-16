@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const SourceEnvironmentLinkSourceKind = {
 /**
  * The kind of source that can be linked to an environment
  */
-export type SourceEnvironmentLinkSourceKind = ClosedEnum<
+export type SourceEnvironmentLinkSourceKind = OpenEnum<
   typeof SourceEnvironmentLinkSourceKind
 >;
 
@@ -46,9 +47,10 @@ export type SourceEnvironmentLink = {
 };
 
 /** @internal */
-export const SourceEnvironmentLinkSourceKind$inboundSchema: z.ZodMiniEnum<
-  typeof SourceEnvironmentLinkSourceKind
-> = z.enum(SourceEnvironmentLinkSourceKind);
+export const SourceEnvironmentLinkSourceKind$inboundSchema: z.ZodMiniType<
+  SourceEnvironmentLinkSourceKind,
+  unknown
+> = openEnums.inboundSchema(SourceEnvironmentLinkSourceKind);
 
 /** @internal */
 export const SourceEnvironmentLink$inboundSchema: z.ZodMiniType<

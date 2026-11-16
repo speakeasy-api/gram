@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { ExternalLinkButton } from "@/components/ExternalLinkButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -206,11 +207,19 @@ export function SetStripeCustomer({
   });
   if (org.stripe_customer_id !== undefined && org.stripe_customer_id !== null) {
     return org.stripe_customer_id ? (
-      <CopyValue
-        label="Stripe customer ID"
-        value={org.stripe_customer_id}
-        className="text-sm"
-      />
+      <span className="flex min-w-0 items-center gap-1">
+        <CopyValue
+          label="Stripe customer ID"
+          value={org.stripe_customer_id}
+          className="text-sm"
+        />
+        {org.stripe_customer_dashboard_url ? (
+          <ExternalLinkButton
+            href={org.stripe_customer_dashboard_url}
+            label="Open customer in Stripe"
+          />
+        ) : null}
+      </span>
     ) : (
       <span className="text-muted-foreground text-sm">-</span>
     );

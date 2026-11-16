@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const MatchKind = {
 /**
  * How the lookup matched this guide. The most specific kind, when both lookup keys matched it.
  */
-export type MatchKind = ClosedEnum<typeof MatchKind>;
+export type MatchKind = OpenEnum<typeof MatchKind>;
 
 /**
  * Published setup documentation for an upstream MCP server
@@ -72,9 +73,8 @@ export type MCPSetupGuide = {
 };
 
 /** @internal */
-export const MatchKind$inboundSchema: z.ZodMiniEnum<typeof MatchKind> = z.enum(
-  MatchKind,
-);
+export const MatchKind$inboundSchema: z.ZodMiniType<MatchKind, unknown> =
+  openEnums.inboundSchema(MatchKind);
 
 /** @internal */
 export const MCPSetupGuide$inboundSchema: z.ZodMiniType<

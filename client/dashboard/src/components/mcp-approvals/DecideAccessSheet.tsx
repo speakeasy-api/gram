@@ -1,7 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
@@ -55,6 +55,15 @@ export type DecideAccessTarget = {
 };
 
 export type AccessDecision = "approved" | "denied";
+
+/**
+ * Why deciding waits while the policy list has failed to load: the sheet
+ * writes grants against the policies it can see, so with none loaded an
+ * approval would record a decision that enforces nothing. Every surface that
+ * opens the sheet says this the same way.
+ */
+export const POLICIES_UNAVAILABLE_REASON =
+  "Policy data could not be loaded — deciding now would not be enforced";
 
 type AudienceGroup = {
   heading: string;
@@ -390,9 +399,7 @@ export function DecideAccessSheet({
               }
             >
               <Button.LeftIcon>
-                {isSubmitting && (
-                  <Icon name="loader-circle" className="animate-spin" />
-                )}
+                {isSubmitting && <Spinner className="mr-0" />}
               </Button.LeftIcon>
               <Button.Text>
                 {decision === "approved" ? "Approve Server" : "Deny Server"}

@@ -3,6 +3,7 @@ import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { logoutToLogin } from "@/lib/logout-to-login";
+import { recordOrganizationSwitch } from "@/lib/organization-host";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Icon } from "@/components/ui/Icon";
@@ -14,6 +15,7 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
+import { TemporaryAccessPanel } from "./temporary-access-panel.tsx";
 import {
   SidePanelProvider,
   SidePanelSurface,
@@ -27,19 +29,35 @@ import { ModeSwitcher } from "./mode-switcher.tsx";
 const chromeTopOffset = (isImpersonating: boolean): string =>
   isImpersonating ? "2.25rem" : "0px";
 
+// Lifts signin_error out of the destination so the auth page shows it.
+function authPagePath(
+  page: string,
+  location: { pathname: string; search: string },
+): string {
+  const params = new URLSearchParams(location.search);
+  const signinError = params.get("signin_error");
+  params.delete("signin_error");
+  const rest = params.toString();
+  const redirectTo = encodeURIComponent(
+    location.pathname + (rest ? `?${rest}` : ""),
+  );
+  const error = signinError
+    ? `&signin_error=${encodeURIComponent(signinError)}`
+    : "";
+  return `${page}?redirect=${redirectTo}${error}`;
+}
+
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
   const session = useSession();
   const location = useLocation();
 
   if (session.session === "") {
-    const redirectTo = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/login?redirect=${redirectTo}`} />;
+    return <Navigate to={authPagePath("/login", location)} />;
   }
 
   if (!session.activeOrganizationId) {
-    const redirectTo = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/sign-up?redirect=${redirectTo}`} />;
+    return <Navigate to={authPagePath("/sign-up", location)} />;
   }
 
   return <Outlet />;
@@ -107,6 +125,7 @@ export const ImpersonationBanner = (): JSX.Element => {
       if (isDemo && ownOrg) {
         localStorage.removeItem(PRE_DEMO_ORG_KEY);
         await client.auth.switchScopes({ organizationId: ownOrg.id });
+        recordOrganizationSwitch(ownOrg.id);
         window.location.replace("/");
         return;
       }
@@ -179,6 +198,7 @@ const AppLayoutContent = ({
       {/* Above the outlet so the suggestion → chat bubble morph survives the
           navigation into the chat route. */}
       <ChatLaunchOverlay />
+      <TemporaryAccessPanel />
     </div>
   );
 };
@@ -273,6 +293,7 @@ export const OrgLayout = (): JSX.Element => {
             </MembershipSyncGuard>
           </SidebarInset>
         </ModeSurface>
+        <TemporaryAccessPanel />
       </div>
     </SidebarProvider>
   );

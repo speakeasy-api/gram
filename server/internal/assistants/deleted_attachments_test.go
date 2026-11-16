@@ -25,9 +25,11 @@ func TestServiceLegacyDeletedAttachments(t *testing.T) {
 			ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 			ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 				OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
-				McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 			})
 			require.NoError(t, err)
+			if kind == "toolset" {
+				createCanonicalWrapper(t, conn, ts, "example-tools-endpoint", "private")
+			}
 			payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 			targetID := ts.ID
 			if kind == "toolset" {
@@ -53,6 +55,8 @@ func TestServiceLegacyDeletedAttachments(t *testing.T) {
 			// Reproduce attachments left behind by historical soft deletions.
 			if kind == "toolset" {
 				_, err = toolsetsrepo.New(conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: ts.Slug, ProjectID: projectID})
+				require.NoError(t, err)
+				_, err = mcpserversrepo.New(conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: ts.ID, ProjectID: projectID})
 			} else {
 				_, err = mcpserversrepo.New(conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: targetID, ProjectID: projectID})
 			}

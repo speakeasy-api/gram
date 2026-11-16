@@ -81,11 +81,13 @@ func platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, version string, 
 		ServerURL:        serverURL,
 		APIKey:           "",
 		HooksAPIKey:      "",
+		HooksKeyIsAgent:  false,
 		ProjectSlug:      "",
 		IsDefaultProject: true,
 		Version:          version,
 		MarketplaceName:  PublicMarketplaceName,
 		BrowserLogin:     false,
+		InstallRoute:     InstallRouteMarketplace,
 		HooksOrgName:     "",
 		InstallFailOpen:  false,
 	}
@@ -210,15 +212,26 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	}
 
 	b.WriteString("## Claude Code\n\n")
-	b.WriteString("Merge this into `~/.claude/settings.json`, or into managed settings for your organization:\n\n")
+	b.WriteString("```\n")
+	b.WriteString("/plugin marketplace add " + marketplaceRepoURL + "\n")
+	b.WriteString("/plugin install " + platformMCPPluginName + "@" + PublicMarketplaceName + "\n")
+	b.WriteString("```\n\n")
+	b.WriteString("Then open `/mcp`, select Platform MCP, and choose Authenticate.\n\n")
+	b.WriteString("### Keep Platform MCP up to date\n\n")
+	b.WriteString("`/plugin marketplace add` leaves auto-update off. To turn it on for yourself, run `/plugin`, open **Marketplaces**, select `" + PublicMarketplaceName + "`, and choose **Enable auto-update**.\n\n")
+	b.WriteString("To turn it on for everyone in your organization, merge this into managed settings, or into `~/.claude/settings.json` for yourself, and restart Claude Code:\n\n")
 	b.WriteString(claudeCodeSettingsSnippet(PublicMarketplaceName, marketplaceRepoURL, platformMCPPluginName))
-	b.WriteString("Restart Claude Code, then open `/mcp`, select Platform MCP, and choose Authenticate.\n\n")
 
 	b.WriteString("## Codex\n\n")
 	b.WriteString("```\n")
 	b.WriteString("codex plugin marketplace add " + marketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
 	b.WriteString("Then open `/plugins` and install `" + platformMCPCodexPluginName + "`.\n\n")
+	b.WriteString("Codex does not open the sign-in page for a plugin's MCP server on its own. Sign in once with:\n\n")
+	b.WriteString("```\n")
+	b.WriteString("codex mcp login " + platformMCPServerName + "\n")
+	b.WriteString("```\n\n")
+	b.WriteString("Or ask the agent to sign you in; the plugin's `platform-sign-in` skill walks it through the same step.\n\n")
 
 	b.WriteString("## Cursor\n\n")
 	b.WriteString("In the Cursor dashboard for a team you administer, go to Settings → Plugins → Import and paste:\n\n")
@@ -233,6 +246,6 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	} else {
 		b.WriteString("Agent Plugins formats. Clone this repository and point your ")
 	}
-	b.WriteString("agent at the directory for your format.\n")
+	b.WriteString("agent at the directory for your format. Codex must use `speakeasy-codex/`, not the portable Agent Plugins package.\n")
 	return []byte(b.String())
 }

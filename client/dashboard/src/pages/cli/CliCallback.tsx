@@ -1,8 +1,13 @@
-import { CodeChallengeMethod } from "@gram/client/models/components/authorizerequestbody.js";
+import {
+  CodeChallengeMethod,
+  KeyScope,
+} from "@gram/client/models/components/authorizerequestbody.js";
 import { useCliAuthAuthorizeMutation } from "@gram/client/react-query/cliAuthAuthorize";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useSwitchScopesMutation } from "@gram/client/react-query/switchScopes";
 import { useEffect, useState, useRef } from "react";
 import { useSessionData } from "@/contexts/Auth";
+import { recordOrganizationSwitch } from "@/lib/organization-host";
 
 interface CliCallbackProps {
   keyScope?: "producer" | "hooks";
@@ -17,6 +22,11 @@ interface CliCallbackProps {
    */
   codeChallenge?: string | null;
   codeChallengeMethod?: string | null;
+  /**
+   * The key a PKCE code redeems for. "producer" is the Speakeasy CLI's
+   * org-wide key; otherwise the code mints the device agent's per-user key.
+   */
+  pkceKeyScope?: "producer" | null;
   /**
    * How the credentials travel to the local callback. "post" submits them as
    * an auto-submitted form body (Apple-style form_post) so the API key never
@@ -44,13 +54,16 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     organizationId,
     codeChallenge,
     codeChallengeMethod,
+    pkceKeyScope,
     callbackMethod,
   } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createKey } = useCreateAPIKeyMutation();
   const { mutateAsync: authorizeCode } = useCliAuthAuthorizeMutation();
+  const { mutateAsync: switchScopes } = useSwitchScopesMutation();
   const hasCreatedKey = useRef(false);
+  const hasSwitchedOrganization = useRef(false);
   const validCallback = isCallbackLocal(localCallbackUrl);
   const isPkceFlow = Boolean(codeChallenge);
 
@@ -73,6 +86,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     if (!session) return;
     if (!session.activeOrganizationId) return;
     if (hasCreatedKey.current) return;
+    if (error) return;
 
     if (!validCallback) {
       setError(errInvalidCallback);
@@ -82,9 +96,32 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     // The requesting plugin was generated for a specific organization; a key
     // minted in whichever org this browser session happens to have active
     // would silently route that machine's telemetry and policy checks to the
-    // wrong org.
+    // wrong org. A member of the requested org is switched to it once; the
+    // refetched session then re-runs this effect and continues the flow.
     if (organizationId && session.activeOrganizationId !== organizationId) {
-      setError(errWrongOrganization);
+      // Renders while the switch is in flight still carry the old session.
+      if (hasSwitchedOrganization.current) return;
+      if (!session.organizations.some((org) => org.id === organizationId)) {
+        setError(errWrongOrganization);
+        return;
+      }
+
+      hasSwitchedOrganization.current = true;
+      switchScopes({
+        request: { organizationId, gramSession: session.session },
+      })
+        .then(() => {
+          recordOrganizationSwitch(organizationId);
+          return session.refetch();
+        })
+        .then((refetched) => {
+          if (refetched.activeOrganizationId !== organizationId) {
+            setError(errSwitchFailed);
+          }
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : errSwitchFailed);
+        });
       return;
     }
 
@@ -101,6 +138,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
         session.session,
         codeChallenge,
         codeChallengeMethod,
+        pkceKeyScope,
         selectedProjectSlug,
       )
         .then((code) => transmitCode(localCallbackUrl, code))
@@ -137,16 +175,19 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
   }, [
     createKey,
     authorizeCode,
+    switchScopes,
     keyScope,
     localCallbackUrl,
     callbackMethod,
     projectSlug,
     organizationId,
     session,
+    error,
     validCallback,
     isPkceFlow,
     codeChallenge,
     codeChallengeMethod,
+    pkceKeyScope,
   ]);
 
   if (error) {
@@ -197,7 +238,9 @@ function generateHooksKeyName(): string {
 const errInvalidCallback =
   "Callback URL must use HTTP or HTTPS on localhost or 127.0.0.1";
 const errWrongOrganization =
-  "This connection link belongs to a different organization. Switch to that organization in the dashboard, then retry the connection.";
+  "This connection link belongs to an organization this account is not a member of. Sign in with an account in that organization, then retry the connection.";
+const errSwitchFailed =
+  "Could not switch to the organization this connection link belongs to. Switch to it in the dashboard, then retry the connection.";
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
 function isCallbackLocal(callbackUrl: string): boolean {
@@ -308,6 +351,7 @@ async function authorizePkceCode(
   sessionId: string,
   codeChallenge: string | null | undefined,
   codeChallengeMethod: string | null | undefined,
+  keyScope: "producer" | null | undefined,
   projectSlug: string | null,
 ): Promise<string> {
   if (!codeChallenge) throw new Error("Missing code_challenge parameter");
@@ -321,6 +365,7 @@ async function authorizePkceCode(
       authorizeRequestBody: {
         codeChallenge,
         codeChallengeMethod: CodeChallengeMethod.S256,
+        keyScope: keyScope === "producer" ? KeyScope.Producer : undefined,
         projectSlug: projectSlug ?? undefined,
       },
     },

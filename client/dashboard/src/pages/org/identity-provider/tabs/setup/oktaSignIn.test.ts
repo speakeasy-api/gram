@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { JSONWebKey } from "@gram/client/models/components/jsonwebkey.js";
 import type { JSONWebKeySet } from "@gram/client/models/components/jsonwebkeyset.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
@@ -31,6 +32,7 @@ function makeClient(
     grantTypes: null,
     credentialOwner: "subject",
     legacyCallbackUrl: false,
+    forwardClientName: false,
     organizationId: "organization-id",
     projectId: "",
     remoteSessionIssuerId: "issuer-id",
@@ -117,8 +119,11 @@ function makeIssuer(overrides: Partial<UserSessionIssuer>): UserSessionIssuer {
     id: "usi",
     slug: "usi",
     authnChallengeMode: "interactive",
+    authorizationServerMode: "endpoint",
     clientIdMetadataAdmissionMode: "disabled",
     sessionDurationHours: 336,
+    useAuthenticationHost: false,
+    issuerUrlPinned: false,
     organizationId: "organization-id",
     projectId: "",
     createdAt: new Date("2026-01-01T00:00:00Z"),

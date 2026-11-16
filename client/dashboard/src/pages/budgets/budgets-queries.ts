@@ -1,9 +1,14 @@
-/* The single adapter seam between the budgets UI and the generated spend-rules
- * SDK. Every @gram/client import for this feature lives here: the components
- * consume app-owned types (budgets-data.ts) and the app-owned hooks below, and
- * never touch the SDK directly. SDK responses are mapped to app types once, at
- * the react-query boundary, so a regeneration that reshapes a model breaks in
- * the mappers here rather than silently rippling through the components. */
+import type { EventType as BudgetEventFilter } from "@gram/client/models/operations/listspendruleevents.js";
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import {
+  CreateSpendRuleRequestBodyAction,
+  WindowKind,
+} from "@gram/client/models/components/createspendrulerequestbody.js";
+/* The adapter between the budgets UI and the generated spend-rules SDK.
+ * Network hooks and response-shape mapping live here. Budget view models share
+ * the SDK's open enum vocabulary, and editors use request-enum validators to
+ * guard writes. This deliberately preserves future enum values; other response
+ * shape changes surface in the mappers rather than throughout the UI. */
 import { invalidateAllSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
 import { invalidateAllSpendRulesListRules } from "@gram/client/react-query/spendRulesListRules.js";
 import { invalidateAllSpendRulesOverview } from "@gram/client/react-query/spendRulesOverview.js";
@@ -25,11 +30,10 @@ import type { SpendRuleUsage as SdkSpendRuleUsage } from "@gram/client/models/co
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
-  normalizeTargetCondition,
+  isSupportedRuleTarget,
   type ActorAttribute,
   type PreviewSpendRuleResult,
   type RuleDraft,
-  type SpendEventType,
   type SpendRule,
   type SpendRuleActorUsage,
   type SpendRuleEvent,
@@ -50,7 +54,7 @@ function mapRule(r: SdkSpendRule): SpendRule {
     version: r.version,
     name: r.name,
     description: r.description,
-    target: normalizeTargetCondition(r.target),
+    target: { ...r.target },
     targetExpr: r.targetExpr,
     ruleExpr: r.ruleExpr,
     limitUsd: r.limitUsd,
@@ -176,9 +180,11 @@ export function useActorAttributes(): {
   attributes: ActorAttribute[];
   isLoading: boolean;
   isError: boolean;
+  isReady: boolean;
 } {
   const query = useSpendRulesActorAttributes(undefined, undefined, {
     staleTime: Infinity,
+    throwOnError: false,
   });
   const attributes = useMemo(
     () => (query.data?.attributes ?? []).map(mapActorAttribute),
@@ -186,13 +192,14 @@ export function useActorAttributes(): {
   );
   return {
     attributes,
-    isLoading: query.isLoading,
+    isLoading: !query.data && !query.isError,
     isError: query.isError,
+    isReady: query.data !== undefined && !query.isError,
   };
 }
 
 export interface BudgetEventsParams {
-  eventType?: SpendEventType;
+  eventType?: BudgetEventFilter;
   cursor?: string;
   limit?: number;
   ruleId?: string;
@@ -242,6 +249,8 @@ export function useCreateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   create: (draft: RuleDraft) => void;
   isPending: boolean;
 } {
+  const { onError } = cb;
+  const { attributes, isReady } = useActorAttributes();
   const mutation = useSpendRulesCreateRuleMutation({
     onSuccess: () => cb.onSuccess?.(),
     onError: (error) => cb.onError?.(error.message),
@@ -249,9 +258,28 @@ export function useCreateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   const { mutate } = mutation;
   const create = useCallback(
     (draft: RuleDraft) => {
-      mutate({ request: { createSpendRuleRequestBody: draft } });
+      if (!isReady || !isSupportedRuleTarget(draft.target, attributes)) {
+        onError?.(
+          isReady
+            ? "Refresh the page before editing this unsupported target condition."
+            : "Target attributes have not been verified. Refresh the page before editing this target condition.",
+        );
+        return;
+      }
+      mutate({
+        request: {
+          createSpendRuleRequestBody: {
+            ...draft,
+            action: requireKnownEnumValue(
+              CreateSpendRuleRequestBodyAction,
+              draft.action,
+            ),
+            windowKind: requireKnownEnumValue(WindowKind, draft.windowKind),
+          },
+        },
+      });
     },
-    [mutate],
+    [mutate, onError, attributes, isReady],
   );
   return { create, isPending: mutation.isPending };
 }
@@ -260,6 +288,8 @@ export function useUpdateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   update: (input: UpdateBudgetRuleInput) => void;
   isPending: boolean;
 } {
+  const { onError } = cb;
+  const { attributes, isReady } = useActorAttributes();
   const mutation = useSpendRulesUpdateRuleMutation({
     onSuccess: () => cb.onSuccess?.(),
     onError: (error) => cb.onError?.(error.message),
@@ -267,9 +297,37 @@ export function useUpdateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   const { mutate } = mutation;
   const update = useCallback(
     (input: UpdateBudgetRuleInput) => {
-      mutate({ request: { updateSpendRuleRequestBody: input } });
+      if (
+        input.target &&
+        (!isReady || !isSupportedRuleTarget(input.target, attributes))
+      ) {
+        onError?.(
+          isReady
+            ? "Refresh the page before editing this unsupported target condition."
+            : "Target attributes have not been verified. Refresh the page before editing this target condition.",
+        );
+        return;
+      }
+      mutate({
+        request: {
+          updateSpendRuleRequestBody: {
+            ...input,
+            action:
+              input.action === undefined
+                ? undefined
+                : requireKnownEnumValue(
+                    CreateSpendRuleRequestBodyAction,
+                    input.action,
+                  ),
+            windowKind:
+              input.windowKind === undefined
+                ? undefined
+                : requireKnownEnumValue(WindowKind, input.windowKind),
+          },
+        },
+      });
     },
-    [mutate],
+    [mutate, onError, attributes, isReady],
   );
   return { update, isPending: mutation.isPending };
 }
@@ -306,6 +364,7 @@ export function usePreviewBudgetRule(): {
   isPending: boolean;
   isError: boolean;
 } {
+  const { attributes, isReady } = useActorAttributes();
   const mutation = useSpendRulesPreviewRuleMutation();
   const { mutate } = mutation;
   const preview = useCallback(
@@ -313,6 +372,13 @@ export function usePreviewBudgetRule(): {
       input: PreviewRuleInput,
       opts?: { onSuccess?: (result: PreviewSpendRuleResult) => void },
     ) => {
+      // Stored rules may use windows or target operators this dashboard cannot preview yet.
+      if (
+        !isKnownEnumValue(WindowKind, input.windowKind) ||
+        !isReady ||
+        !isSupportedRuleTarget(input.target, attributes)
+      )
+        return;
       mutate(
         {
           request: {
@@ -327,7 +393,7 @@ export function usePreviewBudgetRule(): {
         { onSuccess: (data) => opts?.onSuccess?.(mapPreview(data)) },
       );
     },
-    [mutate],
+    [mutate, attributes, isReady],
   );
   return { preview, isPending: mutation.isPending, isError: mutation.isError };
 }

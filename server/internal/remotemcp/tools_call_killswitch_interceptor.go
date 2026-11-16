@@ -27,6 +27,11 @@ type ToolsCallKillswitchInterceptor struct {
 
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallKillswitchInterceptor)(nil)
 
+// killswitchCheckError marks a refusal because the check could not answer, not because it matched.
+type killswitchCheckError struct{ *proxy.RejectError }
+
+func (e killswitchCheckError) Unwrap() error { return e.RejectError }
+
 func NewToolsCallKillswitchInterceptor(checkpoint ToolsCallKillswitchCheckpoint, organizationID, mcpServerID string, logger *slog.Logger) *ToolsCallKillswitchInterceptor {
 	return &ToolsCallKillswitchInterceptor{
 		checkpoint:     checkpoint,
@@ -43,7 +48,7 @@ func (i *ToolsCallKillswitchInterceptor) Name() string {
 func (i *ToolsCallKillswitchInterceptor) InterceptToolsCallRequest(ctx context.Context, _ *proxy.ToolsCallRequest) error {
 	if i.checkpoint == nil {
 		i.logInfrastructureFailure(ctx, errors.New("mcp tool-execution checkpoint is unavailable"))
-		return proxy.NewKillswitchInfrastructureRejection()
+		return killswitchCheckError{proxy.NewKillswitchInfrastructureRejection()}
 	}
 
 	disposition, err := i.checkpoint.Evaluate(ctx, i.organizationID, i.mcpServerID)
@@ -62,11 +67,11 @@ func (i *ToolsCallKillswitchInterceptor) InterceptToolsCallRequest(ctx context.C
 			return proxy.NewKillswitchMatchRejection(note)
 		}
 	case killswitches.TransportDispositionInfrastructureRejection:
-		return proxy.NewKillswitchInfrastructureRejection()
+		return killswitchCheckError{proxy.NewKillswitchInfrastructureRejection()}
 	}
 
 	i.logInfrastructureFailure(ctx, errors.New("invalid mcp tool-execution checkpoint result"))
-	return proxy.NewKillswitchInfrastructureRejection()
+	return killswitchCheckError{proxy.NewKillswitchInfrastructureRejection()}
 }
 
 func (i *ToolsCallKillswitchInterceptor) logInfrastructureFailure(ctx context.Context, err error) {

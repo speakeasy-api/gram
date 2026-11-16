@@ -1,4 +1,36 @@
+import { getDomainWithoutSuffix } from "tldts";
 import { toASCII } from "tr46";
+
+export function organizationSuggestionsFromHostname(hostname: string): {
+  name: string;
+  slug: string;
+} {
+  if (!hostname) return { name: "", slug: "" };
+
+  // Match the server's public-suffix-aware fallback, including private
+  // suffixes such as github.io. The first label is only a defensive fallback
+  // for a hostname accepted by this form but unknown to the suffix list.
+  const name =
+    getDomainWithoutSuffix(hostname, { allowPrivateDomains: true }) ??
+    hostname.split(".")[0] ??
+    "";
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  // Leave an invalid suggestion (such as a single character) for the operator
+  // to fill rather than opening the dialog on an error.
+  return { name, slug: isValidOrganizationSlug(slug) ? slug : "" };
+}
+
+export function isValidOrganizationSlug(slug: string): boolean {
+  return (
+    slug.length >= 2 &&
+    slug.length <= 100 &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
+  );
+}
 
 export function organizationUrlPreview(raw: string): {
   hostname: string;

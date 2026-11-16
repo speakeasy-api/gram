@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const DirectoryStatus = {
 /**
  * Whether a snapshot belongs to the usable current authorization.
  */
-export type DirectoryStatus = ClosedEnum<typeof DirectoryStatus>;
+export type DirectoryStatus = OpenEnum<typeof DirectoryStatus>;
 
 /**
  * Authorization status, independent of directory sync.
@@ -33,7 +34,7 @@ export const SlackDirectoryConnectionStatus = {
 /**
  * Authorization status, independent of directory sync.
  */
-export type SlackDirectoryConnectionStatus = ClosedEnum<
+export type SlackDirectoryConnectionStatus = OpenEnum<
   typeof SlackDirectoryConnectionStatus
 >;
 
@@ -51,12 +52,16 @@ export const SyncStatus = {
 /**
  * Latest workflow state. Unknown means progress could not be checked.
  */
-export type SyncStatus = ClosedEnum<typeof SyncStatus>;
+export type SyncStatus = OpenEnum<typeof SyncStatus>;
 
 /**
  * An organization Slack workspace authorization. Authorization does not indicate directory sync or invocation protection.
  */
 export type SlackDirectoryConnection = {
+  /**
+   * Project whose managed assistant answers Speakeasy app mentions and direct messages in this workspace.
+   */
+  defaultProjectId?: string | undefined;
   /**
    * Whether a snapshot belongs to the usable current authorization.
    */
@@ -98,6 +103,10 @@ export type SlackDirectoryConnection = {
    */
   memberCount: number;
   /**
+   * Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.
+   */
+  missingScopes: Array<string>;
+  /**
    * Authorization status, independent of directory sync.
    */
   status: SlackDirectoryConnectionStatus;
@@ -132,18 +141,20 @@ export type SlackDirectoryConnection = {
 };
 
 /** @internal */
-export const DirectoryStatus$inboundSchema: z.ZodMiniEnum<
-  typeof DirectoryStatus
-> = z.enum(DirectoryStatus);
+export const DirectoryStatus$inboundSchema: z.ZodMiniType<
+  DirectoryStatus,
+  unknown
+> = openEnums.inboundSchema(DirectoryStatus);
 
 /** @internal */
-export const SlackDirectoryConnectionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof SlackDirectoryConnectionStatus
-> = z.enum(SlackDirectoryConnectionStatus);
+export const SlackDirectoryConnectionStatus$inboundSchema: z.ZodMiniType<
+  SlackDirectoryConnectionStatus,
+  unknown
+> = openEnums.inboundSchema(SlackDirectoryConnectionStatus);
 
 /** @internal */
-export const SyncStatus$inboundSchema: z.ZodMiniEnum<typeof SyncStatus> = z
-  .enum(SyncStatus);
+export const SyncStatus$inboundSchema: z.ZodMiniType<SyncStatus, unknown> =
+  openEnums.inboundSchema(SyncStatus);
 
 /** @internal */
 export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
@@ -151,6 +162,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    default_project_id: z.optional(z.string()),
     directory_status: DirectoryStatus$inboundSchema,
     disconnected_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -169,6 +181,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     member_count: z.int(),
+    missing_scopes: z.array(z.string()),
     status: SlackDirectoryConnectionStatus$inboundSchema,
     sync_members: z.optional(z.int()),
     sync_pages: z.optional(z.int()),
@@ -183,6 +196,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "default_project_id": "defaultProjectId",
       "directory_status": "directoryStatus",
       "disconnected_at": "disconnectedAt",
       "granted_scopes": "grantedScopes",
@@ -191,6 +205,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
       "last_sync_failed_at": "lastSyncFailedAt",
       "last_sync_started_at": "lastSyncStartedAt",
       "member_count": "memberCount",
+      "missing_scopes": "missingScopes",
       "sync_members": "syncMembers",
       "sync_pages": "syncPages",
       "sync_phase": "syncPhase",

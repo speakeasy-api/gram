@@ -424,3 +424,19 @@ func TestEndpointStructureErrorPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateRefusesDuplicateNameWithoutSecondEntry(t *testing.T) {
+	t.Parallel()
+
+	ctx, s, _ := newTestService(t)
+	first, err := s.Create(ctx, json.RawMessage(basicRecord))
+	require.NoError(t, err)
+
+	// Create runs CreateTx, whose insert maps the name's unique violation.
+	_, err = s.Create(ctx, json.RawMessage(basicRecord))
+	require.ErrorIs(t, err, ErrConflict)
+
+	got, err := s.GetByName(ctx, "example.test/demo")
+	require.NoError(t, err)
+	require.Equal(t, first.ID, got.ID)
+}

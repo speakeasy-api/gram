@@ -360,3 +360,86 @@ func TestPublish_SkipsScoreEventWithoutSessionFacts(t *testing.T) {
 	require.Equal(t, 1, result.Scored, "missing session facts must not block publication")
 	require.Empty(t, events.events(t), "no session facts means no score event")
 }
+
+// rearmingStubJudge re-judges chats that resume.
+type rearmingStubJudge struct{ stubNamedJudge }
+
+func (rearmingStubJudge) RearmOnNewMessages() bool { return true }
+
+func TestEnqueuePage_RearmsScoredUnitsOnlyForRearmingJudges(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	fixture := newAnalysisFixture(t, "enqueue_rearm")
+	roster := testJudges(t,
+		stubNamedJudge{name: "once", verdict: stubVerdict(1), err: nil},
+		rearmingStubJudge{stubNamedJudge{name: "rearm", verdict: stubVerdict(1), err: nil}},
+	)
+	fixture.enableJudge(t, "once", 10)
+	fixture.enableJudge(t, "rearm", 10)
+
+	chatID := fixture.seedChat(t, 2, 2*time.Hour)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	pending := fixture.pendingEvaluations(t)
+	require.Len(t, pending, 2)
+	for _, row := range pending {
+		_, err := repo.New(fixture.db).ReserveChatAnalysisEvaluations(ctx, repo.ReserveChatAnalysisEvaluationsParams{
+			ProjectID:  fixture.projectID,
+			Ids:        []uuid.UUID{row.ID},
+			ReservedOn: pgtype.Date{Time: time.Now().UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+			Inactivity: pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
+		})
+		require.NoError(t, err)
+		marked, err := repo.New(fixture.db).MarkChatAnalysisEvaluationScored(ctx, repo.MarkChatAnalysisEvaluationScoredParams{ProjectID: fixture.projectID, ID: row.ID})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), marked)
+	}
+
+	// Re-walking with no new messages leaves both units scored.
+	_, err = EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	require.Empty(t, fixture.pendingEvaluations(t))
+
+	// The chat resumes and goes quiet again: only the rearming judge's unit
+	// returns to the queue, with a fresh attempt budget.
+	fixture.seedMessage(t, chatID, time.Hour)
+	_, err = EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	pending = fixture.pendingEvaluations(t)
+	require.Len(t, pending, 1)
+	require.Equal(t, "rearm", pending[0].Judge)
+	require.Equal(t, chatID, pending[0].ChatID)
+	require.Zero(t, pending[0].Attempts)
+}
+
+// sharedOptInStubJudge runs wherever the "source" judge is enabled.
+type sharedOptInStubJudge struct{ stubNamedJudge }
+
+func (sharedOptInStubJudge) OptInWith() string { return "source" }
+
+func TestSettings_SharedOptInFollowsSourceUnlessConfigured(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	fixture := newAnalysisFixture(t, "settings_shared_optin")
+	roster := testJudges(t,
+		stubNamedJudge{name: "source", verdict: stubVerdict(1), err: nil},
+		sharedOptInStubJudge{stubNamedJudge{name: "follower", verdict: stubVerdict(1), err: nil}},
+	)
+
+	settings, err := settingsForProject(ctx, repo.New(fixture.db), roster, fixture.projectID)
+	require.NoError(t, err)
+	require.Empty(t, settings.enabledJudges(), "nothing runs until the source judge is enabled")
+
+	fixture.enableJudge(t, "source", 7)
+	settings, err = settingsForProject(ctx, repo.New(fixture.db), roster, fixture.projectID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]int32{"source": 7, "follower": 7}, settings.JudgeDailyCaps)
+
+	// The follower's own row wins, here switching it off.
+	fixture.enableJudge(t, "follower", 0)
+	settings, err = settingsForProject(ctx, repo.New(fixture.db), roster, fixture.projectID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"source"}, settings.enabledJudges())
+}

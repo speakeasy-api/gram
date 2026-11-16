@@ -39,7 +39,7 @@ func TestRepeatedRefreshesKeepEnrichmentUnderCap(t *testing.T) {
 		claims["blob_"+strconv.Itoa(n)] = strings.Repeat("x", 3<<10)
 		body := `,"id_token":"` + issuer.mint(t, claims) + `"`
 		refreshBody.Store(&body)
-		_, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+		_, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		require.NoError(t, err)
 
 		sess := restatedSession(t, env)
@@ -80,7 +80,7 @@ func TestOverlappingRefreshesKeepStoredIdentity(t *testing.T) {
 				return identity, nil
 			}
 			var resolved string
-			resolved, nestedErr = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+			resolved, nestedErr = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 			nestedToken.Store(&resolved)
 			return identity, nil
 		})
@@ -106,7 +106,7 @@ func TestOverlappingRefreshesKeepStoredIdentity(t *testing.T) {
 	require.Equal(t, "grant-owner@example.com", env.session.UpstreamEmail.String)
 
 	armed.Store(true)
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-1", resolved)
 

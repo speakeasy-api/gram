@@ -112,6 +112,11 @@ func (s *captureSuggestionSignaler) recorded() []suggestionSignal {
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestServiceWithPublisher(t, &capturePublishSignaler{})
+}
+
+func newTestServiceWithPublisher(t *testing.T, publisher *capturePublishSignaler) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -153,10 +158,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
-	publisher := &capturePublishSignaler{mu: sync.Mutex{}, signals: nil}
+	var publishSignaler skills.PluginPublishSignaler
+	if publisher != nil {
+		publishSignaler = publisher
+	}
 	siteURL, err := url.Parse("https://app.getgram.test")
 	require.NoError(t, err)
-	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler, publisher, siteURL)
+	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler, publishSignaler, siteURL)
 
 	ti := &testInstance{
 		service:        service,

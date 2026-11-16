@@ -11,12 +11,8 @@ import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { Stack } from "@/components/ui/Stack";
 import { AgentifyProvider } from "../playground/Agentify";
 import { useAgentify } from "../playground/useAgentify";
-import {
-  CODE_SAMPLES,
-  FRAMEWORKS,
-  SdkFramework,
-  SdkLanguage,
-} from "./examples";
+import type { SdkFramework, SdkLanguage } from "./examples";
+import { CODE_SAMPLES, FRAMEWORKS } from "./examples";
 
 export default function SDK(): JSX.Element {
   return (

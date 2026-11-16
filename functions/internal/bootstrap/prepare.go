@@ -31,7 +31,9 @@ func ResolveProgram(language string, workDir string) (string, []string, error) {
 
 	switch language {
 	case "javascript", "typescript":
-		return "node", []string{"--experimental-strip-types", entryPath}, nil
+		// The image filters the OpenSSL store for the eMudhra compromise. Pass
+		// the flag explicitly because function subprocesses have a fresh environment.
+		return "node", []string{"--use-openssl-ca", "--experimental-strip-types", entryPath}, nil
 	case "python":
 		return "python", []string{entryPath}, nil
 	default:
@@ -180,7 +182,7 @@ func prepareProgram(workDir string, language string) (string, []string, error) {
 			return "", nil, fmt.Errorf("stat %s: %w", functionsPath, err)
 		}
 
-		return "node", []string{"--experimental-strip-types", entryPath}, nil
+		return "node", []string{"--use-openssl-ca", "--experimental-strip-types", entryPath}, nil
 	case "python":
 		if err := os.WriteFile(entryPath, python.Entrypoint, 0444); err != nil {
 			return "", nil, fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)

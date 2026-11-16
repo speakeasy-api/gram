@@ -22,6 +22,13 @@ func accessorTestIntKV(key string, value int64) *otelv1.InboundLogRecord_KeyValu
 	}).Build()
 }
 
+func accessorTestDoubleKV(key string, value float64) *otelv1.InboundLogRecord_KeyValue {
+	return (&otelv1.InboundLogRecord_KeyValue_builder{
+		Key:   &key,
+		Value: (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &value}).Build(),
+	}).Build()
+}
+
 func accessorTestRecord(scope, eventName string, attributes ...*otelv1.InboundLogRecord_KeyValue) *otelv1.InboundLogRecord {
 	return (&otelv1.InboundLogRecord_builder{
 		EventName:  &eventName,

@@ -9,6 +9,21 @@ import {
 
 export const DEFAULT_DATE_RANGE_PRESET: DateRangePreset = "7d";
 
+/**
+ * A preset range is anchored at `now`, which is a different millisecond on
+ * every mount, and so a different react-query key. Widening it to whole
+ * minutes is what lets two views of the same window share one request.
+ */
+export function minuteAlignedRange(range: { from: Date; to: Date }): {
+  from: Date;
+  to: Date;
+} {
+  return {
+    from: new Date(Math.floor(range.from.getTime() / 60_000) * 60_000),
+    to: new Date(Math.ceil(range.to.getTime() / 60_000) * 60_000),
+  };
+}
+
 export function useDateRangeFilter(
   defaultPreset: DateRangePreset = DEFAULT_DATE_RANGE_PRESET,
 ): {

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -78,14 +79,14 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: principal.OrganizationID, ProjectID: project.ID,
 		Name: "Hosted MCP", Slug: "hosted-" + uuid.NewString()[:8],
-		McpSlug: conv.ToPGText(orgSlug + "-hosted"), McpEnabled: true,
 	})
 	require.NoError(t, err)
 	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: project.ID, Name: conv.ToPGText(toolset.Name), Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: project.ID, Name: conv.ToPGText(toolset.Name), Slug: conv.ToPGText(orgSlug + "-hosted"),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, conn, project.ID, toolset.ID, testenv.HostedMCP{Slug: orgSlug + "-hosted"})
 
 	fixtures := testrepo.New(conn)
 	assetID, deploymentID, functionID := uuid.New(), uuid.New(), uuid.New()
@@ -144,7 +145,9 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 		// is not MCP-enabled is reported as needing no index.
 		target, err := toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: indexedToolset, ProjectID: indexedProject})
 		require.NoError(t, err)
-		if !target.McpEnabled {
+		hosting, _, err := hostedmcp.LoadServerState(ctx, conn, target)
+		require.NoError(t, err)
+		if !hosting.Enabled {
 			return toolsets.ErrToolsetIndexNotRequired
 		}
 		return nil
@@ -553,7 +556,7 @@ func TestChangeMCPToolsPinsTheServerToolsetBindingBeforeDeciding(t *testing.T) {
 	// A second toolset in the same project for the server to be moved onto.
 	other, err := toolsetsrepo.New(fixture.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID,
-		Name: "Moved target", Slug: "moved-" + uuid.NewString()[:8], McpEnabled: true,
+		Name: "Moved target", Slug: "moved-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
 
@@ -826,6 +829,7 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 	reader := NewPostgresReader(testenv.NewLogger(t), fixture.conn)
 	describe := func(service *MCPToolExposureService) map[string]Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "tool-exposure-manifest", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerToolExposureTools(registrar, service, reader)
 		byName := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {
@@ -866,11 +870,12 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 
 	// The refusals themselves must differ: a caller that only asked to list a
 	// project's tools must not be told it cannot change a server.
-	listRefusal := invokeUnavailable(t, unavailable[listProjectToolsToolName], map[string]any{
-		"project_id": fixture.project.ID.String(),
+	caller := ContextWithPrincipal(t.Context(), fixture.principal)
+	listRefusal := invokeUnavailable(t, caller, unavailable[listProjectToolsToolName], map[string]any{
+		"project_slug": fixture.project.Slug,
 	})
-	addRefusal := invokeUnavailable(t, unavailable[addToolsToMCPToolName], map[string]any{
-		"project_id": fixture.project.ID.String(), "mcp_id": fixture.toolsetID.String(),
+	addRefusal := invokeUnavailable(t, caller, unavailable[addToolsToMCPToolName], map[string]any{
+		"project_slug": fixture.project.Slug, "mcp_id": fixture.toolsetID.String(),
 		"tool_urns": []string{fixture.tools[0]}, "expected_version": strings.Repeat("a", 64),
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
@@ -879,13 +884,13 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 	require.NotEqual(t, listRefusal, addRefusal)
 }
 
-func invokeUnavailable(t *testing.T, descriptor Descriptor, arguments map[string]any) string {
+func invokeUnavailable(t *testing.T, ctx context.Context, descriptor Descriptor, arguments map[string]any) string {
 	t.Helper()
 	encoded, err := json.Marshal(arguments)
 	require.NoError(t, err)
 	// Through the exported accessor, so the nil guard it exists for is part of
 	// what this exercises rather than bypassed.
-	_, err = descriptor.Invoke(t.Context(), encoded)
+	_, err = descriptor.Invoke(ctx, encoded)
 	require.Error(t, err)
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)

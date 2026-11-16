@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
@@ -76,6 +77,14 @@ func (s postgresStaffClientStore) GetClient(ctx context.Context, clientID string
 		RedirectURIs:    row.RedirectUris,
 		SecretExpiresAt: optionalTime(row.ClientSecretExpiresAt),
 	}, nil
+}
+
+func optionalTime(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	t := value.Time
+	return &t
 }
 
 // StaffOAuthClients owns the registration endpoint; mounting it remains a separate decision.
@@ -170,4 +179,12 @@ func staffJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func staffRequestError(w http.ResponseWriter, err error) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+		staffOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+	} else {
+		staffOAuthError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
 }

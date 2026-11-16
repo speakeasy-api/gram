@@ -1,3 +1,4 @@
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
@@ -15,7 +16,6 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
-import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -279,8 +279,16 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   if (!systemPrompt) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      <div
+        role="status"
+        aria-label="Loading assistant setup"
+        className="flex h-full flex-col justify-between gap-4 p-4"
+      >
+        <div className="mx-auto w-full max-w-2xl space-y-3 pt-12">
+          <Skeleton className="h-6 w-64" />
+          <Skeleton className="h-4 w-96 max-w-full" />
+        </div>
+        <Skeleton className="mx-auto h-24 w-full max-w-2xl" />
       </div>
     );
   }

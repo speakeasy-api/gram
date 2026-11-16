@@ -43,6 +43,7 @@ type LogAwsKmsKeyCreateEvent struct {
 
 func (l *Logger) LogAwsKmsKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogAwsKmsKeyCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -95,6 +96,7 @@ func (l *Logger) LogAwsKmsKeyUpdate(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -132,6 +134,7 @@ type LogAwsKmsKeyDeleteEvent struct {
 
 func (l *Logger) LogAwsKmsKeyDelete(ctx context.Context, dbtx repo.DBTX, event LogAwsKmsKeyDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

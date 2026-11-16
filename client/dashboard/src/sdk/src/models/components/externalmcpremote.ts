@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -20,16 +21,14 @@ import {
 /**
  * Transport type (sse or streamable-http)
  */
-export const ExternalMCPRemoteTransportType = {
+export const TransportType = {
   Sse: "sse",
   StreamableHttp: "streamable-http",
 } as const;
 /**
  * Transport type (sse or streamable-http)
  */
-export type ExternalMCPRemoteTransportType = ClosedEnum<
-  typeof ExternalMCPRemoteTransportType
->;
+export type TransportType = OpenEnum<typeof TransportType>;
 
 /**
  * A remote endpoint for an MCP server
@@ -42,7 +41,7 @@ export type ExternalMCPRemote = {
   /**
    * Transport type (sse or streamable-http)
    */
-  transportType: ExternalMCPRemoteTransportType;
+  transportType: TransportType;
   /**
    * URL of the remote endpoint
    */
@@ -54,9 +53,10 @@ export type ExternalMCPRemote = {
 };
 
 /** @internal */
-export const ExternalMCPRemoteTransportType$inboundSchema: z.ZodMiniEnum<
-  typeof ExternalMCPRemoteTransportType
-> = z.enum(ExternalMCPRemoteTransportType);
+export const TransportType$inboundSchema: z.ZodMiniType<
+  TransportType,
+  unknown
+> = openEnums.inboundSchema(TransportType);
 
 /** @internal */
 export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<
@@ -65,7 +65,7 @@ export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     headers: z.optional(z.array(ExternalMCPRemoteHeader$inboundSchema)),
-    transport_type: ExternalMCPRemoteTransportType$inboundSchema,
+    transport_type: TransportType$inboundSchema,
     url: z.string(),
     variables: z.optional(
       z.record(z.string(), ExternalMCPRemoteVariable$inboundSchema),

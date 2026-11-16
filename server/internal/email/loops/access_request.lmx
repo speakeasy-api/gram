@@ -3,7 +3,8 @@
 <Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">ACCESS / REQUEST</Text></Paragraph>
 <H1>{data.requester_name} needs access</H1>
 <Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmshilgvx01u30j6t4t0211tl.png" alt="" width="536" paddingTop="12" paddingBottom="20" />
-<Paragraph paddingBottom="16">Review the request for {data.organization_name} and grant only the scopes they need.</Paragraph>
+<Paragraph paddingBottom="8">{data.requester_name} asked for {data.permission_label} ({data.permission_scope}) in {data.organization_name}.</Paragraph>
+<Paragraph paddingBottom="16">{data.permission_description} Grant only the permission they need.</Paragraph>
 <Button href="{data.manage_access_link}" align="left" paddingTop="8" paddingBottom="32">Review request</Button>
 <Divider paddingBottom="16" />
 <Paragraph fontSize="12"><Text textColor="#6E6E6E">No access changes are made until an administrator approves the request.</Text></Paragraph>

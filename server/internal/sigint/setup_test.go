@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -17,8 +19,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -67,7 +72,32 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	require.NoError(t, features.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSignalsIntelligence, true))
+
+	// The database is cloned per test but Redis is shared across the package, so
+	// tests that kept the default organization id would also share the
+	// entitlement cache — one test disabling the feature would flake its parallel
+	// neighbours. Sigint queries require the project to belong to the active
+	// organization, so the project moves with it.
+	orgID := "org_" + uuid.NewString()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Sigint Test Org",
+		Slug:        "sigint-test-" + uuid.NewString(),
+		WorkosID:    conv.ToPGText(orgID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	projectSlug := "sigint-" + uuid.NewString()[:8]
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: projectSlug, Slug: projectSlug, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	authCtx.ActiveOrganizationID = orgID
+	authCtx.ProjectID = &project.ID
+	authCtx.ProjectSlug = &project.Slug
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	require.NoError(t, features.SetFeatureEnabled(ctx, orgID, productfeatures.FeatureSignalsIntelligence, true))
 	return ctx, &testInstance{
 		service:  sigint.NewService(logger, tracerProvider, conn, sessions, engine, audit.NewLogger(), features),
 		conn:     conn,

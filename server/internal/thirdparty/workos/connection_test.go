@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -128,6 +129,28 @@ func TestClient_ListConnections_NotFoundError(t *testing.T) {
 	_, err := client.ListConnections(context.Background(), "org_missing")
 	require.Error(t, err)
 	require.True(t, workos.IsNotFound(err), "404 from WorkOS should be detectable via IsNotFound, got %v", err)
+}
+
+func TestClient_ListDirectories_Paginates(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		assert.Equal(t, "org_test", r.URL.Query().Get("organization_id"))
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("after") == "" {
+			_, _ = w.Write([]byte(`{"data":[{"id":"directory_first","organization_id":"org_test"}],"list_metadata":{"after":"directory_first"}}`))
+			return
+		}
+		assert.Equal(t, "directory_first", r.URL.Query().Get("after"))
+		_, _ = w.Write([]byte(`{"data":[{"id":"directory_second","organization_id":"org_test"}],"list_metadata":{"after":""}}`))
+	})
+	client := newClientWithHandler(t, handler)
+	directories, err := client.ListDirectories(context.Background(), "org_test")
+	require.NoError(t, err)
+	require.Len(t, directories, 2)
+	require.Equal(t, 2, calls)
+	require.Equal(t, "directory_second", directories[1].ID)
 }
 
 func TestClient_ListDirectories_NotFoundError(t *testing.T) {

@@ -137,7 +137,7 @@ const (
 )
 ```
 
-**2. Create the flag in PostHog before the gating code merges**; a missing key evaluates as Indeterminate and the gate stays closed. Write the description like `gram-budgets` (org-scoped) or `risk-async-scan-shadow` (person-property, local-only): what it gates, where it is evaluated, how it is targeted, fail-closed behaviour.
+**2. Create the flag in PostHog before the gating code merges**; a missing key evaluates as Indeterminate and the gate stays closed. Write the description like `gram-budgets`: what it gates, where it is evaluated, how it is targeted, fail-closed behaviour.
 
 **3. Verify the condition** with evaluation reasons (Feature flag → Evaluation reasons, or the `feature-flags-evaluation-reasons-retrieve` MCP tool) using `groups={"organization": "<slug>"}` for at least one target org and expect `condition_match`.
 

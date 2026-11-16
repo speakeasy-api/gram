@@ -22,7 +22,6 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // withUniqueDetectionOrg rewrites the auth context onto a per-test org id and
@@ -81,7 +80,6 @@ func seedAIDetectionIdentity(t *testing.T, ctx context.Context, ti *testInstance
 		userID,
 		canonicalEmail,
 	))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 }
 
 func seedAIDetectionDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, memberEmails []string) uuid.UUID {

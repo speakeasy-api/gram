@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -21,7 +22,7 @@ export const RiskMCPScopeToolAnnotations = {
   IdempotentHint: "idempotentHint",
   OpenWorldHint: "openWorldHint",
 } as const;
-export type RiskMCPScopeToolAnnotations = ClosedEnum<
+export type RiskMCPScopeToolAnnotations = OpenEnum<
   typeof RiskMCPScopeToolAnnotations
 >;
 
@@ -41,13 +42,15 @@ export type RiskMCPScope = {
 };
 
 /** @internal */
-export const RiskMCPScopeToolAnnotations$inboundSchema: z.ZodMiniEnum<
-  typeof RiskMCPScopeToolAnnotations
-> = z.enum(RiskMCPScopeToolAnnotations);
+export const RiskMCPScopeToolAnnotations$inboundSchema: z.ZodMiniType<
+  RiskMCPScopeToolAnnotations,
+  unknown
+> = openEnums.inboundSchema(RiskMCPScopeToolAnnotations);
 /** @internal */
-export const RiskMCPScopeToolAnnotations$outboundSchema: z.ZodMiniEnum<
-  typeof RiskMCPScopeToolAnnotations
-> = RiskMCPScopeToolAnnotations$inboundSchema;
+export const RiskMCPScopeToolAnnotations$outboundSchema: z.ZodMiniType<
+  string,
+  RiskMCPScopeToolAnnotations
+> = openEnums.outboundSchema(RiskMCPScopeToolAnnotations);
 
 /** @internal */
 export const RiskMCPScope$inboundSchema: z.ZodMiniType<RiskMCPScope, unknown> =

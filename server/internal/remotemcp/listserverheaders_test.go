@@ -38,7 +38,7 @@ func TestListServerHeaders_OrderedByNameAndRedacted(t *testing.T) {
 	createSecretHeader(t, ctx, ti, server.ID, "X-API-Key", "secret-value")
 
 	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "Authorization", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("Authorization")
+		p.ValueFromRequestHeader = new("X-Upstream-Credential")
 	}))
 	require.NoError(t, err)
 

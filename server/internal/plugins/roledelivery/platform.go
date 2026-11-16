@@ -3,6 +3,7 @@ package roledelivery
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -24,12 +25,14 @@ func ContainsPlatformTools(ctx context.Context, tx pgx.Tx, org string, projectID
 		return false, fmt.Errorf("load platform tool delivery eligibility: %w", err)
 	}
 	// SQLc decodes tool_urns through urn.Tool, including its validated parser.
-	for _, tools := range versions {
-		for _, tool := range tools {
-			if tool.Kind == urn.ToolKindPlatform {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
+	return slices.ContainsFunc(versions, HasPlatformTool), nil
+}
+
+// HasPlatformTool reports whether a toolset version's tools include a Platform
+// tool. Such a toolset is never distributed automatically: not to Default or
+// role plugins, and not through the organization gateway.
+func HasPlatformTool(tools []urn.Tool) bool {
+	return slices.ContainsFunc(tools, func(tool urn.Tool) bool {
+		return tool.Kind == urn.ToolKindPlatform
+	})
 }

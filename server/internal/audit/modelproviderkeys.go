@@ -56,6 +56,7 @@ func (l *Logger) LogModelProviderKeyUpsert(ctx context.Context, dbtx repo.DBTX, 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 
@@ -95,6 +96,7 @@ func (l *Logger) LogModelProviderKeyDelete(ctx context.Context, dbtx repo.DBTX, 
 	action := ActionModelProviderKeyDelete
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 

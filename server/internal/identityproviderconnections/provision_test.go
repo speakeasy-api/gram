@@ -466,10 +466,13 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, connectionID, newKey.ExternalKey.IdentityProviderConnectionID.UUID)
 	require.Equal(t, rotatingKMS.Created()[0], newKey.GcpKmsKey.ResourceName)
-	referenced, err := repo.New(ti.conn).ManagedKeyResourceExists(ctx, rotatingKMS.Created()[0])
+	referenced, err := repo.New(ti.conn).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{ResourceName: rotatingKMS.Created()[0], OrganizationID: ti.orgID})
 	require.NoError(t, err)
 	require.True(t, referenced, "ambiguous-commit reconciliation must preserve a referenced key")
-	referenced, err = repo.New(ti.conn).ManagedKeyResourceExists(ctx, "missing-key-version")
+	referenced, err = repo.New(ti.conn).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{ResourceName: rotatingKMS.Created()[0], OrganizationID: "org_" + uuid.NewString()})
+	require.NoError(t, err)
+	require.False(t, referenced, "another organization's key never counts")
+	referenced, err = repo.New(ti.conn).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{ResourceName: "missing-key-version", OrganizationID: ti.orgID})
 	require.NoError(t, err)
 	require.False(t, referenced)
 
@@ -941,6 +944,7 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 				SigningCredentialID:   uuid.New(),
 				SigningServiceAccount: "",
 				ServerURL:             mustURL(t, serverURL),
+				AllowLoopbackIssuer:   false,
 			},
 		)
 		if err != nil {

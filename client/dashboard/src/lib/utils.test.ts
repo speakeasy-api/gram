@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentEgressHosts,
+  buildLoginRedirectURL,
   chunk,
   firstPartyHosts,
   getCustomDomainCNAME,
@@ -124,5 +125,32 @@ describe("firstPartyHosts", () => {
     ["https://pr-12.dev.getgram.ai", ["pr-12.dev.getgram.ai"]],
   ])("lists %s as %j", (serverURL, expected) => {
     expect(firstPartyHosts(serverURL)).toEqual(expected);
+  });
+});
+
+describe("partner signup redirect", () => {
+  it("encodes the public code alongside signup details", () => {
+    const url = new URL(
+      buildLoginRedirectURL(
+        "/welcome",
+        "Acme",
+        "user@example.com",
+        "partner & friends",
+      ),
+    );
+    expect(url.searchParams.get("partner_code")).toBe("partner & friends");
+    expect(url.searchParams.get("org_name")).toBe("Acme");
+    expect(url.searchParams.get("redirect")).toBe("/welcome");
+  });
+
+  it("adds sign-up attribution params", () => {
+    const url = new URL(
+      buildLoginRedirectURL("/welcome", "Acme", undefined, undefined, {
+        utm_source: "linkedin",
+        analytics_session_id: "sess-123",
+      }),
+    );
+    expect(url.searchParams.get("utm_source")).toBe("linkedin");
+    expect(url.searchParams.get("analytics_session_id")).toBe("sess-123");
   });
 });

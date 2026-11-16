@@ -178,6 +178,7 @@ func (c *Config) SetupResources() []platformmcp.SetupResource {
 		"3. Recheck authenticated readiness after the completion landing page.\n\n" +
 		"Trusted links: use only the same-origin dashboard handoff and completion route returned by the AI Control Plane.\n"
 	return []platformmcp.SetupResource{{
+		Render:      nil,
 		URI:         platformmcp.SetupResourceURI(ProviderKey, SetupIntent),
 		Name:        "local-fixture-provider-setup",
 		Title:       "Local fixture provider setup",

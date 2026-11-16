@@ -35,7 +35,7 @@ func newRequestCounterInterceptorForTest(t *testing.T) *remotemcp.RequestOTELCou
 func newRequestCounterUserRequest(t *testing.T, headerVersion string, messages ...jsonrpc.Message) *proxy.UserRequest {
 	t.Helper()
 
-	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", http.NoBody)
+	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", http.NoBody)
 	require.NoError(t, err)
 	if headerVersion != "" {
 		httpReq.Header.Set(mcpversions.HTTPHeader, headerVersion)

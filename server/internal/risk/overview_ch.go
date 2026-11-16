@@ -12,57 +12,19 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// riskOverviewRowLimit caps the top-users and top-rules lists. Enough rows for
-// the "view all" pages to show the full long-tail without pagination; the main
-// /risk-overview widget only renders the top 10.
+// riskOverviewRowLimit caps the top-users and top-rules lists.
 const riskOverviewRowLimit = 200
 
-// overviewFromClickHouse reports whether GetRiskOverview should serve from
-// ClickHouse for this org. Per-org PostHog rollout flag, targeted by org and
-// slug groups the same way the dashboard evaluates flags. A nil provider,
-// missing ClickHouse connection, or a failed lookup degrades to the Postgres
-// path.
-func (s *Service) overviewFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.findingsCH == nil || s.flags == nil {
-		return false
-	}
-	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk-overview-from-clickhouse flag check failed; serving from postgres",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		)
-		return false
-	}
-	return on
-}
-
 // getRiskOverviewFromClickHouse serves GetRiskOverview from the ClickHouse
-// risk_findings table instead of Postgres risk_results, relieving the
-// autovacuum pressure the PG queries create. Events Scanned and Active
-// Policies stay on Postgres: ClickHouse stores only true positives (clean
-// scans are never written) and policies are current-state config.
+// risk_findings table.
 func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID uuid.UUID, organizationID string, from, to time.Time) (*gen.RiskOverviewResult, error) {
-	window := riskOverviewWindowParams(from, to)
-	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
-		ProjectID: projectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview scan counts").LogError(ctx, s.logger)
-	}
-
 	chWindow := chrepo.RiskOverviewWindowParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID.String(),
@@ -117,15 +79,96 @@ func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID u
 	return &gen.RiskOverviewResult{
 		From:               from.UTC().Format(time.RFC3339),
 		To:                 to.UTC().Format(time.RFC3339),
-		MessagesScanned:    scanCounts.MessagesScanned,
 		Findings:           safeCount(findingCounts.Findings),
 		FlaggedSessions:    safeCount(findingCounts.FlaggedSessions),
-		ActivePolicies:     scanCounts.ActivePolicies,
 		TopCategories:      topCategoriesFromCounts(categoryCounts, 10),
 		TopUsers:           topUsers,
 		TopRules:           topRules,
 		TimeSeriesFindings: fillCategoryTimeSeries(from, to, buckets),
 	}, nil
+}
+
+// ruleBreakdownRowLimit bounds the rules one breakdown returns.
+const ruleBreakdownRowLimit = 1000
+
+// RuleBreakdown is one category's per-rule finding counts over a window.
+// Truncated reports that more rules exist than were returned; Total covers
+// only the returned rules.
+type RuleBreakdown struct {
+	From      string
+	To        string
+	Category  string
+	Rules     []*gen.RiskRuleBreakdownEntry
+	Total     int64
+	Truncated bool
+}
+
+// GetRuleBreakdown counts one category's live findings per rule for the
+// managed assistant. Findings of deleted policies are excluded, as in the Risk
+// Events listing.
+func (s *Service) GetRuleBreakdown(ctx context.Context, category string, rawFrom, rawTo *string) (*RuleBreakdown, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(rawFrom, rawTo)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
+	}
+
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "risk rule breakdown requires the ClickHouse findings store").LogError(ctx, s.logger)
+	}
+
+	out := &RuleBreakdown{
+		From:      from.UTC().Format(time.RFC3339),
+		To:        to.UTC().Format(time.RFC3339),
+		Category:  category,
+		Rules:     []*gen.RiskRuleBreakdownEntry{},
+		Total:     0,
+		Truncated: false,
+	}
+
+	policyIDs, err := s.visiblePolicyIDs(ctx, *authCtx.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve visible risk policies").LogError(ctx, s.logger)
+	}
+	if len(policyIDs) == 0 {
+		return out, nil
+	}
+
+	rows, err := s.findingsCH.ListRiskRuleCountsByCategory(ctx, chrepo.RiskOverviewWindowParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      authCtx.ProjectID.String(),
+		From:           from,
+		To:             to,
+		MCPServerID:    "",
+	}, category, policyIDs, ruleBreakdownRowLimit+1)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk rule breakdown from clickhouse").LogError(ctx, s.logger)
+	}
+
+	// One row past the bound detects truncation without an unbounded read.
+	if len(rows) > ruleBreakdownRowLimit {
+		out.Truncated = true
+		rows = rows[:ruleBreakdownRowLimit]
+	}
+	for _, row := range rows {
+		findings := safeCount(row.Findings)
+		out.Rules = append(out.Rules, &gen.RiskRuleBreakdownEntry{
+			RuleID:   row.RuleID,
+			Source:   row.Source,
+			Findings: findings,
+		})
+		out.Total += findings
+	}
+
+	return out, nil
 }
 
 // resolveOverviewUserEmails turns ClickHouse (user_id, external_user_id)

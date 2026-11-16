@@ -95,6 +95,14 @@ func (m *MockRoleProvider) ListDirectoryGroups(ctx context.Context, directoryID 
 	return nil, mockErr(args, 1)
 }
 
+func (m *MockRoleProvider) ListDirectoryGroupUsers(ctx context.Context, groupID string) ([]thirdpartyworkos.DirectoryUser, error) {
+	args := m.Called(ctx, groupID)
+	if users, ok := args.Get(0).([]thirdpartyworkos.DirectoryUser); ok {
+		return users, mockErr(args, 1)
+	}
+	return nil, mockErr(args, 1)
+}
+
 func mockErr(args mock.Arguments, index int) error {
 	err := args.Error(index)
 	if err == nil {

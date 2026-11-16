@@ -51,13 +51,13 @@ func TestConversationBatchLoadsCreatedMessagesByTenant(t *testing.T) {
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	deps.On("IsFeatureEnabled", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Times(4)
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil, nil)
 	require.NoError(t, err)
 
 	source := &countingMessages{rows: storedMessages{}, requests: map[string][]uuid.UUID{}}
 	for _, m := range []*conversationv1.MessageEvent{first, second, other} {
 		row := storedMessage(m)
-		source.rows[row.ChatMessage.ID] = row
+		source.rows[row.ID] = row
 	}
 	h := NewConversationHandler(evaluator, nil, source)
 	var batch []streams.BatchMessage[*conversationv1.MessageEvent]

@@ -25,7 +25,7 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import {
-  CREDENTIAL_KIND_PRESENTATION,
+  credentialKindPresentation,
   declaredAuthMethodValue,
 } from "@/lib/user-session-client-credential";
 import {
@@ -145,7 +145,7 @@ export function ClientDetailSheet({
                 value is written out rather than left to a tooltip. */}
             <DetailField label="Authentication">
               <Text small>
-                {CREDENTIAL_KIND_PRESENTATION[detail.credentialKind].label}
+                {credentialKindPresentation(detail.credentialKind).label}
               </Text>
               <Text small muted className="font-mono">
                 {declaredAuthMethodValue(detail.tokenEndpointAuthMethod)}

@@ -46,7 +46,7 @@ import {
  * listIssuers organizationUserSessionIssuers
  *
  * @remarks
- * List organization-owned user_session_issuers. Requires org:read.
+ * List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.
  */
 export function organizationUserSessionIssuersList(
   client: GramCore,
@@ -123,6 +123,7 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "tier": payload?.tier,
   });
 
   const headers = new Headers(compactMap({

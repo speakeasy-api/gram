@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/tiktoken-go/tokenizer"
@@ -55,6 +56,9 @@ type ChatClient struct {
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
+	// providerRouting, when set, limits which OpenRouter providers serve
+	// every chat completion this client sends.
+	providerRouting *ProviderRouting
 }
 
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
@@ -77,7 +81,21 @@ func NewUnifiedClient(
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
+		providerRouting:        nil,
 	}
+}
+
+// WithProviderRouting makes every chat completion this client sends use only
+// the given OpenRouter providers; embeddings are not affected. Evals use it so
+// results do not shift with whichever provider OpenRouter picks. The client
+// keeps its own copy, so later changes to routing do not reach it.
+func (c *ChatClient) WithProviderRouting(routing *ProviderRouting) *ChatClient {
+	if routing == nil {
+		c.providerRouting = nil
+		return c
+	}
+	c.providerRouting = &ProviderRouting{Order: slices.Clone(routing.Order), AllowFallbacks: routing.AllowFallbacks}
+	return c
 }
 
 // ResolveKey exposes key resolution so callers can scope rate-limit buckets to
@@ -177,6 +195,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Metadata:       nil,
 		Trace:          nil,
 		Plugins:        nil,
+		Provider:       c.providerRouting,
 	}
 
 	if req.WebSearch != nil {
@@ -1007,7 +1026,7 @@ func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
 		if limited == nil {
 			limited = slices.Clone(inputs)
 		}
-		limited[i] = truncated
+		limited[i] = trimPartialTrailingRune(truncated)
 		truncatedCount++
 	}
 
@@ -1015,6 +1034,23 @@ func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
 		return inputs, 0, nil
 	}
 	return limited, truncatedCount, nil
+}
+
+// trimPartialTrailingRune drops a multi-byte character cut short at the end
+// of s. Tokens hold raw bytes, so a token boundary can fall inside a character
+// (cl100k splits 😀 into two tokens) and leave invalid UTF-8.
+func trimPartialTrailingRune(s string) string {
+	for i := 1; i < utf8.UTFMax && i <= len(s); i++ {
+		start := len(s) - i
+		if !utf8.RuneStart(s[start]) {
+			continue
+		}
+		if !utf8.FullRuneInString(s[start:]) {
+			return s[:start]
+		}
+		return s
+	}
+	return s
 }
 
 func embeddingInputTokensOverLimit(codec *tokenizer.Codec, input string, index int) ([]uint, bool, error) {

@@ -124,6 +124,24 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 	Required("remote_session_issuer_id", "client_id")
 })
 
+// DuplicateOrganizationRemoteSessionClientForm copies a client. client_id and
+// the fields after it replace the copied credentials with a fresh registration;
+// the rest of the configuration always comes from the source.
+var DuplicateOrganizationRemoteSessionClientForm = Type("DuplicateOrganizationRemoteSessionClientForm", func() {
+	Description("Form for an org admin to duplicate a remote_session_client. Omit client_id to copy the source's client_id and stored secret; supply it, with the rest of a Dynamic Client Registration response, to give the copy its own upstream registration.")
+
+	Attribute("id", String, "The remote_session_client id to duplicate.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_id", String, "client_id of a fresh upstream registration, e.g. from /oauth/proxy-register. Omit to copy the source's client_id and secret.")
+	Attribute("client_secret", String, "client_secret of the fresh registration. Only with client_id. Speakeasy encrypts before persisting; the plaintext is never returned.")
+	Attribute("token_endpoint_auth_method", String, "How the fresh registration authenticates at the issuer's token endpoint. Only with client_id; omit to keep the source's method.", func() {
+		Enum("client_secret_basic", "client_secret_post", "none")
+	})
+	RegistrationProvenanceAttributes()
+	Required("id")
+})
+
 // CreateCimdOrganizationRemoteSessionClientForm registers a standalone client
 // in Client ID Metadata Document (CIMD) mode. The caller supplies no
 // credentials: Speakeasy generates the client_id and hosts the metadata document.

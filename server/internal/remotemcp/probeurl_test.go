@@ -854,7 +854,7 @@ func TestProbeRemoteMcpURL_ApprovedRedirectPathInitializesThroughTheProxy(t *tes
 		Identity:             remotemcpproxy.ServerIdentity{RemoteMCPServerID: "probe-alignment"},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id",
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id",
 		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")

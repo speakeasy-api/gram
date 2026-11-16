@@ -10,10 +10,10 @@ import (
 )
 
 // GroupRiskFindingsByChatParams scopes one page of the per-chat rollup of the
-// Risk Events listing. PolicyIDs is the same visible-policy pushdown the flat
-// listing uses; an empty list matches nothing. CursorChatID resumes at that
-// chat id inclusive, walking chat ids downward, which mirrors the Postgres
-// grouped listing so the two stores accept the same cursor.
+// Risk Events listing. PolicyIDs is the caller-resolved policy pushdown; an
+// empty list matches nothing. CursorChatID resumes at that chat id inclusive,
+// walking chat ids downward, which mirrors the Postgres grouped listing so the
+// two stores accept the same cursor.
 type GroupRiskFindingsByChatParams struct {
 	OrganizationID string
 	ProjectID      string

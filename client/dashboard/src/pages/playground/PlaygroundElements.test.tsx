@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render as renderView,
+  screen,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundElements } from "./PlaygroundElements";
@@ -18,7 +25,9 @@ vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   useGetMcpMetadata: () => ({}),
 }));
-vi.mock("@/routes", () => ({ useRoutes: vi.fn() }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("./usePlaygroundIssuerConnection", () => ({
   usePlaygroundIssuerConnection: mocks.connection,
 }));
@@ -39,6 +48,7 @@ const connected: PlaygroundIssuerConnection = {
   connect: vi.fn<() => void>(),
   canConnect: true,
 };
+const render = (ui: ReactElement) => renderView(ui, { wrapper: MemoryRouter });
 function mount(toolsetSlug: string | null = "selected") {
   return render(
     <PlaygroundElements

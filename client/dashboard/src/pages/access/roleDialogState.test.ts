@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import {
   visiblePermissionCount,
@@ -56,6 +57,12 @@ describe("visiblePermissionCount", () => {
         { scope: "risk_policy:bypass" },
       ]),
     ).toBe(2);
+  });
+
+  it("excludes provisioned auth client grants from role permission counts", () => {
+    expect(
+      visiblePermissionCount([{ scope: "mcp:connect" }, { scope: "mcp:auth" }]),
+    ).toBe(1);
   });
 
   it("excludes grants without scopes from role permission counts", () => {
@@ -174,6 +181,16 @@ describe("hasFormChanges", () => {
     ).toBe(true);
   });
 
+  it("upstream credential rules changed → true", () => {
+    expect(hasFormChanges(makeInput({ clientTypesChanged: true }))).toBe(true);
+  });
+
+  it("upstream credential rules unchanged → false", () => {
+    expect(hasFormChanges(makeInput({ clientTypesChanged: false }))).toBe(
+      false,
+    );
+  });
+
   it("create mode → always true (no initial state to compare)", () => {
     expect(hasFormChanges(makeInput({ isEditing: false }))).toBe(true);
   });
@@ -225,6 +242,18 @@ describe("isSaveDisabled", () => {
 
     it("description changed → enabled", () => {
       expect(isSaveDisabled(makeInput({ description: "Updated" }))).toBe(false);
+    });
+
+    it("upstream credential rules changed → enabled", () => {
+      expect(isSaveDisabled(makeInput({ clientTypesChanged: true }))).toBe(
+        false,
+      );
+    });
+
+    it("upstream credential rules unchanged → disabled", () => {
+      expect(isSaveDisabled(makeInput({ clientTypesChanged: false }))).toBe(
+        true,
+      );
     });
 
     it("grant added → enabled", () => {
@@ -360,6 +389,19 @@ function sel(overrides: Partial<Selector> = {}): Selector {
 // --- computeRuleLabel ---
 
 describe("computeRuleLabel", () => {
+  it("counts named servers that carry their project as servers", () => {
+    expect(
+      computeRuleLabel(
+        [
+          sel({ resourceId: "srv-1", projectId: "p1" }),
+          sel({ resourceId: "srv-2", projectId: "p1" }),
+        ],
+        "mcp",
+        projects,
+      ),
+    ).toBe("2 servers");
+  });
+
   it("null selectors (mcp) → All servers", () => {
     expect(computeRuleLabel(null, "mcp", projects)).toBe("All servers");
   });
@@ -618,3 +660,25 @@ describe("computeRuleTooltip", () => {
     ).toBe("Permits access to all assistants in ecommerce-api");
   });
 });
+
+it.each(["allow", "deny"] as const)(
+  "describes project-specific inference %s without treating inference as a collection",
+  (effect) => {
+    expect(
+      computeRuleTooltip(
+        effect,
+        [
+          {
+            resourceKind: "inference",
+            resourceId: "*",
+            projectId: "project_one",
+          },
+        ],
+        "inference",
+        [{ id: "project_one", name: "Project one" }],
+      ),
+    ).toBe(
+      `${effect === "allow" ? "Permits" : "Excludes"} access to inference in Project one`,
+    );
+  },
+);

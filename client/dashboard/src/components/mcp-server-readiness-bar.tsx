@@ -8,9 +8,35 @@ export type ReadinessCheck = {
   key: string;
   label: string;
   description: string;
-  ready: boolean;
+  /** null when it cannot be determined: neither done nor a step to take. */
+  ready: boolean | null;
+  /** An optional check never counts as a step and never blocks readiness. */
+  optional?: boolean;
   href?: string;
 };
+
+function stateClass(check: ReadinessCheck): string {
+  if (check.ready === null || (check.optional && !check.ready)) {
+    return "bg-muted-foreground/50";
+  }
+  return check.ready
+    ? "bg-[var(--color-feedback-green-500)]"
+    : "bg-warning-foreground";
+}
+
+// Only required checks that are known to be incomplete count as steps; one
+// that cannot be determined keeps the server from being called ready.
+function summary(checks: ReadinessCheck[]): string {
+  const required = checks.filter((c) => !c.optional);
+  const remaining = required.filter((c) => c.ready === false).length;
+  if (remaining > 0) {
+    return `This MCP server needs ${remaining} more step${remaining > 1 ? "s" : ""} before it's ready.`;
+  }
+  if (required.some((c) => c.ready === null)) {
+    return "This MCP server's readiness can't be confirmed.";
+  }
+  return "This MCP server is ready to be used.";
+}
 
 // Collapsed-by-default readiness summary for the MCP server sidebar — a row
 // of brand-colored segments (one per check) that expands into per-check rows
@@ -27,10 +53,6 @@ export function McpServerReadinessBar({
 
   if (checks.length === 0) return null;
 
-  const readyCount = checks.filter((c) => c.ready).length;
-  const allReady = readyCount === checks.length;
-  const remaining = checks.length - readyCount;
-
   return (
     <div className="bg-card border-border dark:bg-neutral-950 flex flex-col border shadow-md">
       <button
@@ -44,12 +66,7 @@ export function McpServerReadinessBar({
             {checks.map((check) => (
               <span
                 key={check.key}
-                className={cn(
-                  "h-1.5 flex-1 rounded-full",
-                  check.ready
-                    ? "bg-[var(--color-feedback-green-500)]"
-                    : "bg-warning-foreground",
-                )}
+                className={cn("h-1.5 flex-1 rounded-full", stateClass(check))}
               />
             ))}
           </div>
@@ -61,9 +78,7 @@ export function McpServerReadinessBar({
           />
         </div>
         <Text variant="small" muted className="text-xs">
-          {allReady
-            ? "This MCP server is ready to be used."
-            : `This MCP server needs ${remaining} more step${remaining > 1 ? "s" : ""} before it's ready.`}
+          {summary(checks)}
         </Text>
       </button>
 
@@ -75,14 +90,18 @@ export function McpServerReadinessBar({
                 <span
                   className={cn(
                     "mt-1 h-2 w-2 shrink-0 rounded-full",
-                    check.ready
-                      ? "bg-[var(--color-feedback-green-500)]"
-                      : "bg-warning-foreground",
+                    stateClass(check),
                   )}
                 />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <Text variant="small" className="font-medium">
                     {check.label}
+                    {check.optional && (
+                      <span className="text-muted-foreground font-normal">
+                        {" "}
+                        (optional)
+                      </span>
+                    )}
                   </Text>
                   <Text variant="small" muted className="text-xs">
                     {check.description}

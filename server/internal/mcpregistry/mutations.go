@@ -27,7 +27,7 @@ var ErrConflict = errors.New("registry entry conflict")
 var ErrInvalidToken = errors.New("invalid registry write token")
 
 // ErrEndpointStructureImmutable enforces a temporary restriction for the initial
-// catalog rollout and migration from Pulse: endpoint structure is frozen even
+// catalog rollout: endpoint structure is frozen even
 // when no references exist. Switching providers alone does not make edits safe.
 // Relax this only when endpoint changes can safely preserve existing references.
 var ErrEndpointStructureImmutable = errors.New("registry endpoint structure is immutable")
@@ -46,6 +46,24 @@ func ParseToken(token string) (time.Time, error) {
 }
 
 func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Entry{}, fmt.Errorf("begin registry create: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	created, err := s.CreateTx(ctx, tx, data)
+	if err != nil {
+		return Entry{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Entry{}, fmt.Errorf("commit registry create: %w", err)
+	}
+	return created, nil
+}
+
+// CreateTx creates a published entry inside the caller's transaction, so the
+// insert commits or rolls back with the caller's other writes.
+func (s *Service) CreateTx(ctx context.Context, tx pgx.Tx, data json.RawMessage) (Entry, error) {
 	if issues := s.validator.Validate(data); len(issues) > 0 {
 		return Entry{}, &InvalidError{Issues: issues}
 	}
@@ -54,12 +72,11 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if err != nil {
 		return Entry{}, err
 	}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return Entry{}, fmt.Errorf("begin registry create: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	q := repo.New(tx)
+	data, err = s.canonicalIcons(ctx, q, data)
+	if err != nil {
+		return Entry{}, err
+	}
 	if err := checkOktaMappingConflicts(ctx, q, uuid.Nil, data); err != nil {
 		return Entry{}, err
 	}
@@ -80,14 +97,24 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if errors.As(err, &pgerr) && pgerr.Code == pgerrcode.UniqueViolation && pgerr.ConstraintName == "mcp_registry_entries_name_key" {
 		return Entry{}, ErrConflict
 	}
-	created, err := entry(row, err)
-	if err != nil {
-		return Entry{}, err
+	return entry(row, err)
+}
+
+// NameTakenTx reports whether an entry already uses the record's server name.
+func NameTakenTx(ctx context.Context, tx pgx.Tx, data json.RawMessage) (bool, error) {
+	name := recordName(data)
+	if name == "" {
+		return false, nil
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return Entry{}, fmt.Errorf("commit registry create: %w", err)
+	_, err := entry(repo.New(tx).GetEntryByName(ctx, name))
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("look up registry entry name: %w", err)
+	default:
+		return true, nil
 	}
-	return created, nil
 }
 
 func (s *Service) Save(ctx context.Context, id uuid.UUID, token string, data json.RawMessage) (Entry, error) {
@@ -104,6 +131,17 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		return Entry{}, fmt.Errorf("begin registry mutation: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	result, err := s.mutateTx(ctx, tx, id, token, data, published)
+	if err != nil {
+		return Entry{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Entry{}, fmt.Errorf("commit registry mutation: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, data json.RawMessage, published *bool) (Entry, error) {
 	q := repo.New(tx)
 	old, err := entry(q.LockEntry(ctx, id))
 	if err != nil {
@@ -119,6 +157,10 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 	if published == nil {
 		if issues := s.validator.Validate(data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
+		}
+		data, err = s.canonicalIcons(ctx, q, data)
+		if err != nil {
+			return Entry{}, err
 		}
 		// Save replaces the full raw record, including unknown metadata. Its name
 		// is required by the record schema and must preserve the stored identity.
@@ -138,6 +180,9 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		}
 		if issues := s.validator.ValidateStored(old.Data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
+		}
+		if _, err := s.canonicalIcons(ctx, q, old.Data); err != nil {
+			return Entry{}, err
 		}
 		if err := checkOktaMappingConflicts(ctx, q, id, old.Data); err != nil {
 			return Entry{}, err
@@ -188,9 +233,6 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 	}
 	if err != nil {
 		return Entry{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return Entry{}, fmt.Errorf("commit registry mutation: %w", err)
 	}
 	return result, nil
 }
@@ -324,4 +366,54 @@ func recordName(raw json.RawMessage) string {
 
 func storedSizeError() error {
 	return &InvalidError{Issues: []Issue{{Path: "", Message: "stored record exceeds serialized byte limit"}}}
+}
+
+// CheckCatalogIconsTx locks the exact revision and validates a full icon replacement without writing.
+func (s *Service) CheckCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error) {
+	old, err := entry(repo.New(tx).LockEntry(ctx, id))
+	if err != nil {
+		return Entry{}, err
+	}
+	parsed, err := ParseToken(token)
+	if err != nil {
+		return Entry{}, err
+	}
+	if !parsed.Equal(old.UpdatedAt) {
+		return Entry{}, ErrConflict
+	}
+	data, err := WithCatalogIcons(old.Data, icons)
+	if err != nil {
+		return Entry{}, err
+	}
+	if issues := s.validator.Validate(data); len(issues) > 0 {
+		return Entry{}, &InvalidError{Issues: issues}
+	}
+	if _, err := s.canonicalIcons(ctx, repo.New(tx), data); err != nil {
+		return Entry{}, err
+	}
+	data, err = canonicalMetadata(data, old.PublishedAt, old.PublishedAt)
+	if err != nil {
+		return Entry{}, err
+	}
+	size, err := repo.New(tx).SerializedRegistryRecordBytes(ctx, data)
+	if err != nil {
+		return Entry{}, fmt.Errorf("measure catalog icon replacement: %w", err)
+	}
+	if size > StoredRecordByteLimit {
+		return Entry{}, storedSizeError()
+	}
+	return old, nil
+}
+
+// SetCatalogIconsTx participates in the caller's transaction, including its receipt.
+func (s *Service) SetCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error) {
+	old, err := entry(repo.New(tx).LockEntry(ctx, id))
+	if err != nil {
+		return Entry{}, err
+	}
+	data, err := WithCatalogIcons(old.Data, icons)
+	if err != nil {
+		return Entry{}, err
+	}
+	return s.mutateTx(ctx, tx, id, token, data, nil)
 }

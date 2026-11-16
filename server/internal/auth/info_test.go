@@ -59,34 +59,6 @@ func TestInfoTransport_TrialNull(t *testing.T) {
 func TestService_Info(t *testing.T) {
 	t.Parallel()
 
-	setupInfoRequest := func(t *testing.T) (context.Context, *testInstance, string) {
-		t.Helper()
-
-		userInfo := defaultMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
-
-		session := sessions.Session{
-			SessionID:            t.Name(),
-			UserID:               userInfo.UserID,
-			ActiveOrganizationID: userInfo.Organizations[0].ID,
-			WorkOSSessionID:      "",
-			ImpersonatorEmail:    "",
-		}
-		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
-
-		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-			SessionID:            &session.SessionID,
-			UserID:               session.UserID,
-			ActiveOrganizationID: session.ActiveOrganizationID,
-			AccountType:          "test",
-			Email:                &userInfo.Email,
-		})
-
-		return ctx, instance, session.ActiveOrganizationID
-	}
-
 	insertTrial := func(t *testing.T, ctx context.Context, instance *testInstance, organizationID string, createdAt, endsAt time.Time, convertedAt, demotedAt *time.Time) {
 		t.Helper()
 
@@ -839,4 +811,93 @@ func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testi
 	})
 	require.NoError(t, err)
 	require.False(t, exists, "admin must not be upserted into a customer org's relationship table")
+}
+
+func setupInfoRequest(t *testing.T) (context.Context, *testInstance, string) {
+	t.Helper()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+	session := sessions.Session{
+		SessionID:            t.Name(),
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: userInfo.Organizations[0].ID,
+		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		SessionID:            &session.SessionID,
+		UserID:               session.UserID,
+		ActiveOrganizationID: session.ActiveOrganizationID,
+		AccountType:          "test",
+		Email:                &userInfo.Email,
+	})
+
+	return ctx, instance, session.ActiveOrganizationID
+}
+
+func TestInfoAcceptedSignupOfferNoApplication(t *testing.T) {
+	t.Parallel()
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{offer: true, promotionID: "promo_fixture", flow: "tailscale_partner_gateway"})
+}
+
+func TestInfoAcceptedSignupOfferMissingOffer(t *testing.T) {
+	t.Parallel()
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, want: new("tailscale_partner_gateway")})
+}
+
+func TestInfoAcceptedSignupOfferEnabledOffer(t *testing.T) {
+	t.Parallel()
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, enabled: true, promotionID: "promo_fixture", flow: "tailscale_partner_gateway", want: new("tailscale_partner_gateway")})
+}
+
+func TestInfoAcceptedSignupOfferDisabledOffer(t *testing.T) {
+	t.Parallel()
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, promotionID: "promo_fixture", flow: "tailscale_partner_gateway", want: new("tailscale_partner_gateway")})
+}
+
+func TestInfoAcceptedSignupOfferEditedPromotion(t *testing.T) {
+	t.Parallel()
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, promotionID: "promo_replacement", flow: "tailscale_partner_gateway", want: new("tailscale_partner_gateway")})
+}
+
+func TestInfoAcceptedSignupOfferEditedFlow(t *testing.T) {
+	t.Parallel()
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, promotionID: "promo_fixture", flow: "future_flow", want: new("tailscale_partner_gateway")})
+}
+
+type acceptedSignupOfferCase struct {
+	accepted, offer, enabled bool
+	promotionID, flow        string
+	want                     *string
+}
+
+func testInfoAcceptedSignupOffer(t *testing.T, tc acceptedSignupOfferCase) {
+	t.Helper()
+	ctx, instance, orgID := setupInfoRequest(t)
+	repo := orgRepo.New(instance.conn)
+	if tc.offer {
+		seedPartnerOffer(t, ctx, instance)
+	}
+	if tc.accepted {
+		_, err := repo.AttributePartnerSignup(ctx, orgRepo.AttributePartnerSignupParams{OrganizationID: conv.ToPGText(orgID), StripePromotionCodeID: "promo_fixture"})
+		require.NoError(t, err)
+	}
+	if tc.offer {
+		changePartnerOffer(t, ctx, instance, tc.promotionID, tc.flow, tc.enabled)
+	}
+	result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.Equal(t, tc.want, result.AcceptedSignupOfferFlow)
+	if tc.accepted {
+		application, err := repo.GetOrganizationPromotionApplication(ctx, orgID)
+		require.NoError(t, err)
+		require.Equal(t, "promo_fixture", application.StripePromotionCodeID)
+		require.False(t, application.RedeemedAt.Valid)
+	}
 }

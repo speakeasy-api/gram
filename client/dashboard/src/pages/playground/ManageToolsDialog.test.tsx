@@ -132,6 +132,28 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ManageToolsDialog tool editing", () => {
+  it("keeps group selection separate from expansion", () => {
+    renderDialog({ onToolUpdate: vi.fn() });
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Select Custom tools",
+    });
+    expect(document.querySelector("button button")).toBeNull();
+    const expand = screen.getAllByRole("button", {
+      name: "Collapse Custom group",
+    })[0]!;
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("true");
+    expect(expand.getAttribute("aria-expanded")).toBe("true");
+    const icon = expand.querySelector("svg");
+    expect(icon).not.toBeNull();
+    fireEvent.click(icon!);
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    expect(checkbox.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("waits for the supplied update before reporting success and closing", async () => {
     const update = deferred<void>();
     const onToolUpdate = vi.fn(() => update.promise);
@@ -158,7 +180,9 @@ describe("ManageToolsDialog tool editing", () => {
   });
 
   it("reports a rejected update and keeps the editor open", async () => {
-    const onToolUpdate = vi.fn().mockRejectedValue(new Error("request failed"));
+    const onToolUpdate = vi
+      .fn()
+      .mockRejectedValue(new Error("Refresh the page before editing."));
 
     renderDialog({ onToolUpdate });
     fireEvent.click(screen.getByText("weather_lookup"));
@@ -168,7 +192,9 @@ describe("ManageToolsDialog tool editing", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Save/ }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Failed to update tool");
+      expect(toast.error).toHaveBeenCalledWith(
+        "Refresh the page before editing.",
+      );
     });
     expect(screen.getByLabelText("Description")).toBeTruthy();
     expect(toast.success).not.toHaveBeenCalled();

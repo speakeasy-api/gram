@@ -3,10 +3,8 @@ import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import {
-  buildRegisterMutation,
-  RegisterMutationVariables,
-} from "@gram/client/react-query/register.js";
+import type { RegisterMutationVariables } from "@gram/client/react-query/register.js";
+import { buildRegisterMutation } from "@gram/client/react-query/register.js";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { AUTH_BUTTON_CLASSES } from "./auth-constants";
@@ -19,10 +17,13 @@ import {
 
 export function RegisterPanel({
   redirectTo,
+  partnerCode: initialPartnerCode = "",
 }: {
   redirectTo?: string | null;
+  partnerCode?: string;
 }): JSX.Element {
   const telemetry = useTelemetry();
+  const [partnerCode] = useState(initialPartnerCode);
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
   const sdk = useGramContext();
@@ -46,17 +47,17 @@ export function RegisterPanel({
       return org;
     },
 
-    onSuccess: () => {
+    onSuccess: (org, variables) => {
       telemetry.capture("onboarding_event", {
         action: "new_org_created",
         company_name: companyName,
         is_gram: true,
       });
-      const destination = safeSameOriginUrl(redirectTo) ?? "/";
+      const destination =
+        variables.request.registerRequestBody.partnerCode?.trim()
+          ? `/${org.slug}/billing`
+          : (safeSameOriginUrl(redirectTo) ?? "/");
       window.location.replace(destination);
-    },
-    onError: (error) => {
-      setValidationError(error.message);
     },
   });
 
@@ -72,16 +73,24 @@ export function RegisterPanel({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (partnerCode.length > 80) return;
     const error = validateOrgName(companyName);
     if (error) {
       setValidationError(error);
       return;
     }
 
+    const submittedPartnerCode = partnerCode.trim();
+    telemetry.capture("onboarding_event", {
+      action: "signup_started",
+      ...(submittedPartnerCode ? { partner_code: submittedPartnerCode } : {}),
+    });
+
     registerMutation.mutate({
       request: {
         registerRequestBody: {
           orgName: normalizeOrgName(companyName),
+          partnerCode: submittedPartnerCode || undefined,
         },
       },
     });
@@ -123,6 +132,12 @@ export function RegisterPanel({
           </p>
         </div>
 
+        {partnerCode.length > 80 && (
+          <AuthErrorText>
+            Partner code must be 80 characters or fewer.
+          </AuthErrorText>
+        )}
+
         {(validationError || registerMutation.error) && (
           <AuthErrorText>
             {validationError || registerMutation.error?.message}
@@ -134,6 +149,7 @@ export function RegisterPanel({
           disabled={
             registerMutation.isPending ||
             !companyName.trim() ||
+            partnerCode.length > 80 ||
             Boolean(validationError)
           }
           className={cn(

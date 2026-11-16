@@ -93,7 +93,7 @@ func NewMemoryDocsIndex(resources []SetupResource, now func() time.Time) *Memory
 // Search returns the best-scoring excerpts. Content past its grace window is
 // omitted entirely rather than ranked low: an unreviewed step that loses on
 // score today wins on score tomorrow.
-func (i *MemoryDocsIndex) Search(_ context.Context, query string, limit int) ([]DocsExcerpt, error) {
+func (i *MemoryDocsIndex) Search(ctx context.Context, query string, limit int) ([]DocsExcerpt, error) {
 	if i == nil {
 		return nil, nil
 	}
@@ -162,7 +162,15 @@ func (i *MemoryDocsIndex) Search(_ context.Context, query string, limit int) ([]
 			continue
 		}
 		seen[hit.chunk.resource.URI] = true
-		excerpts = append(excerpts, excerptFor(hit.chunk, now))
+		chunk := hit.chunk
+		if chunk.resource.Render != nil {
+			var err error
+			chunk.body, err = chunk.resource.Render(ctx, chunk.body)
+			if err != nil {
+				return nil, err
+			}
+		}
+		excerpts = append(excerpts, excerptFor(chunk, now))
 	}
 	return excerpts, nil
 }

@@ -5,9 +5,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+ */
+export const SigintSensorInputStrategy = {
+  SingleMessage: "single_message",
+  SlidingWindow: "sliding_window",
+} as const;
+/**
+ * Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+ */
+export type SigintSensorInputStrategy = OpenEnum<
+  typeof SigintSensorInputStrategy
+>;
 
 /**
  * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
@@ -20,7 +35,7 @@ export const SigintSensorMode = {
 /**
  * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
  */
-export type SigintSensorMode = ClosedEnum<typeof SigintSensorMode>;
+export type SigintSensorMode = OpenEnum<typeof SigintSensorMode>;
 
 /**
  * A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
@@ -42,6 +57,10 @@ export type SigintSensor = {
    * Sensor ID
    */
   id: string;
+  /**
+   * Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+   */
+  inputStrategy: SigintSensorInputStrategy;
   /**
    * Optional framing instructions for classification
    */
@@ -74,12 +93,23 @@ export type SigintSensor = {
    * Last update time
    */
   updatedAt: Date;
+  /**
+   * Sliding window size including the target message, between 2 and 10; defaults to 5
+   */
+  windowSize: number;
 };
 
 /** @internal */
-export const SigintSensorMode$inboundSchema: z.ZodMiniEnum<
-  typeof SigintSensorMode
-> = z.enum(SigintSensorMode);
+export const SigintSensorInputStrategy$inboundSchema: z.ZodMiniType<
+  SigintSensorInputStrategy,
+  unknown
+> = openEnums.inboundSchema(SigintSensorInputStrategy);
+
+/** @internal */
+export const SigintSensorMode$inboundSchema: z.ZodMiniType<
+  SigintSensorMode,
+  unknown
+> = openEnums.inboundSchema(SigintSensorMode);
 
 /** @internal */
 export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
@@ -92,6 +122,7 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
       description: z.optional(z.string()),
       enabled: z.boolean(),
       id: z.string(),
+      input_strategy: SigintSensorInputStrategy$inboundSchema,
       instructions: z.optional(z.string()),
       match_expression: z.string(),
       mode: SigintSensorMode$inboundSchema,
@@ -103,14 +134,17 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      window_size: z.int(),
     }),
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
+        "input_strategy": "inputStrategy",
         "match_expression": "matchExpression",
         "project_id": "projectId",
         "signal_ids": "signalIds",
         "updated_at": "updatedAt",
+        "window_size": "windowSize",
       });
     }),
   );

@@ -74,9 +74,9 @@ export function resolveEntityLink(
   if (!proj) return UNRESOLVABLE;
   switch (type) {
     case "mcp_server":
-      return newTab(`${proj}/mcp/x/${enc(rest)}`);
-    case "toolset":
       return newTab(`${proj}/mcp/${enc(rest)}`);
+    case "toolset":
+      return newTab(`${proj}/toolsets/${enc(rest)}`);
     case "deployment":
       return newTab(`${proj}/deployments/${enc(rest)}`);
     case "chat":
@@ -85,9 +85,9 @@ export function resolveEntityLink(
     case "risk_policy":
       return newTab(`${proj}/risk-policies?policy=${enc(rest)}`);
     case "risk_user":
-      return newTab(`${proj}/risk-overview/users/${enc(rest)}`);
+      return newTab(`${proj}/risk-events?identifier=${enc(rest)}`);
     case "risk_category":
-      return newTab(`${proj}/risk-overview/categories/${enc(rest)}`);
+      return newTab(`${proj}/risk-events?category=${enc(rest)}`);
     case "employee":
       return newTab(`${proj}/employees/${enc(rest)}`);
     case "environment":
@@ -97,7 +97,9 @@ export function resolveEntityLink(
     case "prompt":
       return newTab(`${proj}/prompts/${enc(rest)}`);
     case "custom_tool":
-      return newTab(`${proj}/custom-tools/${enc(rest)}`);
+      // Existing assistant responses may still reference these removed pages.
+      // Render the reference as plain text rather than linking to a dead route.
+      return UNRESOLVABLE;
     case "catalog":
       return newTab(`${proj}/catalog/${enc(rest)}`);
     case "assistant":

@@ -46,6 +46,7 @@ func (l *Logger) LogRiskResultUnmask(ctx context.Context, dbtx repo.DBTX, event 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -108,6 +109,7 @@ func (l *Logger) LogRiskResultRevealPayload(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -150,6 +152,7 @@ func (l *Logger) LogRiskResultDismiss(ctx context.Context, dbtx repo.DBTX, event
 	action := ActionRiskResultDismiss
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -190,6 +193,7 @@ func (l *Logger) LogRiskResultRestore(ctx context.Context, dbtx repo.DBTX, event
 	action := ActionRiskResultRestore
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

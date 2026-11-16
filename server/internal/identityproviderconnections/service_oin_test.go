@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
@@ -20,7 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 const (
@@ -352,4 +358,42 @@ func TestCreate_AbandonsOINOrphanWithoutKeySet(t *testing.T) {
 	require.True(t, orphan.Deleted, "the orphan was tombstoned")
 	_, err = si.provisioner.GetManagedClient(ctx, si.orgID, orphanID)
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned, "the orphan's client was tombstoned")
+}
+
+// Tombstoning an abandoned connection's client also removes its user session
+// issuer bindings, so nothing keeps pointing at a deleted client.
+func TestCreate_AbandonedClientLeavesNoBinding(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+
+	orphanID := provisiontest.CreateConnection(t, ctx, si.conn.conn, si.orgID, identityproviderconnections.ProviderOkta)
+	issuerID := createIssuer(t, ctx, si.conn.conn, si.orgID, noProject, tokenEndpoint)
+	managed, err := si.provisioner.ProvisionClient(ctx, secretParams(si.orgID, orphanID, issuerID))
+	require.NoError(t, err)
+
+	fixtures := testrepo.New(si.conn.conn)
+	projectID, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID: uuid.New(), Name: "Abandoned binding", Slug: "abandoned-binding-" + uuid.NewString()[:8], OrganizationID: si.orgID,
+	})
+	require.NoError(t, err)
+	userIssuer, err := usersessionsrepo.New(si.conn.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(si.orgID),
+		Slug:               "abandoned-binding-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, remotesessionsrepo.New(si.conn.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: managed.ClientRowID,
+		UserSessionIssuerID:   userIssuer.ID,
+	}))
+
+	createOINConnection(t, ctx, si)
+
+	_, err = si.provisioner.GetManagedClient(ctx, si.orgID, orphanID)
+	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned, "the orphan's client was tombstoned")
+	bindings, err := fixtures.CountRemoteSessionClientBindingsFixture(ctx, managed.ClientRowID)
+	require.NoError(t, err)
+	require.Zero(t, bindings)
 }

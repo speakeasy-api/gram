@@ -1,5 +1,8 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { isKnownResourceType } from "./types";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { AnyField } from "@/components/moon/any-field";
+import { Input } from "@/components/moon/input";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
@@ -12,51 +15,67 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
+import { useSdkClient } from "@/contexts/Sdk";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
+import { queryKeyAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import type { ListRolesResult } from "@gram/client/models/components/listrolesresult.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
+import { RoleAuthClientTypesField } from "./RoleAuthClientTypesField";
+import { ReviewGrantsStep } from "./ReviewGrantsStep";
+import {
+  addedPermissions,
+  liftedExceptions,
+  reviewNeedsConfirmation,
+  type AddedPermission,
+  type NewHolders,
+} from "./reviewGrants";
+import { scopeCatalogue } from "./scopeCatalogue";
+import {
+  clientTypeGrantChanges,
+  clientTypeRulesFromRole,
+  clientTypeRulesKey,
+  rebaseClientTypeRules,
+  type ClientTypeRules,
+} from "./roleAuthClientTypes";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Bot,
-  Check,
-  ChevronRight,
-  Loader2,
-  Lock,
-} from "lucide-react";
+import { ArrowLeft, Ban, Bot, Check, ChevronRight } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
 import {
   getSelectableMembers,
   isMemberLockedToRole,
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import { indexServers, MCP_CONNECT_SCOPE } from "./mcpAccessModel";
-import { McpAccessPanel } from "./McpAccessPanel";
-import { useMcpAccessCount } from "./useMcpAccessCount";
-import { useOrgMcpServers } from "./useOrgMcpServers";
+import { RoleAccessMatrix } from "./RoleAccessMatrix";
 import {
-  BlockedScopeControl,
-  PermissionScopeControl,
-} from "./PermissionScopeControl";
-import { RolePermissionsSection } from "./RolePermissionsSection";
-import type { Scope } from "@gram/client/models/components/rolegrant.js";
+  denyCountLabel,
+  mcpRowViews,
+  platformAreas,
+  roleDenies,
+} from "./roleMatrixModel";
+import { RoleTemplatePicker } from "./RoleTemplatePicker";
+import { roleTemplates, type RoleTemplate } from "./roleTemplates";
+import { useOrgMcpServers } from "./useOrgMcpServers";
+import { RoleDirectorySources } from "./RoleDirectorySources";
+import type {
+  RoleGrant as SdkRoleGrant,
+  Scope,
+} from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
@@ -64,15 +83,17 @@ import {
   isProjectSelectableResourceType,
   isUnrestrictedResourceType,
 } from "./types";
+import { resourceKindForScope } from "@/hooks/useRBAC";
 import {
   isSaveDisabled,
   grantKeysString as grantKeysStringFn,
-  computeRuleLabel,
 } from "./roleDialogState";
 import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
+  rebaseFormGrants,
+  roleHoldsGrants,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
 
@@ -115,6 +136,8 @@ function getDenyPanels(
   if (resourceType && isProjectSelectableResourceType(resourceType)) {
     return allowLevel === "all" ? ["servers"] : [];
   }
+  if (resourceType === "inference")
+    return allowLevel === "all" ? ["projects"] : [];
   if (resourceType && isProjectFilteredResourceType(resourceType)) {
     if (allowLevel === "all") return ["projects", "servers"];
     return allowLevel === "project" ? ["servers"] : [];
@@ -156,6 +179,73 @@ interface CreateRoleDialogProps {
   hideAssignments?: boolean;
   /** Pre-fills the name of a new role, such as the group it is created for. */
   defaultName?: string;
+  /**
+   * Pre-selects allow grants on a new role, such as the one permission an
+   * access request asked for.
+   */
+  defaultScopes?: Scope[];
+  /**
+   * The resource the default scopes were asked for. The pre-filled rules are
+   * limited to it, so the new role grants no more than the request.
+   */
+  defaultResource?: { resourceId?: string; projectId?: string };
+  /**
+   * The organization's roles, so a new role can start as a copy of a built-in
+   * one. Without them only the dashboard's own starting points are offered.
+   */
+  templateRoles?: Role[];
+}
+
+/**
+ * The selectors that limit a pre-filled grant to the requested resource, in
+ * the shape the rule editor reads: the resource by its id, or a project-wide
+ * rule for the kinds that narrow by project. Null means unrestricted, which
+ * is all a kind without resources of its own can be.
+ */
+function requestedSelectors(
+  scope: Scope,
+  resource: CreateRoleDialogProps["defaultResource"],
+): Selector[] | null {
+  const kind = resourceKindForScope(scope);
+  if (
+    !resource ||
+    !isKnownResourceType(kind) ||
+    isUnrestrictedResourceType(kind)
+  )
+    return null;
+  if (resource.resourceId) {
+    return [{ resourceKind: kind, resourceId: resource.resourceId }];
+  }
+  if (!resource.projectId) return null;
+  if (kind === "mcp" || isProjectFilteredResourceType(kind)) {
+    return [
+      { resourceKind: kind, resourceId: "*", projectId: resource.projectId },
+    ];
+  }
+  if (isProjectSelectableResourceType(kind)) {
+    return [{ resourceKind: kind, resourceId: resource.projectId }];
+  }
+  return null;
+}
+
+function grantsFor(
+  scopes: Scope[],
+  resource: CreateRoleDialogProps["defaultResource"],
+): Record<string, RoleGrant> {
+  const result: Record<string, RoleGrant> = Object.create(null);
+  for (const scope of scopes) {
+    result[scope] = {
+      scope,
+      rules: [
+        {
+          id: crypto.randomUUID(),
+          effect: "allow",
+          selectors: requestedSelectors(scope, resource),
+        },
+      ],
+    };
+  }
+  return result;
 }
 
 export function CreateRoleDialog({
@@ -167,6 +257,9 @@ export function CreateRoleDialog({
   presentation = "sheet",
   hideAssignments = false,
   defaultName = "",
+  defaultScopes,
+  defaultResource,
+  templateRoles,
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -174,7 +267,9 @@ export function CreateRoleDialog({
   // ─── Form state ───────────────────────────────────────────────
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState("");
-  const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
+  const [grants, setGrants] = useState<Record<string, RoleGrant>>(() =>
+    grantsFor(defaultScopes ?? [], defaultResource),
+  );
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),
   );
@@ -184,14 +279,35 @@ export function CreateRoleDialog({
   const [showAgents, setShowAgents] = useState(false);
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
-  const [initialGrantKeys, setInitialGrantKeys] = useState("");
+  const [initialGrants, setInitialGrants] = useState<Record<string, RoleGrant>>(
+    {},
+  );
+  const [clientTypeRules, setClientTypeRules] = useState<ClientTypeRules>(() =>
+    clientTypeRulesFromRole(undefined),
+  );
+  const [savedClientTypeRules, setSavedClientTypeRules] =
+    useState<ClientTypeRules>(() => clientTypeRulesFromRole(undefined));
+  // The starting point the form still matches. A role pre-filled from an
+  // access request starts as its own.
+  const [template, setTemplate] = useState<string | null>(
+    defaultScopes && defaultScopes.length > 0 ? null : "blank",
+  );
   const [showMembers, setShowMembers] = useState(false);
   const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   // ─── Rule editor state ────────────────────────────────────────
-  type DialogStep = "form" | "rule-editor";
+  type DialogStep = "form" | "rule-editor" | "review";
   const [dialogStep, setDialogStep] = useState<DialogStep>("form");
+  // What the pending save adds, shown for review before it goes through. The
+  // save commits the grants that were reviewed, not the form as it stands
+  // when the review is confirmed.
+  const [review, setReview] = useState<{
+    grants: SdkRoleGrant[];
+    added: AddedPermission[];
+    newHolders: NewHolders | null;
+    confirmed: boolean;
+  } | null>(null);
   const [editingScopeSlug, setEditingScopeSlug] = useState<Scope | null>(null);
   const [editingRuleIndex, setEditingRuleIndex] = useState<number>(-1);
   const [draftRule, setDraftRule] = useState<ScopeRule | null>(null);
@@ -199,23 +315,21 @@ export function CreateRoleDialog({
   // ─── Hooks ────────────────────────────────────────────────────
   const queryClient = useQueryClient();
   const organization = useOrganization();
-  const orgRoutes = useOrgRoutes();
-  // A directory owns assignment under SCIM, so the list shows only who it
-  // enrolled; with nobody enrolled there is nothing to show but the way there.
-  // Gated on initialization so a role still loading its members does not
-  // flash the empty state.
-  const scimWithNoMembers =
-    !!organization.scimEnabled &&
-    (!isEditing || initialized) &&
-    selectedMembers.size === 0;
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  // The agent picker is optional here, so on any error (including 403 for
-  // callers without agent:read) it shows no agents instead of taking the role
-  // editor down.
-  const { data: agentsData } = useAgents(undefined, undefined, {
+  const sdk = useSdkClient();
+  // Every page of them: an agent missing from this picker cannot be given the
+  // role, and nothing on screen would say why.
+  //
+  // The picker is optional here, so on any error (including 403 for callers
+  // without agent:read) it shows no agents instead of taking the role editor
+  // down.
+  const { data: agentsData } = useQuery({
+    queryKey: [...queryKeyAgents({}), "all-pages"],
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     throwOnError: false,
   });
   // Suspended and revoked agents keep the roles they hold but cannot be given
@@ -226,126 +340,61 @@ export function CreateRoleDialog({
       (agent) => agent.lifecycle === "active" || selectedAgents.has(agent.id),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
-  const { data: scopesData } = useListScopes();
+  const {
+    data: scopesData,
+    isError: scopesError,
+    refetch: refetchScopes,
+  } = useListScopes();
+  // Everything below reads the catalogue, so the save stays disabled until it
+  // has loaded; a failed fetch says why rather than leaving the button dead.
   const scopeDefinitions = scopesData?.scopes;
+  const catalogue = useMemo(
+    () => scopeCatalogue(scopeDefinitions),
+    [scopeDefinitions],
+  );
   const userVisibleScopeDefinitions = useMemo(
     () =>
       (scopeDefinitions ?? []).filter(
-        (scope) => scope.visibility === "user_visible",
+        (scope): scope is typeof scope & { resourceType: ResourceType } =>
+          scope.visibility === "user_visible" &&
+          isKnownResourceType(scope.resourceType),
       ),
     [scopeDefinitions],
   );
 
-  const mcpAccessCount = useMcpAccessCount(grants, open);
   const mcpInventory = useOrgMcpServers(open);
-  const mcpServerIndex = useMemo(
-    () => indexServers(mcpInventory.groups),
-    [mcpInventory.groups],
-  );
-  // Names the servers a block covers, so the row says which one it is; falls
-  // back to the count-style label for anything else.
-  const blockedResourceLabel = (
-    selectors: Selector[] | null,
-    resourceType: ResourceType,
-  ): string => {
-    const names = (selectors ?? []).map((s) =>
-      s.tool || s.projectId || s.disposition
-        ? undefined
-        : mcpServerIndex.get(s.resourceId)?.server.name,
-    );
-    if (
-      resourceType === "mcp" &&
-      names.length > 0 &&
-      names.every((n) => n !== undefined)
-    ) {
-      return names.join(", ");
-    }
-    return computeRuleLabel(selectors, resourceType, projectList);
-  };
-  // Permissions the role only takes away: every rule is an exception.
-  const blockOnlyScopes = new Set(
-    Object.values(grants)
-      .filter(
-        (g) => g.rules.length > 0 && g.rules.every((r) => r.effect === "deny"),
-      )
-      .map((g) => g.scope),
-  );
 
   const projectList = useMemo(
-    () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
+    () =>
+      organization.projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+      })),
     [organization.projects],
   );
 
-  const scopeGroups = useMemo(() => {
-    const groupOrder: {
-      label: string;
-      resourceType: ResourceType;
-      description: string;
-    }[] = [
-      {
-        label: "Organization",
-        resourceType: "org",
-        description: "Organization metadata, members, and access settings.",
-      },
-      {
-        label: "Build & Deploy",
-        resourceType: "project",
-        description: "Projects and their related resources.",
-      },
-      {
-        label: "Environments",
-        resourceType: "environment",
-        description: "Environments and their entries within projects.",
-      },
-      {
-        label: "Skills",
-        resourceType: "skill",
-        description: "Skills available within projects.",
-      },
-      {
-        label: "Assistants",
-        resourceType: "assistant",
-        description: "Assistants available within projects.",
-      },
-      {
-        label: "MCP Servers",
-        resourceType: "mcp",
-        description: "MCP server configuration and connections.",
-      },
-      {
-        label: "Agent Sessions",
-        resourceType: "chat",
-        description: "Access to members' agent session transcripts.",
-      },
-      {
-        label: "Agents",
-        resourceType: "agent",
-        description: "Agents available within the organization.",
-      },
-      {
-        label: "Workload Identities",
-        resourceType: "workload",
-        description:
-          "The trust policy deciding which machines the organization recognises.",
-      },
-    ];
-    return groupOrder.map((g) => ({
-      ...g,
-      scopes: userVisibleScopeDefinitions.filter(
-        (s) => s.resourceType === g.resourceType,
-      ),
-    }));
-  }, [userVisibleScopeDefinitions]);
+  // The permissions the role stores, in the form's own shape. Read once per
+  // role rather than per render: every read mints fresh rule ids, and the
+  // editor compares these against what is on screen.
+  const storedGrants = useMemo(
+    () =>
+      editingRole && scopesData
+        ? grantsFromRole(editingRole, scopesData.scopes)
+        : null,
+    [editingRole, scopesData],
+  );
 
   // ─── Initialize when editing ──────────────────────────────────
-  if (editingRole && !initialized && scopesData && membersData) {
+  if (editingRole && !initialized && storedGrants && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
-    setGrants(roleGrants);
+    setGrants(storedGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
-    setInitialGrantKeys(grantKeysStringFn(roleGrants));
+    setInitialGrants(storedGrants);
+    setClientTypeRules(clientTypeRulesFromRole(editingRole));
+    setSavedClientTypeRules(clientTypeRulesFromRole(editingRole));
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
@@ -356,6 +405,43 @@ export function CreateRoleDialog({
   }
   if (!editingRole && initialized) {
     setInitialized(false);
+  }
+
+  // ─── Follow the role as it is read again ──────────────────────
+  //
+  // The roles list keeps being refreshed while the editor is open, and a save
+  // works out what to take off the role from what the form holds. So anything
+  // nobody has touched here follows the role as stored: a permission or
+  // credential rule the role gained since the form was filled in shows up
+  // rather than sitting switched off, and saving an unrelated edit cannot take
+  // it away. Changes made in the editor are left as they are, and still
+  // decide what the save removes.
+  if (editingRole && initialized && storedGrants) {
+    if (grantKeysStringFn(storedGrants) !== grantKeysStringFn(initialGrants)) {
+      setGrants((current) =>
+        rebaseFormGrants({
+          current,
+          baseline: initialGrants,
+          stored: storedGrants,
+          scopes: scopesData?.scopes ?? [],
+        }),
+      );
+      setInitialGrants(storedGrants);
+    }
+    const storedClientTypes = clientTypeRulesFromRole(editingRole);
+    if (
+      clientTypeRulesKey(storedClientTypes) !==
+      clientTypeRulesKey(savedClientTypeRules)
+    ) {
+      setClientTypeRules((current) =>
+        rebaseClientTypeRules({
+          current,
+          baseline: savedClientTypeRules,
+          stored: storedClientTypes,
+        }),
+      );
+      setSavedClientTypeRules(storedClientTypes);
+    }
   }
 
   // ─── Mutations ────────────────────────────────────────────────
@@ -372,36 +458,74 @@ export function CreateRoleDialog({
   });
 
   const submitted = useRef<{
+    clientTypeRules: ClientTypeRules;
     name: string;
     description: string;
-    grantKeys: string;
+    formGrants: Record<string, RoleGrant>;
+    grants: SdkRoleGrant[];
     members: Set<string>;
     agents: Set<string>;
   } | null>(null);
 
   const updateRole = useUpdateRoleMutation({
-    onSuccess: async () => {
+    onSuccess: async (role) => {
+      // The next save is worked out against the role being edited, so it has
+      // to be the role as stored now, not the list read before this save.
+      queryClient.setQueriesData<ListRolesResult>(
+        { queryKey: ["@gram/client", "access", "listRoles"] },
+        (data) =>
+          data && {
+            ...data,
+            roles: data.roles.map((r) => (r.id === role.id ? role : r)),
+          },
+      );
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      // The review step is done with once the save lands, whether the
+      // editor closes or stays open on its page.
+      setReview(null);
+      setDialogStep("form");
+      const saved = submitted.current;
+      // A save the server accepted can still leave a permission as it was, so
+      // check what it stored before saying it saved. The form keeps the
+      // change and Save stays enabled, so saving again retries it against
+      // the role as stored.
+      const grantsStored =
+        !saved ||
+        !scopeDefinitions ||
+        roleHoldsGrants(role, saved.grants, scopeDefinitions);
+      // Credential type rules are left out of the form's grants, so check
+      // them on their own against what the role stores.
+      const storedClientTypeRules = clientTypeRulesFromRole(role);
+      const clientTypesStored =
+        !saved ||
+        clientTypeRulesKey(storedClientTypeRules) ===
+          clientTypeRulesKey(saved.clientTypeRules);
+      const allStored = grantsStored && clientTypesStored;
+      if (!allStored) {
+        toast.error(
+          "Some permission changes weren't saved. Check the role and save again.",
+        );
+      }
       // On its own page the editor stays open after a save: what was saved
       // becomes the starting point, so Save waits for the next change. The
       // sheet over the roles list closes as before.
       // The baseline is what the click sent, not the form now: an edit made
       // while the save was in flight stays unsaved and keeps Save enabled.
-      const saved = submitted.current;
       if (presentation === "page" && saved) {
         setInitialName(saved.name);
         setInitialDescription(saved.description);
-        setInitialGrantKeys(saved.grantKeys);
+        if (grantsStored) setInitialGrants(saved.formGrants);
         setInitialMembers(saved.members);
         setInitialAgents(saved.agents);
-        toast.success("Role saved");
+        setSavedClientTypeRules(storedClientTypeRules);
+        if (allStored) toast.success("Role saved");
         return;
       }
-      handleClose();
+      if (allStored) handleClose();
     },
   });
 
@@ -414,6 +538,9 @@ export function CreateRoleDialog({
       isMutating,
       isEditing,
       isSystemRole,
+      clientTypesChanged:
+        clientTypeRulesKey(clientTypeRules) !==
+        clientTypeRulesKey(savedClientTypeRules),
       name,
       description,
       grants,
@@ -422,7 +549,7 @@ export function CreateRoleDialog({
       initial: {
         name: initialName,
         description: initialDescription,
-        grantKeys: initialGrantKeys,
+        grantKeys: grantKeysStringFn(initialGrants),
         members: initialMembers,
         agents: initialAgents,
       },
@@ -434,44 +561,86 @@ export function CreateRoleDialog({
     update: (previous: Record<string, RoleGrant>) => Record<string, RoleGrant>,
   ) => {
     setAssignmentConfirmed(false);
+    setTemplate(null);
     setGrants(update);
   };
 
-  const toggleScope = (scope: Scope) => {
-    updateGrants((prev) => {
-      const next = { ...prev };
-      const existing = next[scope];
-      if (existing && existing.rules.every((r) => r.effect === "deny")) {
-        // Granting a permission the role only blocks keeps the block, which
-        // then reads as the grant's exception.
-        next[scope] = {
-          ...existing,
-          rules: [
-            { id: crypto.randomUUID(), effect: "allow", selectors: null },
-            ...existing.rules,
-          ],
-        };
-      } else if (existing) {
-        delete next[scope];
-      } else {
-        next[scope] = {
-          scope,
-          rules: [
-            { id: crypto.randomUUID(), effect: "allow", selectors: null },
-          ],
-        };
-      }
-      return next;
-    });
+  const templates = useMemo(
+    () => roleTemplates(userVisibleScopeDefinitions, templateRoles ?? []),
+    [userVisibleScopeDefinitions, templateRoles],
+  );
+
+  // Bumped whenever the form's grants are replaced wholesale, so the grid
+  // drops choices it holds on its own, such as Connect with no tools yet.
+  const [matrixEpoch, setMatrixEpoch] = useState(0);
+  // A template picked over permissions the person set by hand waits here
+  // until they confirm replacing them.
+  const [pendingTemplate, setPendingTemplate] = useState<RoleTemplate | null>(
+    null,
+  );
+  const pickTemplate = (next: RoleTemplate) => {
+    if (template === null && Object.keys(grants).length > 0) {
+      setPendingTemplate(next);
+      return;
+    }
+    applyTemplate(next);
   };
 
-  const setConnectGrant = (grant: RoleGrant | undefined) => {
-    updateGrants((prev) => {
-      const next = { ...prev };
-      if (grant) next[MCP_CONNECT_SCOPE] = grant;
-      else delete next[MCP_CONNECT_SCOPE];
-      return next;
-    });
+  const applyTemplate = (next: RoleTemplate) => {
+    const previous = templates.find((t) => t.key === template);
+    setAssignmentConfirmed(false);
+    setGrants(next.grants());
+    setTemplate(next.key);
+    setMatrixEpoch((epoch) => epoch + 1);
+    // A name the person typed stays; one a template put there follows it.
+    if (name.trim() === "" || name === previous?.name) setName(next.name);
+  };
+
+  // Every deny the role stores, counted for the footer: a deny set far up
+  // the page is still in view where the role is saved.
+  const denyCount = useMemo(
+    () =>
+      roleDenies(
+        grants,
+        mcpInventory.settled
+          ? mcpRowViews(mcpInventory.groups, projectList).map((v) => v.row)
+          : null,
+        platformAreas(userVisibleScopeDefinitions),
+      ).length,
+    [grants, mcpInventory, projectList, userVisibleScopeDefinitions],
+  );
+
+  const mcpDenyUncounted =
+    !mcpInventory.settled &&
+    ["mcp:connect", "mcp:read", "mcp:write"].some((scope) =>
+      (grants[scope]?.rules ?? []).some((rule) => rule.effect === "deny"),
+    );
+
+  const clientTypesChanged =
+    clientTypeRulesKey(clientTypeRules) !==
+    clientTypeRulesKey(savedClientTypeRules);
+  const sameSet = (a: Set<string>, b: Set<string>) =>
+    a.size === b.size && [...a].every((id) => b.has(id));
+  // Whether an existing role differs from what is stored, so it can be put
+  // back in one step.
+  const canReset =
+    isEditing &&
+    initialized &&
+    (name !== initialName ||
+      description !== initialDescription ||
+      grantKeysStringFn(grants) !== grantKeysStringFn(initialGrants) ||
+      clientTypesChanged ||
+      !sameSet(selectedMembers, initialMembers) ||
+      !sameSet(selectedAgents, initialAgents));
+  const resetToSaved = () => {
+    setName(initialName);
+    setDescription(initialDescription);
+    setGrants(initialGrants);
+    setClientTypeRules(savedClientTypeRules);
+    setSelectedMembers(new Set(initialMembers));
+    setSelectedAgents(new Set(initialAgents));
+    setAssignmentConfirmed(false);
+    setMatrixEpoch((epoch) => epoch + 1);
   };
 
   const openRuleEditor = (scopeSlug: Scope, ruleIndex: number) => {
@@ -564,24 +733,6 @@ export function CreateRoleDialog({
     }, 300);
   };
 
-  // "All servers" is the unrestricted rule, which the model stores as null
-  // selectors rather than as a list naming everything.
-  const resetRuleToAll = (scopeSlug: string) => {
-    updateGrants((prev) => {
-      const grant = prev[scopeSlug];
-      if (!grant) return prev;
-      return {
-        ...prev,
-        [scopeSlug]: {
-          ...grant,
-          rules: grant.rules.map((rule) =>
-            rule.effect === "allow" ? { ...rule, selectors: null } : rule,
-          ),
-        },
-      };
-    });
-  };
-
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
     updateGrants((prev) => {
       const grant = prev[scopeSlug];
@@ -638,21 +789,109 @@ export function CreateRoleDialog({
 
   // ─── Submit ───────────────────────────────────────────────────
 
+  // The grants the form holds now, in the shape the save sends.
+  const pendingGrants = useMemo(
+    () => (scopeDefinitions ? sdkGrantsFromForm(grants, scopeDefinitions) : []),
+    [grants, scopeDefinitions],
+  );
+
+  // A review is of the grants as they were when it opened. The form follows
+  // the role as it is read again, so if the grants change while the review is
+  // open, what was reviewed is no longer what would be saved: the review
+  // closes, and the next save opens a fresh one.
+  if (
+    review &&
+    dialogStep === "review" &&
+    JSON.stringify(pendingGrants) !== JSON.stringify(review.grants)
+  ) {
+    setReview(null);
+    setDialogStep("form");
+  }
+
+  // A save that adds a permission, or adds holders to a role that grants
+  // sensitive access, goes through the review step first; the confirmation
+  // there is required only when something sensitive is among what it gives.
   const handleSubmit = () => {
     if (!scopeDefinitions) return;
 
-    const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
+    if (dialogStep === "review") {
+      if (review) commitSave(review.grants);
+      return;
+    }
+
+    const sdkGrants = pendingGrants;
+    let addGrants = sdkGrants;
+    let newHolders: NewHolders | null = null;
+    if (isEditing) {
+      const changes = diffGrants(
+        sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
+        sdkGrants,
+      );
+      // Lifting an exception gives the permission back where it applied,
+      // so it is reviewed like an addition.
+      addGrants = [
+        ...changes.addGrants,
+        ...liftedExceptions(changes.removeGrants, sdkGrants, catalogue),
+      ];
+      // Whoever the save adds to the role gains everything it grants, as
+      // the save leaves it. A new role's grants are all additions already.
+      const members = [...selectedMembers].filter(
+        (id) => !initialMembers.has(id),
+      ).length;
+      const agents = [...selectedAgents].filter(
+        (id) => !initialAgents.has(id),
+      ).length;
+      if (members + agents > 0) {
+        const sensitive = addedPermissions(sdkGrants, catalogue).filter(
+          (p) => p.sensitive,
+        );
+        if (sensitive.length > 0) newHolders = { members, agents, sensitive };
+      }
+    }
+    const added = addedPermissions(addGrants, catalogue);
+    if (added.length > 0 || newHolders) {
+      setReview({ grants: sdkGrants, added, newHolders, confirmed: false });
+      setDialogStep("review");
+      return;
+    }
+    commitSave(sdkGrants);
+  };
+
+  const needsReviewConfirmation =
+    !!review && reviewNeedsConfirmation(review.added, review.newHolders);
+  const holdersNote = editingRole
+    ? `${editingRole.memberCount} ${editingRole.memberCount === 1 ? "member holds" : "members hold"} this role today.`
+    : selectedMembers.size > 0
+      ? `It will be assigned to ${selectedMembers.size} ${selectedMembers.size === 1 ? "member" : "members"}.`
+      : undefined;
+
+  const closeReview = () => {
+    setReview(null);
+    setDialogStep("form");
+  };
+
+  const commitSave = (sdkGrants: SdkRoleGrant[]) => {
+    if (!scopeDefinitions) return;
 
     if (isEditing) {
-      const initialGrants = sdkGrantsFromForm(
-        grantsFromRole(editingRole, scopeDefinitions),
-        scopeDefinitions,
+      const scopeChanges = diffGrants(
+        sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
+        sdkGrants,
       );
-      const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+      // Removals use the role's stored selectors, so only the credential
+      // types whose rule changed are rewritten.
+      const typeChanges = clientTypeGrantChanges(editingRole, clientTypeRules);
+      const addGrants = [...scopeChanges.addGrants, ...typeChanges.addGrants];
+      const removeGrants = [
+        ...scopeChanges.removeGrants,
+        ...typeChanges.removeGrants,
+      ];
       submitted.current = {
+        clientTypeRules,
         name,
         description,
-        grantKeys: grantKeysStringFn(grants),
+        formGrants: grants,
+        grants: sdkGrants,
         members: new Set(selectedMembers),
         agents: new Set(selectedAgents),
       };
@@ -682,7 +921,10 @@ export function CreateRoleDialog({
           createRoleForm: {
             name,
             description: description.trim() || undefined,
-            grants: sdkGrants,
+            grants: [
+              ...sdkGrants,
+              ...clientTypeGrantChanges(undefined, clientTypeRules).addGrants,
+            ],
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -702,6 +944,8 @@ export function CreateRoleDialog({
     setName("");
     setDescription("");
     setGrants({});
+    setClientTypeRules(clientTypeRulesFromRole(undefined));
+    setSavedClientTypeRules(clientTypeRulesFromRole(undefined));
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
     setSelectedAgents(new Set());
@@ -709,11 +953,13 @@ export function CreateRoleDialog({
     setShowAgents(false);
     setInitialName("");
     setInitialDescription("");
-    setInitialGrantKeys("");
+    setInitialGrants({});
     setShowMembers(false);
+    setTemplate("blank");
     setAssignmentConfirmed(false);
     setInitialized(false);
     setDialogStep("form");
+    setReview(null);
     setEditingScopeSlug(null);
     setEditingRuleIndex(-1);
     setDraftRule(null);
@@ -723,9 +969,7 @@ export function CreateRoleDialog({
   // ─── Derived for slide panel ──────────────────────────────────
 
   const editingScopeDef = editingScopeSlug
-    ? scopeGroups
-        .flatMap((g) => g.scopes)
-        .find((s) => s.slug === editingScopeSlug)
+    ? userVisibleScopeDefinitions.find((s) => s.slug === editingScopeSlug)
     : null;
 
   // Exception constraints: an exception must be narrower than the broadest allow.
@@ -738,7 +982,7 @@ export function CreateRoleDialog({
     editingScopeDef?.resourceType,
   );
   const stepOffset =
-    dialogStep === "form" ? "translate-x-0" : "-translate-x-full";
+    dialogStep === "rule-editor" ? "-translate-x-full" : "translate-x-0";
 
   // ─── Render ───────────────────────────────────────────────────
 
@@ -806,30 +1050,49 @@ export function CreateRoleDialog({
               isPage ? "pt-2" : "px-4 pt-3",
             )}
           >
-            <InputField
-              label="Name"
-              placeholder="e.g., Project Manager"
-              required
-              autoFocus
-              disabled={editingRole?.isSystem}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <div
+              className={cn("grid gap-4", isPage && "md:grid-cols-[2fr_3fr]")}
+            >
+              <InputField
+                label="Name"
+                placeholder="e.g., Project Manager"
+                required
+                autoFocus
+                disabled={editingRole?.isSystem}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
 
-            <AnyField
-              label="Description"
-              render={(props) => (
-                <textarea
-                  {...props}
-                  rows={2}
-                  disabled={editingRole?.isSystem}
-                  placeholder="Describe what this role can do..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              )}
-            />
+              <AnyField
+                label="Description"
+                // Beside the name on a page, the field matches it: one line,
+                // and no "optional" tag to push its label off the name's. A
+                // description that already has line breaks keeps the
+                // textarea, since a one-line input would strip them.
+                optionality={isPage ? "hidden" : "visible"}
+                render={(props) =>
+                  isPage && !description.includes("\n") ? (
+                    <Input
+                      {...props}
+                      disabled={editingRole?.isSystem}
+                      placeholder="Describe what this role can do..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                    />
+                  ) : (
+                    <textarea
+                      {...props}
+                      rows={2}
+                      disabled={editingRole?.isSystem}
+                      placeholder="Describe what this role can do..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  )
+                }
+              />
+            </div>
 
             {isSystemRole && (
               // Quieter than a banner: the fields it describes are right
@@ -840,138 +1103,63 @@ export function CreateRoleDialog({
               </Text>
             )}
 
-            {/* ─── Permissions ─── */}
-            <div className="border-border border-t pt-4">
-              <Text variant="body" className="mb-3 font-medium">
-                Permissions
-              </Text>
-            </div>
-            <RolePermissionsSection
-              groups={scopeGroups}
-              selectedScopes={new Set(Object.keys(grants))}
-              blockOnlyScopes={blockOnlyScopes}
-              disabled={false}
-              markAgentIneligible={selectedAgents.size > 0}
-              onToggleScope={toggleScope}
-              // No number until an existing role's grants are in: an empty
-              // form would count as zero servers.
-              mcpAccessCount={isEditing && !initialized ? null : mcpAccessCount}
-              renderMcpAccess={({ showPlatformAccess }) =>
-                // An existing role's grants replace the form once they load,
-                // so the panel waits for them rather than take edits that
-                // would be overwritten.
-                isEditing && !initialized ? (
-                  <Skeleton className="m-4">
-                    <div className="h-24 w-full" />
-                    <div className="h-40 w-full" />
-                  </Skeleton>
-                ) : (
-                  <McpAccessPanel
-                    grants={grants}
-                    onChangeConnectGrant={setConnectGrant}
-                    onShowPlatformAccess={showPlatformAccess}
-                  />
-                )
-              }
-              renderScopeRule={(scopeDef) => {
-                const grant = grants[scopeDef.slug];
-                if (!grant) return null;
-                // Scopes with nothing to narrow — an organization is not a
-                // list you pick from — carry no control at all: an "All" chip
-                // that cannot be changed is noise.
-                if (isUnrestrictedResourceType(scopeDef.resourceType)) {
-                  return null;
-                }
-                // A permission can hold more than one allow rule — selectors
-                // at different levels do not merge — so each one gets its own
-                // sentence rather than the first one standing for all of them.
-                const allowRules = grant.rules
-                  .map((rule, index) => ({ rule, index }))
-                  .filter(({ rule }) => rule.effect === "allow");
-                const denyRules = grant.rules
-                  .map((rule, index) => ({ rule, index }))
-                  .filter(({ rule }) => rule.effect === "deny");
-                if (allowRules.length === 0) {
-                  return (
-                    <BlockedScopeControl
-                      denyRules={denyRules}
-                      denyLabel={(rule) =>
-                        blockedResourceLabel(
-                          rule.selectors,
-                          scopeDef.resourceType,
-                        )
-                      }
-                      onEditException={(index) =>
-                        openRuleEditor(scopeDef.slug, index)
-                      }
-                      onRemoveException={(index) =>
-                        removeRule(scopeDef.slug, index)
-                      }
-                    />
-                  );
-                }
-                return allowRules.map(
-                  ({ rule: allowRule, index: allowIndex }, position) => (
-                    <PermissionScopeControl
-                      key={allowRule.id}
-                      allowRule={allowRule}
-                      // Exceptions belong to the permission, not to one of its
-                      // allow rules, so they are stated once.
-                      denyRules={position === 0 ? denyRules : []}
-                      resourceType={scopeDef.resourceType}
-                      allowLabel={computeRuleLabel(
-                        allowRule?.selectors ?? null,
-                        scopeDef.resourceType,
-                        projectList,
-                      )}
-                      denyLabel={(rule) =>
-                        blockedResourceLabel(
-                          rule.selectors,
-                          scopeDef.resourceType,
-                        )
-                      }
-                      canAddException={
-                        position === 0 &&
-                        denyRules.length === 0 &&
-                        getDenyPanels(
-                          getAllowLevel(grant.rules),
-                          scopeDef.resourceType,
-                        ).length > 0
-                      }
-                      disabled={false}
-                      onChooseSpecific={() =>
-                        openRuleEditor(scopeDef.slug, allowIndex)
-                      }
-                      onResetToAll={() => resetRuleToAll(scopeDef.slug)}
-                      onAddException={() => openRuleEditor(scopeDef.slug, -1)}
-                      onEditException={(index) =>
-                        openRuleEditor(scopeDef.slug, index)
-                      }
-                      onRemoveException={(index) =>
-                        removeRule(scopeDef.slug, index)
-                      }
-                    />
-                  ),
-                );
+            {!isEditing && (
+              <RoleTemplatePicker
+                templates={templates}
+                selected={template}
+                onPick={pickTemplate}
+              />
+            )}
+            <ConfirmDialog
+              open={!!pendingTemplate}
+              onOpenChange={(open) => {
+                if (!open) setPendingTemplate(null);
+              }}
+              title="Replace this role's permissions?"
+              description={`Starting from ${pendingTemplate?.label ?? "a template"} replaces the permissions you have set so far. Name, members and agents stay.`}
+              confirmLabel="Replace permissions"
+              confirmVariant="primary"
+              onConfirm={() => {
+                if (pendingTemplate) applyTemplate(pendingTemplate);
+                setPendingTemplate(null);
               }}
             />
 
-            {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}
-            {!hideAssignments && scimWithNoMembers && (
-              <div className="border-border flex items-center gap-1 border-t pt-4 pb-4">
-                <Text variant="body" className="font-medium">
-                  Assign Members
-                </Text>
-                <Link
-                  to={orgRoutes.identity.href()}
-                  className="text-muted-foreground ml-1 underline underline-offset-2"
-                >
-                  Configure directory sync
-                </Link>
-              </div>
+            {/* ─── Permissions ─── */}
+            <RoleAccessMatrix
+              key={matrixEpoch}
+              grants={grants}
+              onChange={updateGrants}
+              scopes={userVisibleScopeDefinitions}
+              projects={projectList}
+              inventory={mcpInventory}
+              // An existing role's grants replace the form once they load, so
+              // the grid waits for them rather than take edits that would be
+              // overwritten.
+              loading={isEditing && !initialized}
+              markAgentIneligible={selectedAgents.size > 0}
+              memberCount={selectedMembers.size}
+              onEditRule={openRuleEditor}
+              onRemoveRule={removeRule}
+            />
+            <RoleAuthClientTypesField
+              value={clientTypeRules}
+              onChange={(next) => {
+                setAssignmentConfirmed(false);
+                setClientTypeRules(next);
+              }}
+              disabled={isEditing && !initialized}
+            />
+
+            {/* ─── Who holds the role ───────────────────────────────
+                Under directory sync the directory decides, so the editor
+                shows the groups and attributes that give the role out in
+                place of a member picker. */}
+            {!hideAssignments && organization.scimEnabled && (
+              <RoleDirectorySources role={editingRole ?? undefined} />
             )}
-            {!hideAssignments && !scimWithNoMembers && (
-              <div className="border-border border-t pt-4 pb-4">
+            {!hideAssignments && !organization.scimEnabled && (
+              <div className="border-border border-t pt-4">
                 <button
                   type="button"
                   onClick={() => setShowMembers(!showMembers)}
@@ -987,139 +1175,106 @@ export function CreateRoleDialog({
                     Assign Members
                   </Text>
                   <Text variant="body" className="text-muted-foreground ml-1">
-                    {organization.scimEnabled
-                      ? `(${selectedMembers.size} assigned by directory sync)`
-                      : `(optional, ${selectedMembers.size} selected)`}
+                    {`(optional, ${selectedMembers.size} selected)`}
                   </Text>
                 </button>
 
                 {showMembers && (
-                  <div className="relative mt-3">
-                    {/* The rows stay visible — who holds the role is still worth
-                        reading — but a directory owns the answer, so nothing here
-                        is clickable. */}
-                    {organization.scimEnabled && (
-                      <div className="bg-background/60 absolute inset-0 z-10 flex items-center justify-center">
-                        <div className="border-border bg-background flex items-center gap-2 border px-3 py-1.5 shadow-sm">
-                          <Lock className="text-muted-foreground h-3.5 w-3.5" />
-                          <Text variant="body" className="text-xs">
-                            Managed by directory sync
-                          </Text>
-                        </div>
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        "border-border divide-border divide-y border",
-                        organization.scimEnabled &&
-                          "pointer-events-none opacity-50 select-none",
-                      )}
-                    >
-                      {/* Select-all header */}
-                      {!organization.scimEnabled &&
-                        (() => {
-                          const selectableMembers = getSelectableMembers(
-                            members,
-                            isEditing,
-                            editingRole?.id,
-                          );
-                          const allSelected =
-                            selectableMembers.length > 0 &&
-                            selectableMembers.every((m) =>
-                              selectedMembers.has(m.id),
-                            );
-                          const someSelected =
-                            !allSelected &&
-                            selectableMembers.some((m) =>
-                              selectedMembers.has(m.id),
-                            );
-                          return (
-                            <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
-                              <Checkbox
-                                checked={
-                                  allSelected
-                                    ? true
-                                    : someSelected
-                                      ? "indeterminate"
-                                      : false
-                                }
-                                onCheckedChange={() => toggleAllMembers()}
-                              />
-                              <Text
-                                variant="body"
-                                className="text-muted-foreground text-sm font-medium"
-                              >
-                                Select all
-                              </Text>
-                            </label>
-                          );
-                        })()}
-                      {(organization.scimEnabled
-                        ? members.filter((m) => selectedMembers.has(m.id))
-                        : members
-                      ).map((member) => {
-                        const alreadyHasRole = isMemberLockedToRole(
-                          isEditing,
-                          editingRole?.id,
-                          member.roleIds,
+                  <div className="border-border divide-border divide-y border mt-3">
+                    {/* Select-all header */}
+                    {(() => {
+                      const selectableMembers = getSelectableMembers(
+                        members,
+                        isEditing,
+                        editingRole?.id,
+                      );
+                      const allSelected =
+                        selectableMembers.length > 0 &&
+                        selectableMembers.every((m) =>
+                          selectedMembers.has(m.id),
                         );
-                        // Under directory sync the rows are read-only for
-                        // everyone, not only the mouse: a focusable checkbox
-                        // would let the keyboard edit an assignment the next
-                        // sync overwrites.
-                        const locked =
-                          organization.scimEnabled || alreadyHasRole;
-                        return (
-                          <label
-                            key={member.id}
-                            className={cn(
-                              "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
-                              alreadyHasRole && "cursor-default opacity-50",
-                            )}
+                      const someSelected =
+                        !allSelected &&
+                        selectableMembers.some((m) =>
+                          selectedMembers.has(m.id),
+                        );
+                      return (
+                        <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
+                          <Checkbox
+                            checked={
+                              allSelected
+                                ? true
+                                : someSelected
+                                  ? "indeterminate"
+                                  : false
+                            }
+                            onCheckedChange={() => toggleAllMembers()}
+                          />
+                          <Text
+                            variant="body"
+                            className="text-muted-foreground text-sm font-medium"
                           >
-                            <Checkbox
-                              checked={
-                                alreadyHasRole || selectedMembers.has(member.id)
-                              }
-                              disabled={locked}
-                              onCheckedChange={() => {
-                                void (!locked && toggleMember(member.id));
-                              }}
-                            />
-                            <Avatar className="h-7 w-7">
-                              {member.photoUrl && (
-                                <AvatarImage
-                                  src={member.photoUrl}
-                                  alt={member.name}
-                                />
-                              )}
-                              <AvatarFallback className="text-xs">
-                                {member.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")
-                                  .toUpperCase()
-                                  .slice(0, 2)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0 flex-1 space-y-0.5">
-                              <Text
-                                variant="body"
-                                className="text-sm font-medium"
-                              >
-                                {member.name}
-                              </Text>
-                              <Text
-                                variant="body"
-                                className="text-muted-foreground text-xs"
-                              >
-                                {member.email}
-                              </Text>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
+                            Select all
+                          </Text>
+                        </label>
+                      );
+                    })()}
+                    {members.map((member) => {
+                      const alreadyHasRole = isMemberLockedToRole(
+                        isEditing,
+                        editingRole?.id,
+                        member.roleIds,
+                      );
+                      return (
+                        <label
+                          key={member.id}
+                          className={cn(
+                            "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
+                            alreadyHasRole && "cursor-default opacity-50",
+                          )}
+                        >
+                          <Checkbox
+                            checked={
+                              alreadyHasRole || selectedMembers.has(member.id)
+                            }
+                            disabled={alreadyHasRole}
+                            onCheckedChange={() => {
+                              void (!alreadyHasRole && toggleMember(member.id));
+                            }}
+                          />
+                          <Avatar className="h-7 w-7">
+                            {member.photoUrl && (
+                              <AvatarImage
+                                src={member.photoUrl}
+                                alt={member.name}
+                              />
+                            )}
+                            <AvatarFallback className="text-xs">
+                              {member.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <Text
+                              variant="body"
+                              className="text-sm font-medium"
+                            >
+                              {member.name}
+                            </Text>
+                            <Text
+                              variant="body"
+                              className="text-muted-foreground text-xs"
+                            >
+                              {member.email}
+                            </Text>
+                          </div>
+                        </label>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1129,7 +1284,7 @@ export function CreateRoleDialog({
                 Not gated on SCIM: a directory syncs people, never agents,
                 so this is the only place an agent's roles are decided. */}
             {!hideAssignments && (
-              <div className="border-border border-t pt-4 pb-4">
+              <div className="border-border border-t pt-4">
                 <button
                   type="button"
                   onClick={() => setShowAgents(!showAgents)}
@@ -1265,11 +1420,75 @@ export function CreateRoleDialog({
         </Footer>
       )}
 
-      {(dialogStep === "form" || isPage) && (
+      {/* The review step is a modal over the form in both presentations, so
+          the form's footer stays where it is underneath. */}
+      <Dialog
+        open={dialogStep === "review"}
+        onOpenChange={(open) => {
+          if (!open) closeReview();
+        }}
+      >
+        <Dialog.Content className="sm:max-w-lg">
+          <Dialog.Header>
+            <Dialog.Title>
+              Review changes to &ldquo;{name.trim() || "this role"}&rdquo;
+            </Dialog.Title>
+            <Dialog.Description>
+              {review && review.added.length === 0
+                ? "The members and agents added to this role gain its sensitive permissions when it is saved."
+                : "These permissions are added when the role is saved."}
+            </Dialog.Description>
+          </Dialog.Header>
+          {review && (
+            <ReviewGrantsStep
+              added={review.added}
+              newHolders={review.newHolders}
+              holdersNote={holdersNote}
+              confirmed={review.confirmed}
+              onConfirmedChange={(confirmed) =>
+                setReview({ ...review, confirmed })
+              }
+            />
+          )}
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={closeReview}>
+              Back
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={
+                isMutating ||
+                !review ||
+                (needsReviewConfirmation && !review.confirmed)
+              }
+            >
+              {isMutating && (
+                <Button.LeftIcon>
+                  <Spinner className="mr-0" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {isMutating
+                  ? isEditing
+                    ? "Saving…"
+                    : "Creating…"
+                  : isEditing
+                    ? "Save role"
+                    : "Create role"}
+              </Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      {(dialogStep !== "rule-editor" || isPage) && (
         <Footer
-          // On a page the permissions table right above already draws a
-          // border; a second one would read as a double line.
-          className={cn("border-border flex-col", !isPage && "border-t")}
+          // On a page the bar stays in view while the role scrolls under
+          // it, so the denies it counts and Save are always at hand.
+          className={cn(
+            "border-border flex-col border-t",
+            isPage && "bg-card sticky bottom-0 z-10 mt-6 py-3",
+          )}
         >
           {confirmAssignmentFor && !isEditing && (
             <label className="flex cursor-pointer items-start gap-3 self-stretch text-left">
@@ -1287,14 +1506,44 @@ export function CreateRoleDialog({
               </Text>
             </label>
           )}
-          <div className="flex justify-end gap-2 self-stretch">
+          {scopesError && (
+            <div className="flex items-center justify-between gap-3 self-stretch">
+              <Text variant="body" className="text-destructive text-sm">
+                Failed to load permissions, so the role can't be saved yet.
+              </Text>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refetchScopes()}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-end gap-2 self-stretch">
+            {(denyCount > 0 || mcpDenyUncounted) && (
+              <span className="text-destructive mr-auto flex items-center gap-2 text-sm">
+                <Ban aria-hidden="true" className="size-4" />
+                {/* Until the servers are listed the MCP denies cannot be
+                    told apart, so no number is better than a low one. */}
+                {mcpDenyUncounted
+                  ? "Explicit denies"
+                  : denyCountLabel(denyCount)}{" "}
+                · overrides every other grant
+              </span>
+            )}
+            {canReset && (
+              <Button variant="tertiary" onClick={resetToSaved}>
+                Reset
+              </Button>
+            )}
             <Button variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saveDisabled}>
               {isMutating && (
                 <Button.LeftIcon>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               )}
               <Button.Text>
@@ -1436,7 +1685,7 @@ function PageFooterSlot({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className={cn("flex flex-row justify-end gap-2 pt-6", className)}>
+    <div className={cn("flex flex-row justify-end gap-2", className)}>
       {children}
     </div>
   );

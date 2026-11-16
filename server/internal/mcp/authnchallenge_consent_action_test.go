@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -27,6 +29,7 @@ import (
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type consentActionFixture struct {
@@ -43,6 +46,9 @@ type consentActionFixture struct {
 	clientB uuid.UUID
 	clientC uuid.UUID
 	clientD uuid.UUID
+	// server is the gateway server whose connect page a render opens, empty
+	// for the endpoint's own consent page.
+	server string
 }
 
 const (
@@ -55,6 +61,14 @@ const (
 // endpoints (BuildAuthorizationUrl never contacts them); pass an httptest
 // base URL to run a real code exchange against it.
 func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, userSessionIssuerIDs []uuid.UUID) uuid.UUID {
+	t.Helper()
+	return createConsentRemoteClientWithCallback(t, ctx, conn, projectID, organizationID, slug, asBase, userSessionIssuerIDs, "")
+}
+
+// createConsentRemoteClientWithCallback is createConsentRemoteClient with the
+// registration's callback landing on callbackBase, or on the default origin
+// when it is empty.
+func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, userSessionIssuerIDs []uuid.UUID, callbackBase string) uuid.UUID {
 	t.Helper()
 	if asBase == "" {
 		asBase = "https://" + slug + "-as.example.com"
@@ -80,6 +94,7 @@ func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.
 		RemoteSessionIssuerID: rsi.ID,
 		ClientID:              slug + "-external-client",
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CallbackBaseUrl:       conv.ToPGTextEmpty(callbackBase),
 	})
 	require.NoError(t, err)
 	for _, usi := range userSessionIssuerIDs {
@@ -129,7 +144,7 @@ func mintConsentEndpointState(t *testing.T, ctx context.Context, ti *testInstanc
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       orgID,
 		ProjectID:            projectID,
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 slug,
 		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		// Deliberately matches no client: the action must never thread it in.
@@ -208,6 +223,9 @@ func postConnectAction(t *testing.T, fx consentActionFixture, clientID uuid.UUID
 	form.Set("csrf_token", "csrf-token")
 	form.Set("action", "connect")
 	form.Set("client_id", clientID.String())
+	if fx.server != "" {
+		form.Set("server", fx.server)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -249,6 +267,70 @@ func TestServeConsentAction_ConnectSendsPerClientResource(t *testing.T) {
 	stateB := mintedRemoteLoginState(t, ctx, fx, locB.Query().Get("state"))
 	require.Equal(t, consentUpstreamB, stateB.Resource)
 	require.Equal(t, fx.clientB, stateB.RemoteSessionClientID)
+}
+
+func TestServeConsentAction_ConnectForwardsClientNameOnlyForAnonymousOptIn(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		optIn       bool
+		anonymous   bool
+		noClientID  bool
+		noClientRow bool
+		clientName  string
+		want        string
+	}{
+		{name: "anonymous and opted in", optIn: true, anonymous: true, want: "Example Client"},
+		{name: "anonymous without opt-in", optIn: false, anonymous: true, want: ""},
+		{name: "signed-in subject shares its grant", optIn: true, anonymous: false, want: ""},
+		{name: "no MCP client", optIn: true, anonymous: true, noClientID: true, want: ""},
+		{name: "long name is capped before it is stored", optIn: true, anonymous: true, clientName: strings.Repeat("a", 64<<10), want: strings.Repeat("a", 256)},
+		{name: "failed lookup only loses the label", optIn: true, anonymous: true, noClientRow: true, want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, fx := seedMultiClientConsentEndpoint(t)
+			_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionClient(ctx, remotesessions_repo.UpdateRemoteSessionClientParams{
+				ID:                fx.clientA,
+				ProjectID:         uuid.NullUUID{UUID: fx.projectID, Valid: true},
+				ForwardClientName: pgtype.Bool{Bool: tc.optIn, Valid: true},
+			})
+			require.NoError(t, err)
+
+			state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+			require.NoError(t, err)
+			if !tc.noClientRow {
+				_, err = usersessions_repo.New(fx.ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+					UserSessionIssuerID:     fx.shared,
+					ClientID:                state.ClientID,
+					ClientSecretHash:        pgtype.Text{String: "", Valid: false},
+					ClientName:              cmp.Or(tc.clientName, "Example Client"),
+					RedirectUris:            []string{"http://example.com/cb"},
+					ClientSecretExpiresAt:   pgtype.Timestamptz{},
+					TokenEndpointAuthMethod: "none",
+					ClientJwks:              nil,
+					ClientJwksUri:           pgtype.Text{String: "", Valid: false},
+				})
+				require.NoError(t, err)
+			}
+			if tc.noClientID {
+				state.ClientID = ""
+			}
+			if tc.anonymous {
+				subject := urn.NewAnonymousSubject(uuid.NewString())
+				state.Subject = &subject
+			}
+			require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+
+			loc := postConnectAction(t, fx, fx.clientA)
+			require.Equal(t, tc.want != "", loc.Query().Has("speakeasy_client_name"))
+			require.Equal(t, tc.want, loc.Query().Get("speakeasy_client_name"))
+			require.Equal(t, tc.want, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).ClientName)
+		})
+	}
 }
 
 func TestServeConsentAction_ConnectWithoutDerivableResourceSendsNone(t *testing.T) {
@@ -398,6 +480,57 @@ func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {
 	require.Empty(t, w.Header().Get("Location"), "fail closed: no upstream redirect may be minted")
 }
 
+// A connect to an authorization server with no authorization endpoint is a 400
+// that names the problem, and mints no upstream redirect.
+func TestServeConsentAction_ConnectWithoutAuthorizationEndpointIsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMultiClientConsentEndpoint(t)
+
+	q := remotesessions_repo.New(fx.ti.conn)
+	rsi, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: fx.projectID, Valid: true},
+		Slug:                              "noauthz-rsi",
+		Issuer:                            "https://noauthz-as.example.com",
+		TokenEndpoint:                     conv.ToPGText("https://noauthz-as.example.com/token"),
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	rsc, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(fx.projectID),
+		OrganizationID:        conv.ToPGTextEmpty(fx.orgID),
+		RemoteSessionIssuerID: rsi.ID,
+		ClientID:              "noauthz-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: rsc.ID,
+		UserSessionIssuerID:   fx.shared,
+	}))
+
+	form := url.Values{}
+	form.Set("state", fx.stateID)
+	form.Set("csrf_token", "csrf-token")
+	form.Set("action", "connect")
+	form.Set("client_id", rsc.ID.String())
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	err = fx.ti.service.ServeConsentAction(w, req, fx.endpoint)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, "This service doesn't support signing in from Speakeasy.", oopsErr.Error())
+	require.ErrorIs(t, err, remotesessions.ErrIssuerNoAuthorizationEndpoint)
+	require.Empty(t, w.Header().Get("Location"))
+}
+
 // consentExchangeCapture records the resource param of a token POST.
 type consentExchangeCapture struct {
 	HasResource bool
@@ -499,7 +632,7 @@ func TestServeConsentAction_MultiBindingExchangePersistsPerClientResource(t *tes
 	require.Equal(t, consentUpstreamB, sessB.Resource.String)
 
 	// The routing layer serves both, each token qualified by its own resource.
-	tokens, err := mgr.ResolveAccessTokens(ctx, projectID, orgID, shared, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, orgID, shared, subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 2)
 	byClient := map[uuid.UUID]remotesessions.UpstreamToken{}
@@ -583,7 +716,7 @@ func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-owner", "", []uuid.UUID{fx.shared})
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-shared", "", []uuid.UUID{fx.shared, other})
 
-	owners, err := remotesessions.ResourceOwners(ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared, consentUpstreamA)
+	owners, err := remotesessions.ResourceOwners(ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared, consentUpstreamA, false)
 	require.NoError(t, err)
 	require.True(t, owners[owner])
 	require.False(t, owners[shared], "a sibling that derives the upstream on its own holds it")
@@ -594,13 +727,13 @@ func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	batch, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, fx.orgID, []remotesessions.ResourceOwnerQuery{
 		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
 		{ServerID: elsewhere, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
-	})
+	}, false)
 	require.NoError(t, err)
 	require.Equal(t, owners, batch[here])
 	require.Equal(t, owners, batch[elsewhere])
 	foreign, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, "org-not-"+fx.orgID, []remotesessions.ResourceOwnerQuery{
 		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
-	})
+	}, false)
 	require.NoError(t, err)
 	require.Empty(t, foreign[here], "another organization's caller sees no clients")
 }

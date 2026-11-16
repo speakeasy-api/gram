@@ -39,6 +39,10 @@ var ErrClientCredentialClientNotFound = errors.New("remotesessions: client crede
 // client, so there is no authorize redirect to mint.
 var ErrSelfCredentialClient = errors.New("remotesessions: client holds its own upstream credential and is not connected by subjects")
 
+// ErrIssuerNoAuthorizationEndpoint means the upstream authorization server
+// advertises no authorization endpoint, so nobody can sign in to it.
+var ErrIssuerNoAuthorizationEndpoint = errors.New("remotesessions: authorization server has no authorization endpoint")
+
 // ErrClientCredentialMisconfigured means the credential a self client holds
 // for itself cannot be obtained, or the upstream rejected it, for a reason
 // only an administrator can repair. It refines ErrRemoteSessionMisconfigured,
@@ -197,6 +201,8 @@ func (m *ChallengeManager) resolveClientCredential(ctx context.Context, req Clie
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
 		ClientCredentialErr:                nil,
 		renewal:                            &clientCredentialRenewal{credential: cred, request: req},
+		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}, nil
 }
 
@@ -237,6 +243,9 @@ func (m *ChallengeManager) RenewClientCredential(ctx context.Context, tok Upstre
 // rejected the request; anything else (an unreachable or failing token
 // endpoint, a rate limit, a signing or cache outage) clears on its own.
 func classifyClientCredentialError(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
 	if errors.Is(err, ErrClientCredentialClientNotFound) || errors.Is(err, ErrTokenEndpointConfiguration) {
 		return fmt.Errorf("%w: %w", ErrClientCredentialMisconfigured, err)
 	}

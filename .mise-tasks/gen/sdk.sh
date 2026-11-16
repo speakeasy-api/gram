@@ -3,6 +3,7 @@
 #MISE description="Generate SDK from OpenAPI spec"
 
 #USAGE flag "-c --check" help="Check if the Gram-Internal and Gram-Admin OpenAPI outputs are up-to-date"
+#USAGE flag "-t --target <target>" help="Generate only this workflow target (CI runs one target per job)"
 
 set -e
 
@@ -25,7 +26,10 @@ generate() {
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy-sdks run "$@" --skip-versioning --skip-upload-spec --minimal
+  # The pinned generator hardcodes Staticcheck 0.8.1, which cannot decode Go
+  # 1.27 export data. Run the Go compile/lint pipeline below with a compatible
+  # Staticcheck. Both inlined TypeScript targets already use compileCommand=true.
+  CI=true speakeasy-sdks run "$@" --skip-versioning --skip-upload-spec --skip-compile --minimal
 }
 
 check_inputs() {
@@ -67,6 +71,22 @@ check_inputs() {
 
 if [[ "${usage_check:-}" == "true" ]]; then
   check_inputs
+  exit
+fi
+
+target=${usage_target:-}
+if [[ -n "$target" ]]; then
+  generate --target "$target"
 else
   generate
+fi
+
+if [[ -z "$target" || "$target" == "hooks-go" ]]; then
+  (
+    cd hooks/sdk
+    go mod tidy
+    go build ./...
+    go test -run=XXX_SHOULD_NEVER_MATCH_XXX ./...
+    go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks=inherit,-SA1019,-SA5008 ./...
+  )
 fi

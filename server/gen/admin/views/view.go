@@ -21,6 +21,9 @@ type ProductFeatures struct {
 
 // ProductFeaturesView is a type that runs validations on a projected type.
 type ProductFeaturesView struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled *bool
 	// Whether tool I/O logging is enabled
@@ -60,9 +63,6 @@ type ProductFeaturesView struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -72,10 +72,19 @@ type ProductFeaturesView struct {
 	NetworkIngressEnabled *bool
 	// Whether the organization can configure signals intelligence
 	SignalsIntelligenceEnabled *bool
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled *bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 var (
@@ -83,6 +92,7 @@ var (
 	// by view name.
 	ProductFeaturesMap = map[string][]string{
 		"default": {
+			"provider_setup_enabled",
 			"logs_enabled",
 			"tool_io_logs_enabled",
 			"session_capture_enabled",
@@ -99,11 +109,13 @@ var (
 			"customer_managed_encryption_keys_enabled",
 			"remote_session_auto_refresh_enabled",
 			"remote_session_auto_refresh_enforced_enabled",
-			"consent_tool_filtering_enabled",
 			"session_portability_enabled",
 			"network_ingress_enabled",
 			"signals_intelligence_enabled",
+			"organization_gateway_disabled",
+			"code_mode_enabled",
 			"device_agent",
+			"upstream_auth_enforced",
 		},
 	}
 )
@@ -171,9 +183,6 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	if result.RemoteSessionAutoRefreshEnforcedEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enforced_enabled", "result"))
 	}
-	if result.ConsentToolFilteringEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("consent_tool_filtering_enabled", "result"))
-	}
 	if result.SessionPortabilityEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_portability_enabled", "result"))
 	}
@@ -182,6 +191,12 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.SignalsIntelligenceEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("signals_intelligence_enabled", "result"))
+	}
+	if result.OrganizationGatewayDisabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_gateway_disabled", "result"))
+	}
+	if result.CodeModeEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code_mode_enabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

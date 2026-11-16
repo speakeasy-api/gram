@@ -54,7 +54,7 @@ INSERT INTO external_keys (
   $6,
   $7
 )
-RETURNING id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateExternalKeyParams struct {
@@ -84,6 +84,7 @@ func (q *Queries) CreateExternalKey(ctx context.Context, arg CreateExternalKeyPa
 		&i.ProjectID,
 		&i.ExternalCredentialID,
 		&i.Provider,
+		&i.Purpose,
 		&i.Algorithm,
 		&i.Name,
 		&i.CustomerGrantReference,
@@ -174,12 +175,13 @@ func (q *Queries) ExternalKeyHasJsonWebKeyReferences(ctx context.Context, arg Ex
 }
 
 const getAwsKmsKey = `-- name: GetAwsKmsKey :one
-SELECT ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted, aws.external_key_id, aws.external_keys_provider, aws.key_arn, aws.created_at, aws.updated_at
+SELECT ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.purpose, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted, aws.external_key_id, aws.external_keys_provider, aws.key_arn, aws.created_at, aws.updated_at
 FROM external_keys AS ek
 JOIN aws_kms_keys AS aws ON aws.external_key_id = ek.id
 WHERE ek.id = $1
   AND ek.organization_id = $2
   AND ek.provider = 'aws_kms'
+  AND ek.purpose = 'sign'
   AND ek.deleted IS FALSE
 `
 
@@ -202,6 +204,7 @@ func (q *Queries) GetAwsKmsKey(ctx context.Context, arg GetAwsKmsKeyParams) (Get
 		&i.ExternalKey.ProjectID,
 		&i.ExternalKey.ExternalCredentialID,
 		&i.ExternalKey.Provider,
+		&i.ExternalKey.Purpose,
 		&i.ExternalKey.Algorithm,
 		&i.ExternalKey.Name,
 		&i.ExternalKey.CustomerGrantReference,
@@ -260,12 +263,14 @@ func (q *Queries) GetExternalCredentialProviderForKey(ctx context.Context, arg G
 }
 
 const getGcpKmsKey = `-- name: GetGcpKmsKey :one
-SELECT ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted, gcp.external_key_id, gcp.external_keys_provider, gcp.resource_name, gcp.created_at, gcp.updated_at
+SELECT ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.purpose, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted, gcp.external_key_id, gcp.external_keys_provider, gcp.resource_name, gcp.created_at, gcp.updated_at
 FROM external_keys AS ek
 JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 WHERE ek.id = $1
   AND ek.organization_id = $2
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE
 `
 
@@ -288,6 +293,7 @@ func (q *Queries) GetGcpKmsKey(ctx context.Context, arg GetGcpKmsKeyParams) (Get
 		&i.ExternalKey.ProjectID,
 		&i.ExternalKey.ExternalCredentialID,
 		&i.ExternalKey.Provider,
+		&i.ExternalKey.Purpose,
 		&i.ExternalKey.Algorithm,
 		&i.ExternalKey.Name,
 		&i.ExternalKey.CustomerGrantReference,
@@ -307,7 +313,7 @@ func (q *Queries) GetGcpKmsKey(ctx context.Context, arg GetGcpKmsKeyParams) (Get
 
 const getGcpKmsKeyForVerify = `-- name: GetGcpKmsKeyForVerify :one
 SELECT
-  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
+  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.purpose, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
   gcp.external_key_id, gcp.external_keys_provider, gcp.resource_name, gcp.created_at, gcp.updated_at,
   ec.id AS credential_id,
   gic.impersonate_service_account,
@@ -328,6 +334,8 @@ LEFT JOIN gcp_iam_credentials AS gic
 WHERE ek.id = $1
   AND ek.organization_id = $2
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE
 `
 
@@ -375,6 +383,7 @@ func (q *Queries) GetGcpKmsKeyForVerify(ctx context.Context, arg GetGcpKmsKeyFor
 		&i.ExternalKey.ProjectID,
 		&i.ExternalKey.ExternalCredentialID,
 		&i.ExternalKey.Provider,
+		&i.ExternalKey.Purpose,
 		&i.ExternalKey.Algorithm,
 		&i.ExternalKey.Name,
 		&i.ExternalKey.CustomerGrantReference,
@@ -399,10 +408,12 @@ func (q *Queries) GetGcpKmsKeyForVerify(ctx context.Context, arg GetGcpKmsKeyFor
 }
 
 const listExternalKeys = `-- name: ListExternalKeys :many
-SELECT id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 FROM external_keys AS ek
 WHERE ek.organization_id = $1
+  AND ek.purpose = 'sign'
   AND ek.deleted IS FALSE
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ($2::text IS NULL OR ek.provider = $2::text)
   AND NOT EXISTS (
     SELECT 1
@@ -420,7 +431,10 @@ type ListExternalKeysParams struct {
 }
 
 // Keys left behind by a tombstoned identity provider connection are hidden;
-// they stay reachable by id so the organization can delete them.
+// they stay reachable by id so the organization can delete them. Like every
+// external_keys read and write in this file, it is scoped to purpose 'sign':
+// encryption keys protect organization data and are managed only through the
+// organization encryption service, which refuses to drop one still in use.
 func (q *Queries) ListExternalKeys(ctx context.Context, arg ListExternalKeysParams) ([]ExternalKey, error) {
 	rows, err := q.db.Query(ctx, listExternalKeys, arg.OrganizationID, arg.Provider)
 	if err != nil {
@@ -436,6 +450,7 @@ func (q *Queries) ListExternalKeys(ctx context.Context, arg ListExternalKeysPara
 			&i.ProjectID,
 			&i.ExternalCredentialID,
 			&i.Provider,
+			&i.Purpose,
 			&i.Algorithm,
 			&i.Name,
 			&i.CustomerGrantReference,
@@ -456,13 +471,15 @@ func (q *Queries) ListExternalKeys(ctx context.Context, arg ListExternalKeysPara
 }
 
 const lockExternalKeyForDelete = `-- name: LockExternalKeyForDelete :one
-SELECT id, identity_provider_connection_id
+SELECT external_keys.id, external_keys.identity_provider_connection_id
 FROM external_keys
-WHERE id = $1
-  AND organization_id = $2
-  AND provider = $3
-  AND deleted IS FALSE
-FOR UPDATE
+WHERE external_keys.id = $1
+  AND external_keys.organization_id = $2
+  AND external_keys.provider = $3
+  AND external_keys.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
+FOR UPDATE OF external_keys
 `
 
 type LockExternalKeyForDeleteParams struct {
@@ -494,11 +511,13 @@ func (q *Queries) LockExternalKeyForDelete(ctx context.Context, arg LockExternal
 const softDeleteExternalKey = `-- name: SoftDeleteExternalKey :one
 UPDATE external_keys
 SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND organization_id = $2
-  AND provider = $3
-  AND deleted IS FALSE
-RETURNING id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+WHERE external_keys.id = $1
+  AND external_keys.organization_id = $2
+  AND external_keys.provider = $3
+  AND external_keys.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
+RETURNING id, organization_id, project_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteExternalKeyParams struct {
@@ -516,6 +535,7 @@ func (q *Queries) SoftDeleteExternalKey(ctx context.Context, arg SoftDeleteExter
 		&i.ProjectID,
 		&i.ExternalCredentialID,
 		&i.Provider,
+		&i.Purpose,
 		&i.Algorithm,
 		&i.Name,
 		&i.CustomerGrantReference,
@@ -534,10 +554,12 @@ SET external_credential_id = $1,
     name = $2,
     customer_grant_reference = $3,
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
-  AND deleted IS FALSE
-RETURNING id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+WHERE external_keys.id = $4
+  AND external_keys.organization_id = $5
+  AND external_keys.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
+RETURNING id, organization_id, project_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateExternalKeyParams struct {
@@ -570,6 +592,7 @@ func (q *Queries) UpdateExternalKey(ctx context.Context, arg UpdateExternalKeyPa
 		&i.ProjectID,
 		&i.ExternalCredentialID,
 		&i.Provider,
+		&i.Purpose,
 		&i.Algorithm,
 		&i.Name,
 		&i.CustomerGrantReference,

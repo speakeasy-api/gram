@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const EventType = {
 /**
  * Event type.
  */
-export type EventType = ClosedEnum<typeof EventType>;
+export type EventType = OpenEnum<typeof EventType>;
 
 export type SpendRuleEvent = {
   /**
@@ -77,9 +78,8 @@ export type SpendRuleEvent = {
 };
 
 /** @internal */
-export const EventType$inboundSchema: z.ZodMiniEnum<typeof EventType> = z.enum(
-  EventType,
-);
+export const EventType$inboundSchema: z.ZodMiniType<EventType, unknown> =
+  openEnums.inboundSchema(EventType);
 
 /** @internal */
 export const SpendRuleEvent$inboundSchema: z.ZodMiniType<

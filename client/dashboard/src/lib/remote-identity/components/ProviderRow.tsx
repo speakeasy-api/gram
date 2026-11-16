@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -46,7 +47,6 @@ import {
   ChevronRight,
   Info,
   KeyRound,
-  Loader2,
   Settings,
   X,
 } from "lucide-react";
@@ -70,7 +70,7 @@ function providerLabel(
 ): string {
   if (selected) return selected.name;
   if (draft.providerLoading) return "Checking\u2026";
-  return "Choose an identity provider";
+  return "Choose an authorization server";
 }
 
 /**
@@ -189,7 +189,7 @@ function ProviderGroupItems({
         >
           {group.loadingMore
             ? "Loading\u2026"
-            : `More ${group.tier.toLowerCase()} providers`}
+            : `More ${group.tier.toLowerCase()} authorization servers`}
         </CommandItem>
       ) : null}
     </CommandGroup>
@@ -200,9 +200,9 @@ function ProviderGroupItems({
  * One Remote Identity Provider, the client the server uses with it, and how
  * to get a new one — the whole User Identity decision on a single settings
  * row. A connected client reads as a status; clearing it opens the choice of
- * an existing client, automatic registration or manual credentials. The
- * issuer and client records behind it stay on the Remote Identity Provider
- * pages.
+ * a new client started from a stored one, automatic registration or manual
+ * credentials. The issuer and client records behind it stay on the Remote
+ * Identity Provider pages.
  */
 export function UserIdentityRow({
   draft,
@@ -216,6 +216,7 @@ export function UserIdentityRow({
   clientHref: (issuerId: string, clientId: string) => string;
 }): JSX.Element {
   const [providerOpen, setProviderOpen] = useState(false);
+  const issuerInputId = useId();
   const { selected } = draft;
   const connectedHref =
     selected && draft.connectedClient
@@ -230,7 +231,7 @@ export function UserIdentityRow({
             <KeyRound aria-hidden="true" className="size-4" />
           </div>
           <div className="flex min-w-0 flex-col gap-0.5">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Popover
                 open={providerOpen}
                 onOpenChange={(open) => {
@@ -244,10 +245,10 @@ export function UserIdentityRow({
                     // about to answer its own question, and offering "choose
                     // one" in the meantime invites a pick that the arriving
                     // default would appear to overwrite.
-                    disabled={disabled || draft.providerLoading}
-                    ariaLabel="Identity provider"
+                    disabled={disabled || draft.saving || draft.providerLoading}
+                    ariaLabel="Authorization server"
                     className={cn(
-                      "gap-1.5",
+                      "max-w-full gap-1.5 text-left break-all whitespace-normal",
                       selected && "text-foreground text-base font-medium",
                     )}
                   >
@@ -262,13 +263,15 @@ export function UserIdentityRow({
                   {/* Searched on the server, so cmdk must not filter again. */}
                   <Command shouldFilter={false}>
                     <CommandInput
-                      placeholder="Search identity providers…"
+                      placeholder="Search authorization servers…"
                       value={draft.providerSearch}
                       onValueChange={draft.setProviderSearch}
                       className="h-9"
                     />
                     <CommandList>
-                      <CommandEmpty>No identity providers match.</CommandEmpty>
+                      <CommandEmpty>
+                        No authorization servers match.
+                      </CommandEmpty>
                       {draft.providerGroups.map((group) => (
                         <ProviderGroupItems
                           key={group.tier}
@@ -289,7 +292,7 @@ export function UserIdentityRow({
                       to={createHref}
                       className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm underline underline-offset-2"
                     >
-                      Create a custom identity provider
+                      Create a custom authorization server
                       <ArrowUpRight aria-hidden="true" className="size-3.5" />
                     </Link>
                   </div>
@@ -299,12 +302,16 @@ export function UserIdentityRow({
                 <Badge
                   variant="warning"
                   size="sm"
-                  title="No matching identity provider exists yet. One is created from what the upstream publishes when you save."
+                  title="No matching authorization server exists yet. One is created from what the upstream publishes when you save."
                 >
                   <Badge.Text>Will be created</Badge.Text>
                 </Badge>
               ) : null}
-              <Text muted variant="small" className="font-mono text-xs">
+              <Text
+                muted
+                variant="small"
+                className="font-mono text-xs break-all"
+              >
                 {selected?.url ?? ""}
               </Text>
             </div>
@@ -331,20 +338,116 @@ export function UserIdentityRow({
 
       {draft.providerLoadFailed ? (
         <Alert variant="error" dismissible={false}>
-          Couldn&apos;t load this server&apos;s identity providers. Refresh the
-          page to try again.
+          Couldn&apos;t load this server&apos;s authorization servers. Refresh
+          the page to try again.
         </Alert>
       ) : null}
 
       {draft.providerUnreachable ? (
         <Alert variant="warning" dismissible={false}>
-          Couldn&apos;t reach the upstream&apos;s identity provider. Check the
-          server URL, or choose a provider from the list.
+          Couldn&apos;t reach the upstream&apos;s authorization server. Check
+          the server URL, or choose an authorization server from the list.
         </Alert>
       ) : null}
 
       {selected && !draft.connected ? (
-        <div className="space-y-4 pl-[52px]">
+        <div className="min-w-0 space-y-4 sm:pl-[52px]">
+          {selected.isNew &&
+          draft.discoveryStatus === "loading" &&
+          !draft.issuerEditorOpen ? (
+            <div role="status" className="flex items-center gap-2">
+              <Spinner className="mr-0 size-3.5" />
+              <Text muted small>
+                Checking OAuth metadata
+              </Text>
+            </div>
+          ) : null}
+          {selected.isNew && draft.discoveryStatus === "error" ? (
+            <Alert variant="error" dismissible={false} className="min-w-0">
+              <code className="block text-xs leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                {draft.discoveryError}
+              </code>
+            </Alert>
+          ) : null}
+          {selected.isNew &&
+          (draft.issuerEditorOpen || draft.discoveryStatus === "error") ? (
+            <div
+              id={`${issuerInputId}-editor`}
+              role="group"
+              aria-label="Issuer correction"
+              className="bg-muted/30 min-w-0 space-y-3 border p-4"
+            >
+              {draft.discoveryStatus === "loading" ? (
+                <div role="status" className="flex items-center gap-2">
+                  <Spinner className="mr-0 size-3.5 shrink-0" />
+                  <Text muted small>
+                    Checking OAuth metadata
+                  </Text>
+                </div>
+              ) : draft.issuerEditorValidated ? (
+                <div role="status" className="flex items-center gap-2">
+                  <Check
+                    aria-hidden="true"
+                    className="text-default-success size-4 shrink-0"
+                  />
+                  <Text small>
+                    OAuth metadata discovered. Save to finish setup.
+                  </Text>
+                </div>
+              ) : null}
+              <Label htmlFor={issuerInputId}>Issuer URL</Label>
+              <Input
+                id={issuerInputId}
+                value={draft.issuerEditorText}
+                onChange={draft.setIssuerEditorText}
+                disabled={disabled || draft.saving}
+                autoFocus
+                aria-describedby={`${issuerInputId}-help${draft.issuerEditorError ? ` ${issuerInputId}-error` : ""}`}
+                aria-invalid={!!draft.issuerEditorError}
+              />
+              <Text id={`${issuerInputId}-help`} muted small className="block">
+                Discover retries the current URL or checks a corrected URL
+                before you can save the new provider. Saved providers are not
+                changed.
+              </Text>
+              {draft.issuerEditorError ? (
+                <div id={`${issuerInputId}-error`}>
+                  <Alert variant="error" dismissible={false}>
+                    {draft.issuerEditorError}
+                  </Alert>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    disabled ||
+                    draft.saving ||
+                    draft.capabilitiesLoading ||
+                    !draft.issuerEditorText.trim()
+                  }
+                  onClick={draft.discoverIssuer}
+                >
+                  <Button.Text>
+                    {draft.capabilitiesLoading
+                      ? "Checking…"
+                      : draft.issuerEditorValidated
+                        ? "Check again"
+                        : "Discover"}
+                  </Button.Text>
+                </Button>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  disabled={disabled || draft.saving}
+                  onClick={draft.resetIssuer}
+                >
+                  <Button.Text>Reset to advertised URL</Button.Text>
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <RegistrationChoices draft={draft} disabled={disabled} />
           <ChoiceDetails
             draft={draft}
@@ -356,9 +459,9 @@ export function UserIdentityRow({
 
       {draft.status.kind === "pending" ? (
         <div className="flex items-center gap-2">
-          <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          <Spinner className="mr-0 size-3.5" />
           <Text muted small>
-            Registering with {selected?.name ?? "the provider"}…
+            Registering with {selected?.name ?? "the authorization server"}…
           </Text>
         </div>
       ) : null}
@@ -529,8 +632,16 @@ function RegistrationChoices({
   draft: UserIdentityDraft;
   disabled: boolean;
 }): JSX.Element {
-  const name = draft.selected?.name ?? "the provider";
+  const name = draft.selected?.name ?? "the authorization server";
   const loading = draft.clientsLoading || draft.capabilitiesLoading;
+  const automaticReason =
+    draft.selected?.isNew && draft.discoveryStatus !== "ready"
+      ? draft.discoveryStatus === "loading"
+        ? "Checking automatic registration."
+        : draft.discoveryStatus === "error"
+          ? "Could not check automatic registration. Retry OAuth metadata discovery."
+          : "Automatic registration has not yet been checked."
+      : `${name} has no usable automatic registration method. Automatic registration requires compatible OAuth endpoints and client authentication, using a Client ID Metadata Document or dynamic client registration.`;
   return (
     <RadioCardGroup
       orientation="horizontal"
@@ -541,14 +652,14 @@ function RegistrationChoices({
     >
       <RadioCard
         value="existing"
-        title="Existing client"
+        title="New from existing"
         disabled={!draft.existingAvailable}
       >
         {draft.existingAvailable ? (
-          `Reuse a client already registered with ${name}.`
+          `Start a new client from one already registered with ${name}.`
         ) : (
           <UnavailableReason
-            reason={`No clients are registered with ${name} yet. Auto-Configure or Manual creates the first one.`}
+            reason={`No client registered with ${name} can be used as a starting point yet. Auto-Configure or Manual creates the first one.`}
           />
         )}
       </RadioCard>
@@ -560,9 +671,7 @@ function RegistrationChoices({
         {draft.automaticAvailable ? (
           `Speakeasy registers a new client with ${name} when you save.`
         ) : (
-          <UnavailableReason
-            reason={`${name} supports neither a Client ID Metadata Document nor dynamic client registration, so Speakeasy can't register a client automatically.`}
-          />
+          <UnavailableReason reason={automaticReason} />
         )}
       </RadioCard>
       <RadioCard value="manual" title="Manual">
@@ -584,7 +693,13 @@ function ChoiceDetails({
 }): JSX.Element | null {
   switch (draft.choice) {
     case "existing":
-      return <ExistingClientField draft={draft} disabled={disabled} />;
+      return (
+        <StartingClientFields
+          draft={draft}
+          disabled={disabled}
+          providerName={providerName}
+        />
+      );
     case "auto":
       return draft.methodChoiceAvailable ? (
         <AdvancedOptions>
@@ -599,47 +714,79 @@ function ChoiceDetails({
           providerName={providerName}
         />
       );
+    case null:
+      return null;
   }
 }
 
-function ExistingClientField({
+/**
+ * The client a new one starts from, and the settings it carries over for
+ * review. The picked client is a starting point only: it is never linked to
+ * this server and Save does not change it.
+ */
+function StartingClientFields({
   draft,
   disabled,
+  providerName,
 }: {
   draft: UserIdentityDraft;
   disabled: boolean;
+  providerName: string;
 }): JSX.Element {
+  const starting = draft.existingClient;
   return (
-    <div className="max-w-md space-y-1.5">
-      <Text small className="block font-medium">
-        Client
-      </Text>
-      <Select
-        value={draft.existingClientId ?? undefined}
-        onValueChange={draft.selectExisting}
-        disabled={disabled}
-      >
-        <SelectTrigger aria-label="Client">
-          <SelectValue placeholder="Choose a client" />
-        </SelectTrigger>
-        <SelectContent>
-          {draft.existingOptions.map((option: ClientOption) => (
-            <SelectItem key={option.id} value={option.id}>
-              {option.name}
-              {option.hint ? (
-                <span className="text-muted-foreground ml-2 font-mono text-xs">
-                  {option.hint}
-                </span>
-              ) : null}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {draft.sameAsConnected ? (
-        <Text muted small className="block">
-          This is the client the server already uses. Choose another to replace
-          it.
+    <div className="space-y-3">
+      <div className="max-w-md space-y-1.5">
+        <Text small className="block font-medium">
+          Start from
         </Text>
+        <Select
+          value={draft.existingClientId ?? ""}
+          onValueChange={draft.selectExisting}
+          disabled={disabled}
+        >
+          <SelectTrigger aria-label="Start from">
+            <SelectValue placeholder="Choose a client" />
+          </SelectTrigger>
+          <SelectContent>
+            {draft.existingOptions.map((option: ClientOption) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.name}
+                {option.hint ? (
+                  <span className="text-muted-foreground ml-2 font-mono text-xs">
+                    {option.hint}
+                  </span>
+                ) : null}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Text muted small className="block">
+          Saving creates a separate client for this server. The client you start
+          from, the servers that use it, and the people signed in through it
+          stay as they are.
+        </Text>
+      </div>
+      {starting?.metadataDocument ? (
+        <div className="max-w-md space-y-1.5">
+          <Text muted small className="block">
+            Speakeasy publishes this client itself, so the new client gets its
+            own client ID and no secret is copied.
+          </Text>
+          <ScopeField
+            draft={draft}
+            disabled={disabled}
+            providerName={providerName}
+          />
+          <StartingAudienceField draft={draft} disabled={disabled} />
+        </div>
+      ) : starting ? (
+        <ManualCredentialsFields
+          draft={draft}
+          disabled={disabled}
+          providerName={providerName}
+          startingClientId={starting.clientId}
+        />
       ) : null}
     </div>
   );
@@ -695,7 +842,7 @@ function RegistrationMethodField({
       />
       <Text muted small className="block">
         CIMD publishes the client from Speakeasy; DCR registers it with the
-        provider.
+        authorization server.
       </Text>
     </>
   );
@@ -735,15 +882,103 @@ function ScopeField({
   );
 }
 
+/** The audience a client started from a stored one carries over, for review. */
+function StartingAudienceField({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  return (
+    <>
+      <Text small className="block font-medium">
+        Audience
+      </Text>
+      <Input
+        value={draft.startingAudience}
+        onChange={draft.setStartingAudience}
+        placeholder="None"
+        disabled={disabled}
+        aria-label="Audience"
+        noAutofill
+      />
+      <Text muted small className="block">
+        Sent with sign-in and token requests. Leave blank to send none.
+      </Text>
+    </>
+  );
+}
+
+const STARTING_AUTH_METHOD_DEFAULT = "default";
+
+/** How a client started from a stored one authenticates, for review. */
+function StartingAuthMethodField({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  return (
+    <>
+      <Text small className="block font-medium">
+        Token endpoint auth method
+      </Text>
+      <Select
+        value={draft.startingAuthMethod || STARTING_AUTH_METHOD_DEFAULT}
+        onValueChange={(value) =>
+          draft.setStartingAuthMethod(
+            value === STARTING_AUTH_METHOD_DEFAULT
+              ? ""
+              : (value as UserIdentityDraft["startingAuthMethod"]),
+          )
+        }
+        disabled={disabled}
+      >
+        <SelectTrigger aria-label="Token endpoint auth method">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={STARTING_AUTH_METHOD_DEFAULT}>
+            Decided from the secret
+          </SelectItem>
+          <SelectItem value="client_secret_basic">
+            client_secret_basic
+          </SelectItem>
+          <SelectItem value="client_secret_post">client_secret_post</SelectItem>
+          <SelectItem value="none">none</SelectItem>
+        </SelectContent>
+      </Select>
+    </>
+  );
+}
+
 function ManualCredentialsFields({
   draft,
   disabled,
   providerName,
+  startingClientId,
 }: {
   draft: UserIdentityDraft;
   disabled: boolean;
   providerName: string;
+  /** The client ID of the client these fields were filled from, if any. */
+  startingClientId?: string;
 }): JSX.Element {
+  let secretPlaceholder = "Optional";
+  let secretHint: string | null = null;
+  if (draft.copiesSecret) {
+    secretPlaceholder = "Copied when you save";
+    secretHint =
+      "Leave the secret blank to copy the stored one. It is copied on the server and never shown here.";
+  } else if (
+    startingClientId !== undefined &&
+    draft.clientId.trim() !== startingClientId
+  ) {
+    secretHint =
+      "A different client ID is a different registration, so no secret is copied. Enter the secret for this client ID.";
+  }
   // The guide URL comes from issuer metadata, so it is upstream input: only
   // render the action once it is known to be an ordinary http(s) link.
   const registrationGuideUrl = safeExternalHttpUrl(draft.registrationGuideUrl);
@@ -771,19 +1006,30 @@ function ManualCredentialsFields({
             type="password"
             value={draft.clientSecret}
             onChange={draft.setClientSecret}
-            placeholder="Optional"
+            placeholder={secretPlaceholder}
             disabled={disabled}
             aria-label="Client secret"
             noAutofill
           />
         </div>
       </div>
+      {secretHint ? (
+        <Text muted small className="block">
+          {secretHint}
+        </Text>
+      ) : null}
       <AdvancedOptions>
         <ScopeField
           draft={draft}
           disabled={disabled}
           providerName={providerName}
         />
+        {startingClientId !== undefined ? (
+          <>
+            <StartingAudienceField draft={draft} disabled={disabled} />
+            <StartingAuthMethodField draft={draft} disabled={disabled} />
+          </>
+        ) : null}
       </AdvancedOptions>
       {registrationGuideUrl ? (
         <Button variant="secondary" size="sm" asChild>

@@ -1,3 +1,5 @@
+import { supportsAudienceReading } from "./manageAccessState";
+import { enumPresentation } from "@/lib/enum";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
@@ -52,7 +54,7 @@ const KIND_ICON: Record<string, LucideIcon> = {
 };
 
 export function audienceIcon(kind: string): LucideIcon {
-  return KIND_ICON[kind] ?? User;
+  return enumPresentation(KIND_ICON, kind, User);
 }
 
 /** Rules edited on this page: the ones whose selector names this server. */
@@ -96,15 +98,35 @@ export interface EffectiveReach {
   reachableTools: string[];
 }
 
-/** The capability a block level takes away. */
-const BLOCKED_CAPABILITY: Partial<Record<AudienceLevel, AudienceLevel>> = {
-  blocked: "use",
-  blocked_view: "view",
-  blocked_manage: "manage",
+/**
+ * The capabilities a block level takes away. Blocks follow the implication
+ * graph in reverse: manage includes view, so a block on view takes manage
+ * too. Connect is included by neither, so its block stands alone. Mirrors
+ * scopeExpansions in server/internal/authz/scopes.go.
+ */
+const BLOCKED_CAPABILITIES: Partial<Record<AudienceLevel, AudienceLevel[]>> = {
+  blocked: ["use"],
+  blocked_view: ["view", "manage"],
+  blocked_manage: ["manage"],
 };
 
+function blockedCapabilities(entry: { level: AudienceLevel }): AudienceLevel[] {
+  return BLOCKED_CAPABILITIES[entry.level] ?? [];
+}
+
 function isBlock(entry: { level: AudienceLevel }): boolean {
-  return BLOCKED_CAPABILITY[entry.level] !== undefined;
+  return Object.hasOwn(BLOCKED_CAPABILITIES, entry.level);
+}
+
+/** The block level that takes away exactly these capabilities, if any. */
+function blockLevelFor(capabilities: AudienceLevel[]): AudienceLevel | null {
+  const key = (levels: AudienceLevel[]) =>
+    [...levels].sort((a, b) => a.localeCompare(b)).join(",");
+  const wanted = key(capabilities);
+  for (const [level, taken] of Object.entries(BLOCKED_CAPABILITIES)) {
+    if (taken && key(taken) === wanted) return level as AudienceLevel;
+  }
+  return null;
 }
 
 /** A rule covering the whole server rather than a slice of it. */
@@ -145,10 +167,9 @@ function isNarrowedRule(entry: {
  * faces on a role and four people underneath needs the rule that took the other
  * seven away, by name.
  *
- * Only the blocks that took something away are named. The mcp:blocked_* scopes
- * are independent, so a block on a capability nobody was granted changed
- * nothing, and naming it sends an administrator to a role that is not the
- * reason.
+ * Only the blocks that took something away are named. A block on a capability
+ * nobody was granted changed nothing, and naming it sends an administrator to
+ * a role that is not the reason.
  */
 export function blockingRules(
   reaching: ResourceAudienceEntry[],
@@ -171,7 +192,7 @@ export function blockingRules(
     (entry) =>
       isBlock(entry) &&
       !isNarrowedRule(entry) &&
-      granted.has(BLOCKED_CAPABILITY[entry.level]!),
+      blockedCapabilities(entry).some((capability) => granted.has(capability)),
   );
 }
 
@@ -181,7 +202,9 @@ export function blockingRules(
  * block reaching them through a role or everyone, for the capabilities it
  * grants. View and manage are about the server itself, so a narrowed rule
  * restores them whole; connect reaches tools, so only an unnarrowed rule sets
- * a connect block aside here. Mirrors server/internal/authz/precedence.go.
+ * a connect block aside here. A block taking several capabilities is set
+ * aside only for the ones outranked: a view block against someone granted
+ * view directly still takes manage. Mirrors server/internal/authz/precedence.go.
  */
 function withoutOutrankedBlocks(
   reaching: ResourceAudienceEntry[],
@@ -202,12 +225,14 @@ function withoutOutrankedBlocks(
       ),
     ),
   );
-  return reaching.filter(
-    (entry) =>
-      !isBlock(entry) ||
-      entry.principalUrn === principalUrn ||
-      !outranked.has(BLOCKED_CAPABILITY[entry.level]!),
-  );
+  return reaching.flatMap((entry) => {
+    if (!isBlock(entry) || entry.principalUrn === principalUrn) return [entry];
+    const taken = blockedCapabilities(entry);
+    const remaining = taken.filter((capability) => !outranked.has(capability));
+    if (remaining.length === taken.length) return [entry];
+    const level = blockLevelFor(remaining);
+    return level ? [{ ...entry, level }] : [];
+  });
 }
 
 /**
@@ -223,7 +248,7 @@ function directConnectPastBlock(
   const ownConnectBlock = reaching.some(
     (entry) =>
       entry.principalUrn === principalUrn &&
-      BLOCKED_CAPABILITY[entry.level] === "use" &&
+      blockedCapabilities(entry).includes("use") &&
       !isNarrowedRule(entry),
   );
   if (ownConnectBlock) return [];
@@ -243,19 +268,32 @@ export function effectiveReach(
   /** The person these rules reach, so their own rules here take precedence. */
   principalUrn?: string,
 ): EffectiveReach | null {
+  // An unknown level might grant or deny access; do not infer either.
+  if (!supportsAudienceReading(allReaching)) {
+    return {
+      toolsLabel: "Access unknown",
+      capabilities: [],
+      scopedLevels: [],
+      excluded: [],
+      grantedBy: [],
+      reachableTools: [],
+    };
+  }
   const reaching = withoutOutrankedBlocks(allReaching, principalUrn);
-  const granting = reaching.filter((entry) => !isBlock(entry));
+  const granting = reaching.filter(
+    (entry) => capabilitiesOf(entry.level).length > 0,
+  );
   if (granting.length === 0) return null;
 
   const isNarrowed = isNarrowedRule;
 
-  // Blocks are independent of one another, so each takes away just the
-  // capability it names — and only an unnarrowed one takes it away whole. A
-  // block narrowed to some tools leaves the rest reachable.
+  // Each block takes away the capabilities it covers — and only an
+  // unnarrowed one takes them away whole. A block narrowed to some tools
+  // leaves the rest reachable.
   const blocked = new Set(
     reaching
       .filter((entry) => isBlock(entry) && !isNarrowed(entry))
-      .map((entry) => BLOCKED_CAPABILITY[entry.level]!),
+      .flatMap((entry) => blockedCapabilities(entry)),
   );
   // A block from a role or everyone closing connect still leaves the tools
   // this person's own narrowed rule here names.
@@ -264,13 +302,17 @@ export function effectiveReach(
     : [];
   if (pastBlock.length > 0) blocked.delete("use");
 
-  const unnarrowed = granting.find((entry) => !isNarrowed(entry));
-  const connectBlocks = reaching.filter(
-    (entry) => BLOCKED_CAPABILITY[entry.level] === "use",
+  // Only connect rules reach tools; view and manage do not include connect.
+  const connecting = granting.filter((entry) =>
+    capabilitiesOf(entry.level).includes("use"),
+  );
+  const unnarrowed = connecting.find((entry) => !isNarrowed(entry));
+  const connectBlocks = reaching.filter((entry) =>
+    blockedCapabilities(entry).includes("use"),
   );
   const directConnect = directConnectPastBlock(reaching, principalUrn);
   const reachable = catalog
-    .filter((tool) => granting.some((grant) => coversTool(grant, tool)))
+    .filter((tool) => connecting.some((grant) => coversTool(grant, tool)))
     .filter(
       (tool) =>
         !connectBlocks.some(
@@ -285,23 +327,26 @@ export function effectiveReach(
   const remaining = reachable.length;
 
   const toolsLabel = reachLabel({
-    connectBlocked: blocked.has("use"),
+    connectBlocked: blocked.has("use") || connecting.length === 0,
     remaining: countable ? remaining : null,
     // Past a block, only this person's own narrowed rules reach any tools.
-    labelRules: pastBlock.length > 0 ? pastBlock : granting,
+    labelRules: pastBlock.length > 0 ? pastBlock : connecting,
     wholeServer: Boolean(unnarrowed) && pastBlock.length === 0,
   });
 
   // A capability held over every tool, versus one held over a few: the second
   // is worth naming separately rather than implying it everywhere.
   const wholeServer = granting.filter((entry) => !isNarrowed(entry));
-  const capabilities = [
-    ...new Set(
-      (wholeServer.length > 0 ? wholeServer : granting).flatMap((entry) =>
-        capabilitiesOf(entry.level),
-      ),
-    ),
-  ].filter((capability) => !blocked.has(capability));
+  const surviving = (entries: ResourceAudienceEntry[]) =>
+    [
+      ...new Set(entries.flatMap((entry) => capabilitiesOf(entry.level))),
+    ].filter((capability) => !blocked.has(capability));
+  // When a block takes everything the whole-server rules give, a narrowed
+  // rule can still leave something (connect to a few tools, say).
+  let capabilities = surviving(wholeServer.length > 0 ? wholeServer : granting);
+  if (capabilities.length === 0 && wholeServer.length > 0) {
+    capabilities = surviving(granting);
+  }
   // Everything this server offered them has been taken away, so they do not
   // reach it at all.
   if (capabilities.length === 0) return null;
@@ -325,7 +370,10 @@ export function effectiveReach(
 
   return {
     toolsLabel,
-    reachableTools: countable && !blocked.has("use") ? reachable : [],
+    reachableTools:
+      countable && !blocked.has("use") && connecting.length > 0
+        ? reachable
+        : [],
     capabilities,
     scopedLevels,
     // Only the blocks that trim tools. One that removes a capability whole
@@ -358,7 +406,7 @@ function reachLabel({
   labelRules,
   wholeServer,
 }: {
-  /** Connect is taken away whole. */
+  /** Connect is taken away whole, or nothing grants it. */
   connectBlocked: boolean;
   /** Tools left once blocks are resolved against the catalogue, if counted. */
   remaining: number | null;
@@ -386,10 +434,12 @@ function reachLabel({
 /** Weakest first, so a row reads "connect, view" rather than "view, connect". */
 function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
   switch (level) {
+    // Manage includes View; neither includes Connect, which is granted on
+    // its own (scopeExpansions in authz/scopes.go).
     case "manage":
-      return ["use", "view", "manage"];
+      return ["view", "manage"];
     case "view":
-      return ["use", "view"];
+      return ["view"];
     case "use":
       return ["use"];
     case "blocked":
@@ -398,6 +448,7 @@ function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
       // A block permits nothing; it only subtracts.
       return [];
   }
+  return [];
 }
 
 function capitalize(value: string): string {
@@ -409,10 +460,14 @@ export function narrowingLabel(entry: {
   tools?: string[];
   dispositions?: string[];
 }): string {
-  const dispositions = (entry.dispositions ?? []).map(
-    (disposition) => DISPOSITION_LABEL[disposition] ?? disposition,
-  );
-  const tools = entry.tools ?? [];
+  const dispositions = [
+    ...new Set(
+      (entry.dispositions ?? []).map((disposition) =>
+        enumPresentation(DISPOSITION_LABEL, disposition, "unknown annotation"),
+      ),
+    ),
+  ];
+  const tools = [...new Set(entry.tools ?? [])];
 
   // A rule stores one or the other, but a summary can hold both — from two
   // rules — and naming only the annotations would hide the tools.

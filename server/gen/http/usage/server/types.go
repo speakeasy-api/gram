@@ -193,9 +193,36 @@ type GetUsageTiersResponseBody struct {
 	Enterprise *TierLimitsResponseBody `form:"enterprise" json:"enterprise" xml:"enterprise"`
 }
 
+// GetStripeCheckoutStatusResponseBody is the type of the "usage" service
+// "getStripeCheckoutStatus" endpoint HTTP response body.
+type GetStripeCheckoutStatusResponseBody struct {
+	Status        string `form:"status" json:"status" xml:"status"`
+	PaymentStatus string `form:"payment_status" json:"payment_status" xml:"payment_status"`
+	// Whether this completed session and its own subscription are ready for
+	// billing activation; local webhook persistence is still required
+	BillingReady bool `form:"billing_ready" json:"billing_ready" xml:"billing_ready"`
+}
+
+// CreateStripeCheckoutResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body.
+type CreateStripeCheckoutResponseBody struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey string `form:"publishable_key" json:"publishable_key" xml:"publishable_key"`
+}
+
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status string `form:"status" json:"status" xml:"status"`
 	// Start of the current Stripe service period
@@ -242,6 +269,14 @@ type GetPaygBillingSummaryResponseBody struct {
 // CancelStripeSubscriptionResponseBody is the type of the "usage" service
 // "cancelStripeSubscription" endpoint HTTP response body.
 type CancelStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status string `form:"status" json:"status" xml:"status"`
 	// Start of the current Stripe service period
@@ -266,6 +301,14 @@ type CancelStripeSubscriptionResponseBody struct {
 // ResumeStripeSubscriptionResponseBody is the type of the "usage" service
 // "resumeStripeSubscription" endpoint HTTP response body.
 type ResumeStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status string `form:"status" json:"status" xml:"status"`
 	// Start of the current Stripe service period
@@ -2493,6 +2536,196 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetStripeCheckoutStatusUnauthorizedResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetStripeCheckoutStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusForbiddenResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "forbidden" error.
+type GetStripeCheckoutStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusBadRequestResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "bad_request" error.
+type GetStripeCheckoutStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusNotFoundResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "not_found" error.
+type GetStripeCheckoutStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusConflictResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "conflict" error.
+type GetStripeCheckoutStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusUnsupportedMediaResponseBody is the type of the
+// "usage" service "getStripeCheckoutStatus" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetStripeCheckoutStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusInvalidResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "invalid" error.
+type GetStripeCheckoutStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusInvariantViolationResponseBody is the type of the
+// "usage" service "getStripeCheckoutStatus" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetStripeCheckoutStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusUnexpectedResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "unexpected" error.
+type GetStripeCheckoutStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCheckoutStatusGatewayErrorResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetStripeCheckoutStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateStripeCheckoutUnauthorizedResponseBody is the type of the "usage"
 // service "createStripeCheckout" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4156,19 +4389,43 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 	return body
 }
 
+// NewGetStripeCheckoutStatusResponseBody builds the HTTP response body from
+// the result of the "getStripeCheckoutStatus" endpoint of the "usage" service.
+func NewGetStripeCheckoutStatusResponseBody(res *usage.GetStripeCheckoutStatusResult) *GetStripeCheckoutStatusResponseBody {
+	body := &GetStripeCheckoutStatusResponseBody{
+		Status:        res.Status,
+		PaymentStatus: res.PaymentStatus,
+		BillingReady:  res.BillingReady,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutResponseBody builds the HTTP response body from the
+// result of the "createStripeCheckout" endpoint of the "usage" service.
+func NewCreateStripeCheckoutResponseBody(res *usage.StripeEmbeddedCheckout) *CreateStripeCheckoutResponseBody {
+	body := &CreateStripeCheckoutResponseBody{
+		ClientSecret:   res.ClientSecret,
+		PublishableKey: res.PublishableKey,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionResponseBody builds the HTTP response body from the
 // result of the "getStripeSubscription" endpoint of the "usage" service.
 func NewGetStripeSubscriptionResponseBody(res *usage.StripeSubscription) *GetStripeSubscriptionResponseBody {
 	body := &GetStripeSubscriptionResponseBody{
-		Status:             res.Status,
-		CurrentPeriodStart: res.CurrentPeriodStart,
-		CurrentPeriodEnd:   res.CurrentPeriodEnd,
-		TrialStart:         res.TrialStart,
-		TrialEnd:           res.TrialEnd,
-		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
-		CancelAt:           res.CancelAt,
-		CanceledAt:         res.CanceledAt,
-		PaymentFailed:      res.PaymentFailed,
+		DiscountDescription:     res.DiscountDescription,
+		DiscountEndsAt:          res.DiscountEndsAt,
+		GatewayPromotionApplied: res.GatewayPromotionApplied,
+		Status:                  res.Status,
+		CurrentPeriodStart:      res.CurrentPeriodStart,
+		CurrentPeriodEnd:        res.CurrentPeriodEnd,
+		TrialStart:              res.TrialStart,
+		TrialEnd:                res.TrialEnd,
+		CancelAtPeriodEnd:       res.CancelAtPeriodEnd,
+		CancelAt:                res.CancelAt,
+		CanceledAt:              res.CanceledAt,
+		PaymentFailed:           res.PaymentFailed,
 	}
 	return body
 }
@@ -4193,15 +4450,18 @@ func NewGetPaygBillingSummaryResponseBody(res *usage.PaygBillingSummary) *GetPay
 // the result of the "cancelStripeSubscription" endpoint of the "usage" service.
 func NewCancelStripeSubscriptionResponseBody(res *usage.StripeSubscription) *CancelStripeSubscriptionResponseBody {
 	body := &CancelStripeSubscriptionResponseBody{
-		Status:             res.Status,
-		CurrentPeriodStart: res.CurrentPeriodStart,
-		CurrentPeriodEnd:   res.CurrentPeriodEnd,
-		TrialStart:         res.TrialStart,
-		TrialEnd:           res.TrialEnd,
-		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
-		CancelAt:           res.CancelAt,
-		CanceledAt:         res.CanceledAt,
-		PaymentFailed:      res.PaymentFailed,
+		DiscountDescription:     res.DiscountDescription,
+		DiscountEndsAt:          res.DiscountEndsAt,
+		GatewayPromotionApplied: res.GatewayPromotionApplied,
+		Status:                  res.Status,
+		CurrentPeriodStart:      res.CurrentPeriodStart,
+		CurrentPeriodEnd:        res.CurrentPeriodEnd,
+		TrialStart:              res.TrialStart,
+		TrialEnd:                res.TrialEnd,
+		CancelAtPeriodEnd:       res.CancelAtPeriodEnd,
+		CancelAt:                res.CancelAt,
+		CanceledAt:              res.CanceledAt,
+		PaymentFailed:           res.PaymentFailed,
 	}
 	return body
 }
@@ -4210,15 +4470,18 @@ func NewCancelStripeSubscriptionResponseBody(res *usage.StripeSubscription) *Can
 // the result of the "resumeStripeSubscription" endpoint of the "usage" service.
 func NewResumeStripeSubscriptionResponseBody(res *usage.StripeSubscription) *ResumeStripeSubscriptionResponseBody {
 	body := &ResumeStripeSubscriptionResponseBody{
-		Status:             res.Status,
-		CurrentPeriodStart: res.CurrentPeriodStart,
-		CurrentPeriodEnd:   res.CurrentPeriodEnd,
-		TrialStart:         res.TrialStart,
-		TrialEnd:           res.TrialEnd,
-		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
-		CancelAt:           res.CancelAt,
-		CanceledAt:         res.CanceledAt,
-		PaymentFailed:      res.PaymentFailed,
+		DiscountDescription:     res.DiscountDescription,
+		DiscountEndsAt:          res.DiscountEndsAt,
+		GatewayPromotionApplied: res.GatewayPromotionApplied,
+		Status:                  res.Status,
+		CurrentPeriodStart:      res.CurrentPeriodStart,
+		CurrentPeriodEnd:        res.CurrentPeriodEnd,
+		TrialStart:              res.TrialStart,
+		TrialEnd:                res.TrialEnd,
+		CancelAtPeriodEnd:       res.CancelAtPeriodEnd,
+		CancelAt:                res.CancelAt,
+		CanceledAt:              res.CanceledAt,
+		PaymentFailed:           res.PaymentFailed,
 	}
 	return body
 }
@@ -5939,6 +6202,156 @@ func NewCreateCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateChe
 	return body
 }
 
+// NewGetStripeCheckoutStatusUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getStripeCheckoutStatus" endpoint of the
+// "usage" service.
+func NewGetStripeCheckoutStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusUnauthorizedResponseBody {
+	body := &GetStripeCheckoutStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusForbiddenResponseBody builds the HTTP response
+// body from the result of the "getStripeCheckoutStatus" endpoint of the
+// "usage" service.
+func NewGetStripeCheckoutStatusForbiddenResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusForbiddenResponseBody {
+	body := &GetStripeCheckoutStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusBadRequestResponseBody builds the HTTP response
+// body from the result of the "getStripeCheckoutStatus" endpoint of the
+// "usage" service.
+func NewGetStripeCheckoutStatusBadRequestResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusBadRequestResponseBody {
+	body := &GetStripeCheckoutStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusNotFoundResponseBody builds the HTTP response body
+// from the result of the "getStripeCheckoutStatus" endpoint of the "usage"
+// service.
+func NewGetStripeCheckoutStatusNotFoundResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusNotFoundResponseBody {
+	body := &GetStripeCheckoutStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusConflictResponseBody builds the HTTP response body
+// from the result of the "getStripeCheckoutStatus" endpoint of the "usage"
+// service.
+func NewGetStripeCheckoutStatusConflictResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusConflictResponseBody {
+	body := &GetStripeCheckoutStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getStripeCheckoutStatus" endpoint of
+// the "usage" service.
+func NewGetStripeCheckoutStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusUnsupportedMediaResponseBody {
+	body := &GetStripeCheckoutStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusInvalidResponseBody builds the HTTP response body
+// from the result of the "getStripeCheckoutStatus" endpoint of the "usage"
+// service.
+func NewGetStripeCheckoutStatusInvalidResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusInvalidResponseBody {
+	body := &GetStripeCheckoutStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getStripeCheckoutStatus" endpoint of
+// the "usage" service.
+func NewGetStripeCheckoutStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusInvariantViolationResponseBody {
+	body := &GetStripeCheckoutStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getStripeCheckoutStatus" endpoint of the
+// "usage" service.
+func NewGetStripeCheckoutStatusUnexpectedResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusUnexpectedResponseBody {
+	body := &GetStripeCheckoutStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCheckoutStatusGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getStripeCheckoutStatus" endpoint of the
+// "usage" service.
+func NewGetStripeCheckoutStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetStripeCheckoutStatusGatewayErrorResponseBody {
+	body := &GetStripeCheckoutStatusGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateStripeCheckoutUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "createStripeCheckout" endpoint of the "usage"
 // service.
@@ -7095,10 +7508,21 @@ func NewCreateCheckoutPayload(sessionToken *string) *usage.CreateCheckoutPayload
 	return v
 }
 
+// NewGetStripeCheckoutStatusPayload builds a usage service
+// getStripeCheckoutStatus endpoint payload.
+func NewGetStripeCheckoutStatusPayload(sessionID string, sessionToken *string) *usage.GetStripeCheckoutStatusPayload {
+	v := &usage.GetStripeCheckoutStatusPayload{}
+	v.SessionID = sessionID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreateStripeCheckoutPayload builds a usage service createStripeCheckout
 // endpoint payload.
-func NewCreateStripeCheckoutPayload(sessionToken *string) *usage.CreateStripeCheckoutPayload {
+func NewCreateStripeCheckoutPayload(theme string, sessionToken *string) *usage.CreateStripeCheckoutPayload {
 	v := &usage.CreateStripeCheckoutPayload{}
+	v.Theme = theme
 	v.SessionToken = sessionToken
 
 	return v

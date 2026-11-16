@@ -41,7 +41,7 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	_, err = platformrepo.New(conn).UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{ID: registration.ID, OrganizationID: principal.OrganizationID, ProjectID: project.ID, Status: "registered", RemoteMcpServerID: uuid.NullUUID{UUID: target.RemoteMcpServerID.UUID, Valid: true}, McpServerID: uuid.NullUUID{UUID: target.McpServerID, Valid: true}})
 	require.NoError(t, err)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Repair", "repair")
-	_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: plugin.ID, ToolsetID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{UUID: target.McpServerID, Valid: true}, DisplayName: "Repair target", Policy: "required", SortOrder: 0})
+	_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: plugin.ID, McpServerID: uuid.NullUUID{UUID: target.McpServerID, Valid: true}, DisplayName: "Repair target", Policy: "required", SortOrder: 0})
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: "role:developers"})
 	require.NoError(t, err)

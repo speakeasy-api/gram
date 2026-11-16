@@ -107,7 +107,7 @@ export function AnthropicInferenceHooksStep({
               <p className="text-muted-foreground text-sm leading-relaxed">
                 Claude doesn&apos;t call your endpoint until this is on.
               </p>
-              <Alert variant="info" alignTop>
+              <Alert variant="info">
                 <AlertTitle>Begin in Shadow mode</AlertTitle>
                 <AlertDescription>
                   Set Failure handling → <strong>Mode</strong> to{" "}

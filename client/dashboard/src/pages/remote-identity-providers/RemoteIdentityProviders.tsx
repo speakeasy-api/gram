@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { RemoteSessionRefreshPolicySetting } from "@/pages/org/RemoteSessionRefreshPolicySetting";
 import { useIssuerHref } from "./useIssuerHref";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
@@ -75,6 +78,11 @@ function RemoteIdentityProvidersOverview() {
   const [addClientTarget, setAddClientTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // Behind gram-user-session-issuer-dashboard, the refresh policy for these
+  // servers' connections lives here instead of on MCP Sessions.
+  const showRefreshPolicy =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+    "enabled";
 
   // Three tenancy tiers, each listed on its own. Platform issuers are
   // inherited from the shared catalog and are read-only to the tenant, so they
@@ -98,11 +106,13 @@ function RemoteIdentityProvidersOverview() {
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Provider is now organizational");
+      toast.success("Authorization server is now organizational");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to move provider",
+        error instanceof Error
+          ? error.message
+          : "Failed to move authorization server",
       );
     },
   });
@@ -157,25 +167,32 @@ function RemoteIdentityProvidersOverview() {
   return (
     <>
       <ResourceListPage
-        title="Organizational Remote Identity Providers"
-        description="Identity providers shared across every project in the organization. Prefer creating clients on platform maintained providers when available unless client setup documentation needs customization for your organization workflows."
+        title="Organizational Authorization Servers"
+        description="Authorization servers shared across every project in the organization. Prefer creating clients on platform-maintained servers when available unless client setup documentation needs customization for your organization workflows."
         primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Button.LeftIcon>
                 <Plus />
               </Button.LeftIcon>
-              <Button.Text>New Remote Identity Provider</Button.Text>
+              <Button.Text>New Authorization Server</Button.Text>
             </Button>
           </RequireScope>
         }
       >
+        {showRefreshPolicy ? (
+          // Pulled up under the description, as on MCP Sessions, so the
+          // surface does not read as a dropped card.
+          <div className="-mt-6 mb-8">
+            <RemoteSessionRefreshPolicySetting />
+          </div>
+        ) : null}
         <IssuerTable
           items={organizational}
           isLoading={organizationalTier.isLoading}
           isError={organizationalTier.isError}
           showProject={false}
-          emptyMessage="No organizational identity providers yet."
+          emptyMessage="No organizational authorization servers yet."
           onDelete={setDeleteTarget}
           onMakeOrganizational={handleMakeOrganizational}
           onMoveToProject={setMoveTarget}
@@ -189,11 +206,11 @@ function RemoteIdentityProvidersOverview() {
         <Stack gap={6} className="mt-3 mb-6">
           <div>
             <Heading variant="h4" className="mb-2">
-              Project-Specific Remote Identity Providers
+              Project-Specific Authorization Servers
             </Heading>
             <Text muted small className="max-w-2xl">
-              Identity providers within a single project in the organization.
-              Prefer creating clients on platform maintained providers when
+              Authorization servers within a single project in the organization.
+              Prefer creating clients on platform-maintained servers when
               available unless client setup documentation needs customization
               for your organization workflows.
             </Text>
@@ -203,7 +220,7 @@ function RemoteIdentityProvidersOverview() {
             isLoading={projectTier.isLoading}
             isError={projectTier.isError}
             showProject
-            emptyMessage="No project-specific identity providers yet."
+            emptyMessage="No project-specific authorization servers yet."
             onDelete={setDeleteTarget}
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
@@ -223,14 +240,14 @@ function RemoteIdentityProvidersOverview() {
             >
               <div className="min-w-0">
                 <Heading variant="h4" className="mb-2">
-                  Platform Remote Identity Providers
+                  Platform Authorization Servers
                 </Heading>
                 <Text muted small className="max-w-2xl">
-                  Common identity providers maintained by the platform
+                  Common authorization servers maintained by the platform
                   administrators for configuring your own clients. Prefer using
-                  these over creating duplicate providers unless the client
-                  setup documentation needs to be customized when creating MCP
-                  Servers.
+                  these over creating duplicate authorization servers unless the
+                  client setup documentation needs to be customized when
+                  creating MCP Servers.
                 </Text>
               </div>
             </Stack>
@@ -244,7 +261,7 @@ function RemoteIdentityProvidersOverview() {
               showProject={false}
               readOnly
               onAddClient={setAddClientTarget}
-              emptyMessage="No platform identity providers available."
+              emptyMessage="No platform authorization servers available."
               onDelete={setDeleteTarget}
               onMakeOrganizational={handleMakeOrganizational}
               onMoveToProject={setMoveTarget}
@@ -348,12 +365,16 @@ function IssuerTable({
   const actionsHeader = showActions ? [{ label: "" }] : [];
   const headers = showProject
     ? [
-        { label: "Provider" },
+        { label: "Authorization server" },
         { label: "Project" },
         { label: "Clients" },
         ...actionsHeader,
       ]
-    : [{ label: "Provider" }, { label: "Clients" }, ...actionsHeader];
+    : [
+        { label: "Authorization server" },
+        { label: "Clients" },
+        ...actionsHeader,
+      ];
 
   if (!isLoading && items.length === 0) {
     return (
@@ -364,7 +385,7 @@ function IssuerTable({
       >
         {isError ? (
           <Text variant="body" className="text-destructive">
-            Failed to load identity providers. Refresh the page to try again.
+            Failed to load authorization servers. Refresh the page to try again.
           </Text>
         ) : (
           <Text variant="body" muted>
@@ -389,7 +410,7 @@ function IssuerTable({
               />
             }
             href={issuerHref(item.issuer)}
-            ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
+            ariaLabel={`View authorization server ${issuerDisplayName(item.issuer)}`}
           >
             <td className="px-3 py-3">
               <Text
@@ -441,7 +462,7 @@ function IssuerTable({
       </DotTable>
       {isError ? (
         <Text small className="text-destructive py-2">
-          Couldn&apos;t load every identity provider. Refresh the page to try
+          Couldn&apos;t load every authorization server. Refresh the page to try
           again.
         </Text>
       ) : null}
@@ -565,7 +586,7 @@ function RowActions({
               </>
             )}
             <DropdownMenuItem onClick={onConsolidate}>
-              Consolidate into another provider
+              Consolidate into another authorization server
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onDelete}>Delete</DropdownMenuItem>
@@ -609,11 +630,11 @@ function MoveToProjectDialog({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Provider moved");
+      toast.success("Authorization server moved");
       onClose();
     },
     onError: (error) => {
-      console.error("Move remote identity provider failed", error);
+      console.error("Move authorization server failed", error);
     },
   });
 
@@ -648,9 +669,9 @@ function MoveToProjectDialog({
     >
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Move identity provider</Dialog.Title>
+          <Dialog.Title>Move authorization server</Dialog.Title>
           <Dialog.Description>
-            Choose a project to scope this provider to, or make it
+            Choose a project to scope this authorization server to, or make it
             organizational (inherited by every project).
           </Dialog.Description>
         </Dialog.Header>
@@ -719,7 +740,7 @@ export function DeleteIssuerDialog({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Remote identity provider deleted");
+      toast.success("Authorization server deleted");
       onDeleted?.();
       onClose();
     },
@@ -727,7 +748,7 @@ export function DeleteIssuerDialog({
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to delete identity provider",
+          : "Failed to delete authorization server",
       );
     },
   });
@@ -741,11 +762,11 @@ export function DeleteIssuerDialog({
         if (!open) onClose();
       }}
       title={`Delete "${issuerLabel}"?`}
-      description="This permanently removes the remote identity provider. Clients must be deleted first."
-      confirmLabel="Delete provider"
+      description="This permanently removes the authorization server. Clients must be deleted first."
+      confirmLabel="Delete authorization server"
       isPending={deleteMutation.isPending}
       impact={{
-        summary: `${clientCount} ${clientCount === 1 ? "client is" : "clients are"} registered with this provider.`,
+        summary: `${clientCount} ${clientCount === 1 ? "client is" : "clients are"} registered with this authorization server.`,
         mcpServerNames: preflight?.mcpServerNames,
         isLoading: preflightLoading,
       }}

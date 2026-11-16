@@ -7,6 +7,7 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 import {
   type DecideAccessTarget,
   DecideAccessSheet,
+  POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
   ShadowMCPInventoryReviewCell,
@@ -104,6 +106,7 @@ export function ShadowMCPInventoryTable({
   enabled = true,
   members,
   onOpenServer,
+  policiesUnavailable = false,
   projectID,
   roles,
   shadowMCPPolicies,
@@ -112,6 +115,8 @@ export function ShadowMCPInventoryTable({
   enabled?: boolean;
   members: AccessMember[];
   onOpenServer?: (server: ShadowMCPInventoryServer) => void;
+  /** The policy list failed to load: the inventory still shows, deciding waits. */
+  policiesUnavailable?: boolean;
   projectID: string;
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
@@ -132,7 +137,15 @@ export function ShadowMCPInventoryTable({
     : { projectId: projectID, limit: INVENTORY_PAGE_LIMIT };
   const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
     enabled: enabled && projectID.length > 0,
+    // The dashboard default throws every non-auth failure to the error
+    // boundary; the table has its own failure state and a retry.
+    throwOnError: false,
   });
+  // The row action and the stdio review's button wait while the policy list
+  // is unavailable, the way the server page's button does.
+  const decideDisabledReason = policiesUnavailable
+    ? POLICIES_UNAVAILABLE_REASON
+    : undefined;
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "review",
@@ -359,13 +372,22 @@ export function ShadowMCPInventoryTable({
 
   if (isInitialError) {
     return (
-      <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-        <Text variant="body" className="font-medium">
-          Shadow MCP inventory could not be loaded
-        </Text>
-        <Text muted small className="max-w-md">
-          Refresh the page or try again later.
-        </Text>
+      <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+        <div className="space-y-1">
+          <Text variant="body" className="font-medium">
+            Shadow MCP inventory could not be loaded
+          </Text>
+          <Text muted small className="max-w-md">
+            It may be a temporary problem. Try again.
+          </Text>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void inventoryQuery.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
       </div>
     );
   }
@@ -406,6 +428,7 @@ export function ShadowMCPInventoryTable({
             approvalRequestId: request.id,
           });
         }}
+        decideDisabledReason={decideDisabledReason}
       />
       <DecideAccessSheet
         target={decideTarget}
@@ -464,6 +487,8 @@ export function ShadowMCPInventoryTable({
                 {
                   label: "Decide access",
                   onClick: () => openDecide(row),
+                  disabled: policiesUnavailable,
+                  description: decideDisabledReason,
                 },
               ]}
             >

@@ -5,7 +5,7 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/Field";
-import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -19,6 +19,7 @@ import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
+import { SharedAuthorizationServerField } from "./SharedAuthorizationServerField";
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
 import { useSelectableUserSessionIssuers } from "./useSelectableUserSessionIssuers";
 import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
@@ -27,6 +28,7 @@ import {
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
+import { SetupStepBanner } from "./SetupStepBanner";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
@@ -51,12 +53,15 @@ function authenticationSectionDescription(
  */
 export function AuthenticationSection({
   mcpServer,
+  mcpUrl,
 }: {
   mcpServer: McpServer;
+  /** The URL clients connect to; undefined while it is unknown. */
+  mcpUrl?: string;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   const isRemoteMcp = !!mcpServer.remoteMcpServerId;
-  const target = useMcpServerAuthTarget(mcpServer);
+  const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
 
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
@@ -72,6 +77,7 @@ export function AuthenticationSection({
           )}
         </SettingsSection.Description>
       </SettingsSection.Header>
+      {isUnproxied ? null : <SetupStepBanner mcpServer={mcpServer} />}
       {isUnproxied ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
@@ -218,6 +224,10 @@ function StandardAuthenticationSectionBody({
     authenticationFields = (
       <>
         <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
+        <SharedAuthorizationServerField
+          userSessionIssuer={userSessionIssuer}
+          mcpUrl={target.mcpUrl}
+        />
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
           allowAdditionalProviders={!!target.multipleProviders}
@@ -263,6 +273,7 @@ function StandardAuthenticationSectionBody({
           onOpenChange={setDeleteOpen}
           userSessionIssuerId={userSessionIssuerId}
           issuer={deleteTarget}
+          mcpServerId={target.mcpServerId}
         />
       )}
 
@@ -309,9 +320,7 @@ function IdentityProviderSetupField({
 function AuthenticationLoadingField() {
   return (
     <AuthRow label="Authentication">
-      <Text muted small>
-        Loading…
-      </Text>
+      <Skeleton label="Loading authentication" className="h-5 w-48" />
     </AuthRow>
   );
 }

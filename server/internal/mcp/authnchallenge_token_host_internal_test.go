@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -54,7 +55,7 @@ func TestCheckPerEndpointTokenHost(t *testing.T) {
 	require.NoError(t, err)
 	signer := sessiontokens.NewSigner("token-host-test-secret")
 	audience := urn.NewUserSessionIssuer(uuid.New()).String()
-	endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "endpoint-a"}
+	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.MCP, Slug: "endpoint-a"}
 
 	contexts := map[string]context.Context{
 		"canonical": tokenHostContext(requestorigin.SurfacePlatform, tokenHostServerURL),

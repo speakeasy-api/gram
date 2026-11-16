@@ -2794,6 +2794,240 @@ func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetStripeCheckoutStatusRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getStripeCheckoutStatus"
+// endpoint
+func (c *Client) BuildGetStripeCheckoutStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetStripeCheckoutStatusUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getStripeCheckoutStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetStripeCheckoutStatusRequest returns an encoder for requests sent to
+// the usage getStripeCheckoutStatus server.
+func EncodeGetStripeCheckoutStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetStripeCheckoutStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getStripeCheckoutStatus", "*usage.GetStripeCheckoutStatusPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("session_id", p.SessionID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetStripeCheckoutStatusResponse returns a decoder for responses
+// returned by the usage getStripeCheckoutStatus endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetStripeCheckoutStatusResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetStripeCheckoutStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetStripeCheckoutStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			res := NewGetStripeCheckoutStatusResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetStripeCheckoutStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetStripeCheckoutStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetStripeCheckoutStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetStripeCheckoutStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetStripeCheckoutStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetStripeCheckoutStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetStripeCheckoutStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetStripeCheckoutStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+				}
+				err = ValidateGetStripeCheckoutStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+				}
+				return nil, NewGetStripeCheckoutStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetStripeCheckoutStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+				}
+				err = ValidateGetStripeCheckoutStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+				}
+				return nil, NewGetStripeCheckoutStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getStripeCheckoutStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetStripeCheckoutStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
+			}
+			err = ValidateGetStripeCheckoutStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			return nil, NewGetStripeCheckoutStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getStripeCheckoutStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateStripeCheckoutRequest instantiates a HTTP request object with
 // method and path set to call the "usage" service "createStripeCheckout"
 // endpoint
@@ -2822,6 +3056,9 @@ func EncodeCreateStripeCheckoutRequest(encoder func(*http.Request) goahttp.Encod
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("theme", p.Theme)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -2858,14 +3095,19 @@ func DecodeCreateStripeCheckoutResponse(decoder func(*http.Response) goahttp.Dec
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body string
+				body CreateStripeCheckoutResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("usage", "createStripeCheckout", err)
 			}
-			return body, nil
+			err = ValidateCreateStripeCheckoutResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripeCheckout", err)
+			}
+			res := NewCreateStripeCheckoutStripeEmbeddedCheckoutOK(&body)
+			return res, nil
 		case http.StatusUnauthorized:
 			var (
 				body CreateStripeCheckoutUnauthorizedResponseBody

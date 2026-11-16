@@ -7,8 +7,16 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  PluginPublishStatus,
+  PluginPublishStatus$inboundSchema,
+} from "./pluginpublishstatus.js";
 
 export type PublishStatusResult = {
+  /**
+   * Whether an automatic publish would change the published marketplace. False while the only pending changes belong to plugins whose auto sync is off, which publish only on a manual sync. Absent when up_to_date is absent.
+   */
+  automaticSyncPending?: boolean | undefined;
   /**
    * Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
    */
@@ -46,6 +54,10 @@ export type PublishStatusResult = {
    */
   marketplaceUrl?: string | undefined;
   /**
+   * Each live plugin's own freshness. Absent when up_to_date is absent.
+   */
+  plugins?: Array<PluginPublishStatus> | undefined;
+  /**
    * GitHub repo name, if connected.
    */
   repoName?: string | undefined;
@@ -58,7 +70,7 @@ export type PublishStatusResult = {
    */
   repoUrl?: string | undefined;
   /**
-   * Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+   * Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
    */
   upToDate?: boolean | undefined;
 };
@@ -69,6 +81,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    automatic_sync_pending: z.optional(z.boolean()),
     claude_observability_plugin: z.optional(z.string()),
     codex_observability_plugin: z.optional(z.string()),
     configured: z.boolean(),
@@ -80,6 +93,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     ),
     live_version: z.optional(z.string()),
     marketplace_url: z.optional(z.string()),
+    plugins: z.optional(z.array(PluginPublishStatus$inboundSchema)),
     repo_name: z.optional(z.string()),
     repo_owner: z.optional(z.string()),
     repo_url: z.optional(z.string()),
@@ -87,6 +101,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "automatic_sync_pending": "automaticSyncPending",
       "claude_observability_plugin": "claudeObservabilityPlugin",
       "codex_observability_plugin": "codexObservabilityPlugin",
       "cursor_observability_plugin": "cursorObservabilityPlugin",

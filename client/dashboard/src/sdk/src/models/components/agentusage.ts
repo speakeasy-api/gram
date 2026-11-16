@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -21,7 +22,7 @@ export const AgentUsageType = {
 /**
  * The agent usage payload discriminator.
  */
-export type AgentUsageType = ClosedEnum<typeof AgentUsageType>;
+export type AgentUsageType = OpenEnum<typeof AgentUsageType>;
 
 export type AgentUsage = {
   claude?: ClaudeAgentUsage | undefined;
@@ -32,9 +33,10 @@ export type AgentUsage = {
 };
 
 /** @internal */
-export const AgentUsageType$inboundSchema: z.ZodMiniEnum<
-  typeof AgentUsageType
-> = z.enum(AgentUsageType);
+export const AgentUsageType$inboundSchema: z.ZodMiniType<
+  AgentUsageType,
+  unknown
+> = openEnums.inboundSchema(AgentUsageType);
 
 /** @internal */
 export const AgentUsage$inboundSchema: z.ZodMiniType<AgentUsage, unknown> = z

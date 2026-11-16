@@ -12,7 +12,13 @@ import {
 // integrations and device integrations schedule endpoints produce this shape.
 export type ScheduleBadgeRuntime = {
   enabled: boolean;
-  status: "pending" | "success" | "failed" | "auto_paused" | "disabled";
+  status:
+    | "pending"
+    | "success"
+    | "failed"
+    | "auto_paused"
+    | "disabled"
+    | "unknown";
   lastSyncedAt: Date | null;
   error: string | null;
   isMutating: boolean;
@@ -93,6 +99,13 @@ function getScheduleStatus({
       detail: "This schedule is paused. Turn it on to resume polling.",
     };
   }
+  if (runtime.status === "unknown")
+    return {
+      label: "Unknown",
+      variant: "neutral",
+      icon: "pending",
+      detail: "Refresh the page for updated schedule details.",
+    };
   if (runtime.status === "auto_paused") {
     return {
       label: "Auto-paused",

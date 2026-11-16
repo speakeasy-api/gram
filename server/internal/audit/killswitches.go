@@ -72,6 +72,7 @@ func (l *Logger) LogKillswitchLifecycle(ctx context.Context, dbtx repo.DBTX, eve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -124,6 +125,7 @@ func (l *Logger) LogKillswitchExpire(ctx context.Context, dbtx repo.DBTX, event 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

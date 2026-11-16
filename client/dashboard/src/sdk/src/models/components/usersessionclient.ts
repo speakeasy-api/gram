@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const CredentialKind = {
 /**
  * What the client must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. 'misconfigured' means the registration contradicts itself and the client cannot authenticate at all.
  */
-export type CredentialKind = ClosedEnum<typeof CredentialKind>;
+export type CredentialKind = OpenEnum<typeof CredentialKind>;
 
 /**
  * An MCP client registered against a user-session issuer. client_secret_hash is never returned.
@@ -85,9 +86,10 @@ export type UserSessionClient = {
 };
 
 /** @internal */
-export const CredentialKind$inboundSchema: z.ZodMiniEnum<
-  typeof CredentialKind
-> = z.enum(CredentialKind);
+export const CredentialKind$inboundSchema: z.ZodMiniType<
+  CredentialKind,
+  unknown
+> = openEnums.inboundSchema(CredentialKind);
 
 /** @internal */
 export const UserSessionClient$inboundSchema: z.ZodMiniType<

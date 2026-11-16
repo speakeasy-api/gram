@@ -45,6 +45,7 @@ type LogOtelDestinationCreateEvent struct {
 func (l *Logger) LogOtelDestinationCreate(ctx context.Context, dbtx repo.DBTX, event LogOtelDestinationCreateEvent) error {
 	action := ActionOtelDestinationCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -94,6 +95,7 @@ func (l *Logger) LogOtelDestinationUpdate(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -132,6 +134,7 @@ type LogOtelDestinationDeleteEvent struct {
 func (l *Logger) LogOtelDestinationDelete(ctx context.Context, dbtx repo.DBTX, event LogOtelDestinationDeleteEvent) error {
 	action := ActionOtelDestinationDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

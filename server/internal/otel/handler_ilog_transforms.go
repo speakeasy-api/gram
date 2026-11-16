@@ -110,13 +110,15 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 // pipeline writes there, and it leaves a key off
 // when a record carries no value for it, so a producer that sends one would
 // otherwise classify its own record, claim another tenant, pose as another
-// producer's scope, or give a person a group or department. The enrichers
-// read the inbound record, so what they see is unchanged; the outbound
-// record is what every consumer and relay receives.
+// producer's scope, or give a person a group or department. The connection
+// recorder keeps speakeasy.mcp_connection; see enrich.IsReservedLogKey. The
+// enrichers read the inbound record, so what they see is unchanged; the
+// outbound record is what every consumer and relay receives.
 func dropReservedLogAttributes(record *otelv1.LogRecord) {
+	source := record.GetProvenance().GetSource()
 	attributes := record.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
-		return enrich.IsPipelineKey(kv.GetKey())
+		return enrich.IsReservedLogKey(source, kv.GetKey())
 	})
 	if len(kept) != len(attributes) {
 		record.SetAttributes(kept)
@@ -210,6 +212,20 @@ func logAnyValue(value otelattr.Value) (*otelv1.LogRecord_AnyValue, error) {
 		}
 		return (&otelv1.LogRecord_AnyValue_builder{
 			ArrayValue: (&otelv1.LogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case otelattr.MAP:
+		input := value.AsMap()
+		values := make([]*otelv1.LogRecord_KeyValue, len(input))
+		for i, item := range input {
+			converted, err := logAnyValue(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("convert map item %d: %w", i, err)
+			}
+			key := string(item.Key)
+			values[i] = (&otelv1.LogRecord_KeyValue_builder{Key: &key, Value: converted}).Build()
+		}
+		return (&otelv1.LogRecord_AnyValue_builder{
+			KvlistValue: (&otelv1.LogRecord_KeyValueList_builder{Values: values}).Build(),
 		}).Build(), nil
 	case otelattr.EMPTY:
 		return (&otelv1.LogRecord_AnyValue_builder{}).Build(), nil

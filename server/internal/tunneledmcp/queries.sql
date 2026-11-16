@@ -88,3 +88,8 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListMetricSourceOwners :many
+-- Authoritative ownership enrichment for internal aggregate ingestion.
+SELECT id, project_id FROM tunneled_mcp_servers
+WHERE id = ANY(@ids::uuid[]) AND deleted IS FALSE;

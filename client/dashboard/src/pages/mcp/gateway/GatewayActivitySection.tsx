@@ -4,15 +4,19 @@ import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeries
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { encodeGatewayServerFilter } from "@/components/observe/observeTargetFilters";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { useRoutes } from "@/routes";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetMetaMcpServerUsage } from "@gram/client/funcs/telemetryGetMetaMcpServerUsage";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { telemetryGetProjectGatewayOverview } from "@gram/client/funcs/telemetryGetProjectGatewayOverview";
+import { telemetryGetProjectGatewayUsage } from "@gram/client/funcs/telemetryGetProjectGatewayUsage";
 import type { GetMetaMcpServerUsageResult } from "@gram/client/models/components/getmetamcpserverusageresult.js";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
@@ -30,16 +34,18 @@ import {
 import type { MemberRow } from "./memberRows";
 import { MetaToolUsageChart } from "./MetaToolUsageChart";
 
+const noMembers: MemberRow[] = [];
+
 function errorRate(summary: ObservabilitySummary): number {
   return summary.totalToolCalls > 0
     ? (summary.failedToolCalls / summary.totalToolCalls) * 100
     : 0;
 }
 
-const memberColumns: Column<MemberUsageRow>[] = [
+const memberColumns = (header: string): Column<MemberUsageRow>[] => [
   {
     key: "label",
-    header: "Member",
+    header,
     width: "2fr",
     render: (row) => <Text className="truncate">{row.label}</Text>,
   },
@@ -101,19 +107,33 @@ function LoadError({ what }: { what: string }): JSX.Element {
   );
 }
 
+// A stored gateway, or the selected project's Project Gateway: the
+// Organization Gateway limited to that project's servers. Both are read in
+// the selected project.
+export type GatewayActivityScope =
+  | {
+      kind: "gateway";
+      metaMcpServerId: string;
+      memberRows: MemberRow[];
+      isLoadingMembers?: boolean;
+    }
+  | { kind: "project"; projectId: string };
+
 // Gateway-attributed usage for the selected range: the shared overview
 // metrics scoped to calls dispatched through this gateway, the discovery
 // funnel, and the per-member breakdown. The two queries fail independently so
 // one failing never hides what the other loaded.
 export function GatewayActivitySection({
-  metaMcpServerId,
-  memberRows,
-  isLoadingMembers = false,
+  scope,
 }: {
-  metaMcpServerId: string;
-  memberRows: MemberRow[];
-  isLoadingMembers?: boolean;
+  scope: GatewayActivityScope;
 }): JSX.Element {
+  const isProjectGateway = scope.kind === "project";
+  const metaMcpServerId =
+    scope.kind === "gateway" ? scope.metaMcpServerId : undefined;
+  const memberRows = scope.kind === "gateway" ? scope.memberRows : noMembers;
+  const isLoadingMembers =
+    scope.kind === "gateway" && (scope.isLoadingMembers ?? false);
   const client = useGramContext();
   const routes = useRoutes();
   const [searchParams] = useSearchParams();
@@ -130,9 +150,16 @@ export function GatewayActivitySection({
     clearCustomRange,
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
-  const rangeKey = [metaMcpServerId, from.toISOString(), to.toISOString()];
-  // Logs and insights read the same range params, so links carry the range shown here.
+  const rangeKey = [
+    scope.kind === "gateway" ? scope.metaMcpServerId : scope.projectId,
+    from.toISOString(),
+    to.toISOString(),
+  ];
+  // Logs and insights read the same range params, so links carry the range
+  // shown here. They filter by a stored gateway, so the Project Gateway, which
+  // has none, gets no links.
   const gatewayScopedSearch = useMemo(() => {
+    if (!metaMcpServerId) return undefined;
     const params = new URLSearchParams();
     params.set("server", encodeGatewayServerFilter(metaMcpServerId));
     for (const key of ["range", "from", "to", "label"]) {
@@ -141,8 +168,16 @@ export function GatewayActivitySection({
     }
     return `?${params.toString()}`;
   }, [metaMcpServerId, searchParams]);
-  const logsHref = routes.logs.href() + gatewayScopedSearch;
-  const insightsHref = routes.insights.href() + gatewayScopedSearch;
+  // Tool Logs admits project readers; an MCP-only member gets no link to a
+  // page that would turn them away.
+  const { canOpen: canOpenToolLogs } = useToolLogsAccess();
+  const logsHref =
+    canOpenToolLogs && gatewayScopedSearch
+      ? routes.logs.href() + gatewayScopedSearch
+      : undefined;
+  const insightsHref = gatewayScopedSearch
+    ? routes.insights.href() + gatewayScopedSearch
+    : undefined;
   const handleRangeSelect = useCallback(
     (rangeFrom: Date, rangeTo: Date) =>
       setCustomRangeParam(
@@ -158,14 +193,18 @@ export function GatewayActivitySection({
       queryKey: ["gateway-overview", ...rangeKey],
       queryFn: () =>
         unwrapAsync(
-          telemetryGetObservabilityOverview(client, {
-            getObservabilityOverviewPayload: {
-              from,
-              to,
-              metaMcpServerId,
-              includeTimeSeries: true,
-            },
-          }),
+          metaMcpServerId
+            ? telemetryGetObservabilityOverview(client, {
+                getObservabilityOverviewPayload: {
+                  from,
+                  to,
+                  metaMcpServerId,
+                  includeTimeSeries: true,
+                },
+              })
+            : telemetryGetProjectGatewayOverview(client, {
+                getProjectGatewayActivityPayload: { from, to },
+              }),
         ),
       placeholderData: keepPreviousData,
       throwOnError: false,
@@ -176,9 +215,13 @@ export function GatewayActivitySection({
       queryKey: ["gateway-usage", ...rangeKey],
       queryFn: () =>
         unwrapAsync(
-          telemetryGetMetaMcpServerUsage(client, {
-            getMetaMcpServerUsagePayload: { metaMcpServerId, from, to },
-          }),
+          metaMcpServerId
+            ? telemetryGetMetaMcpServerUsage(client, {
+                getMetaMcpServerUsagePayload: { metaMcpServerId, from, to },
+              })
+            : telemetryGetProjectGatewayUsage(client, {
+                getProjectGatewayActivityPayload: { from, to },
+              }),
         ),
       placeholderData: keepPreviousData,
       throwOnError: false,
@@ -219,7 +262,9 @@ export function GatewayActivitySection({
     : "No dispatched calls for the selected time range";
   const noMemberCallsMessage = stoppedAtDiscovery
     ? "No execute_tool calls were observed in the selected range; agents only used the discovery tools."
-    : "No member calls in the selected range.";
+    : isProjectGateway
+      ? "No server calls in the selected range."
+      : "No member calls in the selected range.";
 
   return (
     <Page.Section>
@@ -229,8 +274,9 @@ export function GatewayActivitySection({
         Activity
       </Page.Section.Title>
       <Page.Section.Description>
-        Calls dispatched to members through execute_tool, the discovery steps
-        agents took to reach them, and how the load spread across members.
+        {isProjectGateway
+          ? "Calls dispatched to MCP servers through execute_tool, the discovery steps agents took to reach them, and how the load spread across servers."
+          : "Calls dispatched to members through execute_tool, the discovery steps agents took to reach them, and how the load spread across members."}
       </Page.Section.Description>
       <Page.Section.CTA>
         <TimeRangePicker
@@ -341,12 +387,16 @@ export function GatewayActivitySection({
                   loading={usage.isLoading && !usage.data}
                 />
                 <div className="border p-5">
-                  <h3 className="text-eyebrow mb-3">Calls by member</h3>
+                  <h3 className="text-eyebrow mb-3">
+                    {isProjectGateway ? "Calls by server" : "Calls by member"}
+                  </h3>
                   {(usage.isLoading && !usage.data) || isLoadingMembers ? (
                     <SkeletonTable />
                   ) : (
                     <Table
-                      columns={memberColumns}
+                      columns={memberColumns(
+                        isProjectGateway ? "Server" : "Member",
+                      )}
                       data={members}
                       rowKey={(row) => row.mcpServerId}
                       noResultsMessage={

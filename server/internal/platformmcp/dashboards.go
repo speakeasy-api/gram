@@ -65,6 +65,7 @@ type DashboardsService struct {
 type dashboardsManagement interface {
 	ListDashboards(ctx context.Context, payload *gen.ListDashboardsPayload) (*gen.ListDashboardsResult, error)
 	ReadDashboard(ctx context.Context, id string) (dashboards.Detail, error)
+	ReadBuiltInDashboard(ctx context.Context, slug string) (*gen.BuiltInDashboard, error)
 	CardWidgetsInTx(ctx context.Context, dbtx pgx.Tx, id string) (map[string]dashboards.CardWidget, error)
 	CreateDashboardInTx(ctx context.Context, dbtx pgx.Tx, name string, description *string) (*gen.Dashboard, error)
 	UpdateDashboardInTx(ctx context.Context, dbtx pgx.Tx, id, expectedVersion, name string, description *string) (*gen.Dashboard, error)
@@ -197,9 +198,12 @@ func (s *DashboardsService) Get(ctx context.Context, principal Principal, input 
 		return zero, err
 	}
 	if _, err := uuid.Parse(input.DashboardID); err != nil {
-		page, ok := dashboards.BuiltInDashboard(input.DashboardID)
-		if !ok {
+		page, err := s.management.ReadBuiltInDashboard(ctx, input.DashboardID)
+		if isOopsCode(err, oops.CodeNotFound) {
 			return zero, oops.E(oops.CodeNotFound, nil, "no dashboard or Speakeasy-built dashboard has that id or slug")
+		}
+		if err != nil {
+			return zero, fmt.Errorf("read built-in dashboard: %w", err)
 		}
 		return scope.builtInView(page), nil
 	}
@@ -347,9 +351,12 @@ func (s *DashboardsService) preview(ctx context.Context, scope dashboardScope, p
 	}
 	switch {
 	case request.builtIn != "":
-		page, ok := dashboards.BuiltInDashboard(request.builtIn)
-		if !ok {
+		page, err := s.management.ReadBuiltInDashboard(ctx, request.builtIn)
+		if isOopsCode(err, oops.CodeNotFound) {
 			return zero, oops.E(oops.CodeNotFound, nil, "no Speakeasy-built dashboard has that slug")
+		}
+		if err != nil {
+			return zero, fmt.Errorf("read built-in dashboard: %w", err)
 		}
 		view := scope.builtInView(page)
 		out.Current, out.Version, out.DashboardPath = &view, view.Version, view.DashboardPath

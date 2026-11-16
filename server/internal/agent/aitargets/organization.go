@@ -33,7 +33,11 @@ import (
 // a scan target the gateway cannot single out.
 //
 // 7: Conductor joined the catalog (both admission and detection).
-const DefaultsVersion int32 = 7
+//
+// 8: Google Antigravity joined the catalog (both admission and detection).
+//
+// 9: Pi gained stable and per-server gateway client metadata matchers.
+const DefaultsVersion int32 = 9
 
 // Source says where a target in an organization's list comes from.
 type Source string

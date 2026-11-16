@@ -16,9 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -83,7 +85,7 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	require.NoError(t, err)
 
 	row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: hostedIssuerID(t, ctx, ti, toolset),
 		Jti:                 claims.ID,
 	})
 	require.NoError(t, err)
@@ -122,7 +124,7 @@ func TestListUserSessionsNamesDashboardMint(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	unlabeled, err := seedUserSession(t, ctx, ti.conn, toolset.UserSessionIssuerID.UUID, urn.NewUserSubject("other-principal"))
+	unlabeled, err := seedUserSession(t, ctx, ti.conn, hostedIssuerID(t, ctx, ti, toolset), urn.NewUserSubject("other-principal"))
 	require.NoError(t, err)
 
 	listed, err := ti.service.ListUserSessions(ctx, &sessionsgen.ListUserSessionsPayload{
@@ -208,19 +210,26 @@ func createIssuerGatedMintToolset(t *testing.T, ctx context.Context, ti *testIns
 		Slug:                   slug,
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	// Served through the legacy alias by an endpointless canonical server.
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: uuid.MustParse(issuer.ID), Valid: true})
 
-	linked, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.MustParse(issuer.ID), Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
+	linked, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)
 
 	return linked
+}
+
+// hostedIssuerID is the issuer on a toolset's canonical MCP server.
+func hostedIssuerID(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsetsrepo.Toolset) uuid.UUID {
+	t.Helper()
+
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	require.NoError(t, err)
+	require.True(t, server.UserSessionIssuerID.Valid)
+	return server.UserSessionIssuerID.UUID
 }
 
 func TestMintUserSessionForMetaMcpServer(t *testing.T) {

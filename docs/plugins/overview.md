@@ -37,6 +37,8 @@ Team member installs from Claude/Cursor/Codex marketplace
 
 Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect` scope) still enforces access at the MCP entrypoint.
 
+**Skills.** Skills distributed to a plugin ship in its package under `skills/` and, behind the `skills-over-mcp` flag, are also served to assigned members over the plugin's hosted MCP servers through the MCP Skills extension. See [Loading skills over MCP](../skills/loading-skills-over-mcp.md).
+
 **Observability plugin.** Every publish automatically includes a per-org observability plugin — one each for Claude, Cursor, Codex, OpenCode, OpenClaw, Pi and GitHub Copilot — that bundles hooks forwarding tool-use events back to Speakeasy. This is required for proper audit logging.
 
 **OpenClaw.** The OpenClaw observability package is a native OpenClaw plugin (`openclaw.plugin.json` + `index.js`), installed with `openclaw plugins install <dir>` and a Gateway restart. Two caveats are load-bearing and documented in the [OpenClaw install runbook](../runbooks/openclaw-install.md): conversation-scope hooks require `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`, and coverage depends on the customer's model-auth mode — models routed through the Claude CLI harness delegate the tool loop out-of-process, so OpenClaw's tool and LLM hooks never fire for them.

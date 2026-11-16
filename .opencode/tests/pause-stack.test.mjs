@@ -22,8 +22,13 @@ async function fixture(t, options = {}) {
   childProcess.execFile = Object.assign(() => {}, {
     [promisify.custom]: async (file, args, opts) => {
       calls.push({ file, args, opts });
-      if (file === "mise" && args[0] === "set") {
-        return { stdout: "other:speakeasy.pause-stack\n" };
+      if (file === "mise" && args[0] === "env") {
+        assert.deepEqual(args, ["env", "--json"]);
+        return {
+          stdout: JSON.stringify({
+            GRAM_OPENCODE_PLUGINS: "other:speakeasy.pause-stack",
+          }),
+        };
       }
       if (file === "git") {
         return {
@@ -184,12 +189,12 @@ test("the documented append preserves values and never writes after a failed rea
   await writeFile(
     join(directory, "mise"),
     `#!/bin/sh
-if [ "$1" = set ] && [ "$2" = GRAM_OPENCODE_PLUGINS ]; then
+if [ "$1" = env ] && [ "$2" = --json ]; then
   if [ "$READ_FAIL" = 1 ]; then
     echo 'simulated read failure' >&2
     exit 1
   fi
-  printf '%s\\n' "$VALUE"
+  printf '{"GRAM_OPENCODE_PLUGINS":"%s"}\\n' "$VALUE"
 else
   printf '%s\\n' "$4"
 fi

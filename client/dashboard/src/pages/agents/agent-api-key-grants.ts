@@ -21,7 +21,7 @@ export type NarrowingDimension = "disposition" | "tool";
 /** Which inventory names the resources a selector of this kind identifies. */
 export type ResourceInventory = "mcp" | "project";
 
-export interface GrantNarrowing {
+interface GrantNarrowing {
   resourceId?: string;
   /** Legacy editor state: ignored; candidate project restrictions are preserved. */
   projectId?: string;
@@ -37,16 +37,6 @@ export interface GrantSelection {
   grant: AgentPolicyGrantForm;
   narrowing: GrantNarrowing;
 }
-
-export const DISPOSITION_LABELS: Record<
-  AgentPolicySelectorDisposition,
-  string
-> = {
-  read_only: "Read-only tools",
-  destructive: "Destructive tools",
-  idempotent: "Idempotent tools",
-  open_world: "Open-world tools",
-};
 
 export function resourceInventoryFor(
   resourceKind: string,
@@ -168,6 +158,7 @@ export function delegableGrantKey(form: AgentPolicyGrantForm): string {
   // treats a shared key as one grant — the duplicate check, the diff, and the
   // per-candidate editor state.
   return JSON.stringify([
+    form.effect,
     form.scope,
     Object.keys(selector)
       .filter((key) => selector[key] !== undefined)
@@ -204,21 +195,4 @@ export function buildRequestedGrants(
     }
   }
   return forms;
-}
-
-// Match Go strings.TrimSpace and utf8.RuneCountInString used by agent issuance.
-export function validateAgentAPIKeyName(value: string): string {
-  const name = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
-  if (!name) throw new Error("Enter a key name.");
-  for (const prefix of ["plugins-", "litellm-"]) {
-    if (name.startsWith(prefix))
-      throw new Error(
-        `Key names starting with "${prefix}" are reserved. Choose another name.`,
-      );
-  }
-  if (Array.from(name).length > 255)
-    throw new Error(
-      "Key names must not exceed 255 Unicode characters. Shorten the name.",
-    );
-  return name;
 }

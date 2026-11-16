@@ -21,7 +21,6 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,6 +33,7 @@ import {
   SkillPickerDialog,
   type SkillPickerResult,
 } from "../skills/SkillPickerDialog";
+import { SkillDistributionVersionBadge } from "../skills/skill-badges";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
@@ -305,7 +305,10 @@ function PluginSkillCard({
             {distribution.skillDisplayName}
           </Link>
         </Text>
-        <SkillVersionBadge distribution={distribution} />
+        <SkillDistributionVersionBadge
+          pinnedVersionId={distribution.pinnedVersionId}
+          className="text-xs"
+        />
       </div>
       <Text small muted className="truncate font-mono">
         {distribution.skillName}
@@ -369,7 +372,10 @@ function PluginSkillTableRow({
         </Text>
       </td>
       <td className="px-3 py-3">
-        <SkillVersionBadge distribution={distribution} />
+        <SkillDistributionVersionBadge
+          pinnedVersionId={distribution.pinnedVersionId}
+          className="text-xs"
+        />
       </td>
       <td className="px-3 py-3">
         <RequirePluginWrite>
@@ -393,29 +399,5 @@ function PluginSkillTableRow({
         </RequirePluginWrite>
       </td>
     </DotRow>
-  );
-}
-
-function SkillVersionBadge({
-  distribution,
-}: {
-  distribution: SkillDistribution;
-}): JSX.Element {
-  if (distribution.pinnedVersionId) {
-    return (
-      <Badge
-        variant="neutral"
-        className="text-xs"
-        title={distribution.pinnedVersionId}
-      >
-        Pinned
-      </Badge>
-    );
-  }
-
-  return (
-    <Badge variant="information" className="text-xs">
-      Latest
-    </Badge>
   );
 }

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Orientation } from "@/components/ui/lib/types";
+import type { Orientation } from "@/components/ui/lib/types";
 
 export interface SeparatorProps {
   orientation?: Orientation;

@@ -206,8 +206,7 @@ func TestServePublic_ToolsList_ReturnsEmptyForEmptyToolset(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-empty-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "list-empty-"+uuid.NewString()[:8])
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), "", nil)
 	require.NoError(t, err)
@@ -215,6 +214,16 @@ func TestServePublic_ToolsList_ReturnsEmptyForEmptyToolset(t *testing.T) {
 
 	resp := parseToolsListResponse(t, w.Body.Bytes())
 	require.Empty(t, resp.Result.Tools)
+
+	// Clients such as Codex CLI reject a null tools array, which a
+	// skills-only server with no tools would otherwise send.
+	var raw struct {
+		Result struct {
+			Tools json.RawMessage `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+	require.JSONEq(t, `[]`, string(raw.Result.Tools))
 }
 
 func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
@@ -225,8 +234,7 @@ func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-all-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "list-all-"+uuid.NewString()[:8])
 
 	addHTTPTools(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_alpha", "tool_beta")
 
@@ -249,8 +257,7 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-rbac-pub-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "list-rbac-pub-"+uuid.NewString()[:8])
 
 	addHTTPTools(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "pub_tool_a", "pub_tool_b")
 
@@ -304,6 +311,7 @@ func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
 	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "allowed_tool",
 		Disposition: "",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	require.NoError(t, err)
 
@@ -311,6 +319,7 @@ func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
 	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "forbidden_tool",
 		Disposition: "",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -335,12 +344,14 @@ func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
 	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "tool_one",
 		Disposition: "",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	require.NoError(t, err)
 
 	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "tool_two",
 		Disposition: "",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	require.NoError(t, err)
 }
@@ -362,6 +373,7 @@ func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
 	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "tool_x",
 		Disposition: "",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -397,11 +409,11 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 	)
 
 	// tool_a and tool_c pass.
-	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_a", Disposition: ""})))
-	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_c", Disposition: ""})))
+	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_a", Disposition: "", ProjectID: toolset.ProjectID.String()})))
+	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_c", Disposition: "", ProjectID: toolset.ProjectID.String()})))
 
 	// tool_b denied.
-	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_b", Disposition: ""}))
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_b", Disposition: "", ProjectID: toolset.ProjectID.String()}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -433,6 +445,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "safe_tool",
 		Disposition: "read_only",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	require.NoError(t, err)
 
@@ -440,6 +453,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "dangerous_tool",
 		Disposition: "destructive",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -463,6 +477,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *tes
 	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "any_tool",
 		Disposition: "destructive",
+		ProjectID:   toolset.ProjectID.String(),
 	}))
 	require.NoError(t, err)
 }

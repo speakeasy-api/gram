@@ -12,7 +12,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // insertGramHostedCompletionLog writes a completion row the way Speakeasy-hosted
@@ -124,7 +123,6 @@ func TestEnrollmentDirectory_ExcludesGramHostedPhantomIdentities(t *testing.T) {
 
 	now := time.Now().UTC()
 	insertGramHostedJudgeLogWithUserID(t, ctx, projectID, now.Add(-10*time.Minute), phantomID, 5000, 5000)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
 		Filter:   &gen.SearchUsersFilter{From: now.Add(-time.Hour).Format(time.RFC3339), To: now.Add(time.Hour).Format(time.RFC3339)},

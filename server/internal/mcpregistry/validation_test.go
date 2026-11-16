@@ -147,3 +147,18 @@ func TestLogPathMasksSubmittedKeys(t *testing.T) {
 		require.Equal(t, want, LogPath(path), path)
 	}
 }
+
+func TestSparseNativeCatalogContract(t *testing.T) {
+	t.Parallel()
+	validator, err := LoadValidator()
+	require.NoError(t, err)
+	for _, metadata := range []string{
+		`{}`,
+		`{"com.speakeasy.ai/catalog":{"supportsDcr":true}}`,
+		`{"com.speakeasy.ai/catalog":{"authSetup":"unknown","authDiscoveryStatus":"unavailable","supportsDcr":false,"supportsCimd":false}}`,
+		`{"io.modelcontextprotocol.registry/official":{"status":"deprecated","isLatest":false}}`,
+	} {
+		record := []byte(`{"server":{"name":"io.example/sparse","description":"Reviewed server","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":` + metadata + `}`)
+		require.Empty(t, validator.Validate(record))
+	}
+}

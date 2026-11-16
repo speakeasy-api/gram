@@ -1,19 +1,31 @@
 import { SettingsSection } from "@/components/detail/settings-section";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMcpServerAuthTarget } from "./authentication/authTarget";
 import { UserIdentitySessionControls } from "./authentication/UserIdentitySessionControls";
+import { SharedAuthorizationServerField } from "./authentication/SharedAuthorizationServerField";
 import { UserSessionIssuerField } from "./authentication/UserSessionIssuerField";
 import { useSelectableUserSessionIssuers } from "./authentication/useSelectableUserSessionIssuers";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+
+export const MCP_SESSIONS_SECTION_ID = "sessions";
 
 export function RemoteMcpSessionsSection({
   mcpServer,
+  mcpUrl,
 }: {
   mcpServer: McpServer;
+  /** The URL clients connect to; undefined while it is unknown. */
+  mcpUrl?: string;
 }): JSX.Element {
-  const target = useMcpServerAuthTarget(mcpServer);
+  const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
+  const mcpAuthenticationPage =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+    "enabled";
   const selectableIssuers = useSelectableUserSessionIssuers(target);
   const userSessionIssuerId = mcpServer.userSessionIssuerId ?? undefined;
   const issuerQuery = useUserSessionIssuer(
@@ -21,9 +33,11 @@ export function RemoteMcpSessionsSection({
     undefined,
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
+  // Only the in-place session controls read the clients, and the provider
+  // page holds those once its rollout is on.
   const clientsQuery = useAllRemoteSessionClients(
     { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+    { enabled: !!userSessionIssuerId && !mcpAuthenticationPage },
   );
   const loading = issuerQuery.isLoading || clientsQuery.isLoading;
   const failed = issuerQuery.isError || clientsQuery.isError;
@@ -32,7 +46,12 @@ export function RemoteMcpSessionsSection({
   let sessionControls: JSX.Element;
   if (loading) {
     sessionControls = (
-      <SessionsNotice>Loading session settings...</SessionsNotice>
+      <SettingsSection.Body>
+        <Skeleton label="Loading session settings">
+          <div className="h-5 w-48" />
+          <div className="h-9 w-full max-w-md" />
+        </Skeleton>
+      </SettingsSection.Body>
     );
   } else if (failed || !issuerQuery.data) {
     sessionControls = (
@@ -55,12 +74,13 @@ export function RemoteMcpSessionsSection({
   }
 
   return (
-    <SettingsSection>
+    <SettingsSection id={MCP_SESSIONS_SECTION_ID}>
       <SettingsSection.Header>
         <SettingsSection.Title>Sessions</SettingsSection.Title>
         <SettingsSection.Description>
-          Control how long User Identity connections last and which MCP clients
-          may initiate them.
+          {mcpAuthenticationPage
+            ? "Choose where people sign in to this server. How long their sessions last and which clients may connect come with that choice."
+            : "Control how long User Identity connections last and which MCP clients may initiate them."}
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -71,7 +91,15 @@ export function RemoteMcpSessionsSection({
             isLoading={selectableIssuers.isLoading}
             isError={selectableIssuers.isError}
           />
-          {sessionControls}
+          {/* The provider's sign-in details and session settings live on
+              its own page, which the picker opens. */}
+          {!mcpAuthenticationPage && issuerQuery.data ? (
+            <SharedAuthorizationServerField
+              userSessionIssuer={issuerQuery.data}
+              mcpUrl={mcpUrl}
+            />
+          ) : null}
+          {mcpAuthenticationPage ? null : sessionControls}
         </div>
       </SettingsSection.Panel>
     </SettingsSection>

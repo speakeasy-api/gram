@@ -16,7 +16,7 @@ type getPermalinkInput struct {
 	MessageTS string `json:"message_ts" jsonschema:"Timestamp of the message to get a permalink for."`
 }
 
-func NewChatGetPermalinkTool(httpClient *guardian.HTTPClient) core.PlatformToolExecutor {
+func NewChatGetPermalinkTool(httpClient *guardian.HTTPClient) *slackTool {
 	readOnly := true
 	destructive := false
 	idempotent := true

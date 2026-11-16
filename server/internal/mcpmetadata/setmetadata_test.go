@@ -37,10 +37,9 @@ func createTestToolset(t *testing.T, ctx context.Context, ti *testInstance, slug
 		Slug:                   slug,
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityDisabled)
 
 	return toolset
 }
@@ -65,10 +64,9 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
+		createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityDisabled)
 
 		payload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
@@ -107,10 +105,9 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp-update",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
+		createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityDisabled)
 
 		firstPayload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
@@ -160,10 +157,9 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp-logo",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
+		createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityDisabled)
 
 		assetsRepo := assets_repo.New(ti.conn)
 		asset, err := assetsRepo.CreateAsset(ctx, assets_repo.CreateAssetParams{
@@ -217,10 +213,9 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp-instructions",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
+		createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityDisabled)
 
 		instructions := "You have tools for searching the Test Hub. Use them wisely."
 
@@ -357,7 +352,7 @@ func TestService_SetMcpMetadata_AuditLogCountOnCreate(t *testing.T) {
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, result.ID, afterSnapshot["ID"])
-	require.Equal(t, toolset.ID.String(), afterSnapshot["ToolsetID"])
+	require.Equal(t, toolset.ID.String(), afterSnapshot["McpServerID"])
 	require.Equal(t, "https://docs.example.com/create", afterSnapshot["ExternalDocumentationURL"])
 }
 
@@ -589,8 +584,6 @@ func TestService_SetMcpMetadata_RejectsForeignProjectMcpServer(t *testing.T) {
 		Slug:                   "foreign-toolset-" + uuid.NewString()[:8],
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 

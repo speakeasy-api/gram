@@ -11,6 +11,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -23,6 +24,7 @@ func TestAgentPolicyCRUDIsExactAllowOnlyAndAudited(t *testing.T) {
 	agent := createAgent(t, conn, "org-policy", "owner", "Policy agent")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-policy", "owner")
+	seedGrant(t, ctx, conn, "org-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeProjectWrite, "*")
 
 	created, err := service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
 		AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectWrite), Effect: "allow",
@@ -96,7 +98,7 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 	for _, tt := range tests {
 		agent := createAgent(t, conn, "org-validation", "owner", tt.name+" validation agent")
 		tt.payload.AgentID = agent.ID.String()
-		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -104,8 +106,8 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 			_, err := service.CreatePolicyGrant(ctx, &tt.payload)
 			requireOopsCode(t, err, oops.CodeBadRequest)
 
-			var count int
-			require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2`, "org-validation", principal).Scan(&count)) //nolint:glint // notestingrawsql: verifies rejected writes are atomic
+			count, err := testrepo.New(conn).CountPrincipalGrantsFixture(t.Context(), testrepo.CountPrincipalGrantsFixtureParams{OrganizationID: "org-validation", PrincipalUrn: principal})
+			require.NoError(t, err)
 			require.Zero(t, count)
 		})
 	}
@@ -123,6 +125,7 @@ func TestAgentPolicyGrantIDsCannotCrossAgentOrTenant(t *testing.T) {
 	second := createAgent(t, conn, "org-one", "owner-org-one", "Second agent")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-one", "owner-org-one")
+	seedGrant(t, ctx, conn, "org-one", urn.NewPrincipal(urn.PrincipalTypeUser, "owner-org-one"), authz.ScopeProjectRead, "*")
 	grant, err := service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
 		AgentID: first.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow",
 		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"},
@@ -163,9 +166,13 @@ func TestAgentPolicyRequiresExactWriteAuthorityForNonOwner(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	allow(engine, authz.ScopeAgentWrite, agent.ID)
+	skillID := uuid.NewString()
+	for _, userID := range []string{"owner", "operator"} {
+		seedGrant(t, ctx, conn, "org-authority", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeSkillRead, skillID)
+	}
 	_, err = service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
 		AgentID: agent.ID.String(), Scope: string(authz.ScopeSkillRead), Effect: "allow",
-		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindSkill, ResourceID: uuid.NewString()},
+		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindSkill, ResourceID: skillID},
 	})
 	require.NoError(t, err)
 }

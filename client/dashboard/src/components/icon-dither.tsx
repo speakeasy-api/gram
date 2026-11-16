@@ -110,6 +110,22 @@ function density(col: number, row: number, t: number, sea: Sea): number {
 const instances = new Set<{ clear: () => void }>();
 
 /**
+ * The stops of the Speakeasy mark's border gradient (assets/speakeasy-icon.svg),
+ * in order. Passed as `palette`, the sea is drawn in these instead of ink.
+ */
+export const SPEAKEASY_RAINBOW = [
+  "#320F1E",
+  "#C83228",
+  "#FB873F",
+  "#D2DC91",
+  "#5A8250",
+  "#002314",
+  "#00143C",
+  "#2873D7",
+  "#9BC3FF",
+] as const;
+
+/**
  * Hover effect on the card's icon rail: a black-and-white halftone sea, rolled
  * fresh on every hover. Drawn in the theme's foreground ink, so it is dark on
  * light and light on dark. Sits behind the icon tile: the rail is given `isolate` so
@@ -118,8 +134,13 @@ const instances = new Set<{ clear: () => void }>();
  *
  * Fades in on enter and back out on leave rather than cutting, and stops its
  * frame loop once it has faded out.
+ *
+ * With a `palette`, the same sea is drawn in those colors instead of the ink,
+ * spread left to right across the rail in the order given.
  */
-export function useIconDither(): {
+export function useIconDither({
+  palette,
+}: { palette?: readonly string[] } = {}): {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   start: () => void;
   stop: () => void;
@@ -234,23 +255,29 @@ export function useIconDither(): {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = ink;
       ctx.globalAlpha = INK_ALPHA;
-      // One path for the whole frame: a few thousand cells as separate fills
-      // would cost far more than the maths.
-      ctx.beginPath();
+      // One path per color for the whole frame: a few thousand cells as
+      // separate fills would cost far more than the maths.
+      const colors = palette && palette.length > 0 ? palette : [ink];
+      const paths = colors.map(() => new Path2D());
+      const bandOf = Array.from({ length: cols }, (_, col) =>
+        Math.min(colors.length - 1, Math.floor((col / cols) * colors.length)),
+      );
       for (let row = 0; row < rows; row++) {
         const thresholds = BAYER[row % 4]!;
         for (let col = 0; col < cols; col++) {
           if (density(col, row, t, sea) * level > thresholds[col % 4]!) {
-            ctx.rect(col * CELL, row * CELL, DOT, DOT);
+            paths[bandOf[col]!]!.rect(col * CELL, row * CELL, DOT, DOT);
           }
         }
       }
-      ctx.fill();
+      paths.forEach((path, i) => {
+        ctx.fillStyle = colors[i]!;
+        ctx.fill(path);
+      });
     };
     rafRef.current = requestAnimationFrame(loop);
-  }, [halt]);
+  }, [halt, palette]);
 
   return { canvasRef, start, stop };
 }

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const SetupTaskStatus = {
 /**
  * Effective task status.
  */
-export type SetupTaskStatus = ClosedEnum<typeof SetupTaskStatus>;
+export type SetupTaskStatus = OpenEnum<typeof SetupTaskStatus>;
 
 export type SetupTask = {
   assignee?: SetupTaskAssignee | undefined;
@@ -68,9 +69,10 @@ export type SetupTask = {
 };
 
 /** @internal */
-export const SetupTaskStatus$inboundSchema: z.ZodMiniEnum<
-  typeof SetupTaskStatus
-> = z.enum(SetupTaskStatus);
+export const SetupTaskStatus$inboundSchema: z.ZodMiniType<
+  SetupTaskStatus,
+  unknown
+> = openEnums.inboundSchema(SetupTaskStatus);
 
 /** @internal */
 export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z

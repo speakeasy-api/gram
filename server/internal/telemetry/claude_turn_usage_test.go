@@ -43,7 +43,7 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleTurns(t *testing.T) {
 		costUSD: 0.0025, costMicros: 2500, model: "claude-haiku-4-5-20251001", querySource: "generate_session_title",
 	})
 
-	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
 		EventTimeFrom: time.Time{},
@@ -81,7 +81,7 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleAPIRequestsInTurn(t *testing.T) {
 		costUSD: 0.0094443, costMicros: 9444, model: "claude-sonnet-4-6", querySource: "sdk",
 	})
 
-	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
 		EventTimeFrom: time.Time{},
@@ -114,7 +114,7 @@ func TestGetClaudeTurnUsageByChatIDs_NoCostBearingRequest(t *testing.T) {
 		timestamp: time.Now().UTC(), promptID: "prompt-without-request", eventName: "tool_result",
 	})
 
-	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
 		EventTimeFrom: time.Time{},
@@ -168,7 +168,7 @@ func TestGetClaudeTurnUsageByChatIDs_EventTimeFrom(t *testing.T) {
 		inputTokens: 20, outputTokens: 8,
 	})
 
-	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
 		EventTimeFrom: now.Add(-time.Hour),
@@ -198,7 +198,7 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 		toolUseID: "toolu_2", toolName: "WebFetch", toolInputSizeBytes: 512, toolResultSizeBytes: 4096,
 	})
 
-	got := requireClaudeToolUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeToolUsage(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
 		EventTimeFrom: time.Time{},
@@ -216,7 +216,7 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 	require.Equal(t, int64(4096), got[chatID][1].ResultSizeBytes)
 }
 
-func requireClaudeTurnUsageEventually(
+func requireClaudeTurnUsage(
 	ctx context.Context,
 	t *testing.T,
 	ti *testInstance,
@@ -226,17 +226,14 @@ func requireClaudeTurnUsageEventually(
 ) map[string][]repo.ClaudeTurnUsageRow {
 	t.Helper()
 
-	var got map[string][]repo.ClaudeTurnUsageRow
-	require.Eventually(t, func() bool {
-		var err error
-		got, err = ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, params)
-		return err == nil && len(got[chatID]) == expectedRows
-	}, 2*time.Second, 50*time.Millisecond)
+	got, err := ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, got[chatID], expectedRows)
 
 	return got
 }
 
-func requireClaudeToolUsageEventually(
+func requireClaudeToolUsage(
 	ctx context.Context,
 	t *testing.T,
 	ti *testInstance,
@@ -246,12 +243,9 @@ func requireClaudeToolUsageEventually(
 ) map[string][]repo.ClaudeToolUsageRow {
 	t.Helper()
 
-	var got map[string][]repo.ClaudeToolUsageRow
-	require.Eventually(t, func() bool {
-		var err error
-		got, err = ti.chClient.GetClaudeToolUsageByChatIDs(ctx, params)
-		return err == nil && len(got[chatID]) == expectedRows
-	}, 2*time.Second, 50*time.Millisecond)
+	got, err := ti.chClient.GetClaudeToolUsageByChatIDs(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, got[chatID], expectedRows)
 
 	return got
 }

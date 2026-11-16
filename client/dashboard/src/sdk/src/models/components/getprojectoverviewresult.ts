@@ -5,47 +5,39 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ProjectMcpUsage,
+  ProjectMcpUsage$inboundSchema,
+} from "./projectmcpusage.js";
 import {
   ProjectOverviewSummary,
   ProjectOverviewSummary$inboundSchema,
 } from "./projectoverviewsummary.js";
-
-/**
- * Indicates whether metrics are session-based or tool-call-based
- */
-export const MetricsMode = {
-  Session: "session",
-  ToolCall: "tool_call",
-} as const;
-/**
- * Indicates whether metrics are session-based or tool-call-based
- */
-export type MetricsMode = ClosedEnum<typeof MetricsMode>;
+import { QueryResult, QueryResult$inboundSchema } from "./queryresult.js";
 
 /**
  * Result of project overview query
  */
 export type GetProjectOverviewResult = {
   /**
-   * Aggregated project-level summary metrics for a time period
+   * External end user and MCP tool usage for a project in a time period
    */
-  comparison: ProjectOverviewSummary;
-  /**
-   * Indicates whether metrics are session-based or tool-call-based
-   */
-  metricsMode: MetricsMode;
+  mcpUsage?: ProjectMcpUsage | undefined;
   /**
    * Aggregated project-level summary metrics for a time period
    */
   summary: ProjectOverviewSummary;
+  /**
+   * Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.
+   */
+  usageByAgent?: QueryResult | undefined;
+  /**
+   * Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.
+   */
+  usageByUser?: QueryResult | undefined;
 };
-
-/** @internal */
-export const MetricsMode$inboundSchema: z.ZodMiniEnum<typeof MetricsMode> = z
-  .enum(MetricsMode);
 
 /** @internal */
 export const GetProjectOverviewResult$inboundSchema: z.ZodMiniType<
@@ -53,13 +45,16 @@ export const GetProjectOverviewResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    comparison: ProjectOverviewSummary$inboundSchema,
-    metrics_mode: MetricsMode$inboundSchema,
+    mcp_usage: z.optional(ProjectMcpUsage$inboundSchema),
     summary: ProjectOverviewSummary$inboundSchema,
+    usage_by_agent: z.optional(QueryResult$inboundSchema),
+    usage_by_user: z.optional(QueryResult$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "metrics_mode": "metricsMode",
+      "mcp_usage": "mcpUsage",
+      "usage_by_agent": "usageByAgent",
+      "usage_by_user": "usageByUser",
     });
   }),
 );

@@ -1,7 +1,7 @@
 // serve_meta_test.go verifies MCP protocol termination for meta-MCP-backed
 // /mcp/{slug} endpoints: 2026-07-28 initialize and server/discover, the fixed
-// four-tool contract, per-request protocol-version declarations, the issuer
-// gate, and the no-/x/mcp-exposure rule.
+// tool contract, per-request protocol-version declarations, and the issuer
+// gate.
 package mcp_test
 
 import (
@@ -72,7 +72,8 @@ func createMetaMcpEndpoint(
 }
 
 // seedMetaMember creates a member mcp_server (remote-backed, named and
-// slugged) and attaches it to the meta server at the given sort order.
+// slugged), attaches it to the meta server at the given sort order, and
+// returns the member server's id.
 func seedMetaMember(
 	t *testing.T,
 	ctx context.Context,
@@ -82,7 +83,7 @@ func seedMetaMember(
 	name, slug string,
 	sortOrder int32,
 	visibility string,
-) {
+) uuid.UUID {
 	t.Helper()
 
 	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
@@ -116,6 +117,8 @@ func seedMetaMember(
 		SortOrder:       sortOrder,
 	})
 	require.NoError(t, err)
+
+	return server.ID
 }
 
 func makeMetaRPCBody(t *testing.T, method string, params map[string]any) []byte {
@@ -170,8 +173,9 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// is echoed, not upgraded — this is what lets mainstream clients connect.
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
 	require.Equal(t, "Speakeasy Gateway", result.ServerInfo.Name)
-	// Instructions are deliberately generic: the member inventory belongs to
-	// list_servers, so neither the meta server's name nor its members appear.
+	// The caller's servers lead, so agents see the gateway's reach first.
+	require.True(t, strings.HasPrefix(result.Instructions, `Tools from these servers: "member alpha".`+"\n\n"), "instructions=%s", result.Instructions)
+	require.True(t, strings.HasSuffix(result.Instructions, metamcp.Instructions))
 	require.Contains(t, result.Instructions, "list_servers")
 	require.Contains(t, result.Instructions, "describe_tools")
 	// The two rules agents get wrong: guessing arguments, and reading an
@@ -191,6 +195,7 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member alpha", "member-alpha-"+uuid.NewString()[:8], 0, mcpservers.VisibilityPrivate)
 
 	const custom = "Always call list_servers first. Ticketing lives in the support member."
 	setInstructions := func(instructions pgtype.Text) {
@@ -227,8 +232,8 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		stored pgtype.Text
 		want   string
 	}{
-		{name: "custom replaces default", stored: conv.ToPGText(custom), want: custom},
-		{name: "reset restores default", stored: pgtype.Text{}, want: metamcp.Instructions},
+		{name: "custom replaces default and server line", stored: conv.ToPGText(custom), want: custom},
+		{name: "reset restores default", stored: pgtype.Text{}, want: `Tools from these servers: "member alpha".` + "\n\n" + metamcp.Instructions},
 	} {
 		// Exercise setting and resetting the same endpoint sequentially.
 		setInstructions(tc.stored)
@@ -297,7 +302,8 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	envelope := decodeRPCResponse(t, w)
 	var result struct {
 		Tools []struct {
-			Name string `json:"name"`
+			Name        string         `json:"name"`
+			Annotations map[string]any `json:"annotations"`
 		} `json:"tools"`
 	}
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
@@ -305,11 +311,16 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	names := make([]string, 0, len(result.Tools))
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
+		if tool.Name == "execute_tool" {
+			require.Nil(t, tool.Annotations, "execution must not be advertised as read-only")
+		} else {
+			require.Equal(t, map[string]any{"readOnlyHint": true}, tool.Annotations, tool.Name)
+		}
 	}
-	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool"}, names)
+	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "connection_status"}, names)
 
 	// The contract consults neither the endpoint nor the meta server, so every
-	// caller receives these same four tools.
+	// caller receives these same tools.
 	requireCacheHints(t, envelope["result"], "public")
 }
 
@@ -641,30 +652,6 @@ func TestServePublic_MetaEndpoint_UnsupportedVersionPrecedesIssuerAuthentication
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 }
 
-func TestServeMCPEndpoint_MetaEndpoint_NoXmcpExposure(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "meta-" + uuid.NewString()
-	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/x/mcp/"+slug, nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", slug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
-	w := httptest.NewRecorder()
-
-	err := ti.service.ServeMCPEndpoint(w, req, slug, "x/mcp")
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
-}
-
 func TestWellKnown_MetaEndpoint_IssuerGated_ServesMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -724,15 +711,8 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-// TestHandleConsentMCP_MetaEndpoint_NotFound pins that the consent
-// tool-picker transport does not exist for meta-MCP-backed endpoints: they
-// have no per-tool picker (member tool catalogs land with the AGE-3291
-// runtime), so the transport answers NotFound — not the BadRequest a
-// missing-consent-headers request would otherwise get, and never the
-// "neither toolset nor mcp server backend" 500. The test harness enables the
-// consent_tool_filtering feature for the org, so the filtering gate is not
-// what produces the 404 here.
-func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
+// Gateway consent transports reject requests without consent credentials.
+func TestHandleConsentMCP_MetaEndpoint_RequiresConsentCredentials(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -755,7 +735,7 @@ func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "gateways reach the consent transport, which requires its own credentials")
 }
 
 // TestServePublic_MetaEndpoint_Initialize_Negotiation pins the negotiation

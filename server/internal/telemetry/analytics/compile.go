@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/squirrel"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // ErrorCode names what failed in a request, so a client can correct it
@@ -23,6 +24,9 @@ const (
 	ErrLimitExceeded          ErrorCode = "limit_exceeded"
 	ErrTooManyDimensions      ErrorCode = "too_many_dimensions"
 	ErrUnsatisfiable          ErrorCode = "unsatisfiable"
+	// ErrAggregatesOnly is an ungrouped query against a metric dataset, which
+	// answers aggregates alone.
+	ErrAggregatesOnly ErrorCode = "aggregates_only"
 )
 
 // Error is a request the compiler rejected. Field is the position in the
@@ -87,6 +91,8 @@ type Request struct {
 	OrderBy      []OrderBy
 	Limit        int
 	Ungrouped    bool
+	// SignalQuery selects the catalog's named signal-measurement contract.
+	SignalQuery *signalquery.Request
 }
 
 // Reads lists the fields the request touches, which is what LoadLookups
@@ -163,7 +169,10 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 		grain = TimeGrainNone
 	}
 	if !slices.Contains(timeGrains, grain) {
-		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, hour, day, week, month", grain))
+		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, minute, hour, day, week, month", grain))
+	}
+	if req.Ungrouped && ds.Kind == KindMetric {
+		return nil, newError(ErrAggregatesOnly, name, "ungrouped", "true", fmt.Sprintf("dataset %s answers counts and other aggregates, never its rows; group by dimensions instead", name))
 	}
 	if req.Ungrouped && grain != TimeGrainNone {
 		return nil, newError(ErrUnsatisfiable, name, "grain", string(grain), "an ungrouped query has no time buckets")
@@ -198,7 +207,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 	}
 
 	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
-	builder := sq.Select().FromSelect(ds.Source(qc), "src")
+	builder := sq.Select().FromSelect(ds.Source.Rows(qc), "src")
 
 	// Filters apply to the collapsed rows, after the source query, so a
 	// filter on a dimension whose value settled on the last observation sees
@@ -234,7 +243,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 
 	plan := &Plan{
 		Dataset: name,
-		Name:    name + ".agent_events",
+		Name:    name + "." + ds.Source.Table.planSuffix(),
 		SQL:     "",
 		Args:    nil,
 		Columns: nil,
@@ -502,6 +511,8 @@ func spanExceeds(from, to, limit int64) bool {
 func bucketExpr(grain TimeGrain, timeExpr string) string {
 	ts := fmt.Sprintf("fromUnixTimestamp64Nano(%s, 'UTC')", timeExpr)
 	switch grain {
+	case TimeGrainMinute:
+		return fmt.Sprintf("toStartOfMinute(fromUnixTimestamp64Nano(%s, 'UTC'))", timeExpr)
 	case TimeGrainHour:
 		return fmt.Sprintf("toStartOfHour(%s)", ts)
 	case TimeGrainDay:

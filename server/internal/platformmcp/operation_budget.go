@@ -28,6 +28,8 @@ const (
 	LifecycleOrganizationLimitName     = "platform-mcp-lifecycle-organization"
 	SessionRecallConnectionLimitName   = "platform-mcp-session-recall-connection"
 	SessionRecallOrganizationLimitName = "platform-mcp-session-recall-organization"
+	TeamMemoryConnectionLimitName      = "platform-mcp-team-memory-connection"
+	TeamMemoryOrganizationLimitName    = "platform-mcp-team-memory-organization"
 	RiskMutationConnectionLimitName    = "platform-mcp-risk-mutation-connection"
 	RiskMutationOrganizationLimitName  = "platform-mcp-risk-mutation-organization"
 	ReviewRequestConnectionLimitName   = "platform-mcp-review-request-connection"
@@ -53,6 +55,8 @@ const (
 	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
 	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
 	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
+	GatewayMutationConnectionLimitName            = "platform-mcp-gateway-mutation-connection"
+	GatewayMutationOrganizationLimitName          = "platform-mcp-gateway-mutation-organization"
 )
 
 const (
@@ -144,6 +148,13 @@ const (
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
 
+	// GatewayMutationsPer* bound creating gateways and setting their members
+	// on one allowance, so alternating between the two cannot multiply the
+	// write rate. Each allowed call locks the gateway and may republish every
+	// plugin carrying it.
+	GatewayMutationsPerConnectionPerMinute   = 5
+	GatewayMutationsPerOrganizationPerMinute = 50
+
 	// DataExportTogglesPer* bound pausing and resuming data export routes on
 	// their own allowance. Both tools share it, so alternating between them
 	// cannot multiply the permitted write rate. A person handling an incident
@@ -175,12 +186,17 @@ const (
 	DrilldownRowsPerConnectionPerWindow          = 1000
 	DrilldownMetricQueriesPerConnectionPerWindow = 20
 
-	// SessionRecallsPer* bound continue_session. Metered separately and lower
-	// than every other read: each allowed call serves an entire session
-	// transcript as a digest, so this allowance must not be fundable by
-	// spending any other budget.
+	// SessionRecallsPer* bound session recall and captured chat search and reads.
+	// These reads share a separate, lower allowance because they return
+	// transcript content; metadata and aggregate reads cannot fund them.
 	SessionRecallsPerConnectionPerMinute   = 10
 	SessionRecallsPerOrganizationPerMinute = 100
+
+	// TeamMemoryCallsPer* bound search_team_memory and remember. They return
+	// masked summaries and memos, not transcripts, so they get their own
+	// allowance instead of competing with session recall.
+	TeamMemoryCallsPerConnectionPerMinute   = 20
+	TeamMemoryCallsPerOrganizationPerMinute = 200
 )
 
 // DrilldownVolumeWindow is the interval the drill-down volume caps refill over.
@@ -319,9 +335,12 @@ type OperationBudgets struct {
 	// Diagnostics so exhausting it is not possible by spending the summary
 	// allowance, and so it can be tightened on its own.
 	SensitiveDiagnostics OperationBudget
-	// SensitiveSessionRecall meters continue_session — the only operation that
-	// serves whole-transcript content — on its own low allowance.
+	// SensitiveSessionRecall meters continue_session, search_chats and read_chat
+	// together on a low allowance for transcript content.
 	SensitiveSessionRecall OperationBudget
+	// TeamMemory meters the team memory tools on their own allowance, so memory
+	// traffic and session recall cannot throttle each other.
+	TeamMemory OperationBudget
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.
 	RiskMutations OperationBudget
@@ -381,5 +400,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.RiskFindings.valid() && b.Catalog.valid() && b.Registration.valid() && b.ReviewRequests.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
+	return b.RiskFindings.valid() && b.Catalog.valid() && b.Registration.valid() && b.ReviewRequests.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.TeamMemory.valid() && b.DrilldownVolume.valid()
 }

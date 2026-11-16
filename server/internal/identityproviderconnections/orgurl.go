@@ -8,8 +8,8 @@ import (
 )
 
 // oktaOrgHostSuffixes are the Okta-owned domains an org URL may live under.
-// Custom domains are only admitted through a platform admin override.
-var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"}
+// trexcloud.com hosts the orgs Okta uses to review OIN submissions.
+var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com", "okta-gov.com", "okta.mil", "trexcloud.com"}
 
 var (
 	ErrOrgURLInvalid        = errors.New("org url is not a valid URL")

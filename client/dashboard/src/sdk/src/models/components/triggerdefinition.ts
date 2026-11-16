@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const TriggerDefinitionKind = {
 /**
  * The ingress kind for the trigger definition.
  */
-export type TriggerDefinitionKind = ClosedEnum<typeof TriggerDefinitionKind>;
+export type TriggerDefinitionKind = OpenEnum<typeof TriggerDefinitionKind>;
 
 export type TriggerDefinition = {
   /**
@@ -53,9 +54,10 @@ export type TriggerDefinition = {
 };
 
 /** @internal */
-export const TriggerDefinitionKind$inboundSchema: z.ZodMiniEnum<
-  typeof TriggerDefinitionKind
-> = z.enum(TriggerDefinitionKind);
+export const TriggerDefinitionKind$inboundSchema: z.ZodMiniType<
+  TriggerDefinitionKind,
+  unknown
+> = openEnums.inboundSchema(TriggerDefinitionKind);
 
 /** @internal */
 export const TriggerDefinition$inboundSchema: z.ZodMiniType<

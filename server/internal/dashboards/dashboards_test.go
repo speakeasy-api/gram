@@ -17,14 +17,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
-// A bar chart over sessions, as the widgets service would save it.
+// A bar chart over tool calls, as the widgets service would save it.
 const barQuery = `{"window":"7d","grain":"day","dimensions":["user"],"measures":[{"op":"count","alias":"count"}],"limit":1000}`
 const barChart = `{"type":"bar","options":{}}`
 
-// A number tile over sessions.
+// A number tile over tool calls.
 const numberQuery = `{"window":"7d","grain":"none","measures":[{"op":"count","alias":"count"}]}`
 const numberChart = `{"type":"number","options":{}}`
 
@@ -34,7 +35,7 @@ func insertWidget(t *testing.T, ti *testInstance, name, query, visualization str
 	t.Helper()
 	row, err := widgetsrepo.New(ti.conn).CreateWidget(t.Context(), widgetsrepo.CreateWidgetParams{
 		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
-		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: []byte(query), Visualization: []byte(visualization),
+		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "tool_calls", Query: []byte(query), Visualization: []byte(visualization),
 	})
 	require.NoError(t, err)
 	return row
@@ -165,7 +166,7 @@ func TestListAndGetDashboards(t *testing.T) {
 	require.NoError(t, err)
 	second, err := ti.service.CreateDashboard(ctx, createPayload("second"))
 	require.NoError(t, err)
-	widget := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	widget := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	_, err = ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: first.ID, WidgetID: widget.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
@@ -177,9 +178,11 @@ func TestListAndGetDashboards(t *testing.T) {
 	require.Equal(t, second.ID, listed.Dashboards[1].ID)
 	require.Empty(t, listed.Dashboards[1].Widgets)
 
-	// The built-in dashboards come with the list, the same in every project.
-	require.Len(t, listed.BuiltIn, 1)
+	// The built-in dashboards come with the list, the same in every project;
+	// an org admin reads them all.
+	require.Len(t, listed.BuiltIn, 2)
 	require.Equal(t, "mcp-tools", listed.BuiltIn[0].Slug)
+	require.Equal(t, "security-risk", listed.BuiltIn[1].Slug)
 	require.Equal(t, "MCP & Tools", listed.BuiltIn[0].Name)
 	require.NotEmpty(t, listed.BuiltIn[0].Cards)
 	for _, card := range listed.BuiltIn[0].Cards {
@@ -269,8 +272,8 @@ func TestSaveDashboardLayout(t *testing.T) {
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
+		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
 
@@ -323,8 +326,8 @@ func TestSaveDashboardLayout(t *testing.T) {
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
+		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
 		tileAt := func(x, y, w, h int) *gen.PlacementInput { return placement(&tileCard.ID, tile.ID.String(), x, y, w, h) }
@@ -401,7 +404,7 @@ func TestSaveDashboardLayout(t *testing.T) {
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 		other := insertWidget(t, ti, "Other", numberQuery, numberChart)
 		card := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 
@@ -426,9 +429,9 @@ func TestSaveDashboardLayoutIgnoresCardsThatWent(t *testing.T) {
 	ctx, ti := newTestService(t)
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("stale"))
 	require.NoError(t, err)
-	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-	chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
-	other := insertWidget(t, ti, "Sessions by surface", barQuery, barChart)
+	tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
+	chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
+	other := insertWidget(t, ti, "Tool calls by surface", barQuery, barChart)
 	tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 	chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
 	otherCard := addCard(t, ctx, ti, dashboard.ID, other.ID)
@@ -466,7 +469,7 @@ func TestAddDashboardWidgetNeedsRoom(t *testing.T) {
 	ctx, ti := newTestService(t)
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("full"))
 	require.NoError(t, err)
-	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	card := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 
 	// A card ending on the last row leaves nothing below it to append to.
@@ -517,10 +520,10 @@ func TestSaveDashboardFiltersAreBounded(t *testing.T) {
 
 	// A range with nothing in it is no range, and a dimension with no
 	// values, or a null in their place, is no filter.
-	cleaned, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: &gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: nil, To: nil, Label: nil}, Values: map[string][]string{"user": nil, "surface": {}, "model": {"gpt"}}}, SessionToken: nil, ProjectSlugInput: nil})
+	cleaned, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: &gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: nil, To: nil, Label: nil}, Values: map[string][]string{"user": nil, "surface": {}, "tool_name": {"Bash"}}}, SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Nil(t, cleaned.Filters.Range)
-	require.Equal(t, map[string][]string{"model": {"gpt"}}, cleaned.Filters.Values)
+	require.Equal(t, map[string][]string{"tool_name": {"Bash"}}, cleaned.Filters.Values)
 
 	// Instants a query cannot represent are refused.
 	early, late := "1600-01-01T00:00:00Z", "2026-10-03T00:00:00Z"
@@ -539,8 +542,8 @@ func TestAddAndRemoveDashboardWidget(t *testing.T) {
 	ctx, ti := newTestService(t)
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("cards"))
 	require.NoError(t, err)
-	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-	chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+	tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
+	chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 
 	withTile, err := ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: dashboard.ID, WidgetID: tile.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
@@ -644,8 +647,8 @@ func TestDuplicateDashboard(t *testing.T) {
 		ctx, ti := newTestService(t)
 		source, err := ti.service.CreateDashboard(ctx, createPayload("Weekly review"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
+		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		// The tile twice, so one widget copy serves two cards.
 		first := addCard(t, ctx, ti, source.ID, tile.ID)
 		second := addCard(t, ctx, ti, source.ID, tile.ID)
@@ -723,13 +726,13 @@ func TestDuplicateDashboard(t *testing.T) {
 		ctx, ti := newTestService(t)
 		source, err := ti.service.CreateDashboard(ctx, createPayload("broken"))
 		require.NoError(t, err)
-		broken := insertWidget(t, ti, "Sessions by department", `{"window":"7d","grain":"none","dimensions":["department"],"measures":[{"op":"count","alias":"count"}]}`, `{"type":"table","options":{}}`)
+		broken := insertWidget(t, ti, "Tool calls by department", `{"window":"7d","grain":"none","dimensions":["department"],"measures":[{"op":"count","alias":"count"}]}`, `{"type":"table","options":{}}`)
 		_, err = ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: source.ID, WidgetID: broken.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err, "a broken widget can still sit on a dashboard; its card says why")
 
 		_, err = ti.service.DuplicateDashboard(ctx, &gen.DuplicateDashboardPayload{ID: source.ID, SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeBadRequest)
-		require.ErrorContains(t, err, `"Sessions by department"`)
+		require.ErrorContains(t, err, `"Tool calls by department"`)
 		require.ErrorContains(t, err, "department")
 	})
 
@@ -804,7 +807,7 @@ func TestDuplicateBuiltInDashboard(t *testing.T) {
 		require.NoError(t, ti.service.DeleteDashboard(memberCtx, &gen.DeleteDashboardPayload{ID: copied.ID, SessionToken: nil, ProjectSlugInput: nil}))
 		listed, err = ti.service.ListDashboards(ctx, &gen.ListDashboardsPayload{SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
-		require.Len(t, listed.BuiltIn, 1)
+		require.Len(t, listed.BuiltIn, 2)
 	})
 
 	t.Run("it reports an unknown built-in", func(t *testing.T) {
@@ -831,7 +834,7 @@ func TestDeleteDashboard(t *testing.T) {
 		memberCtx := asMember(t, ctx, ti, "user_owner_"+uuid.NewString())
 		created, err := ti.service.CreateDashboard(memberCtx, createPayload("mine"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 		_, err = ti.service.AddDashboardWidget(memberCtx, &gen.AddDashboardWidgetPayload{ID: created.ID, WidgetID: tile.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
 
@@ -862,4 +865,40 @@ func TestDeleteDashboard(t *testing.T) {
 		writerCtx := asMember(t, ctx, ti, "user_writer_"+uuid.NewString(), authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()))
 		require.NoError(t, ti.service.DeleteDashboard(writerCtx, &gen.DeleteDashboardPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
 	})
+}
+
+// TestSecurityRiskIsForOrgAdmins: the Security & risk built-in asks a dataset
+// only org admins may read, so a member is not shown it, cannot read it and
+// cannot copy it, while MCP & Tools stays theirs.
+func TestSecurityRiskIsForOrgAdmins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	memberCtx := asMember(t, ctx, ti, "user_member_"+uuid.NewString())
+
+	listed, err := ti.service.ListDashboards(memberCtx, &gen.ListDashboardsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.BuiltIn, 1)
+	require.Equal(t, "mcp-tools", listed.BuiltIn[0].Slug)
+
+	_, err = ti.service.ReadBuiltInDashboard(memberCtx, "security-risk")
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.DuplicateBuiltInDashboard(memberCtx, &gen.DuplicateBuiltInDashboardPayload{Slug: "security-risk", SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	page, err := ti.service.ReadBuiltInDashboard(memberCtx, "mcp-tools")
+	require.NoError(t, err)
+	require.Equal(t, "MCP & Tools", page.Name)
+
+	page, err = ti.service.ReadBuiltInDashboard(ctx, "security-risk")
+	require.NoError(t, err)
+	require.Equal(t, "Security & risk", page.Name)
+	copied, err := ti.service.DuplicateBuiltInDashboard(ctx, &gen.DuplicateBuiltInDashboardPayload{Slug: "security-risk", SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, copied.Widgets, len(page.Cards), "an org admin copies it like any other")
+
+	// The admin's project copy holds risk_findings widgets; a member copying
+	// it would get widgets over a dataset they may not read.
+	_, err = ti.service.DuplicateDashboard(memberCtx, &gen.DuplicateDashboardPayload{ID: copied.ID, SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorIs(t, err, widgets.ErrDatasetRestricted)
 }

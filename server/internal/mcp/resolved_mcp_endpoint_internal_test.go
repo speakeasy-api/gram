@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/stretchr/testify/require"
@@ -15,7 +17,7 @@ func TestValidateGrantRejectsOriginChange(t *testing.T) {
 	issuerID := uuid.New()
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:                "my-server",
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		UserSessionIssuerID: issuerID,
 	}
 	err := endpoint.ValidateGrant(t.Context(), EndpointRef{
@@ -31,7 +33,7 @@ func TestValidateGrantAllowsLegacyMissingOrigin(t *testing.T) {
 	issuerID := uuid.New()
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:                "my-server",
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		UserSessionIssuerID: issuerID,
 	}
 	require.NoError(t, endpoint.ValidateGrant(t.Context(), EndpointRef{McpSlug: "my-server"}, issuerID, "https://platform.example.com"))
@@ -42,7 +44,7 @@ func TestValidateChallengeRejectsIssuerChange(t *testing.T) {
 
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:                "my-server",
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		UserSessionIssuerID: uuid.New(),
 	}
 	err := endpoint.ValidateChallenge(t.Context(), EndpointRef{McpSlug: "my-server"}, uuid.New())
@@ -55,11 +57,11 @@ func TestValidateGlobalChallengeAllowsCustomDomainCallback(t *testing.T) {
 	issuerID := uuid.New()
 	domainID := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	endpoint := &ResolvedMcpEndpoint{
-		Slug: "my-server", RouteBase: "mcp", UserSessionIssuerID: issuerID,
+		Slug: "my-server", RouteBase: mcproute.MCP, UserSessionIssuerID: issuerID,
 		OrganizationID: "org_123", CustomDomainID: domainID,
 	}
 	ref := EndpointRef{
-		McpSlug: "my-server", RouteBase: "mcp", BaseURL: "https://custom.example.com",
+		McpSlug: "my-server", RouteBase: mcproute.MCP, BaseURL: "https://custom.example.com",
 		CustomDomainID: domainID,
 		Authority: networkingress.Authority{
 			Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://custom.example.com",
@@ -79,11 +81,11 @@ func TestValidateRef_Matches(t *testing.T) {
 
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:      "my-server",
-		RouteBase: "x/mcp",
+		RouteBase: mcproute.MCP,
 	}
 	require.NoError(t, endpoint.ValidateRef(EndpointRef{
 		McpSlug:   "my-server",
-		RouteBase: "x/mcp",
+		RouteBase: mcproute.MCP,
 	}))
 }
 
@@ -95,7 +97,7 @@ func TestValidateRefRejectsVisibilityChange(t *testing.T) {
 	t.Parallel()
 
 	wasPublic := true
-	endpoint := &ResolvedMcpEndpoint{Slug: "my-server", RouteBase: "mcp", IsPublic: false}
+	endpoint := &ResolvedMcpEndpoint{Slug: "my-server", RouteBase: mcproute.MCP, IsPublic: false}
 	err := endpoint.ValidateRef(EndpointRef{McpSlug: "my-server", IsPublic: &wasPublic})
 	require.ErrorIs(t, err, errToolsetEndpointMismatch)
 }
@@ -103,7 +105,7 @@ func TestValidateRefRejectsVisibilityChange(t *testing.T) {
 func TestValidateRefAllowsLegacyMissingVisibility(t *testing.T) {
 	t.Parallel()
 
-	endpoint := &ResolvedMcpEndpoint{Slug: "my-server", RouteBase: "mcp", IsPublic: false}
+	endpoint := &ResolvedMcpEndpoint{Slug: "my-server", RouteBase: mcproute.MCP, IsPublic: false}
 	require.NoError(t, endpoint.ValidateRef(EndpointRef{McpSlug: "my-server"}))
 }
 
@@ -112,7 +114,7 @@ func TestValidateRefAllowsLegacyMissingBackendIDs(t *testing.T) {
 
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:        "my-server",
-		RouteBase:   "mcp",
+		RouteBase:   mcproute.MCP,
 		McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 	}
 	require.NoError(t, endpoint.ValidateRef(EndpointRef{McpSlug: "my-server"}))
@@ -124,7 +126,7 @@ func TestEndpointRefPinsBridgedToolset(t *testing.T) {
 	toolsetID := uuid.New()
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:        "my-server",
-		RouteBase:   "x/mcp",
+		RouteBase:   mcproute.MCP,
 		McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
 	}
@@ -143,7 +145,7 @@ func TestValidateRefRejectsBackendSwap(t *testing.T) {
 	serverID := uuid.New()
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:        "my-server",
-		RouteBase:   "mcp",
+		RouteBase:   mcproute.MCP,
 		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
 	}
 	err := endpoint.ValidateRef(EndpointRef{
@@ -153,12 +155,13 @@ func TestValidateRefRejectsBackendSwap(t *testing.T) {
 	require.ErrorIs(t, err, errToolsetEndpointMismatch)
 }
 
+// A challenge cached on the retired /x/mcp surface cannot resume on /mcp.
 func TestValidateRef_RejectsCrossSurfaceResume(t *testing.T) {
 	t.Parallel()
 
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:      "my-server",
-		RouteBase: "mcp",
+		RouteBase: mcproute.MCP,
 	}
 	err := endpoint.ValidateRef(EndpointRef{
 		McpSlug:   "my-server",
@@ -174,19 +177,11 @@ func TestValidateRef_LegacyEmptyRouteBaseMeansMcp(t *testing.T) {
 
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:      "my-server",
-		RouteBase: "mcp",
+		RouteBase: mcproute.MCP,
 	}
 	require.NoError(t, endpoint.ValidateRef(EndpointRef{
 		McpSlug: "my-server",
 	}))
-
-	xmcpEndpoint := &ResolvedMcpEndpoint{
-		Slug:      "my-server",
-		RouteBase: "x/mcp",
-	}
-	require.ErrorIs(t, xmcpEndpoint.ValidateRef(EndpointRef{
-		McpSlug: "my-server",
-	}), errToolsetEndpointMismatch)
 }
 
 func TestValidateRef_RejectsCustomDomainMismatch(t *testing.T) {
@@ -195,12 +190,34 @@ func TestValidateRef_RejectsCustomDomainMismatch(t *testing.T) {
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:           "my-server",
 		CustomDomainID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-		RouteBase:      "mcp",
+		RouteBase:      mcproute.MCP,
 	}
 	err := endpoint.ValidateRef(EndpointRef{
 		McpSlug:        "my-server",
 		CustomDomainID: uuid.NullUUID{},
-		RouteBase:      "mcp",
+		RouteBase:      mcproute.MCP,
 	})
+	require.ErrorIs(t, err, errToolsetEndpointMismatch)
+}
+
+// A stored endpoint never resumes a challenge minted for the organization gateway.
+func TestValidateRef_RejectsOrganizationGatewayRefOnStoredEndpoint(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &ResolvedMcpEndpoint{Slug: "acme", RouteBase: mcproute.MCP}
+	err := endpoint.ValidateRef(EndpointRef{McpSlug: "acme", RouteBase: mcproute.OrganizationGateway})
+	require.ErrorIs(t, err, errToolsetEndpointMismatch)
+}
+
+// A state cached on the retired /x/mcp surface still decodes, then fails closed
+// before any lookup instead of re-routing onto /mcp.
+func TestBuildResolvedMcpEndpointByRef_RetiredRouteBaseFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	var state AuthnChallengeState
+	require.NoError(t, json.Unmarshal([]byte(`{"id":"c","endpoint":{"mcp_slug":"my-server","route_base":"x/mcp","retired_field":true}}`), &state))
+	require.Equal(t, mcproute.Base("x/mcp"), state.Endpoint.RouteBase)
+
+	_, err := (&Service{}).buildResolvedMcpEndpointByRef(t.Context(), state.Endpoint)
 	require.ErrorIs(t, err, errToolsetEndpointMismatch)
 }

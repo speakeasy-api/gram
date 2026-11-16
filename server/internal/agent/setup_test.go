@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -19,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -26,7 +29,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -36,6 +41,9 @@ import (
 )
 
 const testServerURL = "https://app.getgram.ai"
+
+// testSiteURL is the dashboard base that plugin server links are built on.
+const testSiteURL = "https://dashboard.getgram.ai"
 
 var infra *testenv.Environment
 
@@ -78,6 +86,10 @@ type testInstance struct {
 	// blobs is the same store the service writes handoff documents to, so
 	// tests can assert a burned handoff left nothing behind in it.
 	blobs assets.BlobStore
+	// deviceAgentTokens mints the device-agent tokens the service accepts.
+	deviceAgentTokens *deviceagenttoken.Issuer
+	// redis backs rate limiters a test attaches to the service.
+	redis *redis.Client
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -109,7 +121,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	// behavior is exercised explicitly via withPerUserKeyAuth.
 	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 
 	features := &stubProductFeatures{sessionPortability: true}
 	blobs := assetstest.NewTestBlobStore(t)
@@ -121,16 +133,24 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil)
+	serverURL, err := url.Parse(testServerURL)
+	require.NoError(t, err)
+	siteURL, err := url.Parse(testSiteURL)
+	require.NoError(t, err)
+	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
+	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
 
 	return ctx, &testInstance{
-		service:   svc,
-		conn:      conn,
-		chConn:    chConn,
-		orgID:     authCtx.ActiveOrganizationID,
-		projectID: *authCtx.ProjectID,
-		features:  features,
-		blobs:     blobs,
+		service:           svc,
+		conn:              conn,
+		chConn:            chConn,
+		orgID:             authCtx.ActiveOrganizationID,
+		projectID:         *authCtx.ProjectID,
+		features:          features,
+		blobs:             blobs,
+		deviceAgentTokens: deviceAgentTokens,
+		redis:             redisClient,
 	}
 }
 

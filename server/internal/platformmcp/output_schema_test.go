@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,6 +19,7 @@ import (
 // derived from its Go shape, because it has its own MarshalJSON.
 var sampleWireValues = map[reflect.Type]any{
 	reflect.TypeFor[SubjectCount](): NewSubjectCount(25),
+	reflect.TypeFor[time.Time]():    time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC),
 }
 
 // A client keeps the output schema it fetched when it connected and validates
@@ -46,6 +48,7 @@ func TestEveryAdvertisedOutputSchemaAcceptsAPopulatedResult(t *testing.T) {
 		require.NotEmpty(t, tools)
 		checked := 0
 		for _, tool := range tools {
+			requireObjectPropertySchemas(t, tool)
 			output, ok := outputs[tool.Name]
 			require.True(t, ok, "%s is listed but has no descriptor", tool.Name)
 			if output == reflect.TypeFor[any]() {
@@ -116,6 +119,7 @@ func TestFindAndGetMCPOutputSchemasAcceptPluginMemberships(t *testing.T) {
 		Version:          "v1",
 		Visibility:       "private",
 		EffectiveEnabled: true,
+		EnabledState:     "enabled",
 		Model:            "platform_managed",
 		BackendKind:      MCPBackendRemote,
 		UpstreamURL:      "https://mcp.example.test/platform",
@@ -133,15 +137,19 @@ func TestFindAndGetMCPOutputSchemasAcceptPluginMemberships(t *testing.T) {
 		DashboardPath: "/mcp/reviewed",
 	}
 
-	for name, output := range map[string]any{
-		"find_mcp": FindMCPOutput{MCPs: []MCP{item}, NextCursor: "next"},
-		"get_mcp":  item,
-	} {
-		encoded, err := json.Marshal(output)
-		require.NoError(t, err)
-		var decoded any
-		require.NoError(t, json.Unmarshal(encoded, &decoded))
-		require.NoErrorf(t, schemas[name].Validate(decoded), "%s: %s", name, encoded)
+	for _, state := range []string{"enabled", "disabled", "unknown"} {
+		item.EnabledState = state
+		item.EffectiveEnabled = state == "enabled"
+		for name, output := range map[string]any{
+			"find_mcp": FindMCPOutput{MCPs: []MCP{item}, NextCursor: "next"},
+			"get_mcp":  item,
+		} {
+			encoded, err := json.Marshal(output)
+			require.NoError(t, err)
+			var decoded any
+			require.NoError(t, json.Unmarshal(encoded, &decoded))
+			require.NoErrorf(t, schemas[name].Validate(decoded), "%s: %s", name, encoded)
+		}
 	}
 }
 
@@ -190,6 +198,30 @@ func TestInferredOutputSchemaAcceptsFieldsAddedLater(t *testing.T) {
 
 // connectTestClient opens a client session to server over in-memory
 // transports, closed when the test ends.
+// requireObjectPropertySchemas asserts every value directly under the input and
+// output schemas' properties is a JSON object. JSON Schema allows the boolean
+// schemas true and false there, and jsonschema-go encodes an empty Schema as
+// true, but the MCP spec types each property schema as an object, and the MCP
+// TypeScript SDK drops the whole tools/list result when one tool fails.
+func requireObjectPropertySchemas(t *testing.T, tool *mcp.Tool) {
+	t.Helper()
+	for field, schema := range map[string]any{"inputSchema": tool.InputSchema, "outputSchema": tool.OutputSchema} {
+		encoded, err := json.Marshal(schema)
+		require.NoError(t, err)
+		if string(encoded) == "null" {
+			continue
+		}
+		var decoded struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		require.NoError(t, json.Unmarshal(encoded, &decoded), "%s: %s", tool.Name, field)
+		for property, value := range decoded.Properties {
+			require.Truef(t, strings.HasPrefix(strings.TrimSpace(string(value)), "{"),
+				"%s: %s.properties.%s is %s; MCP clients require an object, so use a typed schema or {}", tool.Name, field, property, value)
+		}
+	}
+}
+
 func connectTestClient(t *testing.T, server *mcp.Server) *mcp.ClientSession {
 	t.Helper()
 

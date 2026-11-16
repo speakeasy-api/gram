@@ -6,13 +6,14 @@ import UserSessions from "./UserSessions";
 
 const state = vi.hoisted(() => ({
   project: { id: "project_a", slug: "first" },
+  tabbed: false,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: state.tabbed ? "enabled" : "disabled" }),
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => state.project }));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => true }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { add: { href: () => "/mcp/add" } } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "first" }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => children,
@@ -34,10 +35,7 @@ vi.mock("@gram/client/react-query/userSessions.js", () => ({
   useUserSessionsInfinite: () => ({ data: { pages: [] } }),
 }));
 vi.mock("./RemoteSessionRefreshPolicySetting", () => ({
-  RemoteSessionRefreshPolicySetting: () => null,
-}));
-vi.mock("./ConsentToolFilteringSetting", () => ({
-  ConsentToolFilteringSetting: () => null,
+  RemoteSessionRefreshPolicySetting: () => <div>Refresh policy</div>,
 }));
 vi.mock("@/components/connections/ConnectionsList", () => ({
   ConnectionsList: () => null,
@@ -53,6 +51,24 @@ vi.mock("@/components/page-templates", () => ({
     resourceId: string;
   }) => (
     <div data-testid="page" data-scope={scope} data-resource={resourceId}>
+      {children}
+    </div>
+  ),
+  TabbedPage: ({
+    children,
+    tabs,
+    activeTab,
+  }: {
+    children: ReactNode;
+    tabs: { value: string; label: string; href: string }[];
+    activeTab: string;
+  }) => (
+    <div data-testid="tabbed-page" data-active={activeTab}>
+      {tabs.map((tab) => (
+        <a key={tab.value} href={tab.href}>
+          {tab.label}
+        </a>
+      ))}
       {children}
     </div>
   ),
@@ -82,7 +98,10 @@ vi.mock("@/components/page-layout", () => ({
   },
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  state.tabbed = false;
+});
 
 it("clears the session search when switching projects and scopes the page to the new project", () => {
   state.project = { id: "project_a", slug: "first" };
@@ -93,7 +112,7 @@ it("clears the session search when switching projects and scopes the page to the
   );
   expect(
     screen.getByRole("link", { name: "Add MCP server" }).getAttribute("href"),
-  ).toBe("/mcp/add");
+  ).toBe("/org/projects/first/mcp/add");
   fireEvent.change(screen.getByRole("textbox"), {
     target: { value: "old project server" },
   });
@@ -116,4 +135,32 @@ it("clears the session search when switching projects and scopes the page to the
   expect(screen.getByTestId("page").getAttribute("data-resource")).toBe(
     "project_b",
   );
+});
+
+it("keeps the refresh policy on the page without tabs while the flag is off", () => {
+  render(
+    <MemoryRouter>
+      <UserSessions />
+    </MemoryRouter>,
+  );
+  expect(screen.queryByTestId("tabbed-page")).toBeNull();
+  expect(screen.getByText("Refresh policy")).toBeTruthy();
+});
+
+it("opens on the Overview tab without the refresh policy once the flag is on", () => {
+  state.tabbed = true;
+  state.project = { id: "project_a", slug: "first" };
+  render(
+    <MemoryRouter>
+      <UserSessions />
+    </MemoryRouter>,
+  );
+  expect(screen.getByTestId("tabbed-page").getAttribute("data-active")).toBe(
+    "overview",
+  );
+  expect(
+    screen.getByRole("link", { name: "Configuration" }).getAttribute("href"),
+  ).toBe("/org/projects/first/mcp-sessions/configuration");
+  expect(screen.queryByText("Refresh policy")).toBeNull();
+  expect(screen.getByRole("textbox")).toBeTruthy();
 });

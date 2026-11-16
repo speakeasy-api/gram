@@ -8,6 +8,8 @@ import (
 
 // HookIngestData - Feature-specific payloads. Hooks populate only the blocks needed for the event.
 type HookIngestData struct {
+	// Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+	DeliveryFailure *HookDeliveryFailureData `json:"delivery_failure,omitzero"`
 	// MCP feature payload.
 	Mcp *HookMCPData `json:"mcp,omitzero"`
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
@@ -41,6 +43,13 @@ func (h *HookIngestData) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	return nil
+}
+
+func (h *HookIngestData) GetDeliveryFailure() *HookDeliveryFailureData {
+	if h == nil {
+		return nil
+	}
+	return h.DeliveryFailure
 }
 
 func (h *HookIngestData) GetMcp() *HookMCPData {

@@ -613,6 +613,7 @@ func TestWritePluginUnknownProviderWritesNothing(t *testing.T) {
 		ProjectSlug:  "default",
 		OrgID:        "org-1",
 		HooksAPIKey:  "shared-key",
+		AgentKey:     false,
 		BrowserLogin: false,
 		BinaryPath:   "/tmp/speakeasy-hooks",
 	})

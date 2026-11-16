@@ -12,7 +12,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type healthToolCallParams struct {
@@ -98,7 +97,6 @@ func TestMCPServerHealth_RemoteServer(t *testing.T) {
 		projectID: projectID, deploymentID: uuid.NewString(), timestamp: now.Add(-time.Minute), traceID: uuid.NewString(),
 		hookSource: "claude-code", toolName: "search", result: `"ok"`, mcpServerURL: "https://mcp.example.com/mcp/remote-slug",
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	target := telemetry.MCPServerTelemetryTarget{ProjectID: projectID, MCPServerID: serverID, ToolsetSlug: "", URLSlug: "remote-slug"}
 	from, to := healthWindow()
@@ -131,7 +129,6 @@ func TestMCPServerHealth_ToolsetBackedServer(t *testing.T) {
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), toolsetSlug: "backed", statusCode: 404})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: serverID, statusCode: 503})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-2 * time.Minute), mcpServerID: uuid.NewString(), toolsetSlug: "backed", statusCode: 503})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	target := telemetry.MCPServerTelemetryTarget{ProjectID: projectID, MCPServerID: serverID, ToolsetSlug: "backed", URLSlug: "backed"}
 	from, to := healthWindow()
@@ -160,7 +157,6 @@ func TestMCPServerHealth_ToolsetOnlyServer(t *testing.T) {
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-5 * time.Minute), toolsetSlug: "only", statusCode: 200})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), toolsetSlug: "only", statusCode: 500})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), toolsetSlug: "another", statusCode: 200})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	target := telemetry.MCPServerTelemetryTarget{ProjectID: projectID, MCPServerID: "", ToolsetSlug: "only", URLSlug: "only"}
 	from, to := healthWindow()
@@ -190,7 +186,6 @@ func TestMCPServerHealth_SharedToolsetDropsSlug(t *testing.T) {
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-5 * time.Minute), mcpServerID: first, toolsetSlug: "shared", statusCode: 200})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), mcpServerID: second, toolsetSlug: "shared", statusCode: 200})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: second, toolsetSlug: "shared", statusCode: 500})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The admin drops the slug when two live wrappers share the toolset, so
 	// only the server id selects rows.
@@ -214,7 +209,6 @@ func TestMCPServerHealth_SeriesBuckets(t *testing.T) {
 
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: to.Add(-2 * time.Hour), mcpServerID: serverID, statusCode: 200})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: to.Add(-20 * 24 * time.Hour), mcpServerID: serverID, statusCode: 500})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	target := telemetry.MCPServerTelemetryTarget{ProjectID: projectID, MCPServerID: serverID, ToolsetSlug: "", URLSlug: "series"}
 

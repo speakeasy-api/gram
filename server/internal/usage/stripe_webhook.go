@@ -19,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -34,10 +36,12 @@ const (
 )
 
 var acceptedStripeWebhookEvents = map[string]struct{}{
-	"checkout.session.completed":    {},
-	"customer.subscription.deleted": {},
-	"invoice.created":               {},
-	"invoice.payment_failed":        {},
+	"checkout.session.completed":               {},
+	"checkout.session.async_payment_succeeded": {},
+	"checkout.session.async_payment_failed":    {},
+	"customer.subscription.deleted":            {},
+	"invoice.created":                          {},
+	"invoice.payment_failed":                   {},
 }
 
 type stripeWebhookResult struct {
@@ -48,6 +52,14 @@ type stripeWebhookResult struct {
 }
 
 type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error)
+
+func isStripeCheckoutSuccess(eventType string) bool {
+	return eventType == "checkout.session.completed" || eventType == "checkout.session.async_payment_succeeded"
+}
+
+func isStripeCheckoutEvent(eventType string) bool {
+	return isStripeCheckoutSuccess(eventType) || eventType == "checkout.session.async_payment_failed"
+}
 
 func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -77,7 +89,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		logger.InfoContext(ctx, "skipping unsupported Stripe webhook event")
 		return nil
 	}
-	if event.Type == "checkout.session.completed" && (event.ObjectID == "" || event.CustomerID == "" || event.SubscriptionID == "") {
+	if isStripeCheckoutEvent(event.Type) && (event.ObjectID == "" || event.CustomerID == "" || event.SubscriptionID == "") {
 		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe Checkout completion identifiers").LogWarn(ctx, logger)
 	}
 	if event.Type == "customer.subscription.deleted" && event.ObjectID == "" {
@@ -108,10 +120,19 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	var checkoutState *stripeclient.CheckoutSessionState
 	var invoiceState *stripeclient.InvoiceState
 	checkoutEligible := true
-	if event.Type == "checkout.session.completed" {
+	if isStripeCheckoutEvent(event.Type) {
 		checkoutState, checkoutEligible, err = s.currentCheckoutSession(ctx, event)
 		if err != nil {
 			return err
+		}
+	}
+	// Await payment without recording an activation receipt that could trigger replay cleanup.
+	if isStripeCheckoutSuccess(event.Type) && checkoutState != nil && !checkoutState.PaymentReady() {
+		return nil
+	}
+	if isStripeCheckoutSuccess(event.Type) && checkoutEligible {
+		if err := s.acceptManualPartnerCheckout(ctx, event, checkoutState); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "failed to accept partner Checkout").LogWarn(ctx, logger)
 		}
 	}
 	if event.Type == "invoice.created" {
@@ -130,7 +151,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	queries := repo.New(tx)
 	var subscriptionLockID string
 	switch {
-	case event.Type == "checkout.session.completed" && checkoutEligible:
+	case isStripeCheckoutSuccess(event.Type) && checkoutEligible:
 		subscriptionLockID = event.SubscriptionID
 	case event.Type == "customer.subscription.deleted":
 		subscriptionLockID = event.ObjectID
@@ -153,7 +174,11 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve Stripe webhook customer").LogError(ctx, logger)
 	}
 
-	if event.Type == "checkout.session.completed" && checkoutEligible {
+	if checkoutState != nil && checkoutState.OrganizationID != "" && checkoutState.OrganizationID != organizationID {
+		return oops.E(oops.CodeBadRequest, nil, "Stripe Checkout organization does not match customer ownership").LogWarn(ctx, logger)
+	}
+
+	if isStripeCheckoutSuccess(event.Type) && checkoutEligible {
 		trialQueries := trialsrepo.New(tx)
 		_, err := trialQueries.LockTrialLifecycle(ctx, organizationID)
 		switch {
@@ -167,13 +192,13 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	// checkout and prior-subscription deletion hold different subscription locks:
 	// trial row when applicable, every OpenRouter key advisory lock, then billing
 	// and key rows. Trial demotion follows the same trial/key prefix.
-	if (event.Type == "checkout.session.completed" && checkoutEligible) || event.Type == "customer.subscription.deleted" {
+	if (isStripeCheckoutSuccess(event.Type) && checkoutEligible) || event.Type == "customer.subscription.deleted" {
 		if err := acquireOpenRouterBillingLocks(ctx, queries, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter billing state").LogError(ctx, logger)
 		}
 	}
 
-	if event.Type == "checkout.session.completed" && checkoutEligible {
+	if isStripeCheckoutSuccess(event.Type) && checkoutEligible {
 		// Serialize Stripe activation with legacy billing-metadata writes only after
 		// OpenRouter locks. This keeps all lifecycle paths advisory-before-row ordered.
 		if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
@@ -235,7 +260,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	if event.Type == "checkout.session.completed" {
+	if isStripeCheckoutSuccess(event.Type) {
 		if err := s.finishPaygCheckout(ctx, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to finish committed Stripe Checkout").LogError(ctx, logger)
 		}
@@ -246,10 +271,10 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 func (s *Service) repairCommittedStripeLifecycleEvent(ctx context.Context, logger *slog.Logger, receipt repo.GetStripeWebhookReceiptRow) error {
 	logger.InfoContext(ctx, "repairing duplicate Stripe lifecycle event from committed state")
 	var err error
-	switch receipt.EventType {
-	case "checkout.session.completed":
+	switch {
+	case isStripeCheckoutSuccess(receipt.EventType):
 		err = s.repairReplayedPaygCheckout(ctx, logger, receipt.OrganizationID)
-	case "customer.subscription.deleted":
+	case receipt.EventType == "customer.subscription.deleted":
 		err = RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, receipt.OrganizationID, openrouter.KeyDesiredStateDisabled)
 	default:
 		return nil
@@ -384,6 +409,14 @@ func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclien
 		return nil, false, oops.E(oops.CodeUnavailable, nil, "Stripe Checkout session is not complete").LogWarn(ctx, s.logger)
 	}
 
+	if event.Type == "checkout.session.async_payment_failed" {
+		// A late failure must not override a subsequently successful payment.
+		return state, state.PaymentStatus == "unpaid", nil
+	}
+	if !state.PaymentReady() {
+		return state, false, nil
+	}
+
 	switch state.SubscriptionStatus {
 	case "active", "trialing", "past_due":
 		return state, true, nil
@@ -395,10 +428,10 @@ func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclien
 }
 
 func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
-	switch event.Type {
-	case "checkout.session.completed":
+	switch {
+	case isStripeCheckoutSuccess(event.Type):
 		return s.activatePaygCheckout(ctx, tx, organizationID, event, checkout)
-	case "invoice.created":
+	case event.Type == "invoice.created":
 		recorded, err := s.recordStripeInvoice(ctx, tx, organizationID, event, invoice)
 		if err != nil {
 			return stripeWebhookResult{}, err
@@ -408,10 +441,10 @@ func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.
 		} else {
 			logger.InfoContext(ctx, "skipped non-billable Stripe invoice creation")
 		}
-	case "invoice.payment_failed":
+	case event.Type == "invoice.payment_failed" || event.Type == "checkout.session.async_payment_failed":
 		logger.InfoContext(ctx, "received Stripe invoice payment failure")
 		return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: true, subscriptionLost: false}, nil
-	case "customer.subscription.deleted":
+	case event.Type == "customer.subscription.deleted":
 		return s.deactivatePaygSubscription(ctx, tx, organizationID, event)
 	}
 	return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
@@ -587,13 +620,17 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if !identity.StripeCustomerID.Valid || identity.StripeCustomerID.String != event.CustomerID {
 		return false, errors.New("stripe invoice customer does not belong to the organization")
 	}
-	if identity.GramAccountType != "payg" {
+	partner, err := q.IsRedeemedPartnerSubscription(ctx, repo.IsRedeemedPartnerSubscriptionParams{OrganizationID: pgtype.Text{String: organizationID, Valid: true}, StripeSubscriptionID: pgtype.Text{String: invoice.SubscriptionID, Valid: true}})
+	if err != nil {
+		return false, fmt.Errorf("verify partner invoice subscription: %w", err)
+	}
+	if identity.GramAccountType != "payg" && !partner {
 		if identity.StripeCheckoutSessionID.Valid {
 			return false, errors.New("PAYG Checkout activation has not committed")
 		}
 		return false, nil
 	}
-	if !identity.StripeSubscriptionID.Valid || identity.StripeSubscriptionID.String != invoice.SubscriptionID || !identity.StripeBillingCycleAnchor.Valid {
+	if (!identity.StripeSubscriptionID.Valid && !partner) || (identity.StripeSubscriptionID.Valid && identity.StripeSubscriptionID.String != invoice.SubscriptionID) || !identity.StripeBillingCycleAnchor.Valid {
 		return false, errors.New("stripe invoice does not belong to active PAYG billing")
 	}
 	if invoice.BillingReason == "subscription_create" && !invoice.ServicePeriodEnd.After(invoice.ServicePeriodStart) {
@@ -609,7 +646,12 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if invoice.Currency != "usd" {
 		return false, fmt.Errorf("unsupported Stripe invoice currency %q", invoice.Currency)
 	}
-	if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
+	anchor := identity.StripeBillingCycleAnchor.Time.UTC()
+	if partner && !anchor.Equal(anchor.Truncate(24*time.Hour)) {
+		if !partnerMonthlyPeriod(anchor, invoice.ServicePeriodStart, invoice.ServicePeriodEnd) {
+			return false, errors.New("partner invoice period does not match the immutable monthly billing anchor")
+		}
+	} else if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
 		return false, errors.New("stripe invoice service period is not UTC-day aligned")
 	}
 
@@ -657,6 +699,11 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, errors.New("stripe subscription already belongs to another organization")
 	}
 
+	checkout, err = s.verifiedPartnerCheckoutTx(ctx, tx, organizationID, event, state, checkout)
+	if err != nil {
+		return stripeWebhookResult{}, err
+	}
+
 	newlyEnabled := []productfeatures.Feature(nil)
 	convertedDemotedTrial := false
 	convertedTrial := false
@@ -688,6 +735,79 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 			return stripeWebhookResult{}, fmt.Errorf("restore demoted trial runtime features: %w", err)
 		}
 		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
+	}
+
+	// Partner access is granted only after Stripe confirms PAYG activation,
+	// never just for entering a signup code. Preserve explicit staff disables.
+	organization, err := orgrepo.New(tx).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("load partner signup attribution: %w", err)
+	}
+	application, err := orgrepo.New(tx).GetOrganizationPromotionApplication(ctx, organizationID)
+	partnerSignup := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stripeWebhookResult{}, fmt.Errorf("read promotion application: %w", err)
+	}
+	if partnerSignup {
+		switch {
+		case application.RedeemedAt.Valid:
+			if application.StripeSubscriptionID.String != event.SubscriptionID {
+				return stripeWebhookResult{}, errors.New("organization promotion was already redeemed by another subscription")
+			}
+		default:
+			// Fail closed until our application-created checkout is persisted. A
+			// webhook arriving before finalization can retry without consuming the intent.
+			if !state.StripeCheckoutSessionID.Valid || state.StripeCheckoutSessionID.String != checkout.ID ||
+				!state.StripeCheckoutIdempotencyKey.Valid || state.StripeCheckoutIdempotencyKey.String == "" {
+				return stripeWebhookResult{}, errors.New("partner checkout does not match a persisted checkout intent; retry after checkout finalization")
+			}
+			rows, err := q.RecordOrganizationPromotionRedemption(ctx, repo.RecordOrganizationPromotionRedemptionParams{
+				OrganizationID: pgtype.Text{String: organizationID, Valid: true}, StripePromotionCodeID: application.StripePromotionCodeID, StripeSubscriptionID: pgtype.Text{String: event.SubscriptionID, Valid: true},
+			})
+			if err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("record promotion redemption: %w", err)
+			}
+			if rows != 1 {
+				return stripeWebhookResult{}, errors.New("promotion redemption changed during activation")
+			}
+			if s.auditLogger == nil {
+				return stripeWebhookResult{}, errors.New("audit logger is unavailable")
+			}
+			if err := s.auditLogger.LogOrganizationPromotionRedeemed(ctx, tx, audit.LogOrganizationPromotionRedeemedEvent{
+				OrganizationID: organizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), ActorDisplayName: nil,
+				OrganizationName: organization.Name, OrganizationSlug: organization.Slug,
+				Redemption: audit.OrganizationPromotionRedemptionSnapshot{StripePromotionCodeID: application.StripePromotionCodeID, StripeSubscriptionID: event.SubscriptionID},
+			}); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("audit promotion redemption: %w", err)
+			}
+		}
+	}
+	if partnerSignup {
+		inserted, err := featurerepo.New(tx).EnableFeatureIfNeverConfigured(ctx, featurerepo.EnableFeatureIfNeverConfiguredParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(productfeatures.FeatureNetworkIngress),
+		})
+		if err != nil {
+			return stripeWebhookResult{}, fmt.Errorf("enable partner private networking: %w", err)
+		}
+		if inserted > 0 {
+			if s.auditLogger == nil {
+				return stripeWebhookResult{}, errors.New("audit logger is unavailable")
+			}
+			if err := s.auditLogger.LogOrganizationProductFeatureToggled(ctx, tx, audit.LogOrganizationProductFeatureToggledEvent{
+				OrganizationID:   organizationID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+				ActorDisplayName: nil,
+				ActorSlug:        nil,
+				OrganizationName: organization.Name,
+				OrganizationSlug: organization.Slug,
+				FeatureName:      string(productfeatures.FeatureNetworkIngress),
+				FeatureEnabled:   true,
+			}); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("audit partner private networking: %w", err)
+			}
+			newlyEnabled = append(newlyEnabled, productfeatures.FeatureNetworkIngress)
+		}
 	}
 
 	reconcileKeyTypes := []openrouter.KeyType(nil)

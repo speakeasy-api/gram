@@ -13,19 +13,19 @@ from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
-import pystreams.risk.enforce_handler as enforce_handler_mod
+import pystreams.risk.presidio_enforce_handler as enforce_handler_mod
 from pystreams.risk import maskdisplay
 from pystreams.risk import metering as metering_mod
-from pystreams.risk.enforce_handler import (
-    MAX_CONTENT_BYTES,
-    MalformedEnforcementRequest,
-    PresidioEnforceHandler,
-)
 from pystreams.risk.fingerprint import (
     Fingerprinter,
     FingerprintKeyringError,
     encode_fingerprint,
     parse_pepper_keyring,
+)
+from pystreams.risk.presidio_enforce_handler import (
+    MAX_CONTENT_BYTES,
+    MalformedEnforcementRequest,
+    PresidioEnforceHandler,
 )
 from pystreams.risk.replywriter import (
     ReplyWriter,
@@ -627,30 +627,56 @@ async def test_handler_rejects_out_of_range_threshold_without_scanning(
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
 
 
-async def test_handler_rejects_oversized_entity_selection_without_scanning():
+async def test_handler_rejects_oversized_entity_selection_without_scanning(
+    monkeypatch: pytest.MonkeyPatch,
+):
     client = fakeredis.aioredis.FakeRedis()
     scanner = FakeScanner()
-    message = _message()
+    truncations: list[int] = []
+
+    class TruncationCounter:
+        def add(self, value: int, attributes: dict[str, str]) -> None:
+            truncations.append(value)
+
+    monkeypatch.setattr(
+        enforce_handler_mod, "_content_truncations", TruncationCounter()
+    )
+    message = _message(content="a" * (MAX_CONTENT_BYTES + 1))
     message.entities.extend(
         f"ENTITY_{n}" for n in range(enforce_handler_mod.MAX_REQUESTED_ENTITIES + 1)
     )
     await _handler(scanner, client).handle(message, _meta())
     assert scanner.calls == []
+    assert truncations == []
     reply = await _read_reply(client)
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
 
 
-async def test_handler_rejects_oversized_content_without_scanning():
+async def test_handler_scans_utf8_safe_prefix_for_oversized_content(
+    monkeypatch: pytest.MonkeyPatch,
+):
     client = fakeredis.aioredis.FakeRedis()
     scanner = FakeScanner()
-    big = "a" * (MAX_CONTENT_BYTES + 1)
+    truncations: list[tuple[int, dict[str, str]]] = []
+
+    class TruncationCounter:
+        def add(self, value: int, attributes: dict[str, str]) -> None:
+            truncations.append((value, attributes))
+
+    monkeypatch.setattr(
+        enforce_handler_mod, "_content_truncations", TruncationCounter()
+    )
+    big = "a" * (MAX_CONTENT_BYTES - 1) + "é"
     await _handler(scanner, client).handle(_message(content=big), _meta())
-    assert scanner.calls == []
+    assert scanner.calls == ["a" * (MAX_CONTENT_BYTES - 1)]
     reply = await _read_reply(client)
-    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
+    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
+    assert reply.content_truncated
+    assert not reply.incomplete
+    assert truncations == [(1, {"gram.risk.enforcement.scanner": "presidio"})]
 
 
-async def test_oversized_request_does_not_publish_enforcement_meter():
+async def test_truncated_request_publishes_one_enforcement_meter():
     client = fakeredis.aioredis.FakeRedis()
     meter_publisher = FakeMeterPublisher()
 
@@ -658,4 +684,4 @@ async def test_oversized_request_does_not_publish_enforcement_meter():
         _metered_message(content="a" * (MAX_CONTENT_BYTES + 1)), _meta()
     )
 
-    assert meter_publisher.published == []
+    assert len(meter_publisher.published) == 1

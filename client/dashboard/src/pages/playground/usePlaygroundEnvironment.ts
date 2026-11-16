@@ -1,5 +1,5 @@
 import { useOrganization, useUser } from "@/contexts/Auth";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import {
   invalidateAllListEnvironments,
@@ -75,7 +75,7 @@ export function usePlaygroundEnvironment(
     () =>
       (existingEnvironment?.entries ?? []).map((entry) => ({
         name: entry.name,
-        hasStoredValue: entry.value.length > 0,
+        hasStoredValue: entry.hasValue,
       })),
     [existingEnvironment],
   );

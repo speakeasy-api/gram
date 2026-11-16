@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const Attestation = {
 /**
  * The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.
  */
-export type Attestation = ClosedEnum<typeof Attestation>;
+export type Attestation = OpenEnum<typeof Attestation>;
 
 /**
  * Agent-coverage summary across the org's connected MDM inventories. What a bucket attests depends on the org's matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device's assigned user has a fresh heartbeat somewhere.
@@ -30,11 +31,11 @@ export type DeviceIntegrationCoverage = {
    */
   activeWindowMinutes: number;
   /**
-   * Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
+   * Devices with an agent heartbeat or state report within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
    */
   agentActive: number;
   /**
-   * How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+   * How many of agent_active are backed by that machine's OWN heartbeat or state report (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
    */
   agentActiveDeviceAttested: number;
   /**
@@ -49,6 +50,10 @@ export type DeviceIntegrationCoverage = {
    * The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.
    */
   attestation: Attestation;
+  /**
+   * agent_active devices whose latest state report says the kill switch halted enforcement, because the reporting agent's build was blocked when it reported.
+   */
+  enforcementHalted: number;
   /**
    * Devices absent from the latest completed MDM snapshot.
    */
@@ -66,6 +71,18 @@ export type DeviceIntegrationCoverage = {
    */
   organizationId: string;
   /**
+   * agent_active devices whose latest report applies the policy last served to the reporting user.
+   */
+  policyAttested: number;
+  /**
+   * agent_active devices that report a different policy, or none.
+   */
+  policyOutdated: number;
+  /**
+   * agent_active devices with no state report within the window, typically an agent that predates reporting.
+   */
+  policyUnreported: number;
+  /**
    * All synced devices, including missing ones.
    */
   totalDevices: number;
@@ -80,8 +97,8 @@ export type DeviceIntegrationCoverage = {
 };
 
 /** @internal */
-export const Attestation$inboundSchema: z.ZodMiniEnum<typeof Attestation> = z
-  .enum(Attestation);
+export const Attestation$inboundSchema: z.ZodMiniType<Attestation, unknown> =
+  openEnums.inboundSchema(Attestation);
 
 /** @internal */
 export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
@@ -95,10 +112,14 @@ export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
     agent_other_device: z.int(),
     agent_stale: z.int(),
     attestation: Attestation$inboundSchema,
+    enforcement_halted: z.int(),
     missing: z.int(),
     no_agent: z.int(),
     no_email: z.int(),
     organization_id: z.string(),
+    policy_attested: z.int(),
+    policy_outdated: z.int(),
+    policy_unreported: z.int(),
     total_devices: z.int(),
     unmanaged_agent_users: z.int(),
     unresolved_email: z.int(),
@@ -110,9 +131,13 @@ export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
       "agent_active_device_attested": "agentActiveDeviceAttested",
       "agent_other_device": "agentOtherDevice",
       "agent_stale": "agentStale",
+      "enforcement_halted": "enforcementHalted",
       "no_agent": "noAgent",
       "no_email": "noEmail",
       "organization_id": "organizationId",
+      "policy_attested": "policyAttested",
+      "policy_outdated": "policyOutdated",
+      "policy_unreported": "policyUnreported",
       "total_devices": "totalDevices",
       "unmanaged_agent_users": "unmanagedAgentUsers",
       "unresolved_email": "unresolvedEmail",

@@ -12,7 +12,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -79,13 +81,12 @@ func newPublishingMetadataService(t *testing.T) (context.Context, publishingMeta
 	return ctx, publishingMetadataFixture{ti: ti, publisher: publisher, orgID: authCtx.ActiveOrganizationID, plugin: plugin}
 }
 
-func (f publishingMetadataFixture) carry(t *testing.T, ctx context.Context, toolsetID, mcpServerID uuid.NullUUID) {
+func (f publishingMetadataFixture) carry(t *testing.T, ctx context.Context, mcpServerID uuid.UUID) {
 	t.Helper()
 
 	_, err := pluginsrepo.New(f.ti.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
 		PluginID:    f.plugin.ID,
-		ToolsetID:   toolsetID,
-		McpServerID: mcpServerID,
+		McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
 		DisplayName: "Carried server",
 		Policy:      "required",
 		SortOrder:   0,
@@ -113,12 +114,7 @@ func createMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug 
 	t.Helper()
 
 	toolset := createTestToolset(t, ctx, ti, slug)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: true,
-		ID:         toolset.ID,
-		ProjectID:  toolset.ProjectID,
-	}))
-	toolset.McpEnabled = true
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: mcpservers.VisibilityPrivate, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	return toolset
 }
 
@@ -128,12 +124,7 @@ func createPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, sl
 	t.Helper()
 
 	toolset := createMCPToolset(t, ctx, ti, slug)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	}))
-	toolset.McpIsPublic = true
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: mcpservers.VisibilityPublic, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	return toolset
 }
 
@@ -146,7 +137,7 @@ func TestSetMcpMetadataRepublishesWhenUserHeadersChange(t *testing.T) {
 
 	ctx, f := newPublishingMetadataService(t)
 	toolset := createPublicToolset(t, ctx, f.ti, "metadata-carried")
-	f.carry(t, ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	f.carry(t, ctx, toolset.ID)
 	slug := types.Slug(toolset.Slug)
 
 	_, err := f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
@@ -201,7 +192,7 @@ func TestSetMcpMetadataPrivateToolsetRepublishesOnlyWhenHeadersAppearOrVanish(t 
 
 	ctx, f := newPublishingMetadataService(t)
 	toolset := createMCPToolset(t, ctx, f.ti, "metadata-private")
-	f.carry(t, ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	f.carry(t, ctx, toolset.ID)
 	slug := types.Slug(toolset.Slug)
 
 	_, err := f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
@@ -246,7 +237,7 @@ func TestSetMcpMetadataSkipsAttachedToolsetWithoutMCP(t *testing.T) {
 
 	ctx, f := newPublishingMetadataService(t)
 	toolset := createTestToolset(t, ctx, f.ti, "metadata-not-mcp")
-	f.carry(t, ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	f.carry(t, ctx, toolset.ID)
 	slug := types.Slug(toolset.Slug)
 
 	_, err := f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
@@ -262,7 +253,7 @@ func TestSetMcpMetadataRepublishesCarriedMCPServer(t *testing.T) {
 
 	ctx, f := newPublishingMetadataService(t)
 	server, _ := createMcpServerWithEndpoint(t, ctx, f.ti, mcpServerFixtureOptions{})
-	f.carry(t, ctx, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: server.ID, Valid: true})
+	f.carry(t, ctx, server.ID)
 	serverID := server.ID.String()
 
 	_, err := f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{

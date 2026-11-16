@@ -54,6 +54,16 @@ type ProtectedResourceDiscoveryError struct {
 	ProbeURL string
 	Status   int
 	cause    error
+	// earlierFault is set when an earlier probe failed with something other
+	// than 404, so a final 404 alone does not establish absence.
+	earlierFault bool
+}
+
+// Absent reports that every probe returned 404: the resource advertises no
+// metadata. Code reports only the final probe, which may be a 404 after an
+// earlier probe failed for another reason.
+func (e *ProtectedResourceDiscoveryError) Absent() bool {
+	return e.Code() == "not_found" && !e.earlierFault
 }
 
 func (e *ProtectedResourceDiscoveryError) Error() string {
@@ -157,9 +167,10 @@ func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Pol
 	candidates, err := protectedResourceProbeCandidates(resourceURL)
 	if err != nil {
 		return OAuthProtectedResourceMetadata{}, nil, &ProtectedResourceDiscoveryError{
-			ProbeURL: "",
-			Status:   0,
-			cause:    fmt.Errorf("compute probe url: %w", err),
+			ProbeURL:     "",
+			Status:       0,
+			cause:        fmt.Errorf("compute probe url: %w", err),
+			earlierFault: false,
 		}
 	}
 
@@ -169,6 +180,7 @@ func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Pol
 	client := policy.Client(guardian.WithInternalCatalog())
 
 	var lastErr *ProtectedResourceDiscoveryError
+	earlierFault := false
 	for _, probeURL := range candidates {
 		doc, attemptErr := attemptProtectedResourceProbe(reqCtx, client, probeURL)
 		if attemptErr == nil {
@@ -179,7 +191,13 @@ func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Pol
 		// Non-final candidates are speculative; only the final candidate's
 		// error survives the loop, so a genuine fault at the canonical
 		// origin-style URL is never masked by a fallback probe.
+		if lastErr != nil && lastErr.Code() != "not_found" {
+			earlierFault = true
+		}
 		lastErr = attemptErr
+	}
+	if lastErr != nil {
+		lastErr.earlierFault = earlierFault
 	}
 
 	return OAuthProtectedResourceMetadata{}, nil, lastErr
@@ -193,9 +211,10 @@ func attemptProtectedResourceProbe(ctx context.Context, client *guardian.HTTPCli
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
 	if err != nil {
 		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
-			ProbeURL: probeURL,
-			Status:   0,
-			cause:    fmt.Errorf("build probe request: %w", err),
+			ProbeURL:     probeURL,
+			Status:       0,
+			cause:        fmt.Errorf("build probe request: %w", err),
+			earlierFault: false,
 		}
 	}
 	req.Header.Set("Accept", "application/json")
@@ -203,43 +222,48 @@ func attemptProtectedResourceProbe(ctx context.Context, client *guardian.HTTPCli
 	resp, err := client.Do(req)
 	if err != nil {
 		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
-			ProbeURL: probeURL,
-			Status:   0,
-			cause:    fmt.Errorf("fetch probe document: %w", err),
+			ProbeURL:     probeURL,
+			Status:       0,
+			cause:        fmt.Errorf("fetch probe document: %w", err),
+			earlierFault: false,
 		}
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
 		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
-			ProbeURL: probeURL,
-			Status:   resp.StatusCode,
-			cause:    fmt.Errorf("probe returned status %d", resp.StatusCode),
+			ProbeURL:     probeURL,
+			Status:       resp.StatusCode,
+			cause:        fmt.Errorf("probe returned status %d", resp.StatusCode),
+			earlierFault: false,
 		}
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, discoverProtectedResourceMaxBodyBytes+1))
 	if err != nil {
 		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
-			ProbeURL: probeURL,
-			Status:   resp.StatusCode,
-			cause:    fmt.Errorf("%w: %w", errReadProbeBody, err),
+			ProbeURL:     probeURL,
+			Status:       resp.StatusCode,
+			cause:        fmt.Errorf("%w: %w", errReadProbeBody, err),
+			earlierFault: false,
 		}
 	}
 	if len(body) > discoverProtectedResourceMaxBodyBytes {
 		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
-			ProbeURL: probeURL,
-			Status:   resp.StatusCode,
-			cause:    fmt.Errorf("probe document exceeds %d bytes", discoverProtectedResourceMaxBodyBytes),
+			ProbeURL:     probeURL,
+			Status:       resp.StatusCode,
+			cause:        fmt.Errorf("probe document exceeds %d bytes", discoverProtectedResourceMaxBodyBytes),
+			earlierFault: false,
 		}
 	}
 
 	var doc OAuthProtectedResourceMetadata
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
-			ProbeURL: probeURL,
-			Status:   resp.StatusCode,
-			cause:    fmt.Errorf("decode probe document: %w", err),
+			ProbeURL:     probeURL,
+			Status:       resp.StatusCode,
+			cause:        fmt.Errorf("decode probe document: %w", err),
+			earlierFault: false,
 		}
 	}
 	doc.Raw = json.RawMessage(body)

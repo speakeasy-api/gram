@@ -8,6 +8,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
@@ -156,7 +157,7 @@ function BackingCredential({
   if (isLoading) {
     return (
       <InfoField label="External credential">
-        <InfoText>Loading…</InfoText>
+        <Skeleton label="Loading external credential" className="h-5 w-48" />
       </InfoField>
     );
   }

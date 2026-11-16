@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,13 +25,13 @@ export const Category = {
 /**
  * Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.
  */
-export type Category = ClosedEnum<typeof Category>;
+export type Category = OpenEnum<typeof Category>;
 
 export const Signals = {
   Installed: "installed",
   Running: "running",
 } as const;
-export type Signals = ClosedEnum<typeof Signals>;
+export type Signals = OpenEnum<typeof Signals>;
 
 /**
  * One AI detection target aggregated across an organization's device-agent scan reports.
@@ -79,14 +80,12 @@ export type AIDetection = {
 };
 
 /** @internal */
-export const Category$inboundSchema: z.ZodMiniEnum<typeof Category> = z.enum(
-  Category,
-);
+export const Category$inboundSchema: z.ZodMiniType<Category, unknown> =
+  openEnums.inboundSchema(Category);
 
 /** @internal */
-export const Signals$inboundSchema: z.ZodMiniEnum<typeof Signals> = z.enum(
-  Signals,
-);
+export const Signals$inboundSchema: z.ZodMiniType<Signals, unknown> = openEnums
+  .inboundSchema(Signals);
 
 /** @internal */
 export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z

@@ -11,13 +11,27 @@ import { GramCore } from "../core.js";
 import { agentsList } from "../funcs/agentsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ManagedAgent } from "../models/components/managedagent.js";
 import {
+  Lifecycle,
   ListAgentsRequest,
+  ListAgentsResponse,
   ListAgentsSecurity,
+  NameOrder,
 } from "../models/operations/listagents.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AgentsQueryData = Array<ManagedAgent>;
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
+import { pageIteratorToJSON } from "./_types.js";
+export type AgentsQueryData = ListAgentsResponse;
+
+export type AgentsInfiniteQueryData = PageIterator<
+  ListAgentsResponse,
+  { cursor: string }
+>;
+
+export type AgentsPageParams = PageIterator<
+  ListAgentsResponse,
+  { cursor: string }
+>["~next"];
 
 export function prefetchAgents(
   queryClient: QueryClient,
@@ -36,6 +50,26 @@ export function prefetchAgents(
   });
 }
 
+export function prefetchAgentsInfinite(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request?: ListAgentsRequest | undefined,
+  security?: ListAgentsSecurity | undefined,
+  options?: RequestOptions,
+): Promise<void> {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildAgentsInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined as AgentsPageParams,
+    getNextPageParam: (previousPage: AgentsInfiniteQueryData) =>
+      previousPage["~next"],
+  });
+}
+
 export function buildAgentsQuery(
   client$: GramCore,
   request?: ListAgentsRequest | undefined,
@@ -46,7 +80,17 @@ export function buildAgentsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<AgentsQueryData>;
 } {
   return {
-    queryKey: queryKeyAgents({ gramSession: request?.gramSession }),
+    queryKey: queryKeyAgents({
+      cursor: request?.cursor,
+      limit: request?.limit,
+      search: request?.search,
+      nameOrder: request?.nameOrder,
+      lifecycle: request?.lifecycle,
+      ownerUserIds: request?.ownerUserIds,
+      registeredAfter: request?.registeredAfter,
+      registeredBefore: request?.registeredBefore,
+      gramSession: request?.gramSession,
+    }),
     queryFn: async function agentsQueryFn(ctx): Promise<AgentsQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -69,8 +113,87 @@ export function buildAgentsQuery(
   };
 }
 
+export function buildAgentsInfiniteQuery(
+  client$: GramCore,
+  request?: ListAgentsRequest | undefined,
+  security?: ListAgentsSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext<QueryKey, AgentsPageParams>,
+  ) => Promise<AgentsInfiniteQueryData>;
+} {
+  return {
+    queryKey: queryKeyAgentsInfinite({
+      cursor: request?.cursor,
+      limit: request?.limit,
+      search: request?.search,
+      nameOrder: request?.nameOrder,
+      lifecycle: request?.lifecycle,
+      ownerUserIds: request?.ownerUserIds,
+      registeredAfter: request?.registeredAfter,
+      registeredBefore: request?.registeredBefore,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function agentsQuery(ctx): Promise<AgentsInfiniteQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(agentsList(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(agentsList(
+        client$,
+        {
+          ...request!,
+          cursor: ctx.pageParam.cursor,
+        },
+        security,
+        mergedOptions,
+      ));
+      return pageIteratorToJSON(pageResult);
+    },
+  };
+}
+
 export function queryKeyAgents(
-  parameters: { gramSession?: string | undefined },
+  parameters: {
+    cursor?: string | undefined;
+    limit?: number | undefined;
+    search?: string | undefined;
+    nameOrder?: NameOrder | undefined;
+    lifecycle?: Array<Lifecycle> | undefined;
+    ownerUserIds?: Array<string> | undefined;
+    registeredAfter?: Date | undefined;
+    registeredBefore?: Date | undefined;
+    gramSession?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "agents", "list", parameters];
+}
+
+export function queryKeyAgentsInfinite(
+  parameters: {
+    cursor?: string | undefined;
+    limit?: number | undefined;
+    search?: string | undefined;
+    nameOrder?: NameOrder | undefined;
+    lifecycle?: Array<Lifecycle> | undefined;
+    ownerUserIds?: Array<string> | undefined;
+    registeredAfter?: Date | undefined;
+    registeredBefore?: Date | undefined;
+    gramSession?: string | undefined;
+  },
+): QueryKey {
+  return ["@gram/client", "agents", "list", "infinite", parameters];
 }

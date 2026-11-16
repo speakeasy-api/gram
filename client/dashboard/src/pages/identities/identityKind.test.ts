@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Employee } from "@/components/observe/insightsEmployeesData";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,7 +12,8 @@ const telemetryIdentity: Employee = {
   name: "external_example",
   email: "",
   role: "",
-  status: "not_enrolled",
+  inDirectory: false,
+  seen: true,
   tokenCount: 10,
   lastActivity: "—",
   lastActivityTimestamp: null,

@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
 	"golang.org/x/sync/errgroup"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -22,59 +23,45 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
-	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
-	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
-	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
-// AnalyzeBatch scans a batch of messages against one risk policy and replaces
-// that policy's stored results for the fetched message IDs.
+// AnalyzeBatch hands a batch of messages to the Pub/Sub analysis handlers for
+// one risk policy. The handlers produce every finding and usage reading; the
+// activity scans nothing itself and writes nothing to Postgres. It fails
+// unless every enforcing scan request is acknowledged, and the coordinator
+// marks the batch analyzed only after it succeeds, so a dropped request is
+// redriven rather than lost. Shadow LLM analyzer requests are the one
+// exception: they only feed engine comparison, so their failures are counted
+// and dropped. Disabled rules, builtin presets and exclusions are applied by
+// the ClickHouse findings writer.
 type AnalyzeBatch struct {
-	logger                 *slog.Logger
-	tracer                 trace.Tracer
-	metrics                *riskMetrics
-	db                     *pgxpool.Pool
-	assetStorage           contentPartAssetReader
-	gitleaksScanner        *gitleaks.Scanner
-	stokenCodec            *stokens.Codec
-	piiScanner             PIIScanner
-	promptInjectionScanner *promptinjection.Scanner
-	shadowMCPScanner       *shadowmcpscan.Scanner
-	judge                  promptpolicy.Evaluator
-	flags                  feature.Provider
-	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
-	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
-	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
-	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
-	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	llmPub                 gcp.Publisher[*riskv1.LLMAnalysis]
-	// llmAnalyzerEnabled reports whether the streams process has a fine-tuned
-	// risk model to evaluate LLM analysis requests (GRAM_RISK_LLM_URL set).
-	// Without it the flag alone must not divert covered sources away from the
-	// legacy engines: the consumer would ack every request with no findings.
-	llmAnalyzerEnabled     bool
-	llmFallbackOnce        sync.Once
-	findingsPub            gcp.Publisher[*riskv1.Finding]
-	riskRecorder           *metering.RiskRecorder
-	customRuleScanner      *customruleanalyzer.Scanner
-	cliDestructiveScanner  *clidestructive.Scanner
-	destructiveToolScanner *destructivetool.Scanner
-	celEng                 *celenv.Engine
-	builtinPresets         *presetlib.Library
-	recommended            RecommendedSet
+	logger             *slog.Logger
+	tracer             trace.Tracer
+	metrics            *riskMetrics
+	db                 *pgxpool.Pool
+	assetStorage       contentPartAssetReader
+	stokenCodec        *stokens.Codec
+	flags              feature.Provider
+	presidioPub        gcp.Publisher[*riskv1.PresidioAnalysis]
+	gitleaksPub        gcp.Publisher[*riskv1.GitleaksAnalysis]
+	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis]
+	promptPolicyPub    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
+	customRulesPub     gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	llmPub             gcp.Publisher[*riskv1.LLMAnalysis]
+	toolCallPub        gcp.Publisher[*riskv1.ToolCallAnalysis]
+	accountIdentityPub gcp.Publisher[*riskv1.AccountIdentityAnalysis]
+	// llmAnalyzerEnabled prevents diverting work to an unconfigured consumer.
+	llmAnalyzerEnabled bool
+	llmFallbackOnce    sync.Once
+	celEng             *celenv.Engine
+	recommended        RecommendedSet
 }
 
 type contentPartAssetReader = blobio.Reader
@@ -85,11 +72,6 @@ func NewAnalyzeBatch(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	assetStorage contentPartAssetReader,
-	piiScanner PIIScanner,
-	promptInjectionScanner *promptinjection.Scanner,
-	shadowMCPClient *shadowmcp.Client,
-	mcpProvenanceLookup MCPProvenanceLookup,
-	judge promptpolicy.Evaluator,
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
@@ -97,68 +79,44 @@ func NewAnalyzeBatch(
 	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	llmPub gcp.Publisher[*riskv1.LLMAnalysis],
-	findingsPub gcp.Publisher[*riskv1.Finding],
-	customRuleScanner *customruleanalyzer.Scanner,
+	toolCallPub gcp.Publisher[*riskv1.ToolCallAnalysis],
+	accountIdentityPub gcp.Publisher[*riskv1.AccountIdentityAnalysis],
 	celEng *celenv.Engine,
-	builtinPresets *presetlib.Library,
-	shadowMCPBypass shadowmcpscan.BypassChecker,
-	riskRecorder *metering.RiskRecorder,
 	llmAnalyzerEnabled bool,
 ) (*AnalyzeBatch, error) {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
-	if piiScanner == nil {
-		piiScanner = &StubPIIScanner{}
+	if toolCallPub == nil {
+		return nil, errors.New("tool call analysis publisher is required")
 	}
-	if promptInjectionScanner == nil {
-		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-	}
-	if findingsPub == nil {
-		findingsPub = gcp.NewNoopPublisher[*riskv1.Finding]()
+	if accountIdentityPub == nil {
+		return nil, errors.New("account identity analysis publisher is required")
 	}
 	recommended, err := CompileRecommended(celEng)
 	if err != nil {
 		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
 	}
 
-	metrics := newRiskMetrics(meterProvider, logger)
-
 	return &AnalyzeBatch{
-		logger:                 logger,
-		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:                metrics,
-		db:                     db,
-		assetStorage:           assetStorage,
-		gitleaksScanner:        gitleaks.NewScanner(),
-		stokenCodec:            stokens.NewCodec(),
-		piiScanner:             piiScanner,
-		promptInjectionScanner: promptInjectionScanner,
-		shadowMCPScanner: shadowmcpscan.NewScanner(
-			logger,
-			shadowMCPClient,
-			shadowMCPClient,
-			mcpProvenanceLookup,
-			metrics,
-			shadowmcpscan.WithShadowMCPBypass(shadowMCPBypass),
-		),
-		judge:                  judge,
-		flags:                  flags,
-		presidioPub:            presidioPub,
-		gitleaksPub:            gitleaksPub,
-		promptInjectionPub:     promptInjectionPub,
-		promptPolicyPub:        promptPolicyPub,
-		customRulesPub:         customRulesPub,
-		llmPub:                 llmPub,
-		findingsPub:            findingsPub,
-		riskRecorder:           riskRecorder,
-		customRuleScanner:      customRuleScanner,
-		cliDestructiveScanner:  clidestructive.NewScanner(),
-		destructiveToolScanner: destructivetool.NewScanner(shadowMCPClient),
-		celEng:                 celEng,
-		builtinPresets:         builtinPresets,
-		recommended:            recommended,
-		llmAnalyzerEnabled:     llmAnalyzerEnabled,
-		llmFallbackOnce:        sync.Once{},
+		logger:             logger,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics:            newRiskMetrics(meterProvider, logger),
+		db:                 db,
+		assetStorage:       assetStorage,
+		stokenCodec:        stokens.NewCodec(),
+		flags:              flags,
+		presidioPub:        presidioPub,
+		gitleaksPub:        gitleaksPub,
+		promptInjectionPub: promptInjectionPub,
+		promptPolicyPub:    promptPolicyPub,
+		customRulesPub:     customRulesPub,
+		llmPub:             llmPub,
+		toolCallPub:        toolCallPub,
+		accountIdentityPub: accountIdentityPub,
+		llmAnalyzerEnabled: llmAnalyzerEnabled,
+		llmFallbackOnce:    sync.Once{},
+		celEng:             celEng,
+		recommended:        recommended,
 	}, nil
 }
 
@@ -173,7 +131,7 @@ type AnalyzeBatchArgs struct {
 	PresidioEntities []string
 	// PresidioScoreThreshold is the per-policy minimum recognizer confidence
 	// (0.0-1.0). Do derives it from the refetched policy's analyzer_config, so it
-	// is not a caller input; zero means unset and the scanner applies
+	// is not a caller input; zero means unset and the handler applies
 	// DefaultPresidioScoreThreshold.
 	PresidioScoreThreshold float64
 	CustomRuleIds          []string
@@ -181,10 +139,6 @@ type AnalyzeBatchArgs struct {
 	// Like PresidioScoreThreshold, Do derives it from the refetched policy's
 	// analyzer_config, so it is not a caller input.
 	ApprovedEmailDomains []string
-	// BuiltinPresetsEnabled toggles scan-time suppression of built-in catalog
-	// false positives. Do derives it from the refetched policy's analyzer_config
-	// (defaulting ON), so it is not a caller input.
-	BuiltinPresetsEnabled bool
 	// DetectionScopes are the policy's specified per-category detection scopes,
 	// each replacing its registry recommendation. Do derives it from the
 	// refetched policy's analyzer_config, so it is not a caller input.
@@ -192,13 +146,13 @@ type AnalyzeBatchArgs struct {
 }
 
 type AnalyzeBatchResult struct {
+	// Processed is the number of messages and content parts published.
 	Processed int
-	Findings  int
 }
 
 func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *AnalyzeBatchResult, err error) {
 	if len(args.MessageIDs) == 0 && len(args.ContentPartIDs) == 0 {
-		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+		return &AnalyzeBatchResult{Processed: 0}, nil
 	}
 
 	start := time.Now()
@@ -219,6 +173,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		}
 		span.End()
 	}()
+	activity.RecordHeartbeat(ctx, 0)
 
 	policy, err := repo.New(a.db).GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        args.RiskPolicyID,
@@ -227,7 +182,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if errors.Is(err, pgx.ErrNoRows) {
 		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
 		a.logger.InfoContext(ctx, "risk policy deleted, skipping batch", attr.SlogRiskPolicyID(args.RiskPolicyID.String()))
-		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+		return &AnalyzeBatchResult{Processed: 0}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get risk policy: %w", err)
@@ -235,172 +190,124 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if !policy.Enabled {
 		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
 		a.logger.InfoContext(ctx, "risk policy disabled, skipping batch", attr.SlogRiskPolicyID(args.RiskPolicyID.String()))
-		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+		return &AnalyzeBatchResult{Processed: 0}, nil
 	}
 
 	// Single source of truth: derive analyzer options from the policy we just
 	// refetched, rather than trusting (possibly omitted) caller values.
 	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
-	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
 	args.DetectionScopes = DetectionScopesFromConfig(policy.AnalyzerConfig)
+
+	if len(args.MessageIDs) > 0 && newSourceSet(args.Sources).Has(SourceAccountIdentity) {
+		if err := a.publishAccountIdentityScanRequests(ctx, args); err != nil {
+			return nil, err
+		}
+	}
 
 	messages, err := a.fetchContent(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	scannedCount = len(messages)
-
-	exclusions := NewExclusionSet(nil)
-	if policy.PolicyType != PolicyTypePromptBased {
-		exclusions, err = a.policyExclusionSet(ctx, args)
-		if err != nil {
-			return nil, err
-		}
+	if len(messages) == 0 {
+		return &AnalyzeBatchResult{Processed: 0}, nil
 	}
 
-	// Session-scoped account_identity findings are computed over the batch's
-	// full message-id set, before the message-type filter and CEL scope above
-	// apply: the detector reads the session's account attribution, not message
-	// content, so narrowing a policy's scope must not subset which sessions it
-	// evaluates. Exclusions apply on entry into the pipeline (in
-	// appendSessionFindings below) and disabled_rules at the shared filter
-	// step, mirroring the content path.
-	var session []sessionFinding
-	if len(args.MessageIDs) > 0 && newSourceSet(args.Sources).Has(SourceAccountIdentity) {
-		session, err = a.scanAccountIdentity(ctx, args)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(messages) == 0 && len(session) == 0 {
-		if _, err := a.writeResults(ctx, args, nil); err != nil {
-			return nil, err
-		}
-		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
-	}
-
-	findings := make([][]scanners.Finding, len(messages))
-	if len(messages) > 0 {
-		specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
-		if err != nil {
-			return nil, fmt.Errorf("compile detection scopes: %w", err)
-		}
-		categoryScopes := NewCategoryScopes(a.recommended, specified, a.metrics)
-		masks := categoryScopes.Masks(ctx, messages)
-
-		switch policy.PolicyType {
-		case PolicyTypePromptBased:
-			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks)
-			if err != nil {
-				return nil, err
-			}
-		default:
-			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	ids, findings := mergeSessionFindings(messages, findings, session, exclusions)
-
-	if disabled := NewDisabledRuleSet(policy.DisabledRules); !disabled.Empty() {
-		for i, batch := range findings {
-			findings[i] = disabled.FilterFindings(batch)
-		}
-	}
-
-	rowsToWrite, findingsCount := a.buildRows(ctx, args, ids, findings)
-	written, err := a.writeResults(ctx, args, rowsToWrite)
+	masks, err := a.categoryScopeMasks(ctx, args, messages)
 	if err != nil {
 		return nil, err
 	}
-	// Mirror the stream scanners onto the shared findings topic for sources
-	// that have no stream publisher (ClickHouse would otherwise never see
-	// them). Only after a committed write: a batch dropped because its policy
-	// was deleted mid-analysis must not leak findings into ClickHouse that
-	// Postgres never stored. A publish failure fails the activity — the
-	// redriven batch repeats only idempotent writes, so the retry converges.
-	if written {
-		if err := a.publishBatchOnlyFindings(ctx, args, ids, findings); err != nil {
-			return nil, err
-		}
+
+	switch policy.PolicyType {
+	case PolicyTypePromptBased:
+		err = a.publishPromptPolicy(ctx, args, policy, messages, masks)
+	default:
+		err = a.publishStandardPolicy(ctx, args, messages, policy.CustomRuleIds, masks)
 	}
-
-	span.SetAttributes(
-		attribute.Int("risk.messages_processed", len(messages)),
-		attribute.Int("risk.findings_count", findingsCount),
-		attribute.Int("risk.rows_written", len(rowsToWrite)),
-	)
-
-	return &AnalyzeBatchResult{
-		Processed: len(messages),
-		Findings:  findingsCount,
-	}, nil
-}
-
-// policyExclusionSet loads the enabled exclusions that apply to the policy
-// (its own plus globals). Fetched once in Do and shared by the content
-// scanners (via mergeFindings) and the session-scoped account_identity path.
-func (a *AnalyzeBatch) policyExclusionSet(ctx context.Context, args AnalyzeBatchArgs) (ExclusionSet, error) {
-	exclusions, err := repo.New(a.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
-		ProjectID:    args.ProjectID,
-		RiskPolicyID: uuid.NullUUID{UUID: args.RiskPolicyID, Valid: true},
-	})
 	if err != nil {
-		return NewExclusionSet(nil), fmt.Errorf("list exclusions: %w", err)
+		return nil, err
 	}
-	return NewExclusionSet(exclusions), nil
+	scannedCount = len(messages)
+	span.SetAttributes(attribute.Int("risk.messages_processed", len(messages)))
+	return &AnalyzeBatchResult{Processed: len(messages)}, nil
 }
 
-// mergeSessionFindings folds session-scoped findings into the
-// message-aligned findings set (ids and findings must be equal length),
-// applying exclusions on the way in (the content path applies them inside
-// mergeFindings, which session findings bypass). A session finding lands on
-// its carrier message's existing slot when that message survived the
-// policy's message-type filter — keeping the "message has findings → no
-// sentinel row" invariant — and appends a new (id, findings) entry
-// otherwise, since session findings deliberately bypass message scoping.
-func mergeSessionFindings(ids []batchMessage, findings [][]scanners.Finding, session []sessionFinding, exclusions ExclusionSet) ([]batchMessage, [][]scanners.Finding) {
-	if len(session) == 0 {
-		return ids, findings
+// publishPromptPolicy publishes the in-scope messages for the handler to judge.
+// A policy without a prompt still publishes: the handler applies the policy's
+// fail mode to it, flagging every message when the policy fails closed.
+func (a *AnalyzeBatch) publishPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) error {
+	enabled, err := policyflags.ProjectFlagChecked(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies)
+	if err != nil {
+		return fmt.Errorf("check prompt policies flag: %w", err)
 	}
-	index := make(map[uuid.UUID]int, len(ids))
-	for i, msg := range ids {
-		if !msg.ContentPart {
-			index[msg.ID] = i
-		}
+	if !enabled {
+		return nil
 	}
-	for _, sf := range session {
-		kept := exclusions.FilterFindings(sf.findings)
-		if len(kept) == 0 {
-			continue
-		}
-		if i, ok := index[sf.messageID]; ok {
-			findings[i] = append(findings[i], kept...)
-		} else {
-			ids = append(ids, batchMessage{
-				ID:                     sf.messageID,
-				ChatID:                 uuid.Nil,
-				ParentChatMessageID:    uuid.Nil,
-				ContentPart:            false,
-				Type:                   "",
-				Content:                "",
-				RawToolCalls:           nil,
-				ToolCalls:              nil,
-				PriorUserRequest:       "",
-				RecentUntrustedContent: "",
-				UserID:                 "",
-				CreatedAt:              time.Time{},
-				Source:                 "",
-				Truncated:              false,
-			})
-			findings = append(findings, kept)
-		}
+	indices := promptPolicyIndices(messages, masks)
+	if len(indices) == 0 {
+		return nil
 	}
-	return ids, findings
+	return a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices)
+}
+
+// publishStandardPolicy publishes each source's in-scope messages to its
+// analysis handler. The LLM analyzer lane, when enforcing, stands in for the
+// sources the model enforces.
+func (a *AnalyzeBatch) publishStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, masks CategoryScopeMasks) error {
+	sources := newSourceSet(args.Sources)
+	lane := a.resolveLLMLane(ctx, args)
+	inScope := func(source string) []batchMessage {
+		cats := sourceCategories[source]
+		a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, source, masks.RecommendedPrefilteredCount(cats))
+		return masks.Admitted(messages, cats)
+	}
+
+	var group errgroup.Group
+	group.Go(func() error {
+		return a.publishLLMLane(ctx, args, messages, lane, sources, masks)
+	})
+	if sources.Has(shadowmcp.SourceShadowMCP) || lane.runs(sources, shadowmcp.SourceDestructiveTool) || lane.runs(sources, SourceCLIDestructive) {
+		group.Go(func() error {
+			return a.publishToolCallScanRequests(ctx, args, messages, sources, masks, lane.ownEngineRuns(shadowmcp.SourceDestructiveTool), lane.ownEngineRuns(SourceCLIDestructive))
+		})
+	}
+	if lane.runs(sources, SourceGitleaks) {
+		subMessages := inScope(SourceGitleaks)
+		group.Go(func() error {
+			return a.publishGitleaksScanRequests(ctx, args, subMessages)
+		})
+	}
+	if lane.runs(sources, SourcePresidio) {
+		subMessages := inScope(SourcePresidio)
+		group.Go(func() error {
+			return a.publishPresidioScanRequests(ctx, args, subMessages, resolvePresidioScoreThreshold(args.PresidioScoreThreshold))
+		})
+	}
+	if lane.runs(sources, SourcePromptInjection) {
+		subMessages := inScope(SourcePromptInjection)
+		group.Go(func() error {
+			return a.publishPromptInjectionScanRequests(ctx, args, subMessages)
+		})
+	}
+	if len(customRuleIDs) > 0 {
+		subMessages := inScope(SourceCustom)
+		group.Go(func() error {
+			return a.publishCustomRulesScanRequests(ctx, args, subMessages, customRuleIDs)
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return fmt.Errorf("publish scan requests: %w", err)
+	}
+	return nil
+}
+
+// categoryScopeMasks compiles the policy's detection scopes against the batch.
+func (a *AnalyzeBatch) categoryScopeMasks(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage) (CategoryScopeMasks, error) {
+	specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
+	if err != nil {
+		return CategoryScopeMasks{}, fmt.Errorf("compile detection scopes: %w", err)
+	}
+	return NewCategoryScopes(a.recommended, specified).Masks(ctx, messages), nil
 }
 
 func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) ([]batchMessage, error) {

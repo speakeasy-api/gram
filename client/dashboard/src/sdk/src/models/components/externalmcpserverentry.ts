@@ -5,6 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -21,9 +23,28 @@ import {
 } from "./externalmcprepository.js";
 
 /**
+ * Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.
+ */
+export const AuthSetup = {
+  None: "none",
+  Dcr: "dcr",
+  Cimd: "cimd",
+  Manual: "manual",
+  Unknown: "unknown",
+} as const;
+/**
+ * Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.
+ */
+export type AuthSetup = OpenEnum<typeof AuthSetup>;
+
+/**
  * A summary of an MCP server from an external registry, returned by catalog listings
  */
 export type ExternalMCPServerEntry = {
+  /**
+   * Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.
+   */
+  authSetup?: AuthSetup | undefined;
   /**
    * Description of what the server does
    */
@@ -33,9 +54,9 @@ export type ExternalMCPServerEntry = {
    */
   iconUrl?: string | undefined;
   /**
-   * Whether every tool on the server is read-only
+   * Whether every declared tool is read-only, when catalog evidence is available
    */
-  isReadOnly: boolean;
+  isReadOnly?: boolean | undefined;
   /**
    * ID of the attached MCP server backing this server
    */
@@ -65,7 +86,11 @@ export type ExternalMCPServerEntry = {
    */
   repository?: ExternalMCPRepository | undefined;
   /**
-   * Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
+   * Whether issuer metadata advertises compatible Client ID Metadata Document support.
+   */
+  supportsCimd?: boolean | undefined;
+  /**
+   * Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). False alone does not establish that manual setup is required.
    */
   supportsDcr: boolean;
   /**
@@ -73,9 +98,9 @@ export type ExternalMCPServerEntry = {
    */
   title?: string | undefined;
   /**
-   * Number of tools the server exposes
+   * Number of declared tools, when catalog evidence is available
    */
-  toolCount: number;
+  toolCount?: number | undefined;
   /**
    * ID of the attached toolset backing this server
    */
@@ -87,14 +112,19 @@ export type ExternalMCPServerEntry = {
 };
 
 /** @internal */
+export const AuthSetup$inboundSchema: z.ZodMiniType<AuthSetup, unknown> =
+  openEnums.inboundSchema(AuthSetup);
+
+/** @internal */
 export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
   ExternalMCPServerEntry,
   unknown
 > = z.pipe(
   z.object({
+    auth_setup: z.optional(AuthSetup$inboundSchema),
     description: z.string(),
     icon_url: z.optional(z.string()),
-    is_read_only: z.boolean(),
+    is_read_only: z.optional(z.boolean()),
     mcp_server_id: z.optional(z.string()),
     meta: z.optional(z.any()),
     packages: z.optional(z.array(ExternalMCPPackage$inboundSchema)),
@@ -102,19 +132,22 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
     registry_specifier: z.string(),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
     repository: z.optional(ExternalMCPRepository$inboundSchema),
+    supports_cimd: z.optional(z.boolean()),
     supports_dcr: z.boolean(),
     title: z.optional(z.string()),
-    tool_count: z.int(),
+    tool_count: z.optional(z.int()),
     toolset_id: z.optional(z.string()),
     version: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auth_setup": "authSetup",
       "icon_url": "iconUrl",
       "is_read_only": "isReadOnly",
       "mcp_server_id": "mcpServerId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
+      "supports_cimd": "supportsCimd",
       "supports_dcr": "supportsDcr",
       "tool_count": "toolCount",
       "toolset_id": "toolsetId",

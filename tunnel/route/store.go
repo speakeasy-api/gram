@@ -6,6 +6,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 const (
@@ -42,6 +44,17 @@ type Connection struct {
 	ActiveSubstreams       int               `json:"active_substreams"`
 	ActiveConsumerSessions int               `json:"active_consumer_sessions"`
 	Metadata               map[string]string `json:"metadata"`
+	TargetDisplay          string            `json:"target_display,omitempty"`
+	Diagnostics            *Diagnostics      `json:"diagnostics,omitempty"`
+}
+
+// Diagnostics describes collection independently from target reachability.
+// ReceivedAt is gateway time; report ages are relative to that instant.
+type Diagnostics struct {
+	State       string                  `json:"state"`
+	AttemptedAt time.Time               `json:"attempted_at,omitzero"`
+	ReceivedAt  time.Time               `json:"received_at,omitzero"`
+	Report      *wire.DiagnosticsReport `json:"report,omitempty"`
 }
 
 type ConnectionSnapshotStore interface {

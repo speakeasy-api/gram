@@ -58,6 +58,8 @@ export interface RemoteMcpToolConnection {
   /** Make the stored tool metadata mirror the session. */
   sync: () => void;
   isSyncing: boolean;
+  /** This viewer can change the stored tool metadata. */
+  canWrite: boolean;
 }
 
 /**
@@ -118,7 +120,7 @@ export function useRemoteMcpToolConnection({
     connectUrl,
     // Every failure stays inline as `isError`, so each consumer can offer its
     // own retry instead of an error boundary.
-    { headers, enabled: connectionEnabled, throwOnError: false },
+    { headers, enabled: connectionEnabled, throwOnError: false, inspect: true },
   );
 
   // The first-party connect page is opened as a top-level new tab, so it rides
@@ -142,7 +144,7 @@ export function useRemoteMcpToolConnection({
 
   // Only remote-backed servers carry tool metadata, and there is nothing to
   // reconcile until both the session and the stored set have loaded.
-  const { sync, isSyncing } = useSyncToolMetadata({
+  const { sync, isSyncing, canWrite } = useSyncToolMetadata({
     mcpServerId,
     live: tools,
     stored: metadataByTool,
@@ -163,5 +165,6 @@ export function useRemoteMcpToolConnection({
       : undefined,
     sync,
     isSyncing,
+    canWrite,
   };
 }

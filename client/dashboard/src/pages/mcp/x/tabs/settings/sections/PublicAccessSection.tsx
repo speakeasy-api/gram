@@ -2,6 +2,7 @@ import { SettingsSection } from "@/components/detail/settings-section";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -10,7 +11,6 @@ import { Text } from "@/components/ui/Text";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { invalidateTunneledMcpSourceViews } from "./sourceInvalidation";
@@ -25,7 +25,7 @@ function PendingIcon({ pending }: { pending: boolean }) {
   if (!pending) return null;
   return (
     <Button.LeftIcon>
-      <Loader2 className="size-4 animate-spin" />
+      <Spinner className="mr-0" />
     </Button.LeftIcon>
   );
 }

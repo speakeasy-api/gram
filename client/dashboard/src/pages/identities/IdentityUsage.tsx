@@ -4,6 +4,7 @@ import {
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { useLocation, useSearchParams } from "react-router";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
@@ -12,6 +13,7 @@ import { useIdentityOutlet } from "./identityRoute";
 import { ShareBar } from "@/components/chart/ShareBar";
 import { SplitRankedBarList } from "@/components/chart/SplitRankedBarList";
 import { IdentitySection } from "./IdentitySection";
+import { IdentityToolLogsPanel } from "./IdentityToolLogs";
 import { sectionMeta } from "./sectionMeta";
 import {
   hasMetricsSubject,
@@ -19,6 +21,7 @@ import {
   useIdentityMetrics,
   useIdentityPeers,
   useIdentityWindow,
+  useIsSelf,
 } from "./useIdentityQueries";
 
 // Enough to show the shape of someone's usage; the handoff owns the long tail.
@@ -49,6 +52,11 @@ export default function IdentityUsage(): JSX.Element {
   const location = useLocation();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
+  // Tool Logs filters by this identity's address. Without log:read the server
+  // answers with the viewer's own rows, so for anyone else the handoff would
+  // open a page that says "no calls" about calls that exist.
+  const isSelf = useIsSelf(identity);
+  const canHandOffToolLogs = useToolLogsAccess().projectWide || isSelf;
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
   const handoffs = identityHandoffs(
@@ -119,6 +127,7 @@ export default function IdentityUsage(): JSX.Element {
   return (
     <IdentitySection
       title="Usage"
+      timeRange
       meta={sectionMeta([
         { count: tools.length, singular: "tool" },
         { count: models.length, singular: "model" },
@@ -235,7 +244,7 @@ export default function IdentityUsage(): JSX.Element {
         <IdentityPanel
           title="Tools"
           handoffLabel="Tool Logs"
-          handoffHref={handoffs.toolLogs}
+          handoffHref={canHandOffToolLogs ? handoffs.toolLogs : undefined}
           loading={metricsQuery.isLoading}
           loadingVariant="block"
           error={metricsQuery.isError && tools.length === 0}
@@ -269,6 +278,9 @@ export default function IdentityUsage(): JSX.Element {
           )}
         </IdentityPanel>
       </div>
+
+      {/* The calls behind the numbers above, for reading one by one. */}
+      <IdentityToolLogsPanel identity={identity} accountType={scope} />
     </IdentitySection>
   );
 }

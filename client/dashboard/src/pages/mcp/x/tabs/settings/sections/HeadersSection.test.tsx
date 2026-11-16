@@ -173,6 +173,22 @@ describe("HeadersSection", () => {
     expect(box(values[1]!)).toContain("border-warning-default");
   });
 
+  it("refuses to forward the caller's Authorization upstream", () => {
+    const rows = [
+      draft({
+        key: "row-authorization",
+        name: "X-Token",
+        source: "request",
+        staticValue: "",
+        valueFromRequestHeader: " authorization ",
+      }),
+    ];
+    expect(headerDraftErrors(rows).get("row-authorization")).toEqual({
+      field: "value",
+      message: '"authorization" cannot be forwarded upstream.',
+    });
+  });
+
   it("refuses to forward the session cookie upstream", () => {
     // The proxy is the control that holds; this marks the row while editing
     // so the refusal is not a failed request much later.

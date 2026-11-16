@@ -15,15 +15,9 @@ export interface ShadowAIPolicySlot {
   href: string | undefined;
 }
 
-export function useShadowAIPolicySlot({
-  enabled = true,
-}: {
-  /** Off, nothing is fetched: the flag-off flow has no Shadow AI control. */
-  enabled?: boolean;
-} = {}): ShadowAIPolicySlot {
+export function useShadowAIPolicySlot(): ShadowAIPolicySlot {
   const routes = useRoutes();
   const policiesQuery = useRiskListPolicies(undefined, undefined, {
-    enabled,
     throwOnError: false,
   });
   const existing = findBlockingShadowMCPPolicy(

@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  EMAProviderOrder,
+  EMAProviderOrder$inboundSchema,
+} from "./emaproviderorder.js";
 
 /**
  * A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
@@ -45,6 +49,10 @@ export type RemoteSessionIssuer = {
    */
   codeChallengeMethodsSupported?: Array<string> | null | undefined;
   createdAt: Date;
+  /**
+   * The EMA providers one vendor authorization server accepts, saved or default. They are stored as an ordered list that identity chaining tries in turn, but each endpoint can use only the provider its sign-in goes through, so the list acts as the set of accepted providers.
+   */
+  emaProviders?: EMAProviderOrder | undefined;
   grantTypesSupported?: Array<string> | undefined;
   /**
    * The remote_session_issuer id.
@@ -176,6 +184,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    ema_providers: z.optional(EMAProviderOrder$inboundSchema),
     grant_types_supported: z.optional(z.array(z.string())),
     id: z.string(),
     id_token_signing_alg_values_supported: z.optional(
@@ -233,6 +242,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "client_setup_documentation_url": "clientSetupDocumentationUrl",
       "code_challenge_methods_supported": "codeChallengeMethodsSupported",
       "created_at": "createdAt",
+      "ema_providers": "emaProviders",
       "grant_types_supported": "grantTypesSupported",
       "id_token_signing_alg_values_supported":
         "idTokenSigningAlgValuesSupported",

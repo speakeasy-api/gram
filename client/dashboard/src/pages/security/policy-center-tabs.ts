@@ -8,6 +8,8 @@ export const POLICY_CENTER_TABS = [
   "policies",
   "detection-rules",
   "shadow-ai-targets",
+  "mcp-approvals",
+  "tool-approvals",
   "exclusions",
   "quarantines",
 ] as const;
@@ -18,31 +20,46 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
   policies: "Policies",
   "detection-rules": "Detection Rules",
   "shadow-ai-targets": "Shadow AI targets",
+  "mcp-approvals": "MCP approvals",
+  "tool-approvals": "Tool approvals",
   exclusions: "Exclusion Rules",
   quarantines: "Quarantines",
 };
 
-/** Which tabs the strip shows. The Shadow AI targets tab arrives with the
- *  Shadow AI fold-in flag; without it the page keeps its four tabs. */
-function visibleTabs(shadowAIEnabled: boolean): PolicyCenterTab[] {
+export function policyCenterTabLabel(tab: PolicyCenterTab): string {
+  return TAB_LABEL[tab];
+}
+
+/** The query string that selects a tab, for links that land on one from
+ *  elsewhere: append it to the Guardrails href. */
+export function policyCenterTabSearch(tab: PolicyCenterTab): string {
+  return `?tab=${tab}`;
+}
+
+type PolicyCenterFlags = { toolApprovals?: boolean };
+
+function visibleTabs({
+  toolApprovals = false,
+}: PolicyCenterFlags): PolicyCenterTab[] {
   return POLICY_CENTER_TABS.filter(
-    (tab) => shadowAIEnabled || tab !== "shadow-ai-targets",
+    (tab) => toolApprovals || tab !== "tool-approvals",
   );
 }
 
-export function policyCenterTabs(shadowAIEnabled: boolean): PageTab[] {
-  return visibleTabs(shadowAIEnabled).map((tab) => ({
+/** The tabs to show. Tool approvals is behind its rollout flag. */
+export function policyCenterTabs(flags: PolicyCenterFlags = {}): PageTab[] {
+  return visibleTabs(flags).map((tab) => ({
     value: tab,
     label: TAB_LABEL[tab],
-    href: `?tab=${tab}`,
+    href: policyCenterTabSearch(tab),
   }));
 }
 
-/** A `?tab=` value the strip does not show falls back to Policies, so a
- *  Shadow AI targets link opened with the flag off still lands somewhere. */
-export function visiblePolicyCenterTab(
-  tab: PolicyCenterTab,
-  shadowAIEnabled: boolean,
+/** The tab a link lands on: one that is hidden, such as Tool approvals with
+ *  its flag off, falls back to "policies" rather than an empty page. */
+export function resolvePolicyCenterTab(
+  requested: PolicyCenterTab,
+  flags: PolicyCenterFlags = {},
 ): PolicyCenterTab {
-  return visibleTabs(shadowAIEnabled).includes(tab) ? tab : "policies";
+  return visibleTabs(flags).includes(requested) ? requested : "policies";
 }

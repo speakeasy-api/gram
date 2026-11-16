@@ -2,16 +2,24 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
+
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
 // WorkOSAdapter wraps the WorkOS usermanagement.Client to implement both
 // IDPClient (for identity) and sessions.SessionRevoker (for sessions),
 // translating between Speakeasy's slim interfaces and the SDK's richer types.
 type WorkOSAdapter struct {
-	client *usermanagement.Client
+	client            *usermanagement.Client
+	googleUserInfoURL string
+	evidence          evidenceCollector
 }
 
 // NewWorkOSAdapter creates an adapter from a WorkOS SDK client.
@@ -20,7 +28,25 @@ func NewWorkOSAdapter(client *usermanagement.Client) *WorkOSAdapter {
 	if client == nil {
 		return nil
 	}
-	return &WorkOSAdapter{client: client}
+	return &WorkOSAdapter{client: client, googleUserInfoURL: DefaultGoogleUserInfoURL, evidence: newEvidenceCollector(EvidenceConfig{Logger: nil, MeterProvider: nil, Enabled: nil})}
+}
+
+// WithEvidence enables sign-in evidence collection. Without it only the
+// verified email is recorded and no sign-in qualifies for vouching.
+func (a *WorkOSAdapter) WithEvidence(cfg EvidenceConfig) *WorkOSAdapter {
+	if a != nil {
+		a.evidence = newEvidenceCollector(cfg)
+	}
+	return a
+}
+
+// WithGoogleUserInfoURL points Google hosted-domain lookups elsewhere, e.g. at
+// the dev-idp locally. Empty keeps Google's endpoint.
+func (a *WorkOSAdapter) WithGoogleUserInfoURL(url string) *WorkOSAdapter {
+	if a != nil && url != "" {
+		a.googleUserInfoURL = url
+	}
+	return a
 }
 
 func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error) {
@@ -32,6 +58,9 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 		UserAgent:    "",
 	})
 	if err != nil {
+		if providerErr, ok := errors.AsType[workos_errors.HTTPError](err); ok && providerErr.Code == http.StatusBadRequest && providerErr.ErrorCode == oautherr.CodeInvalidGrant {
+			return nil, fmt.Errorf("workos authenticate: %w", errors.Join(ErrCodeRejected, err))
+		}
 		return nil, fmt.Errorf("workos authenticate: %w", err)
 	}
 
@@ -41,8 +70,10 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 	}
 
 	return &AuthenticateResult{
-		AccessToken:    resp.AccessToken,
-		OrganizationID: resp.OrganizationID,
+		AccessToken:          resp.AccessToken,
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: string(resp.AuthenticationMethod),
+		Evidence:             a.signInEvidence(ctx, resp),
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,
@@ -85,8 +116,12 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 	}
 
 	return &AuthenticateResult{
-		AccessToken:    resp.AccessToken,
-		OrganizationID: resp.OrganizationID,
+		AccessToken:          resp.AccessToken,
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: string(resp.AuthenticationMethod),
+		// The server redeems this code itself, so nothing here was proven by
+		// the user and the sign-in never qualifies.
+		Evidence: SignInEvidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,
@@ -118,4 +153,36 @@ func (a *WorkOSAdapter) RevokeSession(ctx context.Context, sessionID string) err
 		return fmt.Errorf("workos revoke session: %w", err)
 	}
 	return nil
+}
+
+// maxSessionPages caps the WorkOS session listing for one user.
+const maxSessionPages = 50
+
+// ListSessionIDs lists every WorkOS session the user holds, following
+// pagination.
+func (a *WorkOSAdapter) ListSessionIDs(ctx context.Context, workosUserID string) ([]string, error) {
+	if a == nil {
+		return nil, nil
+	}
+	var ids []string
+	after := ""
+	for range maxSessionPages {
+		resp, err := a.client.ListSessions(ctx, workosUserID, usermanagement.ListSessionsOpts{
+			Limit:  100,
+			Before: "",
+			After:  after,
+			Order:  usermanagement.Desc,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("workos list sessions: %w", err)
+		}
+		for _, session := range resp.Data {
+			ids = append(ids, session.ID)
+		}
+		if resp.ListMetadata.After == "" || len(resp.Data) == 0 {
+			return ids, nil
+		}
+		after = resp.ListMetadata.After
+	}
+	return nil, fmt.Errorf("workos list sessions: more than %d pages", maxSessionPages)
 }

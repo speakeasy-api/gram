@@ -11,15 +11,15 @@ import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { RemoteIdentityProvidersPage } from "./RemoteIdentityProviders";
 
-vi.mock("@/routes", () => ({
-  useRoutes: (overrides?: { projectSlug?: string }) => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        href: (id: string) =>
-          `/example/projects/${overrides?.projectSlug ?? "active"}/remote-identity-providers/${id}`,
-      },
-    },
-  }),
+const flag = vi.hoisted(() => ({ status: "disabled" }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: flag.status }),
+}));
+vi.mock("@/pages/org/RemoteSessionRefreshPolicySetting", () => ({
+  RemoteSessionRefreshPolicySetting: () => <div>Refresh policy</div>,
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "active" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
@@ -157,7 +157,28 @@ vi.mock("./CreateRemoteSessionClientSheet", () => ({
   }) => <div>Add client to {issuer.name}</div>,
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  flag.status = "disabled";
+});
+
+it.each([
+  ["disabled", false],
+  ["enabled", true],
+])(
+  "shows the automatic session refresh policy only while the MCP Sessions tabs flag is %s",
+  (status, shown) => {
+    flag.status = status;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <RemoteIdentityProvidersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText("Refresh policy") !== null).toBe(shown);
+  },
+);
 // Platform management is absent unconditionally; RequireScope is stubbed above,
 // so tenant actions here do not test org:admin authorization.
 it("preserves tenant actions and read-only platform browsing without platform management", () => {
@@ -168,7 +189,7 @@ it("preserves tenant actions and read-only platform browsing without platform ma
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(screen.getByText("Platform Remote Identity Providers")).toBeTruthy();
+  expect(screen.getByText("Platform Authorization Servers")).toBeTruthy();
   for (const [name, slug, id] of [
     ["Platform Example", "active", "platform-provider"],
     ["Organization Example", "active", "org-provider"],
@@ -176,7 +197,7 @@ it("preserves tenant actions and read-only platform browsing without platform ma
   ]) {
     expect(
       screen
-        .getByRole("link", { name: `View remote identity provider ${name}` })
+        .getByRole("link", { name: `View authorization server ${name}` })
         .getAttribute("href"),
     ).toBe(`/example/projects/${slug}/remote-identity-providers/${id}`);
   }
@@ -195,7 +216,7 @@ it("preserves tenant actions and read-only platform browsing without platform ma
   );
   expect(screen.getByText("Add client to Platform Example")).toBeTruthy();
   fireEvent.click(
-    screen.getByRole("button", { name: "New Remote Identity Provider" }),
+    screen.getByRole("button", { name: "New Authorization Server" }),
   );
   expect(screen.getByText("Create tenant provider")).toBeTruthy();
 });

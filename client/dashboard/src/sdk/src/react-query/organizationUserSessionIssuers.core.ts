@@ -15,6 +15,7 @@ import {
   ListOrganizationUserSessionIssuersRequest,
   ListOrganizationUserSessionIssuersResponse,
   ListOrganizationUserSessionIssuersSecurity,
+  QueryParamTier,
 } from "../models/operations/listorganizationusersessionissuers.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -85,6 +86,7 @@ export function buildOrganizationUserSessionIssuersQuery(
     queryKey: queryKeyOrganizationUserSessionIssuers({
       cursor: request?.cursor,
       limit: request?.limit,
+      tier: request?.tier,
       gramSession: request?.gramSession,
     }),
     queryFn: async function organizationUserSessionIssuersQueryFn(
@@ -129,6 +131,7 @@ export function buildOrganizationUserSessionIssuersInfiniteQuery(
     queryKey: queryKeyOrganizationUserSessionIssuersInfinite({
       cursor: request?.cursor,
       limit: request?.limit,
+      tier: request?.tier,
       gramSession: request?.gramSession,
     }),
     queryFn: async function organizationUserSessionIssuersQuery(
@@ -171,6 +174,7 @@ export function queryKeyOrganizationUserSessionIssuers(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    tier?: QueryParamTier | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {
@@ -181,6 +185,7 @@ export function queryKeyOrganizationUserSessionIssuersInfinite(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    tier?: QueryParamTier | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

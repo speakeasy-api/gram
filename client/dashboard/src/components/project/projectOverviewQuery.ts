@@ -71,7 +71,8 @@ export function buildProjectOverviewQuery(
           // Explicit slug: org routes bind the SDK fetcher to `default`, and
           // the request must match the project in the cache key.
           gramProject: scope.project,
-          getProjectMetricsSummaryPayload: { from, to },
+          // Usage rides along so the project home loads with one request.
+          getProjectOverviewPayload: { from, to, includeUsage: true },
         }),
       );
     },

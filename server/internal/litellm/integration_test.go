@@ -15,33 +15,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 	"go.temporal.io/sdk/testsuite"
 	goahttp "goa.design/goa/v3/http"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	riskanalysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -52,12 +48,6 @@ type recordingScanner struct {
 	seenUserIDs        []string
 	acknowledgementHit bool
 	challenges         int
-}
-
-type noMCPProvenance struct{}
-
-func (noMCPProvenance) LookupMCPProvenanceByToolCallID(_ context.Context, _ uuid.UUID, _ []string, _ time.Time) (map[string]telemetryrepo.MCPProvenance, error) {
-	return map[string]telemetryrepo.MCPProvenance{}, nil
 }
 
 func requireChatMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, params chatrepo.ListChatMessagesParams, count int) []chatrepo.ChatMessage {
@@ -184,22 +174,17 @@ func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
 	require.NoError(t, ti.service.traces.Shutdown(t.Context()))
 
 	query := telemetryrepo.New(ti.chConn)
-	var logs []telemetryrepo.TelemetryLog
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-		var queryErr error
-		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     start.Add(-time.Second).UnixNano(),
-			TimeEnd:       start.Add(time.Second).UnixNano(),
-			GramURNs:      []string{litellmOTLPResourceURN},
-			SortOrder:     "asc",
-			Cursor:        "",
-			Limit:         10,
-		})
-		assert.NoError(collect, queryErr)
-		assert.Len(collect, logs, 1)
-	}, 10*time.Second, 50*time.Millisecond)
+	logs, err := query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     start.Add(-time.Second).UnixNano(),
+		TimeEnd:       start.Add(time.Second).UnixNano(),
+		GramURNs:      []string{litellmOTLPResourceURN},
+		SortOrder:     "asc",
+		Cursor:        "",
+		Limit:         10,
+	})
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
 
 	require.Equal(t, messages[0].UserID.String, gjson.Get(logs[0].Attributes, "user.id").String())
 	require.Equal(t, conv.NormalizeEmail(storedEmail), gjson.Get(logs[0].Attributes, "user.email").String())
@@ -240,22 +225,17 @@ func TestOTLPMetricsPersistOnlyOperationalRows(t *testing.T) {
 	require.NoError(t, ti.service.metrics.Shutdown(t.Context()))
 
 	query := telemetryrepo.New(ti.chConn)
-	var logs []telemetryrepo.TelemetryLog
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-		var queryErr error
-		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     now.Add(-time.Second).UnixNano(),
-			TimeEnd:       now.Add(time.Second).UnixNano(),
-			GramURNs:      []string{litellmOTLPMetricsURN},
-			SortOrder:     "asc",
-			Cursor:        "",
-			Limit:         100,
-		})
-		assert.NoError(collect, queryErr)
-		assert.Len(collect, logs, 2*len(litellmMetricNames))
-	}, 10*time.Second, 50*time.Millisecond)
+	logs, err := query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     now.Add(-time.Second).UnixNano(),
+		TimeEnd:       now.Add(time.Second).UnixNano(),
+		GramURNs:      []string{litellmOTLPMetricsURN},
+		SortOrder:     "asc",
+		Cursor:        "",
+		Limit:         100,
+	})
+	require.NoError(t, err)
+	require.Len(t, logs, 2*len(litellmMetricNames))
 
 	for _, log := range logs {
 		require.Equal(t, litellmMetricEventURN, gjson.Get(log.Attributes, "gram.event.urn").String())
@@ -918,36 +898,33 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 	require.Equal(t, []uuid.UUID{messages[0].ID}, fetched.MessageIDs)
 	require.Len(t, fetched.Policies, 1)
 
-	customRules, err := customruleanalyzer.NewScanner(ti.conn)
-	require.NoError(t, err)
 	celEngine, err := riskcelenv.New()
 	require.NoError(t, err)
-	flags := &feature.InMemory{}
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, cache.NoopCache, nil)
+	gitleaksPub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	var gitleaksRequests []*riskv1.GitleaksAnalysis
+	gitleaksPub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			request, ok := args.Get(1).(*riskv1.GitleaksAnalysis)
+			require.True(t, ok)
+			gitleaksRequests = append(gitleaksRequests, request)
+		})
 	analyze, err := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		nil,
-		&riskanalysis.StubPIIScanner{},
-		nil,
-		shadowMCPClient,
-		noMCPProvenance{},
-		nil,
-		flags,
+		&feature.InMemory{},
 		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+		gitleaksPub,
 		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.Finding](),
-		customRules,
+		gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis](),
 		celEngine,
-		nil,
-		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		false,
 	)
 	require.NoError(t, err)
@@ -967,27 +944,14 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		PresidioScoreThreshold: 0,
 		CustomRuleIds:          nil,
 		ApprovedEmailDomains:   nil,
-		BuiltinPresetsEnabled:  false,
 		DetectionScopes:        nil,
 	})
 	require.NoError(t, err)
 	var analyzed riskanalysis.AnalyzeBatchResult
 	require.NoError(t, activityResult.Get(&analyzed))
 	require.Equal(t, 1, analyzed.Processed)
-	require.Positive(t, analyzed.Findings)
-
-	findings, err := riskrepo.New(ti.conn).ListRiskResultsByProjectAndPolicy(ctx, riskrepo.ListRiskResultsByProjectAndPolicyParams{
-		ProjectID:              *authCtx.ProjectID,
-		RiskPolicyID:           policy.ID,
-		CursorMessageCreatedAt: pgtype.Timestamptz{},
-		CursorID:               uuid.NullUUID{},
-		PageLimit:              10,
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, findings)
-	require.Equal(t, riskanalysis.SourceGitleaks, findings[0].Source)
-	require.True(t, findings[0].Found)
-	require.Equal(t, messages[0].ID, findings[0].ChatMessageID.UUID)
+	require.Len(t, gitleaksRequests, 1)
+	require.Equal(t, messages[0].ID.String(), gitleaksRequests[0].GetChatMessageId())
 }
 
 func TestRealHooksBlocksAndCapturesPolicyMessage(t *testing.T) {

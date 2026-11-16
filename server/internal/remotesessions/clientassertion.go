@@ -98,6 +98,9 @@ func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, requ
 	if err != nil {
 		return "", fmt.Errorf("load client assertion backing key: %w", err)
 	}
+	if backing.EmaIssuerManaged {
+		return "", fmt.Errorf("enterprise authorization issuer keys never authenticate clients: %w", errClientAssertionKeyUnconfigured)
+	}
 	if !backing.ResourceName.Valid || backing.ResourceName.String == "" {
 		return "", fmt.Errorf("active client assertion key is not backed by GCP KMS: %w", errClientAssertionKeyUnconfigured)
 	}

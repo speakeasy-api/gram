@@ -1,0 +1,478 @@
+/**
+ * The pieces that administer a registered agent: who owns it, what it is
+ * called, and whether it may still act.
+ *
+ * These were a page of their own at `agent-management`, which showed the same
+ * agent the Identities pages show. The page is gone; the parts that did real
+ * work live here and are rendered on the agent's own page.
+ */
+import { DangerSettingsSection } from "@/components/page-templates";
+import { InlineEditableText } from "@/components/inline-editable-text";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { useOrganization, useSession } from "@/contexts/Auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { IdentityLink } from "@/components/identity-link";
+import { Text } from "@/components/ui/Text";
+import { dateTimeFormatters } from "@/lib/dates";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+
+import { useAgentsDeleteMutation } from "@gram/client/react-query/agentsDelete.js";
+import { useAgentsResumeMutation } from "@gram/client/react-query/agentsResume.js";
+import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.js";
+import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
+import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
+import { useState, type JSX } from "react";
+import { Link } from "react-router";
+import { useRoutes } from "@/routes";
+import { AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+
+function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
+  const organization = useOrganization();
+  if (!agent.projectId) {
+    // No project on the row means one of two things, and the server sends the
+    // same absence for both: an agent registered for the whole organization,
+    // or one that predates project scoping and has never been assigned. The
+    // label states what is known rather than claiming a deliberate choice.
+    return <Text>{organization.name} — no project scope</Text>;
+  }
+  // Named from the organization's own project list rather than the active
+  // project, so an agent reached by id from elsewhere still says where it
+  // belongs. A project the caller cannot see falls back to its id.
+  const bound = organization.projects?.find(
+    (candidate) => candidate.id === agent.projectId,
+  );
+  return <Text>{bound?.name ?? agent.projectId}</Text>;
+}
+
+/**
+ * The person accountable for an agent: their face, and a way to go and look
+ * at them. The viewer's own profile fills in when the server did not send
+ * one, which it does not for the caller themselves.
+ */
+export function AgentOwner({ agent }: { agent: ManagedAgent }): JSX.Element {
+  const { user } = useSession();
+  const self = agent.ownerUserId === user.id;
+  const profile =
+    agent.ownerProfile ??
+    (self
+      ? { displayName: user.displayName || user.email, photoUrl: user.photoUrl }
+      : undefined);
+  const name = profile?.displayName || "Unavailable";
+  const face = (
+    <span className="flex min-w-0 items-center gap-2">
+      <Avatar className="size-5">
+        {profile?.photoUrl && <AvatarImage src={profile.photoUrl} alt="" />}
+        <AvatarFallback className="text-[10px]">
+          {name.slice(0, 1).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <span className="truncate">{name}</span>
+    </span>
+  );
+  if (!profile) return face;
+  return (
+    <IdentityLink identifier={{ userId: agent.ownerUserId }}>
+      {face}
+    </IdentityLink>
+  );
+}
+
+/**
+ * The durable facts, as one line rather than a card of six.
+ *
+ * Name and principal are not repeated: the page header above already carries
+ * both, and a reader comparing them was reading the same string twice. What
+ * is left is what nothing else on an agent's overview says — who answers for
+ * it, whether it may act at all, and since when.
+ */
+export function AgentIdentityFacts({
+  agent,
+}: {
+  agent: ManagedAgent;
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <div className="bg-card border-border space-y-3 border px-4 py-3">
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Owner</dt>
+          <dd>
+            <AgentOwner agent={agent} />
+          </dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Project</dt>
+          <dd>
+            <AgentScopeLabel agent={agent} />
+          </dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Status</dt>
+          <dd>
+            <AgentStatus agent={agent} />
+          </dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Registered</dt>
+          <dd>
+            <time
+              className="tabular-nums"
+              title={dateTimeFormatters.full.format(agent.createdAt)}
+              dateTime={agent.createdAt.toISOString()}
+            >
+              {dateTimeFormatters.day.format(agent.createdAt)}
+            </time>
+          </dd>
+        </div>
+      </dl>
+      {agent.connectionNeedsRefresh && agent.lifecycle === "active" && (
+        <Text role="alert" small>
+          An assigned connection has expired or is no longer available. The
+          connection needs to be reauthenticated or replaced before the agent
+          can use that server.{" "}
+          {agent.permissions.write && (
+            <Link
+              className="underline underline-offset-4"
+              to={routes.identities.detail.mcpSignIn.href(
+                encodeIdentityUrn(`agent:${agent.id}`),
+              )}
+            >
+              Review connections
+            </Link>
+          )}
+        </Text>
+      )}
+      {/* An agent waiting on a new owner cannot be issued keys. That is a
+          fact about the identity, so it belongs here rather than only on the
+          credentials section where the blocked button explains itself. */}
+      {agent.ownerReassignmentRequiredAt && (
+        <Text role="alert" small>
+          This agent needs a new owner before it can be issued keys
+          {agent.ownerReassignmentReason
+            ? `: ${agent.ownerReassignmentReason}`
+            : "."}
+        </Text>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The agent's name as the page title, renamed in place: a pencil on hover
+ * turns it into a field, Enter or leaving the field saves, Escape cancels.
+ * Renaming is one field, so it gets no dialog and no wizard.
+ *
+ * Someone who may not change the agent sees the plain title.
+ */
+export function AgentName({
+  agent,
+  refresh,
+  className,
+}: {
+  agent: ManagedAgent;
+  /**
+   * Re-reads the agent so the header and breadcrumb show the new name. The
+   * editor stays open until it resolves, so the old name never shows again.
+   */
+  refresh: () => Promise<unknown>;
+  /** The title's typography, shared with every other identity header. */
+  className?: string;
+}): JSX.Element {
+  const rename = useRenameAgentMutation();
+  if (!agent.permissions.write)
+    return <h1 className={cn("truncate", className)}>{agent.name}</h1>;
+  return (
+    // A heading by role rather than an <h1>: the button and the field it
+    // turns into are not allowed inside a heading element.
+    <div role="heading" aria-level={1} className="min-w-0 max-w-full">
+      <InlineEditableText
+        value={agent.name}
+        inputLabel="Agent name"
+        editTitle="Rename agent"
+        maxLength={NAME_LIMIT}
+        editorClassName="h-12 w-[36rem] max-w-full"
+        inputClassName={cn("h-12", className)}
+        // Long names truncate rather than push the header past the page.
+        buttonClassName="max-w-full"
+        onSubmit={async (name) => {
+          if (!name) {
+            toast.error("An agent needs a name.");
+            return false;
+          }
+          try {
+            await rename.mutateAsync({
+              request: { renameAgentForm: { id: agent.id, name } },
+            });
+          } catch (error) {
+            toast.error(
+              error instanceof Error && error.message
+                ? error.message
+                : "Unable to rename agent",
+            );
+            return false;
+          }
+          // A failed re-read leaves the rename saved; the next read shows it.
+          await refresh().catch(() => undefined);
+          toast.success("Agent renamed");
+          return true;
+        }}
+      >
+        <span className={cn("truncate", className)}>{agent.name}</span>
+      </InlineEditableText>
+    </div>
+  );
+}
+
+/** The longest name the server accepts for an agent. */
+const NAME_LIMIT = 120;
+
+export function AgentLifecycle({
+  agent,
+  refresh,
+  onDeleted,
+}: {
+  agent: ManagedAgent;
+  refresh: () => void;
+  onDeleted: () => void;
+}): JSX.Element {
+  const [confirm, setConfirm] = useState<"revoke" | "delete" | null>(null);
+  const common = {
+    onError: (error: Error) =>
+      toast.error(error.message || "Unable to update agent"),
+  };
+  const suspend = useAgentsSuspendMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent suspended");
+      refresh();
+    },
+  });
+  const resume = useAgentsResumeMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent resumed");
+      refresh();
+    },
+  });
+  const revoke = useAgentsRevokeMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent revoked");
+      setConfirm(null);
+      refresh();
+    },
+  });
+  const remove = useAgentsDeleteMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent deleted");
+      refresh();
+      onDeleted();
+    },
+  });
+  const pending =
+    suspend.isPending ||
+    resume.isPending ||
+    revoke.isPending ||
+    remove.isPending;
+  const canWrite = agent.permissions.write;
+
+  return (
+    <>
+      {/* Suspension used to carry a section of its own, which put a reversible
+          switch as far from revocation as the page allowed. All four lifecycle
+          moves now sit together, ordered by how final they are. */}
+      <DangerSettingsSection>
+        <DangerSettingsSection.Header>
+          <DangerSettingsSection.Title>Lifecycle</DangerSettingsSection.Title>
+          <DangerSettingsSection.Description>
+            Suspension is reversible. Revocation is terminal, and deletion
+            releases the name while keeping the audit history.
+          </DangerSettingsSection.Description>
+        </DangerSettingsSection.Header>
+        <DangerSettingsSection.Panel>
+          <DangerSettingsSection.Body className="space-y-5">
+            {agent.lifecycle === "suspended" ? (
+              <LifecycleAction
+                title="Resume agent"
+                description="Let this agent authenticate again with its existing keys."
+                action={
+                  <Button
+                    onClick={() =>
+                      resume.mutate({
+                        request: { agentIDForm: { agentId: agent.id } },
+                      })
+                    }
+                    disabled={!canWrite || pending}
+                  >
+                    Resume
+                  </Button>
+                }
+              />
+            ) : agent.lifecycle === "active" ? (
+              <LifecycleAction
+                title="Suspend agent"
+                description="Block its credentials without changing the owner or stored policy. Reversible."
+                action={
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      suspend.mutate({
+                        request: { agentIDForm: { agentId: agent.id } },
+                      })
+                    }
+                    disabled={!canWrite || pending}
+                  >
+                    Suspend
+                  </Button>
+                }
+              />
+            ) : null}
+            {agent.lifecycle !== "revoked" && (
+              <DangerAction
+                title="Revoke agent"
+                description="Permanently prevent this agent from becoming active again. Applies to both API keys and federated access."
+                confirm={confirm === "revoke"}
+                disabled={!canWrite || pending}
+                pending={revoke.isPending}
+                onStart={() => setConfirm("revoke")}
+                onCancel={() => setConfirm(null)}
+                onConfirm={() =>
+                  revoke.mutate({
+                    request: { agentIDForm: { agentId: agent.id } },
+                  })
+                }
+              />
+            )}
+            <DangerAction
+              title="Delete agent"
+              description="Tombstone this agent and release its name for reuse."
+              confirm={confirm === "delete"}
+              disabled={!canWrite || pending}
+              pending={remove.isPending}
+              onStart={() => setConfirm("delete")}
+              onCancel={() => setConfirm(null)}
+              onConfirm={() =>
+                remove.mutate({
+                  request: { agentIDForm: { agentId: agent.id } },
+                })
+              }
+            />
+          </DangerSettingsSection.Body>
+        </DangerSettingsSection.Panel>
+      </DangerSettingsSection>
+    </>
+  );
+}
+
+/** A lifecycle row: what it does, and the control that does it. */
+function LifecycleAction({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action: JSX.Element;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6 border-b pb-5 last:border-b-0 last:pb-0">
+      <div>
+        <Text className="font-medium">{title}</Text>
+        <Text muted small className="mt-1">
+          {description}
+        </Text>
+      </div>
+      <div className="flex shrink-0 gap-2">{action}</div>
+    </div>
+  );
+}
+
+function DangerAction({
+  title,
+  description,
+  confirm,
+  disabled,
+  pending,
+  onStart,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  confirm: boolean;
+  disabled: boolean;
+  pending: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6 border-b pb-5 last:border-b-0 last:pb-0">
+      <div>
+        <Text className="font-medium">{title}</Text>
+        <Text muted small className="mt-1">
+          {description}
+        </Text>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        {confirm ? (
+          <>
+            <Button variant="tertiary" onClick={onCancel} disabled={pending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={onConfirm}
+              disabled={disabled}
+            >
+              Confirm {title.toLowerCase()}
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="destructive-secondary"
+            onClick={onStart}
+            disabled={disabled}
+          >
+            {title}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LifecycleBadge({
+  lifecycle,
+}: {
+  lifecycle: ManagedAgent["lifecycle"];
+}) {
+  const variant =
+    lifecycle === "active"
+      ? "success"
+      : lifecycle === "suspended"
+        ? "warning"
+        : "destructive";
+  return (
+    <Badge variant={variant} size="sm">
+      {lifecycle}
+    </Badge>
+  );
+}
+
+export function AgentStatus({ agent }: { agent: ManagedAgent }): JSX.Element {
+  if (agent.lifecycle === "active" && agent.connectionNeedsRefresh) {
+    return (
+      <Badge variant="warning" size="sm">
+        <AlertTriangle className="mr-1 size-3" aria-hidden="true" />
+        Needs refresh
+      </Badge>
+    );
+  }
+  return <LifecycleBadge lifecycle={agent.lifecycle} />;
+}

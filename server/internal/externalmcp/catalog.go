@@ -14,26 +14,23 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 )
 
 const (
-	registrySourceTypeNative      = "native_v1"
-	registrySourceTypePulseV01    = "pulse_v0_1"
-	registrySourceTypeOfficialV01 = "official_v0_1"
+	registrySourceTypeNative = "native_v1"
 
-	registryAuthProfilePulseServerCredentials = "pulse" + "_server_credentials"
-	registryAuthProfileNone                   = "none"
+	registryAuthProfileNone = "none"
 
 	registryCertificationStateCertified = "certified"
 )
 
 var (
-	errCatalogEmpty          = errors.New("catalog has no configured sources")
-	ErrCatalogSourceNotFound = errors.New("catalog source not found")
-	ErrCatalogSourceDisabled = errors.New("catalog source is not enabled and certified")
-	ErrUnknownRegistrySource = errors.New("unknown registry source profile")
+	errCatalogEmpty             = errors.New("catalog has no configured sources")
+	ErrCatalogSourceNotFound    = errors.New("catalog source not found")
+	ErrUnsupportedCatalogSource = errors.New("unsupported catalog source")
+	ErrCatalogSourceDisabled    = errors.New("catalog source is not enabled and certified")
+	ErrUnknownRegistrySource    = errors.New("unknown registry source profile")
 )
 
 // CatalogSource is an operator-owned, reviewed registry configuration. It is
@@ -47,7 +44,6 @@ type CatalogSource struct {
 	CertificationVersion string
 	Priority             int32
 	SourceKey            string
-	Legacy               bool
 }
 
 // CatalogService is the single organization-selected source boundary for
@@ -55,25 +51,16 @@ type CatalogSource struct {
 // certified sources with a known, code-reviewed adapter/profile combination.
 type CatalogService struct {
 	repo     catalogRepository
-	features feature.Provider
 	adapters map[string]RegistryReader
 }
 
-// NewCatalogService temporarily accepts both RegistryReader implementations for
-// the organization-targeted catalog cutover. Remove the legacy reader after rollout.
-func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
-	adapters := make(map[string]RegistryReader, 2)
-	if legacy != nil {
-		adapters[registryAdapterKey(registrySourceTypePulseV01, registryAuthProfilePulseServerCredentials)] = legacy
-	}
+// NewCatalogService admits only the native reader.
+func NewCatalogService(db *pgxpool.Pool, native RegistryReader) *CatalogService {
+	adapters := make(map[string]RegistryReader, 1)
 	if native != nil {
 		adapters[registryAdapterKey(registrySourceTypeNative, registryAuthProfileNone)] = native
 	}
-	var flags feature.Provider
-	if len(providers) > 0 {
-		flags = providers[0]
-	}
-	return &CatalogService{repo: repo.New(db), adapters: adapters, features: flags}
+	return &CatalogService{repo: repo.New(db), adapters: adapters}
 }
 
 func registryAdapterKey(sourceType, authProfile string) string {
@@ -93,7 +80,6 @@ func zeroCatalogSource() CatalogSource {
 		CertificationVersion: "",
 		Priority:             0,
 		SourceKey:            "",
-		Legacy:               false,
 	}
 }
 
@@ -227,13 +213,12 @@ func (s *CatalogService) sources(ctx context.Context, registryID *uuid.UUID) ([]
 	return []CatalogSource{source}, nil
 }
 
-// SelectedSource selects exactly one catalog. Flag errors/off/unknown select the legacy catalog;
-// missing or failing selected sources never fall back to the other catalog.
+// SelectedSource selects only the native catalog.
+// Missing or failing native sources never fall back to another catalog.
 func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, organizationSlug string) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
 		return zeroCatalogSource(), ErrCatalogSourceNotFound
 	}
-	native, _ := feature.GramMCPCatalogEnabled(ctx, s.features, organizationID, organizationSlug)
 	rows, err := s.repo.ListMCPRegistries(ctx)
 	if err != nil {
 		return zeroCatalogSource(), fmt.Errorf("list catalog sources: %w", err)
@@ -247,11 +232,7 @@ func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, org
 		if !ok {
 			continue
 		}
-		matches := source.SourceType == registrySourceTypePulseV01
-		if native {
-			matches = source.SourceType == registrySourceTypeNative && source.Registry.ID == NativeCatalogRegistryID
-		}
-		if !matches {
+		if source.SourceType != registrySourceTypeNative || source.Registry.ID != NativeCatalogRegistryID {
 			continue
 		}
 		if selected != nil {
@@ -268,20 +249,8 @@ func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, org
 	return *selected, nil
 }
 
-// SelectSource admits an explicit registry ID for a NEW selection.
-func (s *CatalogService) SelectSource(ctx context.Context, organizationID, organizationSlug string, id uuid.UUID) (CatalogSource, error) {
-	source, err := s.SelectedSource(ctx, organizationID, organizationSlug)
-	if err != nil {
-		return zeroCatalogSource(), err
-	}
-	if source.Registry.ID != id {
-		return zeroCatalogSource(), ErrCatalogSourceNotFound
-	}
-	return source, nil
-}
-
-// IdentitySource resolves persisted/accepted work independently of rollout state.
-// It still requires a known enabled/certified source; it never switches identities.
+// IdentitySource resolves persisted/accepted work.
+// Unsupported identities are rejected before enabled/certified admission; identities never switch.
 func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
 		return zeroCatalogSource(), ErrCatalogSourceNotFound
@@ -293,6 +262,9 @@ func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (Cata
 	if err != nil {
 		return zeroCatalogSource(), fmt.Errorf("get catalog identity: %w", err)
 	}
+	if row.ID != NativeCatalogRegistryID || !row.SourceType.Valid || row.SourceType.String != registrySourceTypeNative || !row.AuthProfile.Valid || row.AuthProfile.String != registryAuthProfileNone {
+		return zeroCatalogSource(), ErrUnsupportedCatalogSource
+	}
 	source, ok := catalogSourceFromDetailRow(row)
 	if !ok {
 		return zeroCatalogSource(), ErrCatalogSourceDisabled
@@ -301,23 +273,6 @@ func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (Cata
 		return zeroCatalogSource(), err
 	}
 	return source, nil
-}
-
-// IdentityDetails reads an installed or accepted registry identity without new-selection admission.
-func (s *CatalogService) IdentityDetails(ctx context.Context, id uuid.UUID, name string, allowed []string) (*ServerDetails, error) {
-	source, err := s.IdentitySource(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	reader, err := s.ReaderFor(source)
-	if err != nil {
-		return nil, err
-	}
-	details, err := reader.GetServerDetails(ctx, source.Registry, name, allowed)
-	if err != nil {
-		return nil, fmt.Errorf("read catalog identity details: %w", err)
-	}
-	return details, nil
 }
 
 type catalogRepository interface {
@@ -333,40 +288,25 @@ const NativeCatalogRegistryURL = "https://registry.speakeasy.com"
 // EnsureNativeCatalogSource retains a stable namespace using existing metadata.
 // It never changes legacy catalog rows or overwrites an operator-disabled native source.
 func EnsureNativeCatalogSource(ctx context.Context, db *pgxpool.Pool) error {
-	_, err := db.Exec(ctx, `INSERT INTO mcp_registries
- (id,name,url,source_type,auth_profile,enabled,certification_state,source_key)
- VALUES ($1,'Speakeasy',$2,'native_v1','none',true,'certified','speakeasy')
- ON CONFLICT (id) DO NOTHING`, NativeCatalogRegistryID, NativeCatalogRegistryURL)
+	queries := repo.New(db)
+	err := queries.EnsureNativeCatalogRegistry(ctx, repo.EnsureNativeCatalogRegistryParams{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL})
 	if err != nil {
 		return fmt.Errorf("ensure native catalog namespace: %w", err)
 	}
-	var valid bool
-	err = db.QueryRow(ctx, `SELECT url=$2 AND source_type='native_v1' AND auth_profile='none' AND source_key='speakeasy' FROM mcp_registries WHERE id=$1`, NativeCatalogRegistryID, NativeCatalogRegistryURL).Scan(&valid)
+	valid, err := queries.NativeCatalogRegistryMatches(ctx, repo.NativeCatalogRegistryMatchesParams{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL})
 	if err != nil {
 		return fmt.Errorf("verify native catalog namespace: %w", err)
 	}
-	if !valid {
+	if !valid.Valid {
+		return fmt.Errorf("verify native catalog namespace: source metadata is missing")
+	}
+	if !valid.Bool {
 		return fmt.Errorf("native catalog namespace conflicts with existing source")
 	}
 	return nil
 }
 
 func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
-	// Existing Pulse rows predate source metadata. They remain eligible only for
-	// the exact historic Pulse URL while this reader compatibility release rolls
-	// out; arbitrary legacy URLs cannot enter the shared catalogue.
-	if legacyPulseSourceMetadataAbsent(row) && strings.TrimRight(row.Url, "/") == "https://api.pulsemcp.com" {
-		return CatalogSource{
-			Name:                 row.Name,
-			Registry:             Registry{ID: row.ID, URL: row.Url},
-			SourceType:           registrySourceTypePulseV01,
-			AuthProfile:          registryAuthProfilePulseServerCredentials,
-			CertificationVersion: "",
-			Priority:             0,
-			SourceKey:            "legacy-pulse-" + row.ID.String(),
-			Legacy:               true,
-		}, true
-	}
 	if !row.Enabled.Valid || !row.Enabled.Bool || !row.CertificationState.Valid || row.CertificationState.String != registryCertificationStateCertified || !row.SourceType.Valid || !row.AuthProfile.Valid || !row.SourceKey.Valid || strings.TrimSpace(row.SourceKey.String) == "" {
 		return zeroCatalogSource(), false
 	}
@@ -382,21 +322,7 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 		CertificationVersion: row.CertificationVersion.String,
 		Priority:             priority,
 		SourceKey:            row.SourceKey.String,
-		Legacy:               false,
 	}, true
-}
-
-// legacyPulseSourceMetadataAbsent admits only rows that have not started the
-// metadata migration. Partially populated rows must satisfy the full reviewed
-// source contract rather than bypassing enabled/certified admission.
-func legacyPulseSourceMetadataAbsent(row repo.ListMCPRegistriesRow) bool {
-	return !row.SourceType.Valid &&
-		!row.AuthProfile.Valid &&
-		!row.Enabled.Valid &&
-		!row.CertificationState.Valid &&
-		!row.CertificationVersion.Valid &&
-		!row.Priority.Valid &&
-		!row.SourceKey.Valid
 }
 
 func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, bool) {
@@ -413,28 +339,6 @@ func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, 
 		Priority:             row.Priority,
 		SourceKey:            row.SourceKey,
 	})
-}
-
-// AdmitNewEntry checks the organization-selected source and current native entry
-// eligibility. Persisted identities and accepted continuations use IdentityDetails.
-func (s *CatalogService) AdmitNewEntry(ctx context.Context, organizationID, organizationSlug string, id uuid.UUID, name string) error {
-	source, err := s.SelectSource(ctx, organizationID, organizationSlug, id)
-	if err != nil {
-		return err
-	}
-	if source.SourceType != registrySourceTypeNative {
-		return nil
-	}
-	reader, err := s.ReaderFor(source)
-	if err != nil {
-		return err
-	}
-	native, ok := reader.(*NativeRegistryReader)
-	if !ok {
-		return ErrUnknownRegistrySource
-	}
-	_, err = native.discoveryEntry(ctx, name)
-	return err
 }
 
 // discoveryEntry deliberately does not use the retained GetByName lookup.

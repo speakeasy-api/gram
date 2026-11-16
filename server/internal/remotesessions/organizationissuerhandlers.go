@@ -298,7 +298,14 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
 
-	return mv.BuildRemoteSessionIssuerView(issuer), nil
+	view := mv.BuildRemoteSessionIssuerView(issuer)
+	if vendor, err := NormalizeVendorIssuer(issuer.Issuer); err == nil {
+		view.EmaProviders, err = s.emaProvidersView(ctx, logger, repo.New(s.db), authCtx.ActiveOrganizationID, vendor)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return view, nil
 }
 
 // GetIssuerDeletePreflight returns the authoritative impact of deleting an

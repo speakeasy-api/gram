@@ -3,7 +3,6 @@ package remotesessions
 import (
 	"context"
 	"errors"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -101,7 +100,7 @@ func (s *Service) auditIdentityChainingTransition(ctx context.Context, tx pgx.Tx
 			return err
 		}
 		return s.auditIdentityChaining(ctx, tx, identityChainingAuditEnable, after, after.RemoteSessionClientID.UUID, external, nil)
-	case sameClient && !slices.Equal(before.RequestedScopes, after.RequestedScopes):
+	case sameClient && !SameBindingScopes(before.RequestedScopes, after.RequestedScopes):
 		external, err := identityChainingExternalClientID(ctx, tx, after, client)
 		if err != nil {
 			return err

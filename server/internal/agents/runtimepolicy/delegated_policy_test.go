@@ -26,7 +26,7 @@ func TestNewDelegatedPolicyV1CanonicalizesAndClosesImplications(t *testing.T) {
 
 	runtime := policy.RuntimeGrants()
 	require.Len(t, runtime, 4)
-	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPToolCallCheck("server-one", authz.MCPToolCallDimensions{Tool: "tool-one"})))
+	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPToolCallCheck("server-one", authz.MCPToolCallDimensions{Tool: "tool-one", ProjectID: "project-one"})))
 	require.True(t, authz.GrantsSatisfy(runtime, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
 
 	encoded, err := EncodeDelegatedPolicy(DelegatedPolicyVersion1, policy)
@@ -84,7 +84,7 @@ func TestDecodeDelegatedPolicyRejectsInvalidProfiles(t *testing.T) {
 		version DelegatedPolicyVersion
 		raw     []byte
 	}{
-		"unsupported version":         {version: 5, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{}, Effective: []DelegatedPolicyGrant{}})},
+		"unsupported version":         {version: CurrentDelegatedPolicyVersion + 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{}, Effective: []DelegatedPolicyGrant{}})},
 		"unknown envelope field":      {version: 1, raw: []byte(`{"requested":[],"effective":[],"effect":"allow"}`)},
 		"trailing value":              {version: 1, raw: []byte(`{"requested":[],"effective":[]} {}`)},
 		"missing requested":           {version: 1, raw: []byte(`{"effective":[]}`)},

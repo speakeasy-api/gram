@@ -32,10 +32,11 @@ type delegationAdapterFixture struct {
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
 	refreshIdentity func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error)
+	refreshPaused   func(context.Context, *FederatedProvider) bool
 }
 
 func (s *delegationAdapterFixture) service() *DelegationService {
-	return &DelegationService{service: delegation.New(s.db, s.enc, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, func() time.Time { return s.now() }))}
+	return &DelegationService{service: delegation.New(s.db, s.enc, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, s.refreshPaused, func() time.Time { return s.now() }))}
 }
 func (s *delegationAdapterFixture) RetainVerifiedLogin(ctx context.Context, p *FederatedProvider, human string, i *FederatedIdentity, requested bool) error {
 	return s.service().RetainVerifiedLogin(ctx, p, human, i, requested)
@@ -88,9 +89,10 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	require.NoError(t, fixtures.SeedDelegationLoaderClientFixture(ctx, testrepo.SeedDelegationLoaderClientFixtureParams{
 		ID: b.ClientID, OrganizationID: b.OrganizationID, RemoteSessionIssuerID: b.IssuerID, ClientID: "test-client", Scope: nil,
 	}))
-	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
-	_, err = db.Exec(ctx, `INSERT INTO user_session_issuers (organization_id,slug,authn_challenge_mode,session_duration,trusted_remote_session_issuer_id,trusted_remote_session_client_id) VALUES ($1,'delegation-adapter','interactive',interval '1 hour',$2,$3)`, b.OrganizationID, b.IssuerID, b.ClientID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedDelegationUserSessionIssuerFixture(ctx, testrepo.SeedDelegationUserSessionIssuerFixtureParams{
+		OrganizationID: pgtype.Text{String: b.OrganizationID, Valid: true}, Slug: "delegation-adapter",
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: b.IssuerID, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: b.ClientID, Valid: true},
+	}))
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -105,6 +107,7 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
 		return nil, errors.New("unexpected refresh")
 	}
+	s.refreshPaused = func(context.Context, *FederatedProvider) bool { return false }
 	allow := delegationTestAuthority(func(_ context.Context, got DelegationBinding) error {
 		if got != b {
 			return errors.New("not authorized")

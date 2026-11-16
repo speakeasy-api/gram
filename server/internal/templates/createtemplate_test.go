@@ -337,3 +337,19 @@ func TestTemplatesService_CreateTemplate_AuditLogMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
 }
+
+func TestTemplatesService_CreateTemplate_HigherOrderToolRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+
+	result, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:   types.Slug("retired-custom-tool"),
+		Prompt: `{"toolName":"retired"}`,
+		Engine: "mustache",
+		Kind:   "higher_order_tool",
+	})
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported template kind")
+}

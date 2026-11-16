@@ -141,6 +141,30 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const attributePartnerSignup = `-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT $1, $2
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = $1
+)
+ON CONFLICT DO NOTHING
+`
+
+type AttributePartnerSignupParams struct {
+	OrganizationID        pgtype.Text
+	StripePromotionCodeID string
+}
+
+// Acceptance is immutable even after redemption. Call only during signup or a
+// verified first partner Checkout, under the billing/offer acceptance locks.
+func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartnerSignupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributePartnerSignup, arg.OrganizationID, arg.StripePromotionCodeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
 UPDATE onboarding_playbooks
 SET is_default = false, updated_at = clock_timestamp()
@@ -321,7 +345,7 @@ INSERT INTO organization_metadata (
     $7::text[],
     $8::text
 )
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -428,7 +452,7 @@ const createOrganizationMetadataWithRequests = `-- name: CreateOrganizationMetad
 WITH written AS (
 INSERT INTO organization_metadata (id, name, slug, default_host)
 VALUES ($1, $2, $3, $4::text)
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, TRUE AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, TRUE AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -612,6 +636,36 @@ func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg De
 	return err
 }
 
+const deleteRetiredOnboardingPlaybookSteps = `-- name: DeleteRetiredOnboardingPlaybookSteps :execrows
+DELETE FROM onboarding_playbook_steps ps
+USING onboarding_steps s
+WHERE s.id = ps.step_id
+  AND s.slug = ANY($1::text[])
+  AND EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      JOIN onboarding_steps successor ON successor.id = listed.step_id
+      WHERE listed.playbook_id = ps.playbook_id
+        AND successor.slug = $2::text
+        AND successor.deleted_at IS NULL
+  )
+`
+
+type DeleteRetiredOnboardingPlaybookStepsParams struct {
+	RetiredSlugs  []string
+	SuccessorSlug string
+}
+
+// Drops the retired slugs' steps from every playbook that lists the successor
+// slug. After the repoint, that is every playbook that listed one.
+func (q *Queries) DeleteRetiredOnboardingPlaybookSteps(ctx context.Context, arg DeleteRetiredOnboardingPlaybookStepsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRetiredOnboardingPlaybookSteps, arg.RetiredSlugs, arg.SuccessorSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const disableOrganizationByWorkosID = `-- name: DisableOrganizationByWorkosID :execrows
 UPDATE organization_metadata
 SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
@@ -704,6 +758,37 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAcceptedSignupOfferFlow = `-- name: GetAcceptedSignupOfferFlow :one
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = $1::text
+LIMIT 1
+`
+
+// All accepted applications originate in the partner gateway signup path.
+// Derive display context from that immutable acceptance, not mutable offer mappings.
+// Persist the accepted flow before introducing another signup flow or ledger writer.
+func (q *Queries) GetAcceptedSignupOfferFlow(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getAcceptedSignupOfferFlow, organizationID)
+	var signup_flow string
+	err := row.Scan(&signup_flow)
+	return signup_flow, err
+}
+
+const getEnabledSignupOffer = `-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = $1
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE
+`
+
+func (q *Queries) GetEnabledSignupOffer(ctx context.Context, stripePromotionCodeID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEnabledSignupOffer, stripePromotionCodeID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getInvitationByID = `-- name: GetInvitationByID :one
@@ -888,7 +973,7 @@ func (q *Queries) GetOnboardingUseCaseBySlug(ctx context.Context, slug string) (
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
 `
@@ -914,6 +999,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -922,7 +1008,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -948,6 +1034,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -956,7 +1043,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 }
 
 const getOrganizationMetadataBySlug = `-- name: GetOrganizationMetadataBySlug :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE slug = $1
 `
@@ -982,6 +1069,7 @@ func (q *Queries) GetOrganizationMetadataBySlug(ctx context.Context, slug string
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1080,6 +1168,28 @@ func (q *Queries) GetOrganizationOnboardingStack(ctx context.Context, organizati
 		&i.Slug,
 		&i.MdmVendor,
 		&i.MdmVendorName,
+	)
+	return i, err
+}
+
+const getOrganizationPromotionApplication = `-- name: GetOrganizationPromotionApplication :one
+SELECT redeemed_at, created_at, updated_at, organization_id, stripe_promotion_code_id, stripe_subscription_id, id FROM organization_promotion_applications
+WHERE organization_id = $1::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationPromotionApplication(ctx context.Context, organizationID string) (OrganizationPromotionApplication, error) {
+	row := q.db.QueryRow(ctx, getOrganizationPromotionApplication, organizationID)
+	var i OrganizationPromotionApplication
+	err := row.Scan(
+		&i.RedeemedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.StripePromotionCodeID,
+		&i.StripeSubscriptionID,
+		&i.ID,
 	)
 	return i, err
 }
@@ -1229,41 +1339,41 @@ func (q *Queries) GetRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Conte
 }
 
 const getSetupTaskCompletionFacts = `-- name: GetSetupTaskCompletionFacts :one
-WITH default_project AS (
-    SELECT id
-    FROM projects
-    WHERE organization_id = $1
-      AND deleted IS FALSE
-    ORDER BY created_at, id
-    LIMIT 1
-)
 SELECT
     COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
     (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
-    EXISTS (
-        SELECT 1
-        FROM plugin_github_connections
-        JOIN default_project ON default_project.id = plugin_github_connections.project_id
-        WHERE NULLIF(plugin_github_connections.marketplace_token, '') IS NOT NULL
-    ) AS marketplace_published,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3
         FROM organization_features
         WHERE organization_features.organization_id = $1
           AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
           AND organization_features.deleted IS FALSE
-    )::boolean AS logging_enabled
+    )::boolean AS logging_enabled,
+    -- Any message stored from a Claude transcript upload (Cowork sessions
+    -- shipped on Stop) in one of the organization's projects. Served by the
+    -- partial chat_messages_claude_transcript_project_idx.
+    EXISTS (
+        SELECT 1
+        FROM chat_messages
+        WHERE chat_messages.origin = 'claude-transcript'
+          AND chat_messages.project_id IN (
+              SELECT projects.id
+              FROM projects
+              WHERE projects.organization_id = $1
+                AND projects.deleted IS FALSE
+          )
+    ) AS claude_transcript_captured
 FROM organization_metadata
 WHERE organization_metadata.id = $1
 `
 
 type GetSetupTaskCompletionFactsRow struct {
-	SsoConfigured        bool
-	DsyncConfigured      bool
-	DomainVerified       bool
-	MarketplacePublished bool
-	LoggingEnabled       bool
+	SsoConfigured            bool
+	DsyncConfigured          bool
+	DomainVerified           bool
+	LoggingEnabled           bool
+	ClaudeTranscriptCaptured bool
 }
 
 func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationID string) (GetSetupTaskCompletionFactsRow, error) {
@@ -1273,8 +1383,8 @@ func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationI
 		&i.SsoConfigured,
 		&i.DsyncConfigured,
 		&i.DomainVerified,
-		&i.MarketplacePublished,
 		&i.LoggingEnabled,
+		&i.ClaudeTranscriptCaptured,
 	)
 	return i, err
 }
@@ -2197,6 +2307,62 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listPendingInvitationsForEmail = `-- name: ListPendingInvitationsForEmail :many
+SELECT
+  organization_invitations.id,
+  organization_invitations.organization_id,
+  organization_metadata.name AS organization_name,
+  organization_metadata.workos_id AS organization_workos_id,
+  COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_enabled,
+  COALESCE(organization_metadata.verified_domains, '{}'::text[])::text[] AS verified_domains
+FROM organization_invitations
+JOIN organization_metadata ON organization_metadata.id = organization_invitations.organization_id
+WHERE organization_invitations.email = $1
+  AND organization_invitations.state = 'pending'
+  AND organization_invitations.expires_at > clock_timestamp()
+  AND organization_metadata.disabled_at IS NULL
+ORDER BY organization_invitations.created_at DESC
+`
+
+type ListPendingInvitationsForEmailRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	OrganizationName     string
+	OrganizationWorkosID pgtype.Text
+	SsoEnabled           bool
+	VerifiedDomains      []string
+}
+
+// Lists the live invitations addressed to this email in every organization,
+// newest first. A signed-in user with no organization is offered these before
+// creating one, so an invited teammate joins their team instead.
+func (q *Queries) ListPendingInvitationsForEmail(ctx context.Context, email string) ([]ListPendingInvitationsForEmailRow, error) {
+	rows, err := q.db.Query(ctx, listPendingInvitationsForEmail, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingInvitationsForEmailRow
+	for rows.Next() {
+		var i ListPendingInvitationsForEmailRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationWorkosID,
+			&i.SsoEnabled,
+			&i.VerifiedDomains,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSupportMatrixPlansForOnboarding = `-- name: ListSupportMatrixPlansForOnboarding :many
 SELECT slug, vendor, name
 FROM support_matrix_plans
@@ -2313,7 +2479,7 @@ func (q *Queries) LockOnboardingSteps(ctx context.Context) error {
 }
 
 const lockOrganizationForAdminConfiguration = `-- name: LockOrganizationForAdminConfiguration :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR NO KEY UPDATE
@@ -2342,6 +2508,7 @@ func (q *Queries) LockOrganizationForAdminConfiguration(ctx context.Context, id 
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -2350,7 +2517,7 @@ func (q *Queries) LockOrganizationForAdminConfiguration(ctx context.Context, id 
 }
 
 const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR UPDATE
@@ -2377,6 +2544,7 @@ func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id st
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -2385,7 +2553,7 @@ func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id st
 }
 
 const lockOrganizationForSetupTaskUpdate = `-- name: LockOrganizationForSetupTaskUpdate :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR UPDATE
@@ -2412,6 +2580,7 @@ func (q *Queries) LockOrganizationForSetupTaskUpdate(ctx context.Context, organi
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -2616,6 +2785,49 @@ func (q *Queries) RemoveVerifiedDomainByWorkosID(ctx context.Context, arg Remove
 	return err
 }
 
+const repointRetiredOnboardingPlaybookSteps = `-- name: RepointRetiredOnboardingPlaybookSteps :execrows
+WITH successor AS (
+    SELECT onboarding_steps.id
+    FROM onboarding_steps
+    WHERE onboarding_steps.slug = $1::text
+      AND onboarding_steps.deleted_at IS NULL
+),
+firsts AS (
+    SELECT DISTINCT ON (ps.playbook_id) ps.playbook_id, ps.step_id
+    FROM onboarding_playbook_steps ps
+    JOIN onboarding_steps s ON s.id = ps.step_id
+    WHERE s.slug = ANY($2::text[])
+    ORDER BY ps.playbook_id, ps.position
+)
+UPDATE onboarding_playbook_steps ps
+SET step_id = successor.id, updated_at = clock_timestamp()
+FROM firsts, successor
+WHERE ps.playbook_id = firsts.playbook_id
+  AND ps.step_id = firsts.step_id
+  AND NOT EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      WHERE listed.playbook_id = ps.playbook_id
+        AND listed.step_id = successor.id
+  )
+`
+
+type RepointRetiredOnboardingPlaybookStepsParams struct {
+	SuccessorSlug string
+	RetiredSlugs  []string
+}
+
+// Moves each playbook's first step among the retired slugs onto the successor
+// slug, keeping its position, unless the playbook already lists the
+// successor. Retired slugs match whether or not they are retired yet.
+func (q *Queries) RepointRetiredOnboardingPlaybookSteps(ctx context.Context, arg RepointRetiredOnboardingPlaybookStepsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repointRetiredOnboardingPlaybookSteps, arg.SuccessorSlug, arg.RetiredSlugs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const retireCollidingOrganizationRoleAssignments = `-- name: RetireCollidingOrganizationRoleAssignments :exec
 UPDATE organization_role_assignments AS old
 SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
@@ -2764,7 +2976,7 @@ SET gram_account_type = $1,
 WHERE id = $2
   AND gram_account_type = $3
   AND gram_account_type NOT IN ('payg', 'enterprise')
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 `
 
 type SetAccountTypeIfUnchangedParams struct {
@@ -2794,6 +3006,7 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -2823,7 +3036,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -2852,6 +3065,7 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3373,7 +3587,7 @@ SET name = $1,
     verified_domains = $5::text[],
     updated_at = clock_timestamp()
 WHERE id = $6
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 `
 
 type UpdateOrganizationMetadataFromWorkOSParams struct {
@@ -3417,6 +3631,7 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3488,7 +3703,7 @@ ON CONFLICT (id) DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -3628,7 +3843,7 @@ ON CONFLICT (id) DO UPDATE SET
     -- is created, and a later upsert must not move an existing organization's
     -- URLs to another host.
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,

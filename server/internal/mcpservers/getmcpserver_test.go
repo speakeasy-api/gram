@@ -24,7 +24,7 @@ func TestGetMcpServer_ByToolsetID(t *testing.T) {
 	require.True(t, ok)
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Selected hosted server", Slug: "selected-hosted-server", McpEnabled: true,
+		Name: "Selected hosted server", Slug: "selected-hosted-server",
 	})
 	require.NoError(t, err)
 	servers := mcpserversrepo.New(ti.conn)
@@ -67,11 +67,11 @@ func TestGetMcpServer_ByToolsetID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, canonicalID, got.ID)
 	require.Equal(t, types.McpServerVisibility("disabled"), got.Visibility)
-	require.Nil(t, got.PlatformEndpointSlug, "exact-ID reads do not resolve connection addresses")
+	require.Equal(t, conv.PtrEmpty(canonical.Slug.String+"-endpoint"), got.PlatformEndpointSlug)
 	got, err = ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{Slug: &alternate.Slug.String})
 	require.NoError(t, err)
 	require.Equal(t, alternateID, got.ID)
-	require.Nil(t, got.PlatformEndpointSlug, "exact-slug reads do not resolve connection addresses")
+	require.Equal(t, conv.PtrEmpty(alternate.Slug.String+"-endpoint"), got.PlatformEndpointSlug)
 
 	// Management reads retain the existing backing-toolset grant resource.
 	granted := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, toolsetID))
@@ -130,9 +130,36 @@ func TestGetMcpServer_ExactSelectorsDoNotRequireEndpointLookup(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, server.ID, got.ID)
 		require.Nil(t, got.PlatformEndpointSlug)
+		require.Nil(t, got.PrimaryEndpointID)
+		require.Nil(t, got.PrimaryEndpointURL)
+		require.NotNil(t, got.Toolset, "toolset summary does not depend on endpoint reads")
 	}
 	_, err = ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ToolsetID: conv.PtrEmpty(toolsetID.String())})
 	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+func TestListMcpServers_DegradesWhenEnrichmentFails(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server, _ := createToolsetBackedServerFixture(t, ctx, ti, "list enrichment failure")
+
+	_, err := ti.conn.Exec(ctx, "ALTER TABLE mcp_endpoints RENAME TO unavailable_mcp_endpoints") //nolint:glint // notestingrawsql: isolated test-database fault injection; never expose destructive DDL through production SQLc methods.
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, "ALTER TABLE toolset_versions RENAME TO unavailable_toolset_versions") //nolint:glint // notestingrawsql: isolated test-database fault injection; never expose destructive DDL through production SQLc methods.
+	require.NoError(t, err)
+
+	result, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.McpServers, 1)
+	require.Equal(t, server.ID, result.McpServers[0].ID)
+	require.Nil(t, result.McpServers[0].Toolset)
+	require.Nil(t, result.McpServers[0].PrimaryEndpointID)
+	require.Nil(t, result.McpServers[0].HasEndpoint, "unknown, not false, so clients never hide on a failed read")
+
+	orgResult, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{})
+	require.NoError(t, err)
+	require.Len(t, orgResult.McpServers, 1)
+	require.Nil(t, orgResult.McpServers[0].Toolset)
 }
 
 func TestGetMcpServer(t *testing.T) {

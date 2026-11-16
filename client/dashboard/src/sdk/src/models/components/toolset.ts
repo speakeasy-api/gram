@@ -5,13 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import {
-  ExternalMCPHeaderDefinition,
-  ExternalMCPHeaderDefinition$inboundSchema,
-} from "./externalmcpheaderdefinition.js";
 import {
   ExternalOAuthServer,
   ExternalOAuthServer$inboundSchema,
@@ -51,7 +48,7 @@ export const ToolsetNetworkAccessMode = {
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
-export type ToolsetNetworkAccessMode = ClosedEnum<
+export type ToolsetNetworkAccessMode = OpenEnum<
   typeof ToolsetNetworkAccessMode
 >;
 
@@ -76,10 +73,6 @@ export type Toolset = {
    * Description of the toolset
    */
   description?: string | undefined;
-  /**
-   * The external MCP header definitions that are relevant to the toolset
-   */
-  externalMcpHeaderDefinitions?: Array<ExternalMCPHeaderDefinition> | undefined;
   externalOauthServer?: ExternalOAuthServer | undefined;
   /**
    * The function environment variables that are relevant to the toolset
@@ -168,7 +161,7 @@ export type Toolset = {
    */
   updatedAt: Date;
   /**
-   * The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
+   * The id of the user_session_issuer wired to this toolset's hosted MCP server. Set via mcpServers.update; null when no USI is linked.
    */
   userSessionIssuerId?: string | undefined;
   /**
@@ -178,9 +171,10 @@ export type Toolset = {
 };
 
 /** @internal */
-export const ToolsetNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
-  typeof ToolsetNetworkAccessMode
-> = z.enum(ToolsetNetworkAccessMode);
+export const ToolsetNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  ToolsetNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(ToolsetNetworkAccessMode);
 
 /** @internal */
 export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
@@ -193,9 +187,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     custom_domain_id: z.optional(z.string()),
     default_environment_slug: z.optional(z.string()),
     description: z.optional(z.string()),
-    external_mcp_header_definitions: z.optional(
-      z.array(ExternalMCPHeaderDefinition$inboundSchema),
-    ),
     external_oauth_server: z.optional(ExternalOAuthServer$inboundSchema),
     function_environment_variables: z.optional(
       z.array(FunctionEnvironmentVariable$inboundSchema),
@@ -234,7 +225,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "created_at": "createdAt",
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
-      "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
       "external_oauth_server": "externalOauthServer",
       "function_environment_variables": "functionEnvironmentVariables",
       "mcp_enabled": "mcpEnabled",

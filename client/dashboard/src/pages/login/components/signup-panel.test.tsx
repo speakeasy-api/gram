@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setAnalyticsSessionIdSource } from "@/lib/signup-attribution";
 import { SignUpPanel } from "./signup-panel";
 
 const telemetryCapture = vi.hoisted(() => vi.fn());
@@ -16,10 +17,14 @@ afterEach(() => {
   telemetryCapture.mockReset();
 });
 
-function renderPanel(initialEntry = "/sign-up", redirectTo?: string | null) {
+function renderPanel(
+  initialEntry = "/sign-up",
+  redirectTo?: string | null,
+  partnerCode?: string,
+) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <SignUpPanel redirectTo={redirectTo} />
+      <SignUpPanel redirectTo={redirectTo} partnerCode={partnerCode} />
     </MemoryRouter>,
   );
 }
@@ -164,6 +169,44 @@ describe("SignUpPanel", () => {
         .getByRole("button", { name: /create account/i })
         .hasAttribute("disabled"),
     ).toBe(false);
+  });
+
+  it("forwards sign-up attribution to the login endpoint", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+    const previousURL = window.location.href;
+    window.history.replaceState(
+      null,
+      "",
+      "/sign-up?utm_source=linkedin&utm_campaign=q4-mcp-gateway",
+    );
+    setAnalyticsSessionIdSource(() => "sess-123");
+
+    try {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByRole("checkbox"));
+      await user.type(
+        screen.getByLabelText("Work email"),
+        "someone@example.com",
+      );
+      await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+      await user.click(screen.getByRole("button", { name: /create account/i }));
+
+      expect(assign).toHaveBeenCalledTimes(1);
+      const params = new URL(
+        assign.mock.calls[0]?.[0] as string,
+        "https://example.com",
+      ).searchParams;
+      expect(params.get("utm_source")).toBe("linkedin");
+      expect(params.get("utm_campaign")).toBe("q4-mcp-gateway");
+      expect(params.get("analytics_session_id")).toBe("sess-123");
+    } finally {
+      setAnalyticsSessionIdSource(null);
+      window.history.replaceState(null, "", previousURL);
+      assign.mockRestore();
+    }
   });
 
   it("hands off a company name in a non-latin script unchanged", async () => {
@@ -323,4 +366,100 @@ describe("SignUpPanel", () => {
       expect.objectContaining({ action: "signup_started" }),
     );
   });
+});
+
+it.each(["partner", "x".repeat(80), "  partner  ", "   "])(
+  "preserves URL code %s through retry, login link and signup without promoting it",
+  async (partnerCode) => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      renderPanel(
+        `/sign-up?signin_error=init_error&partner_code=${partnerCode}`,
+        "/welcome",
+        partnerCode,
+      );
+      expect(screen.getByText(/Failed to initialize account/)).toBeTruthy();
+      expect(screen.queryByLabelText(/partner code/i)).toBeNull();
+      expect(
+        screen.queryByText(/valid partner code|\$100 off|pay-as-you-go/i),
+      ).toBeNull();
+      expect(Boolean(screen.queryByText(/14-day trial/i))).toBe(
+        !partnerCode.trim(),
+      );
+      const login = new URL(
+        screen.getByRole("link", { name: "Log in" }).getAttribute("href")!,
+        window.location.origin,
+      );
+      expect(login.searchParams.get("partner_code")).toBe(
+        partnerCode.trim() || null,
+      );
+      await user.click(screen.getByRole("checkbox"));
+      await user.type(screen.getByLabelText("Work email"), "user@example.com");
+      await user.type(screen.getByLabelText("Company name"), "Acme");
+      await user.click(screen.getByRole("button", { name: /create account/i }));
+      const destination = new URL(assign.mock.calls[0]![0].toString());
+      expect(destination.searchParams.get("partner_code")).toBe(
+        partnerCode.trim() || null,
+      );
+      expect(telemetryCapture.mock.calls).toEqual([
+        [
+          "onboarding_event",
+          {
+            action: "signup_started",
+            created_via: "signup",
+            accepted_terms: true,
+            ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}),
+          },
+        ],
+      ]);
+    } finally {
+      assign.mockRestore();
+    }
+  },
+);
+
+it("keeps ordinary trial signup without a partner field", () => {
+  renderPanel();
+  expect(screen.getByText(/14-day trial/)).toBeTruthy();
+  expect(screen.queryByLabelText(/partner code/i)).toBeNull();
+  expect(
+    screen.queryByText(/valid partner code|\$100 off|pay-as-you-go/i),
+  ).toBeNull();
+  expect(
+    screen.getByRole("link", { name: "Log in" }).getAttribute("href"),
+  ).toBe("/login");
+});
+
+it("rejects oversized URL codes without truncating or signing up", async () => {
+  const assign = vi
+    .spyOn(window.location, "assign")
+    .mockImplementation(() => {});
+  try {
+    const user = userEvent.setup();
+    const partnerCode = "x".repeat(81);
+    renderPanel("/sign-up", undefined, partnerCode);
+    expect(screen.queryByLabelText(/partner code/i)).toBeNull();
+    expect(
+      screen.getByText("Partner code must be 80 characters or fewer."),
+    ).toBeTruthy();
+    const login = new URL(
+      screen.getByRole("link", { name: "Log in" }).getAttribute("href")!,
+      window.location.origin,
+    );
+    expect(login.searchParams.get("partner_code")).toBe(partnerCode);
+    await user.click(screen.getByRole("checkbox"));
+    await user.type(screen.getByLabelText("Work email"), "user@example.com");
+    await user.type(screen.getByLabelText("Company name"), "Acme");
+    const submit = screen.getByRole("button", { name: /create account/i });
+    expect(submit).toHaveProperty("disabled", true);
+    await user.click(submit);
+    await user.type(screen.getByLabelText("Company name"), "{Enter}");
+    expect(assign).not.toHaveBeenCalled();
+    expect(telemetryCapture).not.toHaveBeenCalled();
+  } finally {
+    assign.mockRestore();
+  }
 });

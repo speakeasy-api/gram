@@ -11,7 +11,7 @@ Local development uses the `local` assistant runtime provider. `./zero`
 `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE=gram-assistant-runtime` into `mise.local.toml`
 when those vars are unset, and builds `gram-assistant-runtime:dev` if the image
 is missing. The Speakeasy server then starts one runtime container per assistant on
-your machine's Docker daemon, on demand. No Fly.io credentials, apps, or
+your machine's Docker daemon, on demand. No remote runtime credentials or
 registry pushes are involved.
 
 `mise run zero:assistants --restart` rewrites those keys and rebuilds the image.
@@ -70,11 +70,3 @@ mise run assistants:local-clean
    a `127.0.0.1:<port>->8081/tcp` publish, and the turn produces a reply.
 4. `mise run assistants:local-clean` — containers and volumes are gone; the
    next turn relaunches from scratch.
-
-### Migrating from the Fly.io workflow
-
-If your `mise.local.toml` still pins `GRAM_ASSISTANT_RUNTIME_PROVIDER=flyio`
-(or a `registry.fly.io/...` value for `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE`),
-`mise run zero:assistants --restart` overwrites those two keys with the local
-defaults and rebuilds the image. Remove any leftover `GRAM_ASSISTANT_RUNTIME_FLYIO_*`
-keys yourself.

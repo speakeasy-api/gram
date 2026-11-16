@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { SelectFilterChip } from "@/components/filters/FilterChip";
+import { getFilterAccents } from "@/components/gradient-colors";
 import { Toolbar } from ".";
 import { Button } from "@/components/ui/Button";
 import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
@@ -37,6 +39,33 @@ export const ListPageControls: Story = {
           </Toolbar.Actions>
           <Toolbar.ViewAs value={view} onChange={setView} />
         </Toolbar.Row>
+      </Toolbar>
+    );
+  },
+};
+
+export const DirectFilter: Story = {
+  render: function Render() {
+    const [value, setValue] = useState<string | null>(null);
+    return (
+      <Toolbar>
+        <Toolbar.Leading>
+          <SelectFilterChip
+            dim={{
+              id: "server",
+              label: "MCP server",
+              kind: "select",
+              pinned: true,
+            }}
+            value={value}
+            options={[
+              { value: "issues", label: "Issue tracker" },
+              { value: "docs", label: "Knowledge base" },
+            ]}
+            color={getFilterAccents(["server"]).server}
+            onChange={setValue}
+          />
+        </Toolbar.Leading>
       </Toolbar>
     );
   },

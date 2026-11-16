@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
   activeTabFromPath,
@@ -13,6 +14,7 @@ const BASE = `/acme/projects/demo/mcp/gateway/${ID}`;
 const TABS = [
   "overview",
   "inspect",
+  "skills",
   "team-access",
   "sessions",
   "settings",
@@ -36,7 +38,7 @@ describe("activeTabFromPath", () => {
 
   it("requires the mcp/gateway prefix, so a lookalike path misses", () => {
     expect(
-      activeTabFromPath(`/acme/projects/demo/mcp/x/${ID}/settings`, ID),
+      activeTabFromPath(`/acme/projects/demo/mcp/${ID}/settings`, ID),
     ).toBeUndefined();
   });
 

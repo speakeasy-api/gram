@@ -12,6 +12,11 @@ export type IdentityRailItem = {
    * place of the left rule that marks the top-level sections.
    */
   nested?: boolean;
+  /**
+   * How many things on the sub-page need someone, drawn as a red count beside
+   * its title so the reader is drawn there. Nothing is drawn for 0.
+   */
+  badge?: number;
 };
 
 // The left edge on the rail layout. The rule belongs to the top-level
@@ -89,6 +94,20 @@ export function IdentityRail({
             </span>
           )}
           {item.title}
+          {item.badge ? (
+            <>
+              <span
+                aria-hidden
+                className="bg-destructive ml-2 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] align-[1px] text-[11px] leading-none font-semibold text-white tabular-nums"
+              >
+                {item.badge}
+              </span>
+              {/* Read with the title: "MCP sign-in (2 need attention)". */}
+              <span className="sr-only">
+                {`(${item.badge} need${item.badge === 1 ? "s" : ""} attention)`}
+              </span>
+            </>
+          ) : null}
         </Link>
       ))}
     </nav>

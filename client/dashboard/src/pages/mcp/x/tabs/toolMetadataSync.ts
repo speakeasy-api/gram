@@ -17,6 +17,25 @@ const METADATA_FIELDS = [
 
 export type MetadataField = (typeof METADATA_FIELDS)[number];
 
+/**
+ * Hints the MCP spec defaults to false, so unset and false claim the same thing.
+ * Lists rewritten by the proxy spell these out as false, and that must not read as
+ * a change. The other hints default to true, where unset and false do differ.
+ */
+const DEFAULT_FALSE_FIELDS: ReadonlySet<MetadataField> = new Set([
+  "readOnlyHint",
+  "idempotentHint",
+]);
+
+function fieldsMatch(
+  field: MetadataField,
+  a: string | boolean | undefined,
+  b: string | boolean | undefined,
+): boolean {
+  if (DEFAULT_FALSE_FIELDS.has(field)) return (a ?? false) === (b ?? false);
+  return a === b;
+}
+
 export type FieldChange = {
   field: MetadataField;
   /** What Speakeasy has stored. Undefined means the hint is unset. */
@@ -91,7 +110,9 @@ export function computeDrift(
     const changes = METADATA_FIELDS.flatMap((field) => {
       const a = advertisedField(tool.annotations, field);
       const s = storedField(entry, field);
-      return a === s ? [] : [{ field, stored: s, advertised: a }];
+      return fieldsMatch(field, a, s)
+        ? []
+        : [{ field, stored: s, advertised: a }];
     });
 
     if (changes.length > 0) {

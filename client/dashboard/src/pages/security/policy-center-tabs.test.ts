@@ -1,13 +1,19 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { policyCenterTabs, visiblePolicyCenterTab } from "./policy-center-tabs";
+import {
+  policyCenterTabs,
+  policyCenterTabSearch,
+  resolvePolicyCenterTab,
+} from "./policy-center-tabs";
 
 describe("policyCenterTabs", () => {
-  it("adds the Shadow AI targets tab after Detection Rules once the fold-in is on", () => {
-    const tabs = policyCenterTabs(true);
+  it("shows the Shadow AI targets and MCP approvals tabs after Detection Rules", () => {
+    const tabs = policyCenterTabs();
     expect(tabs.map((tab) => tab.value)).toEqual([
       "policies",
       "detection-rules",
       "shadow-ai-targets",
+      "mcp-approvals",
       "exclusions",
       "quarantines",
     ]);
@@ -17,24 +23,38 @@ describe("policyCenterTabs", () => {
         href: "?tab=shadow-ai-targets",
       },
     );
+    expect(tabs.find((tab) => tab.value === "mcp-approvals")).toMatchObject({
+      label: "MCP approvals",
+      href: "?tab=mcp-approvals",
+    });
   });
 
-  it("keeps the four tabs while the fold-in is off", () => {
-    expect(policyCenterTabs(false).map((tab) => tab.value)).toEqual([
+  it("shows Tool approvals after MCP approvals when its flag is on", () => {
+    const tabs = policyCenterTabs({ toolApprovals: true });
+    expect(tabs.map((tab) => tab.value)).toEqual([
       "policies",
       "detection-rules",
+      "shadow-ai-targets",
+      "mcp-approvals",
+      "tool-approvals",
       "exclusions",
       "quarantines",
     ]);
+    expect(tabs.find((tab) => tab.value === "tool-approvals")).toMatchObject({
+      label: "Tool approvals",
+      href: "?tab=tool-approvals",
+    });
   });
-});
 
-describe("visiblePolicyCenterTab", () => {
-  it("falls back to Policies for a Shadow AI targets link opened with the fold-in off", () => {
-    expect(visiblePolicyCenterTab("shadow-ai-targets", false)).toBe("policies");
-    expect(visiblePolicyCenterTab("shadow-ai-targets", true)).toBe(
-      "shadow-ai-targets",
-    );
-    expect(visiblePolicyCenterTab("exclusions", false)).toBe("exclusions");
+  it("lands a link to a hidden tab on Policies", () => {
+    expect(resolvePolicyCenterTab("tool-approvals")).toBe("policies");
+    expect(
+      resolvePolicyCenterTab("tool-approvals", { toolApprovals: true }),
+    ).toBe("tool-approvals");
+    expect(resolvePolicyCenterTab("mcp-approvals")).toBe("mcp-approvals");
+  });
+
+  it("builds the search string a link lands on a tab with", () => {
+    expect(policyCenterTabSearch("mcp-approvals")).toBe("?tab=mcp-approvals");
   });
 });

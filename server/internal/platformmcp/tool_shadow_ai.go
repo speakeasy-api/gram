@@ -31,7 +31,7 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 	})
 	addTool(reg, &mcp.Tool{
 		Name:        operationListAIScanLibrary,
-		Title:       "List AI Scan Library",
+		Title:       "List AI Tools Scanned by Devices",
 		Description: "List the AI tools this organization's device agents probe for: the built-in library Speakeasy ships plus any targets the organization added. Everything listed is probed for. Says which were added by this organization and which publish a client ID metadata document and are therefore blockable at the gateway. The library version is the number agents echo back once they have received the list.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAIScanLibraryInput) (*mcp.CallToolResult, ListAIScanLibraryOutput, error) {
@@ -44,7 +44,7 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 func registerUnavailableShadowAITools(reg *Registrar) {
 	for _, tool := range []struct{ name, title, description string }{
 		{operationListShadowAIInventory, "List Shadow AI Inventory", "List detected AI tools and their gateway access decisions. This is not switched on for your organization yet."},
-		{operationListAIScanLibrary, "List AI Scan Library", "List the AI tools device agents probe for. This is not switched on for your organization yet."},
+		{operationListAIScanLibrary, "List AI Tools Scanned by Devices", "List the AI tools device agents probe for. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool(shadowAIFeature))
 	}

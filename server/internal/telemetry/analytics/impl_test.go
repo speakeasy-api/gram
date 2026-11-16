@@ -19,36 +19,33 @@ func TestDescribe(t *testing.T) {
 
 	result, err := ti.service.Describe(ctx, &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
-	require.Len(t, result.Datasets, 3)
+	require.Len(t, result.Datasets, 3, "an org admin reads every dataset")
+	require.Empty(t, result.RestrictedDatasets)
 
-	sessions := datasetNamed(t, result.Datasets, "sessions")
-	require.Equal(t, "event", sessions.Kind)
-	require.NotEmpty(t, sessions.Grain)
+	toolCalls := datasetNamed(t, result.Datasets, "tool_calls")
+	require.Equal(t, "event", toolCalls.Kind)
+	require.NotEmpty(t, toolCalls.Grain)
 
-	byName := fieldsByName(sessions)
+	byName := fieldsByName(toolCalls)
 	require.Equal(t, "dimension", byName["user"].Role)
 	require.Equal(t, []string{"equals", "in"}, byName["user"].Operators)
 	require.Equal(t, []string{"count_distinct"}, byName["user"].Aggregations, "describe advertises the one aggregation a dimension admits")
-	require.Empty(t, byName["model"].Aggregations)
-	require.Equal(t, "measure", byName["duration_seconds"].Role)
-	require.Equal(t, "float64", byName["duration_seconds"].Type)
-	require.NotNil(t, byName["duration_seconds"].Unit)
-	require.Equal(t, "s", *byName["duration_seconds"].Unit)
-	require.Equal(t, []string{"sum", "avg", "p95"}, byName["duration_seconds"].Aggregations)
+	require.Empty(t, byName["status"].Aggregations)
+	require.Equal(t, "measure", byName["duration_ms"].Role)
+	require.Equal(t, "float64", byName["duration_ms"].Type)
+	require.NotNil(t, byName["duration_ms"].Unit)
+	require.Equal(t, "ms", *byName["duration_ms"].Unit)
+	require.Equal(t, []string{"sum", "avg", "p95"}, byName["duration_ms"].Aggregations)
 	require.NotContains(t, byName, "project")
-	require.True(t, byName["user"].Default, "the catalog names the opening group-by, not the client")
+	require.Equal(t, []string{"tool_name"}, defaultFields(toolCalls), "the catalog names the opening group-by, not the client")
 	require.False(t, byName["session"].Default)
-	require.False(t, byName["duration_seconds"].Default)
-
-	toolCalls := datasetNamed(t, result.Datasets, "tool_calls")
-	require.Equal(t, []string{"tool_name"}, defaultFields(toolCalls), "one flagged dimension opens the tool calls view")
-	toolFields := fieldsByName(toolCalls)
-	require.NotContains(t, toolFields, "skill", "a Skill call is an ordinary call here; skills are their own dataset")
-	require.NotNil(t, toolFields["mcp_server"].Lookup, "describe says which map mcp_server reads through")
-	require.Equal(t, MCPServerDisplayNamesLookup, toolFields["mcp_server"].Lookup.Name)
-	require.Contains(t, toolFields["mcp_server"].Lookup.Description, "Hooks settings")
-	require.Nil(t, toolFields["tool_name"].Lookup, "a field read as reported names no lookup")
-	require.Nil(t, toolFields["tool_name"].Description, "a field with nothing to add has no description")
+	require.False(t, byName["duration_ms"].Default)
+	require.NotContains(t, byName, "skill", "a Skill call is an ordinary call here; skills are their own dataset")
+	require.NotNil(t, byName["mcp_server"].Lookup, "describe says which map mcp_server reads through")
+	require.Equal(t, MCPServerDisplayNamesLookup, byName["mcp_server"].Lookup.Name)
+	require.Contains(t, byName["mcp_server"].Lookup.Description, "Hooks settings")
+	require.Nil(t, byName["tool_name"].Lookup, "a field read as reported names no lookup")
+	require.Nil(t, byName["tool_name"].Description, "a field with nothing to add has no description")
 	require.Nil(t, byName["user"].Description)
 
 	skills := datasetNamed(t, result.Datasets, "skills")
@@ -59,6 +56,13 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, []string{"count_distinct"}, skillFields["skill"].Aggregations, "skills used is a distinct count")
 	require.Equal(t, "dimension", skillFields["tool_call"].Role, "the invocation's call id tells repeated invocations apart in rows mode")
 	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
+
+	riskFindings := datasetNamed(t, result.Datasets, "risk_findings")
+	require.Equal(t, "metric", riskFindings.Kind, "describe says the dataset answers aggregates only")
+	require.Equal(t, []string{"category"}, defaultFields(riskFindings))
+	riskFields := fieldsByName(riskFindings)
+	require.Equal(t, RiskPolicySeveritiesLookup, riskFields["severity"].Lookup.Name)
+	require.Equal(t, RiskPolicyNamesLookup, riskFields["policy"].Lookup.Name)
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
@@ -72,18 +76,20 @@ func TestDescribe(t *testing.T) {
 func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
 	t.Parallel()
 
-	described := describeDatasets(MustCatalog(nil, &Dataset{
+	catalog := MustCatalog(nil, &Dataset{
 		Name:        "things",
 		Kind:        KindEvent,
 		Grain:       "thing",
 		Description: "things",
 		TimeExpr:    "started_at",
+		Access:      AccessProject,
 		Fields: []Field{
 			{Name: "kind", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "kind", Description: "Which producers fill it.", Lookup: ""},
 			{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: "", Lookup: ""},
 		},
-		Source: sessionsSource,
-	}))
+		Source: toolCallsSource,
+	})
+	described := describeDatasets(catalog, catalog.Datasets())
 	require.Len(t, described, 1)
 	require.NotNil(t, described[0].Fields[0].Description)
 	require.Equal(t, "Which producers fill it.", *described[0].Fields[0].Description)
@@ -181,35 +187,32 @@ func TestQuery(t *testing.T) {
 	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(48*time.Hour).Format(time.RFC3339)
 	str := func(s string) *string { return &s }
 
-	t.Run("it aggregates sessions by user with identity-aware measures", func(t *testing.T) {
+	t.Run("it aggregates tool calls by user", func(t *testing.T) {
 		t.Parallel()
 		result, err := ti.service.Query(ctx, &gen.QueryPayload{
 			SessionToken: nil, ProjectSlugInput: nil,
-			Dataset: "sessions", From: from, To: to, Grain: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
 			Dimensions: []string{"user"},
 			Measures: []*gen.AnalyticsMeasure{
 				{Op: "count", Field: nil, Alias: nil},
-				{Op: "sum", Field: str("tool_call_count"), Alias: str("tool_calls")},
-				{Op: "sum", Field: str("turn_count"), Alias: nil},
+				{Op: "count_distinct", Field: str("session"), Alias: str("sessions")},
 			},
 			Filters: nil, OrderBy: []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}}, Limit: 0, Ungrouped: false,
 		})
 		require.NoError(t, err)
-		require.Equal(t, "sessions", result.Dataset)
-		require.Equal(t, "sessions.agent_events", result.Plan)
+		require.Equal(t, "tool_calls", result.Dataset)
+		require.Equal(t, "tool_calls.agent_events", result.Plan)
 		require.Len(t, result.Rows, 2)
 
-		bob := result.Rows[0]
-		require.Equal(t, "bob@example.com", bob["user"])
-		require.EqualValues(t, 2, bob["count"], "s2 and s3")
-		require.EqualValues(t, 1, bob["tool_calls"])
-		require.EqualValues(t, 2, bob["sum_turn_count"])
-
-		ann := result.Rows[1]
+		ann := result.Rows[0]
 		require.Equal(t, "ann@example.com", ann["user"])
-		require.EqualValues(t, 1, ann["count"])
-		require.EqualValues(t, 1, ann["tool_calls"], "two observations of tc1 are one call")
-		require.EqualValues(t, 2, ann["sum_turn_count"], "the redelivered record does not add a turn")
+		require.EqualValues(t, 1, ann["count"], "two observations of tc1 are one call")
+		require.EqualValues(t, 1, ann["sessions"])
+
+		bob := result.Rows[1]
+		require.Equal(t, "bob@example.com", bob["user"])
+		require.EqualValues(t, 1, bob["count"])
+		require.EqualValues(t, 1, bob["sessions"])
 	})
 
 	t.Run("it counts distinct values of a dimension", func(t *testing.T) {
@@ -236,7 +239,7 @@ func TestQuery(t *testing.T) {
 		t.Parallel()
 		result, err := ti.service.Query(ctx, &gen.QueryPayload{
 			SessionToken: nil, ProjectSlugInput: nil,
-			Dataset: "sessions", From: from, To: to, Grain: str("day"),
+			Dataset: "tool_calls", From: from, To: to, Grain: str("day"),
 			Dimensions: nil,
 			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
 			Filters:    nil, OrderBy: nil, Limit: 0, Ungrouped: false,
@@ -246,7 +249,7 @@ func TestQuery(t *testing.T) {
 		require.Equal(t, "2026-09-02T00:00:00Z", result.Rows[0]["time_bucket"])
 		require.EqualValues(t, 1, result.Rows[0]["count"])
 		require.Equal(t, "2026-09-03T00:00:00Z", result.Rows[1]["time_bucket"])
-		require.EqualValues(t, 2, result.Rows[1]["count"])
+		require.EqualValues(t, 1, result.Rows[1]["count"])
 	})
 
 	t.Run("it returns ungrouped rows newest first with a time column", func(t *testing.T) {
@@ -272,7 +275,7 @@ func TestQuery(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.Query(ctx, &gen.QueryPayload{
 			SessionToken: nil, ProjectSlugInput: nil,
-			Dataset: "sessions", From: from, To: to, Grain: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
 			Dimensions: []string{"department"},
 			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
 			Filters:    nil, OrderBy: nil, Limit: 0, Ungrouped: false,
@@ -286,7 +289,7 @@ func TestQuery(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.Query(ctx, &gen.QueryPayload{
 			SessionToken: nil, ProjectSlugInput: nil,
-			Dataset: "sessions", From: "yesterday", To: to, Grain: nil,
+			Dataset: "tool_calls", From: "yesterday", To: to, Grain: nil,
 			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
 			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
@@ -298,7 +301,7 @@ func TestQuery(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.Query(ctx, &gen.QueryPayload{
 			SessionToken: nil, ProjectSlugInput: nil,
-			Dataset: "sessions", From: "1500-01-01T00:00:00Z", To: to, Grain: nil,
+			Dataset: "tool_calls", From: "1500-01-01T00:00:00Z", To: to, Grain: nil,
 			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
 			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
@@ -310,7 +313,7 @@ func TestQuery(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.Query(t.Context(), &gen.QueryPayload{
 			SessionToken: nil, ProjectSlugInput: nil,
-			Dataset: "sessions", From: from, To: to, Grain: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
 			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
 			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})

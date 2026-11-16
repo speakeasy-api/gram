@@ -81,6 +81,44 @@ Redis is live data-plane state:
 - `tunnel_connections:<tunnelID>`: owner-scoped live connection snapshots for
   UI/API overview data, merged on read.
 
+## Diagnostics and activity
+
+The MCP server Overview separates connected agents, target network reachability,
+and MCP outcomes. Capable agents report DNS/TCP/TLS checks and aggregate HTTP
+progress when the gateway polls, about every 30 seconds. Polling backs off after
+failures. Checks never send HTTP requests or invoke MCP tools.
+HTTP/MCP stays **Not observed** until normal traffic arrives. HTTP 200 alone does
+not prove MCP success, and an open SSE response is not itself a failure.
+
+Telemetry includes bounded counters and the configured target's scheme, hostname
+and port. It excludes the target's path, payloads, tool names, raw client names and
+user agents, URL userinfo, query strings and raw errors. Requests are grouped by a
+fixed client family classified from the `clientInfo.name` the MCP session reported
+at initialize, falling back to the HTTP User-Agent. Requests are collected in minute buckets and
+gateway connections are sampled every 15 seconds. The Overview groups history
+into 1-minute buckets for 1 hour, 15-minute buckets for 24 hours, and hourly
+buckets for 7 days.
+Missing samples remain gaps. An interval is marked partial when the server or
+gateway that collected that tunnel's aggregates discarded some of them. Metrics
+are best-effort.
+
+Speakeasy servers record request metrics, `gram streams` ingests them, and the
+gateway polls capable agents for diagnostics and publishes connection history.
+None of this has a switch. Deploy the metrics schema and Pub/Sub topology/IAM
+before the server.
+
+Gateway publication requires `GRAM_GCP_PROJECT_ID` and permission to publish the
+metrics topic; local development can use `PUBSUB_EMULATOR_HOST`. Without a project
+ID the gateway logs a warning and forwards traffic without publishing metrics.
+
+Diagnostics enrich the optional protocol. Old agents and gateways continue to
+forward traffic; old agents show diagnostics as unsupported. Set
+`TUNNEL_DISABLE_DIAGNOSTICS=1` on an agent to turn off its target address,
+probes and passive diagnostic counters. The agent then announces
+`diagnostics-disabled.v1`, so the dashboard shows that checks are turned off
+rather than asking for an upgrade. Agents and gateways can be
+rolled back independently.
+
 ## Local Validation
 
 Start the local dev stack with `./zero --agent`. The `tunnel-gateway`

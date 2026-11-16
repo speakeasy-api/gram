@@ -16,61 +16,64 @@ import (
 
 // Endpoints wraps the "risk" service endpoints.
 type Endpoints struct {
-	CreateRiskPolicy               goa.Endpoint
-	ListRiskPolicies               goa.Endpoint
-	ListMCPPlatformToolsets        goa.Endpoint
-	ListRiskPoliciesForMcpServer   goa.Endpoint
-	ListBuiltinExclusions          goa.Endpoint
-	GetRiskPolicy                  goa.Endpoint
-	UpdateRiskPolicy               goa.Endpoint
-	DeleteRiskPolicy               goa.Endpoint
-	ListSessionQuarantines         goa.Endpoint
-	ReleaseSessionQuarantine       goa.Endpoint
-	ListRiskResults                goa.Endpoint
-	ListRiskResultsForAgent        goa.Endpoint
-	UnmaskRiskResult               goa.Endpoint
-	RevealRiskResultPayload        goa.Endpoint
-	ListRiskResultsByChat          goa.Endpoint
-	MarkRiskResultsFalsePositive   goa.Endpoint
-	UnmarkRiskResultsFalsePositive goa.Endpoint
-	ListDismissedRiskResults       goa.Endpoint
-	GetRiskOverview                goa.Endpoint
-	ListRiskCategories             goa.Endpoint
-	ListRiskPresets                goa.Endpoint
-	SuggestRiskPolicy              goa.Endpoint
-	CompileExpr                    goa.Endpoint
-	GetRiskUserBreakdown           goa.Endpoint
-	GetRiskRuleBreakdown           goa.Endpoint
-	GetRiskSignals                 goa.Endpoint
-	GetRiskMcpServerCounts         goa.Endpoint
-	GetRiskAnalysisStatus          goa.Endpoint
-	CreateRiskPolicyBypassRequest  goa.Endpoint
-	AcknowledgeRiskPolicyChallenge goa.Endpoint
-	GetRiskPolicyChallenge         goa.Endpoint
-	DeclineRiskPolicyChallenge     goa.Endpoint
-	GetRiskBlock                   goa.Endpoint
-	SubmitRiskBlockFeedback        goa.Endpoint
-	ListRiskPolicyBypassRequests   goa.Endpoint
-	ApproveRiskPolicyBypassRequest goa.Endpoint
-	DenyRiskPolicyBypassRequest    goa.Endpoint
-	RevokeRiskPolicyBypassRequest  goa.Endpoint
-	TriggerRiskAnalysis            goa.Endpoint
-	CreateCustomDetectionRule      goa.Endpoint
-	ListCustomDetectionRules       goa.Endpoint
-	GetCustomDetectionRule         goa.Endpoint
-	UpdateCustomDetectionRule      goa.Endpoint
-	DeleteCustomDetectionRule      goa.Endpoint
-	ListRiskExclusions             goa.Endpoint
-	CreateRiskExclusion            goa.Endpoint
-	UpdateRiskExclusion            goa.Endpoint
-	DeleteRiskExclusion            goa.Endpoint
-	SuggestCustomDetectionRule     goa.Endpoint
-	SuggestExclusion               goa.Endpoint
-	TestDetectionRule              goa.Endpoint
-	EvaluatePromptGuardrail        goa.Endpoint
-	SaveRiskEvalReview             goa.Endpoint
-	ListRiskEvalReviews            goa.Endpoint
-	DeleteRiskEvalReview           goa.Endpoint
+	CreateRiskPolicy                 goa.Endpoint
+	ListRiskPolicies                 goa.Endpoint
+	ListMCPPlatformToolsets          goa.Endpoint
+	ListRiskPoliciesForMcpServer     goa.Endpoint
+	ListBuiltinExclusions            goa.Endpoint
+	GetRiskPolicy                    goa.Endpoint
+	UpdateRiskPolicy                 goa.Endpoint
+	DeleteRiskPolicy                 goa.Endpoint
+	ListSessionQuarantines           goa.Endpoint
+	ReleaseSessionQuarantine         goa.Endpoint
+	ListRiskResults                  goa.Endpoint
+	ListRiskResultsForAgent          goa.Endpoint
+	UnmaskRiskResult                 goa.Endpoint
+	RevealRiskResultPayload          goa.Endpoint
+	ListRiskResultsByChat            goa.Endpoint
+	MarkRiskResultsFalsePositive     goa.Endpoint
+	UnmarkRiskResultsFalsePositive   goa.Endpoint
+	ListDismissedRiskResults         goa.Endpoint
+	GetRiskOverview                  goa.Endpoint
+	ListRiskCategories               goa.Endpoint
+	ListRiskPresets                  goa.Endpoint
+	SuggestRiskPolicy                goa.Endpoint
+	CompileExpr                      goa.Endpoint
+	GetRiskUserBreakdown             goa.Endpoint
+	GetRiskSignals                   goa.Endpoint
+	GetRiskMcpServerCounts           goa.Endpoint
+	GetRiskAnalysisStatus            goa.Endpoint
+	CreateRiskPolicyBypassRequest    goa.Endpoint
+	GetRiskPolicyBypassRequestTarget goa.Endpoint
+	AcknowledgeRiskPolicyChallenge   goa.Endpoint
+	GetRiskPolicyChallenge           goa.Endpoint
+	DeclineRiskPolicyChallenge       goa.Endpoint
+	GetRiskBlock                     goa.Endpoint
+	SubmitRiskBlockFeedback          goa.Endpoint
+	ListRiskPolicyBypassRequests     goa.Endpoint
+	ApproveRiskPolicyBypassRequest   goa.Endpoint
+	DenyRiskPolicyBypassRequest      goa.Endpoint
+	RevokeRiskPolicyBypassRequest    goa.Endpoint
+	ListRiskPolicyApprovals          goa.Endpoint
+	GetRiskPolicyApproval            goa.Endpoint
+	DecideRiskPolicyApproval         goa.Endpoint
+	TriggerRiskAnalysis              goa.Endpoint
+	CreateCustomDetectionRule        goa.Endpoint
+	ListCustomDetectionRules         goa.Endpoint
+	GetCustomDetectionRule           goa.Endpoint
+	UpdateCustomDetectionRule        goa.Endpoint
+	DeleteCustomDetectionRule        goa.Endpoint
+	ListRiskExclusions               goa.Endpoint
+	CreateRiskExclusion              goa.Endpoint
+	UpdateRiskExclusion              goa.Endpoint
+	DeleteRiskExclusion              goa.Endpoint
+	SuggestCustomDetectionRule       goa.Endpoint
+	SuggestExclusion                 goa.Endpoint
+	TestDetectionRule                goa.Endpoint
+	EvaluatePromptGuardrail          goa.Endpoint
+	SaveRiskEvalReview               goa.Endpoint
+	ListRiskEvalReviews              goa.Endpoint
+	DeleteRiskEvalReview             goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "risk" service with endpoints.
@@ -78,61 +81,64 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateRiskPolicy:               NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
-		ListRiskPolicies:               NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
-		ListMCPPlatformToolsets:        NewListMCPPlatformToolsetsEndpoint(s, a.APIKeyAuth),
-		ListRiskPoliciesForMcpServer:   NewListRiskPoliciesForMcpServerEndpoint(s, a.APIKeyAuth),
-		ListBuiltinExclusions:          NewListBuiltinExclusionsEndpoint(s, a.APIKeyAuth),
-		GetRiskPolicy:                  NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
-		UpdateRiskPolicy:               NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
-		DeleteRiskPolicy:               NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
-		ListSessionQuarantines:         NewListSessionQuarantinesEndpoint(s, a.APIKeyAuth),
-		ReleaseSessionQuarantine:       NewReleaseSessionQuarantineEndpoint(s, a.APIKeyAuth),
-		ListRiskResults:                NewListRiskResultsEndpoint(s, a.APIKeyAuth),
-		ListRiskResultsForAgent:        NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
-		UnmaskRiskResult:               NewUnmaskRiskResultEndpoint(s, a.APIKeyAuth),
-		RevealRiskResultPayload:        NewRevealRiskResultPayloadEndpoint(s, a.APIKeyAuth),
-		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
-		MarkRiskResultsFalsePositive:   NewMarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
-		UnmarkRiskResultsFalsePositive: NewUnmarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
-		ListDismissedRiskResults:       NewListDismissedRiskResultsEndpoint(s, a.APIKeyAuth),
-		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
-		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
-		ListRiskPresets:                NewListRiskPresetsEndpoint(s, a.APIKeyAuth),
-		SuggestRiskPolicy:              NewSuggestRiskPolicyEndpoint(s, a.APIKeyAuth),
-		CompileExpr:                    NewCompileExprEndpoint(s, a.APIKeyAuth),
-		GetRiskUserBreakdown:           NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
-		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
-		GetRiskSignals:                 NewGetRiskSignalsEndpoint(s, a.APIKeyAuth),
-		GetRiskMcpServerCounts:         NewGetRiskMcpServerCountsEndpoint(s, a.APIKeyAuth),
-		GetRiskAnalysisStatus:          NewGetRiskAnalysisStatusEndpoint(s, a.APIKeyAuth),
-		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
-		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
-		GetRiskPolicyChallenge:         NewGetRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
-		DeclineRiskPolicyChallenge:     NewDeclineRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
-		GetRiskBlock:                   NewGetRiskBlockEndpoint(s, a.APIKeyAuth),
-		SubmitRiskBlockFeedback:        NewSubmitRiskBlockFeedbackEndpoint(s, a.APIKeyAuth),
-		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsEndpoint(s, a.APIKeyAuth),
-		ApproveRiskPolicyBypassRequest: NewApproveRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
-		DenyRiskPolicyBypassRequest:    NewDenyRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
-		RevokeRiskPolicyBypassRequest:  NewRevokeRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
-		TriggerRiskAnalysis:            NewTriggerRiskAnalysisEndpoint(s, a.APIKeyAuth),
-		CreateCustomDetectionRule:      NewCreateCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
-		ListCustomDetectionRules:       NewListCustomDetectionRulesEndpoint(s, a.APIKeyAuth),
-		GetCustomDetectionRule:         NewGetCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
-		UpdateCustomDetectionRule:      NewUpdateCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
-		DeleteCustomDetectionRule:      NewDeleteCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
-		ListRiskExclusions:             NewListRiskExclusionsEndpoint(s, a.APIKeyAuth),
-		CreateRiskExclusion:            NewCreateRiskExclusionEndpoint(s, a.APIKeyAuth),
-		UpdateRiskExclusion:            NewUpdateRiskExclusionEndpoint(s, a.APIKeyAuth),
-		DeleteRiskExclusion:            NewDeleteRiskExclusionEndpoint(s, a.APIKeyAuth),
-		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
-		SuggestExclusion:               NewSuggestExclusionEndpoint(s, a.APIKeyAuth),
-		TestDetectionRule:              NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
-		EvaluatePromptGuardrail:        NewEvaluatePromptGuardrailEndpoint(s, a.APIKeyAuth),
-		SaveRiskEvalReview:             NewSaveRiskEvalReviewEndpoint(s, a.APIKeyAuth),
-		ListRiskEvalReviews:            NewListRiskEvalReviewsEndpoint(s, a.APIKeyAuth),
-		DeleteRiskEvalReview:           NewDeleteRiskEvalReviewEndpoint(s, a.APIKeyAuth),
+		CreateRiskPolicy:                 NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
+		ListRiskPolicies:                 NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
+		ListMCPPlatformToolsets:          NewListMCPPlatformToolsetsEndpoint(s, a.APIKeyAuth),
+		ListRiskPoliciesForMcpServer:     NewListRiskPoliciesForMcpServerEndpoint(s, a.APIKeyAuth),
+		ListBuiltinExclusions:            NewListBuiltinExclusionsEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicy:                    NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
+		UpdateRiskPolicy:                 NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
+		DeleteRiskPolicy:                 NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
+		ListSessionQuarantines:           NewListSessionQuarantinesEndpoint(s, a.APIKeyAuth),
+		ReleaseSessionQuarantine:         NewReleaseSessionQuarantineEndpoint(s, a.APIKeyAuth),
+		ListRiskResults:                  NewListRiskResultsEndpoint(s, a.APIKeyAuth),
+		ListRiskResultsForAgent:          NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
+		UnmaskRiskResult:                 NewUnmaskRiskResultEndpoint(s, a.APIKeyAuth),
+		RevealRiskResultPayload:          NewRevealRiskResultPayloadEndpoint(s, a.APIKeyAuth),
+		ListRiskResultsByChat:            NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
+		MarkRiskResultsFalsePositive:     NewMarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
+		UnmarkRiskResultsFalsePositive:   NewUnmarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
+		ListDismissedRiskResults:         NewListDismissedRiskResultsEndpoint(s, a.APIKeyAuth),
+		GetRiskOverview:                  NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
+		ListRiskCategories:               NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
+		ListRiskPresets:                  NewListRiskPresetsEndpoint(s, a.APIKeyAuth),
+		SuggestRiskPolicy:                NewSuggestRiskPolicyEndpoint(s, a.APIKeyAuth),
+		CompileExpr:                      NewCompileExprEndpoint(s, a.APIKeyAuth),
+		GetRiskUserBreakdown:             NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
+		GetRiskSignals:                   NewGetRiskSignalsEndpoint(s, a.APIKeyAuth),
+		GetRiskMcpServerCounts:           NewGetRiskMcpServerCountsEndpoint(s, a.APIKeyAuth),
+		GetRiskAnalysisStatus:            NewGetRiskAnalysisStatusEndpoint(s, a.APIKeyAuth),
+		CreateRiskPolicyBypassRequest:    NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicyBypassRequestTarget: NewGetRiskPolicyBypassRequestTargetEndpoint(s, a.APIKeyAuth),
+		AcknowledgeRiskPolicyChallenge:   NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicyChallenge:           NewGetRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		DeclineRiskPolicyChallenge:       NewDeclineRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		GetRiskBlock:                     NewGetRiskBlockEndpoint(s, a.APIKeyAuth),
+		SubmitRiskBlockFeedback:          NewSubmitRiskBlockFeedbackEndpoint(s, a.APIKeyAuth),
+		ListRiskPolicyBypassRequests:     NewListRiskPolicyBypassRequestsEndpoint(s, a.APIKeyAuth),
+		ApproveRiskPolicyBypassRequest:   NewApproveRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		DenyRiskPolicyBypassRequest:      NewDenyRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		RevokeRiskPolicyBypassRequest:    NewRevokeRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		ListRiskPolicyApprovals:          NewListRiskPolicyApprovalsEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicyApproval:            NewGetRiskPolicyApprovalEndpoint(s, a.APIKeyAuth),
+		DecideRiskPolicyApproval:         NewDecideRiskPolicyApprovalEndpoint(s, a.APIKeyAuth),
+		TriggerRiskAnalysis:              NewTriggerRiskAnalysisEndpoint(s, a.APIKeyAuth),
+		CreateCustomDetectionRule:        NewCreateCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		ListCustomDetectionRules:         NewListCustomDetectionRulesEndpoint(s, a.APIKeyAuth),
+		GetCustomDetectionRule:           NewGetCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		UpdateCustomDetectionRule:        NewUpdateCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		DeleteCustomDetectionRule:        NewDeleteCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		ListRiskExclusions:               NewListRiskExclusionsEndpoint(s, a.APIKeyAuth),
+		CreateRiskExclusion:              NewCreateRiskExclusionEndpoint(s, a.APIKeyAuth),
+		UpdateRiskExclusion:              NewUpdateRiskExclusionEndpoint(s, a.APIKeyAuth),
+		DeleteRiskExclusion:              NewDeleteRiskExclusionEndpoint(s, a.APIKeyAuth),
+		SuggestCustomDetectionRule:       NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		SuggestExclusion:                 NewSuggestExclusionEndpoint(s, a.APIKeyAuth),
+		TestDetectionRule:                NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
+		EvaluatePromptGuardrail:          NewEvaluatePromptGuardrailEndpoint(s, a.APIKeyAuth),
+		SaveRiskEvalReview:               NewSaveRiskEvalReviewEndpoint(s, a.APIKeyAuth),
+		ListRiskEvalReviews:              NewListRiskEvalReviewsEndpoint(s, a.APIKeyAuth),
+		DeleteRiskEvalReview:             NewDeleteRiskEvalReviewEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -162,11 +168,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SuggestRiskPolicy = m(e.SuggestRiskPolicy)
 	e.CompileExpr = m(e.CompileExpr)
 	e.GetRiskUserBreakdown = m(e.GetRiskUserBreakdown)
-	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
 	e.GetRiskSignals = m(e.GetRiskSignals)
 	e.GetRiskMcpServerCounts = m(e.GetRiskMcpServerCounts)
 	e.GetRiskAnalysisStatus = m(e.GetRiskAnalysisStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
+	e.GetRiskPolicyBypassRequestTarget = m(e.GetRiskPolicyBypassRequestTarget)
 	e.AcknowledgeRiskPolicyChallenge = m(e.AcknowledgeRiskPolicyChallenge)
 	e.GetRiskPolicyChallenge = m(e.GetRiskPolicyChallenge)
 	e.DeclineRiskPolicyChallenge = m(e.DeclineRiskPolicyChallenge)
@@ -176,6 +182,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ApproveRiskPolicyBypassRequest = m(e.ApproveRiskPolicyBypassRequest)
 	e.DenyRiskPolicyBypassRequest = m(e.DenyRiskPolicyBypassRequest)
 	e.RevokeRiskPolicyBypassRequest = m(e.RevokeRiskPolicyBypassRequest)
+	e.ListRiskPolicyApprovals = m(e.ListRiskPolicyApprovals)
+	e.GetRiskPolicyApproval = m(e.GetRiskPolicyApproval)
+	e.DecideRiskPolicyApproval = m(e.DecideRiskPolicyApproval)
 	e.TriggerRiskAnalysis = m(e.TriggerRiskAnalysis)
 	e.CreateCustomDetectionRule = m(e.CreateCustomDetectionRule)
 	e.ListCustomDetectionRules = m(e.ListCustomDetectionRules)
@@ -1611,65 +1620,6 @@ func NewGetRiskUserBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 	}
 }
 
-// NewGetRiskRuleBreakdownEndpoint returns an endpoint function that calls the
-// method "getRiskRuleBreakdown" of service "risk".
-func NewGetRiskRuleBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetRiskRuleBreakdownPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"producer"},
-		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{"producer"},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.GetRiskRuleBreakdown(ctx, p)
-	}
-}
-
 // NewGetRiskSignalsEndpoint returns an endpoint function that calls the method
 // "getRiskSignals" of service "risk".
 func NewGetRiskSignalsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -1879,6 +1829,29 @@ func NewCreateRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.CreateRiskPolicyBypassRequest(ctx, p)
+	}
+}
+
+// NewGetRiskPolicyBypassRequestTargetEndpoint returns an endpoint function
+// that calls the method "getRiskPolicyBypassRequestTarget" of service "risk".
+func NewGetRiskPolicyBypassRequestTargetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskPolicyBypassRequestTargetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskPolicyBypassRequestTarget(ctx, p)
 	}
 }
 
@@ -2230,6 +2203,183 @@ func NewRevokeRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.RevokeRiskPolicyBypassRequest(ctx, p)
+	}
+}
+
+// NewListRiskPolicyApprovalsEndpoint returns an endpoint function that calls
+// the method "listRiskPolicyApprovals" of service "risk".
+func NewListRiskPolicyApprovalsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRiskPolicyApprovalsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRiskPolicyApprovals(ctx, p)
+	}
+}
+
+// NewGetRiskPolicyApprovalEndpoint returns an endpoint function that calls the
+// method "getRiskPolicyApproval" of service "risk".
+func NewGetRiskPolicyApprovalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskPolicyApprovalPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskPolicyApproval(ctx, p)
+	}
+}
+
+// NewDecideRiskPolicyApprovalEndpoint returns an endpoint function that calls
+// the method "decideRiskPolicyApproval" of service "risk".
+func NewDecideRiskPolicyApprovalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DecideRiskPolicyApprovalPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.DecideRiskPolicyApproval(ctx, p)
 	}
 }
 

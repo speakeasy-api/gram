@@ -137,6 +137,30 @@ func (c *Client) PlatformFeatureCheck(ctx context.Context, organizationID string
 // flags without specialized write behavior before calling this method.
 func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, feature Feature, enabled bool) error {
 	return c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
+		if feature == FeatureOrganizationGatewayDisabled {
+			tx, err := conn.Begin(ctx)
+			if err != nil {
+				return fmt.Errorf("begin feature update: %w", err)
+			}
+			defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+			syncGateway, err := prepareGatewayAuthClients(ctx, tx, organizationID)
+			if err != nil {
+				return err
+			}
+			if err = setFeatureEnabled(ctx, repo.New(tx), organizationID, feature, enabled); err != nil {
+				return err
+			}
+			if err = syncGateway(); err != nil {
+				return err
+			}
+			if err = tx.Commit(ctx); err != nil {
+				return fmt.Errorf("commit feature update: %w", err)
+			}
+			cacheCtx, cancel := mutationCacheContext(ctx)
+			defer cancel()
+			_ = c.storeFeatureCache(cacheCtx, organizationID, feature, enabled, "failed to update feature flag cache")
+			return nil
+		}
 		if err := setFeatureEnabled(ctx, repo.New(conn), organizationID, feature, enabled); err != nil {
 			return err
 		}
@@ -198,6 +222,18 @@ func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationI
 		return nil
 	}
 
+	if feature == FeatureOrganizationGatewayDisabled {
+		current, err := queries.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
+		if err != nil {
+			return fmt.Errorf("read gateway opt-in: %w", err)
+		}
+		if !current {
+			return nil
+		}
+		if _, err := queries.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)}); err != nil {
+			return fmt.Errorf("record gateway opt-in: %w", err)
+		}
+	}
 	_, err := queries.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("disable feature: %w", err)

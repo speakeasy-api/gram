@@ -51,6 +51,33 @@ beforeEach(() => mocks.listOrganizationActivity.mockReset());
 afterEach(cleanup);
 
 describe("Activity", () => {
+  it("labels only internal activity in a mixed page", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({ id: "internal", isInternal: true }),
+        anActivityLog({ id: "ordinary", isInternal: false }),
+      ],
+    });
+    await renderWithApp(<Activity org={ORG} />);
+    const rows = within(await screen.findByRole("list")).getAllByRole(
+      "listitem",
+    );
+    expect(within(rows[0]!).getByText("Internal")).toBeTruthy();
+    expect(within(rows[1]!).queryByText("Internal")).toBeNull();
+    expect(screen.getAllByText("Internal")).toHaveLength(1);
+  });
+
+  it.each([false, undefined])(
+    "does not label activity with isInternal=%s as internal",
+    async (isInternal) => {
+      mocks.listOrganizationActivity.mockResolvedValue({
+        logs: [anActivityLog({ isInternal })],
+      });
+      await renderWithApp(<Activity org={ORG} />);
+      await screen.findByRole("list");
+      expect(screen.queryByText("Internal")).toBeNull();
+    },
+  );
   it("renders every event field and the display, slug, and ID fallbacks", async () => {
     const createdAt = new Date("2026-01-15T12:30:00Z");
     mocks.listOrganizationActivity.mockResolvedValue({

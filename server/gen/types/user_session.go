@@ -18,9 +18,12 @@ type UserSession struct {
 	SubjectUrn string
 	// Current access-token JTI; used by the revocation path.
 	Jti string
-	// Next refresh deadline.
+	// Inbound authorization deadline. Refresh is possible until this time only
+	// when the session has a refresh grant.
 	RefreshExpiresAt string
-	// Terminal session expiry; ceiling on refresh_expires_at.
+	// Current access-token expiry. Sessions with a refresh grant may refresh
+	// before refresh_expires_at; workload and other sessions without a refresh
+	// grant cannot.
 	ExpiresAt string
 	CreatedAt string
 	UpdatedAt string

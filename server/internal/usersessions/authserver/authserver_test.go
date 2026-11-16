@@ -67,7 +67,7 @@ func TestHosts_SharedIssuerURLRefusesUnconfiguredAuthenticationHost(t *testing.T
 	hosts := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil}
 
 	_, err := hosts.SharedIssuerURL(pinnedIssuer(testAuthenticationHostBaseURL))
-	require.Error(t, err)
+	require.ErrorIs(t, err, authserver.ErrHostNotServed)
 
 	optedIn := sharedIssuer(true)
 	issuerURL, err := hosts.SharedIssuerURL(optedIn)
@@ -90,33 +90,93 @@ func TestHosts_SharedIssuerURLRefusals(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		issuer func() repo.UserSessionIssuer
+		err    error
 	}{
-		{name: "endpoint mode", issuer: func() repo.UserSessionIssuer {
+		{name: "endpoint mode", err: authserver.ErrNotShared, issuer: func() repo.UserSessionIssuer {
 			issuer := sharedIssuer(false)
 			issuer.AuthorizationServerMode = string(authserver.ModeEndpoint)
 			return issuer
 		}},
-		{name: "another issuer's path", issuer: func() repo.UserSessionIssuer {
+		{name: "another issuer's path", err: authserver.ErrPinnedIssuerURLInvalid, issuer: func() repo.UserSessionIssuer {
 			issuer := sharedIssuer(false)
 			issuer.PinnedIssuerUrl = conv.ToPGText(testServerURL + authserver.SharedPath(uuid.New()))
 			return issuer
 		}},
-		{name: "query", issuer: func() repo.UserSessionIssuer {
+		{name: "query", err: authserver.ErrPinnedIssuerURLInvalid, issuer: func() repo.UserSessionIssuer {
 			issuer := pinnedIssuer(testServerURL)
 			issuer.PinnedIssuerUrl = conv.ToPGText(issuer.PinnedIssuerUrl.String + "?x=1")
 			return issuer
 		}},
-		{name: "unserved host", issuer: func() repo.UserSessionIssuer {
+		{name: "unserved host", err: authserver.ErrHostNotServed, issuer: func() repo.UserSessionIssuer {
 			return pinnedIssuer("https://other.example.com")
+		}},
+		{name: "no origin", err: authserver.ErrPinnedIssuerURLInvalid, issuer: func() repo.UserSessionIssuer {
+			return pinnedIssuer("")
+		}},
+		{name: "unparseable", err: authserver.ErrPinnedIssuerURLInvalid, issuer: func() repo.UserSessionIssuer {
+			issuer := sharedIssuer(false)
+			issuer.PinnedIssuerUrl = conv.ToPGText("https://app.example.com/%zz")
+			return issuer
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			_, err := testHosts.SharedIssuerURL(tc.issuer())
-			require.Error(t, err)
+			require.ErrorIs(t, err, tc.err)
+
+			_, err = testHosts.SharedAuthorizationServer(tc.issuer())
+			require.ErrorIs(t, err, tc.err)
 		})
 	}
+}
+
+func TestHosts_SharedAuthorizationServer(t *testing.T) {
+	t.Parallel()
+
+	pinned := pinnedIssuer(testServerURL)
+	server, err := testHosts.SharedAuthorizationServer(pinned)
+	require.NoError(t, err)
+	require.Equal(t, testServerURL+authserver.SharedPath(pinned.ID), server.IssuerURL)
+	require.Equal(t, testServerURL+authserver.SharedPath(pinned.ID)+"/token", server.TokenEndpoint)
+}
+
+func TestHosts_SharedIssuerURLOn(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	require.Equal(t, testAuthenticationHostBaseURL+authserver.SharedPath(id), testHosts.SharedIssuerURLOn(id, true))
+	require.Equal(t, testServerURL+authserver.SharedPath(id), testHosts.SharedIssuerURLOn(id, false))
+
+	withoutAuthenticationHost := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil}
+	require.False(t, withoutAuthenticationHost.AuthenticationHostAvailable())
+	require.Equal(t, testServerURL+authserver.SharedPath(id), withoutAuthenticationHost.SharedIssuerURLOn(id, true))
+}
+
+func TestHosts_PerServerOrigin(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, testHosts.AuthenticationHostAvailable())
+	require.Equal(t, testAuthenticationHostBaseURL, testHosts.PerServerOrigin(true))
+	require.Equal(t, testServerURL, testHosts.PerServerOrigin(false))
+
+	withoutAuthenticationHost := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil}
+	require.Equal(t, testServerURL, withoutAuthenticationHost.PerServerOrigin(true))
+}
+
+func TestIssuerURLPinned(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, authserver.IssuerURLPinned(pinnedIssuer(testServerURL)))
+	require.False(t, authserver.IssuerURLPinned(sharedIssuer(false)))
+
+	empty := sharedIssuer(false)
+	empty.PinnedIssuerUrl = conv.ToPGText("")
+	require.False(t, authserver.IssuerURLPinned(empty))
+
+	endpoint := pinnedIssuer(testServerURL)
+	endpoint.AuthorizationServerMode = string(authserver.ModeEndpoint)
+	require.False(t, authserver.IssuerURLPinned(endpoint))
 }
 
 func TestHosts_ServesSharedOn(t *testing.T) {

@@ -174,7 +174,7 @@ func TestUnsupportedProvenanceOmitsAssertion(t *testing.T) {
 	target := targetForTest()
 	ctx := tenantContext(t, target)
 	b := mcpidentity.NewValidatorBoundary()
-	contexts := []context.Context{ctx, b.StampAssistant(ctx), b.StampChatSession(ctx), b.StampAPIKey(ctx, ""), sessionContext(t, ctx, urn.NewAnonymousSubject(uuid.NewString()), time.Hour), sessionContext(t, ctx, urn.NewWorkloadSubject(uuid.New(), "synthetic-subject"), time.Hour)}
+	contexts := []context.Context{ctx, b.StampAssistant(ctx), b.StampChatSession(ctx, ""), b.StampAPIKey(ctx, ""), sessionContext(t, ctx, urn.NewAnonymousSubject(uuid.NewString()), time.Hour), sessionContext(t, ctx, urn.NewWorkloadSubject(uuid.New(), "synthetic-subject"), time.Hour)}
 	for _, c := range contexts {
 		raw, err := issuer.Mint(c, target)
 		require.NoError(t, err)

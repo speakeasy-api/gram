@@ -25,10 +25,12 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { TRANSCRIPT_DENIED_REASON, useCanReadFindingChat } from "../unmask";
+import { ChatReadAccess } from "../finding-drawer-parts";
+import { TRANSCRIPT_DENIED_NOTE, useCanReadFindingChat } from "../unmask";
 import { collectChatFindings } from "./collect-findings";
 
 /**
@@ -107,7 +109,7 @@ export function EvidenceTitle({
               onClick={() => setExpanded((prev) => !prev)}
             >
               {flaggedMessage.loading ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Spinner className="mr-0" />
               ) : (
                 <Icon
                   name={expanded ? "chevron-up" : "chevron-down"}
@@ -130,10 +132,13 @@ export function EvidenceTitle({
           )}
         </div>
         {transcriptDenied && (
-          <p className="text-warning flex items-start gap-1 text-xs">
-            <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
-            <span>{TRANSCRIPT_DENIED_REASON}</span>
-          </p>
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-warning flex items-start gap-1 text-xs">
+              <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
+              <span>{TRANSCRIPT_DENIED_NOTE}</span>
+            </p>
+            <ChatReadAccess chatId={findingChatId} />
+          </div>
         )}
         {/* Outside the title button so the text can be selected. */}
         {expanded && (
@@ -175,7 +180,12 @@ export function FlaggedMessage({
     );
   }
   if (message.loading) {
-    return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
+    return (
+      <Spinner
+        className="text-muted-foreground mr-0"
+        label="Loading flagged message"
+      />
+    );
   }
   return <FlaggedMessageBody message={message} chatId={chatId} />;
 }

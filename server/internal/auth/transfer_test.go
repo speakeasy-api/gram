@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -151,6 +152,9 @@ func newTransfer(t *testing.T, opts transferOptions) (context.Context, *transfer
 	t.Helper()
 
 	userInfo := defaultMockUserInfo()
+	// Sign-out-everywhere epochs are per user in shared Redis, so each
+	// fixture gets its own user.
+	userInfo.UserID = "test-user-" + uuid.NewString()[:8]
 	ctx, instance := newTestAuthService(t, userInfo)
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	org := userInfo.Organizations[0]
@@ -176,7 +180,7 @@ func newTransfer(t *testing.T, opts transferOptions) (context.Context, *transfer
 	if opts.supportOrgID != "" {
 		source.SupportExpiresAt = time.Now().Add(time.Hour)
 	}
-	require.NoError(t, instance.sessionManager.StoreSession(ctx, source))
+	require.NoError(t, instance.sessionManager.StoreSessionIssuedAt(ctx, source, time.Now()))
 
 	return ctx, &transferFixture{instance: instance, userInfo: userInfo, source: source}
 }
@@ -569,6 +573,8 @@ func TestService_TransferOut_StoresOnlyTheNonceHash(t *testing.T) {
 
 	var record map[string]any
 	require.NoError(t, f.instance.nonceStore.Get(ctx, "session_transfer:"+nonceHash(code), &record))
+	require.NotZero(t, record["SourceIssuedAt"], "the source session's issuance travels, never its id")
+	delete(record, "SourceIssuedAt")
 	require.Equal(t, map[string]any{
 		"UserID":               f.source.UserID,
 		"ActiveOrganizationID": f.source.ActiveOrganizationID,
@@ -577,6 +583,48 @@ func TestService_TransferOut_StoresOnlyTheNonceHash(t *testing.T) {
 		"TargetHost":           testExtraPlatformHost,
 		"NonceHash":            nonceHash(nonce),
 	}, record)
+}
+
+func TestService_TransferIn_RefusesASessionFromBeforeSignOutEverywhere(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	require.NoError(t, f.instance.sessionManager.RaiseUserEpoch(ctx, f.source.UserID, time.Now()))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b), errAccessChanged)
+}
+
+func TestService_Transfer_UnknownSourceIssuanceNeverOutlivesSignOutEverywhere(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	require.NoError(t, f.instance.nonceStore.Delete(ctx, "sessions:issued_at:"+f.source.SessionID))
+	code, _, b := f.begin(ctx, t)
+
+	result := f.in(ctx, t, testTargetBaseURL, code, b)
+	f.requireAccepted(ctx, t, result)
+	require.NoError(t, f.instance.sessionManager.RaiseUserEpoch(ctx, f.source.UserID, time.Now().Add(-time.Hour)))
+	predates, err := f.instance.sessionManager.SessionPredatesEpoch(ctx, f.source.UserID, *result.SessionCookie)
+	require.NoError(t, err)
+	require.True(t, predates, "a session transferred from an unknown issuance predates any epoch")
+}
+
+func TestService_Transfer_KeepsTheSourceIssuance(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	sourceIssued, known, err := f.instance.sessionManager.IssuedAt(ctx, f.source.SessionID)
+	require.NoError(t, err)
+	require.True(t, known)
+	code, _, b := f.begin(ctx, t)
+
+	result := f.in(ctx, t, testTargetBaseURL, code, b)
+	f.requireAccepted(ctx, t, result)
+	issued, known, err := f.instance.sessionManager.IssuedAt(ctx, *result.SessionCookie)
+	require.NoError(t, err)
+	require.True(t, known)
+	require.Equal(t, sourceIssued.UnixMicro(), issued.UnixMicro(), "a transfer never resets issuance past the epoch")
 }
 
 func TestService_Transfer_RoundTrip(t *testing.T) {
@@ -592,6 +640,108 @@ func TestService_Transfer_RoundTrip(t *testing.T) {
 	// The source session is untouched.
 	_, err := f.instance.sessionManager.GetSession(ctx, f.source.SessionID)
 	require.NoError(t, err)
+}
+
+// storeTargetSession stores a session for the fixture's user that the browser
+// already holds on the target host, and returns a target-host context
+// carrying its cookie.
+func (f *transferFixture) storeTargetSession(ctx context.Context, t *testing.T) (context.Context, sessions.Session) {
+	t.Helper()
+	existing := f.source
+	existing.SessionID = "target-" + strings.ReplaceAll(t.Name(), "/", "-")
+	require.NoError(t, f.instance.sessionManager.StoreSessionIssuedAt(ctx, existing, time.Now()))
+	return contextvalues.SetSessionTokenInContext(ctx, existing.SessionID), existing
+}
+
+func TestService_TransferIn_KeepsExistingTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	targetCtx, existing := f.storeTargetSession(ctx, t)
+	code, _, b := f.begin(ctx, t)
+	replay := b.clone()
+
+	result := f.in(targetCtx, t, testTargetBaseURL, code, b)
+	require.Equal(t, testTargetBaseURL+testTransferRedirect, result.Location)
+	require.Nil(t, result.SessionCookie, "the existing session cookie stays")
+	require.Nil(t, result.SessionToken)
+	require.Empty(t, b.transferCookies(), "the nonce cookie is cleared")
+
+	kept, err := f.instance.sessionManager.GetSession(ctx, existing.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, existing, kept)
+
+	// The code is consumed even though no session was minted.
+	requireRefused(t, f.in(targetCtx, t, testTargetBaseURL, code, replay), errExpired)
+}
+
+func TestService_TransferIn_ReplaceSessionReplacesExistingTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	targetCtx, _ := f.storeTargetSession(ctx, t)
+
+	b := newBrowser()
+	payload := startPayload(testServerURL.Host, new(testTransferRedirect))
+	payload.ReplaceSession = new(true)
+	started, err := f.instance.service.TransferIn(auth.WithTransferCookieJar(atHost(ctx, testTargetBaseURL), b), payload)
+	require.NoError(t, err)
+	location, err := url.Parse(started.Location)
+	require.NoError(t, err)
+	require.Len(t, b.transferCookies(), 2, "the nonce cookie and the replace marker")
+
+	code := codeFrom(t, f.out(f.sourceCtx(ctx), t, outPayload(location.Query().Get("nonce"))))
+	f.requireAccepted(ctx, t, f.in(targetCtx, t, testTargetBaseURL, code, b))
+	require.Empty(t, b.transferCookies(), "both cookies are cleared")
+}
+
+func TestService_TransferIn_ReplacesUnusableTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	targetCtx := contextvalues.SetSessionTokenInContext(ctx, "expired-target-session")
+	f.requireAccepted(ctx, t, f.in(targetCtx, t, testTargetBaseURL, code, b))
+}
+
+func TestService_TransferIn_ReplacesAnotherUsersTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	other := f.source
+	other.SessionID = "other-user-" + strings.ReplaceAll(t.Name(), "/", "-")
+	other.UserID = "other-user-" + uuid.NewString()[:8]
+	require.NoError(t, f.instance.sessionManager.StoreSessionIssuedAt(ctx, other, time.Now()))
+	targetCtx := contextvalues.SetSessionTokenInContext(ctx, other.SessionID)
+	f.requireAccepted(ctx, t, f.in(targetCtx, t, testTargetBaseURL, code, b))
+}
+
+func TestService_TransferIn_TargetSessionCheckFailureIsTemporary(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	targetCtx, existing := f.storeTargetSession(ctx, t)
+	code, _, b := f.begin(ctx, t)
+
+	// Transfer codes live in the fixture's Redis; sessions cannot be read.
+	codes, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	svc := serviceWithRedis(ctx, t, f, brokenRedis(t), codes)
+
+	result, err := svc.TransferIn(auth.WithTransferCookieJar(atHost(targetCtx, testTargetBaseURL), b.clone()), callbackPayload(code, new(testTransferRedirect)))
+	require.NoError(t, err)
+	requireRefused(t, result, errTemporary)
+
+	// The outage neither used up the code nor replaced the session.
+	result = f.in(targetCtx, t, testTargetBaseURL, code, b)
+	require.Equal(t, testTargetBaseURL+testTransferRedirect, result.Location)
+	require.Nil(t, result.SessionCookie)
+	kept, err := f.instance.sessionManager.GetSession(ctx, existing.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, existing, kept)
 }
 
 func TestService_TransferIn_ReplayedCode(t *testing.T) {
@@ -735,7 +885,7 @@ func TestService_TransferIn_NonMemberDoesNotConsume(t *testing.T) {
 	// if the membership was removed after transferOut issued it.
 	ctx, f := newTransfer(t, transferOptions{member: false, defaultHost: new(testTargetBaseURL), impersonator: "", supportOrgID: ""})
 	nonce := "browser-nonce"
-	code, err := sessions.NewTransferManager(f.instance.nonceStore).Create(ctx, f.source, nonce, testServerURL.Host, testExtraPlatformHost)
+	code, err := sessions.NewTransferManager(f.instance.nonceStore).Create(ctx, f.source, time.Time{}, nonce, testServerURL.Host, testExtraPlatformHost)
 	require.NoError(t, err)
 	b := newBrowser()
 	b.Set(constants.TransferInNonceCookiePrefix+nonceHash(nonce)[:16], nonce)

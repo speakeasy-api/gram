@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -21,12 +22,11 @@ export const ToolEntryType = {
   Prompt: "prompt",
   Function: "function",
   Platform: "platform",
-  Externalmcp: "externalmcp",
 } as const;
 /**
  * The type of tool
  */
-export type ToolEntryType = ClosedEnum<typeof ToolEntryType>;
+export type ToolEntryType = OpenEnum<typeof ToolEntryType>;
 
 export type ToolEntry = {
   /**
@@ -56,8 +56,10 @@ export type ToolEntry = {
 };
 
 /** @internal */
-export const ToolEntryType$inboundSchema: z.ZodMiniEnum<typeof ToolEntryType> =
-  z.enum(ToolEntryType);
+export const ToolEntryType$inboundSchema: z.ZodMiniType<
+  ToolEntryType,
+  unknown
+> = openEnums.inboundSchema(ToolEntryType);
 
 /** @internal */
 export const ToolEntry$inboundSchema: z.ZodMiniType<ToolEntry, unknown> = z

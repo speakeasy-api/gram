@@ -80,6 +80,9 @@ func TestAuthorizeAgentHooksKeySelectsReadableProjectSlug(t *testing.T) {
 	require.Equal(t, projects[0].ID, *authCtx.ProjectID)
 }
 
+// Authorize keeps the project:read gate for agent keys on every route that
+// uses it. Hooks ingestion resolves its project through
+// AuthorizeWithHandlerProjectAccess instead and checks org:hooks_ingest.
 func TestAuthorizeAgentHooksKeyRejectsUnreadableProjectSlug(t *testing.T) {
 	t.Parallel()
 
@@ -91,5 +94,38 @@ func TestAuthorizeAgentHooksKeyRejectsUnreadableProjectSlug(t *testing.T) {
 	_, err = instance.authorizer.Authorize(admitted, projects[1].Slug, projectSlugScheme)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code, "project:read is enforced on the selected project")
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code, "Authorize enforces project:read on the selected project")
+}
+
+// AuthorizeWithHandlerProjectAccess resolves a project the agent key may not
+// read and leaves the permission decision to the handler.
+func TestAuthorizeWithHandlerProjectAccessResolvesUnreadableProjectForAgentKey(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance, projects := newProjectAccessTest(t, "hooks-readable", "hooks-other")
+	key := createHooksAgentKey(t, ctx, instance, projects[0])
+
+	admitted, err := instance.authorizer.Authorize(ctx, key, hooksKeyScheme)
+	require.NoError(t, err)
+	scoped, err := instance.authorizer.AuthorizeWithHandlerProjectAccess(admitted, projects[1].Slug, projectSlugScheme)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(scoped)
+	require.True(t, ok)
+	require.Equal(t, projects[1].ID, *authCtx.ProjectID)
+}
+
+// Leaving the permission to the handler keeps tenant scoping: a slug outside
+// the key's organization is still refused.
+func TestAuthorizeWithHandlerProjectAccessRejectsProjectOutsideOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance, projects := newProjectAccessTest(t, "hooks-readable")
+	key := createHooksAgentKey(t, ctx, instance, projects[0])
+
+	admitted, err := instance.authorizer.Authorize(ctx, key, hooksKeyScheme)
+	require.NoError(t, err)
+	_, err = instance.authorizer.AuthorizeWithHandlerProjectAccess(admitted, "not-in-this-organization", projectSlugScheme)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }

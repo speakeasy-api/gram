@@ -7,13 +7,13 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import { AuditLog, AuditLog$inboundSchema } from "./auditlog.js";
+import { AdminAuditLog, AdminAuditLog$inboundSchema } from "./adminauditlog.js";
 
 export type AdminListOrganizationActivityResult = {
   /**
    * List of organization activity.
    */
-  logs: Array<AuditLog>;
+  logs: Array<AdminAuditLog>;
   /**
    * Cursor for the next page of results.
    */
@@ -26,7 +26,7 @@ export const AdminListOrganizationActivityResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    logs: z.array(AuditLog$inboundSchema),
+    logs: z.array(AdminAuditLog$inboundSchema),
     next_cursor: z.optional(z.string()),
   }),
   z.transform((v) => {

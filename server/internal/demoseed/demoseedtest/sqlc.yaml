@@ -2,7 +2,8 @@
 version: "2"
 sql:
   - engine: postgresql
-    schema: ../../../database/schema.sql
+    schema:
+      [../../../database/schema.sql, ../../../database/sqlc_retired_columns.sql]
     queries: queries.sql
     gen:
       go:

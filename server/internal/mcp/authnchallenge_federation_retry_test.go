@@ -34,10 +34,10 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 		{name: "cancel", code: ""},
 		{name: "account_switch", code: ""},
 		{name: "subject_switch", code: ""},
-		{name: "csrf", code: oops.CodeUnauthorized},
-		{name: "tenant", code: oops.CodeUnauthorized},
-		{name: "unresolved", code: oops.CodeUnauthorized},
-		{name: "authorizer_mismatch", code: oops.CodeUnauthorized},
+		{name: "csrf", code: oops.CodeBadRequest},
+		{name: "tenant", code: oops.CodeBadRequest},
+		{name: "unresolved", code: oops.CodeBadRequest},
+		{name: "authorizer_mismatch", code: oops.CodeBadRequest},
 		{name: "membership", code: oops.CodeForbidden},
 		{name: "impersonated", code: oops.CodeForbidden},
 		{name: "missing_provenance", code: oops.CodeForbidden},
@@ -50,10 +50,10 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 		{name: "client_drift", code: oops.CodeFailedPrecondition},
 		{name: "retry_used", code: oops.CodeFailedPrecondition},
 		{name: "unsupported_action", code: oops.CodeBadRequest},
-		{name: "authority_revoked", code: oops.CodeUnauthorized},
-		{name: "authority_repointed", code: oops.CodeUnauthorized},
-		{name: "authority_revoked_after_preflight", code: oops.CodeUnauthorized},
-		{name: "authority_repointed_after_preflight", code: oops.CodeUnauthorized},
+		{name: "authority_revoked", code: oops.CodeBadRequest},
+		{name: "authority_repointed", code: oops.CodeBadRequest},
+		{name: "authority_revoked_after_preflight", code: oops.CodeBadRequest},
+		{name: "authority_repointed_after_preflight", code: oops.CodeBadRequest},
 	} {
 		scenario := tc.name
 		t.Run(scenario, func(t *testing.T) {
@@ -226,7 +226,7 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 						form.Set("action", credentialAction)
 						response, err := action()
 						require.ErrorAs(t, err, &failure)
-						require.Equal(t, oops.CodeUnauthorized, failure.Code, credentialAction)
+						require.Equal(t, oops.CodeBadRequest, failure.Code, credentialAction)
 						require.Empty(t, response.Header().Get("Location"))
 						require.Equal(t, 1, f.provider.exchangeCount())
 					}

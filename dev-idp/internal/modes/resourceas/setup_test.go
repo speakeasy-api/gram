@@ -49,6 +49,11 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWithAliases(t, nil)
+}
+
+func newHarnessWithAliases(t *testing.T, aliases map[string][]string) *harness {
+	t.Helper()
 
 	logger := plog.NewLogger(io.Discard)
 	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""})
@@ -62,7 +67,7 @@ func newHarness(t *testing.T) *harness {
 	server := httptest.NewUnstartedServer(outer)
 	baseURL := "http://" + server.Listener.Addr().String()
 
-	h := NewHandler(Config{ExternalURL: baseURL}, ks, logger, tracenoop.NewTracerProvider(), db)
+	h := NewHandler(Config{ExternalURL: baseURL, AudienceAliases: aliases}, ks, logger, tracenoop.NewTracerProvider(), db)
 	outer.Handle(Prefix+"/", http.StripPrefix(Prefix, h.Handler()))
 	h.RegisterRootRoutes(outer)
 
@@ -143,6 +148,8 @@ type jagOpts struct {
 	Typ      string
 	Key      *rsa.PrivateKey
 	KID      string
+	// Mutate edits the encoded claim set before signing.
+	Mutate func(jwt.MapClaims)
 }
 
 // defaultJAG returns options that produce an ID-JAG this harness accepts.
@@ -163,6 +170,7 @@ func (h *harness) defaultJAG() jagOpts {
 		Typ:      ema.JWTType,
 		Key:      nil, // nil means "sign with this dev-idp's own key"
 		KID:      "",
+		Mutate:   nil,
 	}
 }
 
@@ -193,7 +201,17 @@ func (h *harness) signJAG(t *testing.T, opts jagOpts) string {
 		kid = h.keystore.KID()
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	var token *jwt.Token
+	if opts.Mutate != nil {
+		raw, err := json.Marshal(claims)
+		require.NoError(t, err, "encode claims")
+		mapped := jwt.MapClaims{}
+		require.NoError(t, json.Unmarshal(raw, &mapped), "decode claims")
+		opts.Mutate(mapped)
+		token = jwt.NewWithClaims(jwt.SigningMethodRS256, mapped)
+	} else {
+		token = jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	}
 	token.Header["kid"] = kid
 	token.Header["typ"] = opts.Typ
 	signed, err := token.SignedString(key)
@@ -268,6 +286,17 @@ type foreignIDP struct {
 
 func newForeignIDP(t *testing.T) *foreignIDP {
 	t.Helper()
+	return newForeignIDPWithMetadata(t, false)
+}
+
+// newOktaStyleIDP lists jwks_uri only in OpenID metadata, as Okta's org authorization server does.
+func newOktaStyleIDP(t *testing.T) *foreignIDP {
+	t.Helper()
+	return newForeignIDPWithMetadata(t, true)
+}
+
+func newForeignIDPWithMetadata(t *testing.T, openIDOnly bool) *foreignIDP {
+	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err, "generate foreign idp key")
@@ -280,6 +309,15 @@ func newForeignIDP(t *testing.T) *foreignIDP {
 	issuer := server.URL + "/idp"
 
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server/idp", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		doc := map[string]any{"issuer": issuer}
+		if !openIDOnly {
+			doc["jwks_uri"] = issuer + "/jwks.json"
+		}
+		_ = json.NewEncoder(w).Encode(doc)
+	})
+
+	mux.HandleFunc("GET /idp/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"issuer":   issuer,

@@ -86,7 +86,7 @@ const (
 	// login falls back to the issuer's scopes.
 	ProbeOutcomeDBError ProbeOutcome = "db_error"
 
-	// ProbeOutcomeDisabled: the organization is not enrolled, or the replica has no prober.
+	// ProbeOutcomeDisabled: the replica has no prober.
 	ProbeOutcomeDisabled ProbeOutcome = "disabled"
 
 	// ProbeOutcomeNotOwned: another client bound to the endpoint holds the resource.

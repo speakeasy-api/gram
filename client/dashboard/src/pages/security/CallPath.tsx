@@ -54,7 +54,9 @@ function PathConnector({
   return (
     <div className="flex flex-col items-center gap-1.5 px-1.5 py-2 @xl:py-0">
       <div className="flex w-24 items-center @xl:w-full">
-        {link.blocked ? (
+        {link.blocked === null ? (
+          dashed
+        ) : link.blocked ? (
           <>
             {blockedFrom === "left" ? solid : dashed}
             <span className="bg-destructive inline-flex size-[18px] shrink-0 items-center justify-center text-white">
@@ -115,7 +117,13 @@ export function CallPath({
         <PathNode
           eyebrow="Speakeasy gateway"
           name={surfaceLabel}
-          sub={`Scanned ${response ? "response" : "request"}`}
+          sub={
+            result.phase !== undefined &&
+            result.phase !== "request" &&
+            result.phase !== "response"
+              ? "Phase unknown"
+              : `Scanned ${response ? "response" : "request"}`
+          }
           className={cn(
             "border-foreground border-l-2",
             rating ? SEVERITY_EDGE[rating] : "border-l-foreground",
@@ -130,9 +138,11 @@ export function CallPath({
           name={serverName}
           sub={result.toolName ?? "-"}
           className={cn(
-            path.serverReached
-              ? "border-foreground"
-              : "border-border opacity-55",
+            path.serverReached === null
+              ? "border-border"
+              : path.serverReached
+                ? "border-foreground"
+                : "border-border opacity-55",
           )}
         />
       </div>
