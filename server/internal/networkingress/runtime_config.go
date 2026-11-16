@@ -56,14 +56,17 @@ type RuntimeConfig struct {
 	Gateway GatewayRuntimeConfig
 
 	// OperatorProviderEnabled keeps the Tailscale Kubernetes operator provider
-	// registered so existing operator-managed ingresses can be observed and
-	// torn down. New ingresses use the gateway whenever it is enabled.
+	// registered. It hosts every ingress whose runtime is not "gateway": those
+	// created before the gateway, and new ones for organizations without the
+	// private-network-gateway flag.
 	OperatorProviderEnabled bool
 }
 
 // GatewayRuntimeConfig configures the tailnet gateway provider.
 type GatewayRuntimeConfig struct {
-	// Enabled registers the gateway provider; new ingresses are hosted by it.
+	// Enabled says the gateway pods are deployed, so ingresses created with
+	// the gateway runtime (private-network-gateway flag) are provisioned;
+	// without it they wait as provider_configuration_unavailable.
 	Enabled bool
 
 	// Tag is the ACL tag minted auth keys carry; it must match the gateway pods.
