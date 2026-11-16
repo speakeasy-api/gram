@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -211,6 +212,10 @@ func TestServeConsent_GatewayListSaysTheSignInProviderAddress(t *testing.T) {
 	require.NoError(t, locks.Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotFound, time.Minute))
 	require.NoError(t, locks.Set(ctx, remotesessions.RefreshCooldownKey(session), time.Now().Add(time.Minute), time.Minute))
 
+	rec := mcpconnectionattemptstest.New(t)
+	fx.ti.service.SetConnectionRecorder(rec.Recorder)
+	withConsentFlow(t, ctx, fx.ti, fx.stateID)
+
 	list := fx
 	list.server = ""
 	_, page, _ := render(t, list)
@@ -218,25 +223,78 @@ func TestServeConsent_GatewayListSaysTheSignInProviderAddress(t *testing.T) {
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "unavailable", outcomes[0].Status)
 	require.Equal(t, "Can't connect · its sign-in provider uses an address that does not point anywhere · ask your administrator", outcomes[0].Label)
+	require.Equal(t, []string{mcpconnectionattempts.CodeAddressNotFound.String()}, discoveryReasons(rec), "the row agrees with the card")
 	require.NotContains(t, page, "try again shortly")
 }
 
-// A gateway member whose own address is refused says so on the gateway list.
-func TestGatewayConsentMemberAtBlockedAddress(t *testing.T) {
+// withConsentFlow gives a stored consent challenge a flow, so its page records an attempt.
+func withConsentFlow(t *testing.T, ctx context.Context, ti *testInstance, stateID string) {
+	t.Helper()
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	state.FlowID = uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+}
+
+// discoveryReasons are the reasons of the discovery_member rows recorded, in order.
+func discoveryReasons(rec *mcpconnectionattemptstest.Recording) []string {
+	var reasons []string
+	for _, row := range rec.Rows() {
+		if row.Step == mcpconnectionattempts.StepDiscoveryMember.String() {
+			reasons = append(reasons, row.Reason)
+		}
+	}
+	return reasons
+}
+
+// A gateway member whose own address is refused or missing says so on the gateway list, and its row agrees.
+// A member that is unavailable for another reason keeps member_tools_missing.
+func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{}, mcp.TunnelPublicConfig{}, guardian.WithBlockedCIDRBlocks("192.0.2.0/24"))
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	slug := "gateway-address-" + uuid.NewString()[:8]
-	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
-	blockedSlug := "blocked-" + uuid.NewString()[:8]
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Blocked", blockedSlug, 1, "https://192.0.2.10/mcp")
+	resolver := dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(ctx context.Context, network, host string) ([]net.IP, error) {
+			if host == missingMemberHost {
+				return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+			}
+			return net.DefaultResolver.LookupIP(ctx, network, host)
+		},
+	})
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(broken.Close)
 
-	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
-	outcomes := gatewayOutcomesFromPage(consentGetPageWithContext(t, ctx, ti, slug, stateID))
-	require.Len(t, outcomes, 1)
-	require.Equal(t, "unavailable", outcomes[0].Status)
-	require.Equal(t, "Can't connect · it uses an address Speakeasy does not connect to directly · ask your administrator", outcomes[0].Label)
+	for _, tc := range []struct {
+		name   string
+		url    string
+		label  string
+		reason mcpconnectionattempts.Code
+	}{
+		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · it uses an address Speakeasy does not connect to directly · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · it uses an address that does not point anywhere · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotFound},
+		{name: "broken server", url: broken.URL, label: "Unavailable · try again shortly, or ask your administrator", reason: mcpconnectionattempts.CodeMemberToolsMissing},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{}, mcp.TunnelPublicConfig{}, guardian.WithBlockedCIDRBlocks("192.0.2.0/24"), guardian.WithResolver(resolver))
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "gateway-address-" + uuid.NewString()[:8]
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Member", "member-"+uuid.NewString()[:8], 1, tc.url)
+
+			stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+			withConsentFlow(t, ctx, ti, stateID)
+			outcomes := gatewayOutcomesFromPage(consentGetPageWithContext(t, ctx, ti, slug, stateID))
+			require.Len(t, outcomes, 1)
+			require.Equal(t, "unavailable", outcomes[0].Status)
+			require.Equal(t, tc.label, outcomes[0].Label)
+			require.Equal(t, []string{tc.reason.String()}, discoveryReasons(rec), "the row agrees with the card")
+		})
+	}
 }
