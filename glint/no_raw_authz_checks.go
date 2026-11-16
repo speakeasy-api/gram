@@ -12,16 +12,15 @@ import (
 	"golang.org/x/tools/go/types/typeutil"
 )
 
-// no-raw-authz-checks keeps migrated packages on the typed authorization
+// no-raw-authz-checks keeps the server on the typed authorization
 // requests generated from the authz registry (authz.MCPServer(id, project).Write(),
 // authz.Environments(p).Write(), ...). A hand-built authz.Check
 // literal or a scope-taking constructor such as authz.EnvironmentCheck lets a
 // caller pair any scope with any resource and leave out dimensions the model
 // requires; the refs make those mistakes unrepresentable.
 //
-// The rule applies to the packages in noRawAuthzChecksPackages, which grows
-// as packages migrate. Once every package has migrated the list goes away and
-// the rule applies everywhere outside internal/authz.
+// The rule applies to every package outside internal/authz, which builds the
+// typed refs from these literals.
 
 const (
 	noRawAuthzChecksAnalyzer       = "norawauthzchecks"
@@ -29,86 +28,6 @@ const (
 )
 
 const authzPkgPath = "github.com/speakeasy-api/gram/server/internal/authz"
-
-// noRawAuthzChecksPackages are the packages migrated to typed refs. Prefix
-// matched, so subpackages inherit the rule.
-var noRawAuthzChecksPackages = []string{
-	"github.com/speakeasy-api/gram/server/internal/environments",
-	"github.com/speakeasy-api/gram/server/internal/remotesessions",
-	"github.com/speakeasy-api/gram/server/internal/access",
-	"github.com/speakeasy-api/gram/server/internal/platformmcp",
-	"github.com/speakeasy-api/gram/server/internal/platformtools",
-	"github.com/speakeasy-api/gram/server/internal/risk",
-	"github.com/speakeasy-api/gram/server/internal/skills",
-	"github.com/speakeasy-api/gram/server/internal/skillefficacy",
-	"github.com/speakeasy-api/gram/server/internal/plugins",
-	"github.com/speakeasy-api/gram/server/internal/usersessions",
-	"github.com/speakeasy-api/gram/server/internal/organizations",
-	"github.com/speakeasy-api/gram/server/internal/authclients",
-	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections",
-	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers",
-	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets",
-	"github.com/speakeasy-api/gram/server/internal/externalcredentials",
-	"github.com/speakeasy-api/gram/server/internal/externalkeys",
-	"github.com/speakeasy-api/gram/server/internal/orgencryptionapi",
-	"github.com/speakeasy-api/gram/server/internal/productfeatures",
-	"github.com/speakeasy-api/gram/server/internal/networkingress",
-	"github.com/speakeasy-api/gram/server/internal/customdomains",
-	"github.com/speakeasy-api/gram/server/internal/identityapi",
-	"github.com/speakeasy-api/gram/server/internal/cliauth",
-	"github.com/speakeasy-api/gram/server/internal/auth",
-	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections",
-	"github.com/speakeasy-api/gram/server/internal/oktaserversuggestions",
-	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections",
-	"github.com/speakeasy-api/gram/server/internal/slackapp",
-	"github.com/speakeasy-api/gram/server/internal/auditapi",
-	"github.com/speakeasy-api/gram/server/internal/mcp",
-	"github.com/speakeasy-api/gram/server/internal/remotemcp",
-	"github.com/speakeasy-api/gram/server/internal/metamcp",
-	"github.com/speakeasy-api/gram/server/internal/tunneledmcp",
-	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp",
-	"github.com/speakeasy-api/gram/server/internal/externalmcp",
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp",
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval",
-	"github.com/speakeasy-api/gram/server/internal/mcpservers",
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints",
-	"github.com/speakeasy-api/gram/server/internal/mcpregistry",
-	"github.com/speakeasy-api/gram/server/internal/mcpmetadata",
-	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers",
-	"github.com/speakeasy-api/gram/server/internal/toolsets",
-	"github.com/speakeasy-api/gram/server/internal/tools",
-	"github.com/speakeasy-api/gram/server/internal/deployments",
-	"github.com/speakeasy-api/gram/server/internal/packages",
-	"github.com/speakeasy-api/gram/server/internal/variations",
-	"github.com/speakeasy-api/gram/server/internal/templates",
-	"github.com/speakeasy-api/gram/server/internal/resources",
-	"github.com/speakeasy-api/gram/server/internal/assets",
-	"github.com/speakeasy-api/gram/server/internal/agent",
-	"github.com/speakeasy-api/gram/server/internal/agentmanagement",
-	"github.com/speakeasy-api/gram/server/internal/assistants",
-	"github.com/speakeasy-api/gram/server/internal/assistantmemories",
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity",
-	"github.com/speakeasy-api/gram/server/internal/workloadpolicy",
-	"github.com/speakeasy-api/gram/server/internal/chat",
-	"github.com/speakeasy-api/gram/server/internal/deviceintegrations",
-	"github.com/speakeasy-api/gram/server/internal/hooks",
-	"github.com/speakeasy-api/gram/server/internal/businessmemory",
-	"github.com/speakeasy-api/gram/server/internal/telemetry",
-	"github.com/speakeasy-api/gram/server/internal/usage",
-	"github.com/speakeasy-api/gram/server/internal/spendrules",
-	"github.com/speakeasy-api/gram/server/internal/dashboards",
-	"github.com/speakeasy-api/gram/server/internal/widgets",
-	"github.com/speakeasy-api/gram/server/internal/dataexports",
-	"github.com/speakeasy-api/gram/server/internal/sigint",
-	"github.com/speakeasy-api/gram/server/internal/triggers",
-	"github.com/speakeasy-api/gram/server/internal/aiintegrations",
-	"github.com/speakeasy-api/gram/server/internal/modelkeys",
-	"github.com/speakeasy-api/gram/server/internal/litellm",
-	"github.com/speakeasy-api/gram/server/internal/otel",
-	"github.com/speakeasy-api/gram/server/internal/projects",
-	"github.com/speakeasy-api/gram/server/internal/keys",
-	"github.com/speakeasy-api/gram/server/cmd/gram",
-}
 
 // noRawAuthzCheckConstructors are the authz constructors a typed ref
 // replaces. Constructors for kinds without a generated ref (auth clients,
@@ -126,15 +45,18 @@ var noRawAuthzCheckConstructors = []string{
 type noRawAuthzChecksSettings struct {
 	Disabled bool `json:"disabled"`
 
-	// Packages overrides the migrated package prefixes, for tests whose
-	// packages cannot carry the production import paths.
+	// Packages limits the rule to these package prefixes, for tests whose
+	// packages cannot carry the production import paths. Empty means every
+	// package outside internal/authz.
 	Packages []string `json:"packages"`
 }
 
 func newNoRawAuthzChecksAnalyzer(rule noRawAuthzChecksSettings) *analysis.Analyzer {
-	migrated := noRawAuthzChecksPackages
-	if len(rule.Packages) > 0 {
-		migrated = rule.Packages
+	applies := func(path string) bool {
+		if len(rule.Packages) > 0 {
+			return packageMatches(path, rule.Packages)
+		}
+		return !packageMatches(path, []string{authzPkgPath})
 	}
 
 	return &analysis.Analyzer{
@@ -142,7 +64,7 @@ func newNoRawAuthzChecksAnalyzer(rule noRawAuthzChecksSettings) *analysis.Analyz
 		Doc:      noRawAuthzChecksDefaultMessage,
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
-			if !packageMatches(pass.Pkg.Path(), migrated) {
+			if !applies(pass.Pkg.Path()) {
 				return nil, nil
 			}
 			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
