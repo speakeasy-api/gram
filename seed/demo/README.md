@@ -170,7 +170,7 @@ needs and the shared demo org must never have:
   Each server's endpoint is `<org>-<slug>`. The OpenAPI document
   (`server/internal/demoseed/openapi.yaml`) declares two security schemes,
   `oauth` (authorization code at the fixture) and `apiKey` (an Authorization
-  header), with `security: [oauth, apiKey]`; the seed fills in the
+  header), as alternatives (`security: [{oauth: []}, {apiKey: []}]`); the seed fills in the
   deployment's fixture URL when it uploads it. Speakeasy lets a hosted server
   use one auth method, and the OpenAPI Server uses the upstream OAuth one: it
   needs no Speakeasy sign-in, and its tools forward the caller's fixture
