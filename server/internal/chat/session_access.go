@@ -82,9 +82,9 @@ const (
 
 func (a chatAccess) check(chatID string) authz.Check {
 	if a == chatAccessWrite {
-		return authz.ChatWriteCheck(chatID)
+		return authz.Chat(authz.ChatIDFrom(chatID)).Write()
 	}
-	return authz.ChatReadCheck(chatID)
+	return authz.Chat(authz.ChatIDFrom(chatID)).Read()
 }
 
 // authorizeChatRead decides whether the caller may read a chat's content.
