@@ -67,7 +67,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 		owner = p.ActorUserID
 		delegators[1] = owner
 	}
-	agent, err := s.createAgent(ctx, tx, p, owner, actor)
+	agent, err := s.createAgent(ctx, tx, p, assistant.Name, owner, actor)
 	if err != nil {
 		return err
 	}
@@ -143,12 +143,12 @@ func provisionActor(p ProvisionParams) (auditActor, error) {
 }
 
 // createAgent creates the assistant's agent, owned by owner.
-func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, owner string, actor auditActor) (agentrepo.Agent, error) {
+func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, name, owner string, actor auditActor) (agentrepo.Agent, error) {
 	agent, err := agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
 		OrganizationID: p.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
 		OwnerUserID:    owner,
-		Name:           "Assistant " + p.AssistantID.String(),
+		Name:           name,
 	})
 	if err != nil {
 		return agentrepo.Agent{}, fmt.Errorf("create assistant agent: %w", err)

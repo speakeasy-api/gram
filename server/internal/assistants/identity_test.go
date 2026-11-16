@@ -70,6 +70,7 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
 	require.NoError(t, err)
 	require.Equal(t, "user-1", agent.OwnerUserID)
+	require.Equal(t, record.Name, agent.Name)
 	grants, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
 	require.NoError(t, err)
 	policy := make([]authz.Grant, 0, len(grants))
@@ -123,8 +124,11 @@ func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.NeverConfigured, resolution.State)
 
-	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", Staff: nil})
+	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", Staff: nil})
 	require.NoError(t, err)
+	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: uuid.MustParse(*upgraded.AgentID)})
+	require.NoError(t, err)
+	require.Equal(t, legacy.Name, agent.Name)
 	reused, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
 	require.Equal(t, root, reused)
@@ -178,6 +182,7 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	kept, err := agents.GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
 	require.NoError(t, err)
 	require.Equal(t, lifecycle.Suspended, lifecycle.Derive(kept), "deleting the assistant leaves its agent as the user left it")
+	require.Equal(t, "Renamed by a user", kept.Name)
 }
 
 func TestDeleteAssistantWithdrawsWorkloads(t *testing.T) {
