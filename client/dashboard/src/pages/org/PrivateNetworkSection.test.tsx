@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { NetworkIngressProvider } from "@gram/client/models/components/networkingress.js";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 
@@ -31,6 +37,9 @@ const state = vi.hoisted(() => ({
       }
     | undefined,
   createMutate: vi.fn(),
+  createOptions: undefined as
+    | { onSuccess?: (result: { runtime: string }) => Promise<void> }
+    | undefined,
   deleteMutate: vi.fn(),
   healthMutate: vi.fn(),
   ingress: undefined as
@@ -45,6 +54,7 @@ const state = vi.hoisted(() => ({
         credentialsConfigured: boolean;
         status: string;
         lastError?: string;
+        runtime?: string;
         createdAt: Date;
         updatedAt: Date;
       }
@@ -102,11 +112,14 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/createNetworkIngress.js", () => ({
-  useCreateNetworkIngressMutation: () => ({
-    isPending: false,
-    mutate: state.createMutate,
-    reset: vi.fn(),
-  }),
+  useCreateNetworkIngressMutation: (options: typeof state.createOptions) => {
+    state.createOptions = options;
+    return {
+      isPending: false,
+      mutate: state.createMutate,
+      reset: vi.fn(),
+    };
+  },
 }));
 vi.mock("@gram/client/react-query/updateNetworkIngress.js", () => ({
   useUpdateNetworkIngressMutation: () => ({
@@ -159,12 +172,44 @@ beforeEach(() => {
   state.ingressPending = false;
   state.ingressOptions = undefined;
   state.createMutate.mockReset();
+  state.createOptions = undefined;
   state.deleteMutate.mockReset();
   state.healthMutate.mockReset();
   state.ingress = undefined;
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
+
+function configuredIngress(
+  overrides: Partial<NonNullable<typeof state.ingress>>,
+): NonNullable<typeof state.ingress> {
+  return {
+    id: "ingress-1",
+    organizationId: "org-1",
+    provider: "tailscale",
+    hostname: "private-mcp",
+    endpointNamespaceKind: "platform",
+    enabled: true,
+    identityRequired: false,
+    credentialsConfigured: true,
+    status: "online",
+    createdAt: new Date(0),
+    updatedAt: new Date(1_000),
+    ...overrides,
+  };
+}
+
+function fillCredentials(): void {
+  fireEvent.change(screen.getByLabelText("OAuth client ID"), {
+    target: { value: "client-id" },
+  });
+  fireEvent.change(screen.getByLabelText("OAuth client secret"), {
+    target: { value: "client-secret" },
+  });
+}
 
 describe("PrivateNetworkSection", () => {
   it.each(["online", "deleting"])(
@@ -405,6 +450,154 @@ describe("PrivateNetworkSection", () => {
     expect(
       screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
     ).toBeTruthy();
+  });
+
+  it("warns that changing the hostname later moves every MCP server", () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(
+      screen.getByText(
+        /Changing it later moves\s+every MCP server to a new address/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("rejects the reserved local- prefix before submit", () => {
+    vi.stubEnv("DEV", false);
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Private hostname" }),
+      { target: { value: "local-mcp" } },
+    );
+    fillCredentials();
+    const connect = screen
+      .getAllByRole("button", { name: "Connect Tailscale" })
+      .at(-1) as HTMLButtonElement;
+    expect(connect.disabled).toBe(true);
+    expect(
+      screen.getByText(/Hostnames starting with "local-" are reserved/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+  });
+
+  it("accepts a local- hostname in development builds", () => {
+    vi.stubEnv("DEV", true);
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Private hostname" }),
+      { target: { value: "local-ab12-mcp" } },
+    );
+    fillCredentials();
+    const connect = screen
+      .getAllByRole("button", { name: "Connect Tailscale" })
+      .at(-1) as HTMLButtonElement;
+    expect(connect.disabled).toBe(false);
+    expect(
+      screen.getByText(/"svc:local-ab12-mcp": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+  });
+
+  it("keeps the sheet open on the created connection's steps when they differ", async () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+
+    // The browser saw the gateway flag on, but the server created the
+    // connection on the operator.
+    await act(async () => {
+      await state.createOptions?.onSuccess?.({
+        ...configuredIngress({ hostname: "speakeasy", status: "pending" }),
+        runtime: "operator",
+      });
+    });
+
+    expect(screen.getByText("Tailscale setup steps")).toBeTruthy();
+    expect(screen.getByText(/needs different Tailscale steps/)).toBeTruthy();
+    expect(
+      screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
+    expect(screen.queryByLabelText("OAuth client ID")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByText("Tailscale setup steps")).toBeNull();
+  });
+
+  it("closes the sheet when the created connection matches the steps shown", async () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    await act(async () => {
+      await state.createOptions?.onSuccess?.({
+        ...configuredIngress({ hostname: "speakeasy", status: "pending" }),
+        runtime: "gateway",
+      });
+    });
+
+    expect(
+      screen.queryByRole("textbox", { name: "Private hostname" }),
+    ).toBeNull();
+    expect(screen.queryByText("Tailscale setup steps")).toBeNull();
+  });
+
+  it("reopens an existing connection's steps from its runtime, not the flag", () => {
+    state.gatewayFlag = "enabled";
+    state.ingress = configuredIngress({ runtime: "operator" });
+    render(<PrivateNetworkSection />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup steps" }));
+
+    expect(screen.getByText("Tailscale setup steps")).toBeTruthy();
+    expect(
+      screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/needs different Tailscale steps/)).toBeNull();
+  });
+
+  it("shows a gateway connection's steps for its real hostname", () => {
+    state.gatewayFlag = "disabled";
+    state.ingress = configuredIngress({
+      runtime: "gateway",
+      hostname: "local-ab12-private",
+    });
+    render(<PrivateNetworkSection />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup steps" }));
+
+    expect(
+      screen.getByText(/"svc:local-ab12-private": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    {
+      code: "encryption_key_unavailable",
+      text: /can.t use your organization.s encryption\s+key/,
+    },
+    {
+      code: "provider_configuration_unavailable",
+      text: /because of a problem on\s+our side/,
+    },
+  ])("explains $code without offering a retry", ({ code, text }) => {
+    state.ingress = configuredIngress({ status: "error", lastError: code });
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText(text)).toBeTruthy();
+    expect(screen.queryByText(/Tailscale could not be connected/)).toBeNull();
+    expect(screen.queryByText(/Latest check:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry provisioning" }),
+    ).toBeNull();
+    expect(screen.getByRole("link", { name: "Contact support" })).toBeTruthy();
   });
 
   it("closes a setup draft when an unsupported provider arrives", () => {
