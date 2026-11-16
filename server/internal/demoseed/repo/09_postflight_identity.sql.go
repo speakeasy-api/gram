@@ -176,7 +176,7 @@ WHERE t.organization_id = $1::text AND t.project_id = $2::uuid
   AND a.id = $3::uuid
   AND ag.project_id = $2::uuid AND ag.owner_user_id = $4::text
   AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
-  AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
+  AND i.issuer = $5::text AND i.jwks_uri = $6::text AND i.allow_wildcard_admission IS FALSE
   AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
   AND t.subject = 'assistant-trigger:' || r.id::text
   AND (SELECT count(*) FROM principal_grants g
@@ -188,6 +188,8 @@ type PostflightIDBoundAssistantRootParams struct {
 	ProjectID   uuid.UUID
 	AssistantID uuid.UUID
 	OwnerUserID string
+	Issuer      string
+	JwksUri     string
 }
 
 func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg PostflightIDBoundAssistantRootParams) (int64, error) {
@@ -196,6 +198,8 @@ func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg Postfl
 		arg.ProjectID,
 		arg.AssistantID,
 		arg.OwnerUserID,
+		arg.Issuer,
+		arg.JwksUri,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -359,7 +363,7 @@ type PostflightIDExecutionProfileChoicesParams struct {
 }
 
 // The identity-bound assistant's person-backed and userless turns use the
-// shared token on Linear, by an administrator's choice in each profile's
+// shared token on the Example OAuth server, by an administrator's choice in each profile's
 // latest version, and the token is still enabled and offered there.
 func (q *Queries) PostflightIDExecutionProfileChoices(ctx context.Context, arg PostflightIDExecutionProfileChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDExecutionProfileChoices,
@@ -420,22 +424,6 @@ func (q *Queries) PostflightIDGitHubCheckAccessGrants(ctx context.Context, arg P
 		arg.DirectGrant,
 		arg.WildcardGrant,
 	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const postflightIDInertUpstreamSessions = `-- name: PostflightIDInertUpstreamSessions :one
-SELECT count(*) FROM remote_sessions
-WHERE remote_session_client_id = $1::uuid
-  AND deleted IS FALSE
-  AND access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT' AND refresh_token_encrypted IS NULL
-  AND (validation_status IS NULL
-       OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'))
-`
-
-func (q *Queries) PostflightIDInertUpstreamSessions(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDInertUpstreamSessions, remoteSessionClientID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -540,6 +528,11 @@ WHERE CASE match_kind
   -- the author wanted a wildcard and instead stored a literal matching
   -- nothing at all.
   WHEN 'exact' THEN subject LIKE '%*%'
+    -- A wimse:// or spiffe:// subject needs a trust domain, no user
+    -- information, port, query or fragment, and well-formed percent escapes.
+    OR (subject ~* '^(wimse|spiffe):' AND (
+      subject !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$'
+      OR subject ~ '%(?![0-9A-Fa-f]{2})'))
   WHEN 'wildcard' THEN
     -- Enforced on read, so clearing the issuer flag is a kill switch. A rule
     -- written under an issuer that forbids wildcards is already inert.
@@ -550,6 +543,13 @@ WHERE CASE match_kind
     OR subject NOT LIKE '%*'
     OR left(subject, length(subject) - 1) = ''
     OR left(subject, length(subject) - 1) LIKE '%*%'
+    -- Whitespace before the "*" is part of the stem, so the rule matches
+    -- nothing while looking correct.
+    OR right(left(subject, length(subject) - 1), 1) IN (' ', E'\t', E'\r', E'\n')
+    -- The same identifier syntax, checked on the stem as far as it goes.
+    OR (left(subject, length(subject) - 1) ~* '^(wimse|spiffe):' AND (
+      left(subject, length(subject) - 1) !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$'
+      OR left(subject, length(subject) - 1) ~ '%(?![0-9A-Fa-f]{2})'))
   ELSE TRUE
 END
 `
@@ -599,7 +599,7 @@ type PostflightIDIssuanceProfileChoicesParams struct {
 	AuthClientID   uuid.UUID
 }
 
-// The headless app's one profile, choosing the shared token on Linear,
+// The headless app's one profile, choosing the shared token on the Example OAuth server,
 // which is still enabled and offered there.
 func (q *Queries) PostflightIDIssuanceProfileChoices(ctx context.Context, arg PostflightIDIssuanceProfileChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDIssuanceProfileChoices,
@@ -719,7 +719,7 @@ type PostflightIDLinearIssuerStampParams struct {
 }
 
 // The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
-// every live client bound to Linear's user session issuer names one remote
+// every live client bound to the Example OAuth server's user session issuer names one remote
 // issuer, and it is the stamped one. Returns no row (pgx.ErrNoRows) when the
 // HAVING fails, including when no live client is bound at all.
 func (q *Queries) PostflightIDLinearIssuerStamp(ctx context.Context, arg PostflightIDLinearIssuerStampParams) (int64, error) {
@@ -732,12 +732,19 @@ func (q *Queries) PostflightIDLinearIssuerStamp(ctx context.Context, arg Postfli
 const postflightIDLinearProtectedResource = `-- name: PostflightIDLinearProtectedResource :one
 SELECT count(*) FROM remote_protected_resources
 WHERE project_id = $1::uuid AND deleted IS FALSE
-  AND resource_identifier = 'https://mcp.linear.app/mcp'
-  AND scope_override = ARRAY['read']
+  AND resource_identifier = $2::text
+  AND scope_override = ARRAY['notes:read', 'notes:write']
 `
 
-func (q *Queries) PostflightIDLinearProtectedResource(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDLinearProtectedResource, projectID)
+type PostflightIDLinearProtectedResourceParams struct {
+	ProjectID uuid.UUID
+	Resource  string
+}
+
+// The fixture servers phase moves it to the hosted fixture and pins both
+// of the fixture's scopes, so a new sign-in can read and write notes.
+func (q *Queries) PostflightIDLinearProtectedResource(ctx context.Context, arg PostflightIDLinearProtectedResourceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDLinearProtectedResource, arg.ProjectID, arg.Resource)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -784,15 +791,6 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
       OR (u.mcp_server_id = $4::uuid AND u.no_auth)
       OR (u.credential_id = ANY($5::uuid[])
           AND u.mcp_server_id = ANY($6::uuid[]) AND u.no_auth)
-      OR (u.credential_id = ANY($5::uuid[])
-          AND u.mcp_server_id = $7::uuid AND u.remote_session_client_id IS NULL
-          AND u.auth_client_id = $8::uuid AND NOT u.no_auth
-          AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
-                      JOIN mcp_server_auth_clients l
-                        ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
-                       AND l.project_id = $1::uuid AND l.deleted IS FALSE
-                      WHERE ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
-                        AND ac.deleted IS FALSE AND ac.enabled))
       OR (u.credential_id = ANY($5::uuid[]) AND NOT u.no_auth
           AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
                       WHERE a.mcp_server_id = u.mcp_server_id
@@ -809,14 +807,12 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 	SlackServerID      uuid.UUID
 	OrgSessionIds      []uuid.UUID
 	OrgNoAuthServerIds []uuid.UUID
-	GithubServerID     uuid.UUID
-	GithubAuthClientID uuid.UUID
 }
 
-// Count live choices outside the intended set: Linear through its main client,
-// Slack with no upstream authentication, the organization gateway's GitHub
-// choice of the caller's own token and its tunneled inventory choice, each on a
-// seeded session.
+// Count live choices outside the intended set: the Example OAuth server
+// through its main client, the Example Shared Credential server with no
+// upstream authentication, and the organization gateway's choices of each
+// server's associated client, each on a seeded session.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDMisassignedUpstreamClientChoices,
 		arg.ProjectID,
@@ -825,8 +821,6 @@ func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Conte
 		arg.SlackServerID,
 		arg.OrgSessionIds,
 		arg.OrgNoAuthServerIds,
-		arg.GithubServerID,
-		arg.GithubAuthClientID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -857,6 +851,24 @@ func (q *Queries) PostflightIDPendingDirectoryReviewItems(ctx context.Context, o
 	return count, err
 }
 
+const postflightIDPerUserUpstreamSessions = `-- name: PostflightIDPerUserUpstreamSessions :one
+SELECT count(*) FROM remote_sessions
+WHERE remote_session_client_id = $1::uuid
+  AND deleted IS FALSE
+  AND access_token_encrypted <> ''
+  AND (validation_status IS NULL
+       OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'))
+`
+
+// The Example OAuth server's sign-ins. The live ones hold MCP fixture
+// tokens (fixture_servers.go); the expired ones keep the dummy token.
+func (q *Queries) PostflightIDPerUserUpstreamSessions(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDPerUserUpstreamSessions, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDProjectAgentSessions = `-- name: PostflightIDProjectAgentSessions :one
 SELECT count(*) FROM user_sessions
 WHERE project_id = $1::uuid AND deleted IS FALSE
@@ -877,8 +889,8 @@ SELECT count(*) FROM remote_session_issuers
 WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
-// Linear's remote identity provider, the identity chaining example, Jamf
-// Pro, and the two EMA services' authorization servers.
+// The Example OAuth server's remote identity provider, the identity chaining example, Jamf
+// Pro, the Enterprise Sign-In (ID-JAG) Server's authorization server, and Linear.
 func (q *Queries) PostflightIDProjectRemoteSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectRemoteSessionIssuers, projectID)
 	var count int64
@@ -896,7 +908,7 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
 // Two upstream MCP issuers, two independent gateway issuers, and one
-// Connections issuer; GitHub uses the organization workforce issuer.
+// Connections issuer.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64
@@ -1060,8 +1072,7 @@ WHERE b.organization_id = $2::text AND b.project_id = $3::uuid
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
-  AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
-  AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE
+  AND rs.access_token_encrypted <> ''
 `
 
 type PostflightIDSessionAttachmentsParams struct {
@@ -1407,11 +1418,11 @@ func (q *Queries) PostflightIDUnregisteredConnections(ctx context.Context, proje
 const postflightIDUpstreamClientChoices = `-- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT id, project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source, auth_client_id, auth_client_attachment_scope, created_at, updated_at, deleted_at, deleted FROM upstream_client_selections
-  WHERE project_id = $10::uuid AND deleted IS FALSE
+  WHERE project_id = $8::uuid AND deleted IS FALSE
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 32
+WHERE (SELECT count(*) FROM live) = 26
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1430,18 +1441,6 @@ WHERE (SELECT count(*) FROM live) = 32
      AND remote_session_client_id IS NULL
      AND client_attachment_scope IS NULL
      AND no_auth IS TRUE)
-    OR
-    (credential_id = ANY($6::uuid[])
-     AND mcp_server_id = $8::uuid
-     AND remote_session_client_id IS NULL
-     AND auth_client_id = $9::uuid
-     AND no_auth IS FALSE
-     AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
-                 JOIN mcp_server_auth_clients l
-                   ON l.auth_client_id = ac.id AND l.mcp_server_id = live.mcp_server_id
-                  AND l.project_id = $10::uuid AND l.deleted IS FALSE
-                 WHERE ac.id = live.auth_client_id AND ac.organization_id = live.organization_id
-                   AND ac.deleted IS FALSE AND ac.enabled))
     OR
     (credential_id = ANY($6::uuid[])
      AND no_auth IS FALSE
@@ -1465,13 +1464,11 @@ type PostflightIDUpstreamClientChoicesParams struct {
 	SlackServerID      uuid.UUID
 	OrgSessionIds      []uuid.UUID
 	OrgNoAuthServerIds []uuid.UUID
-	GithubServerID     uuid.UUID
-	GithubAuthClientID uuid.UUID
 	ProjectID          uuid.UUID
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// thirty-two misassigned choices cannot satisfy postflight.
+// twenty-six misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,
@@ -1481,8 +1478,6 @@ func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg Pos
 		arg.SlackServerID,
 		arg.OrgSessionIds,
 		arg.OrgNoAuthServerIds,
-		arg.GithubServerID,
-		arg.GithubAuthClientID,
 		arg.ProjectID,
 	)
 	var count int64
@@ -1581,7 +1576,7 @@ type PostflightIDWorkforceInboundEMATrustParams struct {
 	EmaProvider     uuid.UUID
 }
 
-// EMA: two ready bindings, no cached credentials, and one saved provider
+// EMA: one ready binding, no cached credentials, and no saved provider
 // order. The workforce issuer accepts ID-JAGs from the fictional provider
 // without federating interactive sign-in through it.
 func (q *Queries) PostflightIDWorkforceInboundEMATrust(ctx context.Context, arg PostflightIDWorkforceInboundEMATrustParams) (int64, error) {

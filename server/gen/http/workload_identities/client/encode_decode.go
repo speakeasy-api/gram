@@ -2270,7 +2270,7 @@ func DecodeWithdrawSubjectResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("workloadIdentities", "withdrawSubject", err)
 			}
-			res := NewWithdrawSubjectWorkloadIdentityPolicyOK(&body)
+			res := NewWithdrawSubjectWithdrawnWorkloadSubjectPolicyOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

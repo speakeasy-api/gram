@@ -1193,8 +1193,8 @@ func TestToolCallSearchTools_RequireTheDrilldownComposition(t *testing.T) {
 
 // TestToolCallSearchTools_AreRegisteredForBothAudiences pins the manifest: both
 // tools serve the external endpoint and the assistant, are read-only, name their
-// project explicitly, and the row-level search requires log:read while key
-// discovery follows the project-read reads it exists to prepare.
+// project explicitly, and the row-level search is open to every member (who
+// searches their own scope) while key discovery follows the project-read reads.
 func TestToolCallSearchTools_AreRegisteredForBothAudiences(t *testing.T) {
 	t.Parallel()
 
@@ -1206,7 +1206,7 @@ func TestToolCallSearchTools_AreRegisteredForBothAudiences(t *testing.T) {
 	for _, registrar := range []*Registrar{live, unavailable} {
 		search := descriptorByName(t, registrar, "search_tool_calls")
 		require.Equal(t, ExternalAuthorizationMember, search.Meta.Authorization)
-		require.Equal(t, discoveryLogRead, search.Meta.DiscoveryScopes)
+		require.Empty(t, search.Meta.DiscoveryScopes, "every member has their own calls to search")
 		require.Equal(t, bothAudiences, search.Meta.Audiences)
 		require.Equal(t, ProjectScopeExplicit, search.Meta.ProjectScope)
 		require.True(t, search.Annotations.ReadOnlyHint)

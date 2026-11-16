@@ -79,13 +79,17 @@ type GatewayMemberRefusal struct {
 }
 
 type CreateGatewayInput struct {
-	ProjectID string   `json:"project_id" jsonschema:"ID of the project the gateway belongs to; every member must be in it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string   `json:"-"`
 	Name      string   `json:"name" jsonschema:"display name for the gateway, at most 100 characters"`
 	MCPIDs    []string `json:"mcp_ids" jsonschema:"exact IDs of the MCP servers to put behind the gateway, from find_mcp in this project, in the order the gateway lists them; at most 50"`
 }
 
 type SetGatewayMembersInput struct {
-	ProjectID string   `json:"project_id" jsonschema:"ID of the project the gateway belongs to"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string   `json:"-"`
 	GatewayID string   `json:"gateway_id" jsonschema:"exact ID of the gateway to change"`
 	MCPIDs    []string `json:"mcp_ids" jsonschema:"the complete list of MCP servers the gateway should front afterwards, in order; servers left out are removed and an empty list removes them all; at most 50"`
 }
@@ -563,7 +567,7 @@ func gatewayMembersRefused(refusals []GatewayMemberRefusal, outcome string) erro
 func parseGatewayProject(value string) (uuid.UUID, error) {
 	projectID, err := uuid.Parse(strings.TrimSpace(value))
 	if err != nil {
-		return uuid.Nil, gatewayInvalid("Provide an explicit project ID.")
+		return uuid.Nil, gatewayInvalid("Provide the project's slug, as list_projects returns it.")
 	}
 	return projectID, nil
 }

@@ -11,6 +11,7 @@ const daemons = [
   ["streams", "GRAM_STREAMS_CONTROL_ADDRESS", "GRAM_STREAMS_CONTROL_PORT"],
   ["dev-idp", "GRAM_DEVIDP_CONTROL_ADDRESS", "GRAM_DEVIDP_CONTROL_PORT"],
   ["mock-oidc", "MOCK_OIDC_ADDRESS", "GRAM_ADMIN_OIDC_EMULATOR_PORT"],
+  ["mock-mcp", "GRAM_MOCK_MCP_ADDRESS", "GRAM_MOCK_MCP_PORT"],
 ] as const;
 
 const addresses = [

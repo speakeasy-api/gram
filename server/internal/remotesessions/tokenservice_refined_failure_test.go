@@ -134,7 +134,7 @@ func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) 
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   old.UserSessionIssuerID,
 		RemoteSessionClientID: env.clientID,
-		AccessTokenEncrypted:  old.AccessTokenEncrypted,
+		AccessTokenEncrypted:  old.AccessTokenEncrypted.String,
 		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(-time.Second)),
 		RefreshTokenEncrypted: old.RefreshTokenEncrypted,
 		Scopes:                []string{},
@@ -203,7 +203,7 @@ func TestConnectionOutage_RecordedOnFailureClearedBySuccessAndReconnect(t *testi
 	old := active()
 	_, err = env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn: env.subject, UserSessionIssuerID: old.UserSessionIssuerID, RemoteSessionClientID: env.clientID,
-		AccessTokenEncrypted: old.AccessTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		AccessTokenEncrypted: old.AccessTokenEncrypted.String, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 		RefreshTokenEncrypted: old.RefreshTokenEncrypted, Scopes: []string{},
 	})
 	require.NoError(t, err)
@@ -678,44 +678,6 @@ func TestResolveAccessTokens_InvalidGrantNeedsReconnect(t *testing.T) {
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 
 	// The failed refresh cleared the grant, so stored state now agrees.
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
-	require.NoError(t, err)
-	require.True(t, reconnect)
-}
-
-// An unreadable stored access token is an error validateAndRefresh raises
-// itself rather than a RefreshError, so it never clears on retry and must keep
-// the reconnect remedy.
-func TestResolveAccessTokens_UnreadableAccessTokenNeedsReconnect(t *testing.T) {
-	t.Parallel()
-
-	var refreshAttempts atomic.Int32
-	ctx, env := newSyntheticExpiryEnv(t, "unreadable-access-token", func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if r.Form.Get("grant_type") == "refresh_token" {
-			refreshAttempts.Add(1)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"live-access","refresh_token":"live-refresh"}`))
-	})
-
-	_, err := env.q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
-		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID,
-		ExpectedUpdatedAt: env.session.UpdatedAt, AccessTokenEncrypted: "not-ciphertext",
-		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), RefreshTokenEncrypted: env.session.RefreshTokenEncrypted,
-		Scopes: env.session.Scopes,
-	})
-	require.NoError(t, err)
-
-	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
-	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
-	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
-	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	require.Zero(t, refreshAttempts.Load(), "a live access token is forwarded without refreshing")
-
 	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.True(t, reconnect)

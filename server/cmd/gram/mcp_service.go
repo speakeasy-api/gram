@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -71,6 +72,11 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 	return otelpub.NewLogger(publisher,
 		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
 		dialect.GatewayLogScope)
+}
+
+// newConnectionLogExport publishes failed connection attempts to the otel pipeline.
+func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) mcpconnectionattempts.RecorderOption {
+	return mcpconnectionattempts.WithExport(otelsink.New(publisher, gatewayRecordsServiceName))
 }
 
 type mcpServiceDependencies struct {

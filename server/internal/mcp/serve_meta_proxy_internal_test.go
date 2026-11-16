@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -372,6 +374,43 @@ func TestChainMetaMember_ChainingServesAnOutage(t *testing.T) {
 	self := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: remotesessions.ErrClientCredentialUnavailable}
 	_, _, err = chainMetaMember(t.Context(), chaining("chained"), metaMember{}, "r", self, routeErr)
 	require.ErrorIs(t, err, routeErr, "a self client's failure is never chained around")
+}
+
+// Chaining serves an unreadable sign-in only with the same person's verified identity; without one the reconnect stands.
+func TestChainMetaMember_UnreadableSignInReconnectsWhenChainingFails(t *testing.T) {
+	t.Parallel()
+
+	routed := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: fmt.Errorf("decrypt: %w", remotesessions.ErrStoredSignInUnreadable)}
+	chaining := func(token string) metaGateContext {
+		return metaGateContext{chainUpstream: func(context.Context, metaMember, string) (string, error) { return token, nil }}
+	}
+	member := metaMember{slug: "m"}
+
+	_, token, err := chainMetaMember(t.Context(), chaining("chained"), member, "r", routed, nil)
+	require.NoError(t, err)
+	require.Equal(t, "chained", token)
+
+	_, token, err = chainMetaMember(t.Context(), chaining(""), member, "r", routed, nil)
+	require.Empty(t, token, "never an anonymous call")
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok, "error: %v", err)
+	require.Equal(t, mcpconnectionattempts.CodeStoredSignInUnreadable, failure.code)
+	require.Contains(t, err.Error(), `server "m" can't use its saved sign-in anymore`)
+}
+
+// Of several held entries for one upstream, an outage answers, whatever the map order.
+func TestRouteUpstreamToken_HeldEntriesAnswerDeterministically(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://a.example.com/mcp"
+	unreadable := remotesessions.UpstreamToken{Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: fmt.Errorf("decrypt: %w", remotesessions.ErrStoredSignInUnreadable)}
+	outage := remotesessions.UpstreamToken{Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	for range 50 {
+		tokens := map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): unreadable, uuid.New(): outage, uuid.New(): unreadable}
+		_, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), tokens, upstream, false, uuid.NullUUID{})
+		require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+		require.NotErrorIs(t, err, remotesessions.ErrStoredSignInUnreadable)
+	}
 }
 
 func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {

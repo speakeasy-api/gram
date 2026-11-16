@@ -63,14 +63,13 @@ type ProjectRedeployPreview struct {
 	OpenAPIAssets      int    `json:"openapi_assets"`
 	FunctionAssets     int    `json:"function_assets"`
 	Packages           int    `json:"packages"`
-	ExternalMCPs       int    `json:"external_mcps"`
 }
 
 func registerProjectRedeployPreviewTool(server *mcp.Server, organizations OrganizationReader, previews ProjectRedeployPreviewReader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_project_redeploy_preview",
 		Title:       "Get Project Redeploy Preview",
-		Description: "Read what redeploying an exact project would act on: its active deployment and that deployment's source counts. Its external MCP sources are the ones a redeploy drops. Changes nothing.",
+		Description: "Read what redeploying an exact project would act on: its active deployment and that deployment's source counts. Changes nothing.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDInput) (*mcp.CallToolResult, ProjectRedeployPreview, error) {
 		if _, err := parseExactProjectID(input.ProjectID); err != nil {
@@ -90,7 +89,7 @@ func registerProjectRedeployPreviewTool(server *mcp.Server, organizations Organi
 		return nil, ProjectRedeployPreview{
 			OrganizationID: preview.OrganizationID, ProjectID: preview.ProjectID, ProjectName: preview.ProjectName,
 			ActiveDeploymentID: preview.ActiveDeploymentID, OpenAPIAssets: preview.OpenapiAssets, FunctionAssets: preview.FunctionAssets,
-			Packages: preview.Packages, ExternalMCPs: preview.ExternalMcps,
+			Packages: preview.Packages,
 		}, nil
 	})
 }

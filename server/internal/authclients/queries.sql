@@ -140,6 +140,28 @@ WHERE msac.auth_client_id = @auth_client_id
   AND ms.project_id = msac.project_id
 RETURNING msac.id, msac.project_id, ms.name AS mcp_server_name;
 
+-- name: UndoServerBackfillAuthClientDetaches :many
+-- Undoes administrator detaches of one upstream OAuth client's backfilled
+-- auth clients from one MCP server, for an explicit attach of that client.
+-- The deleted links become source 'backfill' retirements, which the backfill
+-- relinks while the association they were derived from stands. Returns the
+-- auth clients whose detach was undone, once per undone row.
+UPDATE mcp_server_auth_clients msac
+SET source = 'backfill',
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients ac
+WHERE msac.mcp_server_id = @mcp_server_id
+  AND msac.project_id = @project_id
+  AND msac.organization_id = @organization_id
+  AND msac.source = 'admin'
+  AND msac.deleted IS TRUE
+  AND ac.id = msac.auth_client_id
+  AND ac.organization_id = msac.organization_id
+  AND ac.remote_session_client_id = @remote_session_client_id
+  AND ac.source = 'backfill'
+  AND ac.deleted IS FALSE
+RETURNING msac.auth_client_id;
+
 -- name: GetOrganizationMCPServer :one
 SELECT
   ms.id,

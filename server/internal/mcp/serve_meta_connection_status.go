@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -288,6 +289,14 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 // agent gateway, a missing or unusable connection is a row the agent's
 // sign-in step fixes.
 func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
+	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable {
+		if gate.agentFix != nil {
+			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)
+			row.Reconnect = true
+			return row
+		}
+		return signInRow(metamcp.SignInNotConnected, memberErrorMessage(err), nil)
+	}
 	unavailable, ok := errors.AsType[memberUnavailableError](err)
 	if refreshProvenance(err) || (ok && refreshProvenance(unavailable.session)) {
 		contextvalues.ClaimRefreshConnectionReference(ctx)

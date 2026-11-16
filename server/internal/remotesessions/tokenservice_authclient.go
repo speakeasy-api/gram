@@ -159,7 +159,7 @@ func (m *ChallengeManager) AuthClientRemoteSessionStatuses(ctx context.Context, 
 	for _, row := range rows {
 		states = append(states, remotesessions_repo.ListRemoteSessionStatusesForSubjectRow(row))
 	}
-	return remoteSessionStates(states), nil
+	return m.remoteSessionStates(states), nil
 }
 
 // DisconnectAuthClientRemoteSession is DisconnectRemoteSession for a
@@ -188,7 +188,7 @@ func (m *ChallengeManager) DisconnectAuthClientRemoteSession(ctx context.Context
 	for _, row := range disconnected {
 		m.revoker.RevokeDetached(ctx, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted,
+			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
 			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
 		})
 	}

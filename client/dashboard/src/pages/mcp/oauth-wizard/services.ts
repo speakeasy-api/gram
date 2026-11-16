@@ -10,17 +10,8 @@ import { fromPromise } from "xstate";
 
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { linkToolsetUserSessionIssuer } from "@/lib/linkUserSessionIssuer";
-import {
-  proxyRegisterUpstreamClient,
-  registrationProvenance,
-  type RegistrationProvenance,
-} from "@/lib/proxyRegisterUpstreamClient";
 
-import {
-  authServerOrigin,
-  parseScopes,
-  pickAuthMethodFromList,
-} from "./machine-types";
+import { authServerOrigin, parseScopes } from "./machine-types";
 
 type SignalArg = { signal: AbortSignal };
 
@@ -69,33 +60,7 @@ export type ProvisionUserSessionInput = {
   clientId: string;
   clientSecret: string;
   audience: string;
-  // Present when registerClient obtained the credentials, so the server
-  // records when the issuer expires them and can re-register them in place.
-  // Absent for credentials the operator typed in.
-  registration?: RegistrationProvenance;
 };
-
-export type RegisterClientInput = {
-  registrationEndpoint: string;
-  // Method derived from the (often empty) discovered metadata. Used as the
-  // fallback when live discovery is skipped or fails.
-  tokenAuthMethod: string;
-  // Origin to run live RFC 8414 discovery against to recover the upstream's
-  // real token_endpoint_auth_methods_supported. Empty disables discovery.
-  issuer: string;
-};
-
-export type RegisterClientOutput = {
-  clientId: string;
-  clientSecret: string;
-  tokenAuthMethod: string | null;
-  registration: RegistrationProvenance;
-};
-
-export type AuthedFetch = (
-  endpoint: string,
-  opts: RequestInit,
-) => Promise<Response>;
 
 export type WizardServices = {
   addExternalOAuth: ReturnType<typeof fromPromise<void, AddExternalOAuthInput>>;
@@ -105,17 +70,11 @@ export type WizardServices = {
   provisionUserSession: ReturnType<
     typeof fromPromise<void, ProvisionUserSessionInput>
   >;
-  registerClient: ReturnType<
-    typeof fromPromise<RegisterClientOutput, RegisterClientInput>
-  >;
 };
 
 export type GramClient = Gram;
 
-export function createWizardServices(
-  client: GramClient,
-  authedFetch: AuthedFetch,
-): WizardServices {
+export function createWizardServices(client: GramClient): WizardServices {
   const discoverExternalOAuth = fromPromise<
     DiscoverExternalOAuthOutput,
     DiscoverExternalOAuthInput
@@ -244,7 +203,6 @@ export function createWizardServices(
               input.tokenAuthMethod,
             ),
             audience: input.audience || undefined,
-            ...input.registration,
           },
         },
         ...opts,
@@ -259,53 +217,9 @@ export function createWizardServices(
     },
   );
 
-  const registerClient = fromPromise<RegisterClientOutput, RegisterClientInput>(
-    async ({ input, signal }) => {
-      // The synthesized remote-MCP metadata omits the supported-methods list,
-      // so run a live RFC 8414 discovery against the issuer origin to recover
-      // it (e.g. Make advertises only client_secret_post, and rejects DCR that
-      // omits it or sends client_secret_basic). Best-effort: any failure leaves
-      // the metadata-derived fallback method in place.
-      let authMethod = input.tokenAuthMethod;
-      if (input.issuer) {
-        try {
-          const draft = await client.remoteSessionIssuers.fetchMetadata(
-            {
-              fetchIssuerMetadataRequestBody: { issuer: input.issuer },
-            },
-            undefined,
-            { fetchOptions: { signal } },
-          );
-          const supported = draft.tokenEndpointAuthMethodsSupported ?? [];
-          if (supported.length > 0) {
-            authMethod = pickAuthMethodFromList(supported);
-          }
-        } catch {
-          // Keep the fallback method on discovery failure.
-        }
-      }
-
-      const result = await proxyRegisterUpstreamClient(
-        authedFetch,
-        {
-          registrationEndpoint: input.registrationEndpoint,
-          tokenEndpointAuthMethod: authMethod || undefined,
-        },
-        { signal },
-      );
-      return {
-        clientId: result.clientId,
-        clientSecret: result.clientSecret,
-        tokenAuthMethod: result.tokenEndpointAuthMethod,
-        registration: registrationProvenance(result),
-      };
-    },
-  );
-
   return {
     addExternalOAuth,
     discoverExternalOAuth,
     provisionUserSession,
-    registerClient,
   };
 }

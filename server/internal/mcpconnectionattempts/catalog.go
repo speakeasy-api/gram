@@ -14,6 +14,9 @@ const (
 	OutcomeAbandoned Outcome = "abandoned"
 )
 
+// allOutcomes are every Outcome.
+var allOutcomes = []Outcome{OutcomeConnected, OutcomeFailed, OutcomeBlocked, OutcomeDeclined, OutcomeAbandoned}
+
 // WhoFixes is the party that has to act, not necessarily the one that caused it.
 type WhoFixes string
 
@@ -66,6 +69,13 @@ var (
 	StepDiscoveryListing = Step{"discovery_listing"}
 	StepDiscoveryMember  = Step{"discovery_member"}
 )
+
+// allSteps are every Step.
+var allSteps = []Step{
+	StepInboundAuthorize, StepInboundSignIn, StepInboundConsent, StepInboundToken, StepProviderSignIn,
+	StepProviderToken, StepProviderRefresh, StepSignInRenewal, StepUpstreamEMA, StepMCPRequest,
+	StepDiscoveryListing, StepDiscoveryMember,
+}
 
 // Happened is what a call site says about a step: a success Result, or a Code
 // for anything else. Only this package implements it.
@@ -294,4 +304,11 @@ var (
 	CodeRefreshTokenUsedByOtherApp = define("refresh_token_used_by_other_app", OutcomeFailed, WhoPerson, "This connection ended because another app used its sign-in.", "Connect to the server again. If it keeps happening, report it to the app's makers.")
 	CodeStoredSessionInvalid       = define("stored_session_invalid", OutcomeFailed, WhoPerson, "Your saved connection is damaged on our side.", "Connect to the server again. If it keeps happening, contact Speakeasy support.")
 	CodeSignInRevokedByAdmin       = define("sign_in_revoked_by_admin", OutcomeBlocked, WhoAdmin, "Your admin ended this sign-in.", "Ask your admin if you still need access.")
+	CodeStoredSignInUnreadable     = define("stored_sign_in_unreadable", OutcomeFailed, WhoPerson, "Your saved sign-in for this server can't be used anymore.", "Reconnect to fix it.")
+
+	// Token requests from workloads and assistants.
+	CodeUpstreamCredentialDenied    = define("upstream_credential_denied", OutcomeBlocked, WhoAdmin, "This identity is not allowed to use this server's sign-in for the service.", "Ask for access to that sign-in.")
+	CodeUpstreamCredentialNotChosen = define("upstream_credential_not_chosen", OutcomeFailed, WhoAdmin, "This server has more than one sign-in for the service, and none was chosen.", "Choose which sign-in this identity uses for the server.")
+	CodeSignInMethodNotAccepted     = define("sign_in_method_not_accepted", OutcomeFailed, WhoApp, "This server does not accept this kind of sign-in.", "Connect to a server that accepts it, or use another way to sign in.")
+	CodeCredentialChoiceInvalid     = define("credential_choice_invalid", OutcomeFailed, WhoApp, "The app's sign-in choice does not fit this server.", "Update the app, or report the problem to its makers.")
 )

@@ -177,7 +177,6 @@ func TestDeployments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 		ExcludeOpenapiv3Assets: []string{},
 		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
-		ExcludeExternalMcps:    []string{},
 		NonBlocking:            nil,
 	})
 	require.ErrorAs(t, err, &oopsErr)

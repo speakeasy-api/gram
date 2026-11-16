@@ -66,7 +66,9 @@ type MCPAccessRoleRule struct {
 }
 
 type CreateMCPAccessRoleInput struct {
-	ProjectID      string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in rules"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string              `json:"-"`
 	Name           string              `json:"name" jsonschema:"display name for the new custom role"`
 	Description    string              `json:"description,omitempty" jsonschema:"optional description for the new custom role"`
 	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project; an empty list creates a role with no grants"`
@@ -75,7 +77,9 @@ type CreateMCPAccessRoleInput struct {
 }
 
 type UpdateMCPAccessRoleInput struct {
-	ProjectID       string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in the delta"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string              `json:"-"`
 	RoleReference   string              `json:"role_reference" jsonschema:"opaque role reference returned by list_access_roles, get_mcp_access, or a role mutation"`
 	ExpectedVersion string              `json:"expected_version" jsonschema:"opaque role version returned by the preceding role mutation"`
 	AddRules        []MCPAccessRoleRule `json:"add_rules,omitempty" jsonschema:"MCP access rules to add without replacing other grants"`

@@ -5,6 +5,7 @@ import type {
 } from "@gram/client/models/components/setresourceaudienceentry.js";
 import {
   BLOCK_LEVEL,
+  closedBesides,
   complementTools,
   effectiveForeignGrants,
   inheritedGrants,
@@ -77,10 +78,14 @@ function withoutOwnBlock(
   row: AccessRow,
   scope: ScopeKey,
 ): AudienceRule[] {
-  if (!row.cells[scope].ownBlock) return direct;
-  return withoutRules(direct, [
-    ruleId({ principalUrn: row.principalUrn, level: BLOCK_LEVEL[scope] }),
-  ]);
+  const blocks = row.cells[scope].ownBlocks;
+  if (blocks.length === 0) return direct;
+  return withoutRules(
+    direct,
+    blocks.map((block) =>
+      ruleId({ principalUrn: row.principalUrn, level: block.level }),
+    ),
+  );
 }
 
 /**
@@ -154,7 +159,20 @@ export function allowWrite(
   scope: ScopeKey,
   resourceName?: string,
 ): AudienceWrite {
-  const base = withoutOwnBlock(direct, row, scope);
+  // A lifted block can close more than this scope: a view block takes manage
+  // too. Whatever still grants those keeps being blocked, so allowing view
+  // does not quietly open manage.
+  const kept = new Set(
+    row.cells[scope].ownBlocks.flatMap((block) =>
+      closedBesides(block.level, scope),
+    ),
+  );
+  let base = withoutOwnBlock(direct, row, scope);
+  for (const key of kept) {
+    if (row.cells[key].grants.length > 0 && !row.cells[key].ownBlock) {
+      base = withRule(base, row.principalUrn, BLOCK_LEVEL[key]);
+    }
+  }
   // Something else may already open this whole. Lifting the block is then
   // the entire edit, and this row's own narrower rule goes with it: a grant
   // alongside an unnarrowed one takes nothing away and only muddies the line.
@@ -426,8 +444,9 @@ export function allowDestructiveWrite(
 
 /**
  * Take a principal off this server. The rules it owns here go, and anything
- * still reaching it is subtracted. Blocks are independent, so "no access at
- * all" is all three of them.
+ * still reaching it is subtracted. A view block also takes manage, but
+ * connect's block stands alone, so "no access at all" writes a block for each
+ * line rather than leaning on one to cover the rest.
  */
 export function revokeRowWrite(
   direct: AudienceRule[],

@@ -37,6 +37,10 @@ type Client struct {
 	// updateMcpServer endpoint.
 	UpdateMcpServerDoer goahttp.Doer
 
+	// SetSetupGuideCompleted Doer is the HTTP client used to make requests to the
+	// setSetupGuideCompleted endpoint.
+	SetSetupGuideCompletedDoer goahttp.Doer
+
 	// ListToolFilters Doer is the HTTP client used to make requests to the
 	// listToolFilters endpoint.
 	ListToolFiltersDoer goahttp.Doer
@@ -94,6 +98,7 @@ func NewClient(
 		ListMcpServersDoer:          doer,
 		ListMcpServersForOrgDoer:    doer,
 		UpdateMcpServerDoer:         doer,
+		SetSetupGuideCompletedDoer:  doer,
 		ListToolFiltersDoer:         doer,
 		SetToolMetadataBatchDoer:    doer,
 		AddToolMetadataBatchDoer:    doer,
@@ -225,6 +230,30 @@ func (c *Client) UpdateMcpServer() goa.Endpoint {
 		resp, err := c.UpdateMcpServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpServers", "updateMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSetupGuideCompleted returns an endpoint that makes HTTP requests to the
+// mcpServers service setSetupGuideCompleted server.
+func (c *Client) SetSetupGuideCompleted() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSetupGuideCompletedRequest(c.encoder)
+		decodeResponse = DecodeSetSetupGuideCompletedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSetupGuideCompletedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSetupGuideCompletedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "setSetupGuideCompleted", err)
 		}
 		return decodeResponse(resp)
 	}

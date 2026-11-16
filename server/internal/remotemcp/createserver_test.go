@@ -428,6 +428,51 @@ func TestCreateServer_RBACForbidden(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+// projectBoundedMCPWriteGrant is mcp:write on every server in projectID only,
+// the grant the dashboard writes for "all servers in this project".
+func projectBoundedMCPWriteGrant(projectID string) authz.Grant {
+	return authz.NewGrantWithSelector(authz.ScopeMCPWrite, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+		authz.SelectorKeyResourceID:   authz.WildcardResource,
+		authz.SelectorKeyProjectID:    projectID,
+	})
+}
+
+func TestCreateServer_RBACProjectBoundedGrantOtherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, projectBoundedMCPWriteGrant(uuid.NewString()))
+
+	_, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCreateServer_RBACProjectBoundedGrantSameProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, projectBoundedMCPWriteGrant(authCtx.ProjectID.String()))
+
+	result, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
 func TestCreateServer_NameStored(t *testing.T) {
 	t.Parallel()
 

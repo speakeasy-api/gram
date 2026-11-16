@@ -2,11 +2,39 @@ import { useSetup } from "./setup-context";
 import { useState, type ReactNode, type ComponentType } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/Field";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { ArrowUpRight, CirclePlus, SquareDashed } from "lucide-react";
 import { type FieldName, names } from "./state";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/Alert";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+
+export function CallbackUrlStatus({
+  label,
+  isError,
+  retry,
+}: {
+  label: string;
+  isError: boolean;
+  retry: () => unknown;
+}): JSX.Element {
+  if (isError)
+    return (
+      <Alert variant="error">
+        Couldn’t load the {label}.{" "}
+        <Button variant="secondary" size="sm" onClick={() => void retry()}>
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
+    );
+  return <p className="mt-4 text-sm text-muted-foreground">Loading {label}…</p>;
+}
 
 export function Section({
   title,
@@ -47,13 +75,54 @@ export function ExternalAction({
   label,
   href,
   disabled = false,
+  disabledReason,
 }: {
   title: string;
   children?: ReactNode;
   label: string;
   href?: string;
   disabled?: boolean;
+  disabledReason?: string;
 }): JSX.Element {
+  const disabledAction = (
+    <Button
+      variant="primary"
+      disabled={disabled}
+      className="self-end @min-[650px]/task:self-start"
+    >
+      <Button.Text>{label}</Button.Text>
+      <Button.RightIcon>
+        <ArrowUpRight />
+      </Button.RightIcon>
+    </Button>
+  );
+  let action = disabledAction;
+  if (href && !disabled)
+    action = (
+      <Button
+        variant="primary"
+        asChild
+        className="self-end @min-[650px]/task:self-start"
+      >
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {label}
+          <ArrowUpRight className="ml-2 size-4" />
+        </a>
+      </Button>
+    );
+  else if (disabled && disabledReason)
+    action = (
+      <SimpleTooltip tooltip={disabledReason}>
+        <span
+          tabIndex={0}
+          role="group"
+          aria-label={`${label} unavailable`}
+          className="inline-flex self-end @min-[650px]/task:self-start"
+        >
+          {disabledAction}
+        </span>
+      </SimpleTooltip>
+    );
   return (
     <div className="mt-6 flex flex-col items-start justify-between gap-6 bg-warning-softest p-[22px] border-l-2 border-warning-default first:mt-0 @min-[650px]/task:flex-row">
       <div className="min-w-0 flex-1">
@@ -62,29 +131,7 @@ export function ExternalAction({
         )}
         {children}
       </div>
-      {href ? (
-        <Button
-          variant="primary"
-          asChild
-          className="self-end @min-[650px]/task:self-start"
-        >
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {label}
-            <ArrowUpRight className="ml-2 size-4" />
-          </a>
-        </Button>
-      ) : (
-        <Button
-          variant="primary"
-          disabled={disabled}
-          className="self-end @min-[650px]/task:self-start"
-        >
-          <Button.Text>{label}</Button.Text>
-          <Button.RightIcon>
-            <ArrowUpRight />
-          </Button.RightIcon>
-        </Button>
-      )}
+      {action}
     </div>
   );
 }
@@ -96,6 +143,7 @@ export function SetupField({
   disabled = false,
   value,
   type,
+  onBlur,
 }: {
   field: FieldName;
   label: string;
@@ -104,6 +152,7 @@ export function SetupField({
   disabled?: boolean;
   value?: string;
   type?: string;
+  onBlur?: () => void;
 }): JSX.Element {
   const { s, dispatch, live } = useSetup();
   const id = `setup-${s.provider}-${field}`,
@@ -145,6 +194,7 @@ export function SetupField({
         aria-invalid={!!error}
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={(value) => live.changeField({ field, value })}
+        onBlur={onBlur}
       />
       {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
     </Field>
@@ -163,6 +213,31 @@ export type ChoiceOption = {
   description?: string;
   icon: ComponentType<{ className?: string }>;
 };
+export function SetupGroup({
+  label,
+  labelId,
+  visibleLabel = true,
+  className,
+  children,
+}: {
+  label: string;
+  labelId?: string;
+  visibleLabel?: boolean;
+  className?: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <fieldset className={cn("mb-7 min-w-0 border-0 p-0", className)}>
+      {visibleLabel && (
+        <legend id={labelId} className="mb-3 text-base font-semibold">
+          {label}
+        </legend>
+      )}
+      {children}
+    </fieldset>
+  );
+}
+
 export function Choices({
   field,
   label,
@@ -178,10 +253,7 @@ export function Choices({
 }): JSX.Element {
   const { s, live } = useSetup();
   return (
-    <fieldset className={cn("mb-7 min-w-0 border-0 p-0", className)}>
-      {visibleLabel && (
-        <legend className="mb-3 text-base font-semibold">{label}</legend>
-      )}
+    <SetupGroup label={label} visibleLabel={visibleLabel} className={className}>
       <RadioCardGroup
         aria-label={label}
         value={s.values[field]}
@@ -209,7 +281,7 @@ export function Choices({
           </RadioCard>
         ))}
       </RadioCardGroup>
-    </fieldset>
+    </SetupGroup>
   );
 }
 export function AppChoice({
@@ -312,6 +384,28 @@ export function CopyValue({
     </div>
   );
 }
+export function ProviderFieldInstructions({
+  items,
+}: {
+  items: { label: string; description: ReactNode; copyValue?: string }[];
+}): JSX.Element {
+  return (
+    <dl className="space-y-6">
+      {items.map(({ label, description, copyValue }) => (
+        <div key={label}>
+          <dt className="text-sm font-medium">{label}</dt>
+          <dd className="mt-2">
+            <FieldDescription>{description}</FieldDescription>
+            {copyValue !== undefined && (
+              <CopyValue label={label} value={copyValue} hideLabel />
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function Correction({
   step,
   children,
@@ -332,7 +426,7 @@ export function Correction({
 }
 export function Note({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="mt-6 border-l-2 bg-muted px-5 py-4" role="status">
+    <div className="mt-6 border-l-2 bg-muted/30 px-5 py-4" role="status">
       {children}
     </div>
   );

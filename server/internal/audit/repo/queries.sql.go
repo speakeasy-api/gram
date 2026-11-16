@@ -321,6 +321,71 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 	return items, nil
 }
 
+const listAuditActorsOnSubjects = `-- name: ListAuditActorsOnSubjects :many
+SELECT subject_id, action, actor_type, actor_id, is_internal, created_at
+FROM audit_logs
+WHERE organization_id = $1
+  AND (
+    subject_id = ANY($2::text[])
+    OR (subject_type = ANY($3::text[]) AND action = ANY($4::text[]))
+  )
+  AND created_at > $5
+  AND created_at < $6
+`
+
+type ListAuditActorsOnSubjectsParams struct {
+	OrganizationID string
+	SubjectIds     []string
+	SubjectTypes   []string
+	Actions        []string
+	After          pgtype.Timestamptz
+	Before         pgtype.Timestamptz
+}
+
+type ListAuditActorsOnSubjectsRow struct {
+	SubjectID  string
+	Action     string
+	ActorType  string
+	ActorID    string
+	IsInternal bool
+	CreatedAt  pgtype.Timestamptz
+}
+
+// Who changed any of these subjects, or did any of these actions, in an organization within a time range.
+func (q *Queries) ListAuditActorsOnSubjects(ctx context.Context, arg ListAuditActorsOnSubjectsParams) ([]ListAuditActorsOnSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listAuditActorsOnSubjects,
+		arg.OrganizationID,
+		arg.SubjectIds,
+		arg.SubjectTypes,
+		arg.Actions,
+		arg.After,
+		arg.Before,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditActorsOnSubjectsRow
+	for rows.Next() {
+		var i ListAuditActorsOnSubjectsRow
+		if err := rows.Scan(
+			&i.SubjectID,
+			&i.Action,
+			&i.ActorType,
+			&i.ActorID,
+			&i.IsInternal,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT a.id, a.is_internal, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a

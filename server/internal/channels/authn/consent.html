@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Connect to Speakeasy Channels</title>
+    <style>{{.Styles}}</style>
+  </head>
+  <body class="bg-background text-foreground min-h-screen">
+    <main class="mx-auto flex min-h-screen w-full max-w-[34rem] flex-col gap-6 px-4 py-12 sm:py-16">
+      <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
+      <section class="bg-card border" aria-labelledby="page-title">
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow">Authorize</p>
+          <h1 id="page-title" class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span class="break-all">{{.Name}}</span>
+            <span class="text-muted-foreground" aria-hidden="true">&rsaquo;</span>
+            <span>Speakeasy Channels</span>
+          </h1>
+          <p class="text-sm text-muted-foreground">
+            Allow <span class="text-foreground font-medium break-all">{{.Name}}</span>
+            to connect to Channels on your behalf?
+          </p>
+        </header>
+        <dl class="m-0 flex flex-col gap-4 border-b px-6 py-6 sm:px-8">
+          <div>
+            <dt class="text-eyebrow">Organization</dt>
+            <dd class="mt-1 ml-0 text-sm break-all">{{.Organization}}</dd>
+          </div>
+          <div>
+            <dt class="text-eyebrow">Project</dt>
+            <dd class="mt-1 ml-0 text-sm break-all">{{.Project}}</dd>
+          </div>
+          {{if .UserEmail}}
+          <div>
+            <dt class="text-eyebrow">Signed in as</dt>
+            <dd class="mt-1 ml-0 text-sm break-all">{{.UserEmail}}</dd>
+          </div>
+          {{end}}
+          <div>
+            <dt class="text-eyebrow">Will redirect to</dt>
+            <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.RedirectURI}}</dd>
+          </div>
+        </dl>
+        <form method="post" action="/channels/oauth/authorize" class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
+          <input type="hidden" name="resource" value="{{.Resource}}" />
+          <input type="hidden" name="challenge" value="{{.Challenge}}" />
+          <input type="hidden" name="csrf" value="{{.CSRF}}" />
+          <button type="submit" name="decision" value="allow" class="bg-primary text-primary-foreground interact:bg-foreground h-10 w-full px-6 text-sm sm:w-auto">Allow</button>
+          <button type="submit" name="decision" value="deny" class="bg-card interact:bg-accent h-10 w-full border px-6 text-sm sm:w-auto">Deny</button>
+        </form>
+      </section>
+      <p class="text-xs text-muted-foreground">Secured by Speakeasy.</p>
+    </main>
+  </body>
+</html>

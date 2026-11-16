@@ -335,7 +335,7 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 	}{
 		{name: "expired refresh", accessLifetime: -time.Hour, refreshLifetime: -time.Hour, wantReconnect: true},
 		{name: "unreadable refresh", accessLifetime: -time.Hour, refreshLifetime: time.Hour, corruptRefresh: true, wantReconnect: true},
-		{name: "unreadable access", accessLifetime: time.Hour, refreshLifetime: time.Hour, corruptAccess: true, wantReconnect: true},
+		{name: "unreadable access renews with a readable refresh token", accessLifetime: time.Hour, refreshLifetime: time.Hour, corruptAccess: true},
 		{name: "live access with expired refresh", accessLifetime: time.Hour, refreshLifetime: -time.Hour},
 		{name: "live access with unreadable refresh", accessLifetime: time.Hour, refreshLifetime: time.Hour, corruptRefresh: true},
 		{name: "early refresh falls back to live access", accessLifetime: 25 * time.Second, refreshLifetime: time.Hour, corruptRefresh: true},

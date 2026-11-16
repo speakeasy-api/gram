@@ -17,6 +17,7 @@ var AuditLogCreated = outbox.NewEventDef[AuditLogCreatedPayloadV1](
 )
 
 var (
+	AssistantConfigurationV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_configuration_event_v1", "Emitted when an assistant reasoning preference is configured")
 	CatalogPromotionV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.catalog_promotion_event_v1", "Emitted when staff curate catalogue promotion candidates or retry setup documentation")
 	AccessChallengeV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_challenge_event_v1", "Emitted when changes to access challenges are made")
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")
@@ -30,9 +31,11 @@ var (
 	AwsKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_kms_key_event_v1", "Emitted when changes to AWS KMS external keys are made")
 	AssistantIdentityV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_identity_event_v1", "Emitted when workload identity is configured for an assistant")
 	AssistantExecutionProfileV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_execution_profile_event_v1", "Emitted when the upstream credentials an assistant's turns use are changed")
+	AssistantRuntimeV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_runtime_event_v1", "Emitted when the runtime an assistant runs on is changed")
 	AssistantToolCallV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_tool_call_event_v1", "Emitted when an assistant executes a tool call")
 	AssistantWakeV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_wake_event_v1", "Emitted when an assistant wake is scheduled or canceled")
 	BillingMetadataV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.billing_metadata_event_v1", "Emitted when changes to billing metadata are made")
+	ChannelsV1                             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.channels_event_v1", "Emitted when an organization changes whether Channels is available or changes a member's Channels participation")
 	ChatAnalysisSettingsV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.chat_analysis_settings_event_v1", "Emitted when chat analysis settings are changed")
 	ChatSessionV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.chat_session_event_v1", "Emitted when a chat session is accessed, moved to another harness, or exported as a handoff")
 	CustomDomainV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.custom_domain_event_v1", "Emitted when changes to custom domains are made")
@@ -105,6 +108,7 @@ var (
 	SkillEfficacySettingsV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_efficacy_settings_event_v1", "Emitted when skill efficacy sampling settings are changed")
 	SkillV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_event_v1", "Emitted when changes to skills are made")
 	SpendRuleV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.spend_rule_event_v1", "Emitted when changes to spend rules are made")
+	TeamMemoryV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.team_memory_event_v1", "Emitted when a project's team memory is read or a memo is saved to it")
 	TemplateV1                             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.template_event_v1", "Emitted when changes to prompt templates are made")
 	ToolsetV1                              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.toolset_event_v1", "Emitted when changes to toolsets used by MCP servers are made")
 	TunneledMcpServerV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.tunneled_mcp_server_event_v1", "Emitted when changes to tunneled MCP servers are made")

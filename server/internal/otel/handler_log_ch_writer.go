@@ -76,6 +76,9 @@ var _ streams.BatchHandler[*otelv1.LogRecord] = (*LogEventCHWriter)(nil)
 func (w *LogEventCHWriter) HandleBatch(ctx context.Context, messages []*otelv1.LogRecord, _ []gcp.MessageMetadata) error {
 	rows := make([]chrepo.OTelLogRow, 0, len(messages))
 	for _, message := range messages {
+		if isConnectionLogRecord(message) {
+			continue
+		}
 		row, skipReason := logEventRow(message)
 		if skipReason != "" {
 			w.logger.ErrorContext(ctx, "skipping unprocessable otel log record",

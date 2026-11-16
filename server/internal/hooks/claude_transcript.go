@@ -1,15 +1,17 @@
 package hooks
 
 // Claude transcript intake. Claude's unified Chat/Cowork mode runs plugin
-// hooks only inside the Cowork VM, where the per-event hooks cannot be relied
-// on to describe the whole session. When the standard Claude plugin's hooks
-// binary runs there, it relays no per-event hook and instead, each time Stop
-// fires, uploads the transcript lines written since its last successful
-// upload. This endpoint stores those lines as the session's chat history.
+// hooks only inside the Cowork VM, so the per-event hooks miss part of the
+// session: the first prompt, typed in chat before the session moved to
+// Cowork, and the assistant's text. Alongside the per-event hooks, the
+// standard Claude plugin's hooks binary uploads, each time Stop fires, the
+// transcript lines written since its last successful upload. This endpoint
+// stores what the hooks did not.
 //
-// Every stored row is keyed by the transcript entry's uuid, so re-sent lines
-// (a retry after a failed upload, or a fresh VM that starts from offset zero)
-// are idempotent.
+// Prompts and tool calls are keyed by the ids the hooks also use (prompt id,
+// tool_use id), and other entries by the transcript entry's uuid, so a line
+// the hooks already stored, or a re-sent line (a retry after a failed upload,
+// or a fresh VM that starts from offset zero), is stored once.
 
 import (
 	"bytes"
@@ -32,6 +34,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -144,6 +147,12 @@ func (e *claudeTranscriptEntries) UnmarshalJSON(data []byte) error {
 
 type claudeTranscriptResult struct {
 	Stored int64 `json:"stored"`
+	// Warnings carries the warn-policy matches found in the upload's newly
+	// stored user prompts. Cowork runs no per-event hooks, so these prompts
+	// were never evaluated before they reached the model; the binary surfaces
+	// the warnings from Stop instead. Omitted when there are none, so older
+	// binaries that read only stored are unaffected.
+	Warnings []claudeTranscriptWarning `json:"warnings,omitempty"`
 }
 
 // AttachTranscript mounts the transcript intake endpoint. It
@@ -176,7 +185,7 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 	// on its next Stop finds the rows and stores nothing twice.
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTranscriptPersistTimeout)
 	defer cancel()
-	stored, err := s.persistClaudeTranscript(persistCtx, authCtx, upload)
+	persisted, err := s.persistClaudeTranscript(persistCtx, authCtx, upload)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, errChatProjectMismatch) {
@@ -190,9 +199,11 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	warnings := s.claudeTranscriptWarnings(ctx, authCtx, upload.SessionID, persisted)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: stored})
+	_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: persisted.stored, Warnings: warnings})
 }
 
 // readClaudeTranscriptUpload decodes and validates the request body. The
@@ -239,9 +250,19 @@ func statusForBodyError(err error) int {
 	return http.StatusBadRequest
 }
 
+// claudeTranscriptPersisted describes one stored upload: how many rows were
+// new, who the session belongs to, and the user prompts this upload stored
+// for the first time (not those a per-event hook stored before it).
+type claudeTranscriptPersisted struct {
+	stored     int64
+	metadata   SessionMetadata
+	newPrompts []claudeTranscriptRow
+}
+
 // persistClaudeTranscript stores the upload's conversation entries in the
-// session's chat and returns how many rows were newly stored.
-func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextvalues.AuthContext, upload *claudeTranscriptUpload) (int64, error) {
+// session's chat and reports how many rows were newly stored.
+func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextvalues.AuthContext, upload *claudeTranscriptUpload) (claudeTranscriptPersisted, error) {
+	var none claudeTranscriptPersisted
 	projectID := *authCtx.ProjectID
 	// Identity and surface resolution reuse the canonical ingest path, so a
 	// transcript session is attributed exactly as a hook-captured one would be.
@@ -251,17 +272,77 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	enabled, err := s.sessionCaptureEnabled(ctx, &metadata, projectID)
 	if err != nil || !enabled {
-		return 0, err
+		return none, err
 	}
 
 	rows := claudeTranscriptRows(upload.Entries, s.now().UTC())
 	if len(rows) == 0 {
-		return 0, nil
+		return none, nil
 	}
 
 	hookSource := conv.Default(s.claudeSessionSurface(ctx, &metadata), agentVariantCowork)
 	chatID := sessionIDToUUID(upload.SessionID)
-	if err := s.ensureHookChat(ctx, s.repo, &metadata, chatID, projectID, claudeTranscriptTitle(rows, hookSource)); err != nil {
+	// The lookup only decides which prompts to warn about, so a failure
+	// warns about every prompt in the upload rather than losing the upload.
+	held, err := s.heldClaudePromptKeys(ctx, chatID, projectID, rows)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not list stored claude prompt keys; scanning every uploaded prompt",
+			attr.SlogEvent("hooks_claude_transcript_prompt_keys_failed"),
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogGenAIConversationID(upload.SessionID),
+		)
+		held = map[string]bool{}
+	}
+	stored, err := s.writeClaudeRows(ctx, authCtx, &metadata, chatID, rows, hookSource, claudeTranscriptOrigin, claudeTranscriptTitle(rows, hookSource))
+	if err != nil {
+		return claudeTranscriptPersisted{stored: stored, metadata: metadata, newPrompts: nil}, err
+	}
+	var newPrompts []claudeTranscriptRow
+	for _, row := range rows {
+		if row.role == "user" && !held[row.externalID] {
+			newPrompts = append(newPrompts, row)
+		}
+	}
+	return claudeTranscriptPersisted{stored: stored, metadata: metadata, newPrompts: newPrompts}, nil
+}
+
+// heldClaudePromptKeys returns the keys of the upload's user rows the chat
+// already holds, written by a per-event hook or an earlier upload. Those
+// prompts were already evaluated when they were stored.
+func (s *Service) heldClaudePromptKeys(ctx context.Context, chatID, projectID uuid.UUID, rows []claudeTranscriptRow) (map[string]bool, error) {
+	keys := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.role == "user" && row.externalID != "" {
+			keys = append(keys, row.externalID)
+		}
+	}
+	held := make(map[string]bool, len(keys))
+	if len(keys) == 0 {
+		return held, nil
+	}
+	existing, err := s.repo.ListChatExternalMessageIDs(ctx, repo.ListChatExternalMessageIDsParams{
+		ChatID:             chatID,
+		ProjectID:          uuid.NullUUID{UUID: projectID, Valid: true},
+		ExternalMessageIds: keys,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stored claude prompt keys: %w", err)
+	}
+	for _, key := range existing {
+		held[key] = true
+	}
+	return held, nil
+}
+
+// writeClaudeRows stores Claude conversation rows keyed by external message id
+// and returns how many were new. A row whose key the chat already holds is
+// skipped by the (chat_id, external_message_id) unique index, which is what
+// lets the Cowork per-event hooks and the transcript both write a message
+// without storing it twice.
+func (s *Service) writeClaudeRows(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, chatID uuid.UUID, rows []claudeTranscriptRow, hookSource, origin, title string) (int64, error) {
+	projectID := *authCtx.ProjectID
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, title); err != nil {
 		return 0, err
 	}
 
@@ -293,7 +374,7 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 				PromptTokens:     0,
 				CompletionTokens: 0,
 				TotalTokens:      0,
-				Origin:           conv.ToPGText(claudeTranscriptOrigin),
+				Origin:           conv.ToPGTextEmpty(origin),
 				UserAgent:        conv.ToPGTextEmpty(""),
 				IpAddress:        conv.ToPGTextEmpty(""),
 				Source:           conv.ToPGTextEmpty(hookSource),
@@ -314,7 +395,7 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	stored, err := s.writer.WriteExternalWithContentParts(ctx, projectID, writes, nil)
 	if err != nil {
-		return stored, fmt.Errorf("write claude transcript messages: %w", err)
+		return stored, fmt.Errorf("write claude conversation rows: %w", err)
 	}
 	if stored > 0 && assistantTurn {
 		s.scheduleCanonicalChatTitle(ctx, authCtx, chatID, hookSource)
@@ -349,6 +430,8 @@ func claudeTranscriptPayload(upload *claudeTranscriptUpload) *gen.IngestPayload 
 			TurnID: nil,
 			Cwd:    conv.PtrEmpty(strings.TrimSpace(upload.Cwd)),
 			Model:  nil,
+			// Unused: this payload is never ingested as an event.
+			Surface: nil,
 		},
 		Event: &gen.HookIngestEvent{Type: "session.updated", OccurredAt: nil},
 		Data:  nil,
@@ -377,7 +460,10 @@ type claudeTranscriptLine struct {
 	IsSidechain      bool   `json:"isSidechain"`
 	IsMeta           bool   `json:"isMeta"`
 	IsCompactSummary bool   `json:"isCompactSummary"`
-	Message          struct {
+	// PromptID is Claude Code's id for the user turn, the same value the
+	// UserPromptSubmit hook reports as prompt_id.
+	PromptID string `json:"promptId"`
+	Message  struct {
 		ID      string          `json:"id"`
 		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
@@ -407,10 +493,12 @@ type claudeTranscriptToolFunction struct {
 
 // claudeTranscriptRow is one chat row derived from a transcript entry.
 type claudeTranscriptRow struct {
-	externalID   string
-	role         string
-	content      string
-	toolCallID   string
+	externalID string
+	role       string
+	content    string
+	toolCallID string
+	// toolUseID is the id of the tool call an assistant tool_use row carries.
+	toolUseID    string
 	toolCalls    []byte
 	finishReason string
 	model        string
@@ -458,6 +546,11 @@ func claudeTranscriptRows(entries []json.RawMessage, now time.Time) []claudeTran
 			row.externalID = base
 			if len(entryRows) > 1 {
 				row.externalID = fmt.Sprintf("%s/block:%d", base, i)
+			}
+			// Prompts and tool traffic use the ids the per-event hooks report
+			// too, so whichever path writes first owns the row.
+			if key := claudeSharedRowKey(*row, line.PromptID); key != "" {
+				row.externalID = key
 			}
 			// Rows split from one entry keep their order at the entry's time.
 			row.createdAt = createdAt.Add(time.Duration(i) * time.Microsecond)
@@ -508,6 +601,7 @@ func claudeTranscriptEntryRows(line claudeTranscriptLine, blocks []claudeTranscr
 				continue
 			}
 			row := claudeTranscriptBaseRow(line, "assistant")
+			row.toolUseID = conv.StripNUL(block.ID)
 			row.toolCalls = calls
 			row.finishReason = "tool_calls"
 			rows = append(rows, row)
@@ -540,6 +634,7 @@ func claudeTranscriptBaseRow(line claudeTranscriptLine, role string) claudeTrans
 		role:         role,
 		content:      "",
 		toolCallID:   "",
+		toolUseID:    "",
 		toolCalls:    nil,
 		finishReason: "",
 		model:        "",

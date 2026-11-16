@@ -48,7 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -836,7 +836,7 @@ func validateUserSessionBearerAudiences(
 // organization, before its subject is stamped: the organization's metadata,
 // the project when there is one, and the session id when there is one.
 func (s *Service) sessionAuthContext(ctx context.Context, organizationID string, projectID *uuid.UUID, sessionID string) (*contextvalues.AuthContext, error) {
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, organizationID)
+	orgMetadata, err := orgaccount.Describe(ctx, s.logger, s.orgsRepo, s.billingRepository, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
 	}
@@ -1351,7 +1351,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication, err); ok {
 			return recoveryErr
 		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, err)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, resolveFailureHappened(err), err)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}
@@ -1423,9 +1423,14 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 		return
 	}
 	endpoint := authentication.endpoint
-	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request,
+	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
-		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
+		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope),
+	}
+	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
+		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request, opts...)
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
@@ -1624,7 +1629,7 @@ func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mc
 	if err != nil || a.CreatedAt.IsZero() {
 		return mcpconnectionattempts.NoAttempt
 	}
-	app := mcpconnectionattempts.AppOf(a.ClientID)
+	app := mcpconnectionattempts.AppOf(a.ClientID, mcpconnectionattempts.ClientIDAdmitted)
 	switch {
 	case a.WorkloadReconnect != nil:
 		app = mcpconnectionattempts.AppWorkload

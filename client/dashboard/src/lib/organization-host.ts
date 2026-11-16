@@ -59,6 +59,7 @@ const HOST_MOVE_EXEMPT_PATHS = [
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
+  "/ack",
 ];
 
 function isExempt(current: CurrentLocation): boolean {

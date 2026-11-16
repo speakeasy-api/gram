@@ -75,7 +75,7 @@ export function usePlaygroundEnvironment(
     () =>
       (existingEnvironment?.entries ?? []).map((entry) => ({
         name: entry.name,
-        hasStoredValue: entry.value.length > 0,
+        hasStoredValue: entry.hasValue,
       })),
     [existingEnvironment],
   );
