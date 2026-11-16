@@ -121,12 +121,8 @@ export function SendTestEventSection({
                 <code className="font-mono text-xs whitespace-nowrap">
                   speakeasy.test_event=true
                 </code>
-                {sendsEverySignal
-                  ? ", and the test log's message starts with "
-                  : " and its message starts with "}
-                &ldquo;Speakeasy test event&rdquo;, so you can filter{" "}
-                {sendsEverySignal ? "them" : "it"} out of dashboards and
-                monitors.
+                , which real data never carries. Filter on it to keep tests
+                out of dashboards and monitors.
               </Text>
             )}
           </div>

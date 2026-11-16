@@ -23,9 +23,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -131,6 +133,41 @@ func TestTestRouteMapsDestinationAnswers(t *testing.T) {
 			require.Equal(t, result.TestEventID, metadata["test_event_id"])
 		})
 	}
+}
+
+func TestTestRouteWithoutSenderIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, err := ti.serviceWithoutTests.TestRoute(ctx, &gen.TestRoutePayload{ID: uuid.NewString(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, http.StatusServiceUnavailable, shareable.HTTPStatus(ctx))
+}
+
+func TestTestRouteIsAuditedWithoutAConfigChangeWebhook(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, _ := testRouteDestination(t, http.StatusOK)
+	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceMCPConnectionLogs)
+	eventType := string(events.DataExportRouteV1.EventType())
+	webhooksBefore, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, eventType)
+	require.NoError(t, err)
+	require.Positive(t, webhooksBefore, "creating the route is a config change and publishes")
+	auditsBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+	require.NoError(t, err)
+
+	_, err = testRoute(ctx, ti, route.ID)
+	require.NoError(t, err)
+
+	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+	require.NoError(t, err)
+	require.Equal(t, auditsBefore+1, auditsAfter)
+	webhooksAfter, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, eventType)
+	require.NoError(t, err)
+	require.Equal(t, webhooksBefore, webhooksAfter)
 }
 
 func TestTestRouteReportsUnreachableDestination(t *testing.T) {

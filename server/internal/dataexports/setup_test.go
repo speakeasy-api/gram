@@ -45,8 +45,11 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service *dataexports.Service
-	conn    *pgxpool.Pool
-	enc     *encryption.Client
+
+	// serviceWithoutTests is service composed without the test event sender.
+	serviceWithoutTests *dataexports.Service
+	conn                *pgxpool.Pool
+	enc                 *encryption.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -80,7 +83,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	})
 
 	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc, routeTests)
-	return ctx, &testInstance{service: service, conn: conn, enc: enc}
+	serviceWithoutTests := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc, nil)
+	return ctx, &testInstance{service: service, serviceWithoutTests: serviceWithoutTests, conn: conn, enc: enc}
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

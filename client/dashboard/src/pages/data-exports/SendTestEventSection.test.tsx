@@ -118,7 +118,7 @@ describe("SendTestEventSection", () => {
     });
   });
 
-  it("says how to filter the test event out", () => {
+  it("says to filter test events out on the reserved attribute", () => {
     renderSection();
 
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();
@@ -129,9 +129,10 @@ describe("SendTestEventSection", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        /and its message starts with “Speakeasy test event”, so you can filter it out of dashboards and monitors/,
+        /which real data never carries\. Filter on it to keep tests out of dashboards and monitors\./,
       ),
     ).toBeTruthy();
+    expect(screen.queryByText(/Speakeasy test event/)).toBeNull();
   });
 
   it("says product telemetry sends a log, a trace and a metric", () => {
@@ -142,7 +143,7 @@ describe("SendTestEventSection", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        /and the test log's message starts with “Speakeasy test event”, so you can filter them out of dashboards and monitors/,
+        /Each is marked[\s\S]*which real data never carries\. Filter on it to keep tests out of dashboards and monitors\./,
       ),
     ).toBeTruthy();
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();

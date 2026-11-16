@@ -752,7 +752,7 @@ func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) 
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	if s.routeTests == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "test events are not available").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnavailable, nil, "Speakeasy can't send test events right now. Try again shortly.").LogError(ctx, logger)
 	}
 	result, err := s.routeTests.SendTest(ctx, SendRouteTestParams{
 		OrganizationID:   authCtx.ActiveOrganizationID,

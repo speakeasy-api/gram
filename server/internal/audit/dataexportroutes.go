@@ -245,5 +245,6 @@ func (l *Logger) LogDataExportRouteTest(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DataExportRouteV1})
+	// A test changes no configuration, so it publishes no config-change webhook.
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: nil})
 }
