@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 )
 
@@ -15,28 +16,34 @@ func chatMetadataRegistrar(t *testing.T, reader chatMetadataReader) (*Registrar,
 
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 	registrar := newRegistrar(newTestMCPServer())
+	registrar.withProjects(slugProjects{})
 	registerChatMetadataTools(registrar, service)
 	return registrar, service
 }
 
-func TestListChatsToolDeclaresBothAudiencesAndAdminAuthorization(t *testing.T) {
+// Every member is admitted: each one has their own and their agents' chats to
+// list, and chat:read widens the listing at call time rather than at discovery.
+func TestListChatsToolDeclaresBothAudiencesAndMemberAuthorization(t *testing.T) {
 	t.Parallel()
 
 	registrar, _ := chatMetadataRegistrar(t, &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0})
 	descriptor := descriptorByName(t, registrar, listChatsToolName)
 	require.Equal(t, bothAudiences, descriptor.Meta.Audiences)
-	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+	require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+	require.Empty(t, descriptor.Meta.DiscoveryScopes, "a member with no grants still lists their own chats")
+	require.True(t, externalToolDiscoverable([]authz.Grant{}, true, registrationServicePrincipal(), descriptor.Meta))
 	require.Equal(t, ProjectScopeDefaultable, descriptor.Meta.ProjectScope)
 	require.Contains(t, descriptor.Description, "metadata only")
+	require.Contains(t, descriptor.Description, "chat:read on the project widens this")
 	require.Contains(t, descriptor.Description, "no titles, messages, prompts, tool inputs or outputs, or raw identities")
 
-	// The schema is closed and carries the project selectors the assistant
-	// policy injects, so the model is never asked to choose a project.
+	// The schema is closed and carries the project slug the assistant policy
+	// injects, so the model is never asked to choose a project.
 	var schema map[string]any
 	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
 	properties, ok := schema["properties"].(map[string]any)
 	require.True(t, ok)
-	require.ElementsMatch(t, []string{"project_id", "project_slug", "window", "risk", "source", "assistant_id", "agent_id", "user_reference", "limit", "cursor"}, keysOf(properties))
+	require.ElementsMatch(t, []string{"project_slug", "window", "risk", "source", "assistant_id", "agent_id", "user_reference", "limit", "cursor"}, keysOf(properties))
 }
 
 func TestListChatsToolServesAPage(t *testing.T) {
@@ -71,7 +78,7 @@ func TestListChatsToolRefusesOutsideTheSchema(t *testing.T) {
 		"limit over cap":   `{"limit":51}`,
 		"limit under one":  `{"limit":0}`,
 		"unknown property": `{"search":"password"}`,
-		"both selectors":   `{"project_id":"` + uuid.NewString() + `","project_slug":"default"}`,
+		"project id":       `{"project_id":"` + uuid.NewString() + `"}`,
 	} {
 		_, err := descriptorByName(t, registrar, listChatsToolName).Invoke(ctx, json.RawMessage(arguments))
 		require.ErrorContains(t, err, "arguments do not match the tool schema", name)
@@ -90,7 +97,7 @@ func TestListChatsToolMapsRefusals(t *testing.T) {
 	_, err := descriptor.Invoke(ctx, json.RawMessage(`{"cursor":"stale"}`))
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
-	require.JSONEq(t, `{"code":"not_found","message":"That cursor or person reference is not available here. List the chats again with the same filters and use a value from the new result."}`, refusal.Payload)
+	require.JSONEq(t, `{"code":"not_found","message":"That cursor or person reference is not available here. List the chats again with the same filters and use a value from the new result. Without chat:read a person reference can only name the caller."}`, refusal.Payload)
 
 	_, err = descriptor.Invoke(ctx, json.RawMessage(`{"user_reference":"stale"}`))
 	require.ErrorAs(t, err, &refusal)
@@ -99,7 +106,7 @@ func TestListChatsToolMapsRefusals(t *testing.T) {
 	projects, ok := service.projects.(*findingProjects)
 	require.True(t, ok)
 	projects.err = ErrRiskReadNotFound
-	_, err = descriptor.Invoke(ctx, json.RawMessage(`{"project_id":"`+uuid.NewString()+`"}`))
+	_, err = descriptor.Invoke(ctx, json.RawMessage(`{"project_slug":"no-such-project"}`))
 	require.ErrorAs(t, err, &refusal)
 	require.JSONEq(t, `{"code":"not_found","message":"That project is not one this organization holds. Choose one returned by list_projects."}`, refusal.Payload)
 	projects.err = nil

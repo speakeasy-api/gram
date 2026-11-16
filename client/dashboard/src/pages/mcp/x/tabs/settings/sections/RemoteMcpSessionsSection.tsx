@@ -9,6 +9,8 @@ import { SharedAuthorizationServerField } from "./authentication/SharedAuthoriza
 import { UserSessionIssuerField } from "./authentication/UserSessionIssuerField";
 import { useSelectableUserSessionIssuers } from "./authentication/useSelectableUserSessionIssuers";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 export const MCP_SESSIONS_SECTION_ID = "sessions";
 
@@ -21,6 +23,9 @@ export function RemoteMcpSessionsSection({
   mcpUrl?: string;
 }): JSX.Element {
   const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
+  const mcpAuthenticationPage =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+    "enabled";
   const selectableIssuers = useSelectableUserSessionIssuers(target);
   const userSessionIssuerId = mcpServer.userSessionIssuerId ?? undefined;
   const issuerQuery = useUserSessionIssuer(
@@ -28,9 +33,11 @@ export function RemoteMcpSessionsSection({
     undefined,
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
+  // Only the in-place session controls read the clients, and the provider
+  // page holds those once its rollout is on.
   const clientsQuery = useAllRemoteSessionClients(
     { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+    { enabled: !!userSessionIssuerId && !mcpAuthenticationPage },
   );
   const loading = issuerQuery.isLoading || clientsQuery.isLoading;
   const failed = issuerQuery.isError || clientsQuery.isError;
@@ -71,8 +78,9 @@ export function RemoteMcpSessionsSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Sessions</SettingsSection.Title>
         <SettingsSection.Description>
-          Control how long User Identity connections last and which MCP clients
-          may initiate them.
+          {mcpAuthenticationPage
+            ? "Choose where people sign in to this server. How long their sessions last and which clients may connect come with that choice."
+            : "Control how long User Identity connections last and which MCP clients may initiate them."}
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -83,13 +91,15 @@ export function RemoteMcpSessionsSection({
             isLoading={selectableIssuers.isLoading}
             isError={selectableIssuers.isError}
           />
-          {issuerQuery.data ? (
+          {/* The provider's sign-in details and session settings live on
+              its own page, which the picker opens. */}
+          {!mcpAuthenticationPage && issuerQuery.data ? (
             <SharedAuthorizationServerField
               userSessionIssuer={issuerQuery.data}
               mcpUrl={mcpUrl}
             />
           ) : null}
-          {sessionControls}
+          {mcpAuthenticationPage ? null : sessionControls}
         </div>
       </SettingsSection.Panel>
     </SettingsSection>

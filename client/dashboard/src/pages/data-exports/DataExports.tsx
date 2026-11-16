@@ -141,7 +141,7 @@ function renderDataSourceDescription(
   }
 
   if (dataSource === DataSource.McpConnectionLogs) {
-    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. Blocked or declined connections, and connections through organization gateways, are not included.";
+    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. You can choose to also send warnings (blocked connections) or info (declined connections). Connections through organization gateways are not included.";
   }
 
   return "OTLP data";
@@ -432,6 +432,10 @@ function DataExportsInner(): JSX.Element {
       const existingRoute = state.routes.find(
         (route) => route.dataSource === values.dataSource,
       );
+      const minSeverity =
+        values.dataSource === DataSource.McpConnectionLogs
+          ? values.minSeverity
+          : undefined;
       if (existingRoute) {
         await updateRoute.mutateAsync({
           request: {
@@ -441,6 +445,7 @@ function DataExportsInner(): JSX.Element {
               dataSource: values.dataSource,
               enabled: values.enabled,
               otelDestinationId: destinationID,
+              minSeverity,
             },
           },
         });
@@ -452,6 +457,7 @@ function DataExportsInner(): JSX.Element {
               dataSource: values.dataSource,
               enabled: values.enabled,
               otelDestinationId: destinationID,
+              minSeverity,
             },
           },
         });

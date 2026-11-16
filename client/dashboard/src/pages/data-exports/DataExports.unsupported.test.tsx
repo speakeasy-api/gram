@@ -92,6 +92,7 @@ vi.mock("./ConfigureExportSheet", () => ({
           destinationName: "Example destination",
           endpointUrl: "https://collector.example.com",
           enabled: true,
+          minSeverity: "warn",
           includeSensitiveData: false,
           headers: [],
         })
@@ -162,4 +163,30 @@ it("saves a known-source export through destination creation and route update", 
       },
     },
   });
+  expect(
+    state.mutateAsync.mock.calls[1]?.[0].request.updateRouteRequestBody
+      .minSeverity,
+  ).toBeUndefined();
+});
+
+it("sends the level only for MCP connection logs", async () => {
+  state.dataSource = "mcp_connection_logs";
+  state.submittedSource = "mcp_connection_logs";
+  state.mutateAsync.mockResolvedValue({ id: "destination-created" });
+  render(
+    <MemoryRouter>
+      <DataExports />
+    </MemoryRouter>,
+  );
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Configure MCP connection logs export",
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save export" }));
+  await waitFor(() => expect(state.mutateAsync).toHaveBeenCalledTimes(2));
+  expect(
+    state.mutateAsync.mock.calls[1]?.[0].request.updateRouteRequestBody
+      .minSeverity,
+  ).toBe("warn");
 });

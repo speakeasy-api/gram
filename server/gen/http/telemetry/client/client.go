@@ -61,13 +61,13 @@ type Client struct {
 	// getMetaMcpServerUsage endpoint.
 	GetMetaMcpServerUsageDoer goahttp.Doer
 
-	// GetOrganizationGatewayOverview Doer is the HTTP client used to make requests
-	// to the getOrganizationGatewayOverview endpoint.
-	GetOrganizationGatewayOverviewDoer goahttp.Doer
+	// GetProjectGatewayOverview Doer is the HTTP client used to make requests to
+	// the getProjectGatewayOverview endpoint.
+	GetProjectGatewayOverviewDoer goahttp.Doer
 
-	// GetOrganizationGatewayUsage Doer is the HTTP client used to make requests to
-	// the getOrganizationGatewayUsage endpoint.
-	GetOrganizationGatewayUsageDoer goahttp.Doer
+	// GetProjectGatewayUsage Doer is the HTTP client used to make requests to the
+	// getProjectGatewayUsage endpoint.
+	GetProjectGatewayUsageDoer goahttp.Doer
 
 	// GetProjectOverview Doer is the HTTP client used to make requests to the
 	// getProjectOverview endpoint.
@@ -203,8 +203,8 @@ func NewClient(
 		GetObservabilityOverviewDoer:         doer,
 		GetMcpNetworkTrafficDoer:             doer,
 		GetMetaMcpServerUsageDoer:            doer,
-		GetOrganizationGatewayOverviewDoer:   doer,
-		GetOrganizationGatewayUsageDoer:      doer,
+		GetProjectGatewayOverviewDoer:        doer,
+		GetProjectGatewayUsageDoer:           doer,
 		GetProjectOverviewDoer:               doer,
 		GetUnproxiedMcpServerUsageDoer:       doer,
 		GetUnproxiedMcpServerToolUsageDoer:   doer,
@@ -503,15 +503,15 @@ func (c *Client) GetMetaMcpServerUsage() goa.Endpoint {
 	}
 }
 
-// GetOrganizationGatewayOverview returns an endpoint that makes HTTP requests
-// to the telemetry service getOrganizationGatewayOverview server.
-func (c *Client) GetOrganizationGatewayOverview() goa.Endpoint {
+// GetProjectGatewayOverview returns an endpoint that makes HTTP requests to
+// the telemetry service getProjectGatewayOverview server.
+func (c *Client) GetProjectGatewayOverview() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetOrganizationGatewayOverviewRequest(c.encoder)
-		decodeResponse = DecodeGetOrganizationGatewayOverviewResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetProjectGatewayOverviewRequest(c.encoder)
+		decodeResponse = DecodeGetProjectGatewayOverviewResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetOrganizationGatewayOverviewRequest(ctx, v)
+		req, err := c.BuildGetProjectGatewayOverviewRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -519,23 +519,23 @@ func (c *Client) GetOrganizationGatewayOverview() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetOrganizationGatewayOverviewDoer.Do(req)
+		resp, err := c.GetProjectGatewayOverviewDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "getOrganizationGatewayOverview", err)
+			return nil, goahttp.ErrRequestError("telemetry", "getProjectGatewayOverview", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// GetOrganizationGatewayUsage returns an endpoint that makes HTTP requests to
-// the telemetry service getOrganizationGatewayUsage server.
-func (c *Client) GetOrganizationGatewayUsage() goa.Endpoint {
+// GetProjectGatewayUsage returns an endpoint that makes HTTP requests to the
+// telemetry service getProjectGatewayUsage server.
+func (c *Client) GetProjectGatewayUsage() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetOrganizationGatewayUsageRequest(c.encoder)
-		decodeResponse = DecodeGetOrganizationGatewayUsageResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetProjectGatewayUsageRequest(c.encoder)
+		decodeResponse = DecodeGetProjectGatewayUsageResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetOrganizationGatewayUsageRequest(ctx, v)
+		req, err := c.BuildGetProjectGatewayUsageRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -543,9 +543,9 @@ func (c *Client) GetOrganizationGatewayUsage() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetOrganizationGatewayUsageDoer.Do(req)
+		resp, err := c.GetProjectGatewayUsageDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "getOrganizationGatewayUsage", err)
+			return nil, goahttp.ErrRequestError("telemetry", "getProjectGatewayUsage", err)
 		}
 		return decodeResponse(resp)
 	}

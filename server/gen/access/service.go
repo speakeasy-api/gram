@@ -473,6 +473,8 @@ type AuthzChallenge struct {
 	ResolvedBy *string
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrant
 }
 
 // A group of consecutive challenges with the same dimensions that occurred
@@ -523,6 +525,8 @@ type ChallengeBucket struct {
 	ResolvedBy *string
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrant
 }
 
 type ChallengeResolution struct {
@@ -546,6 +550,18 @@ type ChallengeResolution struct {
 	// Admin who resolved.
 	ResolvedBy string
 	CreatedAt  string
+}
+
+type ChallengeTemporaryGrant struct {
+	// Temporary grant ID.
+	ID string
+	// active: authorizing requests. expired: its deadline passed, or the same
+	// access was given again later as a new grant. revoked: ended early, so the
+	// grant no longer exists.
+	Status string
+	// When the grant stops, or stopped, authorizing new requests. Absent once
+	// revoked, and once the same access was given again later.
+	ExpiresAt *string
 }
 
 // CreateRolePayload is the payload type of the access service createRole
@@ -586,6 +602,12 @@ type CreateTemporaryGrantPayload struct {
 	ExpiresAt string
 	// Why the access is needed, recorded in the audit log.
 	Reason *string
+	// Denied authorization challenges this grant answers. Each must be an
+	// unresolved deny of this scope by this principal that the grant's selector
+	// covers and that no exclusion still blocks; they are resolved as
+	// temporary_grant in the same transaction. Only accepted with a grant to one
+	// member (user:<id>).
+	ChallengeIds []string
 }
 
 // DeleteDirectoryRoleMappingPayload is the payload type of the access service
@@ -1500,6 +1522,9 @@ type ScopeDefinition struct {
 	// agents cannot hold; those are ignored for the role's agent members rather
 	// than granted.
 	AgentEligible bool
+	// Whether an administrator can give this scope for a limited time with
+	// createTemporaryGrant.
+	TemporaryGrantable bool
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
 }

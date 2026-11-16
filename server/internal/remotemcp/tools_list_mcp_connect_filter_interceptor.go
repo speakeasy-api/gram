@@ -32,7 +32,7 @@ import (
 // resolve to the empty disposition, leaving a pure tool-name match.
 //
 // An inspected listing (see [toolsListInspection]) keeps the tools this filter
-// would drop and marks them instead.
+// would drop and marks them instead, each with a [ToolUnavailableReason].
 //
 // The filter leaves cache labelling to the proxy, which marks every tools/list
 // result relayed through a chain with this filter attached caller-varying with
@@ -144,6 +144,16 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		}
 	}
 
+	// Only an inspected listing explains its marks. The reasons come from the
+	// grants already on the context, so they cost no extra round trip.
+	var reasons []authz.DenialReason
+	if inspecting {
+		reasons, err = i.authz.DenialReasons(ctx, checks)
+		if err != nil {
+			return fmt.Errorf("explain unavailable tools: %w", err)
+		}
+	}
+
 	allowed := make([]*mcp.Tool, 0, len(tools))
 	unchanged := true
 	for idx, t := range tools {
@@ -151,7 +161,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		case matched[idx]:
 			allowed = append(allowed, t)
 		case inspecting:
-			allowed = append(allowed, markToolUnavailable(t))
+			allowed = append(allowed, markToolUnavailable(t, toolUnavailableReason(reasons[idx])))
 			unchanged = false
 		default:
 			unchanged = false

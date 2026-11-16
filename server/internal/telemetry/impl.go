@@ -37,7 +37,6 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/identity"
@@ -73,11 +72,7 @@ type Service struct {
 	logsEnabled           FeatureChecker
 	sessionCaptureEnabled FeatureChecker
 	authz                 *authz.Engine
-	featureFlags          feature.Provider
 	identities            *identity.Resolver
-	// shadowFoldSem bounds concurrent identity-fold shadow queries; see
-	// maxConcurrentShadowCompares.
-	shadowFoldSem chan struct{}
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -95,7 +90,6 @@ func NewService(
 	sessionCaptureEnabled FeatureChecker,
 	posthogClient PosthogClient,
 	authzEngine *authz.Engine,
-	featureFlags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
@@ -124,9 +118,7 @@ func NewService(
 		posthog:               posthogClient,
 		chatSessions:          chatSessions,
 		authz:                 authzEngine,
-		featureFlags:          featureFlags,
 		identities:            identity.NewResolver(logger, db),
-		shadowFoldSem:         make(chan struct{}, maxConcurrentShadowCompares),
 	}
 }
 
@@ -212,6 +204,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		OwnScope:               params.ownScope,
 		GramProjectID:          params.projectID,
 		TimeStart:              params.timeStart,
 		TimeEnd:                params.timeEnd,
@@ -283,6 +276,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListToolTraces(ctx, repo.ListToolTracesParams{
+		OwnScope:         params.ownScope,
 		GramProjectID:    params.projectID,
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
@@ -327,14 +321,16 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}, nil
 }
 
-// SearchChats retrieves chat session summaries with pagination.
+// SearchChats retrieves chat session summaries with pagination. A summary
+// names the session's user, so chat:read reads the whole project and a member
+// without it reads their own sessions and their agents' only.
 func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChatsPayload) (res *telem_gen.SearchChatsResult, err error) {
 	var from, to *string
 	if payload.Filter != nil {
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeChatRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -360,6 +356,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		Cursor:                  cursorChatID,
 		CursorStartTimeUnixNano: cursorStart,
 		Limit:                   params.limit + 1,
+		OwnScope:                params.ownScope,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
@@ -492,17 +489,10 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		groupBy = "external_user_id"
 	}
 
-	// Internal grouping folds one employee's linked emails into one summary
-	// when the org is on the canonical fold; external ids never fold. A
-	// canonical cursor minted under the fold stops resolving if the flag
-	// flips off mid-pagination (short page, no error) — transient, inherent
-	// to per-request flag evaluation.
-	fold, shadow := false, false
-	if groupBy != "external_user_id" {
-		fold, shadow = s.canonicalIdentityMode(ctx, params.organizationID)
-	}
+	// Internal grouping folds one employee's linked emails into one summary;
+	// external ids never fold.
 	canonicalOrg := ""
-	if fold {
+	if groupBy != "external_user_id" {
 		canonicalOrg = params.organizationID
 	}
 
@@ -548,14 +538,6 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	items, err := s.chRepo.SearchUsers(ctx, searchParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error searching users")
-	}
-
-	// List divergence is customer-visible in a way aggregate drift is not, so
-	// the employee list gets its own shadow: first pages only — under a cursor
-	// the literal and folded orderings paginate differently and a membership
-	// diff would be noise.
-	if shadow && params.cursor == "" {
-		s.shadowCompareSearchUsersFold(ctx, params.organizationID, searchParams, items)
 	}
 
 	var nextCursor *string
@@ -657,9 +639,9 @@ func validateAgentMetricsFilter(filter *telem_gen.SearchUsersFilter) error {
 func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType string, params *searchParams) (*telem_gen.SearchUsersResult, error) {
 	var agentItems, emaillessItems []repo.UserSummary
 	g, gctx := errgroup.WithContext(ctx)
-	// Fold the enrollment list's email keys to canonical identities when the
-	// org is on the fold, matching the employee detail pages it links to.
-	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
+	// Fold the enrollment list's email keys to canonical identities, matching
+	// the employee detail pages it links to.
+	canonicalOrg := params.organizationID
 
 	g.Go(func() error {
 		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
@@ -1042,57 +1024,6 @@ func (s *Service) expandUserSearchKeys(ctx context.Context, orgID string, keys [
 	return expanded
 }
 
-// expandEmployeeEmailFilters makes the generic cost analytics endpoints apply
-// the same employee identity fold as the dedicated employee endpoints. Values
-// without an @ are device-hostname buckets and retain literal filter semantics.
-func (s *Service) expandEmployeeEmailFilters(ctx context.Context, orgID string, filters []repo.AttributeMetricsFilter) []repo.AttributeMetricsFilter {
-	resolved := make(map[string][]string)
-	for i := range filters {
-		if filters[i].Dimension != "email" {
-			continue
-		}
-
-		values := make([]string, 0, len(filters[i].Values))
-		for _, value := range filters[i].Values {
-			if !strings.Contains(value, "@") {
-				values = append(values, value)
-				continue
-			}
-			key := conv.NormalizeEmail(value)
-			emails, ok := resolved[key]
-			if !ok {
-				emails = s.resolveEmployeeIdentity(ctx, orgID, value).Emails
-				resolved[key] = emails
-			}
-			if len(emails) == 0 {
-				// The value contains an @ but is not an address the fold can
-				// expand ("dev@"), so it keeps literal filter semantics.
-				// Dropping it would empty the filter and widen the query from
-				// one employee to the whole org.
-				values = append(values, value)
-				continue
-			}
-			values = append(values, emails...)
-		}
-		filters[i].Values = dedupe(values)
-	}
-
-	return filters
-}
-
-func dedupe(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
 // attachUserAccounts populates UserSummary.Accounts from the user_accounts
 // directory. Ownership comes from the directory itself, never from telemetry
 // row identity: an account row attaches to the summary whose resolved owner
@@ -1228,7 +1159,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 
 	// Canonical keys also serve the role rollup: one employee aggregates once
 	// per role instead of splitting across their linked emails.
-	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
+	canonicalOrg := params.organizationID
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
@@ -1837,20 +1768,25 @@ type searchParams struct {
 	cursor         string
 	timeStart      int64
 	timeEnd        int64
+	// ownScope is set when the caller lacks the project-wide scope and reads
+	// only their own activity. nil means the caller sees the whole project.
+	ownScope *repo.OwnScope
 }
 
 // prepareTelemetrySearch authorizes the caller for requiredScope on the active
 // project, then validates and prepares common search parameters. Endpoints that
 // return individual tool calls or raw log records pass authz.ScopeLogRead, since
-// those rows carry every member's tool arguments, results, and prompts;
-// aggregate and per-person summary endpoints pass authz.ScopeProjectRead.
+// those rows carry every member's tool arguments, results, and prompts; chat
+// session summaries pass authz.ScopeChatRead; aggregate and per-person summary
+// endpoints pass authz.ScopeProjectRead.
 func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope authz.Scope, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	ownScope, err := s.resolveSearchScope(ctx, authCtx, requiredScope)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1890,9 +1826,21 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope auth
 		limit:          limit,
 		sortOrder:      sortOrder,
 		cursor:         cursorVal,
+		ownScope:       ownScope,
 		timeStart:      timeStart,
 		timeEnd:        timeEnd,
 	}, nil
+}
+
+// resolveSearchScope returns nil when the caller may read the whole project.
+// Who falls back to their own activity, and what counts as theirs, is decided
+// by authz.Engine.ResolveReadScope; this only maps its answer onto the query.
+func (s *Service) resolveSearchScope(ctx context.Context, authCtx *contextvalues.AuthContext, requiredScope authz.Scope) (*repo.OwnScope, error) {
+	scope, err := s.authz.ResolveReadScope(ctx, requiredScope, authCtx.ProjectID.String())
+	if err != nil {
+		return nil, err //nolint:wrapcheck // authz errors carry the oops code the caller must see
+	}
+	return repo.OwnScopeFrom(scope, authCtx.ActiveOrganizationID), nil
 }
 
 // parseTimeRange extracts and parses the time range from a telemetry filter.
@@ -2471,7 +2419,7 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 	if payload.Cursor != nil {
 		cursor = *payload.Cursor
 	}
-	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+	canonicalOrg := authCtx.ActiveOrganizationID
 	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerUserUsage(ctx, repo.GetUnproxiedMcpServerUserUsageParams{
 		GramProjectID:        authCtx.ProjectID.String(),
 		CanonicalURL:         canonical.CanonicalURL,
@@ -3033,10 +2981,9 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		skillTimeSeriesPoints []repo.SkillTimeSeriesPoint
 		sessionCount          int64
 	)
-	// The user dimension folds one employee's linked emails into one bucket
-	// when the org is on the canonical fold; server/tool dimensions and the
-	// flag-off behavior are unchanged.
-	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+	// The user dimension folds one employee's linked emails into one bucket;
+	// server/tool dimensions are unchanged.
+	canonicalOrg := authCtx.ActiveOrganizationID
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -3396,11 +3343,10 @@ func (s *Service) resolveToolUsageParamsWithOwners(ctx context.Context, f toolUs
 	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
 
 	// The canonical org is only needed to fold email user filters in the
-	// scan pushdown, so it is resolved only when one is present — agent-only
-	// requests skip the lookup entirely.
+	// scan pushdown.
 	canonicalOrg := ""
 	if hasEmailFilter {
-		canonicalOrg = s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 
 	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
@@ -3790,6 +3736,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
+		OwnScope:           params.ownScope,
 		GramProjectID:      params.projectID,
 		TimeStart:          params.timeStart,
 		TimeEnd:            params.timeEnd,
@@ -5119,8 +5066,9 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	attributeFilters := toRepoAttributeFilters(payload.Filters)
 
 	// Query with limit+1 to detect if there are more results
-	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
+	canonicalOrg := params.organizationID
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
+		OwnScope:             params.ownScope,
 		GramProjectID:        params.projectID,
 		TimeStart:            params.timeStart,
 		TimeEnd:              params.timeEnd,

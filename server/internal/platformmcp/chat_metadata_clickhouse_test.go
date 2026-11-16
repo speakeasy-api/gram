@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,9 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestChatMetadataList_ClickHouseFindings(t *testing.T) {
@@ -57,9 +60,11 @@ func TestChatMetadataList_ClickHouseFindings(t *testing.T) {
 		EventKind:         chrepo.EventKindFinding,
 	}}))
 
-	service := NewChatMetadataService(conn, chatfindings.New(conn, chrepo.New(chConn)), allowBudget(), "chat-list-test-key")
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	service := NewChatMetadataService(conn, engine, chatfindings.New(conn, chrepo.New(chConn)), allowBudget(), "chat-list-test-key")
 	service.now = func() time.Time { return now.Add(time.Minute) }
-	output, err := service.List(ctx, principal, ListChatsInput{
+	// The chat is the member's own, so no chat:read grant is needed to list it.
+	output, err := service.List(platformMemberContext(ctx, principal), principal, ListChatsInput{
 		ProjectID: project.ID.String(), Risk: ChatRiskWithFindings,
 	})
 	require.NoError(t, err)

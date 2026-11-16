@@ -10,14 +10,13 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import {
   hostedToolCountLabel,
-  MCP_SERVER_KIND_LABEL,
   mcpServerDisplayName,
   mcpServerHref,
   type McpServerKind,
 } from "./mcp-server-kind";
-import { SpeakeasyMark } from "./OrganizationGatewayCard";
-import { AlertTriangleIcon, Link2, Network } from "lucide-react";
-import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
+import { McpKindBadge } from "./McpKindBadge";
+import { SpeakeasyMark } from "./ProjectGatewayCard";
+import { Link2, Network } from "lucide-react";
 
 /** Table rows of the /mcp listing; gateways and servers share Name, Kind, Address, Contents. */
 
@@ -96,7 +95,7 @@ export function GatewayTableRow({
     >
       <NameCell name={gateway.name} />
       <td className={CELL}>
-        <Badge variant="neutral">Gateway</Badge>
+        <McpKindBadge kind="gateway" />
       </td>
       <AddressCell url={mcpUrl} />
       <td className={CELL}>
@@ -108,8 +107,8 @@ export function GatewayTableRow({
   );
 }
 
-/** The Organization Gateway: every server a person can reach. */
-export function OrganizationGatewayTableRow({
+/** The project's gateway: every server in the project a person can reach. */
+export function ProjectGatewayTableRow({
   url,
   isOff,
 }: {
@@ -119,41 +118,20 @@ export function OrganizationGatewayTableRow({
   const routes = useRoutes();
   return (
     <DotRow
-      href={routes.mcp.organizationGateway.href()}
-      ariaLabel="Open Organization Gateway"
+      href={routes.mcp.projectGateway.href()}
+      ariaLabel="Open Project Gateway"
       icon={<SpeakeasyMark className="h-5 w-5" />}
     >
-      <NameCell name="Organization Gateway">
+      <NameCell name="Project Gateway">
         {isOff && <Badge variant="warning">Off</Badge>}
       </NameCell>
       <td className={CELL}>
-        <Badge variant="neutral">Gateway</Badge>
+        <McpKindBadge kind="gateway" />
       </td>
-      <td className={`max-w-xs ${CELL}`}>
-        {url ? (
-          <div
-            className="relative z-20 flex items-center gap-1.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Text small muted className="truncate font-mono text-xs">
-              {url.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={url}
-              size="sm"
-              icon={Link2}
-              tooltip="Copy MCP URL"
-            />
-          </div>
-        ) : (
-          <Text small muted>
-            —
-          </Text>
-        )}
-      </td>
+      <AddressCell url={url} />
       <td className={CELL}>
         <Text small muted>
-          Every server your team can reach
+          Every server in this project your team can reach
         </Text>
       </td>
     </DotRow>
@@ -171,14 +149,10 @@ export function MCPServerTableRow({
   const routes = useRoutes();
   const hosted = kind === "hosted";
   const toolset = hosted ? server.toolset : undefined;
-  const oauthStatus = useHostedMcpOAuthConfigStatus({
-    toolset,
-    userSessionIssuerId: server.userSessionIssuerId,
-  });
   const name = mcpServerDisplayName(server);
   return (
     <DotRow
-      href={mcpServerHref(routes, server, oauthStatus)}
+      href={mcpServerHref(routes, server)}
       ariaLabel={`Open MCP server ${name}`}
       icon={
         <SourceMcpIcon
@@ -187,18 +161,9 @@ export function MCPServerTableRow({
         />
       }
     >
-      <NameCell name={name}>
-        {oauthStatus === "required-unconfigured" && (
-          <Badge variant="warning">
-            <Badge.LeftIcon>
-              <AlertTriangleIcon />
-            </Badge.LeftIcon>
-            <Badge.Text>OAuth Required</Badge.Text>
-          </Badge>
-        )}
-      </NameCell>
+      <NameCell name={name} />
       <td className={CELL}>
-        <Badge variant="neutral">{MCP_SERVER_KIND_LABEL[kind]}</Badge>
+        <McpKindBadge kind={kind} />
       </td>
       {server.primaryEndpointUrl || hosted ? (
         <AddressCell url={server.primaryEndpointUrl} />

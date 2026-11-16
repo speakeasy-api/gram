@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  GetUserSessionIssuerMigratePreflightRequestBody,
+  GetUserSessionIssuerMigratePreflightRequestBody$Outbound,
+  GetUserSessionIssuerMigratePreflightRequestBody$outboundSchema,
+} from "../components/getusersessionissuermigratepreflightrequestbody.js";
 
 export type GetOrganizationUserSessionIssuerMigratePreflightSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -11,17 +16,11 @@ export type GetOrganizationUserSessionIssuerMigratePreflightSecurity = {
 
 export type GetOrganizationUserSessionIssuerMigratePreflightRequest = {
   /**
-   * The user_session_issuer to migrate away from.
-   */
-  sourceId: string;
-  /**
-   * The user_session_issuer to migrate onto.
-   */
-  targetId: string;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
+  getUserSessionIssuerMigratePreflightRequestBody:
+    GetUserSessionIssuerMigratePreflightRequestBody;
 };
 
 /** @internal */
@@ -58,9 +57,9 @@ export function getOrganizationUserSessionIssuerMigratePreflightSecurityToJSON(
 
 /** @internal */
 export type GetOrganizationUserSessionIssuerMigratePreflightRequest$Outbound = {
-  source_id: string;
-  target_id: string;
   "Gram-Session"?: string | undefined;
+  GetUserSessionIssuerMigratePreflightRequestBody:
+    GetUserSessionIssuerMigratePreflightRequestBody$Outbound;
 };
 
 /** @internal */
@@ -70,15 +69,15 @@ export const GetOrganizationUserSessionIssuerMigratePreflightRequest$outboundSch
     GetOrganizationUserSessionIssuerMigratePreflightRequest
   > = z.pipe(
     z.object({
-      sourceId: z.string(),
-      targetId: z.string(),
       gramSession: z.optional(z.string()),
+      getUserSessionIssuerMigratePreflightRequestBody:
+        GetUserSessionIssuerMigratePreflightRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
-        sourceId: "source_id",
-        targetId: "target_id",
         gramSession: "Gram-Session",
+        getUserSessionIssuerMigratePreflightRequestBody:
+          "GetUserSessionIssuerMigratePreflightRequestBody",
       });
     }),
   );

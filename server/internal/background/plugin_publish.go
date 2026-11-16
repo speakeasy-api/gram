@@ -184,6 +184,7 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 		SkipIfUnchanged:      params.SkipIfUnchanged,
 		IncludePausedPlugins: params.IncludePausedPlugins,
 	}).Get(ctx, &result); err != nil {
+		recordPluginProjectPublishOutcome(ctx, result, err)
 		var appErr *temporal.ApplicationError
 		if errors.As(err, &appErr) && appErr.Type() == activities.ErrTypePluginActorNotMember {
 			// The organization has no member to attribute the publish to, so
@@ -193,6 +194,7 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
+	recordPluginProjectPublishOutcome(ctx, result, nil)
 	return &result, nil
 }
 

@@ -33,9 +33,6 @@ const (
 
 	// maxClientVersionBytes bounds a stored version. Real ones are far shorter.
 	maxClientVersionBytes = 32
-
-	// maxForwardedForBytes keeps the end of the header, which holds the only hop we read.
-	maxForwardedForBytes = 128
 )
 
 // clientFamilies is checked in order, so an editor's Electron User-Agent reads as the
@@ -179,9 +176,9 @@ func validClientVersion(version string) bool {
 // requestClient is what a row keeps from its request until the writer reads it. It is bounded
 // and copied, so a row holds no large header, and it is never stored or logged.
 type requestClient struct {
-	present      bool
-	userAgent    string
-	forwardedFor string
+	present   bool
+	userAgent string
+	ipAddress string
 
 	// appFamily is the family the row's admitted catalog client_id names.
 	appFamily string
@@ -190,16 +187,17 @@ type requestClient struct {
 	reported func() (name, version string)
 }
 
-// FromRequest keeps what the request says about its client, for the writer to read. It parses
-// nothing here, so hostile headers can't affect the request. Without a request it sets nothing.
+// FromRequest captures bounded client metadata, including the public listener's
+// resolved IP. Classification and hashing run on the writer.
+// Without a request it sets nothing.
 func FromRequest(r *http.Request) Option {
 	if r == nil {
 		return Option{apply: nil}
 	}
 	userAgent := strings.Clone(r.UserAgent()[:min(len(r.UserAgent()), maxUserAgentBytes)])
-	forwardedFor := lastForwardedFor(r)
+	ipAddress := publicClientIP(r)
 	return Option{apply: func(row *Row) {
-		row.client.present, row.client.userAgent, row.client.forwardedFor = true, userAgent, forwardedFor
+		row.client.present, row.client.userAgent, row.client.ipAddress = true, userAgent, ipAddress
 	}}
 }
 
@@ -218,7 +216,7 @@ func ReportedClient(read func() (name, version string)) Option {
 // name comes first, then a User-Agent that names a client, then the catalog client_id.
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
-	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: "", reported: nil}
+	row.client = requestClient{present: false, userAgent: "", ipAddress: "", appFamily: "", reported: nil}
 	// reportedUnknown is a session that reported a name no family knows, with reportedVersion.
 	reportedUnknown, reportedVersion := false, ""
 	if client.reported != nil {
@@ -251,7 +249,7 @@ func (r *Recorder) stampClient(row *Row) {
 	if !client.present {
 		return
 	}
-	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, connectionIP(client.forwardedFor))
+	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, client.ipAddress)
 }
 
 // classifyReported returns no family for a name it does not know, so the User-Agent gets its turn.

@@ -60,9 +60,9 @@ func TestClaudeTranscriptRows(t *testing.T) {
 	require.Equal(t, []got{
 		{"claude-transcript:u-1", "user", "list the files", ""},
 		{"claude-transcript:a-2", "assistant", "Listing them now.", ""},
-		{"claude-transcript:a-3", "assistant", "", ""},
-		{"claude-transcript:u-2", "tool", "a.txt\nb.txt", "toolu_1"},
-		{"claude-transcript:u-3", "tool", "line one", "toolu_2"},
+		{"claude-tool-call:toolu_1", "assistant", "", ""},
+		{"claude-tool-result:toolu_1", "tool", "a.txt\nb.txt", "toolu_1"},
+		{"claude-tool-result:toolu_2", "tool", "line one", "toolu_2"},
 		{"claude-transcript:a-4", "assistant", "Two files.", ""},
 	}, summary)
 
@@ -83,7 +83,7 @@ func TestClaudeTranscriptRowsSplitsMixedEntry(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.Equal(t, "claude-transcript:mixed/block:0", rows[0].externalID)
 	require.Equal(t, "Reading.", rows[0].content, "text precedes the tool call it introduces")
-	require.Equal(t, "claude-transcript:mixed/block:1", rows[1].externalID)
+	require.Equal(t, "claude-tool-call:toolu_a", rows[1].externalID, "tool calls share the key the tool hooks use")
 	require.NotNil(t, rows[1].toolCalls)
 	require.True(t, rows[1].createdAt.After(rows[0].createdAt))
 }

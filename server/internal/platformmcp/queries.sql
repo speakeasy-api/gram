@@ -842,14 +842,54 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: GetPlatformMCPCatalogRegistrationProject :one
--- The project a live registration belongs to, so a caller can name the
--- server it added by registration ID alone.
-SELECT project_id
-FROM platform_mcp_catalog_registrations
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND deleted IS FALSE;
+-- name: GetPlatformMCPServerProject :one
+-- The live project a live MCP server belongs to, so a caller can name a
+-- server by its ID alone.
+SELECT m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.id = @mcp_server_id
+  AND m.deleted IS FALSE;
+
+-- name: GetPlatformMCPServerRegistrationForCaller :one
+-- The Platform setup record behind an MCP server named by its ID: the newest
+-- live registration of that server, as GetPlatformMCPInventoryItem picks it.
+-- registration_id is the nil UUID when the server was not added through
+-- Platform setup. added_by_caller applies the same ownership rule as
+-- GetPlatformMCPCatalogRegistrationForLifecycle, so a refusal can say the
+-- server belongs to another member instead of calling it unknown.
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(
+        registration.user_id = @user_id
+        OR (registration.user_id IS NULL AND created_connection.subject_urn = @subject_urn),
+        FALSE
+    )::boolean AS added_by_caller
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.user_id, registration.connection_id
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = @organization_id
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN platform_mcp_connections AS created_connection
+  ON created_connection.id = registration.connection_id
+ AND created_connection.organization_id = @organization_id
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;
 
 -- name: GetPlatformMCPRegistrationAwaitingSignIn :one
 -- The live registration behind an MCP server whose sign-in provider is not
@@ -4117,6 +4157,11 @@ WHERE m.project_id = @project_id::uuid
   AND c.deleted IS FALSE AND p.deleted IS FALSE
   AND m.created_at >= @from_time AND m.created_at < @to_time
   AND (cardinality(@chat_ids::uuid[]) = 0 OR m.chat_id = ANY(@chat_ids::uuid[]))
+  -- Own-scope visibility for a member without chat:read, the predicate the chat
+  -- ListChats query applies: their sessions plus agent-only sessions of agents
+  -- they own. Every other filter only narrows it further.
+  AND (@own_user_id::text = '' OR c.user_id = @own_user_id
+       OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
   AND (@owner_user_id::text = '' OR c.user_id = @owner_user_id)
   AND (@source::text = '' OR m.source = @source)
   AND (@pattern::text = ''
@@ -4145,7 +4190,11 @@ ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
 LIMIT @row_limit::integer;
 
 -- name: GetPlatformChatSearchChat :one
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
+-- agent_only is the shape the search predicate above admits for an owner: a NULL
+-- user_id, not the empty string UpsertChat leaves on a demoted mixed session.
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, c.agent_id,
+       (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id IS NOT NULL)::boolean AS agent_only,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 WHERE c.id = @chat_id AND c.project_id = @project_id AND c.organization_id = @organization_id

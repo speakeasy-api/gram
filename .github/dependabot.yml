@@ -95,9 +95,8 @@ updates:
           - "oxfmt"
           - "oxlint"
           - "oxlint-tsgolint"
-      polar-stripe:
+      stripe:
         patterns:
-          - "@polar-sh/checkout"
           - "@stripe/*"
       radix:
         patterns:

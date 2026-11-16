@@ -84,6 +84,10 @@ export type CustomDomain = {
    */
   ipAllowlist: Array<string>;
   /**
+   * The custom domain ingress configuration is being applied
+   */
+  isReconciling: boolean;
+  /**
    * The custom domain is actively being registered
    */
   isUpdating: boolean;
@@ -95,6 +99,10 @@ export type CustomDomain = {
    * The ID of the organization this domain belongs to
    */
   organizationId: string;
+  /**
+   * The latest domain ingress reconciliation state. One of: not_started, applying, reconciled, failed.
+   */
+  reconciliationStatus: string;
   /**
    * The MCP endpoint currently mapped to the domain root, if any
    */
@@ -151,9 +159,11 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
       health_status: z.optional(z.string()),
       id: z.string(),
       ip_allowlist: z.array(z.string()),
+      is_reconciling: z.boolean(),
       is_updating: z.boolean(),
       openai_apps_challenge_token: z.optional(z.string()),
       organization_id: z.string(),
+      reconciliation_status: z.string(),
       root_mcp_endpoint_id: z.optional(z.string()),
       suggested_record_type: SuggestedRecordType$inboundSchema,
       unhealthy_since: z.optional(
@@ -179,9 +189,11 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
         "health_issue": "healthIssue",
         "health_status": "healthStatus",
         "ip_allowlist": "ipAllowlist",
+        "is_reconciling": "isReconciling",
         "is_updating": "isUpdating",
         "openai_apps_challenge_token": "openaiAppsChallengeToken",
         "organization_id": "organizationId",
+        "reconciliation_status": "reconciliationStatus",
         "root_mcp_endpoint_id": "rootMcpEndpointId",
         "suggested_record_type": "suggestedRecordType",
         "unhealthy_since": "unhealthySince",

@@ -19,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -269,6 +270,11 @@ type WriteDependencies struct {
 	// ProjectRedeployer is nil when the admin server has no Temporal
 	// connection, which leaves redeploy_project unimplemented.
 	ProjectRedeployer admin.ProjectRedeployer
+
+	// AssistantIdentities is nil when the admin server has no Speakeasy signing
+	// issuer, which leaves migrate_organization_assistant_identities
+	// unimplemented.
+	AssistantIdentities *assistantidentity.Service
 }
 
 // AttachWrites exposes every write operation this server implements while
@@ -292,9 +298,13 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{runner: runner, writes: writes},
 		OperationCreateRegistryEntry:                  &registryEntryWriter{runner: runner, registry: registry, writes: writes},
 		OperationSetRegistryIcons:                     &registryIconsWriter{runner: runner, registry: registry, writes: writes},
+		OperationMigrateAssistantsToKit:               &assistantKitMigrationWriter{runner: runner, audit: auditLogger, writes: writes, now: time.Now},
 	}}
 	if deps.ProjectRedeployer != nil {
 		tools.writers[OperationRedeployProject] = &projectRedeployWriter{runner: runner, redeployer: deps.ProjectRedeployer, writes: writes, now: time.Now}
+	}
+	if deps.AssistantIdentities != nil {
+		tools.writers[OperationMigrateAssistantIdentities] = &assistantIdentityMigrationWriter{runner: runner, identities: deps.AssistantIdentities, writes: writes}
 	}
 	if runtime.catalogPromotions != nil {
 		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}

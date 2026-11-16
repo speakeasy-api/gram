@@ -57,11 +57,15 @@ const STATUS_TILE_TITLES: Record<Status, string> = {
  * than the issuer-scoped one the MCP server tab drains. Its filters run on the
  * server ahead of cursor pagination, so pages load on request instead.
  *
- * Without a gateway id the listing is organization-wide and independent of the
- * working project.
+ * A stored gateway is named by id and a Project Gateway by its project. With
+ * neither the listing is organization-wide and independent of the working
+ * project.
  */
 export function useGatewaySessionListing(
-  gatewayId: string | undefined,
+  {
+    gatewayId,
+    projectId,
+  }: { gatewayId: string | undefined; projectId: string | undefined },
   enabled: boolean,
 ): {
   sessions: UserSession[];
@@ -82,6 +86,7 @@ export function useGatewaySessionListing(
   const query = useGatewaySessionsInfinite(
     {
       gatewayId,
+      projectId,
       search: search || undefined,
       status,
       // The list orders itself by recency, so the most recently used sessions
@@ -96,7 +101,7 @@ export function useGatewaySessionListing(
     undefined,
     { enabled },
   );
-  const facets = useGatewaySessionFacets({ gatewayId }, undefined, {
+  const facets = useGatewaySessionFacets({ gatewayId, projectId }, undefined, {
     enabled,
   });
   const sessions = useMemo(

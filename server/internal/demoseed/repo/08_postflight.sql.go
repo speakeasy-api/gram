@@ -71,6 +71,32 @@ func (q *Queries) PostflightCountAgentOnlyDeviceSyncs(ctx context.Context, orgID
 	return count, err
 }
 
+const postflightCountAgentOwnerSessions = `-- name: PostflightCountAgentOwnerSessions :one
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+WHERE c.project_id = $1::uuid AND c.organization_id = $2::text
+  AND c.user_id IS NULL AND c.external_user_id IS NULL
+  AND a.owner_user_id = $3::text
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE
+`
+
+type PostflightCountAgentOwnerSessionsParams struct {
+	ProjectID   uuid.UUID
+	OrgID       string
+	OwnerUserID string
+}
+
+// Agent-credential sessions the owner persona can read: the join mirrors
+// ListOwnedAgentIDs (owner match, not deleted, not latched for reassignment).
+func (q *Queries) PostflightCountAgentOwnerSessions(ctx context.Context, arg PostflightCountAgentOwnerSessionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAgentOwnerSessions, arg.ProjectID, arg.OrgID, arg.OwnerUserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountApprovals = `-- name: PostflightCountApprovals :one
 SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = $1::text AND deleted IS FALSE
@@ -843,9 +869,13 @@ func (q *Queries) PostflightCountOutdatedDeviceAgentStateReports(ctx context.Con
 const postflightCountOwnerlessChats = `-- name: PostflightCountOwnerlessChats :one
 SELECT count(*)
 FROM chats WHERE organization_id = $1::text
+  AND NOT (agent_id IS NOT NULL AND user_id IS NULL AND external_user_id IS NULL)
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL)
 `
 
+// A session driven by an agent credential carries no user ids by design: the
+// agent is its actor, and its owner reads it through ownership. Only that
+// shape is exempt; an agent-stamped chat with partial user ids is still flagged.
 func (q *Queries) PostflightCountOwnerlessChats(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountOwnerlessChats, orgID)
 	var count int64
@@ -1009,16 +1039,14 @@ func (q *Queries) PostflightCountShadowPolicyGrants(ctx context.Context, arg Pos
 	return count, err
 }
 
-const postflightCountTunnelEndpoints = `-- name: PostflightCountTunnelEndpoints :one
-SELECT count(*)
-FROM mcp_endpoints e
-JOIN mcp_servers s ON s.id = e.mcp_server_id
-WHERE e.project_id = $1::uuid AND e.deleted IS FALSE
-  AND s.tunneled_mcp_server_id IS NOT NULL
+const postflightCountToolMetadata = `-- name: PostflightCountToolMetadata :one
+SELECT count(*) FROM mcp_server_tool_metadata
+WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
-func (q *Queries) PostflightCountTunnelEndpoints(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightCountTunnelEndpoints, projectID)
+// The Inspect tab's stored annotations for Linear, Slack and GitHub.
+func (q *Queries) PostflightCountToolMetadata(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountToolMetadata, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

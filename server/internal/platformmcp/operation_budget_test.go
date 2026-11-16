@@ -46,6 +46,7 @@ func TestOperationBudgetsValidRequiresAccessReads(t *testing.T) {
 		Repair: budget, Docs: budget, Skills: budget, LifecycleMetadata: budget,
 		Plugins: budget, AccessReads: budget, AccessRoleMutations: budget, Diagnostics: budget,
 		SensitiveDiagnostics: budget, SensitiveSessionRecall: budget, RiskMutations: budget, RiskFindings: budget,
+		TeamMemory:      budget,
 		DrilldownVolume: DrilldownVolumeBudget{Rows: allowOperationLimiter{}, MetricQueries: allowOperationLimiter{}},
 	}
 	require.True(t, budgets.Valid())

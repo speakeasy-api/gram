@@ -2638,25 +2638,25 @@ func EncodeGetMetaMcpServerUsageError(encoder func(context.Context, http.Respons
 	}
 }
 
-// EncodeGetOrganizationGatewayOverviewResponse returns an encoder for
-// responses returned by the telemetry getOrganizationGatewayOverview endpoint.
-func EncodeGetOrganizationGatewayOverviewResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetProjectGatewayOverviewResponse returns an encoder for responses
+// returned by the telemetry getProjectGatewayOverview endpoint.
+func EncodeGetProjectGatewayOverviewResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*telemetry.GetObservabilityOverviewResult)
 		enc := encoder(ctx, w)
-		body := NewGetOrganizationGatewayOverviewResponseBody(res)
+		body := NewGetProjectGatewayOverviewResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetOrganizationGatewayOverviewRequest returns a decoder for requests
-// sent to the telemetry getOrganizationGatewayOverview endpoint.
-func DecodeGetOrganizationGatewayOverviewRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetOrganizationGatewayOverviewPayload, error) {
-	return func(r *http.Request) (*telemetry.GetOrganizationGatewayOverviewPayload, error) {
-		var payload *telemetry.GetOrganizationGatewayOverviewPayload
+// DecodeGetProjectGatewayOverviewRequest returns a decoder for requests sent
+// to the telemetry getProjectGatewayOverview endpoint.
+func DecodeGetProjectGatewayOverviewRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetProjectGatewayOverviewPayload, error) {
+	return func(r *http.Request) (*telemetry.GetProjectGatewayOverviewPayload, error) {
+		var payload *telemetry.GetProjectGatewayOverviewPayload
 		var (
-			body GetOrganizationGatewayOverviewRequestBody
+			body GetProjectGatewayOverviewRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -2670,19 +2670,24 @@ func DecodeGetOrganizationGatewayOverviewRequest(mux goahttp.Muxer, decoder func
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateGetOrganizationGatewayOverviewRequestBody(&body)
+		err = ValidateGetProjectGatewayOverviewRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
 
 		var (
-			sessionToken *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewGetOrganizationGatewayOverviewPayload(&body, sessionToken)
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetProjectGatewayOverviewPayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2690,14 +2695,21 @@ func DecodeGetOrganizationGatewayOverviewRequest(mux goahttp.Muxer, decoder func
 				payload.SessionToken = &cred
 			}
 		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
 
 		return payload, nil
 	}
 }
 
-// EncodeGetOrganizationGatewayOverviewError returns an encoder for errors
-// returned by the getOrganizationGatewayOverview telemetry endpoint.
-func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetProjectGatewayOverviewError returns an encoder for errors returned
+// by the getProjectGatewayOverview telemetry endpoint.
+func EncodeGetProjectGatewayOverviewError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2714,7 +2726,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewUnauthorizedResponseBody(res)
+				body = NewGetProjectGatewayOverviewUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2728,7 +2740,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewForbiddenResponseBody(res)
+				body = NewGetProjectGatewayOverviewForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2742,7 +2754,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewBadRequestResponseBody(res)
+				body = NewGetProjectGatewayOverviewBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2756,7 +2768,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewNotFoundResponseBody(res)
+				body = NewGetProjectGatewayOverviewNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2770,7 +2782,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewConflictResponseBody(res)
+				body = NewGetProjectGatewayOverviewConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2784,7 +2796,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewUnsupportedMediaResponseBody(res)
+				body = NewGetProjectGatewayOverviewUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2798,7 +2810,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewInvalidResponseBody(res)
+				body = NewGetProjectGatewayOverviewInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2812,7 +2824,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewInvariantViolationResponseBody(res)
+				body = NewGetProjectGatewayOverviewInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2826,7 +2838,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewUnexpectedResponseBody(res)
+				body = NewGetProjectGatewayOverviewUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2840,7 +2852,7 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayOverviewGatewayErrorResponseBody(res)
+				body = NewGetProjectGatewayOverviewGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -2851,25 +2863,25 @@ func EncodeGetOrganizationGatewayOverviewError(encoder func(context.Context, htt
 	}
 }
 
-// EncodeGetOrganizationGatewayUsageResponse returns an encoder for responses
-// returned by the telemetry getOrganizationGatewayUsage endpoint.
-func EncodeGetOrganizationGatewayUsageResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetProjectGatewayUsageResponse returns an encoder for responses
+// returned by the telemetry getProjectGatewayUsage endpoint.
+func EncodeGetProjectGatewayUsageResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*telemetry.GetMetaMcpServerUsageResult)
 		enc := encoder(ctx, w)
-		body := NewGetOrganizationGatewayUsageResponseBody(res)
+		body := NewGetProjectGatewayUsageResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetOrganizationGatewayUsageRequest returns a decoder for requests sent
-// to the telemetry getOrganizationGatewayUsage endpoint.
-func DecodeGetOrganizationGatewayUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetOrganizationGatewayUsagePayload, error) {
-	return func(r *http.Request) (*telemetry.GetOrganizationGatewayUsagePayload, error) {
-		var payload *telemetry.GetOrganizationGatewayUsagePayload
+// DecodeGetProjectGatewayUsageRequest returns a decoder for requests sent to
+// the telemetry getProjectGatewayUsage endpoint.
+func DecodeGetProjectGatewayUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetProjectGatewayUsagePayload, error) {
+	return func(r *http.Request) (*telemetry.GetProjectGatewayUsagePayload, error) {
+		var payload *telemetry.GetProjectGatewayUsagePayload
 		var (
-			body GetOrganizationGatewayUsageRequestBody
+			body GetProjectGatewayUsageRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -2883,19 +2895,24 @@ func DecodeGetOrganizationGatewayUsageRequest(mux goahttp.Muxer, decoder func(*h
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateGetOrganizationGatewayUsageRequestBody(&body)
+		err = ValidateGetProjectGatewayUsageRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
 
 		var (
-			sessionToken *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewGetOrganizationGatewayUsagePayload(&body, sessionToken)
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetProjectGatewayUsagePayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2903,14 +2920,21 @@ func DecodeGetOrganizationGatewayUsageRequest(mux goahttp.Muxer, decoder func(*h
 				payload.SessionToken = &cred
 			}
 		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
 
 		return payload, nil
 	}
 }
 
-// EncodeGetOrganizationGatewayUsageError returns an encoder for errors
-// returned by the getOrganizationGatewayUsage telemetry endpoint.
-func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetProjectGatewayUsageError returns an encoder for errors returned by
+// the getProjectGatewayUsage telemetry endpoint.
+func EncodeGetProjectGatewayUsageError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2927,7 +2951,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageUnauthorizedResponseBody(res)
+				body = NewGetProjectGatewayUsageUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2941,7 +2965,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageForbiddenResponseBody(res)
+				body = NewGetProjectGatewayUsageForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2955,7 +2979,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageBadRequestResponseBody(res)
+				body = NewGetProjectGatewayUsageBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2969,7 +2993,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageNotFoundResponseBody(res)
+				body = NewGetProjectGatewayUsageNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2983,7 +3007,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageConflictResponseBody(res)
+				body = NewGetProjectGatewayUsageConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2997,7 +3021,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageUnsupportedMediaResponseBody(res)
+				body = NewGetProjectGatewayUsageUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -3011,7 +3035,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageInvalidResponseBody(res)
+				body = NewGetProjectGatewayUsageInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -3025,7 +3049,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageInvariantViolationResponseBody(res)
+				body = NewGetProjectGatewayUsageInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3039,7 +3063,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageUnexpectedResponseBody(res)
+				body = NewGetProjectGatewayUsageUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3053,7 +3077,7 @@ func EncodeGetOrganizationGatewayUsageError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationGatewayUsageGatewayErrorResponseBody(res)
+				body = NewGetProjectGatewayUsageGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -10052,6 +10076,26 @@ func marshalTelemetrySessionSummaryToSessionSummaryResponseBody(v *telemetry.Ses
 		TotalTokens:       v.TotalTokens,
 		TotalCost:         v.TotalCost,
 		Status:            v.Status,
+	}
+
+	return res
+}
+
+// marshalTelemetrySessionTotalsToSessionTotalsResponseBody builds a value of
+// type *SessionTotalsResponseBody from a value of type
+// *telemetry.SessionTotals.
+func marshalTelemetrySessionTotalsToSessionTotalsResponseBody(v *telemetry.SessionTotals) *SessionTotalsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &SessionTotalsResponseBody{
+		SessionCount:      v.SessionCount,
+		MessageCount:      v.MessageCount,
+		ToolCallCount:     v.ToolCallCount,
+		TotalInputTokens:  v.TotalInputTokens,
+		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
+		TotalCost:         v.TotalCost,
 	}
 
 	return res
