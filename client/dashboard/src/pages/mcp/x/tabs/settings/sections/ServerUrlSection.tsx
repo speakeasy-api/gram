@@ -619,7 +619,9 @@ function AddressRow({
           <Button
             size="md"
             variant="primary"
-            disabled={!dirty || !!slugError || update.isPending}
+            disabled={
+              !dirty || !trimmedSuffix || !!slugError || update.isPending
+            }
             onClick={() => {
               if (usageServerId) {
                 setPendingChange("rename");

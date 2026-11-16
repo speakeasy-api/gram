@@ -235,6 +235,17 @@ describe("ServerUrlSection", () => {
     expect(updateEndpoint).not.toHaveBeenCalled();
   });
 
+  it("keeps Save disabled when an address is cleared", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "  " },
+    });
+    const save = screen.getByLabelText("Save address") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+  });
+
   it("adds the organization prefix when renaming an unprefixed platform address", () => {
     const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
     renderSection(hosted(), [legacy]);
