@@ -6,7 +6,7 @@ import {
   saveProviderProgress,
   loadProviderProgress,
   providerProgressKey,
-  salesforceSourceFingerprint,
+  providerSourceFingerprint,
 } from "./provider-setup";
 
 describe("Salesforce source-bound progress", () => {
@@ -14,7 +14,7 @@ describe("Salesforce source-bound progress", () => {
     url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
     instanceUrl: "",
   };
-  const baseline = salesforceSourceFingerprint("upstream", source);
+  const baseline = providerSourceFingerprint("upstream", source);
   it("retains an intentional pending draft against the same source", () => {
     const state = initialState("salesforce");
     state.configChanged = true;
@@ -71,7 +71,7 @@ describe("Salesforce source-bound progress", () => {
         "salesforce",
         "sf-stale",
         defaults,
-        salesforceSourceFingerprint("replacement", source),
+        providerSourceFingerprint("replacement", source),
       );
       expect(restored.values.salesforceServer).toBe("sobject-mutations");
       expect(restored.step).toBe("choices");
@@ -100,7 +100,7 @@ describe("Salesforce source-bound progress", () => {
       ...source,
       url: "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
     };
-    const partialBaseline = salesforceSourceFingerprint("upstream", partial);
+    const partialBaseline = providerSourceFingerprint("upstream", partial);
     Object.assign(state.values, {
       environment: "sandbox",
       salesforceServer: "sobject-all",
@@ -215,28 +215,28 @@ describe("Provider setup routing", () => {
     ])
       expect(setupProviderForUrl(url)).toBeNull();
   });
-  it.each([
-    "https://example.snowflakecomputing.com/api/v2/databases/A/schemas/B/mcp-servers/C",
-    "https://example.okta.com/mcp",
-  ])("leaves other providers on their existing path: %s", (url) => {
-    expect(setupProviderForUrl(url)).toBeNull();
-    expect(
-      providerSetupInstallTarget(
-        [{ remotes: [{ url }] }],
-        [
-          {
-            status: "completed",
-            key: "server",
-            name: "Server",
-            identityMode: "user",
-            remoteUrl: url,
-            mcpServerId: "id",
-            mcpServerParam: "server",
-          },
-        ],
-      ),
-    ).toBeNull();
-  });
+  it.each(["https://example.test/mcp"])(
+    "leaves other providers on their existing path: %s",
+    (url) => {
+      expect(setupProviderForUrl(url)).toBeNull();
+      expect(
+        providerSetupInstallTarget(
+          [{ remotes: [{ url }] }],
+          [
+            {
+              status: "completed",
+              key: "server",
+              name: "Server",
+              identityMode: "user",
+              remoteUrl: url,
+              mcpServerId: "id",
+              mcpServerParam: "server",
+            },
+          ],
+        ),
+      ).toBeNull();
+    },
+  );
   it("checks the installed remote rather than another endpoint offered by the catalog entry", () => {
     const servers = [
       {
@@ -557,3 +557,159 @@ it.each([
     ).toBeNull();
   },
 );
+
+it("recognizes native Snowflake but excludes the older hosted integration", () => {
+  expect(
+    setupProviderForUrl(
+      "https://example.snowflakecomputing.com/api/v2/databases/A/schemas/B/mcp-servers/C",
+    ),
+  ).toBe("snowflake");
+  expect(
+    setupProviderForUrl("https://app.getgram.ai/mcp/speakeasy-team-snowflake"),
+  ).toBeNull();
+});
+
+describe("Snowflake source-bound progress", () => {
+  it("restores pending drafts without credentials and resets after an external edit", () => {
+    const state = initialState("snowflake");
+    const source = {
+      url: "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+    };
+    const baseline = providerSourceFingerprint("upstream", source);
+    Object.assign(state.values, {
+      host: "example.snowflakecomputing.com",
+      database: "DRAFT",
+      schema: "PUBLIC",
+      serverName: "MCP",
+      agent: "APP.PUBLIC.AGENT",
+      clientId: "id",
+      clientSecret: "secret",
+    });
+    state.configChanged = true;
+    state.sourceFingerprint = baseline;
+    state.step = "credentials";
+    saveProviderProgress("snowflake-draft", state);
+    const defaults = {
+      host: "example.snowflakecomputing.com",
+      database: "APP",
+      schema: "PUBLIC",
+      serverName: "MCP",
+    };
+    const restored = loadProviderProgress(
+      "snowflake",
+      "snowflake-draft",
+      defaults,
+      baseline,
+    );
+    expect(restored.values.database).toBe("DRAFT");
+    expect(restored.values.clientId).toBe("");
+    expect(restored.values.clientSecret).toBe("");
+    expect(restored.saved).toBe(false);
+    expect(restored.configChanged).toBe(true);
+    const changed = loadProviderProgress(
+      "snowflake",
+      "snowflake-draft",
+      { ...defaults, database: "OTHER" },
+      providerSourceFingerprint("upstream", {
+        url: source.url.replace("/APP/", "/OTHER/"),
+      }),
+    );
+    expect(changed.values.database).toBe("OTHER");
+    expect(changed.values.agent).toBe("");
+    expect(changed.step).toBe("account");
+  });
+});
+
+it("restores the Snowflake SQL workspace step after reload", () => {
+  const state = initialState("snowflake");
+  state.step = "workspace";
+  state.values.host = "example.snowflakecomputing.com";
+  saveProviderProgress("snowflake-workspace", state);
+  const restored = loadProviderProgress("snowflake", "snowflake-workspace");
+  expect(restored.step).toBe("workspace");
+  expect(restored.values.host).toBe("example.snowflakecomputing.com");
+});
+
+it("prefills a new Snowflake server name and retains a chosen name after reload", () => {
+  const key = "snowflake-server-name";
+  sessionStorage.removeItem(key);
+  expect(loadProviderProgress("snowflake", key).values.serverName).toBe(
+    "SPEAKEASY_MCP",
+  );
+  const state = initialState("snowflake");
+  state.values.serverName = "";
+  saveProviderProgress(key, state);
+  expect(loadProviderProgress("snowflake", key).values.serverName).toBe(
+    "SPEAKEASY_MCP",
+  );
+  state.values.serverName = "CUSTOM_MCP";
+  saveProviderProgress(key, state);
+  expect(loadProviderProgress("snowflake", key).values.serverName).toBe(
+    "CUSTOM_MCP",
+  );
+});
+
+it.each([
+  "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/data/data360",
+  "https://api.salesforce.com/platform/mcp/v1/platform/unknown",
+])(
+  "does not hand an undocumented Salesforce catalog endpoint into guided setup: %s",
+  (url) => {
+    expect(
+      providerSetupInstallTarget(
+        [{ remotes: [{ url }] }],
+        [
+          {
+            status: "completed",
+            key: "sf",
+            name: "Salesforce",
+            identityMode: "user",
+            remoteUrl: url,
+            mcpServerId: "id",
+            mcpServerParam: "installed",
+          },
+        ],
+      ),
+    ).toBeNull();
+  },
+);
+
+describe("Okta source-bound progress", () => {
+  it("keeps only non-secret configuration and resets stale org/app choices", () => {
+    const s = initialState("okta");
+    Object.assign(s.values, {
+      oktaOrg: "https://example.okta.com",
+      oktaAppType: "native",
+      clientId: "example-client",
+      clientSecret: "example-secret",
+    });
+    s.sourceFingerprint = "source-one";
+    s.step = "credentials";
+    s.configChanged = true;
+    saveProviderProgress("okta-progress", s);
+    const raw = sessionStorage.getItem("okta-progress")!;
+    expect(raw).not.toContain("oktaScopes");
+    expect(raw).not.toContain("example-secret");
+    expect(raw).not.toContain("example-client");
+    const restored = loadProviderProgress(
+      "okta",
+      "okta-progress",
+      { oktaOrg: "https://example.okta.com" },
+      "source-one",
+    );
+    expect(restored.values.oktaAppType).toBe("native");
+    expect(restored.step).toBe("credentials");
+    expect(restored.saved).toBe(false);
+    const changed = loadProviderProgress(
+      "okta",
+      "okta-progress",
+      { oktaOrg: "https://other.okta.com" },
+      "source-two",
+    );
+    expect(changed.values.oktaOrg).toBe("https://other.okta.com");
+    expect(changed.values.oktaAppType).toBe("web");
+    expect(changed.step).toBe("enable");
+    expect(changed.tested).toBe(false);
+  });
+});

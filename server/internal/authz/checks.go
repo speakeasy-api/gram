@@ -1,5 +1,7 @@
 package authz
 
+import "slices"
+
 // MCPToolCallDimensions carries the typed attributes of an MCP tool call.
 // Zero-value fields are omitted from the check dimensions.
 type MCPToolCallDimensions struct {
@@ -9,6 +11,7 @@ type MCPToolCallDimensions struct {
 }
 
 // MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
+// dims.ProjectID is required: evaluation rejects an MCP check without one.
 func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	dimensions := map[string]string{}
 	if dims.Tool != "" {
@@ -24,7 +27,10 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 }
 
 // MCPCheck builds a Check for an MCP scope (read/write/connect) with project_id
-// injected as a dimension so project-scoped grants can match.
+// injected as a dimension so project-scoped grants can match. resourceID is the
+// server or toolset ID for operations on one server, or the project ID for
+// project-level operations. projectID is required: evaluation rejects an MCP
+// check without one.
 func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	var dimensions map[string]string
 	if projectID != "" {
@@ -89,6 +95,38 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 		dimensions[SelectorKeyUpstreamClient] = dims.UpstreamClient
 	}
 	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
+}
+
+// requiredCheckDimensions lists, per resource kind, the dimensions every check
+// of that kind must carry. Selector matching skips grant keys a check omits, so
+// a check without a dimension that grants of its kind can be bounded by would
+// pass such a grant whatever value the grant names. MCP grants can be bounded
+// to a project ({"resource_id":"*","project_id":P}), so every MCP check must
+// name the project of the resource it targets.
+var requiredCheckDimensions = map[string][]string{
+	ResourceKindMCP: {SelectorKeyProjectID},
+}
+
+// RequiredCheckDimensions returns the dimensions a check of resourceKind must
+// carry, or nil when the kind requires none.
+func RequiredCheckDimensions(resourceKind string) []string {
+	return slices.Clone(requiredCheckDimensions[resourceKind])
+}
+
+// validateRequiredDimensions rejects a check that omits, or wildcards, a
+// dimension its resource kind requires, so it fails closed instead of matching
+// a grant bounded on that dimension.
+func validateRequiredDimensions(c Check) error {
+	for _, key := range requiredCheckDimensions[c.resourceKind()] {
+		value := c.Dimensions[key]
+		if value == "" {
+			return invalidCheckReason(c.Scope, c.ResourceID, "missing "+key)
+		}
+		if value == WildcardResource {
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		}
+	}
+	return nil
 }
 
 // validateAuthClientCheck rejects auth-client checks missing the trusted

@@ -17,6 +17,11 @@ func GetGatewayOrganizationsPath() string {
 	return "/rpc/organizations.getGateway"
 }
 
+// GetProjectGatewayOrganizationsPath returns the URL path to the organizations service getProjectGateway HTTP endpoint.
+func GetProjectGatewayOrganizationsPath() string {
+	return "/rpc/organizations.getProjectGateway"
+}
+
 // SendInviteOrganizationsPath returns the URL path to the organizations service sendInvite HTTP endpoint.
 func SendInviteOrganizationsPath() string {
 	return "/rpc/organizations.sendInvite"

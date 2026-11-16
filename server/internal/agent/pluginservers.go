@@ -89,7 +89,7 @@ func (s *Service) pluginServerDashboardURL(grants []authz.Grant, row repo.ListAg
 		check = authz.MCPCheck(authz.ScopeMCPRead, resourceID, projectID)
 		link = dashboardlinks.MCPServer(row.OrganizationSlug, row.ProjectSlug, mcpservers.DashboardRouteParam(row.McpServerSlug.String, row.McpServerID.UUID))
 	case row.GatewayID.Valid:
-		check = authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID, Dimensions: nil}
+		check = authz.MCPCheck(authz.ScopeMCPRead, projectID, projectID)
 		link = dashboardlinks.MCPGateway(row.OrganizationSlug, row.ProjectSlug, row.GatewayID.UUID.String())
 	default:
 		return nil, nil

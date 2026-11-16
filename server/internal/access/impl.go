@@ -43,9 +43,7 @@ import (
 var errConnectedUserNotFound = errors.New("connected user not found")
 
 // CanonicalFoldGate reports the organization id an identity-folded query
-// should run under: the org id when the canonical identity fold is rolled out
-// to it, "" when it is not. Injected rather than reimplemented so the rollout
-// flag stays one switch across every service that folds.
+// should run under, or "" for no fold.
 type CanonicalFoldGate interface {
 	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
@@ -64,8 +62,7 @@ type Service struct {
 	foldGate CanonicalFoldGate
 }
 
-// canonicalFoldOrg resolves the org id to fold under. A nil gate means no
-// caller wired the rollout flag in, which fails closed: no fold.
+// canonicalFoldOrg resolves the org id to fold under. A nil gate means no fold.
 func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
 	if s.foldGate == nil {
 		return ""

@@ -2363,24 +2363,6 @@ func marshalTypesDeploymentPackageToDeploymentPackageResponseBody(v *types.Deplo
 	return res
 }
 
-// marshalTypesDeploymentExternalMCPToDeploymentExternalMCPResponseBody builds
-// a value of type *DeploymentExternalMCPResponseBody from a value of type
-// *types.DeploymentExternalMCP.
-func marshalTypesDeploymentExternalMCPToDeploymentExternalMCPResponseBody(v *types.DeploymentExternalMCP) *DeploymentExternalMCPResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &DeploymentExternalMCPResponseBody{
-		ID:                      v.ID,
-		RegistryID:              v.RegistryID,
-		Name:                    v.Name,
-		Slug:                    string(v.Slug),
-		RegistryServerSpecifier: v.RegistryServerSpecifier,
-	}
-
-	return res
-}
-
 // marshalTypesDeploymentToDeploymentResponseBody builds a value of type
 // *DeploymentResponseBody from a value of type *types.Deployment.
 func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *DeploymentResponseBody {
@@ -2438,16 +2420,6 @@ func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *Deploy
 		}
 	} else {
 		res.Packages = []*DeploymentPackageResponseBody{}
-	}
-	if v.ExternalMcps != nil {
-		res.ExternalMcps = make([]*DeploymentExternalMCPResponseBody, len(v.ExternalMcps))
-		for i, val := range v.ExternalMcps {
-			if val == nil {
-				res.ExternalMcps[i] = nil
-				continue
-			}
-			res.ExternalMcps[i] = marshalTypesDeploymentExternalMCPToDeploymentExternalMCPResponseBody(val)
-		}
 	}
 
 	return res

@@ -11,6 +11,13 @@ import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { RemoteIdentityProvidersPage } from "./RemoteIdentityProviders";
 
+const flag = vi.hoisted(() => ({ status: "disabled" }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: flag.status }),
+}));
+vi.mock("@/pages/org/RemoteSessionRefreshPolicySetting", () => ({
+  RemoteSessionRefreshPolicySetting: () => <div>Refresh policy</div>,
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "example", projectSlug: "active" }),
 }));
@@ -150,7 +157,28 @@ vi.mock("./CreateRemoteSessionClientSheet", () => ({
   }) => <div>Add client to {issuer.name}</div>,
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  flag.status = "disabled";
+});
+
+it.each([
+  ["disabled", false],
+  ["enabled", true],
+])(
+  "shows the automatic session refresh policy only while the MCP Sessions tabs flag is %s",
+  (status, shown) => {
+    flag.status = status;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <RemoteIdentityProvidersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText("Refresh policy") !== null).toBe(shown);
+  },
+);
 // Platform management is absent unconditionally; RequireScope is stubbed above,
 // so tenant actions here do not test org:admin authorization.
 it("preserves tenant actions and read-only platform browsing without platform management", () => {

@@ -1,5 +1,19 @@
 # admin
 
+## 0.13.0
+
+### Minor Changes
+
+- c696162: Staff can see an organization's hooks installs on a new Hooks tab in admin and through Admin MCP: which versions each machine runs compared with the current release, how they were installed, which hooks endpoints they use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.
+- e46d4fd: Staff can manage platform GCP credentials from a new Platform credentials section in admin: list them, create one, view its configuration, run a live identity check, edit it and delete it. A platform credential's identity can no longer be changed, and it can no longer be deleted, while Speakeasy-managed organization encryption keys still reach KMS through it. Renames are still allowed. Provisioning a managed organization encryption key now re-checks the platform credential inside its write, so a credential deleted or repointed mid-provision is refused rather than recorded.
+- fb7bab2: Adds an Organizational Memory evals page. Staff can start a run against the demo organization's synthetic corpus with chosen answer, judge, summary and digest models, follow it to completion, and compare runs side by side by accuracy, valid citations, leaks, tokens, cost and latency.
+
+### Patch Changes
+
+- 593ae16: Staff can start Organizational Memory eval runs against the seeded demo corpus and list or read their results through a new admin API. Runs go one at a time, are capped per rolling 24 hours, and a run left unresolved past any workflow's lifetime no longer blocks later starts.
+- fe585ec: The staff admin "Business Memory Extraction" control is now an "Organizational Memory" on/off switch with no cap input. Switching it on keeps a stored daily cap or sets the default of 100, and an organization whose cap is 0 now counts as off for Organizational Memory instead of showing the team memory tools while nothing gets summarized.
+- d9f2b98: The upstream OAuth migration page no longer reports an organization as not migrated because of connections made through a gateway, which only ever need choices for the servers approved when connecting. Once enforcement is on, assistant profiles that no turn has used yet are shown separately instead of as work left to record.
+
 ## 0.12.0
 
 ### Minor Changes

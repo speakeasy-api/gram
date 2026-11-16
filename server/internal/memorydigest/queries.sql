@@ -6,7 +6,7 @@
 
 -- name: ListMemoryOrganizations :many
 -- Organizations with redacted summaries or memos since @since. The job
--- checks the Business Memory Extraction gate (memorygate.Enabled) for
+-- checks the Organizational Memory gate (memorygate.Enabled) for
 -- these, then lists candidates only for enabled ones, so orgs with the
 -- gate off never crowd a batch.
 SELECT DISTINCT c.organization_id

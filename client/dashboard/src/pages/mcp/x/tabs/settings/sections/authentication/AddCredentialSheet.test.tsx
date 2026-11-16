@@ -188,6 +188,44 @@ afterEach(() => {
 });
 
 describe("AddCredentialSheet", () => {
+  it("marks the name as required and explains why an empty form cannot be added", () => {
+    mocks.clientPages = [];
+    renderSheet();
+    fireEvent.click(screen.getByRole("radio", { name: /^Static credential/ }));
+    expect(
+      screen.getByLabelText("Name (required)").hasAttribute("required"),
+    ).toBe(true);
+    expect(
+      screen.getByText("Give the credential a name people will recognize."),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Add credential" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.change(screen.getByLabelText("Name (required)"), {
+      target: { value: "   " },
+    });
+    expect(
+      screen
+        .getByRole("button", { name: "Add credential" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByText("Give the credential a name people will recognize."),
+    ).toBeTruthy();
+  });
+
+  it("waits for reusable credentials before asking for a selection", async () => {
+    mocks.clientPages = [[client({ id: "shared", name: "Shared token" })]];
+    renderSheet();
+
+    expect(screen.getByText("Loading credentials…")).toBeTruthy();
+    expect(screen.queryByText("Choose a credential.")).toBeNull();
+    expect(await screen.findByText("Choose a credential.")).toBeTruthy();
+    expect(screen.getByLabelText("Credential (required)")).toBeTruthy();
+  });
+
   it("offers only credentials this server can share", async () => {
     mocks.clientPages = [
       [client({ id: "shared", name: "Shared token" })],
@@ -244,7 +282,7 @@ describe("AddCredentialSheet", () => {
           .getByRole("radio", { name: /Existing credential/ })
           .getAttribute("aria-checked"),
       ).toBe("true");
-      expect(screen.queryByLabelText("Name")).toBeNull();
+      expect(screen.queryByLabelText("Name (required)")).toBeNull();
       expect(
         await screen.findByText(/This credential is no longer available/),
       ).toBeTruthy();
@@ -261,7 +299,7 @@ describe("AddCredentialSheet", () => {
     renderSheet();
 
     fireEvent.click(screen.getByRole("radio", { name: /^Static credential/ }));
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name (required)"), {
       target: { value: "Engineering token" },
     });
     fireEvent.change(screen.getByLabelText("Value for Authorization"), {
@@ -375,7 +413,7 @@ describe("AddCredentialSheet", () => {
         },
       ];
     };
-    const picker = () => screen.getByLabelText("Start from");
+    const picker = () => screen.getByLabelText("Start from (required)");
     const chooseOwnAccount = () => {
       fireEvent.click(
         screen.getByRole("radio", { name: /^Each person's own account/ }),
@@ -422,7 +460,7 @@ describe("AddCredentialSheet", () => {
           /with auth\.example\.com can be used as a starting point yet/,
         ),
       ).toBeTruthy();
-      expect(screen.queryByLabelText("Start from")).toBeNull();
+      expect(screen.queryByLabelText("Start from (required)")).toBeNull();
       expect(screen.queryByText(/Showing sign-ins for/)).toBeNull();
       expect(screen.getByRole("button", { name: "Show all" })).toBeTruthy();
     });
@@ -521,7 +559,7 @@ describe("AddCredentialSheet", () => {
       fireEvent.click(screen.getByRole("button", { name: "Show all" }));
       fireEvent.click(picker());
       fireEvent.click(screen.getByRole("option", { name: /Linear/ }));
-      fireEvent.change(screen.getByLabelText("Name"), {
+      fireEvent.change(screen.getByLabelText("Name (required)"), {
         target: { value: "Team sign-in" },
       });
       expect(
@@ -531,7 +569,7 @@ describe("AddCredentialSheet", () => {
       ).toBe(false);
 
       mocks.issuersFailed = true;
-      fireEvent.change(screen.getByLabelText("Name"), {
+      fireEvent.change(screen.getByLabelText("Name (required)"), {
         target: { value: "Team sign-ins" },
       });
 
@@ -613,7 +651,7 @@ describe("AddCredentialSheet", () => {
       fireEvent.click(screen.getByRole("button", { name: "Show all" }));
 
       mocks.authorizationServers = undefined;
-      fireEvent.change(screen.getByLabelText("Name"), {
+      fireEvent.change(screen.getByLabelText("Name (required)"), {
         target: { value: "Rerender" },
       });
 
@@ -696,9 +734,9 @@ describe("AddCredentialSheet", () => {
       fireEvent.click(
         screen.getByRole("radio", { name: /^New from existing/ }),
       );
-      fireEvent.click(screen.getByLabelText("Start from"));
+      fireEvent.click(screen.getByLabelText("Start from (required)"));
       fireEvent.click(screen.getByRole("option", { name: /Linear/ }));
-      fireEvent.change(screen.getByLabelText("Name"), {
+      fireEvent.change(screen.getByLabelText("Name (required)"), {
         target: { value: "Linear for engineering" },
       });
     };
@@ -906,7 +944,7 @@ describe("AddCredentialSheet", () => {
         screen.getByRole("radio", { name: /^New from existing/ }),
       );
 
-      expect(screen.queryByLabelText("Start from")).toBeNull();
+      expect(screen.queryByLabelText("Start from (required)")).toBeNull();
       expect(
         screen.getByText(/can be used as a starting point yet/),
       ).toBeTruthy();
@@ -990,7 +1028,7 @@ describe("AddCredentialSheet", () => {
           .getByRole("radio", { name: /^New from scratch/ })
           .getAttribute("aria-checked"),
       ).toBe("true");
-      fireEvent.change(screen.getByLabelText("Name"), {
+      fireEvent.change(screen.getByLabelText("Name (required)"), {
         target: { value: "GitHub accounts" },
       });
       expect(

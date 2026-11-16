@@ -21,9 +21,14 @@ import (
 type seeder struct {
 	spec Spec
 	// enc is the environment's key, which seals the inert sessions' dummy token.
-	enc    *encryption.Client
-	q      *repo.Queries
-	logger *slog.Logger
+	enc *encryption.Client
+	// assistantIssuer is the deployment's signing issuer origin, without a
+	// trailing slash. The seeded assistant trigger trust registration must
+	// name it, or runtime provisioning in the project cannot find or create
+	// its own registration.
+	assistantIssuer string
+	q               *repo.Queries
+	logger          *slog.Logger
 	// now is the Postgres transaction's now(), read once at the start of the
 	// run, so Go-computed timestamps agree with any now() a query still uses
 	// and ClickHouse rows line up with the Postgres ones.

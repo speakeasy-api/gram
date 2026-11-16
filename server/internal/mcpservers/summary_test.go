@@ -168,9 +168,6 @@ func TestMcpServerSummary_HostedAcrossReads(t *testing.T) {
 			urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"),
 			urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"),
 			urn.NewTool(urn.ToolKindHTTP, "petstore", "get_pet"),
-			urn.NewTool(urn.ToolKindExternalMCP, "zeta", "proxy"),
-			urn.NewTool(urn.ToolKindExternalMCP, "acme", "search"),
-			urn.NewTool(urn.ToolKindExternalMCP, "acme", "proxy"),
 		},
 	)
 	deployment := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
@@ -191,10 +188,8 @@ func TestMcpServerSummary_HostedAcrossReads(t *testing.T) {
 		require.Equal(t, toolset.ID.String(), got.Toolset.ID)
 		require.Equal(t, toolset.Slug, got.Toolset.Slug)
 		require.Equal(t, toolset.Name, got.Toolset.Name)
-		require.Equal(t, 2, got.Toolset.ToolCount, "latest version, live, distinct, external MCP URNs excluded")
+		require.Equal(t, 2, got.Toolset.ToolCount, "latest version, live, distinct")
 		require.Equal(t, toolset.ToolSelectionMode, got.Toolset.ToolSelectionMode)
-		require.Equal(t, []string{"acme", "zeta"}, got.Toolset.ExternalMcpSlugs)
-		require.False(t, got.Toolset.ExternalMcpProxyOnly)
 		require.Nil(t, got.Toolset.ExternalOauthServerID)
 		require.Equal(t, conv.PtrEmpty("io.example/acme"), got.Toolset.RegistrySpecifier)
 		require.Equal(t, conv.PtrEmpty(older.ID.String()), got.PrimaryEndpointID)
@@ -215,29 +210,19 @@ func TestMcpServerSummary_HostedAcrossReads(t *testing.T) {
 	}
 }
 
-func TestMcpServerSummary_ProxyOnlyAndEmptyToolsets(t *testing.T) {
+func TestMcpServerSummary_EmptyToolset(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	orgID, projectID := summaryAuth(t, ctx)
 
-	proxyOnly := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{urn.NewTool(urn.ToolKindExternalMCP, "acme", "proxy")})
 	empty := seedSummaryToolset(t, ctx, ti, orgID, projectID)
-	proxyServer := seedSummaryServer(t, ctx, ti, projectID, proxyOnly.ID)
 	emptyServer := seedSummaryServer(t, ctx, ti, projectID, empty.ID)
 
-	got := getSummaryServer(t, ctx, ti, proxyServer.ID)
+	got := getSummaryServer(t, ctx, ti, emptyServer.ID)
 	require.NotNil(t, got.Toolset)
 	require.Equal(t, 0, got.Toolset.ToolCount)
-	require.True(t, got.Toolset.ExternalMcpProxyOnly)
-	require.Equal(t, []string{"acme"}, got.Toolset.ExternalMcpSlugs)
-	require.Nil(t, got.PrimaryEndpointID)
-
-	got = getSummaryServer(t, ctx, ti, emptyServer.ID)
-	require.NotNil(t, got.Toolset)
-	require.Equal(t, 0, got.Toolset.ToolCount)
-	require.False(t, got.Toolset.ExternalMcpProxyOnly)
-	require.Empty(t, got.Toolset.ExternalMcpSlugs)
 	require.Nil(t, got.Toolset.RegistrySpecifier)
+	require.Nil(t, got.PrimaryEndpointID)
 }
 
 func TestMcpServerSummary_DeletedToolsetHasNoSummary(t *testing.T) {
@@ -475,7 +460,6 @@ func TestCreateAndUpdateMcpServer_ResponsesCarrySummary(t *testing.T) {
 
 	toolset := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{
 		urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"),
-		urn.NewTool(urn.ToolKindExternalMCP, "acme", "proxy"),
 	})
 	deployment := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
 	seedSummaryHTTPTool(t, ctx, ti, projectID, deployment, urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"), "list_pets")
@@ -486,7 +470,6 @@ func TestCreateAndUpdateMcpServer_ResponsesCarrySummary(t *testing.T) {
 	require.NotNil(t, created.Toolset)
 	require.Equal(t, toolset.ID.String(), created.Toolset.ID)
 	require.Equal(t, 1, created.Toolset.ToolCount)
-	require.Equal(t, []string{"acme"}, created.Toolset.ExternalMcpSlugs)
 	require.Nil(t, created.PrimaryEndpointID, "a new server has no endpoint yet")
 
 	endpoint := seedSummaryEndpoint(t, ctx, ti, projectID, uuid.MustParse(created.ID), uuid.NullUUID{})

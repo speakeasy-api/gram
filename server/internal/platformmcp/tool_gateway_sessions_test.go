@@ -35,6 +35,7 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 	service := gatewaySessionManagementFunc(func(_ context.Context, payload *gatewaygen.ListGatewaySessionsPayload) (*gatewaygen.GatewaySessionsResult, error) {
 		calls++
 		require.Equal(t, input.GatewayID, payload.GatewayID)
+		require.Equal(t, input.ProjectID, payload.ProjectID)
 		require.Equal(t, input.Search, payload.Search)
 		require.Equal(t, input.Status, payload.Status)
 		require.Equal(t, input.Sort, payload.Sort)
@@ -46,10 +47,15 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 		require.Equal(t, input.Limit, payload.Limit)
 		return &gatewaygen.GatewaySessionsResult{Items: []*types.UserSession{{ID: "authorization-id", SubjectType: "user", SubjectUrn: "private-subject", SubjectDisplayName: new("private-name"), ClientName: new("private-client"), Jti: "private-jti", Workload: &types.UserSessionWorkload{}, Upstreams: []*types.UserSessionUpstream{{RemoteSessionID: "private-upstream"}}}}, NextCursor: new("next-page")}, nil
 	})
-	for _, scope := range []string{"gateway", "organization"} {
+	project := uuid.NewString()
+	for _, scope := range []string{"gateway", "organization", "project"} {
 		input.Scope = scope
-		if scope == "organization" {
+		switch scope {
+		case "organization":
 			input.GatewayID = nil
+		case "project":
+			input.GatewayID = nil
+			input.ProjectID = &project
 		}
 		output, err := listGatewaySessions(ctx, service, principal, input)
 		require.NoError(t, err)
@@ -60,7 +66,7 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 		require.NotContains(t, string(encoded), "private-")
 		require.Contains(t, string(encoded), "authorization-id")
 	}
-	require.Equal(t, 2, calls)
+	require.Equal(t, 3, calls)
 	for _, grants := range [][]authz.Grant{nil, {authz.NewGrant(authz.ScopeOrgRead, principal.OrganizationID)}, {authz.NewGrant(authz.ScopeOrgAdmin, "other-org")}} {
 		_, err := listGatewaySessions(authz.GrantsToContext(ctx, grants), service, principal, input)
 		require.ErrorIs(t, err, ErrForbidden)
@@ -69,11 +75,11 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 	mismatched.OrganizationID = "other-org"
 	_, err := listGatewaySessions(ctx, service, mismatched, input)
 	require.ErrorIs(t, err, ErrForbidden)
-	for _, invalid := range []ListGatewaySessionsInput{{}, {Scope: "gateway"}, {Scope: "organization", GatewayID: &gateway}, {Scope: "organization", Limit: 101}} {
+	for _, invalid := range []ListGatewaySessionsInput{{}, {Scope: "gateway"}, {Scope: "organization", GatewayID: &gateway}, {Scope: "organization", Limit: 101}, {Scope: "project"}, {Scope: "organization", ProjectID: &project}, {Scope: "gateway", GatewayID: &gateway, ProjectID: &project}} {
 		_, err := listGatewaySessions(ctx, service, principal, invalid)
 		require.Error(t, err)
 	}
-	require.Equal(t, 2, calls, "refused requests must not reach session inventory")
+	require.Equal(t, 3, calls, "refused requests must not reach session inventory")
 	_, err = listGatewaySessions(ctx, nil, principal, input)
 	require.ErrorIs(t, err, ErrUnavailable)
 }
@@ -93,7 +99,7 @@ func TestGatewaySessionToolContract(t *testing.T) {
 	require.Equal(t, ExternalAuthorizationOrgAdmin, a.Meta.Authorization)
 	require.Equal(t, ProjectScopeNone, a.Meta.ProjectScope)
 	require.Empty(t, live.For(AudienceAssistant))
-	for _, field := range []string{"scope", "gateway_id", "search", "server_id", "provider_id", "status", "created_after", "created_before", "sort", "cursor", "limit"} {
+	for _, field := range []string{"scope", "gateway_id", "project_id", "search", "server_id", "provider_id", "status", "created_after", "created_before", "sort", "cursor", "limit"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	principal := Principal{OrganizationID: "test-org", UserID: "test-user"}
