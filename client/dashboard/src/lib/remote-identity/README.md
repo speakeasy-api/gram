@@ -79,7 +79,7 @@ lib/remote-identity/
     IdentityModeCards.tsx   User Identity / Shared credential / Manual
     ProviderRow.tsx         the provider and registration choice
     CredentialFields.tsx    format, fields, live Authorization preview
-    IdentityExplainer.tsx   content, dialog, and inline callout
+    IdentityExplainer.tsx   content and inline callout
     ProviderLink.tsx        deep link to the CRUD surface
     ScopeBadge.tsx          tier as a badge
 ```

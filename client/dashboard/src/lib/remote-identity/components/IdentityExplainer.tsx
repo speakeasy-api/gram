@@ -67,9 +67,8 @@ function UseItWhen({ items }: { items: string[] }): JSX.Element {
 }
 
 /**
- * The side-by-side comparison itself. Rendered in a dialog from the server
- * details pill, and inline inside a setup step — a step that is already a
- * dialog must not stack another one on top of it.
+ * The side-by-side comparison itself, shown inline inside a setup step: a
+ * step that is already a dialog must not stack another one on top of it.
  */
 function IdentityExplainerContent(): JSX.Element {
   return (
