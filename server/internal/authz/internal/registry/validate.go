@@ -315,7 +315,8 @@ func camelAction(action Action) string {
 // (mcp grants by project_id) to mark that dimension Required. A check that
 // left the parent out would match no bounded grant, and a probe would match
 // one bounded to any parent, so the check is refused as invalid instead.
-// Strictly matched types validate their own dimensions.
+// Strictly matched types are left out: no exception lets them omit a key,
+// and they validate their own dimensions.
 func validateParentDimension(fail func(string, ...any), t ResourceType) {
 	if t.Parent == "" || t.Match != MatchStandard {
 		return

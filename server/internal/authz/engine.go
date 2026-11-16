@@ -450,9 +450,13 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-	if !slices.Contains(decision.blocked, true) {
-		e.logMissingKeys(ctx, authorization, checks...)
+	unblocked := make([]Check, 0, len(checks))
+	for i, check := range checks {
+		if !decision.blocked[i] {
+			unblocked = append(unblocked, check)
+		}
 	}
+	e.logMissingKeys(ctx, authorization, unblocked...)
 	// The alternatives are equivalent to the handler but not to the person
 	// asking for access: explain the one that grants the least.
 	if suggested, ok := leastPrivilegedAlternative(checks, decision.blocked); ok {

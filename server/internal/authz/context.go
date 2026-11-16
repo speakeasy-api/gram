@@ -189,11 +189,15 @@ func (a grantAuthorization) policiesFor(check Check) [][]Grant {
 
 // keysMissingFrom lists the grant keys the check does not carry, where that
 // alone is why a grant of a scope that would satisfy the check was refused.
-// It explains a refusal and decides nothing.
+// Only policies that refuse the check are read, since a policy that allows it
+// is not why it was refused. It explains a refusal and decides nothing.
 func (a grantAuthorization) keysMissingFrom(check Check) []string {
 	check = a.bind(check)
 	seen := map[string]bool{}
 	for _, policy := range a.policiesFor(check) {
+		if grant, _ := matchingGrant(policy, check.expand()); grant != nil {
+			continue
+		}
 		for _, grant := range policy {
 			for _, expanded := range check.expand() {
 				if grant.Scope != expanded.Scope {
