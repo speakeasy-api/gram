@@ -66,8 +66,8 @@ var _ proxy.ToolsListResponseInterceptor = (*ToolsListMCPConnectFilterIntercepto
 // a single Remote MCP Server. mcpServerID is the [authz.Check] ResourceID, the
 // mcp_servers row id (NOT the remote_mcp_servers id), so the filter resolves
 // grants against the same row as the handler's upfront server-level
-// `mcp:connect` check and as [authz.MCPToolCallCheck] does for the paired
-// tools/call enforcement.
+// `mcp:connect` check and as [authz.MCPServerRef.ToolCall] does for the
+// paired tools/call enforcement.
 func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
 	return &ToolsListMCPConnectFilterInterceptor{
 		authz:       authzEngine,
@@ -85,7 +85,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 }
 
 // InterceptToolsListResponse implements [proxy.ToolsListResponseInterceptor].
-// It builds one [authz.MCPToolCallCheck] per tool, hands the batch to
+// It builds one [authz.MCPServerRef.ToolCall] check per tool, hands the batch to
 // [authz.Engine.FindMatched] for per-tool match indicators (one challenge-log
 // entry for the batch, not N), and rebuilds the tool slice in input order
 // keeping only authorized entries, or marking the rest in an inspected listing.

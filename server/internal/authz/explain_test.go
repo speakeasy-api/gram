@@ -97,12 +97,12 @@ func TestExplainGrantCheckMatchesGrantsAuthorizeForRandomGrantSets(t *testing.T)
 		},
 	}
 	checks := []Check{
-		MCPCheck(ScopeMCPConnect, "server-1", "project-1"),
-		MCPCheck(ScopeMCPRead, "server-1", "project-1"),
-		MCPCheck(ScopeMCPWrite, "server-1", "project-1"),
-		MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-a", Disposition: DispositionReadOnly, ProjectID: "project-1"}),
-		MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-b", Disposition: DispositionDestructive, ProjectID: "project-1"}),
-		MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-c", Disposition: "", ProjectID: "project-1"}),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect(),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Read(),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Write(),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("tool-a", DispositionReadOnly),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("tool-b", DispositionDestructive),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("tool-c", ""),
 	}
 
 	// A fixed seed keeps failures reproducible while still covering far more
@@ -129,7 +129,7 @@ func TestExplainGrantCheckBlockFromAnotherRoleWins(t *testing.T) {
 		heldBy("role:organization:role-2", NewGrant(ScopeMCPBlockedConnect, "server-1")),
 	}
 
-	explanation := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	explanation := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.False(t, explanation.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceRole, scope: ScopeMCPConnect, effect: GrantEffectBlocked, reason: BlockedReasonNone},
@@ -147,7 +147,7 @@ func TestExplainGrantCheckDirectGrantOutranksRoleAndEveryoneBlocks(t *testing.T)
 		heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")),
 	}
 
-	explanation := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	explanation := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.True(t, explanation.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceRole, scope: ScopeMCPConnect, effect: GrantEffectBlocked, reason: BlockedReasonNone},
@@ -165,7 +165,7 @@ func TestExplainGrantCheckOwnBlockBeatsOwnGrant(t *testing.T) {
 		heldBy(precedenceUser, NewGrant(ScopeMCPBlockedConnect, "server-1")),
 	}
 
-	explanation := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	explanation := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.False(t, explanation.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceUser, scope: ScopeMCPConnect, effect: GrantEffectBlocked, reason: BlockedReasonOwnExclusion},
@@ -181,7 +181,7 @@ func TestExplainGrantCheckWildcardDirectGrantDoesNotOutrankRoleBlock(t *testing.
 		heldBy(precedenceUser, NewGrant(ScopeMCPConnect, WildcardResource)),
 	}
 
-	explanation := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	explanation := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.False(t, explanation.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceUser, scope: ScopeMCPConnect, effect: GrantEffectBlocked, reason: BlockedReasonWildcardDirectGrant},
@@ -197,7 +197,7 @@ func TestExplainGrantCheckOrganizationWideGrantAllows(t *testing.T) {
 		heldBy(precedenceRole, NewGrant(ScopeMCPRead, "server-2")),
 	}
 
-	explanation := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	explanation := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.True(t, explanation.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceEveryone, scope: ScopeMCPConnect, effect: GrantEffectAllows, reason: BlockedReasonNone},
@@ -212,7 +212,7 @@ func TestExplainGrantCheckScopeExpansionAllows(t *testing.T) {
 	}
 
 	for _, scope := range []Scope{ScopeMCPRead, ScopeMCPWrite} {
-		explanation := requireConsistentExplanation(t, grants, MCPCheck(scope, "server-1", "project-1"))
+		explanation := requireConsistentExplanation(t, grants, mcpCheck(scope, "server-1", "project-1"))
 		require.True(t, explanation.Allowed, scope)
 		require.Equal(t, []explainedGrant{
 			{principal: precedenceRole, scope: ScopeMCPWrite, effect: GrantEffectAllows, reason: BlockedReasonNone},
@@ -220,7 +220,7 @@ func TestExplainGrantCheckScopeExpansionAllows(t *testing.T) {
 	}
 
 	// mcp:write does not reach mcp:connect.
-	explanation := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	explanation := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.False(t, explanation.Allowed)
 	require.Empty(t, explainedGrants(explanation))
 }
@@ -228,7 +228,7 @@ func TestExplainGrantCheckScopeExpansionAllows(t *testing.T) {
 func TestExplainGrantCheckNoMatchingGrant(t *testing.T) {
 	t.Parallel()
 
-	explanation := requireConsistentExplanation(t, nil, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	explanation := requireConsistentExplanation(t, nil, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.False(t, explanation.Allowed)
 	require.Empty(t, explanation.Contributions)
 }
@@ -245,7 +245,7 @@ func TestExplainGrantCheckDispositionDirectGrantDoesNotReachUnannotatedTool(t *t
 
 	// The call carries no disposition, so the disposition-limited direct
 	// grant does not cover it at all and only the block is explained.
-	explanation := requireConsistentExplanation(t, grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "unannotated", Disposition: "", ProjectID: "project-1"}))
+	explanation := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("unannotated", ""))
 	require.False(t, explanation.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceRole, scope: ScopeMCPBlockedConnect, effect: GrantEffectBlocks, reason: BlockedReasonNone},
@@ -262,13 +262,13 @@ func TestExplainGrantCheckToolBlockDoesNotReachServerCheck(t *testing.T) {
 		heldBy(precedenceRole, NewGrantWithSelector(ScopeMCPBlockedConnect, blocked)),
 	}
 
-	server := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	server := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.True(t, server.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceRole, scope: ScopeMCPConnect, effect: GrantEffectAllows, reason: BlockedReasonNone},
 	}, explainedGrants(server))
 
-	tool := requireConsistentExplanation(t, grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "delete", Disposition: DispositionDestructive, ProjectID: "project-1"}))
+	tool := requireConsistentExplanation(t, grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("delete", DispositionDestructive))
 	require.False(t, tool.Allowed)
 	require.Equal(t, []explainedGrant{
 		{principal: precedenceRole, scope: ScopeMCPConnect, effect: GrantEffectBlocked, reason: BlockedReasonNone},
@@ -279,6 +279,6 @@ func TestExplainGrantCheckToolBlockDoesNotReachServerCheck(t *testing.T) {
 func TestExplainGrantCheckRejectsWildcardResource(t *testing.T) {
 	t.Parallel()
 
-	_, err := ExplainGrantCheck(nil, MCPCheck(ScopeMCPConnect, WildcardResource, ""))
+	_, err := ExplainGrantCheck(nil, mcpCheck(ScopeMCPConnect, WildcardResource, ""))
 	require.Error(t, err)
 }

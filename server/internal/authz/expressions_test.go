@@ -207,12 +207,12 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 		}),
 	}
 
-	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
+	result, err := expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
-	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_other_project", "project_other")).Evaluate(grants)
+	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_other_project"), ProjectIDFrom("project_other")).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
@@ -245,18 +245,18 @@ func TestGrantExpressionEvaluate_mcpReadBlocklistAlsoBlocksMCPWrite(t *testing.T
 		}),
 	}
 
-	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
+	result, err := expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
-	result, err = expressionForCheck(MCPCheck(ScopeMCPRead, "server_in_project", projectID)).Evaluate(grants)
+	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Read()).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
 	// A block bounded to the project leaves servers elsewhere alone.
-	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_elsewhere", "project_456")).Evaluate(grants)
+	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_elsewhere"), ProjectIDFrom("project_456")).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
 }
@@ -273,7 +273,7 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 		NewGrant(ScopeMCPBlockedConnect, serverID),
 	}
 
-	write := MCPCheck(ScopeMCPWrite, serverID, testProjectID)
+	write := MCPServer(MCPServerIDFrom(serverID), ProjectIDFrom(testProjectID)).Write()
 	result, err := expressionForCheck(write).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
