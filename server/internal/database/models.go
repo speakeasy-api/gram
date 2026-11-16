@@ -1036,12 +1036,15 @@ type AuthzChallengeResolution struct {
 	ResourceKind string
 	// @access: opaque-confidential
 	ResourceID string
-	// How the challenge was resolved: role_assigned, dismissed.
+	// How the challenge was resolved: role_assigned, temporary_grant, dismissed.
 	// @access: confidential
 	ResolutionType string
 	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
 	// @access: confidential
 	RoleSlug pgtype.Text
+	// When resolution_type=temporary_grant, the principal_grants row that was granted with an expiry. Soft reference: the grant row may be revoked (deleted) later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
 	// URN of the admin who resolved the challenge.
 	// @access: confidential
 	ResolvedBy string
