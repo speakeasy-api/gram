@@ -439,12 +439,17 @@ type PublishStatusResult struct {
 	// marketplace — the value to mark required in Cursor's team marketplace.
 	// Present when connected.
 	CursorObservabilityPlugin *string
+	// Whether the Mistral Vibe observability plugin ZIP can be downloaded right
+	// now: observability is enabled for the project, the pinned hooks release's
+	// relay carries the vibe provider, and the org name satisfies the Agent
+	// Plugins 1.0 name schema. Present when connected.
+	VibeObservabilityAvailable *bool
 	// Slug of the generated Mistral Vibe observability plugin's install directory
 	// (`~/.vibe/plugins/<slug>`) — present only when connected, observability is
-	// enabled for the project, the org is past the phased hooks rollout, the
-	// pinned hooks binary supports the vibe provider, and the org name satisfies
-	// the Agent Plugins 1.0 name schema; absent otherwise. The marketplace repo
-	// directory is `<slug>-vibe`.
+	// enabled, the vibe package is available, and the stored published hooks
+	// version equals the current generator version, i.e. the published marketplace
+	// repo actually carries the package. The marketplace repo directory is
+	// `<slug>-vibe`.
 	VibeObservabilityPlugin *string
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project

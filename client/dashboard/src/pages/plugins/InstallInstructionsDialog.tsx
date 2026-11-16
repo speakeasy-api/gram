@@ -1058,11 +1058,14 @@ function VibeInstallContent({
   pluginSlug,
   agentPluginsV1Compatible,
   observabilityPluginSlug,
+  observabilityAvailable,
 }: Pick<ContentProps, "repoOwner" | "repoName" | "pluginSlug"> & {
   /** Whether the selected feature plugin is published as a portable Agent Plugins 1.0 package (a `<slug>-vibe/` directory exists for it). */
   agentPluginsV1Compatible?: boolean;
-  /** Real install name of the org's observability plugin from the publish status, when published. */
+  /** Real install name of the org's observability plugin from the publish status, when the published repo carries it. */
   observabilityPluginSlug?: string;
+  /** Whether the observability ZIP can be downloaded right now (pin carries vibe + name fits the schema) — independent of the marketplace repo. */
+  observabilityAvailable?: boolean;
 }): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("vibe", "observability-vibe.zip");
@@ -1074,7 +1077,12 @@ function VibeInstallContent({
   // so the copy never shows a placeholder. Feature plugins publish as
   // <slug>-vibe/ in the marketplace repo, but only when they are portable
   // Agent Plugins 1.0 packages.
-  const observabilityPublished = Boolean(observabilityPluginSlug);
+  // The Quick install (server-generated ZIP) renders whenever the vibe
+  // package is available — the ZIP does not depend on the marketplace repo —
+  // while the real install name comes from the publish status when the
+  // published repo carries the package.
+  const observabilityPublished = Boolean(observabilityAvailable);
+  const observabilityName = observabilityPluginSlug ?? "<org>-observability";
   const isObservability = !pluginSlug || pluginSlug === observabilityPluginSlug;
   const installSlug = isObservability
     ? (observabilityPluginSlug ?? "<org>-observability")
@@ -1083,18 +1091,25 @@ function VibeInstallContent({
   const portable = agentPluginsV1Compatible !== false;
 
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
-  // Clone into a fresh temp directory, chain with &&, and trap EXIT so the
-  // clone is cleaned up on success and failure: a second paste of the clone
-  // alone fails, and without the chaining the copy below would still replace
-  // the install from the stale checkout. Clear the destination first: cp -R
-  // into an existing directory nests the new files one level deeper and Vibe
-  // keeps loading the old plugin.
-  const manualCopy = `tmp=$(mktemp -d) && \
-trap 'rm -rf "$tmp"' EXIT && \
-git clone ${repoUrl} "$tmp/marketplace" && \
-mkdir -p ~/.vibe/plugins && \
-rm -rf ~/.vibe/plugins/${installSlug} && \
-cp -R "$tmp/marketplace/${packageDir}" ~/.vibe/plugins/${installSlug}`;
+  // Clone into a fresh temp directory and chain with && inside a subshell, so
+  // the EXIT trap fires when the command ends (a bare trap replaces any trap
+  // the user's shell already has and only fires at shell exit). A second
+  // paste of the clone alone fails, and without the chaining the copy below
+  // would still replace the install from the stale checkout. Clear the
+  // destination first: cp -R into an existing directory nests the new files
+  // one level deeper and Vibe keeps loading the old plugin. The lines are
+  // built as an array and joined with a real backslash-newline: a backslash
+  // before a newline inside a template literal is a line continuation, which
+  // would render the whole block as one long line.
+  const manualLines = [
+    "tmp=$(mktemp -d)",
+    `trap 'rm -rf "$tmp"' EXIT`,
+    `git clone ${repoUrl} "$tmp/marketplace"`,
+    "mkdir -p ~/.vibe/plugins",
+    `rm -rf ~/.vibe/plugins/${installSlug}`,
+    `cp -R "$tmp/marketplace/${packageDir}" ~/.vibe/plugins/${installSlug}`,
+  ];
+  const manualCopy = `( ${manualLines.join(" && \\\n")} )`;
 
   return (
     <div className="min-w-0 space-y-6">
@@ -1108,7 +1123,7 @@ cp -R "$tmp/marketplace/${packageDir}" ~/.vibe/plugins/${installSlug}`;
               Agent Plugins 1.0 package with a hooks-scoped API key already
               embedded (no CLI, no key to export). Extract it into{" "}
               <code className="bg-muted px-1 py-0.5 text-xs">
-                ~/.vibe/plugins/{observabilityPluginSlug}
+                ~/.vibe/plugins/{observabilityName}
               </code>{" "}
               and Vibe loads it on next start.
             </p>
@@ -1125,9 +1140,9 @@ cp -R "$tmp/marketplace/${packageDir}" ~/.vibe/plugins/${installSlug}`;
             <p className="text-muted-foreground mt-2 text-xs">
               Then extract:{" "}
               <code className="bg-muted px-1 py-0.5">
-                mkdir -p ~/.vibe/plugins/{observabilityPluginSlug} &amp;&amp;
-                unzip observability-vibe.zip -d ~/.vibe/plugins/
-                {observabilityPluginSlug}
+                mkdir -p ~/.vibe/plugins/{observabilityName} &amp;&amp; unzip
+                observability-vibe.zip -d ~/.vibe/plugins/
+                {observabilityName}
               </code>
             </p>
             <p className="text-muted-foreground mt-2 text-xs">
@@ -1533,6 +1548,9 @@ export function InstallInstructionsDialog({
                   agentPluginsV1Compatible={effectiveAgentPluginsV1Compatible}
                   observabilityPluginSlug={
                     publishStatus?.vibeObservabilityPlugin
+                  }
+                  observabilityAvailable={
+                    publishStatus?.vibeObservabilityAvailable
                   }
                 />
               )}

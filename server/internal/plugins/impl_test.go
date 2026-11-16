@@ -1100,7 +1100,7 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 }
 
 func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
-	plugins.SetPinnedHooksBinaryVersionForTest(t, plugins.VibeProviderMinHooksBinaryVersionForTest)
+	plugins.SetReleasedHooksProvidersForTest(t, []string{"pi", plugins.VibeProviderSlugForTest})
 
 	ctx, ti := newTestPluginsService(t)
 
@@ -1116,6 +1116,52 @@ func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) { //nolint
 	for _, name := range []string{"plugin.json", "speakeasy.json", "hooks/bootstrap.sh"} {
 		require.Contains(t, files, name, "vibe download must ship %s", name)
 	}
+}
+
+// platform=vibe download is a failed precondition — not a 500 — when the
+// pinned release lacks the vibe provider or the org name breaks the AP1.0
+// name schema, and neither shape may store a hooks key row. Not parallel:
+// the provider shape reads the releasedHooksProviders package var.
+func TestPluginsService_DownloadObservabilityPluginVibeGateFailures(t *testing.T) { //nolint:paralleltest // Reads releasedHooksProviders, which sibling tests write.
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	countKeys := func() int {
+		t.Helper()
+		keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+		require.NoError(t, err)
+		return len(keys)
+	}
+	requireOopsCode := func(err error, code oops.Code, msgPart string) {
+		t.Helper()
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, code, shareable.Code)
+		require.Contains(t, err.Error(), msgPart)
+	}
+
+	// Shape 1: the pinned release does not carry the vibe provider.
+	before := countKeys()
+	_, _, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "vibe"})
+	requireOopsCode(err, oops.CodeFailedPrecondition, "does not carry the vibe provider")
+	require.Equal(t, before, countKeys(), "a gated download must not store a hooks key")
+
+	// Shapes 2 and 3: the provider is released, but the org name produces an
+	// invalid manifest name (80 chars, or no ASCII letters/digits at all).
+	plugins.SetReleasedHooksProvidersForTest(t, []string{"pi", plugins.VibeProviderSlugForTest})
+	for _, name := range []string{strings.Repeat("a", 80), "*** ***"} {
+		renameOrganization(t, ctx, ti.conn, authCtx.ActiveOrganizationID, name)
+		before = countKeys()
+		_, _, err = ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "vibe"})
+		requireOopsCode(err, oops.CodeFailedPrecondition, "name schema")
+		require.Equal(t, before, countKeys(), "a name-gated download must not store a hooks key")
+	}
+
+	// platform=claude is unaffected by the vibe gate.
+	renameOrganization(t, ctx, ti.conn, authCtx.ActiveOrganizationID, strings.Repeat("a", 80))
+	_, _, err = ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "claude"})
+	require.NoError(t, err)
 }
 
 func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testing.T) {

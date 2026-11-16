@@ -214,8 +214,7 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
         },
         {
           title: "Sign in from Vibe, then connect",
-          description:
-            "Run /mcp login platform inside a Vibe session to open the AI Control Plane browser authorization, then ask Vibe to list your Speakeasy projects.",
+          description: `Run /mcp login ${PLATFORM_MCP_SERVER_NAME} inside a Vibe session to open the AI Control Plane browser authorization, then ask Vibe to list your Speakeasy projects.`,
         },
       ];
   }

@@ -74,7 +74,11 @@ export type PublishStatusResult = {
    */
   upToDate?: boolean | undefined;
   /**
-   * Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled for the project, the org is past the phased hooks rollout, the pinned hooks binary supports the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema; absent otherwise. The marketplace repo directory is `<slug>-vibe`.
+   * Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: observability is enabled for the project, the pinned hooks release's relay carries the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema. Present when connected.
+   */
+  vibeObservabilityAvailable?: boolean | undefined;
+  /**
+   * Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled, the vibe package is available, and the stored published hooks version equals the current generator version, i.e. the published marketplace repo actually carries the package. The marketplace repo directory is `<slug>-vibe`.
    */
   vibeObservabilityPlugin?: string | undefined;
 };
@@ -102,6 +106,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     repo_owner: z.optional(z.string()),
     repo_url: z.optional(z.string()),
     up_to_date: z.optional(z.boolean()),
+    vibe_observability_available: z.optional(z.boolean()),
     vibe_observability_plugin: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -118,6 +123,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
       "repo_owner": "repoOwner",
       "repo_url": "repoUrl",
       "up_to_date": "upToDate",
+      "vibe_observability_available": "vibeObservabilityAvailable",
       "vibe_observability_plugin": "vibeObservabilityPlugin",
     });
   }),

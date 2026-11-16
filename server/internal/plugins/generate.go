@@ -16,8 +16,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"golang.org/x/mod/semver"
-
 	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
@@ -666,14 +664,13 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	if err := generatePiObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate pi observability plugin: %w", err)
 	}
-	if err := generateVibeObservabilityPlugin(files, cfg); err != nil {
-		if errors.Is(err, errVibeHooksUnsupported) || errors.Is(err, errVibeManifestName) {
-			// Not fatal for the publish: the Vibe observability package is
-			// skipped until the pinned hooks binary carries the vibe provider
-			// or the org slug fits the plugin name schema.
-			return files, nil
+	// The Vibe package is skipped (not fatal for the publish) unless the
+	// pinned hooks release carries the vibe provider and the org slug fits
+	// the plugin name schema — callers gate on VibeObservabilityPluginAvailable.
+	if VibeObservabilityPluginAvailable(cfg) {
+		if err := generateVibeObservabilityPlugin(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate vibe observability plugin: %w", err)
 		}
-		return nil, fmt.Errorf("generate vibe observability plugin: %w", err)
 	}
 	return files, nil
 }
@@ -2632,6 +2629,10 @@ func renderVibeHooksTOML() []byte {
 	b.WriteString("# needs bash (bash-only array syntax); Vibe's own bash tool requires\n")
 	b.WriteString("# bash too — /bin/bash on macOS/Linux, Git Bash on Windows (install\n")
 	b.WriteString("# Git for Windows; PowerShell-only hosts are not supported).\n")
+	b.WriteString("# The pre_tool hook is strict: an undecodable payload or a crashed hook\n")
+	b.WriteString("# denies the call instead of letting it run unobserved. Strict does not\n")
+	b.WriteString("# cover an unreachable Speakeasy server — the relay fails open on\n")
+	b.WriteString("# transport, same as Claude Code.\n")
 	for _, event := range vibeObservabilityHookEvents {
 		// Only pre_tool is strict: the server can only block prompt and
 		// pre-tool events, so strict post_tool would just clear the result of
@@ -2664,41 +2665,32 @@ func generateVibeObservabilityPluginFlat(files map[string][]byte, cfg GenerateCo
 	return generateVibeObservabilityPluginInDir(files, "", cfg)
 }
 
-// vibeProviderMinHooksBinaryVersion is the first speakeasy-hooks release that
+// releasedHooksProviders mirrors the generated hooksReleaseProviders (the
+// providers the pinned speakeasy-hooks release supports) but is a var so
+// tests can exercise both sides of the vibe gate before a release carrying
+// the provider is pinned. Tests that write it must not run in parallel with
+// other tests that read it.
+var releasedHooksProviders = hooksReleaseProviders
+
+// vibeProviderReleased reports whether the pinned hooks release's relay
 // carries the vibe provider. The generated hooks.toml runs the pinned binary,
-// and a pin without the provider exits 64 ("unknown provider") on every hook —
-// under strict that denies every tool call. The Vibe observability package and
-// the platform=vibe download are gated on the pin reaching this version, so a
-// marketplace published before the release PR merges never ships hooks that
-// can only fail.
-const vibeProviderMinHooksBinaryVersion = "0.3.47"
-
-var (
-	errVibeHooksUnsupported = fmt.Errorf("vibe provider requires speakeasy-hooks >= %s (pinned: %s)", vibeProviderMinHooksBinaryVersion, hooksBinaryVersion)
-	errVibeManifestName     = errors.New("vibe observability plugin name does not satisfy the Agent Plugins 1.0 name schema")
-)
-
-// pinnedHooksBinaryVersion mirrors the generated const hooksBinaryVersion but
-// is a var so tests can exercise both sides of the vibe gate before the
-// release PR moves the pin past vibeProviderMinHooksBinaryVersion. Tests that
-// write it must not run in parallel with other tests that read it.
-var pinnedHooksBinaryVersion = hooksBinaryVersion
-
-// vibeHooksSupported reports whether the pinned hooks binary includes the vibe
-// provider.
-func vibeHooksSupported() bool {
-	return semver.Compare("v"+pinnedHooksBinaryVersion, "v"+vibeProviderMinHooksBinaryVersion) >= 0
+// and a release without the provider exits 64 ("unknown provider") on every
+// hook — under strict that denies every tool call — so the Vibe observability
+// package and the platform=vibe download are gated on this list, which
+// pin-hooks-release derives from the release itself.
+func vibeProviderReleased() bool {
+	return slices.Contains(releasedHooksProviders, string(relay.ProviderVibe))
 }
 
 // VibeObservabilityPluginAvailable reports whether the per-org Vibe
-// observability package would generate cleanly for cfg: the pinned hooks
-// binary carries the vibe provider, and the manifest name (the org's
+// observability package can be generated and published for cfg: the pinned
+// hooks release carries the vibe provider, and the manifest name (the org's
 // observability slug) satisfies the Agent Plugins 1.0 name schema — checked
 // through the same vendored-schema validation generation runs, so the two
-// cannot drift. Publish status uses it so install UIs only offer the package
-// when it is actually published.
+// cannot drift. Callers (the marketplace publish, the platform=vibe download,
+// publish status) gate on this before generating.
 func VibeObservabilityPluginAvailable(cfg GenerateConfig) bool {
-	if !vibeHooksSupported() {
+	if !vibeProviderReleased() {
 		return false
 	}
 	name := naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
@@ -2706,9 +2698,6 @@ func VibeObservabilityPluginAvailable(cfg GenerateConfig) bool {
 }
 
 func generateVibeObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
-	if !vibeHooksSupported() {
-		return errVibeHooksUnsupported
-	}
 	// The plugin's identity is <org>-observability — the name users install it
 	// under (~/.vibe/plugins/<org>-observability/) — not the repo directory
 	// <org>-observability-vibe/, which only keeps the package from colliding
@@ -2732,12 +2721,12 @@ func generateVibeObservabilityPluginInDir(files map[string][]byte, subdir string
 			},
 		},
 	}
-	// An org slug that breaks the name schema must not fail the whole
-	// publish — only the Vibe package is skipped. The name is checked on its
-	// own first so a schema-loader or future manifest error is not
-	// misreported as a name failure.
+	// The name is checked on its own first so a schema-loader or future
+	// manifest error is not misreported as a name failure. Callers gate on
+	// VibeObservabilityPluginAvailable, so a bad name here means the caller
+	// did not check — still only this package fails.
 	if err := validateAgentPluginName(manifestName); err != nil {
-		return fmt.Errorf("%w: %w", errVibeManifestName, err)
+		return fmt.Errorf("vibe observability plugin name does not satisfy the Agent Plugins 1.0 name schema: %w", err)
 	}
 	manifestJSON, err := marshalJSON(manifest)
 	if err != nil {

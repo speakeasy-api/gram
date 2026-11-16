@@ -366,15 +366,6 @@ func (r *Relay) vibePostAgent(ctx context.Context, in *vibeHookInput, raw json.R
 	return resp, nil
 }
 
-// vibeFailureResponse renders the structured reply for an internal failure
-// (undecodable payload, handler error). Vibe fail-opens a failed hook unless
-// the hook is strict; under strict the relay emits the structured response
-// that achieves the strict outcome directly rather than relying on Vibe's
-// non-zero-exit path: pre_tool denies the call with the failure reason, and
-// post_tool clears the output (a deny whose reason replaces tool_output_text;
-// an empty reason clears it). strict is forbidden on post_agent, so those
-// always fail open. Without strict the response is nil — exit 0 with empty
-// stdout, Vibe's pass-through.
 // sniffVibeHookEvent recovers the hook_event_name from raw payload bytes when
 // the whole object no longer parses, so strict failure handling still knows
 // which hook type failed. Unknown bytes report "".
@@ -391,11 +382,17 @@ func sniffVibeHookEvent(payload []byte, fallback string) string {
 }
 
 // vibeFailureResponse renders the structured reply for an internal failure
-// (bad payload or handler error): nil means pass through (fail open). Under
-// strict, an unrecognised payload ("") fails closed as a pre_tool-style deny:
-// for pre_tool that is the tool error, and for a truncated post_tool Vibe's
-// own failure path under strict also denies, so either way the call does not
-// proceed unanswered.
+// (undecodable payload, handler error). Vibe fail-opens a failed hook unless
+// the hook is strict; under strict the relay emits the structured response
+// that achieves the strict outcome directly rather than relying on Vibe's
+// non-zero-exit path: pre_tool denies the call with the failure reason, and
+// post_tool clears the output (a deny whose reason replaces tool_output_text;
+// an empty reason clears it). strict is forbidden on post_agent, so those
+// always fail open. Without strict the response is nil — exit 0 with empty
+// stdout, Vibe's pass-through. An unrecognised payload ("") fails closed as a
+// pre_tool-style deny under strict. Note the generated config never passes
+// --strict for post_tool (only pre_tool is strict there), so the strict
+// post_tool branch is reachable only through the HOOKS_STRICT env override.
 func vibeFailureResponse(hook string, strict bool, err error) *vibeResponse {
 	switch {
 	case strict && (hook == vibeHookPreTool || hook == ""):
@@ -555,18 +552,32 @@ func vibeHomeDir() string {
 // loadVibeMCPServers reads the MCP servers a Vibe session can reach:
 // [[mcp_servers]] in the Vibe home's config.toml, plus the mcp.json of every
 // plugin under the Vibe home's plugins/ (user scope) and the session cwd's
-// .vibe/plugins/ (trusted project scope). Config-file discovery is
-// best-effort, like Pi's.
+// .vibe/plugins/ (trusted project scope), in that order — the order Vibe
+// itself resolves a name collision, so the first entry wins. Dedup is on the
+// normalised name (Vibe renders "-" and spaces as "_" in tool names): two
+// sources declaring names that normalise alike are a collision, and when
+// their URLs differ the alias is ambiguous and neither URL is reported, so a
+// hosted server cannot be claimed through the wrong entry. Config-file
+// discovery is best-effort, like Pi's.
 func loadVibeMCPServers(cwd string) []agenthooks.MCPServer {
 	var out []agenthooks.MCPServer
-	seen := map[string]bool{}
+	seen := map[string]string{}    // normalised alias -> URL
+	ambiguous := map[string]bool{} // alias declared with differing URLs
 	add := func(name, rawURL, command string) {
 		name = strings.TrimSpace(name)
-		if name == "" || seen[name] {
+		alias := normalizeVibeServerName(name)
+		if name == "" || alias == "" {
 			return
 		}
-		seen[name] = true
-		out = append(out, agenthooks.MCPServer{Name: name, URL: strings.TrimSpace(rawURL), Command: command})
+		rawURL = strings.TrimSpace(rawURL)
+		if prev, ok := seen[alias]; ok {
+			if prev != rawURL {
+				ambiguous[alias] = true
+			}
+			return
+		}
+		seen[alias] = rawURL
+		out = append(out, agenthooks.MCPServer{Name: name, URL: rawURL, Command: command})
 	}
 
 	if home := vibeHomeDir(); home != "" {
@@ -598,8 +609,15 @@ func loadVibeMCPServers(cwd string) []agenthooks.MCPServer {
 			}
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	// Drop ambiguous aliases (declared with differing URLs) — resolving them
+	// would risk attributing a call to the wrong server.
+	kept := out[:0]
+	for _, srv := range out {
+		if !ambiguous[normalizeVibeServerName(srv.Name)] {
+			kept = append(kept, srv)
+		}
+	}
+	return kept
 }
 
 // vibePluginDirs lists the plugin roots in scope: user scope under the Vibe

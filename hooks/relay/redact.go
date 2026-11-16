@@ -198,9 +198,6 @@ func redactCommand(raw string) string {
 		case secretFlagRE.MatchString(f):
 			out = append(out, f)
 			maskNext = true
-		// A token is URL-shaped only when its first colon opens "://"; a
-		// keyword-bearing scheme (oauth://) must not read as a header, and a
-		// no-space header whose value is a URL must not read as one.
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
 			maskNext = true
@@ -211,6 +208,9 @@ func redactCommand(raw string) string {
 			i := strings.IndexByte(f, '=')
 			out = append(out, f[:i+1]+"***")
 		case strings.Contains(f, "://"):
+			// A token is URL-shaped only when its first colon opens "://"; a
+			// keyword-bearing scheme (oauth://) must not read as a header, and
+			// a no-space header whose value is a URL must not read as one.
 			// A server URL passed as an argument (npx mcp-remote <url>) can
 			// carry credentials in userinfo or its query string; structured
 			// redaction keeps the host and path matchable. Checked before
@@ -225,7 +225,18 @@ func redactCommand(raw string) string {
 		case tokenPrefixRE.MatchString(f):
 			out = append(out, "***")
 		default:
-			out = append(out, f)
+			// The patterns above are anchored at the start of the field, but
+			// the quote-aware splitter can return a field of several words (an
+			// unterminated quote swallows the rest of the line, and a quoted
+			// argument keeps its spaces). Run the old word-level pass over any
+			// such field so a secret not at its start is still masked — e.g.
+			// `node /tmp/o'brien/server.js --api-key <secret>` or
+			// `sh -c 'cd /app && API_KEY=<secret> node server.js'`.
+			if strings.ContainsAny(f, " \t") {
+				out = append(out, redactCommand(f))
+			} else {
+				out = append(out, f)
+			}
 		}
 	}
 	return strings.Join(out, " ")

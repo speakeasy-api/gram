@@ -76,6 +76,7 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
       repoName: "plugins",
       repoUrl: "https://example.com/repo",
       marketplaceUrl: "https://example.com/private-token",
+      vibeObservabilityAvailable: true,
       vibeObservabilityPlugin: "example-observability",
     } satisfies PublishStatusResult,
   }),

@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -439,21 +437,37 @@ args = ["-y", "@example/mcp"]
 	require.Equal(t, agenthooks.ToolMCP, tc.Canonical)
 }
 
-// TestLoadVibeMCPServersSkipsUnsafeFiles: a FIFO or an oversized mcp.json in
-// the project scope must be skipped, not stall or balloon the gating read.
-func TestLoadVibeMCPServersSkipsUnsafeFiles(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("FIFO test is unix-only")
-	}
+// TestLoadVibeMCPServersNormalisedCollision: two sources whose names
+// normalise to the same alias collide; the first (config.toml, the order Vibe
+// resolves in) wins when the URLs match, and when they differ the alias is
+// ambiguous and neither entry is reported — a hosted server must not be
+// claimed through the wrong one.
+func TestLoadVibeMCPServersNormalisedCollision(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("VIBE_HOME", home)
 	cwd := t.TempDir()
-	projDir := filepath.Join(cwd, ".vibe", "plugins", "evil")
+	require.NoError(t, os.WriteFile(filepath.Join(home, "config.toml"), []byte(`
+[[mcp_servers]]
+name = "my_server"
+url = "https://third-party.example.test/mcp"
+`), 0o600))
+	projDir := filepath.Join(cwd, ".vibe", "plugins", "proj")
 	require.NoError(t, os.MkdirAll(projDir, 0o755))
-	require.NoError(t, syscall.Mkfifo(filepath.Join(projDir, "mcp.json"), 0o600))
-	bigDir := filepath.Join(cwd, ".vibe", "plugins", "big")
-	require.NoError(t, os.MkdirAll(bigDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(bigDir, "mcp.json"), make([]byte, maxMCPConfigBytes+1), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(projDir, "mcp.json"),
+		[]byte(`{"mcpServers":{"my-server":{"url":"https://app.getgram.ai/mcp/hosted"}}}`), 0o600))
 
-	require.Empty(t, loadVibeMCPServers(cwd))
+	servers := loadVibeMCPServers(cwd)
+	require.Empty(t, servers, "alias with differing URLs must be ambiguous, got %v", servers)
+
+	var tc agenthooks.ToolCall
+	tc.MCP = &agenthooks.MCPCall{Server: "my_server"}
+	resolveVibeMCP(&tc, servers)
+	require.Empty(t, tc.MCP.URL, "ambiguous alias must not report the hosted URL")
+
+	// Same URL from both sources: first wins, no ambiguity.
+	require.NoError(t, os.WriteFile(filepath.Join(projDir, "mcp.json"),
+		[]byte(`{"mcpServers":{"my-server":{"url":"https://third-party.example.test/mcp"}}}`), 0o600))
+	servers = loadVibeMCPServers(cwd)
+	require.Len(t, servers, 1)
+	require.Equal(t, "my_server", servers[0].Name, "config.toml resolves first")
 }

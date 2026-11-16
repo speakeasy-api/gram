@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"maps"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -35,6 +36,7 @@ type pins struct {
 	BinaryVersion string
 	SHA256s       map[string]string
 	Retired       map[string]map[string]string
+	Providers     []string
 }
 
 func main() {
@@ -42,15 +44,16 @@ func main() {
 	checksums := flag.String("checksums", "", "path to the release checksums.txt")
 	path := flag.String("pins", "server/internal/plugins/hooks_release_pins.go", "path to the generated pins file")
 	generate := flag.String("generate", "server/internal/plugins/generate.go", "path to the file owning hooksGeneratorVersion")
+	relay := flag.String("relay", "hooks/relay", "path to the released relay's source, scanned for the providers it supports")
 	flag.Parse()
 
-	if err := run(*version, *checksums, *path, *generate); err != nil {
+	if err := run(*version, *checksums, *path, *generate, *relay); err != nil {
 		fmt.Fprintf(os.Stderr, "pin-hooks-release: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(version, checksums, path, generate string) error {
+func run(version, checksums, path, generate, relayDir string) error {
 	if version == "" || checksums == "" {
 		return fmt.Errorf("--version and --checksums are required")
 	}
@@ -80,10 +83,19 @@ func run(version, checksums, path, generate string) error {
 	}
 	retired[current.BinaryVersion] = current.SHA256s
 
+	// The workflow checks out the release's own commit, so the relay source
+	// here is exactly what the released binary carries: scan its Provider*
+	// constants and pin them alongside the version.
+	providers, err := scanRelayProviders(relayDir)
+	if err != nil {
+		return err
+	}
+
 	if err := writePins(path, pins{
 		BinaryVersion: version,
 		SHA256s:       sha256s,
 		Retired:       retired,
+		Providers:     providers,
 	}); err != nil {
 		return err
 	}
@@ -277,6 +289,7 @@ func templateData(data pins) struct {
 	BinaryVersion string
 	SHA256s       []templateSHA
 	Retired       []templateEntry
+	Providers     []string
 } {
 	retired := make([]templateEntry, 0, len(data.Retired))
 	for version, sha256s := range data.Retired {
@@ -288,11 +301,45 @@ func templateData(data pins) struct {
 		BinaryVersion string
 		SHA256s       []templateSHA
 		Retired       []templateEntry
+		Providers     []string
 	}{
 		BinaryVersion: data.BinaryVersion,
 		SHA256s:       sortedSHAs(data.SHA256s),
 		Retired:       retired,
+		Providers:     data.Providers,
 	}
+}
+
+// providerConstPattern matches the relay-local provider declarations, e.g.
+// `const ProviderVibe agenthooks.Provider = "vibe"` in hooks/relay/vibe.go.
+var providerConstPattern = regexp.MustCompile(`(?m)^const (Provider\w+) agenthooks\.Provider = "([^"]+)"$`)
+
+// scanRelayProviders returns the sorted provider slugs the relay source in
+// dir declares — the providers the released binary supports.
+func scanRelayProviders(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read relay source %s: %w", dir, err)
+	}
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name())) // #nosec G304 -- release-workflow-supplied dir inside the repo checkout
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", e.Name(), err)
+		}
+		for _, m := range providerConstPattern.FindAllSubmatch(b, -1) {
+			seen[string(m[2])] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // semverLess orders MAJOR.MINOR.PATCH strings numerically; plain string
@@ -339,6 +386,17 @@ package plugins
 // hooksBinaryVersion is the release every newly rendered bootstrap script
 // installs.
 const hooksBinaryVersion = {{ printf "%q" .BinaryVersion }}
+
+// hooksReleaseProviders lists the hook providers the pinned release's relay
+// supports (the Provider* constants in hooks/relay at the release commit).
+// Gates — e.g. a new provider's plugin package — check membership here instead
+// of comparing version numbers, so they open exactly when a release carrying
+// the provider is pinned.
+var hooksReleaseProviders = []string{
+{{- range .Providers }}
+	{{ printf "%q" . }},
+{{- end }}
+}
 
 // hooksBinarySHA256s pins the archive digests for hooksBinaryVersion. Bootstrap
 // scripts verify the same digests client-side after downloading.

@@ -110873,9 +110873,12 @@ components:
         up_to_date:
           type: boolean
           description: Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+        vibe_observability_available:
+          type: boolean
+          description: 'Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: observability is enabled for the project, the pinned hooks release''s relay carries the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema. Present when connected.'
         vibe_observability_plugin:
           type: string
-          description: Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled for the project, the org is past the phased hooks rollout, the pinned hooks binary supports the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema; absent otherwise. The marketplace repo directory is `<slug>-vibe`.
+          description: Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled, the vibe package is available, and the stored published hooks version equals the current generator version, i.e. the published marketplace repo actually carries the package. The marketplace repo directory is `<slug>-vibe`.
       required:
         - configured
         - connected
