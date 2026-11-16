@@ -66,7 +66,7 @@ func NewSearchEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
 				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if p.ApikeyToken != nil {
@@ -77,7 +77,7 @@ func NewSearchEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 				sc := security.APIKeyScheme{
 					Name:           "project_slug",
 					Scopes:         []string{},
-					RequiredScopes: []string{},
+					RequiredScopes: []string{"producer"},
 				}
 				var key string
 				if p.ProjectSlugInput != nil {

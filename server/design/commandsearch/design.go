@@ -10,7 +10,8 @@ import (
 var _ = Service("commandSearch", func() {
 	Description("Searches authorized project resources for Command K.")
 	Security(security.Session, security.ProjectSlug)
-	Security(security.ByKey, security.ProjectSlug)
+	// Matches the risk and skills services, whose inventories this search exposes.
+	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
 	shared.DeclareErrorResponses()
 
 	Method("search", func() {
