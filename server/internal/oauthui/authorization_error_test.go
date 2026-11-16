@@ -264,6 +264,7 @@ func TestAuthorizationErrorPageAdminDetailIsTechnicalOnly(t *testing.T) {
 	body := response.Body.String()
 	require.Contains(t, body, `data-admin-detail>The exact problem.</dd>`)
 	require.Contains(t, body, "Problem: The exact problem.", "the copied technical details carry it")
+	require.Equal(t, 2, strings.Count(body, "The exact problem."), "only the Problem row and the copied details carry it")
 	page := strings.Join(strings.Fields(body), " ")
 	require.Contains(t, page, "because its sign-in address is a private or internal one that Speakeasy can't reach. This isn't something you did.")
 }
