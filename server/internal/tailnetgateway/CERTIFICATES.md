@@ -81,22 +81,28 @@ TLS with only the certificate its tracker holds (`serviceMode`,
 
 Certificate work is bounded to 8 concurrent requests per pod.
 
-**State machine** (`certificate.go`). One `certState` per node; `decide`
-picks the next step and `apply` records its outcome, both pure.
+**State machine** (`certchart.go`). One `sc` statechart instance per node,
+driven by the node's heartbeat: each poll fires the timers that are due, and
+the chart starts at most one request at a time on its own goroutine.
 
-| Phase               | Meaning                                                   |
-| ------------------- | --------------------------------------------------------- |
-| `phaseObtaining`    | No certificate, nothing has failed yet                    |
-| `phaseRetrying`     | No certificate, the last request failed; waiting to retry |
-| `phaseServing`      | Holding a certificate, nothing failing                    |
-| `phaseRenewFailing` | Holding a certificate, the last renewal failed            |
-| `phaseStopped`      | The node is closing                                       |
+| State             | Meaning                                                     |
+| ----------------- | ----------------------------------------------------------- |
+| `waiting`         | Nothing asked yet; the first poll after approval obtains    |
+| `obtaining`       | No certificate held; obtaining one                          |
+| `retrying`        | No certificate held; the last request failed                |
+| `serving`         | Holding a certificate; waiting for the next deadline        |
+| `checking_store`  | Re-reading the store for another slot's renewal             |
+| `fetching_window` | Asking Let's Encrypt for the renewal window                 |
+| `renewing`        | Renewing under the lease                                    |
+| `renew_backoff`   | The last renewal failed; still serving the held certificate |
+| `stopped`         | The node is closing                                         |
 
-Steps, in priority order: obtain (none held), check the store, fetch the
-window, renew. Expiry is not a phase; `certStatus` works it out from the
-clock. A slot without a valid certificate reports `awaiting_certificate`, and
-the ingress shows `provider_certificate_unavailable` with the reason and
-retry time.
+From `serving`, three deadlines lead out: the store refresh, the window
+check and the renewal point, in that order when due together. A renewal is
+adopted only if it is later than the held certificate. Expiry is not a
+state; `certStatus` works it out from the clock. A slot without a valid
+certificate reports `awaiting_certificate`, and the ingress shows
+`provider_certificate_unavailable` with the reason and retry time.
 
 ## Not handled
 
@@ -119,7 +125,7 @@ retry time.
 
 ## Verification
 
-- Unit tests: the state machine (`certstate_internal_test.go`), lease and
+- Unit tests: the chart, step by step (`certchart_internal_test.go`), lease and
   renewal coordination across slots (`certificate_internal_test.go`), the ARI
   client (`renewal_internal_test.go`), and the lease in Postgres
   (`statestore_test.go`).
@@ -127,6 +133,20 @@ retry time.
   against Tailscale's test control server and a Pebble ACME server. It shows
   one certificate per connection under concurrent handshakes, and that tsnet
   renews at once and names the replaced certificate.
-- A TLA+ model of issuance and renewal found problems 3 and 4 above and checks
-  the fixes: one issuance per connection, one renewal per cycle, and no outage
-  while the issuer is down for less than the remaining margin.
+- The chart's own rules (`certchart_internal_test.go`): `Machine.Explore`
+  walks every state the chart can reach and checks that a node holding a
+  certificate never obtains one, renews only once the window says so, never
+  stops serving a certificate it holds, and replaces one only with a later
+  one.
+- `Certificate.tla` models every slot of a connection together with the
+  store, the lease, tsnet and Let's Encrypt, and checks one new order per
+  connection, one renewal per certificate, and that every slot converges on
+  the latest certificate. Each design ruled out above, and each contract on
+  tsnet and the lease, is a constant that makes TLC print its trace.
+  `Certificate.cfg` runs in seconds; `CertificateLarge.cfg` in about a minute.
+  CI does not run them, so rerun both when the chart changes:
+
+  ```bash
+  java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -metadir "$(mktemp -d)" \
+    -workers auto -config Certificate.cfg Certificate.tla
+  ```
