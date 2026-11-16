@@ -1374,8 +1374,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, err)
 				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
-				if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
-					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, remotesessions.SignInAddressReason(address)))
+				if remotesessions.OutageAddress(err) != guardian.AddressFine {
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, oauthui.ReasonSignInAddress))
 				}
 				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
 					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
@@ -1889,9 +1889,9 @@ func (c remoteSessionCard) connectionDown() bool {
 	return c.Unavailable || c.SignInAddress
 }
 
-// SignInAddressStatus is the card's status line for a sign-in provider address Speakeasy did not dial.
+// SignInAddressStatus is the card's status line when its sign-in setup stops it; the reason stays on the connection row.
 func (c remoteSessionCard) SignInAddressStatus() string {
-	return "Sign-in provider " + c.signInAddressFailure.Problem() + " · ask your administrator"
+	return "Can't connect · this sign-in isn't set up correctly · ask your administrator"
 }
 
 // needsAction reports a card with a reconnect or verification still open.

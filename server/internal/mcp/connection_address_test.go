@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ func TestGatewayMemberAtBlockedAddress(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.NotEmpty(t, row.MemberID)
 	require.Equal(t, "192.0.2.10", row.ProviderHost, "the member's configured host")
-	require.Equal(t, `server "member" uses a private or internal address Speakeasy can't reach. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
+	require.Equal(t, `server "member" can't connect because of how it is set up. Ask your administrator to fix it`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 	require.NotContains(t, text, "192.0.2.10")
 }
 
@@ -89,7 +90,7 @@ func TestGatewayMemberAtMissingHost(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotFound.String(), row.Reason)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.Equal(t, missingMemberHost, row.ProviderHost, "the member's configured host")
-	require.Equal(t, `server "member" uses an address that does not point anywhere. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
+	require.Equal(t, `server "member" can't connect because of how it is set up. Ask your administrator to fix it`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 }
 
 // A lookup that fails for now is not a missing name: it stays the provider's to answer.
@@ -124,12 +125,12 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
-	const want = "uses a private or internal address Speakeasy can't reach. Ask your administrator to check the sign-in provider's address"
 
 	for _, call := range []string{"first", "inside the cooldown"} {
 		text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
 		require.True(t, isError, call)
-		require.Contains(t, text, `server "member" can't renew its sign-in because its sign-in provider `+want, call)
+		require.Contains(t, text, `server "member" can't sign in to the service it uses because of how it is set up. Waiting won't fix this. Ask your administrator to fix it`, call)
+		requirePlainEndUserText(t, text)
 		require.NotContains(t, text, "Retry", call)
 		require.NotContains(t, text, "reconnect", call)
 		require.NotContains(t, text, "192.0.2.10", call)
@@ -141,7 +142,8 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 		status := f.connectionStatus(t, ctx)
 		require.Equal(t, metamcp.SignInUnavailable, status.Servers[0].Status, call)
 		require.NotNil(t, status.Servers[0].Outage, call)
-		require.Equal(t, "member can't connect because its sign-in provider "+want+".", status.Servers[0].Outage.Message, call)
+		require.Equal(t, "member can't connect because of how it is set up. Waiting won't fix this. Ask your administrator.", status.Servers[0].Outage.Message, call)
+		requirePlainEndUserText(t, status.Text())
 		require.Empty(t, status.Servers[0].Outage.ReconnectURL, call)
 		require.True(t, status.Servers[0].Outage.NeedsAdmin, call)
 		require.Contains(t, status.Text(), "- member: can't connect (", call)
@@ -156,12 +158,13 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 	for _, token := range tokens {
 		state, instructions := mcp.ConnectionRouteFailureForOutage("member", token.ClientCredentialErr, true)
 		require.Equal(t, "unreachable", state)
-		require.Equal(t, "This server can't connect because its sign-in provider "+want+".", instructions)
+		require.Equal(t, "This server can't connect because of how it is set up. Retrying won't help. Ask your administrator to fix it.", instructions)
 
 		w := httptest.NewRecorder()
 		gate := mcp.RemoteSessionUnavailableError(w, token.ClientCredentialErr)
 		require.Equal(t, oops.CodeUnavailable, gate.Code, "still a 503")
-		require.Equal(t, "This MCP server can't get the credential it needs because its sign-in provider "+want+".", gate.Error())
+		require.Equal(t, "This server can't sign in to the service it uses because of how it is set up. Ask your administrator to fix it.", gate.Error())
+		requirePlainEndUserText(t, gate.Error())
 		require.Empty(t, w.Header().Get("Retry-After"), "waiting does not fix an address")
 	}
 }
@@ -179,7 +182,7 @@ func TestServeConsent_SignInProviderAddressCard(t *testing.T) {
 	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotAllowed, time.Minute))
 
 	_, page, _ := render(t, fx)
-	require.Contains(t, html.UnescapeString(page), "Sign-in provider uses a private or internal address Speakeasy can't reach · ask your administrator")
+	require.Contains(t, html.UnescapeString(page), "Can't connect · this sign-in isn't set up correctly · ask your administrator")
 	require.Contains(t, page, "0 of 1 connected", "a down connection is not counted")
 	require.NotContains(t, page, "Unavailable · try again shortly")
 	require.NotContains(t, page, "> Reconnect </button>")
@@ -201,7 +204,7 @@ func TestCodeServersVerifyMemberAtBlockedAddress(t *testing.T) {
 	page, err := host.Servers(ctx, codemode.PageArgs{Server: "remote", Verify: true})
 	require.NoError(t, err)
 	require.Equal(t, "unreachable", page.Items[0].Connection.Authentication)
-	require.Equal(t, "This server uses a private or internal address Speakeasy can't reach. Ask your administrator to check the server's address.", page.Items[0].Connection.Instructions)
+	require.Equal(t, "This server can't connect because of how it is set up. Retrying won't help. Ask your administrator to fix it.", page.Items[0].Connection.Instructions)
 }
 
 // The gateway list says a member's sign-in provider address is the problem, inside the cooldown that follows it.
@@ -228,12 +231,12 @@ func TestServeConsent_GatewayListSaysTheSignInProviderAddress(t *testing.T) {
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "unavailable", outcomes[0].Status)
-	require.Equal(t, "Can't connect · its sign-in provider uses an address that does not point anywhere · ask your administrator", outcomes[0].Label)
+	require.Equal(t, "Can't connect · it isn't set up correctly · ask your administrator", outcomes[0].Label)
 	require.Equal(t, []string{mcpconnectionattempts.CodeAddressNotFound.String()}, discoveryReasons(rec), "the row agrees with the card")
 	require.Contains(t, normalizeSpaces(page), `class="text-xs text-default-warning" data-gateway-server-status="unavailable"`, "styled as needing attention")
 
 	_, focus, _ := render(t, fx)
-	require.Contains(t, html.UnescapeString(normalizeSpaces(focus)), "can't connect because its sign-in provider uses an address that does not point anywhere. Ask your administrator to check the sign-in provider's address.")
+	require.Contains(t, html.UnescapeString(normalizeSpaces(focus)), "can't connect because of how it is set up. Waiting won't fix this. Ask your administrator to fix it.")
 	require.NotContains(t, focus, "Try again shortly")
 	require.NotContains(t, focus, "needs no sign-in")
 	require.NotContains(t, page, "try again shortly")
@@ -283,8 +286,8 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 		label  string
 		reason mcpconnectionattempts.Code
 	}{
-		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · it uses a private or internal address Speakeasy can't reach · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotAllowed},
-		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · it uses an address that does not point anywhere · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotFound},
+		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · it isn't set up correctly · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · it isn't set up correctly · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotFound},
 		{name: "broken server", url: broken.URL, label: "Unavailable · try again shortly, or ask your administrator", reason: mcpconnectionattempts.CodeMemberToolsMissing},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -341,5 +344,13 @@ func TestConsentPost_SignInProviderAddressIsNotApprovable(t *testing.T) {
 			_, page, _ := render(t, fx)
 			require.Contains(t, page, fmt.Sprintf(`data-consent-enabled="%t"`, tc.approvable))
 		})
+	}
+}
+
+// requirePlainEndUserText checks an end-user string names no configuration.
+func requirePlainEndUserText(t *testing.T, text string) {
+	t.Helper()
+	for _, word := range []string{"address", "URL", "private", "internal", "provider", "credential", "tunnel"} {
+		require.NotContains(t, strings.ToLower(text), strings.ToLower(word), text)
 	}
 }

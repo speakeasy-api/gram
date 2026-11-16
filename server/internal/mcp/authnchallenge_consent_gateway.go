@@ -113,14 +113,10 @@ func (g gatewayServer) Ready() bool {
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
 	case gatewayServerUnavailable:
-		switch {
-		case g.address == guardian.AddressFine:
+		if g.address == guardian.AddressFine {
 			return "Unavailable · try again shortly, or ask your administrator"
-		case g.signInAddress:
-			return "Can't connect · its sign-in provider " + g.address.Problem() + " · ask your administrator"
-		default:
-			return "Can't connect · it " + g.address.Problem() + " · ask your administrator"
 		}
+		return "Can't connect · it isn't set up correctly · ask your administrator"
 	case gatewayServerNoAccess:
 		return "No access"
 	case gatewayServerNoSignIn:
@@ -146,16 +142,12 @@ func (g gatewayServer) NeedsAttention() bool {
 	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage() || g.AddressNotice() != ""
 }
 
-// AddressNotice says an address an admin must fix stops this server, empty when none does.
+// AddressNotice says this server's setup stops it and an administrator must fix it, empty otherwise.
 func (g gatewayServer) AddressNotice() string {
-	switch {
-	case g.Status != gatewayServerUnavailable || g.address == guardian.AddressFine:
+	if g.Status != gatewayServerUnavailable || g.address == guardian.AddressFine {
 		return ""
-	case g.signInAddress:
-		return g.Name + " can't connect because its sign-in provider " + g.address.Problem() + ". Ask your administrator to check the sign-in provider's address."
-	default:
-		return g.Name + " " + g.address.Problem() + ". Ask your administrator to check the server's address."
 	}
+	return g.Name + " can't connect because of how it is set up. Waiting won't fix this. Ask your administrator to fix it."
 }
 
 // ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.
