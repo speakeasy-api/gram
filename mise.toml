@@ -409,6 +409,12 @@ GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
 ## randomize the listen port and issuer out of sync with the admin client.
 MOCK_OIDC_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
 MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
+## Local mock MCP server (server/cmd/mock-mcp), the offline upstream the local
+## seed registers as the "Acme Tasks (local mock)" remote MCP server. Loopback
+## only: the local server's remote MCP proxy is its only client.
+GRAM_MOCK_MCP_PORT = "4100"
+GRAM_MOCK_MCP_ADDRESS = "127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}"
+GRAM_MOCK_MCP_URL = "http://127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}/mcp"
 
 ########################
 ## Svix configuration ##

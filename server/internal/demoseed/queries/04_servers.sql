@@ -228,14 +228,16 @@ INSERT INTO remote_session_issuers
    name, scope_override)
 VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
-   'example-workspace-identity', 'https://identity.example.com',
-   'https://identity.example.com/oauth/authorize',
-   'https://identity.example.com/oauth/token',
-   'https://identity.example.com/.well-known/jwks.json',
+   -- Linear's real authorization server, as its MCP server advertises it, so
+   -- the demo reads like production.
+   'linear', 'https://mcp.linear.app',
+   'https://mcp.linear.app/authorize',
+   'https://mcp.linear.app/token',
+   NULL,
    ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
    ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
    -- An issuer-wide scope override, shown on the provider's page.
-   'Example Workspace Identity', ARRAY['read']);
+   'Linear', ARRAY['read']);
 
 -- name: ServersInsertLinearRemoteSessionClient :exec
 INSERT INTO remote_session_clients
@@ -306,7 +308,7 @@ VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
    'https://mcp.linear.app/mcp',
    'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://identity.example.com'], ARRAY['read', 'write'],
+   ARRAY['https://mcp.linear.app'], ARRAY['read', 'write'],
    ARRAY['read'], now() - interval '2 hours')
 ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
 SET metadata_url = EXCLUDED.metadata_url,
@@ -934,3 +936,65 @@ VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' ||
  @jti::text, @refresh_token_hash::text,
  now() + (@refresh_expires_in::text)::interval,
  now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
+
+-- Inspect tab: the annotations an admin keeps for a remote server's tools.
+-- One call per server; the arrays are aligned by position. The upsert keeps
+-- a rerun of the local fixtures idempotent; the projects cascade clears the
+-- rows on every reseed.
+-- name: ServersUpsertToolMetadata :execrows
+INSERT INTO mcp_server_tool_metadata
+  (project_id, mcp_server_id, tool_name, title, read_only_hint,
+   destructive_hint, idempotent_hint, open_world_hint)
+SELECT @project_id::uuid, @mcp_server_id::uuid, unnest(@tool_names::text[]),
+       unnest(@titles::text[]), unnest(@read_only_hints::boolean[]),
+       unnest(@destructive_hints::boolean[]), unnest(@idempotent_hints::boolean[]),
+       unnest(@open_world_hints::boolean[])
+ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE
+DO UPDATE SET title = EXCLUDED.title, read_only_hint = EXCLUDED.read_only_hint,
+  destructive_hint = EXCLUDED.destructive_hint, idempotent_hint = EXCLUDED.idempotent_hint,
+  open_world_hint = EXCLUDED.open_world_hint, updated_at = clock_timestamp();
+
+-- A block on one tool of one server for a role: an organization role by
+-- slug, or else the global role of that slug (Admin). Tool-scoped exclusions
+-- match strictly, so the role still connects to the server and its other
+-- tools. Custom role grants are cleared with the roles on every reseed; a
+-- global role's block is cleared by id in the org phase. Inserts nothing when
+-- no role of that slug exists (global roles may be absent on a fresh stack).
+-- name: ServersInsertToolBlock :execrows
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT @id::uuid, @org_id::text, r.principal_urn, 'mcp:blocked_connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', (@mcp_server_id::uuid)::text, 'tool', @tool::text)
+FROM (
+  SELECT COALESCE(
+    (SELECT 'role:organization:' || o.id FROM organization_roles o
+     WHERE o.organization_id = @org_id::text AND o.workos_slug = @role_slug::text
+       AND o.deleted IS FALSE AND o.workos_deleted IS FALSE),
+    (SELECT 'role:global:' || g.id FROM global_roles g
+     WHERE g.workos_slug = @role_slug::text
+       AND g.deleted IS FALSE AND g.workos_deleted IS FALSE LIMIT 1)) AS principal_urn
+) r
+WHERE r.principal_urn IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+-- A third gateway, stored in Direct mode, so the gateway pages show all
+-- three discovery modes (Acme Agent Gateway is Progressive, Python Code
+-- Gateway Code Mode locally). Its own issuer, like every gateway.
+-- name: ServersInsertDirectGatewayIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, 'engineering-direct-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
+
+-- name: ServersInsertDirectGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id, discovery_mode) VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, 'Engineering Direct Gateway',
+   @user_session_issuer_id::uuid, 'direct');
+
+-- name: ServersInsertGatewayMember :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  (@id::uuid, @project_id::uuid, @meta_id::uuid, @mcp_server_id::uuid, @sort_order::integer)
+ON CONFLICT DO NOTHING;

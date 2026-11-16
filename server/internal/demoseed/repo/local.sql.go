@@ -168,6 +168,33 @@ func (q *Queries) LocalGrantAPIKeyPolicy(ctx context.Context, arg LocalGrantAPIK
 	return err
 }
 
+const localGrantRoleReadOnlyConnect = `-- name: LocalGrantRoleReadOnlyConnect :execrows
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT $1::text, 'role:organization:' || r.id, 'mcp:connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', ($2::uuid)::text, 'disposition', 'read_only')
+FROM organization_roles r
+WHERE r.organization_id = $1::text AND r.workos_slug = $3::text
+ON CONFLICT DO NOTHING
+`
+
+type LocalGrantRoleReadOnlyConnectParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	RoleSlug       string
+}
+
+// A role limited to the read-only tools of one server, the read_only reason
+// on the Inspect tab for its members. Custom role grants are cleared with
+// the roles on every seed run.
+func (q *Queries) LocalGrantRoleReadOnlyConnect(ctx context.Context, arg LocalGrantRoleReadOnlyConnectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localGrantRoleReadOnlyConnect, arg.OrganizationID, arg.McpServerID, arg.RoleSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localGrantSessionVisibility = `-- name: LocalGrantSessionVisibility :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1::text, 'user:' || $2::text, 'chat:read',
@@ -346,6 +373,100 @@ type LocalUpsertEnvironmentParams struct {
 
 func (q *Queries) LocalUpsertEnvironment(ctx context.Context, arg LocalUpsertEnvironmentParams) error {
 	_, err := q.db.Exec(ctx, localUpsertEnvironment, arg.ID, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
+const localUpsertInspectEndpoint = `-- name: LocalUpsertInspectEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text)
+ON CONFLICT (id) DO UPDATE
+  SET mcp_server_id = EXCLUDED.mcp_server_id, meta_mcp_server_id = NULL, slug = EXCLUDED.slug,
+      deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE mcp_endpoints.project_id = EXCLUDED.project_id
+`
+
+type LocalUpsertInspectEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+// Restores the fixture endpoint if it was soft-deleted, but only within the
+// local fixture's project.
+func (q *Queries) LocalUpsertInspectEndpoint(ctx context.Context, arg LocalUpsertInspectEndpointParams) error {
+	_, err := q.db.Exec(ctx, localUpsertInspectEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const localUpsertInspectMCPServer = `-- name: LocalUpsertInspectMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, remote_mcp_server_id,
+                         user_session_issuer_id, visibility)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::uuid,
+        $6::uuid, $7::text)
+ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name, slug = EXCLUDED.slug, visibility = EXCLUDED.visibility,
+      deleted_at = NULL, updated_at = clock_timestamp()
+`
+
+type LocalUpsertInspectMCPServerParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                string
+	Slug                string
+	RemoteMcpServerID   uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	Visibility          string
+}
+
+// Like DeepWiki, each takes no upstream credential and sits under the shared
+// workforce issuer, so the local developer connects without a sign-in.
+func (q *Queries) LocalUpsertInspectMCPServer(ctx context.Context, arg LocalUpsertInspectMCPServerParams) error {
+	_, err := q.db.Exec(ctx, localUpsertInspectMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.RemoteMcpServerID,
+		arg.UserSessionIssuerID,
+		arg.Visibility,
+	)
+	return err
+}
+
+const localUpsertInspectRemoteServer = `-- name: LocalUpsertInspectRemoteServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::text, 'streamable-http', $5::text)
+ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name, slug = EXCLUDED.slug, url = EXCLUDED.url,
+      deleted_at = NULL, updated_at = clock_timestamp()
+`
+
+type LocalUpsertInspectRemoteServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      string
+	Slug      string
+	Url       string
+}
+
+// Remote MCP servers for the Inspect tab that exist only locally: the mock
+// task tracker (server/cmd/mock-mcp), an unreachable upstream and a disabled
+// copy of the mock. They live in the seeded project, so the next seed run's
+// projects cascade removes them before the fixtures add them back.
+func (q *Queries) LocalUpsertInspectRemoteServer(ctx context.Context, arg LocalUpsertInspectRemoteServerParams) error {
+	_, err := q.db.Exec(ctx, localUpsertInspectRemoteServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.Url,
+	)
 	return err
 }
 
