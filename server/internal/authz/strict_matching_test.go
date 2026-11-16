@@ -123,3 +123,45 @@ func TestMatching_MissingKeyRefusalIsLogged(t *testing.T) {
 	requireForbidden(t, engine.Require(ctx, ref.ToolCall("delete_all", DispositionDestructive)))
 	require.NotContains(t, logs.String(), missingKeyLog)
 }
+
+// Only a policy that refuses the check explains the refusal: a missing key on
+// a grant in a policy that allows the check is not why it was refused.
+func TestMatching_MissingKeysComeFromRefusingPolicies(t *testing.T) {
+	t.Parallel()
+
+	server := uuid.New()
+	project := uuid.New()
+	call := MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("mystery", "")
+	otherServer := []Grant{NewGrant(ScopeMCPConnect, uuid.NewString())}
+	allowing := append([]Grant{NewGrant(ScopeMCPConnect, server.String())}, readOnlyConnect(server)...)
+
+	refusedElsewhere := grantAuthorization{policies: [][]Grant{otherServer, allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+	require.Empty(t, refusedElsewhere.keysMissingFrom(call))
+
+	refusedForTheKey := grantAuthorization{policies: [][]Grant{readOnlyConnect(server), allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+	require.Equal(t, []string{SelectorKeyDisposition}, refusedForTheKey.keysMissingFrom(call))
+}
+
+// RequireAny still reports a missing key on an alternative that no block
+// refused, even when a block refused another one.
+func TestMatching_RequireAnyLogsUnblockedAlternatives(t *testing.T) {
+	t.Parallel()
+
+	server := uuid.New()
+	blockedServer := uuid.New()
+	project := uuid.New()
+	grants := append(readOnlyConnect(server),
+		NewGrant(ScopeMCPConnect, blockedServer.String()),
+		NewGrant(ScopeMCPBlockedConnect, blockedServer.String()),
+	)
+
+	var logs bytes.Buffer
+	engine := NewEngine(slog.New(slog.NewTextHandler(&logs, nil)), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), grants)
+
+	requireForbidden(t, engine.RequireAny(ctx,
+		MCPServer(MCPServerIDOf(blockedServer), ProjectIDOf(project)).Connect(),
+		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("mystery", ""),
+	))
+	require.Contains(t, logs.String(), missingKeyLog)
+}

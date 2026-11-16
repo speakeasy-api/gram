@@ -15,6 +15,7 @@ import (
 // Wildcard uses {"resource_kind":"*","resource_id":"*"}.
 // For a grant selector to match a check selector, every key in the grant must
 // be carried by the check and either equal its value or be the wildcard "*".
+// Check.mayOmit names the few checks that may leave a grant key out.
 type Selector map[string]string
 
 // The SelectorKey*, AuthClientType* and Disposition* names are generated from
