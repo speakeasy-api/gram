@@ -126,7 +126,7 @@ WHERE id = @id::uuid AND remote_session_client_id = ANY(@client_ids::uuid[]) AND
     WHERE c.id = remote_sessions.remote_session_client_id AND c.project_id = @project_id::uuid
   );
 
--- The External OAuth Server's authorization server: the fixture's.
+-- The OpenAPI Server's external OAuth server: the fixture's.
 -- name: FixturePointExternalOAuth :execrows
 UPDATE external_oauth_server_metadata SET metadata = @metadata::jsonb, authorization_server_issuer = NULL, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;

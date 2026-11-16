@@ -31,7 +31,7 @@ This directory holds the authoring docs:
 
 The shared seed writes two active release agents with one fictional human owner.
 Both reference the same exact upstream session through
-`principal_remote_session_bindings`; the requesting Per-User OAuth Server session's issuer is
+`principal_remote_session_bindings`; the requesting Example OAuth server session's issuer is
 linked to its upstream client. This is intentionally inert: `.invalid` issuer,
 invalid ciphertext, no refresh token, and auto-refresh off. No real credentials
 or external account IDs are included. Deterministic `gram-demo-attachment-*`
@@ -136,7 +136,7 @@ needs and the shared demo org must never have:
   Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
-- **Working upstream servers.** The seed has nine working MCP servers: seven
+- **Working upstream servers.** The seed has five working MCP servers: three
   named for the configuration they test, plus Linear and Notion, real
   vendors. (Acme Tracker and Acme Wiki, the Enterprise Managed Authorization
   examples, are seeded disabled.) Most
@@ -149,30 +149,32 @@ needs and the shared demo org must never have:
   (under `/rpc` because the deployed ingress sends `/rpc` to the API server).
   It holds fake data only (notes) and offers: an OAuth 2.1 server (sign in by
   picking an email; dynamic registration, client ID metadata documents, PKCE,
-  refresh rotation, tokens bound to the requested resource), a second,
-  DCR-only authorization server at `/dcr`, MCP endpoints `/mcp/oauth`,
-  `/dcr/mcp/auto`, `/mcp/shared`, `/mcp/own-token` and `/mcp/open`, a personal
-  token page at `/tokens`, and a stub of the demo API.
+  refresh rotation, tokens bound to the requested resource), MCP endpoints
+  `/mcp/oauth` and `/mcp/shared`, and a stub of the demo API at `/acme-api`.
+  It also serves endpoints the seed does not use: a DCR-only authorization
+  server at `/dcr`, `/mcp/own-token`, `/mcp/open` and a token page at
+  `/tokens`.
   Its credentials live in `fixtureauth` and are checked in on purpose: they
   guard nothing real. The shared seed's last phase before postflight
   (`fixture_servers.go`) points the servers at it and gives every live seeded
   sign-in real fixture tokens:
 
-  | Server                       | Tests                                                                         | Reaches                                                                                                              |
-  | ---------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-  | OpenAPI Server (API Key)     | A server generated from an OpenAPI document, reached with a Speakeasy API key | The fixture's API stub (`ACME_SERVER_URL` system environment)                                                        |
-  | Server-Specific Sign-In      | A hosted server with its own Speakeasy sign-in                                | Same API stub                                                                                                        |
-  | External OAuth Server        | Callers bring a token from the customer's own OAuth server                    | Its authorization server metadata is the fixture's                                                                   |
-  | Per-User OAuth Server        | Each person signs in upstream: expiry, refresh, scope pins, agent connections | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens                      |
-  | Service Account Server       | One static shared credential for every caller                                 | `/mcp/shared` with the checked-in shared token                                                                       |
-  | Pass-Through Token Server    | Each caller's own token, forwarded upstream                                   | `/mcp/own-token`; the caller's `X-Upstream-Token` header is forwarded (create one at `/rpc/demoseed/tokens`)         |
-  | Auto-Configured OAuth Server | Sign-in set up through discovery and dynamic client registration              | `/dcr/mcp/auto`, through a client the seed registers with the DCR-only authorization server, as Auto-Configure would |
-  | Linear                       | A real vendor; each person signs in to their own Linear account               | `https://mcp.linear.app/mcp` (below)                                                                                 |
-  | Notion                       | A real vendor; each person signs in to their own Notion account               | `https://mcp.notion.com/mcp` (below)                                                                                 |
+  | Server                    | Slug                        | Tests                                                                                                                    | Reaches                                                                                                                                        |
+  | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+  | OpenAPI Server            | `openapi-server`            | A public server generated from an OpenAPI document; callers bring an OAuth token from the API's own authorization server | The fixture's API stub (`ACME_SERVER_URL` system environment); its external OAuth server (slug `openapi-server`) is the fixture's              |
+  | Example OAuth             | `example-oauth`             | Each person signs in upstream: expiry, refresh, scope pins, agent connections                                            | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens; also offers the "Shared service token" client |
+  | Example Shared Credential | `example-shared-credential` | One static shared credential for every caller                                                                            | `/mcp/shared` with the checked-in example shared token as a static Authorization header (not sensitive)                                        |
+  | Linear                    | `linear`                    | A real vendor; each person signs in to their own Linear account                                                          | `https://mcp.linear.app/mcp` (below)                                                                                                           |
+  | Notion                    | `notion`                    | A real vendor; each person signs in to their own Notion account                                                          | `https://mcp.notion.com/mcp` (below)                                                                                                           |
 
-  The fixture's client ids are signed tokens, so the seed registers the
-  Auto-Configured OAuth Server's client exactly as the fixture's `/register`
-  endpoint would, without calling it.
+  Each server's endpoint is `<org>-<slug>`. The OpenAPI document
+  (`server/internal/demoseed/openapi.yaml`) declares two security schemes,
+  `oauth` (authorization code at the fixture) and `apiKey` (an Authorization
+  header), with `security: [oauth, apiKey]`; the seed fills in the
+  deployment's fixture URL when it uploads it. Speakeasy lets a hosted server
+  use one auth method, and the OpenAPI Server uses the upstream OAuth one: it
+  needs no Speakeasy sign-in, and its tools forward the caller's fixture
+  token to the API stub.
 
   Linear and Notion (`vendor_apps.go`) are set up in every org as an admin's
   Auto-Configure would: the vendor's authorization server, a client ID

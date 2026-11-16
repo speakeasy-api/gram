@@ -531,9 +531,9 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 			if supp == 2 || supp == 3 {
 				falsePositiveAt = new(chatDT.Add(3 * time.Hour))
 			}
-			// Same chat-to-server rule as telemetry_logs (i % 5 = 0 is
-			// Server-Specific Sign-In), so the Risk Events MCP filter agrees
-			// with the call details.
+			// Same chat-to-server rule as telemetry_logs (every chat calls the
+			// OpenAPI Server), so the Risk Events MCP filter agrees with the
+			// call details.
 			var execID, mcpServerID, toolsetID, toolName, phase, mediation, method, principal, outcome string
 			if !onUser {
 				execID = s.det("mcp-execution-" + strconv.Itoa(i)).String()
@@ -541,8 +541,6 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 				toolsetID = s.toolset1().String()
 				toolName = "get_customer"
 				if i%5 == 0 {
-					mcpServerID = s.signInServer().String()
-					toolsetID = s.toolset3().String()
 					toolName = "query_db"
 				}
 				phase, mediation, method, principal, outcome = "response", "hosted_mcp", "tools/call", "user_session", "logged"
@@ -848,15 +846,15 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 }
 
 var (
-	// Weighted member pick: OpenAPI Server (API Key) 5, Per-User OAuth Server
-	// 3, Service Account Server 2 of every 10.
+	// Weighted member pick: OpenAPI Server 5, Example OAuth 3, Example Shared
+	// Credential 2 of every 10.
 	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "linear", "linear", "linear", "slack", "slack"}
 	chfGatewayTools   = map[string][]string{
 		"support": {"search_logs", "get_customer", "query_db", "fetch_traces"},
 		"linear":  {"list_notes", "add_note", "whoami"},
 		"slack":   {"whoami", "echo"},
 	}
-	chfGatewayToolsets = map[string]string{"support": "openapi-api-key"}
+	chfGatewayToolsets = map[string]string{"support": "openapi-server"}
 )
 
 // chfGatewayMemberCalls: member calls dispatched through the gateway. They
@@ -865,7 +863,7 @@ var (
 // the "tools:externalmcp:<remote id>:" urn the proxy emits), plus
 // gram.meta_mcp_server.id. One row serves the member's own usage, the gateway
 // Activity section, and the MCP listing marker alike, so call totals never
-// double. The Per-User OAuth Server carries most of the failures.
+// double. The Example OAuth server carries most of the failures.
 func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) error {
 	rows := s.chfDispatchedCalls(s.det("metamcp-1").String(), "gw", 240)
 	return s.chfInsertTelemetry(ctx, ch, "gateway member call telemetry", rows)
@@ -975,15 +973,15 @@ func (s *seeder) chfDirectRemoteCalls(ctx context.Context, ch driver.Conn) error
 	return s.chfInsertTelemetry(ctx, ch, "direct remote server call telemetry", rows)
 }
 
-// chfGatewayGoneCalls: dispatches to the Pass-Through Token Server from before it left the gateway
+// chfGatewayGoneCalls: dispatches to Linear from before it left the gateway
 // (its membership is soft-deleted in Postgres three days ago). They count
 // toward the gateway's dispatched-call totals but must not appear in Calls by
 // member.
 func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error {
 	gateway := s.det("metamcp-1").String()
-	member := s.det("mcpserver-github").String()
-	remote := s.det("remotemcp-github").String()
-	tools := []string{"list_notes", "echo", "whoami"}
+	member := s.det("mcpserver-linear-app").String()
+	remote := s.det("remotemcp-linear-app").String()
+	tools := []string{"list_issues", "get_issue", "search_issues"}
 	handles := []string{"amara", "priya", "mateo"}
 	rows := make([]chfTelemetryRow, 0, 24)
 	for n := range 24 {

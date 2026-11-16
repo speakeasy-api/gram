@@ -47,7 +47,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 				require.Equal(t, s.det("metamcp-1").String(), row.ServerID)
 				require.Equal(t, s.supportServer().String(), row.MemberID)
 			case "mcp":
-				require.Equal(t, s.det("mcpserver-github").String(), row.ServerID)
+				require.Equal(t, s.det("mcpserver-linear").String(), row.ServerID)
 				require.Empty(t, row.MemberID, "a direct server has no member")
 			default:
 				require.Fail(t, "refusal on an unexpected server kind", row.ServerKind)

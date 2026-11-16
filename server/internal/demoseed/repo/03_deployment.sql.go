@@ -361,7 +361,7 @@ const deployInsertExternalOAuthMetadata = `-- name: DeployInsertExternalOAuthMet
 INSERT INTO external_oauth_server_metadata
   (id, project_id, slug, metadata, authorization_server_issuer)
 VALUES
-  ($1, $2::uuid, 'external-oauth',
+  ($1, $2::uuid, 'openapi-server',
    '{"issuer":"https://mcp-fixture.example.com","authorization_endpoint":"https://mcp-fixture.example.com/oauth/authorize","token_endpoint":"https://mcp-fixture.example.com/oauth/token","registration_endpoint":"https://mcp-fixture.example.com/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"]}'::jsonb,
    NULL)
 `
@@ -603,18 +603,12 @@ func (q *Queries) DeployInsertPrincipalGrant(ctx context.Context, arg DeployInse
 
 const deployInsertToolsetVersions = `-- name: DeployInsertToolsetVersions :exec
 INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
-  ($1, extract(epoch FROM now())::bigint, $2::text[], '{}'),
-  ($3, extract(epoch FROM now())::bigint, $4::text[], '{}'),
-  ($5, extract(epoch FROM now())::bigint, $6::text[], '{}')
+  ($1, extract(epoch FROM now())::bigint, $2::text[], '{}')
 `
 
 type DeployInsertToolsetVersionsParams struct {
 	Toolset1     uuid.UUID
 	Toolset1Urns []string
-	Toolset3     uuid.UUID
-	Toolset3Urns []string
-	Toolset4     uuid.UUID
-	Toolset4Urns []string
 }
 
 // Version = epoch seconds: the server caches toolset contents in Redis
@@ -622,14 +616,7 @@ type DeployInsertToolsetVersionsParams struct {
 // would keep serving the stale cached payload. A fresh version per run
 // changes the cache key, so every reseed is immediately visible.
 func (q *Queries) DeployInsertToolsetVersions(ctx context.Context, arg DeployInsertToolsetVersionsParams) error {
-	_, err := q.db.Exec(ctx, deployInsertToolsetVersions,
-		arg.Toolset1,
-		arg.Toolset1Urns,
-		arg.Toolset3,
-		arg.Toolset3Urns,
-		arg.Toolset4,
-		arg.Toolset4Urns,
-	)
+	_, err := q.db.Exec(ctx, deployInsertToolsetVersions, arg.Toolset1, arg.Toolset1Urns)
 	return err
 }
 
@@ -637,25 +624,18 @@ const deployInsertToolsets = `-- name: DeployInsertToolsets :exec
 INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
                       external_oauth_server_id)
 VALUES
-  ($1, $2::text, $3::uuid, 'OpenAPI Server (API Key)', 'openapi-api-key',
-   'Hosted from an OpenAPI document; callers use a Speakeasy API key.', NULL),
-  -- The OAuth-protected server, kept separate from the one above: attaching
-  -- a session issuer changes what a server's authentication tab and install
-  -- instructions say, and the API key server is the one a visitor meets
-  -- first.
-  ($4, $2::text, $3::uuid, 'Server-Specific Sign-In', 'server-specific-sign-in',
-   'Hosted, with its own Speakeasy sign-in and session length.', NULL),
-  ($5, $2::text, $3::uuid, 'External OAuth Server', 'external-oauth',
-   'Hosted; callers bring a token from an external OAuth server.',
-   $6::uuid)
+  -- Public: callers bring an OAuth token from the API's own authorization
+  -- server (the MCP fixture's), which the tools forward upstream. No
+  -- Speakeasy sign-in is involved.
+  ($1, $2::text, $3::uuid, 'OpenAPI Server', 'openapi-server',
+   'Hosted from an OpenAPI document; callers bring an OAuth token from the API''s authorization server.',
+   $4::uuid)
 `
 
 type DeployInsertToolsetsParams struct {
 	Toolset1              uuid.UUID
 	OrganizationID        string
 	ProjectID             uuid.UUID
-	Toolset3              uuid.UUID
-	Toolset4              uuid.UUID
 	ExternalOauthServerID uuid.UUID
 }
 
@@ -667,8 +647,6 @@ func (q *Queries) DeployInsertToolsets(ctx context.Context, arg DeployInsertTool
 		arg.Toolset1,
 		arg.OrganizationID,
 		arg.ProjectID,
-		arg.Toolset3,
-		arg.Toolset4,
 		arg.ExternalOauthServerID,
 	)
 	return err
@@ -804,7 +782,7 @@ func (q *Queries) DeployInsertUserSessionClient(ctx context.Context, arg DeployI
 
 const deployInsertUserSessionIssuer = `-- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES ($1, $2::uuid, $3::text, 'server-specific-sign-in', 'interactive', make_interval(secs => 30 * 24 * 60 * 60))
+VALUES ($1, $2::uuid, $3::text, 'agent-connections', 'interactive', make_interval(secs => 30 * 24 * 60 * 60))
 `
 
 type DeployInsertUserSessionIssuerParams struct {

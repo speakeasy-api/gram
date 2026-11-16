@@ -29,7 +29,7 @@ func (s *seeder) chOwnerSessionRows() []chTelemetryRow {
 				`,"gram.tool.name":"` + tool + `"` +
 				`,"gram.event.source":"tool_call"` +
 				chIf(sess.agent, agentActor, owner) +
-				`,"gram.toolset.slug":"openapi-api-key"` +
+				`,"gram.toolset.slug":"openapi-server"` +
 				`,"gram.mcp_server.id":"` + s.supportServer().String() + `"` +
 				`,"http.response.status_code":200` +
 				`,"gram.outcome":"ok"` +

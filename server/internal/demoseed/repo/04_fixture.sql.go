@@ -125,7 +125,7 @@ type FixturePointExternalOAuthParams struct {
 	ProjectID uuid.UUID
 }
 
-// The External OAuth Server's authorization server: the fixture's.
+// The OpenAPI Server's external OAuth server: the fixture's.
 func (q *Queries) FixturePointExternalOAuth(ctx context.Context, arg FixturePointExternalOAuthParams) (int64, error) {
 	result, err := q.db.Exec(ctx, fixturePointExternalOAuth, arg.Metadata, arg.ID, arg.ProjectID)
 	if err != nil {

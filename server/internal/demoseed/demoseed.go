@@ -6,6 +6,7 @@
 package demoseed
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	_ "embed"
@@ -23,13 +24,17 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 //go:embed openapi.yaml
-var openapiDoc []byte
+var openapiDocTemplate []byte
+
+// openapiFixturePlaceholder stands for the hosted MCP fixture in openapi.yaml.
+const openapiFixturePlaceholder = "https://speakeasy.example.com/rpc/demoseed"
 
 const (
 	clickHouseDeleteVisibilityTimeout = 30 * time.Second
@@ -167,6 +172,8 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 // which SQL alone cannot: it writes the embedded spec through the asset store
 // (fs locally, GCS in prod) and points the seeded assets row at it.
 func (s *seeder) uploadOpenAPIDoc(ctx context.Context, blob assets.BlobStore) error {
+	// The document's OAuth flow names the MCP fixture this deployment hosts.
+	openapiDoc := bytes.ReplaceAll(openapiDocTemplate, []byte(openapiFixturePlaceholder), []byte(fixtureauth.BaseURL(s.serverURL)))
 	docSHA := sha256.Sum256(openapiDoc)
 	w, objURL, err := blob.Write(ctx, "demoseed/"+s.spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
 	if err != nil {

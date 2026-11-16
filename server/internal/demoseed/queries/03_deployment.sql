@@ -36,7 +36,7 @@ VALUES (@tool_urn::text, @project_id::uuid, @deployment_id, @openapiv3_document_
 INSERT INTO external_oauth_server_metadata
   (id, project_id, slug, metadata, authorization_server_issuer)
 VALUES
-  (@id, @project_id::uuid, 'external-oauth',
+  (@id, @project_id::uuid, 'openapi-server',
    '{"issuer":"https://mcp-fixture.example.com","authorization_endpoint":"https://mcp-fixture.example.com/oauth/authorize","token_endpoint":"https://mcp-fixture.example.com/oauth/token","registration_endpoint":"https://mcp-fixture.example.com/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"]}'::jsonb,
    NULL);
 
@@ -47,16 +47,11 @@ VALUES
 INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
                       external_oauth_server_id)
 VALUES
-  (@toolset_1, @organization_id::text, @project_id::uuid, 'OpenAPI Server (API Key)', 'openapi-api-key',
-   'Hosted from an OpenAPI document; callers use a Speakeasy API key.', NULL),
-  -- The OAuth-protected server, kept separate from the one above: attaching
-  -- a session issuer changes what a server's authentication tab and install
-  -- instructions say, and the API key server is the one a visitor meets
-  -- first.
-  (@toolset_3, @organization_id::text, @project_id::uuid, 'Server-Specific Sign-In', 'server-specific-sign-in',
-   'Hosted, with its own Speakeasy sign-in and session length.', NULL),
-  (@toolset_4, @organization_id::text, @project_id::uuid, 'External OAuth Server', 'external-oauth',
-   'Hosted; callers bring a token from an external OAuth server.',
+  -- Public: callers bring an OAuth token from the API's own authorization
+  -- server (the MCP fixture's), which the tools forward upstream. No
+  -- Speakeasy sign-in is involved.
+  (@toolset_1, @organization_id::text, @project_id::uuid, 'OpenAPI Server', 'openapi-server',
+   'Hosted from an OpenAPI document; callers bring an OAuth token from the API''s authorization server.',
    @external_oauth_server_id::uuid);
 
 -- Version = epoch seconds: the server caches toolset contents in Redis
@@ -65,13 +60,11 @@ VALUES
 -- changes the cache key, so every reseed is immediately visible.
 -- name: DeployInsertToolsetVersions :exec
 INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
-  (@toolset_1, extract(epoch FROM now())::bigint, @toolset_1_urns::text[], '{}'),
-  (@toolset_3, extract(epoch FROM now())::bigint, @toolset_3_urns::text[], '{}'),
-  (@toolset_4, extract(epoch FROM now())::bigint, @toolset_4_urns::text[], '{}');
+  (@toolset_1, extract(epoch FROM now())::bigint, @toolset_1_urns::text[], '{}');
 
 -- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES (@id, @project_id::uuid, @organization_id::text, 'server-specific-sign-in', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
+VALUES (@id, @project_id::uuid, @organization_id::text, 'agent-connections', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
 
 -- name: DeployInsertChainingIssuer :exec
 INSERT INTO remote_session_issuers

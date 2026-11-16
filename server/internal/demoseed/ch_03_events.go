@@ -46,7 +46,7 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("org", s.orgID()),
 		clickhouse.Named("proj", s.projectID().String()),
 		clickhouse.Named("marker", s.spec.Marker),
-		clickhouse.Named("github", s.det("mcpserver-github").String()),
+		clickhouse.Named("gone_member", s.det("mcpserver-linear-app").String()),
 		clickhouse.Named("linear_app", s.det("mcpserver-linear-app").String()),
 		clickhouse.Named("notion_app", s.det("mcpserver-notion-app").String()),
 		clickhouse.Named("directgateway", s.directGatewayID().String()),
@@ -129,7 +129,7 @@ func (s *seeder) chTelemetryChecks() []chCheck {
    WHERE gram_project_id = toUUID(@proj)
      AND meta_mcp_server_id != ''
      AND event_source = 'tool_call'
-     AND mcp_server_id = @github) < 24`,
+     AND mcp_server_id = @gone_member) < 24`,
 			settings: "",
 			msg:      "demo seed postflight: removed gateway member dispatches missing",
 		},
@@ -865,7 +865,7 @@ func (s *seeder) chInsertMCPNetworkRequests(ctx context.Context, ch driver.Conn)
 		kind, surface, serverID string
 	}{
 		{"mcp", "public", s.supportServer().String()},
-		{"mcp", "private", s.signInServer().String()},
+		{"mcp", "private", s.det("mcpserver-linear").String()},
 		{"meta", "public", s.det("metamcp-1").String()},
 		{"meta", "private", s.det("metamcp-1").String()},
 	}

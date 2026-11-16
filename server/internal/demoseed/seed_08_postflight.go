@@ -171,7 +171,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(7, "expected 7 auth client associations, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -476,7 +476,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "canonical wrappers",
 			count: byProject(s.q.PostflightCountCanonicalWrappers),
-			fail:  postflightMustEqual(3, "expected 3 canonical hosted MCP servers (support, partner, discovery), found %d"),
+			fail:  postflightMustEqual(1, "expected 1 canonical hosted MCP server (the OpenAPI Server), found %d"),
 		},
 		{
 			what:  "gateway endpoints",

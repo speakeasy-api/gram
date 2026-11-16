@@ -75,6 +75,9 @@ func (s *seeder) toolBlockID(role, server, tool string) uuid.UUID {
 func (s *seeder) globalToolBlockIDs() []uuid.UUID {
 	return []uuid.UUID{
 		s.toolBlockID("admin", "linear-app", "delete_issue"),
+		// The block's id before it moved to the Linear vendor server, so a
+		// reseed over an older seed's data still removes it.
+		s.toolBlockID("admin", "linear", "delete_issue"),
 		s.toolBlockID("admin", localTasksKey, "delete_task"),
 	}
 }

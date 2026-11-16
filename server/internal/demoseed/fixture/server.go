@@ -79,7 +79,7 @@ type Config struct {
 	// RedirectOrigins, when set, are the only origins (scheme and host, e.g.
 	// https://ai.speakeasy.com) the authorization servers send a sign-in back
 	// to, besides loopback: Speakeasy's own callbacks, and native MCP
-	// clients signing in directly (the External OAuth Server), which listen
+	// clients signing in directly (the OpenAPI Server's callers), which listen
 	// on the person's own machine. Hosted on a public domain, the fixture
 	// would otherwise redirect a visitor anywhere a registered client names.
 	// Empty accepts any absolute redirect URI.

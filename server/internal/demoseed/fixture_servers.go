@@ -3,7 +3,6 @@ package demoseed
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -40,7 +39,6 @@ type LocalUpstreamOptions struct {
 // Fixed values for the servers the fixture backs.
 const (
 	fixtureProviderName       = "MCP Fixture OAuth"
-	fixtureDCRProviderName    = "MCP Fixture OAuth (DCR)"
 	fixtureEnvironmentFixedID = "0000-4000-a000-000000007008"
 	fixtureAPIEnvVar          = "ACME_SERVER_URL"
 	fixtureAccessTokenTTL     = time.Hour
@@ -51,22 +49,17 @@ const (
 // fixture the Speakeasy server hosts (fixtureauth.BaseURL of the server URL),
 // in every organization the seed writes, so they work right after seeding:
 //
-//   - the generated toolset servers (OpenAPI Server (API Key),
-//     Server-Specific Sign-In, External OAuth Server) call the fixture's
-//     stub of the demo API, through a system environment, and the External
-//     OAuth Server's authorization server is the fixture's;
-//   - the Per-User OAuth Server: its URL, MCP Fixture OAuth provider,
-//     protected resource and client ID metadata document client move from
-//     the example.com host the servers phase writes to the fixture, and
-//     every live seeded sign-in holds real fixture tokens;
-//   - the Service Account Server: the fixture's shared-token endpoint, with
-//     the checked-in shared token as its static Authorization header;
-//   - the Pass-Through Token Server: the fixture's own-token endpoint, with
-//     the caller's X-Upstream-Token header forwarded;
+//   - the OpenAPI Server calls the fixture's stub of the demo API, through a
+//     system environment, and its external OAuth server is the fixture's:
+//     callers bring a fixture token, which its tools forward upstream;
+//   - Example OAuth: its URL, MCP Fixture OAuth provider, protected resource
+//     and client ID metadata document client move from the example.com host
+//     the servers phase writes to the fixture, and every live seeded sign-in
+//     holds real fixture tokens;
+//   - Example Shared Credential: the fixture's shared-token endpoint, with the
+//     checked-in shared token as its static Authorization header.
 //
-// The Auto-Configured OAuth Server is set up with the other servers
-// (seedFixtureAutoConfigured), since sign-ins choose its client. This runs
-// after every phase that writes sessions, so it sees them all.
+// This runs after every phase that writes sessions, so it sees them all.
 func (s *seeder) seedFixtureServers(ctx context.Context) error {
 	q := s.q
 	org := s.orgID()
@@ -96,14 +89,14 @@ func (s *seeder) seedFixtureServers(ctx context.Context) error {
 	}
 	n, err = q.FixtureLinkToolsetEnvironments(ctx, repo.FixtureLinkToolsetEnvironmentsParams{
 		EnvironmentID: envID, ProjectID: proj,
-		ToolsetIds: []uuid.UUID{s.toolset1(), s.toolset3(), s.toolset4()},
+		ToolsetIds: []uuid.UUID{s.toolset1()},
 	})
 	if err := expect("link toolset environments", n, err); err != nil {
 		return err
 	}
 
-	// The External OAuth Server sends callers to sign in at the fixture's
-	// authorization server, as if it were the customer's own.
+	// The OpenAPI Server sends callers to sign in at the fixture's
+	// authorization server, the API's own.
 	metadata, err := json.Marshal(map[string]any{
 		"issuer":                                base,
 		"authorization_endpoint":                base + "/oauth/authorize",
@@ -123,7 +116,7 @@ func (s *seeder) seedFixtureServers(ctx context.Context) error {
 		return err
 	}
 
-	// 2. The Per-User OAuth Server.
+	// 2. Example OAuth.
 	n, err = q.FixturePointRemoteServer(ctx, repo.FixturePointRemoteServerParams{Url: resource, ID: s.det("remotemcp-linear"), ProjectID: proj})
 	if err := expect("point the OAuth remote server", n, err); err != nil {
 		return err
@@ -194,7 +187,7 @@ func (s *seeder) seedFixtureServers(ctx context.Context) error {
 		}
 	}
 
-	// 3. The Service Account Server: every caller shares the checked-in
+	// 3. Example Shared Credential: every caller shares the checked-in
 	// token, sent as a static Authorization header (Settings shows "Shared
 	// credential").
 	n, err = q.FixturePointRemoteServer(ctx, repo.FixturePointRemoteServerParams{Url: base + fixtureauth.PathSharedMCP, ID: s.det("remotemcp-slack"), ProjectID: proj})
@@ -206,122 +199,13 @@ func (s *seeder) seedFixtureServers(ctx context.Context) error {
 		return err
 	}
 
-	// 4. The Pass-Through Token Server: each caller brings their own upstream
-	// token in a request header Speakeasy forwards unchanged (Manual identity:
-	// users manage their own headers). The header is required, so Speakeasy
-	// turns away a caller without one. The fixture's own-token endpoint answers
-	// the handshake without a token only so Speakeasy's setup probe, which
-	// calls the upstream directly with no headers, sees a working server; it
-	// runs tools only for a caller with a token, read from this header or from
-	// Authorization when the typed pass-through client forwards it there.
-	n, err = q.FixturePointRemoteServer(ctx, repo.FixturePointRemoteServerParams{Url: base + fixtureauth.PathOwnTokenMCP, ID: s.det("remotemcp-github"), ProjectID: proj})
-	if err := expect("point the pass-through server", n, err); err != nil {
-		return err
-	}
-	n, err = q.FixtureUpsertForwardedHeader(ctx, repo.FixtureUpsertForwardedHeaderParams{
-		ID: s.det("remote-header-pass-through"), RemoteMcpServerID: s.det("remotemcp-github"), ProjectID: proj,
-		Name: fixtureauth.OwnTokenHeader, FromRequestHeader: fixtureauth.OwnTokenHeader,
-	})
-	if err := expect("forward the caller's token", n, err); err != nil {
-		return err
-	}
-	// The typed shared credential (used once upstream auth is enforced)
-	// carries the same checked-in token.
+	// The typed shared token Example OAuth also offers carries the same
+	// checked-in token.
 	n, err = q.FixtureSetHeaderValue(ctx, repo.FixtureSetHeaderValueParams{Value: "Bearer " + fixtureauth.SharedToken, ID: s.det("auth-client-github-token-header"), OrganizationID: org})
 	if err := expect("set the typed shared token", n, err); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-// seedFixtureAutoConfigured sets the Auto-Configured OAuth Server up as an
-// admin's Auto-Configure would against the fixture's DCR-only authorization
-// server: the provider, a client registered by dynamic registration, and the
-// server's links to both. The fixture's client ids are signed tokens, so the
-// seed registers the client exactly as the fixture's registration endpoint
-// would, without calling it. Its static ids keep the "notion" names the
-// server had before it was the fixture's. It runs in the servers phase, as
-// the seeded sign-ins choose its client.
-func (s *seeder) seedFixtureAutoConfigured(ctx context.Context) error {
-	q := s.q
-	org := s.orgID()
-	proj := s.projectID()
-	base := fixtureauth.BaseURL(s.serverURL)
-	serverURL := strings.TrimRight(s.serverURL.String(), "/")
-	issuer := fixtureauth.DCRIssuer(base)
-	resource := fixtureauth.AutoResource(base)
-	issuerID := s.det("remote-identity-provider-notion")
-	clientRowID := s.det("remote-identity-client-notion")
-	serverID := s.det("mcpserver-notion")
-	authClientID := s.det("auth-client-notion")
-
-	n, err := q.FixturePointRemoteServer(ctx, repo.FixturePointRemoteServerParams{Url: resource, ID: s.det("remotemcp-notion"), ProjectID: proj})
-	if err != nil {
-		return fmt.Errorf("point the auto-configured oauth server: %w", err)
-	}
-	if n == 0 {
-		return errors.New("point the auto-configured oauth server matched no rows")
-	}
-	if err := q.ServersInsertVendorAppIssuer(ctx, repo.ServersInsertVendorAppIssuerParams{
-		ID: issuerID, ProjectID: proj, OrganizationID: org, Key: "mcp-fixture-dcr", Issuer: issuer,
-		AuthorizationEndpoint: issuer + "/oauth/authorize", TokenEndpoint: issuer + "/oauth/token",
-		RegistrationEndpoint: issuer + "/oauth/register", RevocationEndpoint: issuer + "/oauth/revoke",
-		TokenEndpointAuthMethods:          []string{"none"},
-		ClientIDMetadataDocumentSupported: false,
-		Scopes:                            fixtureauth.DefaultScopes, Name: fixtureDCRProviderName,
-	}); err != nil {
-		return fmt.Errorf("insert the auto-configured provider: %w", err)
-	}
-	clientID, err := fixtureauth.RegisterClient(issuer, "Speakeasy", []string{remotesessions.RemoteLoginCallbackURL(s.serverURL)}, s.now)
-	if err != nil {
-		return fmt.Errorf("register the auto-configured client: %w", err)
-	}
-	if err := q.FixtureInsertRegisteredClient(ctx, repo.FixtureInsertRegisteredClientParams{
-		ID: clientRowID, ProjectID: proj, OrganizationID: org, RemoteSessionIssuerID: issuerID,
-		ClientID: clientID, CallbackBaseUrl: serverURL,
-	}); err != nil {
-		return fmt.Errorf("insert the auto-configured client: %w", err)
-	}
-	// The server's own sign-in, and the organization sign-in, which reaches
-	// every server, both bind the client.
-	for _, sessionIssuer := range []uuid.UUID{s.det("issuer-notion"), s.det("issuer-workforce")} {
-		if err := q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-			RemoteSessionClientID: clientRowID, UserSessionIssuerID: sessionIssuer,
-		}); err != nil {
-			return fmt.Errorf("bind the auto-configured client to a sign-in: %w", err)
-		}
-	}
-	if err := q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
-		RemoteSessionIssuerID: issuerID, McpServerID: serverID, ProjectID: proj,
-	}); err != nil {
-		return fmt.Errorf("stamp the auto-configured provider: %w", err)
-	}
-	if err := q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-		ID: s.det("server-client-association-notion"), ProjectID: proj, OrgID: org,
-		McpServerID: serverID, RemoteSessionClientID: clientRowID,
-	}); err != nil {
-		return fmt.Errorf("associate the auto-configured client: %w", err)
-	}
-	if err := q.ServersInsertAuthClient(ctx, repo.ServersInsertAuthClientParams{
-		ID: authClientID, OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill",
-		Name: fixtureDCRProviderName, RemoteSessionClientID: uuid.NullUUID{UUID: clientRowID, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("insert the auto-configured auth client: %w", err)
-	}
-	if err := q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
-		ID: s.det("auth-client-assoc-notion"), ProjectID: proj, OrgID: org,
-		McpServerID: serverID, AuthClientID: authClientID,
-	}); err != nil {
-		return fmt.Errorf("offer the auto-configured auth client: %w", err)
-	}
-	if err := q.ServersInsertVendorAppProtectedResource(ctx, repo.ServersInsertVendorAppProtectedResourceParams{
-		ID: s.det("protected-resource-notion"), ProjectID: proj, OrganizationID: org,
-		Resource: resource, MetadataUrl: issuer + "/.well-known/oauth-protected-resource" + fixtureauth.PathAutoMCP,
-		Issuer: issuer, Scopes: fixtureauth.DefaultScopes,
-	}); err != nil {
-		return fmt.Errorf("insert the auto-configured protected resource: %w", err)
-	}
 	return nil
 }
 
