@@ -142,9 +142,9 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 	return clientCredentialMisconfiguredError(err)
 }
 
-// signInAddressText says a sign-in provider address Speakeasy did not dial stopped what, and who checks it.
-func signInAddressText(what string, address guardian.AddressFailure) string {
-	return fmt.Sprintf("%s because its sign-in provider %s. Ask your administrator to check the sign-in provider's address", what, address.Problem())
+// memberSignInSetupText is a member's answer when its sign-in service's setup stops it; the reason stays on the connection row.
+func memberSignInSetupText(slug string) string {
+	return fmt.Sprintf("server %q can't sign in to the service it uses because of how it is set up. Waiting won't fix this. Ask your administrator to fix it", slug)
 }
 
 // memberAddressOutage is a member stopped by its sign-in provider's address.
@@ -169,7 +169,7 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 			return linkedMemberOutage(member, err, "")
 		}
 		if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
-			return memberAddressOutage(signInAddressText(fmt.Sprintf("server %q can't get its credential", member.slug), address), nil, address)
+			return memberAddressOutage(memberSignInSetupText(member.slug), nil, address)
 		}
 		if remotesessions.TokenEndpointCausedOutage(err) {
 			return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't available right now. Retry shortly. If it keeps happening, ask your administrator", member.slug), nil)
@@ -231,7 +231,7 @@ func outageWaitWords(wait time.Duration) string {
 // linkedMemberOutage offers reconnecting only when the connect page has a Reconnect button for it.
 func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
-		return memberAddressOutage(signInAddressText(fmt.Sprintf("server %q can't renew its sign-in", member.slug), address), err, address)
+		return memberAddressOutage(memberSignInSetupText(member.slug), err, address)
 	}
 	retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(err)) + "."
 	switch remotesessions.OutageKindOf(err) {
