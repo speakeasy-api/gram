@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -67,7 +68,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 		owner = p.ActorUserID
 		delegators[1] = owner
 	}
-	agent, err := s.createAgent(ctx, tx, p, owner, actor)
+	agent, err := s.createAgent(ctx, tx, p, assistant.Name, owner, actor)
 	if err != nil {
 		return err
 	}
@@ -142,14 +143,42 @@ func provisionActor(p ProvisionParams) (auditActor, error) {
 	return auditActor{principal: urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID), displayName: nil}, nil
 }
 
-// createAgent creates the assistant's agent, owned by owner.
-func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, owner string, actor auditActor) (agentrepo.Agent, error) {
-	agent, err := agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
+const (
+	// maxAgentNameAttempts bounds how many names derived from the assistant's
+	// name are tried: the name itself, then "<name> (2)" onwards. Assistant
+	// names are unique per project but agent names per organization, so a few
+	// collisions are expected; past this the agent is named after the
+	// assistant's ID, which cannot collide with another assistant's agent.
+	maxAgentNameAttempts = 20
+
+	// maxAgentNameLength is the agents.name length limit, in characters.
+	maxAgentNameLength = 120
+)
+
+// createAgent creates the assistant's agent, owned by owner and named after
+// the assistant.
+func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, assistantName, owner string, actor auditActor) (agentrepo.Agent, error) {
+	q := agentrepo.New(tx)
+	params := agentrepo.CreateAgentIfNameAvailableParams{
 		OrganizationID: p.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
 		OwnerUserID:    owner,
-		Name:           "Assistant " + p.AssistantID.String(),
-	})
+		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
+		Name:           "",
+	}
+	var agent agentrepo.Agent
+	err := pgx.ErrNoRows
+	for attempt := 1; attempt <= maxAgentNameAttempts && errors.Is(err, pgx.ErrNoRows); attempt++ {
+		params.Name = agentNameCandidate(assistantName, attempt)
+		agent, err = q.CreateAgentIfNameAvailable(ctx, params)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		agent, err = q.CreateAgent(ctx, agentrepo.CreateAgentParams{
+			OrganizationID: p.OrganizationID,
+			OwnerUserID:    owner,
+			ProjectID:      params.ProjectID,
+			Name:           "Assistant " + p.AssistantID.String(),
+		})
+	}
 	if err != nil {
 		return agentrepo.Agent{}, fmt.Errorf("create assistant agent: %w", err)
 	}
@@ -160,6 +189,20 @@ func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams,
 		return agentrepo.Agent{}, fmt.Errorf("audit assistant agent: %w", err)
 	}
 	return agent, nil
+}
+
+// agentNameCandidate is the assistant name for the first attempt and the name
+// with a " (n)" suffix after that, shortened so the result fits an agent name.
+func agentNameCandidate(assistantName string, attempt int) string {
+	if attempt <= 1 {
+		return assistantName
+	}
+	suffix := fmt.Sprintf(" (%d)", attempt)
+	base := []rune(assistantName)
+	if limit := maxAgentNameLength - len(suffix); len(base) > limit {
+		base = base[:limit]
+	}
+	return strings.TrimRight(string(base), " ") + suffix
 }
 
 // initialGrants is the dedicated agent's starting ceiling: every MCP server

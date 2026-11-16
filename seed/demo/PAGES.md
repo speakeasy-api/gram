@@ -122,8 +122,8 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
 PG `agents` ×7 includes Release assistant, Support triage, Retired
-documentation bot, the active Release notes assistant, the dedicated
-Identity-bound assistant agent (empty grants), Inference summary worker, and Deploy
+documentation bot, the active Release notes assistant, Identity-bound assistant
+(the dedicated agent, named after its assistant; empty grants), Inference summary worker, and Deploy
 watcher (owned by the Member-only persona Kwame Mensah, who is outside the directory
 roster), covering active, suspended, and revoked identities with four fictional owners
 (display names and avatar initials fallback). One inert agent-subject `user_sessions` row shows the

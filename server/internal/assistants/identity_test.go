@@ -1,6 +1,7 @@
 package assistants
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -70,6 +71,7 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
 	require.NoError(t, err)
 	require.Equal(t, "user-1", agent.OwnerUserID)
+	require.Equal(t, "Identity assistant", agent.Name)
 	grants, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
 	require.NoError(t, err)
 	policy := make([]authz.Grant, 0, len(grants))
@@ -106,6 +108,57 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	created, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentCreate)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, created)
+}
+
+func dedicatedAgentName(t *testing.T, db *pgxpool.Pool, record assistantRecord) string {
+	t.Helper()
+	require.NotNil(t, record.AgentID)
+	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: uuid.MustParse(*record.AgentID)})
+	require.NoError(t, err)
+	return agent.Name
+}
+
+// Assistant names are unique per project but agent names per organization, so
+// a taken name gets a numbered suffix instead of failing the assistant.
+func TestDedicatedAgentNameSkipsTakenNames(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_agent_name_taken")
+	require.NoError(t, err)
+	first := newProvisioningProject(t, db, "identity-agent-name-a")
+	second := newProvisioningProject(t, db, "identity-agent-name-b")
+	core := newProvisioningCore(t, db)
+	_, err = agentrepo.New(db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: "org-test", OwnerUserID: "user-2", ProjectID: uuid.NullUUID{UUID: first, Valid: true}, Name: "support desk"})
+	require.NoError(t, err)
+
+	inFirst, err := core.CreateAssistant(t.Context(), "org-test", first, "user-1", "Support desk", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, "Support desk (2)", dedicatedAgentName(t, db, inFirst))
+
+	inSecond, err := core.CreateAssistant(t.Context(), "org-test", second, "user-1", "Support desk", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, "Support desk (3)", dedicatedAgentName(t, db, inSecond))
+}
+
+func TestDedicatedAgentNameFallsBackToAssistantID(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_agent_name_fallback")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "identity-agent-name-fallback")
+	core := newProvisioningCore(t, db)
+	agents := agentrepo.New(db)
+	// Takes the assistant's name and every numbered variant provisioning tries.
+	for attempt := 1; attempt <= 20; attempt++ {
+		name := "Busy"
+		if attempt > 1 {
+			name = fmt.Sprintf("Busy (%d)", attempt)
+		}
+		_, err := agents.CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: "org-test", OwnerUserID: "user-2", ProjectID: uuid.NullUUID{UUID: project, Valid: true}, Name: name})
+		require.NoError(t, err)
+	}
+
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Busy", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, "Assistant "+record.ID.String(), dedicatedAgentName(t, db, record))
 }
 
 func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {

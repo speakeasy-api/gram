@@ -64,6 +64,57 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 	return i, err
 }
 
+const createAgentIfNameAvailable = `-- name: CreateAgentIfNameAvailable :one
+INSERT INTO agents (
+  organization_id,
+  owner_user_id,
+  project_id,
+  name
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4
+)
+ON CONFLICT (organization_id, LOWER(name)) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateAgentIfNameAvailableParams struct {
+	OrganizationID string
+	OwnerUserID    string
+	ProjectID      uuid.NullUUID
+	Name           string
+}
+
+// Returns no row, instead of failing the caller's transaction, when a live
+// agent in the organization already holds the name case-insensitively.
+func (q *Queries) CreateAgentIfNameAvailable(ctx context.Context, arg CreateAgentIfNameAvailableParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, createAgentIfNameAvailable,
+		arg.OrganizationID,
+		arg.OwnerUserID,
+		arg.ProjectID,
+		arg.Name,
+	)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.ProjectID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createAgentPolicyGrant = `-- name: CreateAgentPolicyGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, concat('agent:', $2::uuid), $3, $4)

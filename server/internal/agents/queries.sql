@@ -15,6 +15,23 @@ INSERT INTO agents (
 )
 RETURNING *;
 
+-- name: CreateAgentIfNameAvailable :one
+-- Returns no row, instead of failing the caller's transaction, when a live
+-- agent in the organization already holds the name case-insensitively.
+INSERT INTO agents (
+  organization_id,
+  owner_user_id,
+  project_id,
+  name
+) VALUES (
+  @organization_id,
+  @owner_user_id,
+  sqlc.narg('project_id'),
+  @name
+)
+ON CONFLICT (organization_id, LOWER(name)) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
+
 -- name: CreateAgentWithID :one
 INSERT INTO agents (
   id,
