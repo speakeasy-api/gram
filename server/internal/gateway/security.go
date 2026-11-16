@@ -182,7 +182,7 @@ func processSecurity(
 							if ok {
 								reason = failure.failure
 							}
-							message := clientGrantFailureMessage(reason, callerSetGrant(env, security, reason))
+							message := clientGrantFailureMessage(reason)
 							if ok && env.Credentials != nil {
 								applied[http.CanonicalHeaderKey("Authorization")] = credentialFrom(variable, grant)
 								env.Credentials.GrantFailure = failure.failure
@@ -465,54 +465,25 @@ func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure 
 	return toolconfig.ClientGrantUnavailable
 }
 
-// clientGrantFailureMessage tells whoever set the failing value what to check when a tool could not get its access token.
-func clientGrantFailureMessage(failure toolconfig.ClientGrantFailure, byCaller bool) string {
+// clientGrantFailureMessage tells the caller what to check when a tool could not get its access token.
+func clientGrantFailureMessage(failure toolconfig.ClientGrantFailure) string {
 	const prefix = "The tool could not get its access token: "
-	const unusableAnswer = "its token service gave an answer Speakeasy could not use."
-	checkURL := " Ask your administrator to check the token URL in the tool's OpenAPI document or environment."
-	if byCaller {
-		checkURL = " Check the token URL you set for this tool."
-	}
+	const checkURL = " Check the tool's token URL. If you did not set this tool up, ask your administrator."
+	const unusableAnswer = prefix + "its token service gave an answer Speakeasy could not use." + checkURL
 	switch failure {
 	case toolconfig.ClientGrantBlocked:
 		return prefix + "its token URL " + guardian.AddressNotAllowed.Problem() + "." + checkURL
 	case toolconfig.ClientGrantAddressNotFound:
 		return prefix + "its token URL " + guardian.AddressNotFound.Problem() + "." + checkURL
 	case toolconfig.ClientGrantRejected:
-		if byCaller {
-			return prefix + "its token service refused the request. Check the client ID and client secret you set for this tool."
-		}
-		return prefix + "its token service refused the request. Ask your administrator to check the tool's client ID, client secret, scopes and token URL."
+		return prefix + "its token service refused the request. Check the tool's client ID, client secret, scopes and token URL. If you did not set this tool up, ask your administrator."
 	case toolconfig.ClientGrantUnavailable:
-		if byCaller {
-			return prefix + "its token service could not be reached or answered with an error. If trying again does not help, check the token URL you set for this tool."
-		}
-		return prefix + "its token service could not be reached or answered with an error. If trying again does not help, ask your administrator to check the token URL in the tool's OpenAPI document or environment."
+		return prefix + "its token service could not be reached or answered with an error. If trying again does not help, check the tool's token URL. If you did not set this tool up, ask your administrator."
 	case toolconfig.ClientGrantMisconfigured:
-		return prefix + unusableAnswer + checkURL
+		return unusableAnswer
 	default:
-		return prefix + unusableAnswer + checkURL
+		return unusableAnswer
 	}
-}
-
-// callerSetGrant reports whether the caller set the value a failed grant points at: the client for a refusal, else the token URL.
-func callerSetGrant(env toolconfig.ToolCallEnv, security *HTTPToolSecurity, failure toolconfig.ClientGrantFailure) bool {
-	if env.Credentials == nil || env.UserConfig == nil {
-		return false
-	}
-	markers := []string{"TOKEN_URL"}
-	if failure == toolconfig.ClientGrantRejected {
-		markers = []string{"CLIENT_ID", "CLIENT_SECRET"}
-	}
-	for _, variable := range security.EnvVariables {
-		if !slices.ContainsFunc(markers, func(marker string) bool { return strings.Contains(variable, marker) }) || env.UserConfig.Get(variable) == "" {
-			continue
-		}
-		if slices.ContainsFunc(env.Credentials.CallerVariables, func(caller string) bool { return strings.EqualFold(caller, variable) }) {
-			return true
-		}
-	}
-	return false
 }
 
 func clientCredentialsStatusFailure(status int) toolconfig.ClientGrantFailure {

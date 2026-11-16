@@ -180,13 +180,11 @@ func TestClientGrantFailureMessage(t *testing.T) {
 	}
 
 	const (
-		prefix     = "The tool could not get its access token: "
-		adminURL   = " Ask your administrator to check the token URL in the tool's OpenAPI document or environment."
-		callerURL  = " Check the token URL you set for this tool."
-		unreached  = prefix + "its token service could not be reached or answered with an error. If trying again does not help, ask your administrator to check the token URL in the tool's OpenAPI document or environment."
-		refused    = prefix + "its token service refused the request. Ask your administrator to check the tool's client ID, client secret, scopes and token URL."
-		unusable   = prefix + "its token service gave an answer Speakeasy could not use." + adminURL
-		callerSent = prefix + "its token service refused the request. Check the client ID and client secret you set for this tool."
+		prefix    = "The tool could not get its access token: "
+		checkURL  = " Check the tool's token URL. If you did not set this tool up, ask your administrator."
+		unreached = prefix + "its token service could not be reached or answered with an error. If trying again does not help, check the tool's token URL. If you did not set this tool up, ask your administrator."
+		refused   = prefix + "its token service refused the request. Check the tool's client ID, client secret, scopes and token URL. If you did not set this tool up, ask your administrator."
+		unusable  = prefix + "its token service gave an answer Speakeasy could not use." + checkURL
 	)
 	blocked := prefix + "its token URL " + guardian.AddressNotAllowed.Problem() + "."
 	missing := prefix + "its token URL " + guardian.AddressNotFound.Problem() + "."
@@ -207,7 +205,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL: func(*testing.T) string { return "https://192.0.2.10:8443/oauth/token" },
 			options:  []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")},
 			secret:   []string{"192.0.2.10", "8443"},
-			want:     blocked + adminURL,
+			want:     blocked + checkURL,
 			code:     mcpconnectionattempts.CodeAddressNotAllowed,
 		},
 		{
@@ -217,7 +215,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			options:  []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")},
 			secret:   []string{"192.0.2.10", "8443"},
 			logged:   "192.0.2.10",
-			want:     blocked + callerURL,
+			want:     blocked + checkURL,
 			code:     mcpconnectionattempts.CodeAddressNotAllowed,
 		},
 		{
@@ -225,7 +223,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + ":8443/oauth/token" },
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "no such host", Name: tokenHost, Server: "198.51.100.53:53", IsNotFound: true})},
 			secret:   []string{tokenHost, "198.51.100.53", "8443"},
-			want:     missing + adminURL,
+			want:     missing + checkURL,
 			code:     mcpconnectionattempts.CodeAddressNotFound,
 		},
 		{
@@ -254,7 +252,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "server misbehaving", Name: tokenHost, Server: "198.51.100.53:53", IsTemporary: true})},
 			secret:   []string{tokenHost, "198.51.100.53", "8443"},
 			logged:   tokenHost,
-			want:     prefix + "its token service could not be reached or answered with an error. If trying again does not help, check the token URL you set for this tool.",
+			want:     unreached,
 			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
 		{
@@ -288,7 +286,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			headers: callerClient,
 			secret:  []string{"invalid_client", "secret-detail", "caller-secret"},
 			logged:  "secret-detail",
-			want:    callerSent,
+			want:    refused,
 		},
 		{
 			name: "token URL that does not exist",

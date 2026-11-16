@@ -178,7 +178,7 @@ type CredentialReport struct {
 	// GrantFailure says why a client credentials grant failed. Empty when none did.
 	GrantFailure ClientGrantFailure
 
-	// CallerVariables lists the variables the caller set, in request headers or the tool call's own arguments; a credential from one is the caller's.
+	// CallerVariables lists the variables the tool call's own arguments set; a credential from one is the caller's.
 	CallerVariables []string
 
 	// ServerVariable is the user configuration variable the server URL came from, or "" for the tool's own URL or a system one.
