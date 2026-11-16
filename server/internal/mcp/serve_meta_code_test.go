@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -22,7 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // TestCodeModeWithoutRuntimeServesProgressive pins the kill switch: with no
@@ -235,13 +238,14 @@ func TestCodeModeNeverServesAnonymousCallers(t *testing.T) {
 // submission reports a typed, retryable error instead of an opaque message.
 func TestCodeModeRefusalIsStructured(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
 	mcp.SetTestCodeExecutor(ti.service.Service, &refusingCodeExecutor{err: fmt.Errorf("admit: %w", codemode.ErrCapacity)})
 	enableCodeMode(t, ctx, ti)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
-	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+	requestCtx := wide.Start(t.Context())
+	w, err := serveOrganizationGatewayHTTP(t, requestCtx, ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var response struct {
@@ -276,13 +280,36 @@ func TestCodeModeRefusalIsStructured(t *testing.T) {
 	require.NotContains(t, refusalTiming, "admission_ms", "a refusal reports server time only")
 	require.NotContains(t, refusalTiming, "run_ms")
 	require.Contains(t, timed.Result.Meta, "io.modelcontextprotocol/serverInfo", "timing joins the server identity in _meta")
+
+	var serverMS int64
+	require.NoError(t, json.Unmarshal(refusalTiming["server_ms"], &serverMS))
+	found := false
+	for _, span := range recorder.Ended() {
+		if span.Name() != "gateway.code.execute" {
+			continue
+		}
+		found = true
+		require.Equal(t, codes.Error, span.Status().Code)
+		require.Contains(t, span.Attributes(), attr.CodeServerMS(serverMS))
+		require.Contains(t, span.Attributes(), attr.CodeOutcome("refused"))
+		for _, field := range span.Attributes() {
+			require.NotEqual(t, attr.CodeAdmissionMSKey, field.Key)
+			require.NotEqual(t, attr.CodeRunMSKey, field.Key)
+		}
+	}
+	require.True(t, found, "refusals produce a trace span")
+	fields := wide.Emit(requestCtx)
+	require.Contains(t, fields, attr.SlogCodeServerMS(serverMS))
+	require.Contains(t, fields, attr.SlogCodeOutcome("refused"))
+	require.False(t, wide.Contains(requestCtx, string(attr.CodeAdmissionMSKey)))
+	require.False(t, wide.Contains(requestCtx, string(attr.CodeRunMSKey)))
 }
 
 // TestCodeModeReportsServerTiming pins the timing an execute result carries
 // in _meta, so clients can separate server time from their own network time.
 func TestCodeModeReportsServerTiming(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
 	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
 		return &codemode.ExecutionResult{Value: json.RawMessage("2"), ToolCalls: []codemode.CallOutcome{}, Timing: codemode.ExecutionTiming{Admission: 3 * time.Millisecond, Run: 12 * time.Millisecond}}, nil
@@ -291,7 +318,8 @@ func TestCodeModeReportsServerTiming(t *testing.T) {
 	enableCodeMode(t, ctx, ti)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
-	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1+1"}}))
+	requestCtx := wide.Start(t.Context())
+	w, err := serveOrganizationGatewayHTTP(t, requestCtx, ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1+1"}}))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var response struct {
@@ -312,6 +340,25 @@ func TestCodeModeReportsServerTiming(t *testing.T) {
 	require.Equal(t, int64(12), *timing.RunMS)
 	require.NotNil(t, timing.ServerMS, "server_ms is always reported")
 	require.GreaterOrEqual(t, *timing.ServerMS, int64(0))
+
+	found := false
+	for _, span := range recorder.Ended() {
+		if span.Name() != "gateway.code.execute" {
+			continue
+		}
+		found = true
+		require.Equal(t, codes.Unset, span.Status().Code)
+		require.Contains(t, span.Attributes(), attr.CodeServerMS(*timing.ServerMS))
+		require.Contains(t, span.Attributes(), attr.CodeAdmissionMS(*timing.AdmissionMS))
+		require.Contains(t, span.Attributes(), attr.CodeRunMS(*timing.RunMS))
+		require.Contains(t, span.Attributes(), attr.CodeOutcome("ok"))
+	}
+	require.True(t, found, "execution produces a trace span")
+	fields := wide.Emit(requestCtx)
+	require.Contains(t, fields, attr.SlogCodeServerMS(*timing.ServerMS))
+	require.Contains(t, fields, attr.SlogCodeAdmissionMS(*timing.AdmissionMS))
+	require.Contains(t, fields, attr.SlogCodeRunMS(*timing.RunMS))
+	require.Contains(t, fields, attr.SlogCodeOutcome("ok"))
 }
 
 // TestCodeModeRunnerRefusalIsStructured pins that a runner refusing a
@@ -330,7 +377,7 @@ func TestCodeModeRunnerRefusalIsStructured(t *testing.T) {
 	} {
 		t.Run(tc.runnerCode, func(t *testing.T) {
 			t.Parallel()
-			ctx, ti := newTestMCPService(t)
+			ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
 			fx := seedOrganizationGateway(t, ctx, ti)
 			executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
 				return &codemode.ExecutionResult{Value: json.RawMessage("null"), ToolCalls: []codemode.CallOutcome{}, Error: &codemode.ExecutionError{Code: tc.runnerCode, Message: "refused"}}, nil
@@ -339,7 +386,8 @@ func TestCodeModeRunnerRefusalIsStructured(t *testing.T) {
 			enableCodeMode(t, ctx, ti)
 			bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
-			w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+			requestCtx := wide.Start(t.Context())
+			w, err := serveOrganizationGatewayHTTP(t, requestCtx, ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 			var response struct {
@@ -362,6 +410,15 @@ func TestCodeModeRunnerRefusalIsStructured(t *testing.T) {
 			require.True(t, refusal.Retryable)
 			require.Equal(t, tc.retryAfterMS, refusal.RetryAfterMS)
 			require.Contains(t, refusal.Message, "No program was submitted.")
+			found := false
+			for _, span := range recorder.Ended() {
+				if span.Name() == "gateway.code.execute" {
+					found = true
+					require.Contains(t, span.Attributes(), attr.CodeOutcome("refused"))
+				}
+			}
+			require.True(t, found)
+			require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeOutcome("refused"))
 		})
 	}
 }
@@ -420,4 +477,91 @@ func mintGatewayTestSession(t *testing.T, ctx context.Context, ti *testInstance,
 	_, err = usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: issuerID, SubjectUrn: subject, Jti: jti, RefreshTokenHash: conv.ToPGText(uuid.NewString()), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ToolSelection: policy})
 	require.NoError(t, err)
 	return token
+}
+
+func TestCodeModeFailureReportsTiming(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		code    string
+		value   json.RawMessage
+		status  string
+		failure *codemode.ExecutionError
+		outcome string
+	}{
+		{name: "invalid source", code: "", value: json.RawMessage("2"), status: "error", outcome: "error"},
+		{name: "serialize failure", code: "1+1", value: json.RawMessage("invalid-json"), status: "serialize code execution", outcome: "error"},
+		{name: "runner timeout", code: "1", value: json.RawMessage("null"), failure: &codemode.ExecutionError{Code: "deadline_exceeded", Message: "execution timed out"}, status: "timeout", outcome: "timeout"},
+		{name: "runner cancellation", code: "1", value: json.RawMessage("null"), failure: &codemode.ExecutionError{Code: "cancelled", Message: "execution cancelled"}, status: "cancelled", outcome: "cancelled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+			fx := seedOrganizationGateway(t, ctx, ti)
+			executor := &recordingCodeExecutor{run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
+				return &codemode.ExecutionResult{Value: tc.value, Error: tc.failure, Timing: codemode.ExecutionTiming{Admission: 3 * time.Millisecond, Run: 12 * time.Millisecond}}, nil
+			}}
+			mcp.SetTestCodeExecutor(ti.service.Service, executor)
+			enableCodeMode(t, ctx, ti)
+			bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
+			requestCtx := wide.Start(t.Context())
+			w, err := serveOrganizationGatewayHTTP(t, requestCtx, ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": tc.code}}))
+			require.NoError(t, err)
+			require.Contains(t, w.Body.String(), `"error"`)
+			found := false
+			for _, span := range recorder.Ended() {
+				if span.Name() != "gateway.code.execute" {
+					continue
+				}
+				found = true
+				if tc.outcome == "cancelled" {
+					require.Equal(t, codes.Unset, span.Status().Code)
+					require.Empty(t, span.Status().Description)
+				} else {
+					require.Equal(t, codes.Error, span.Status().Code)
+					require.Contains(t, span.Status().Description, tc.status, "preserve LogError's span treatment")
+				}
+				require.Contains(t, span.Attributes(), attr.CodeOutcome(tc.outcome))
+				for _, field := range span.Attributes() {
+					if field.Key == attr.CodeServerMSKey {
+						require.GreaterOrEqual(t, field.Value.AsInt64(), int64(0))
+						require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeServerMS(field.Value.AsInt64()))
+					}
+				}
+			}
+			require.True(t, found)
+			serverTimings := 0
+			for _, field := range wide.Emit(requestCtx) {
+				if field.Key == string(attr.CodeServerMSKey) {
+					serverTimings++
+				}
+			}
+			require.Equal(t, 1, serverTimings, "every return records one server duration")
+			require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeOutcome(tc.outcome))
+		})
+	}
+}
+
+func TestCodeModeCancelledAdmissionIsNotSpanError(t *testing.T) {
+	t.Parallel()
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	mcp.SetTestCodeExecutor(ti.service.Service, &refusingCodeExecutor{err: codemode.ErrCancelledBeforeSubmit})
+	enableCodeMode(t, ctx, ti)
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
+	requestCtx := wide.Start(t.Context())
+	w, err := serveOrganizationGatewayHTTP(t, requestCtx, ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), `"code":"cancelled"`)
+	found := false
+	for _, span := range recorder.Ended() {
+		if span.Name() == "gateway.code.execute" {
+			found = true
+			require.Equal(t, codes.Unset, span.Status().Code)
+			require.Contains(t, span.Attributes(), attr.CodeOutcome("cancelled"))
+		}
+	}
+	require.True(t, found)
+	require.True(t, wide.Contains(requestCtx, string(attr.CodeServerMSKey)))
+	require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeOutcome("cancelled"))
 }

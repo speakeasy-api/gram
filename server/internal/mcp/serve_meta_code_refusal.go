@@ -7,9 +7,12 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/wide"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // codeRefusalCode classifies why an execution never reached a runner.
@@ -116,8 +119,8 @@ type codeExecutionTiming struct {
 	// ServerMS is the gateway's total time for the request, in milliseconds.
 	ServerMS int64 `json:"server_ms"`
 
-	// AdmissionMS is time spent waiting for capacity before submission; absent
-	// when the request was refused before reaching the runtime.
+	// AdmissionMS includes admission overhead and runner cleanup outside the
+	// timed run; absent when refused before reaching the runtime.
 	AdmissionMS *int64 `json:"admission_ms,omitempty"`
 
 	// RunMS is time from submission to the result, including tool callbacks;
@@ -125,8 +128,8 @@ type codeExecutionTiming struct {
 	RunMS *int64 `json:"run_ms,omitempty"`
 }
 
-// newCodeExecutionTiming measures the request from started; execution is nil
-// when the coordinator refused it.
+// newCodeExecutionTiming captures response timings before serializing the reply.
+// Execution is nil when the coordinator refused it.
 func newCodeExecutionTiming(started time.Time, execution *codemode.ExecutionResult) codeExecutionTiming {
 	timing := codeExecutionTiming{ServerMS: time.Since(started).Milliseconds(), AdmissionMS: nil, RunMS: nil}
 	if execution != nil {
@@ -134,6 +137,22 @@ func newCodeExecutionTiming(started time.Time, execution *codemode.ExecutionResu
 		timing.RunMS = new(execution.Timing.Run.Milliseconds())
 	}
 	return timing
+}
+
+// recordCodeExecutionTiming emits the response timings, or timings captured at
+// return for an early error, exactly once per execution request.
+func recordCodeExecutionTiming(ctx context.Context, timing codeExecutionTiming, outcome string) {
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(attr.CodeServerMS(timing.ServerMS), attr.CodeOutcome(outcome))
+	wide.Push(ctx, attr.SlogCodeServerMS(timing.ServerMS), attr.SlogCodeOutcome(outcome))
+	if timing.AdmissionMS != nil {
+		span.SetAttributes(attr.CodeAdmissionMS(*timing.AdmissionMS))
+		wide.Push(ctx, attr.SlogCodeAdmissionMS(*timing.AdmissionMS))
+	}
+	if timing.RunMS != nil {
+		span.SetAttributes(attr.CodeRunMS(*timing.RunMS))
+		wide.Push(ctx, attr.SlogCodeRunMS(*timing.RunMS))
+	}
 }
 
 // codeToolCallResult is an execute result with the gateway's timing in _meta.
