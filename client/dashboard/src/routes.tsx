@@ -544,7 +544,7 @@ const ROUTE_STRUCTURE = {
         title: "Agents",
         url: "agents",
         icon: "bot",
-        stage: "preview",
+        stage: "beta",
         subPages: {
           new: {
             title: "New Agent Identity",
