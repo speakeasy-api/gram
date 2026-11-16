@@ -7,9 +7,12 @@ package authz
 type MatchMode int
 
 const (
-	// MatchLoose skips grant keys the check does not carry. It is today's
-	// default for every resource type except auth clients.
-	MatchLoose MatchMode = iota
-	// MatchStrict requires every grant key to be present in the check.
+	// MatchStandard requires every grant key to be present in the check,
+	// except where the check is one of the few built to leave a key out: a
+	// probe, a connection against a tool limit, and a risk policy audience
+	// question against a server limit.
+	MatchStandard MatchMode = iota
+	// MatchStrict requires every grant key to be present in the check, with
+	// no exception.
 	MatchStrict
 )

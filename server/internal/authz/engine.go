@@ -335,6 +335,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 			if evaluation.Denied {
 				return deniedByBlock(check.Scope, check.selector())
 			}
+			e.logMissingKeys(ctx, authorization, check)
 			return Denied(check.Scope, check.selector())
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
@@ -449,6 +450,9 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	if !slices.Contains(decision.blocked, true) {
+		e.logMissingKeys(ctx, authorization, checks...)
+	}
 	// The alternatives are equivalent to the handler but not to the person
 	// asking for access: explain the one that grants the least.
 	if suggested, ok := leastPrivilegedAlternative(checks, decision.blocked); ok {
@@ -1013,6 +1017,26 @@ func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 			"invalid authz check on a path that skips enforcement",
 			attr.SlogResourceID(check.ResourceID),
 			attr.SlogError(err),
+		)
+	}
+}
+
+// logMissingKeys logs an error for each refused check that a grant would have
+// covered had the check carried a key the grant names. A check that leaves
+// out a key never matches, so this is either a call site that should carry
+// the key or a stored grant that names a key its permission does not have.
+func (e *Engine) logMissingKeys(ctx context.Context, authorization grantAuthorization, refused ...Check) {
+	for _, check := range refused {
+		keys := authorization.keysMissingFrom(check)
+		if len(keys) == 0 {
+			continue
+		}
+		e.logger.ErrorContext(
+			ctx,
+			"authz check refused: a grant names a key the check does not carry",
+			attr.SlogResourceID(check.ResourceID),
+			attr.SlogAuthzMissingSelectorKeys(keys),
+			attr.SlogError(Denied(check.Scope, check.selector())),
 		)
 	}
 }

@@ -90,9 +90,9 @@ func TestDispositionLimitedGrantSeparatesConnectFromCalls(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed)
 
-	// A tool with no annotations carries no disposition, so the limited
-	// grant still admits it, as it does today.
+	// A tool with no annotations carries no disposition, and a grant limited
+	// to a disposition never covers a call that does not carry one.
 	allowed, err = GrantsAuthorize(grants, ref.ToolCall("mystery", ""))
 	require.NoError(t, err)
-	require.True(t, allowed)
+	require.False(t, allowed)
 }

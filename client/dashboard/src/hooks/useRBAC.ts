@@ -30,12 +30,15 @@ export function resourceKindForScope(scope: string): string {
 
 /**
  * Check if a grant selector matches a check selector.
- * Mirrors the server-side Selector.Matches in authz/selector.go.
+ * Mirrors how the server matches a probe (Check.Probe in authz/access.go):
+ * the dashboard asks whether to show a control, not whether to perform an
+ * action, so it asks the server's discovery question.
  *
  * For each key in the grant selector, if the check also has that key the
  * values must match (or the grant value must be "*"). Keys present in the
- * grant but absent from the check are skipped — the check isn't constraining
- * that dimension.
+ * grant but absent from the check are skipped. The server refuses such an
+ * omission on every request it decides, except a probe, a connection and a
+ * risk policy audience question.
  */
 export function selectorMatches(
   grantSelector: Record<string, string>,

@@ -125,8 +125,9 @@ var dimensionValues = map[string]string{
 // atomsFor lists, for scope, a grant on everything, on one project, on one
 // resource, a direct grant on that resource, and, for each optional dimension
 // of the kind, a grant on everything limited by that dimension. The dashboard
-// never sends optional dimensions, so those grants test that a loose allow
-// still matches and a strict exclusion does not.
+// never sends optional dimensions and asks as a probe, so those grants test
+// that a limited allow still matches its question and a limited exclusion
+// does not.
 func atomsFor(scope authz.Scope, inProject bool, dimensions []string) []caseAtom {
 	project := ""
 	if inProject {
@@ -248,6 +249,10 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 					if tg.project != "" {
 						check.Dimensions = map[string]string{authz.SelectorKeyProjectID: tg.project}
 					}
+					// The dashboard asks whether to show a control, not
+					// whether to perform an action, so its questions are
+					// probes: a grant key it does not send still matches.
+					check = check.Probe()
 					allowed, err := authz.GrantsAuthorize(grants, check)
 					if err != nil {
 						return nil, fmt.Errorf("case %q, check %s on %s: %w", c.Name, scope, tg.resource, err)

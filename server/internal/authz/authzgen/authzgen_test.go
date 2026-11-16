@@ -41,7 +41,7 @@ func TestRender_RejectsNameCollisions(t *testing.T) {
 		Kind:       "org_read",
 		Parent:     "",
 		Category:   registry.ScopeCategoryOrg,
-		Match:      registry.MatchLoose,
+		Match:      registry.MatchStandard,
 		Dimensions: nil,
 		Permissions: []registry.Permission{{
 			Action: "x", LegacyScope: "org_read:x", Implies: nil, Exclusions: nil, Dimensions: nil, Source: registry.GrantSourceRoles,
@@ -67,7 +67,7 @@ func TestRender_RejectsScopesThatAreNotIdentifiers(t *testing.T) {
 		Kind:       "thing",
 		Parent:     "",
 		Category:   registry.ScopeCategoryOrg,
-		Match:      registry.MatchLoose,
+		Match:      registry.MatchStandard,
 		Dimensions: nil,
 		Permissions: []registry.Permission{{
 			Action: "read-only", LegacyScope: "", Implies: nil, Exclusions: nil, Dimensions: nil, Source: registry.GrantSourceRoles,

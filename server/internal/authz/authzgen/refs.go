@@ -188,7 +188,7 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 			b.WriteString("\t}\n}\n\n")
 		}
 
-		match := "MatchLoose"
+		match := "MatchStandard"
 		if t.Match == registry.MatchStrict {
 			match = "MatchStrict"
 		}
@@ -206,15 +206,22 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 				mparams = append(mparams, paramName(d.Key)+" "+paramType(r, d.Key))
 			}
 			fmt.Fprintf(&b, "func (r %sRef) %s(%s) Check {\n", name, method, strings.Join(mparams, ", "))
+			// A permission with dimension sets has a plain form that leaves
+			// them out: connecting to a server names no tool. That form is
+			// stamped, so the matcher knows the omission is meant.
+			stamp := ""
+			if len(p.DimensionSets) > 0 {
+				stamp = ".asConnection()"
+			}
 			if len(extra) == 0 {
-				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), r.dimensions(), %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), r.dimensions(), %s)%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match, stamp)
 				continue
 			}
 			b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 			for _, d := range extra {
 				fmt.Fprintf(&b, "\tdimensions[%q] = %s.String()\n", d.Key, paramName(d.Key))
 			}
-			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match, stamp)
 		}
 		for _, p := range t.Permissions {
 			for _, set := range p.DimensionSets {

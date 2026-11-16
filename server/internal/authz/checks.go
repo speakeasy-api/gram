@@ -43,6 +43,12 @@ func validateCheckOperation(c Check) error {
 	if hasTool || hasDisposition {
 		return invalidCheckReason(c.Scope, c.ResourceID, "tool and disposition belong to a tool call")
 	}
+	if c.operation == operationConnection && !isConnectScope(c.Scope) {
+		return invalidCheckReason(c.Scope, c.ResourceID, "only the connect permission has connections")
+	}
+	if c.operation == operationPolicyAudience && c.Scope != ScopeRiskPolicyEvaluate && c.Scope != ScopeRiskPolicyBypass {
+		return invalidCheckReason(c.Scope, c.ResourceID, "only the risk policy audience permission, or the bypass that takes it away, asks an audience question")
+	}
 	return nil
 }
 
@@ -56,13 +62,18 @@ func isConnectScope(scope Scope) bool {
 // injected as a dimension so project-scoped grants can match. resourceID is the
 // server or toolset ID for operations on one server, or the project ID for
 // project-level operations. projectID is required: evaluation rejects an MCP
-// check without one.
+// check without one. A connect check is a connection: it names no tool, so a
+// grant limited to some tools still covers it.
 func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	var dimensions map[string]string
 	if projectID != "" {
 		dimensions = map[string]string{SelectorKeyProjectID: projectID}
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	check := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	if isConnectScope(scope) {
+		return check.asConnection()
+	}
+	return check
 }
 
 // AssistantCheck builds a Check for an assistant scope. resourceID is the
@@ -86,8 +97,7 @@ func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
 }
 
 // HooksIngestCheck builds the org:hooks_ingest check for projectID. It always
-// carries the project, because matching skips grant keys a check omits, which
-// would let a project-bounded grant through for any project.
+// carries the project, so a project-bounded grant covers only its project.
 func HooksIngestCheck(organizationID, projectID string) Check {
 	return Check{Scope: ScopeOrgHooksIngest, ResourceKind: "", ResourceID: organizationID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
@@ -233,8 +243,12 @@ type RiskPolicyDimensions struct {
 	ServerIdentity string
 }
 
+// RiskPolicyEvaluateCheck asks whether the audience of a risk policy includes
+// the caller. It names no server, and an audience grant limited to some
+// servers still matches it: a match places the caller under the policy, so
+// leaving the server out can only apply the policy more widely.
 func RiskPolicyEvaluateCheck(policyID string) Check {
-	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationPolicyAudience}
 }
 
 // RiskPolicyApplies builds the runtime authorization rule for applying a risk
@@ -295,7 +309,7 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 }
 
 // InferenceExecuteCheck authorizes inference in one project, not chat mutation.
-// Always include project_id so project-bounded grants cannot match by omission.
+// It always carries project_id, so a project-bounded grant covers only its project.
 func InferenceExecuteCheck(projectID string) Check {
 	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }

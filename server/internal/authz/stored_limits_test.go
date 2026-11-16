@@ -43,10 +43,23 @@ func TestValidateStoredSelector_AcceptsLimitsSavedEarlier(t *testing.T) {
 	require.Error(t, ValidateStoredSelector(ScopeProjectRead, limitedSelector(ScopeProjectRead, SelectorKeyTool, "search")))
 }
 
-// Loading a stored rule as the effect it has must not change a decision. A
+// matchedBeforeStrictMatching is how an allow rule was compared with a check
+// before a missing key stopped matching: a key the check did not carry was
+// skipped.
+func matchedBeforeStrictMatching(grant, check Selector) bool {
+	for key, grantVal := range grant {
+		checkVal, ok := check[key]
+		if ok && !selectorValueMatches(key, grantVal, checkVal, "") {
+			return false
+		}
+	}
+	return true
+}
+
+// Loading a stored rule as the effect it had must not change a decision. A
 // check for viewing or managing a server never names a tool, so a limited
-// allow already matches like an unlimited one and a limited block never
-// matches.
+// allow used to match like an unlimited one and a limited block never
+// matched. The load keeps that effect now that a missing key never matches.
 func TestStoredSelectorInEffect_KeepsEveryDecision(t *testing.T) {
 	t.Parallel()
 
@@ -67,7 +80,7 @@ func TestStoredSelectorInEffect_KeepsEveryDecision(t *testing.T) {
 			require.NotContains(t, inEffect, key)
 			require.Equal(t, before, stored, "the stored selector must not be changed in place")
 			for _, check := range checks {
-				require.Equal(t, stored.Matches(check), inEffect.Matches(check), "%s limited by %s against %v", scope, key, check)
+				require.Equal(t, matchedBeforeStrictMatching(stored, check), inEffect.StrictMatches(check), "%s limited by %s against %v", scope, key, check)
 			}
 		}
 		for _, scope := range []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedWrite} {
