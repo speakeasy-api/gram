@@ -117,13 +117,29 @@ func mcpSelector(resourceID string, dims ...string) authz.Selector {
 // counts as a connect grant held by the same principal on the same selector.
 // authz/connect_equivalence_test.go pins that this emulation decides every
 // case the way the engine did while the implication held.
-func withReadWriteImplyingConnect(grants []authz.Grant) []authz.Grant {
+//
+// The connect grants come from the rows as stored, not from the loaded
+// grants: a tool or disposition limit on a stored read or write grant limited
+// the connect it implied, and loading drops that limit because it never
+// limited viewing or managing.
+func withReadWriteImplyingConnect(grants []authz.Grant, stored []fixtureGrant, principals []urn.Principal) []authz.Grant {
 	out := slices.Clone(grants)
-	for _, g := range grants {
-		if g.Scope == authz.ScopeMCPRead || g.Scope == authz.ScopeMCPWrite {
-			g.Scope = authz.ScopeMCPConnect
-			out = append(out, g)
+	for _, g := range stored {
+		if g.scope != authz.ScopeMCPRead && g.scope != authz.ScopeMCPWrite {
+			continue
 		}
+		if !slices.Contains(principals, g.principal) {
+			continue
+		}
+		if g.expiresAt != nil && !g.expiresAt.After(time.Now()) {
+			continue
+		}
+		out = append(out, authz.Grant{
+			PrincipalUrn: g.principal.String(),
+			Scope:        authz.ScopeMCPConnect,
+			Selector:     g.selector,
+			Inferred:     false,
+		})
 	}
 	return out
 }
@@ -150,7 +166,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	apiKey := urn.NewPrincipal(urn.PrincipalTypeAPIKey, uuid.NewString())
 	workload := urn.NewPrincipal(urn.PrincipalTypeWorkload, uuid.NewString()+":repo:example/app")
 
-	for _, g := range []fixtureGrant{
+	stored := []fixtureGrant{
 		// Roles: a project-wide viewer role that blocks serverA, and an operator
 		// role that may manage one tool on serverB.
 		{principal: viewers, scope: authz.ScopeMCPRead, selector: mcpSelector(authz.WildcardResource, authz.SelectorKeyProjectID, projectA)},
@@ -183,7 +199,8 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		{principal: agent, scope: authz.ScopeMCPRead, selector: mcpSelector(serverA)},
 		{principal: apiKey, scope: authz.ScopeMCPWrite, selector: mcpSelector(authz.WildcardResource, authz.SelectorKeyProjectID, projectB)},
 		{principal: workload, scope: authz.ScopeMCPRead, selector: mcpSelector(serverC)},
-	} {
+	}
+	for _, g := range stored {
 		f.grant(g)
 	}
 	f.provision(inferredOverride, authz.ScopeMCPConnect, mcpSelector(serverA))
@@ -220,7 +237,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 			grants, err := authz.LoadGrants(ctx, f.db, f.orgID, principals)
 			require.NoError(t, err)
 			if legacy {
-				grants = withReadWriteImplyingConnect(grants)
+				grants = withReadWriteImplyingConnect(grants, stored, principals)
 			}
 			for i, check := range checks {
 				allowed, err := authz.GrantsAuthorize(grants, check)
