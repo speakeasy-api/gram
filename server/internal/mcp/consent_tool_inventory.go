@@ -357,11 +357,7 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 			disposition := toolDisposition(ctx, s.logger, base.Name, base.Annotations)
 			// Listing the tools names none of them, as in tools/list
 			// (filterToolsByMCPConnect), so no check is recorded per tool.
-			if rerr := s.authz.Require(authz.WithoutChallenges(ctx), authz.MCPToolCallCheck(connectResourceID, authz.MCPToolCallDimensions{
-				Tool:        base.Name,
-				Disposition: disposition,
-				ProjectID:   endpoint.ProjectID.String(),
-			})); rerr != nil {
+			if rerr := s.authz.Require(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDFrom(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID)).ToolCall(base.Name, disposition)); rerr != nil {
 				var oopsErr *oops.ShareableError
 				if errors.As(rerr, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
 					roleHidden = append(roleHidden, base.Name)
