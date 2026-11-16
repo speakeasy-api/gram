@@ -1,3 +1,6 @@
+import { accountSpecifiers, accountSetupUrls } from "./account-provider";
+import { oktaRemoteTemplate } from "./provider-setup/okta";
+import { snowflakeRemoteTemplate } from "./snowflake-install";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -125,6 +128,7 @@ import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.j
 import type { CatalogServer } from "@/pages/catalog/hooks";
 import {
   ISSUER_LOOKUP_FAILED_MESSAGE,
+  headerValueKey,
   useRemoteMcpInstallWorkflow,
 } from "./useRemoteMcpInstallWorkflow";
 
@@ -248,6 +252,104 @@ describe("useRemoteMcpInstallWorkflow", () => {
       await pending;
     });
     expect(mockCreateServer).not.toHaveBeenCalled();
+  });
+
+  it.each(["snowflake", "okta"] as const)(
+    "creates native %s disabled before account configuration without probing or OAuth",
+    async (provider) => {
+      const servers = [
+        makeServer({
+          registrySpecifier: accountSpecifiers[provider],
+          remotes: [
+            remote(
+              provider === "okta"
+                ? oktaRemoteTemplate
+                : snowflakeRemoteTemplate,
+            ),
+          ],
+        }),
+      ];
+      const initialConfiguration = { identityMode: "user" as const };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({
+          servers,
+          accountSetupEnabled: true,
+          initialConfiguration,
+        }),
+      );
+      await act(async () => {
+        if (result.current.phase !== "configure")
+          throw new Error("Expected configure");
+        await result.current.startInstall();
+      });
+      expect(mockCreateServer).toHaveBeenCalledWith(
+        {
+          createServerForm: {
+            name: accountSpecifiers[provider],
+            url: accountSetupUrls[provider],
+            transportType: "streamable-http",
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockMcpServersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createMcpServerForm: expect.objectContaining({
+            remoteMcpServerId: "rms-1",
+            visibility: "disabled",
+          }),
+        }),
+        undefined,
+        undefined,
+      );
+      expect(mockProbeURL).not.toHaveBeenCalled();
+      expect(mockDiscoverProtectedResourceMetadata).not.toHaveBeenCalled();
+      expect(mockCommitIdentity).not.toHaveBeenCalled();
+      expect(mockMcpServersUpdate).not.toHaveBeenCalled();
+      expect(result.current.phase).toBe("complete");
+      if (result.current.phase !== "complete")
+        throw new Error("Expected complete");
+      expect(result.current.statuses[0]).toMatchObject({
+        mcpServerId: "mcp-server-1",
+        remoteUrl: accountSetupUrls[provider],
+        identityMode: "user",
+        setupRequired: expect.any(String),
+      });
+    },
+  );
+
+  it("retains Snowflake customize intent for server Setup instead of opening a competing editor", async () => {
+    const servers = [
+      makeServer({
+        registrySpecifier: "com.snowflake/cortex-mcp",
+        remotes: [remote(snowflakeRemoteTemplate)],
+      }),
+    ];
+    const initialConfiguration = { identityMode: "user" as const };
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        initialConfiguration,
+        accountSetupEnabled: true,
+        offerGuardrails: true,
+      }),
+    );
+    act(() => {
+      if (result.current.phase === "configure")
+        result.current.continueToGuardrails?.();
+    });
+    await act(async () => {
+      if (result.current.phase !== "guardrails")
+        throw new Error("Expected guardrails");
+      expect(await result.current.installForCustomizing()).toEqual([]);
+    });
+    if (result.current.phase !== "complete")
+      throw new Error("Expected complete");
+    expect(result.current.statuses[0]?.setupPolicy?.categories).toEqual(
+      new Set(["secrets", "pii"]),
+    );
+    expect(mockCreatePolicy).not.toHaveBeenCalled();
   });
 
   it("retains accepted servers when policy creation fails", async () => {
@@ -399,6 +501,146 @@ describe("useRemoteMcpInstallWorkflow", () => {
     );
     expect(result.current.phase).toBe("selectRemotes");
   });
+
+  it("honors the caller's User Identity default for a single manual-auth source", () => {
+    const servers = [
+      makeServer({
+        supportsDcr: false,
+        remotes: [
+          remote(
+            "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+          ),
+        ],
+      }),
+    ];
+    const initialConfiguration = { identityMode: "user" as const };
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+    );
+    expect(result.current.phase).toBe("configure");
+    if (result.current.phase !== "configure")
+      throw new Error("unexpected phase");
+    expect(result.current.serverConfigs[0]!.identityMode).toBe("user");
+    expect(result.current.serverConfigs[0]!.remotes).toHaveLength(1);
+  });
+
+  it.each(["none", "agent"] as const)(
+    "preserves %s and the name through the original endpoint selection",
+    (identityMode) => {
+      const servers = [
+        makeServer({
+          supportsDcr: false,
+          remotes: [
+            remote("https://a.example/mcp"),
+            remote("https://b.example/mcp"),
+          ],
+        }),
+      ];
+      const initialConfiguration = { identityMode, name: "Chosen name" };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+      );
+      act(() => {
+        if (result.current.phase !== "selectRemotes")
+          throw new Error("unexpected phase");
+        result.current.updateCurrentConfig({
+          selectedRemoteUrls: new Set([servers[0]!.remotes![1]!.url]),
+        });
+      });
+      act(() => {
+        if (result.current.phase !== "selectRemotes")
+          throw new Error("unexpected phase");
+        result.current.nextServer();
+      });
+      if (result.current.phase !== "configure")
+        throw new Error("unexpected phase");
+      expect(result.current.serverConfigs[0]).toMatchObject({
+        identityMode,
+        name: "Chosen name",
+        remotes: [servers[0]!.remotes![1]],
+      });
+    },
+  );
+
+  it.each(["native", "hosted"] as const)(
+    "keeps %s endpoint choices and header input when Manual and Shared credential switch",
+    (integration) => {
+      const remotes =
+        integration === "native"
+          ? [
+              remote(
+                "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+              ),
+              remote(
+                "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+              ),
+              remote(
+                "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
+              ),
+            ]
+          : [
+              remote("https://app.getgram.ai/mcp/speakeasy-team-salesforce", [
+                "MCP-Instance-URL",
+              ]),
+            ];
+      const servers = [makeServer({ remotes })];
+      const initialConfiguration = { identityMode: "none" as const };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+      );
+      const selected = integration === "native" ? remotes.slice(0, 2) : remotes;
+      if (integration === "native") {
+        act(() => {
+          if (result.current.phase !== "selectRemotes")
+            throw new Error("unexpected phase");
+          result.current.updateCurrentConfig({
+            selectedRemoteUrls: new Set(selected.map((item) => item.url)),
+          });
+        });
+        act(() => {
+          if (result.current.phase !== "selectRemotes")
+            throw new Error("unexpected phase");
+          result.current.nextServer();
+        });
+      }
+      act(() => {
+        if (result.current.phase !== "configure")
+          throw new Error("unexpected phase");
+        result.current.updateServerConfig(0, {
+          name: "Chosen Salesforce name",
+        });
+        if (integration === "hosted")
+          result.current.setHeaderValue(
+            0,
+            remotes[0]!.url,
+            "MCP-Instance-URL",
+            "https://example.my.salesforce.com",
+          );
+      });
+      for (const identityMode of ["agent", "none"] as const) {
+        act(() => {
+          if (result.current.phase !== "configure")
+            throw new Error("unexpected phase");
+          result.current.updateServerConfig(0, { identityMode });
+        });
+        expect(result.current.phase).toBe("configure");
+        if (result.current.phase !== "configure")
+          throw new Error("unexpected phase");
+        expect(result.current.serverConfigs[0]).toMatchObject({
+          identityMode,
+          name: "Chosen Salesforce name",
+          remotes: selected,
+          headerValues:
+            integration === "hosted"
+              ? {
+                  [headerValueKey(remotes[0]!.url, "MCP-Instance-URL")]:
+                    "https://example.my.salesforce.com",
+                }
+              : {},
+        });
+      }
+    },
+  );
 
   it("skips selectRemotes and installs every endpoint with autoSelectRemotes", () => {
     const servers = [
@@ -1076,7 +1318,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
       data: {
         mcpServers: [
           {
-            toolset: { registrySpecifier: "test/server", externalMcpSlugs: [] },
+            toolset: { registrySpecifier: "test/server" },
           },
         ],
       },

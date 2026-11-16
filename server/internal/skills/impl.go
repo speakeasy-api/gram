@@ -1116,9 +1116,10 @@ func skillMetadataMatches(skill repo.Skill, name, displayName string, summary *s
 // accessibleSkillIDs returns the skills at least one of these users is
 // authorized to reach across the organization.
 //
-// The rule — a grant on the user or on a role they hold, less any blocking
-// grant withdrawing the same scope — lives in the access service's query, and
-// is read from here rather than restated so the two surfaces cannot drift.
+// The rule — a grant on the user or on a role they hold, less any block that
+// withdraws it, as the header of ListAccessibleSkillsForUser spells out — lives
+// in the access service's query, and is read from here rather than restated so
+// the two surfaces cannot drift.
 // Several users union, matching how the listing filters read: a skill shows if
 // anyone named can reach it.
 //

@@ -101,6 +101,11 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             The connection could not be completed.
             {{end}}
           </p>
+          {{if .ConnectionReference}}
+          <p class="text-xs text-muted-foreground" data-connection-reference>
+            Reference: <span class="font-mono break-all">{{.ConnectionReference}}</span>
+          </p>
+          {{end}}
         </header>
 
         <p class="text-sm border-b px-6 py-6 sm:px-8">
@@ -236,10 +241,10 @@ consent page shows, so the person recognizes the flow they started. */ -}}
                 <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.ErrorID}}</dd>
               </div>
               {{end}}
-              {{if .Reference}}
+              {{if .TraceID}}
               <div>
-                <dt class="text-eyebrow">Reference</dt>
-                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.Reference}}</dd>
+                <dt class="text-eyebrow">Trace ID</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.TraceID}}</dd>
               </div>
               {{end}}
               <div>

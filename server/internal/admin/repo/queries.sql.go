@@ -968,15 +968,14 @@ func (q *Queries) AdminInsertPlatformMCPFeedbackFixture(ctx context.Context, arg
 }
 
 const adminInsertPrincipalGrantFixture = `-- name: AdminInsertPrincipalGrantFixture :exec
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at, created_at)
 VALUES (
   $1,
   $2,
   $3,
-  $4::text,
-  $5,
-  $6::timestamptz,
-  COALESCE($7::timestamptz, clock_timestamp())
+  $4,
+  $5::timestamptz,
+  COALESCE($6::timestamptz, clock_timestamp())
 )
 `
 
@@ -984,25 +983,112 @@ type AdminInsertPrincipalGrantFixtureParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 	ExpiresAt      pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 }
 
-// Test fixture: writes a grant row as stored, including temporary, expired,
-// deny-effect and backdated rows no single writer produces together.
+// Test fixture: writes a grant row as stored, including temporary, expired
+// and backdated rows no single writer produces together.
 func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg AdminInsertPrincipalGrantFixtureParams) error {
 	_, err := q.db.Exec(ctx, adminInsertPrincipalGrantFixture,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 		arg.ExpiresAt,
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const adminListCustomDomains = `-- name: AdminListCustomDomains :many
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND ($1::text IS NULL OR d.organization_id = $1::text)
+  AND (
+    $2::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = $2::text
+  )
+ORDER BY d.domain, d.id
+`
+
+type AdminListCustomDomainsParams struct {
+	OrganizationID   pgtype.Text
+	DnsRoutingMethod pgtype.Text
+}
+
+type AdminListCustomDomainsRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	OrganizationName       string
+	OrganizationSlug       string
+	Domain                 string
+	Verified               bool
+	Activated              bool
+	DnsTargetToken         pgtype.Text
+	DnsRoutingMethod       pgtype.Text
+	DnsConfigurationStatus pgtype.Text
+	DnsCheckedAt           pgtype.Timestamptz
+	HealthStatus           pgtype.Text
+	HealthIssue            pgtype.Text
+	HealthCheckedAt        pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+}
+
+// Staff-wide read across organizations. A domain with no observed routing
+// method matches the unknown filter, since no supported method was observed.
+func (q *Queries) AdminListCustomDomains(ctx context.Context, arg AdminListCustomDomainsParams) ([]AdminListCustomDomainsRow, error) {
+	rows, err := q.db.Query(ctx, adminListCustomDomains, arg.OrganizationID, arg.DnsRoutingMethod)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListCustomDomainsRow
+	for rows.Next() {
+		var i AdminListCustomDomainsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.Domain,
+			&i.Verified,
+			&i.Activated,
+			&i.DnsTargetToken,
+			&i.DnsRoutingMethod,
+			&i.DnsConfigurationStatus,
+			&i.DnsCheckedAt,
+			&i.HealthStatus,
+			&i.HealthIssue,
+			&i.HealthCheckedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListCustomerUsageOrganizations = `-- name: AdminListCustomerUsageOrganizations :many
@@ -1246,6 +1332,81 @@ func (q *Queries) AdminListObservedOktaApplicationNames(ctx context.Context, arg
 			&i.Organizations,
 			&i.Labels,
 			&i.SignOnModes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOrganizationAssistants = `-- name: AdminListOrganizationAssistants :many
+SELECT
+    a.id,
+    a.project_id,
+    p.slug AS project_slug,
+    p.name AS project_name,
+    a.name,
+    a.status,
+    a.runtime_version,
+    a.created_by_user_id,
+    u.email AS created_by_user_email,
+    (u.id IS NOT NULL AND u.deleted_at IS NULL AND EXISTS (
+        SELECT 1 FROM organization_user_relationships r
+        WHERE r.organization_id = a.organization_id
+          AND r.user_id = a.created_by_user_id
+          AND r.deleted_at IS NULL
+    ))::boolean AS creator_active,
+    a.created_at
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+LEFT JOIN users u ON u.id = a.created_by_user_id
+WHERE a.organization_id = $1
+  AND a.deleted IS FALSE
+ORDER BY p.name, a.name, a.id
+`
+
+type AdminListOrganizationAssistantsRow struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	ProjectSlug        string
+	ProjectName        string
+	Name               string
+	Status             string
+	RuntimeVersion     int16
+	CreatedByUserID    pgtype.Text
+	CreatedByUserEmail pgtype.Text
+	CreatorActive      bool
+	CreatedAt          pgtype.Timestamptz
+}
+
+// Every live assistant of an organization with its creator's membership, for
+// the staff identity and runtime migrations. Identity state is read
+// separately through assistantidentity.States, its single definition.
+func (q *Queries) AdminListOrganizationAssistants(ctx context.Context, organizationID string) ([]AdminListOrganizationAssistantsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationAssistants, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationAssistantsRow
+	for rows.Next() {
+		var i AdminListOrganizationAssistantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.ProjectName,
+			&i.Name,
+			&i.Status,
+			&i.RuntimeVersion,
+			&i.CreatedByUserID,
+			&i.CreatedByUserEmail,
+			&i.CreatorActive,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1777,6 +1938,7 @@ SELECT
     m.name,
     m.slug,
     t.name AS toolset_name,
+    r.url AS upstream_url,
     m.visibility,
     m.toolset_id,
     m.remote_mcp_server_id,
@@ -1791,6 +1953,7 @@ SELECT
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
 LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
 LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
     AND d.organization_id = p.organization_id
@@ -1805,6 +1968,7 @@ type AdminListProjectMcpServerRowsRow struct {
 	Name                   pgtype.Text
 	Slug                   pgtype.Text
 	ToolsetName            pgtype.Text
+	UpstreamUrl            pgtype.Text
 	Visibility             string
 	ToolsetID              uuid.NullUUID
 	RemoteMcpServerID      uuid.NullUUID
@@ -1835,6 +1999,7 @@ func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID u
 			&i.Name,
 			&i.Slug,
 			&i.ToolsetName,
+			&i.UpstreamUrl,
 			&i.Visibility,
 			&i.ToolsetID,
 			&i.RemoteMcpServerID,

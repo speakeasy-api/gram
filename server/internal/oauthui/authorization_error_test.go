@@ -13,6 +13,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -136,7 +137,7 @@ func TestAuthorizationErrorPageNamesUnknownClientAndServerGenerically(t *testing
 	body := response.Body.String()
 	require.Contains(t, body, "Your MCP client")
 	require.Contains(t, body, "this MCP server")
-	require.NotContains(t, body, ">Reference<")
+	require.NotContains(t, body, ">Trace ID<")
 }
 
 func TestAuthorizationErrorPageCopiesTechnicalDetailsAsPlainText(t *testing.T) {
@@ -159,7 +160,7 @@ func TestAuthorizationErrorPageCopiesTechnicalDetailsAsPlainText(t *testing.T) {
 	}
 	require.Equal(t, strings.Join([]string{
 		"Speakeasy authorization error",
-		"Reference: " + traceID.String(),
+		"Trace ID: " + traceID.String(),
 		"Time: " + strings.SplitN(strings.SplitN(copied, "Time: ", 2)[1], "\n", 2)[0],
 		"Error: invalid_request",
 		"Error description: code_challenge is required <b>",
@@ -417,4 +418,23 @@ func TestAuthorizationErrorPageSignInFailed(t *testing.T) {
 	require.Contains(t, page, "Your sign-in service couldn't sign you in. This isn't something you did.")
 	require.Contains(t, page, "Try again. If it keeps happening, share the technical details below with your IT administrators.")
 	require.NotContains(t, page, "isn't available right now")
+}
+
+func TestAuthorizationErrorConnectionReference(t *testing.T) {
+	t.Parallel()
+
+	render := func(ctx context.Context) string {
+		w := httptest.NewRecorder()
+		require.NoError(t, oauthui.WriteAuthorizationError(ctx, w, oauthui.AuthorizationError{Status: http.StatusForbidden, Code: "access_denied"}))
+		return w.Body.String()
+	}
+
+	require.NotContains(t, render(contextvalues.WithConnectionReferenceSlot(t.Context())), "data-connection-reference", "no stored row, no reference")
+
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	contextvalues.SetConnectionReference(ctx, "6f1c0000-0000-0000-0000-000000000000")
+	body := render(ctx)
+	require.Contains(t, body, "data-connection-reference")
+	require.Contains(t, body, "6f1c0000-0000-0000-0000-000000000000")
+	require.Contains(t, body, "Reference: <span")
 }

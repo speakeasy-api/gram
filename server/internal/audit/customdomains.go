@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	ActionCustomDomainsCreate Action = "custom_domains:create"
-	ActionCustomDomainsUpdate Action = "custom_domains:update"
-	ActionCustomDomainsDelete Action = "custom_domains:delete"
+	ActionCustomDomainsCreate    Action = "custom_domains:create"
+	ActionCustomDomainsUpdate    Action = "custom_domains:update"
+	ActionCustomDomainsDelete    Action = "custom_domains:delete"
+	ActionCustomDomainsReconcile Action = "custom_domains:reconcile"
 )
 
 type LogCustomDomainCreateEvent struct {
@@ -93,6 +94,42 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
 
 		Action: string(action),
+
+		SubjectID:          event.CustomDomainURN.ID.String(),
+		SubjectType:        string(subjectTypeCustomDomain),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.DomainName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		Metadata:       nil,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomainV1})
+}
+
+type LogCustomDomainReconcileEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	CustomDomainURN urn.CustomDomain
+	DomainName      string
+}
+
+func (l *Logger) LogCustomDomainReconcile(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainReconcileEvent) error {
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionCustomDomainsReconcile),
 
 		SubjectID:          event.CustomDomainURN.ID.String(),
 		SubjectType:        string(subjectTypeCustomDomain),

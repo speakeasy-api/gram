@@ -32,6 +32,9 @@ func validateKitGatewayCommand(command, args []string, port int) error {
 }
 
 func validateKitBootstrap(b KitLocalBootstrap) error {
+	if _, err := kitReasoningEffort(b.ReasoningEffort); err != nil {
+		return err
+	}
 	if len(b.AgentsMD) == 0 || len(b.GatewayToken) == 0 {
 		return fmt.Errorf("kit requires global instructions and gateway bearer")
 	}
@@ -109,8 +112,25 @@ func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if b.Workload == nil {
 		return ""
 	}
-	return kitFileConfig + "model = " + strconv.Quote(b.Model) + "\n" +
+	effort, err := kitReasoningEffort(b.ReasoningEffort)
+	if err != nil {
+		return ""
+	}
+	return kitFileConfig + "model = " + strconv.Quote(b.Model) + "\nreasoning_effort = " + strconv.Quote(effort) + "\n" +
 		"[inference_providers.speakeasy]\nendpoint = " + strconv.Quote(b.InferenceEndpoint) + "\n" +
 		"[inference_providers.speakeasy.workload]\ntokenFile = " + strconv.Quote(b.AssertionFile) + "\nendpointMode = \"explicit\"\ngrant = \"jwtBearer\"\ntokenEndpoint = " + strconv.Quote(b.Workload.Audience+"/token") + "\nresource = \"urn:speakeasy:inference\"\n" +
 		"[inference_providers.speakeasy.workload.extensions]\nproject_id = " + strconv.Quote(b.Workload.Identity.ProjectID.String()) + "\n"
+}
+
+// Kit's provider and ACP contracts support only low, medium and high. In
+// particular, its "default" selector is not a request to disable reasoning.
+func kitReasoningEffort(effort string) (string, error) {
+	switch effort {
+	case "":
+		return "medium", nil
+	case "low", "medium", "high":
+		return effort, nil
+	default:
+		return "", fmt.Errorf("kit does not support reasoning effort %q; select low, medium or high", effort)
+	}
 }

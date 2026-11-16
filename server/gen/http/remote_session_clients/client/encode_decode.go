@@ -3499,6 +3499,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		TokenEndpointAuthMethod:         v.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
+		IdentityProviderConnectionID:    v.IdentityProviderConnectionID,
 		Audience:                        v.Audience,
 		ForwardClientName:               *v.ForwardClientName,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,

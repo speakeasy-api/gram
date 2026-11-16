@@ -37,6 +37,11 @@ func ListRootMcpServersDomainsPath() string {
 	return "/rpc/domain.listRootMcpServers"
 }
 
+// ReconcileDomainDomainsPath returns the URL path to the domains service reconcileDomain HTTP endpoint.
+func ReconcileDomainDomainsPath() string {
+	return "/rpc/domain.reconcile"
+}
+
 // CheckHealthDomainsPath returns the URL path to the domains service checkHealth HTTP endpoint.
 func CheckHealthDomainsPath() string {
 	return "/rpc/domain.checkHealth"

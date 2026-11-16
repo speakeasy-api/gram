@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessionlist"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -35,7 +36,7 @@ type gatewaySessionScope struct {
 	resources      []string
 }
 
-func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID *string) (*gatewaySessionScope, error) {
+func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID, projectID *string) (*gatewaySessionScope, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -46,6 +47,12 @@ func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID *string) (*
 	}
 	scope := &gatewaySessionScope{organizationID: authCtx.ActiveOrganizationID, gatewayID: id, projects: []uuid.UUID{}, issuers: []uuid.UUID{}, resources: []string{}}
 	q := repo.New(s.db)
+	if projectID != nil {
+		if id.Valid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "gateway_id and project_id cannot be combined")
+		}
+		return s.projectGatewaySessionScope(ctx, scope, *projectID)
+	}
 	if id.Valid {
 		gateway, err := q.GetGatewaySessionScope(ctx, repo.GetGatewaySessionScopeParams{GatewayID: id.UUID, OrganizationID: scope.organizationID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -109,6 +116,44 @@ func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID *string) (*
 	return scope, nil
 }
 
+// projectGatewaySessionScope is the organization gateway restricted to one
+// project: the organization's issuers, the project's servers, and the
+// project gateway's own URLs.
+func (s *Service) projectGatewaySessionScope(ctx context.Context, scope *gatewaySessionScope, projectID string) (*gatewaySessionScope, error) {
+	id, err := uuid.Parse(projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id")
+	}
+	project, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: scope.organizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load project gateway project")
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	scope.projects = []uuid.UUID{project.ID}
+	// Turning off the gateway must not hide existing authorizations.
+	scope.issuers, err = repo.New(s.db).ListGatewaySessionIssuers(ctx, conv.ToPGText(scope.organizationID))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization gateway issuers")
+	}
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, scope.organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load organization gateway")
+	}
+	for _, platformURL := range s.gatewayPlatformURLs() {
+		base, err := url.Parse(platformURL)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "parse gateway base URL")
+		}
+		scope.resources = append(scope.resources, orggateway.ProjectURL(base, organization.Slug, project.Slug))
+	}
+	return scope, nil
+}
+
 // gatewayPlatformURLs mirrors the platform origins accepted by shared OAuth.
 func (s *Service) gatewayPlatformURLs() []string {
 	bases := []string{s.serverURL}
@@ -124,7 +169,7 @@ func (s *Service) ListGatewaySessions(ctx context.Context, payload *gen.ListGate
 	if utf8.RuneCountInString(conv.PtrValOr(payload.Search, "")) > gatewaySessionSearchLimit {
 		return nil, oops.E(oops.CodeBadRequest, nil, "identity search must not exceed 200 characters")
 	}
-	scope, err := s.gatewaySessionScope(ctx, payload.GatewayID)
+	scope, err := s.gatewaySessionScope(ctx, payload.GatewayID, payload.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +205,7 @@ func (s *Service) ListGatewaySessions(ctx context.Context, payload *gen.ListGate
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid session status")
 	}
 	search := strings.TrimSpace(conv.PtrValOr(payload.Search, ""))
-	fingerprint := sessionlist.Fingerprint(scope.organizationID, conv.PtrValOr(payload.GatewayID, ""), search, conv.PtrValOr(payload.ServerID, ""), conv.PtrValOr(payload.ProviderID, ""), status, sort, conv.PtrValOr(payload.CreatedAfter, ""), conv.PtrValOr(payload.CreatedBefore, ""))
+	fingerprint := sessionlist.Fingerprint(scope.organizationID, conv.PtrValOr(payload.GatewayID, ""), conv.PtrValOr(payload.ProjectID, ""), search, conv.PtrValOr(payload.ServerID, ""), conv.PtrValOr(payload.ProviderID, ""), status, sort, conv.PtrValOr(payload.CreatedAfter, ""), conv.PtrValOr(payload.CreatedBefore, ""))
 	cursorTime, cursorID, err := sessionlist.Decode(payload.Cursor, fingerprint)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
@@ -208,7 +253,7 @@ func (s *Service) ListGatewaySessions(ctx context.Context, payload *gen.ListGate
 
 // ListGatewaySessionFacets lists configured associations, not observed usage.
 func (s *Service) ListGatewaySessionFacets(ctx context.Context, payload *gen.ListGatewaySessionFacetsPayload) (*gen.GatewaySessionFacets, error) {
-	scope, err := s.gatewaySessionScope(ctx, payload.GatewayID)
+	scope, err := s.gatewaySessionScope(ctx, payload.GatewayID, payload.ProjectID)
 	if err != nil {
 		return nil, err
 	}

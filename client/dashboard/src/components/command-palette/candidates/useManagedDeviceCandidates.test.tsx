@@ -1,6 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { isSendable } from "./types";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -85,6 +84,7 @@ describe("useManagedDeviceCandidates", () => {
     expect(mocks.requests.at(-1)).toEqual({ limit: 200 });
     expect(mocks.options.at(-1)).toMatchObject({
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
       queryKey: ["fleetDevices", "org-one"],
@@ -92,7 +92,7 @@ describe("useManagedDeviceCandidates", () => {
     expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
   });
 
-  it("finds devices by hostname or serial and keeps them away from the intent service", () => {
+  it("finds devices by hostname or serial", () => {
     mocks.query.data = {
       pages: [
         { result: { devices: [device("a")] } },
@@ -120,9 +120,6 @@ describe("useManagedDeviceCandidates", () => {
       keywords: ["device", "jamf", "SERIAL-a", "mdm-a", "a@example.com"],
       group: "Devices",
     });
-    expect(result.current.every((candidate) => !isSendable(candidate))).toBe(
-      true,
-    );
   });
 
   it("opens the device's panel on the Devices tab", () => {

@@ -1,13 +1,21 @@
+import { OktaTask, OktaCredentialInstructions } from "./OktaTask";
+import { SalesforceTask } from "./SalesforceTask";
+import {
+  SnowflakeTask,
+  SnowflakeCredentialInstructions,
+} from "./SnowflakeTask";
 import { useSetup } from "./setup-context";
 import { names, orgValid } from "./state";
 import type { ReactNode } from "react";
-import { scopesFor } from "./provider-data";
+import { scopesFor, setupPlanCopy } from "./provider-data";
 import { Eye, Link, Settings2 } from "lucide-react";
 import {
   AppChoice,
+  CallbackUrlStatus,
   Choices,
   CopyValue,
   CopyAction,
+  Correction,
   ExternalAction,
   InProvider,
   SetupField,
@@ -22,7 +30,7 @@ import { Button } from "@/components/ui/Button";
 
 function Plan() {
   const { s } = useSetup();
-  const github = s.provider === "github";
+  const copy = setupPlanCopy[s.provider];
   return (
     <>
       <Card className="h-auto bg-muted/10">
@@ -32,20 +40,26 @@ function Plan() {
             <h3 className="mb-4 text-lg font-normal">
               Let’s connect {names[s.provider]} to Speakeasy.
             </h3>
-            <p>
-              {github
-                ? "We’ll walk you through setting up an OAuth app in GitHub, adding its credentials here, and testing the connection."
-                : "We’ll walk you through creating or configuring a Slack app, choosing its permissions, adding its credentials here, and testing the connection."}
-            </p>
-            <p className="mt-[18px]">
-              {github
-                ? "You’ll need permission to manage OAuth apps in your GitHub organization—or a teammate who can help."
-                : "You’ll need access to your Slack workspace and permission to manage an app—or a teammate who can help. Your workspace may also require app approval."}
-            </p>
+            <p>{copy.introduction}</p>
+            <p className="mt-[18px]">{copy.requirements}</p>
           </div>
         </Card.Content>
       </Card>
-      {github ? (
+      {s.provider === "snowflake" && (
+        <details className="mt-6">
+          <summary>Check permissions and region availability</summary>
+          <p className="mt-3">
+            You’ll need a security owner to grant access, a role that can create
+            the MCP server if needed, and ACCOUNTADMIN or a delegated role with
+            CREATE INTEGRATION for OAuth. These can be different people.
+          </p>
+          <p className="mt-3">
+            This setup isn’t available in China or government regions. Each
+            person will sign in using their own Snowflake account.
+          </p>
+        </details>
+      )}
+      {s.provider === "github" && (
         <details className="mt-6">
           <summary>Organization approval and SSO</summary>
           <p className="mt-3">
@@ -54,7 +68,8 @@ function Plan() {
             authorizing the app.
           </p>
         </details>
-      ) : (
+      )}
+      {s.provider === "slack" && (
         <details className="mt-6">
           <summary>Using an existing app or an IP allowlist?</summary>
           <p className="mt-3">
@@ -69,9 +84,17 @@ function Plan() {
   );
 }
 function credentialInstructions(
-  provider: "slack" | "github",
+  provider: "slack" | "github" | "salesforce",
   existing: boolean,
 ): ReactNode[] {
+  if (provider === "salesforce")
+    return [
+      <>
+        Open your app’s{" "}
+        <strong>Settings → OAuth Settings → Consumer Key and Secret</strong>,
+        complete any verification prompt, and copy the Consumer Key below.
+      </>,
+    ];
   const copyCredentials = (
     <>
       Copy <strong>Client ID</strong> and <strong>Client Secret</strong> into
@@ -109,26 +132,66 @@ function Credentials() {
   const saved = s.saved;
   return (
     <>
-      <InProvider
-        actions={credentialInstructions(
-          s.provider,
-          s.values.appChoice === "existing",
-        )}
-      />
+      {s.provider === "okta" && (s.errors.oktaOrg || s.errors.oktaAppType) && (
+        <Alert variant="error">
+          Review your Okta configuration before saving credentials.{" "}
+          <Correction step="organization">Review organization</Correction>
+          {" · "}
+          <Correction step="app">Review app type</Correction>
+        </Alert>
+      )}
+      {s.provider === "salesforce" && s.errors.salesforceServer && (
+        <Alert variant="error">
+          {s.errors.salesforceServer}{" "}
+          <Correction step="choices">Review connection choices</Correction>
+        </Alert>
+      )}
+      {s.provider === "salesforce" && s.errors.salesforceDomain && (
+        <Alert variant="error">
+          {s.errors.salesforceDomain}{" "}
+          <Correction step="salesforce-org">
+            Review Salesforce domain
+          </Correction>
+        </Alert>
+      )}
+      {s.provider === "okta" ? (
+        <OktaCredentialInstructions />
+      ) : s.provider === "snowflake" ? (
+        <SnowflakeCredentialInstructions />
+      ) : (
+        <InProvider
+          actions={credentialInstructions(
+            s.provider,
+            s.values.appChoice === "existing",
+          )}
+        />
+      )}
+      {s.provider === "snowflake" && s.errors.host && (
+        <Alert variant="error">
+          {s.errors.host} <Correction step="account">Review account</Correction>
+          {" · "}
+          <Correction step="server">Review server details</Correction>
+        </Alert>
+      )}
       <SetupField
         field="clientId"
-        label="Client ID"
+        label={s.provider === "salesforce" ? "Consumer Key" : "Client ID"}
         disabled={saved}
         value={saved ? (live.savedClientId ?? "") : undefined}
-        placeholder="Paste Client ID"
+        placeholder={
+          s.provider === "salesforce" ? "Paste Consumer Key" : "Paste Client ID"
+        }
       />
-      <SetupField
-        field="clientSecret"
-        label="Client Secret"
-        disabled={saved}
-        value={saved ? "••••••••" : undefined}
-        placeholder="Paste Client Secret"
-      />
+      {s.provider !== "salesforce" &&
+        !(s.provider === "okta" && s.values.oktaAppType === "native") && (
+          <SetupField
+            field="clientSecret"
+            label="Client Secret"
+            disabled={saved}
+            value={saved ? "••••••••" : undefined}
+            placeholder="Paste Client Secret"
+          />
+        )}
       {saved && (
         <div className="mt-5 flex justify-end">
           <Button
@@ -221,21 +284,12 @@ function GitHubTask() {
         )}
         {redirectUrl ? (
           <CopyValue label="Authorization callback URL" value={redirectUrl} />
-        ) : callbackQuery.isError ? (
-          <Alert variant="error">
-            Couldn’t load the authorization callback URL.{" "}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void callbackQuery.refetch()}
-            >
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
         ) : (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Loading authorization callback URL…
-          </p>
+          <CallbackUrlStatus
+            label="authorization callback URL"
+            isError={callbackQuery.isError}
+            retry={() => callbackQuery.refetch()}
+          />
         )}
         <InProvider
           actions={[
@@ -341,23 +395,13 @@ function SlackTask({ serverName }: { serverName: string }) {
       >
         {existing && <p>Open the app you want to configure.</p>}
       </ExternalAction>
-      {!redirectUrl &&
-        (callbackQuery.isError ? (
-          <Alert variant="error">
-            Couldn’t load the redirect URL.{" "}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void callbackQuery.refetch()}
-            >
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
-        ) : (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Loading redirect URL…
-          </p>
-        ))}
+      {!redirectUrl && (
+        <CallbackUrlStatus
+          label="redirect URL"
+          isError={callbackQuery.isError}
+          retry={() => callbackQuery.refetch()}
+        />
+      )}
       <InProvider
         actions={
           existing
@@ -436,6 +480,9 @@ export function ProviderTask({
   const { s } = useSetup();
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
+  if (s.provider === "okta") return <OktaTask />;
+  if (s.provider === "snowflake") return <SnowflakeTask />;
+  if (s.provider === "salesforce") return <SalesforceTask />;
   if (s.provider === "github") return <GitHubTask />;
   return <SlackTask serverName={serverName} />;
 }

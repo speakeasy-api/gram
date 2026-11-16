@@ -19,41 +19,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AllowedClientsDialog } from "./AllowedClientsDialog";
 import { AuthRow, ExplainerDialog, RowSave } from "./AuthRow";
-
-// The three WRITABLE modes. "open" is what an issuer carries unless someone
-// changes it, so it is what a newly created or never-configured issuer shows
-// as selected. The read side of the API can also return "reporting", a
-// legacy value that admits exactly what "open" admits. It is not writable
-// and is deliberately not offered as a fourth option, so an issuer still
-// storing it renders with nothing selected.
-const MODE_OPTIONS: {
-  value: WritableMode;
-  label: string;
-  /** Shown only while this option is the selection. */
-  explanation: string;
-}[] = [
-  {
-    value: WritableMode.Presets,
-    label: "Verified clients",
-    // Deliberately not "the URLs you add below": the custom URL list only
-    // renders in the modes that consult it, so "below" would point at
-    // nothing for an issuer currently on Any or Off.
-    explanation:
-      "Clients Speakeasy has checked, plus any document URLs you allow yourself.",
-  },
-  {
-    value: WritableMode.Open,
-    label: "Any client",
-    explanation:
-      "Any client with a valid document, hosted anywhere on the internet. Nobody vets it first — each user decides at the consent screen.",
-  },
-  {
-    value: WritableMode.Disabled,
-    label: "Off",
-    explanation:
-      "No client connects this way. Speakeasy stops advertising it, so clients register themselves instead.",
-  },
-];
+import { CLIENT_ACCESS_OPTIONS as MODE_OPTIONS } from "./sessionSettings";
 
 export function CimdAdmissionModeField({
   userSessionIssuer,
@@ -248,7 +214,7 @@ export function CimdAdmissionModeField({
 
 // The button's own label, so the counts an operator is about to manage are
 // visible before the modal opens.
-function AllowedClientsSummary() {
+function AllowedClientsSummary(): JSX.Element {
   const { data, isLoading, isError } = useCimdClientPresets();
   const verified = (data?.items ?? []).filter((preset) => preset.enabled);
 

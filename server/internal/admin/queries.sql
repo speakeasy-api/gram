@@ -516,6 +516,7 @@ SELECT
     m.name,
     m.slug,
     t.name AS toolset_name,
+    r.url AS upstream_url,
     m.visibility,
     m.toolset_id,
     m.remote_mcp_server_id,
@@ -530,6 +531,7 @@ SELECT
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
 LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
 LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
     AND d.organization_id = p.organization_id
@@ -1293,14 +1295,13 @@ SELECT
   (SELECT count(*) FROM taken_over)::bigint AS taken_over;
 
 -- name: AdminInsertPrincipalGrantFixture :exec
--- Test fixture: writes a grant row as stored, including temporary, expired,
--- deny-effect and backdated rows no single writer produces together.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+-- Test fixture: writes a grant row as stored, including temporary, expired
+-- and backdated rows no single writer produces together.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at, created_at)
 VALUES (
   @organization_id,
   @principal_urn,
   @scope,
-  sqlc.narg('effect')::text,
   @selectors,
   sqlc.narg('expires_at')::timestamptz,
   COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
@@ -1357,3 +1358,60 @@ LIMIT @row_limit;
 -- Test fixture: the Platform MCP writer sets its own timestamps and rate limits.
 INSERT INTO platform_mcp_feedback (organization_id, subject_urn, category, rating, tool_name, note, idempotency_key, input_hash, created_at, expires_at)
 VALUES (@organization_id, @subject_urn, @category, @rating, @tool_name, @note, @idempotency_key, 'fixture', @created_at, @expires_at);
+
+-- name: AdminListCustomDomains :many
+-- Staff-wide read across organizations. A domain with no observed routing
+-- method matches the unknown filter, since no supported method was observed.
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND (sqlc.narg(organization_id)::text IS NULL OR d.organization_id = sqlc.narg(organization_id)::text)
+  AND (
+    sqlc.narg(dns_routing_method)::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = sqlc.narg(dns_routing_method)::text
+  )
+ORDER BY d.domain, d.id;
+
+-- name: AdminListOrganizationAssistants :many
+-- Every live assistant of an organization with its creator's membership, for
+-- the staff identity and runtime migrations. Identity state is read
+-- separately through assistantidentity.States, its single definition.
+SELECT
+    a.id,
+    a.project_id,
+    p.slug AS project_slug,
+    p.name AS project_name,
+    a.name,
+    a.status,
+    a.runtime_version,
+    a.created_by_user_id,
+    u.email AS created_by_user_email,
+    (u.id IS NOT NULL AND u.deleted_at IS NULL AND EXISTS (
+        SELECT 1 FROM organization_user_relationships r
+        WHERE r.organization_id = a.organization_id
+          AND r.user_id = a.created_by_user_id
+          AND r.deleted_at IS NULL
+    ))::boolean AS creator_active,
+    a.created_at
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+LEFT JOIN users u ON u.id = a.created_by_user_id
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+ORDER BY p.name, a.name, a.id;

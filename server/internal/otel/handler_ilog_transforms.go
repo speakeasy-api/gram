@@ -110,13 +110,15 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 // pipeline writes there, and it leaves a key off
 // when a record carries no value for it, so a producer that sends one would
 // otherwise classify its own record, claim another tenant, pose as another
-// producer's scope, or give a person a group or department. The enrichers
-// read the inbound record, so what they see is unchanged; the outbound
-// record is what every consumer and relay receives.
+// producer's scope, or give a person a group or department. The connection
+// recorder keeps speakeasy.mcp_connection; see enrich.IsReservedLogKey. The
+// enrichers read the inbound record, so what they see is unchanged; the
+// outbound record is what every consumer and relay receives.
 func dropReservedLogAttributes(record *otelv1.LogRecord) {
+	source := record.GetProvenance().GetSource()
 	attributes := record.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
-		return enrich.IsPipelineKey(kv.GetKey())
+		return enrich.IsReservedLogKey(source, kv.GetKey())
 	})
 	if len(kept) != len(attributes) {
 		record.SetAttributes(kept)

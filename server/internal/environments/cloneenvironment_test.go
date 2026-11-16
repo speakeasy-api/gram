@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -49,8 +48,10 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 		require.Equal(t, "clone-target-no-values", string(clone.Slug))
 		require.Len(t, clone.Entries, 2)
 
-		// Empty plaintext redacts to "<EMPTY>" (see redactedEnvironment in shared.go).
+		// Cloning without values leaves empty secret placeholders.
 		for _, e := range clone.Entries {
+			require.True(t, e.IsSecret, "entry %q should be a secret placeholder", e.Name)
+			require.False(t, e.HasValue, "entry %q should have no value", e.Name)
 			require.Equal(t, "<EMPTY>", e.Value, "entry %q should be the empty placeholder", e.Name)
 		}
 
@@ -66,7 +67,7 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 				sourceFound = true
 				require.Len(t, env.Entries, 2)
 				for _, e := range env.Entries {
-					require.NotEqual(t, "<EMPTY>", e.Value, "source entry %q must not have been mutated to empty", e.Name)
+					require.True(t, e.HasValue, "source entry %q must not have been mutated to empty", e.Name)
 				}
 			}
 		}
@@ -102,17 +103,13 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, clone.Entries, 2)
 
-		// redactedEnvironment is deterministic on plaintext (val[:3]+"*****" or "*****"
-		// for short values), so identical source/clone redactions imply identical plaintext.
-		sourceByName := make(map[string]*types.EnvironmentEntry, len(source.Entries))
-		for _, e := range source.Entries {
-			sourceByName[e.Name] = e
-		}
 		for _, e := range clone.Entries {
-			s, ok := sourceByName[e.Name]
-			require.True(t, ok, "cloned entry %q should exist in source", e.Name)
-			require.Equal(t, s.Value, e.Value, "cloned entry %q redaction should equal source redaction", e.Name)
+			require.Equal(t, "***", e.Value, "cloned entry %q should be masked", e.Name)
+			require.True(t, e.HasValue, "cloned entry %q should have a value", e.Name)
 		}
+
+		// Reads mask every secret the same way, so compare the stored plaintext.
+		require.Equal(t, ti.plaintextValues(t, ctx, source), ti.plaintextValues(t, ctx, clone))
 	})
 
 	t.Run("duplicate clone name returns conflict", func(t *testing.T) {

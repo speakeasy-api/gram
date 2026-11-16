@@ -129,11 +129,9 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	toolKinds := make(map[urn.ToolKind]any)
 	for _, t := range payload.ToolTypes {
 		switch t {
-		// The external MCP kind stays a valid filter value but matches no tools.
 		case types.ToolType(urn.ToolKindHTTP),
 			types.ToolType(urn.ToolKindFunction),
 			types.ToolType(urn.ToolKindPrompt),
-			types.ToolType(urn.ToolKindExternalMCP),
 			types.ToolType(urn.ToolKindPlatform):
 			toolKinds[urn.ToolKind(t)] = nil
 		default:

@@ -1,14 +1,8 @@
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LauncherCandidate } from "./candidates/types";
-import type { JudgeState } from "./useLauncherJudge";
 
 const palette = vi.hoisted(() => ({
   isOpen: true,
@@ -25,20 +19,11 @@ const slugs = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   candidates: [] as unknown[],
-  judgeState: {
-    judgment: null,
-    fresh: false,
-    inFlight: false,
-    latencyMs: null,
-    disabled: false,
-  } as unknown,
-  judge: vi.fn(),
-  reset: vi.fn(),
+  capture: vi.fn(),
+  prefilter: vi.fn(),
+  rank: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({
-  useLocation: () => ({ pathname: "/acme/mcp" }),
-}));
 vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => palette,
 }));
@@ -51,33 +36,33 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: mocks.capture }),
+}));
 vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
 }));
 vi.mock("./candidates", () => ({
   useLauncherCandidates: () => mocks.candidates,
 }));
-vi.mock("./useLauncherJudge", () => ({
-  useLauncherJudge: () => ({
-    state: mocks.judgeState,
-    judge: mocks.judge,
-    reset: mocks.reset,
-  }),
-}));
-
+vi.mock("./ranker", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./ranker")>();
+  return {
+    ...actual,
+    prefilter: (...args: Parameters<typeof actual.prefilter>) => {
+      mocks.prefilter(...args);
+      return actual.prefilter(...args);
+    },
+    rank: (...args: Parameters<typeof actual.rank>) => {
+      mocks.rank(...args);
+      return actual.rank(...args);
+    },
+  };
+});
 import { CommandPalette } from "./CommandPalette";
-
-const IDLE_JUDGE: JudgeState = {
-  judgment: null,
-  fresh: false,
-  inFlight: false,
-  latencyMs: null,
-  disabled: false,
-};
 
 const runSettings = vi.fn();
 const runSlack = vi.fn();
-const runMarketplace = vi.fn();
 const runSessions = vi.fn();
 
 function candidate(
@@ -113,17 +98,6 @@ const SLACK = candidate({
   run: runSlack,
 });
 
-const MARKETPLACE = candidate({
-  id: "marketplace",
-  kind: "marketplace",
-  title: "Plugin marketplace",
-  detail: "Plugin marketplace · unpublished changes",
-  keywords: ["marketplace", "publish"],
-  verbs: ["open", "publish"],
-  group: "Plugins",
-  run: runMarketplace,
-});
-
 const SESSIONS = candidate({
   id: "action:sessions",
   title: "Sessions",
@@ -143,51 +117,6 @@ const WIDGETS = candidate({
   group: "Projects",
 });
 
-/**
- * A settled open judgment that orders the rows as `ids` lists them. Halving
- * masses (0.5, 0.25, 0.125, …) keep the total under 1, as a distribution the
- * judge can actually return, while keeping the order strict.
- */
-function ordering(ids: string[]): JudgeState {
-  const target: Record<string, number> = {};
-  ids.forEach((id, index) => {
-    target[id] = 0.5 / 2 ** index;
-  });
-  return {
-    judgment: { target, action: { open: 1 }, ready: 0 },
-    fresh: true,
-    inFlight: false,
-    latencyMs: 10,
-    disabled: false,
-  };
-}
-
-/** A settled judgment that picks the Slack row and the disable verb. */
-const DISABLE_SLACK: JudgeState = {
-  judgment: {
-    target: { "mcp:slack": 0.95, "action:settings": 0.05 },
-    action: { open: 0.05, disable: 0.9, unclear: 0.05 },
-    ready: 0.9,
-  },
-  fresh: true,
-  inFlight: false,
-  latencyMs: 123,
-  disabled: false,
-};
-
-/** A settled judgment that picks the marketplace row and the publish verb. */
-const PUBLISH_MARKETPLACE: JudgeState = {
-  judgment: {
-    target: { marketplace: 0.95, "action:settings": 0.05 },
-    action: { open: 0.05, publish: 0.9, unclear: 0.05 },
-    ready: 0.9,
-  },
-  fresh: true,
-  inFlight: false,
-  latencyMs: 123,
-  disabled: false,
-};
-
 const input = () =>
   screen.getByPlaceholderText("Ask AI or search resources and pages…");
 
@@ -195,19 +124,107 @@ beforeEach(() => {
   slugs.orgSlug = "acme";
   slugs.projectSlug = "widgets";
   mocks.candidates = [SETTINGS, SLACK];
-  mocks.judgeState = IDLE_JUDGE;
-  mocks.judge.mockReset();
-  mocks.reset.mockReset();
+  mocks.capture.mockReset();
+  mocks.prefilter.mockReset();
+  mocks.rank.mockReset();
+  palette.isOpen = true;
   palette.close.mockReset();
   runSettings.mockReset();
   runSlack.mockReset().mockResolvedValue(undefined);
-  runMarketplace.mockReset().mockResolvedValue(undefined);
   runSessions.mockReset();
 });
 
 afterEach(cleanup);
 
 describe("CommandPalette", () => {
+  it("captures one performance event per open under StrictMode", () => {
+    const view = render(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.capture).toHaveBeenCalledWith(
+      "command_palette_open_performance",
+      expect.objectContaining({
+        cache_state: "warm",
+        ranking_invocation_count: 0,
+        scope: "project",
+      }),
+    );
+
+    palette.isOpen = true;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+  });
+
+  it("only ranks meaningful queries across updates and reopen", async () => {
+    const view = render(<CommandPalette />);
+
+    expect(mocks.prefilter).not.toHaveBeenCalled();
+    expect(mocks.rank).not.toHaveBeenCalled();
+
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    view.rerender(<CommandPalette />);
+    await userEvent.type(input(), "   ");
+    mocks.candidates = [SETTINGS, SLACK];
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).not.toHaveBeenCalled();
+    expect(mocks.rank).not.toHaveBeenCalled();
+
+    fireEvent.change(input(), { target: { value: "   s" } });
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("s", mocks.candidates);
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    await userEvent.clear(input());
+    mocks.candidates = [SETTINGS, SLACK];
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    palette.isOpen = false;
+    view.rerender(<CommandPalette />);
+    palette.isOpen = true;
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    fireEvent.change(input(), { target: { value: "slack" } });
+
+    expect(mocks.prefilter).toHaveBeenCalledTimes(2);
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("slack", mocks.candidates);
+    expect(mocks.rank).toHaveBeenCalledTimes(2);
+  });
+
   it("offers the Project Assistant for a query that matches nothing", async () => {
     render(<CommandPalette />);
 
@@ -237,8 +254,7 @@ describe("CommandPalette", () => {
 
   // Inside a project the projects are a switcher, not the palette's main
   // job: they wait for a query so the idle list isn't headed by the projects
-  // you aren't in. The judge is mocked idle here, so fuzzy order alone has
-  // to surface the row.
+  // you aren't in.
   it("offers projects inside a project only once there is a query", async () => {
     mocks.candidates = [SETTINGS, WIDGETS];
     render(<CommandPalette />);
@@ -282,257 +298,9 @@ describe("CommandPalette", () => {
     expect(screen.queryByText(/confirm/)).toBeNull();
   });
 
-  it("asks the judge on every query change with the prefiltered rows", async () => {
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "sl");
-
-    const [query, sent] = mocks.judge.mock.calls.at(-1) as [
-      string,
-      LauncherCandidate[],
-    ];
-    expect(query).toBe("sl");
-    expect(sent.map((c) => c.id)).toContain("mcp:slack");
-  });
-
-  it("runs a reversible verb on the first Enter", async () => {
-    mocks.judgeState = DISABLE_SLACK;
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "slack");
-    expect(
-      screen.getByRole("option", { name: /Disable · Slack/ }),
-    ).toBeDefined();
-
-    await userEvent.keyboard("{Enter}");
-
-    // Enabling a server back is one click in the toast, so the palette does
-    // not spend a second keystroke confirming it.
-    expect(runSlack).toHaveBeenCalledWith("disable");
-    await waitFor(() => expect(palette.close).toHaveBeenCalled());
-  });
-
-  it("sets the verb rows apart under an Actions heading", async () => {
-    mocks.judgeState = DISABLE_SLACK;
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "slack");
-
-    const actions = screen.getByRole("group", { name: "Actions" });
-    expect(
-      within(actions).getByRole("option", { name: /Disable · Slack/ }),
-    ).toBeDefined();
-    // Plain matches stay out of it.
-    expect(within(actions).queryByRole("option", { name: /Settings/ })).toBe(
-      null,
-    );
-  });
-
-  it("confirms a verb that cannot be undone", async () => {
-    mocks.candidates = [SETTINGS, MARKETPLACE];
-    mocks.judgeState = PUBLISH_MARKETPLACE;
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "publish");
-    await userEvent.keyboard("{Enter}");
-
-    expect(runMarketplace).not.toHaveBeenCalled();
-    expect(screen.getByText("Publish Plugin marketplace?")).toBeDefined();
-    // The list collapses to the row being confirmed.
-    expect(screen.getAllByRole("option")).toHaveLength(1);
-
-    await userEvent.keyboard("{Enter}");
-
-    expect(runMarketplace).toHaveBeenCalledWith("publish");
-    await waitFor(() => expect(palette.close).toHaveBeenCalled());
-  });
-
-  it("returns from confirm to the list on Escape, keeping the query", async () => {
-    mocks.candidates = [SETTINGS, MARKETPLACE];
-    mocks.judgeState = PUBLISH_MARKETPLACE;
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "publish");
-    await userEvent.keyboard("{Enter}");
-    expect(screen.getByText("Publish Plugin marketplace?")).toBeDefined();
-
-    await userEvent.keyboard("{Escape}");
-
-    expect(screen.queryByText("Publish Plugin marketplace?")).toBeNull();
-    expect((input() as HTMLInputElement).value).toBe("publish");
-    expect(palette.close).not.toHaveBeenCalled();
-    expect(runMarketplace).not.toHaveBeenCalled();
-  });
-
-  it("returns to the list when the mutation rejects", async () => {
-    mocks.candidates = [SETTINGS, MARKETPLACE];
-    mocks.judgeState = PUBLISH_MARKETPLACE;
-    runMarketplace.mockRejectedValue(new Error("boom"));
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "publish");
-    await userEvent.keyboard("{Enter}");
-    await userEvent.keyboard("{Enter}");
-
-    await waitFor(() => expect(input()).toBeDefined());
-    expect((input() as HTMLInputElement).value).toBe("publish");
-    expect(palette.close).not.toHaveBeenCalled();
-  });
-
-  it("shows the green ↵ on the top row when ready and hides it once the selection moves", async () => {
-    mocks.judgeState = DISABLE_SLACK;
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "s");
-
-    const options = screen.getAllByRole("option");
-    expect(options[0]?.textContent).toContain("Slack");
-    expect(screen.getByLabelText("Ready")).toBeDefined();
-
-    await userEvent.keyboard("{ArrowDown}");
-
-    expect(screen.queryByLabelText("Ready")).toBeNull();
-  });
-
-  // A judgment landing after the user moved the highlight must not yank it
-  // to the new top row: Enter runs the row they were looking at.
-  it("keeps the highlight on the row the user moved to when a judgment reorders", async () => {
+  // Search results stay flat so fuzzy order is not disturbed by display groups.
+  it("renders fuzzy-ranked rows flat without group headings", async () => {
     mocks.candidates = [SETTINGS, SLACK, SESSIONS];
-    mocks.judgeState = ordering([
-      "action:settings",
-      "mcp:slack",
-      "action:sessions",
-    ]);
-    const { rerender } = render(<CommandPalette />);
-
-    await userEvent.type(input(), "s");
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining("Settings"),
-        expect.stringContaining("Slack"),
-        expect.stringContaining("Sessions"),
-      ]),
-    );
-    await userEvent.keyboard("{ArrowDown}");
-    expect(
-      screen.getByRole("option", { selected: true }).textContent,
-    ).toContain("Slack");
-
-    mocks.judgeState = ordering([
-      "action:sessions",
-      "action:settings",
-      "mcp:slack",
-    ]);
-    rerender(<CommandPalette />);
-    expect(
-      screen.getAllByRole("option").map((o) => o.textContent)[0],
-    ).toContain("Sessions");
-    expect(
-      screen.getByRole("option", { selected: true }).textContent,
-    ).toContain("Slack");
-
-    await userEvent.keyboard("{Enter}");
-    expect(runSlack).toHaveBeenCalledWith("open");
-    expect(runSessions).not.toHaveBeenCalled();
-  });
-
-  // Moving away and back leaves the highlight on the top row, but the user
-  // chose that row: a reorder must not take it from under an Enter.
-  it("keeps the highlight where the user returned it when a judgment reorders", async () => {
-    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
-    mocks.judgeState = ordering([
-      "action:settings",
-      "mcp:slack",
-      "action:sessions",
-    ]);
-    const { rerender } = render(<CommandPalette />);
-
-    await userEvent.type(input(), "s");
-    await userEvent.keyboard("{ArrowDown}");
-    await userEvent.keyboard("{ArrowUp}");
-    expect(
-      screen.getByRole("option", { selected: true }).textContent,
-    ).toContain("Settings");
-
-    mocks.judgeState = ordering([
-      "action:sessions",
-      "action:settings",
-      "mcp:slack",
-    ]);
-    rerender(<CommandPalette />);
-    expect(
-      screen.getAllByRole("option").map((o) => o.textContent)[0],
-    ).toContain("Sessions");
-    expect(
-      screen.getByRole("option", { selected: true }).textContent,
-    ).toContain("Settings");
-
-    await userEvent.keyboard("{Enter}");
-    expect(runSettings).toHaveBeenCalledWith("open");
-    expect(runSessions).not.toHaveBeenCalled();
-  });
-
-  it("snaps the highlight to the new top row when the user had not moved it", async () => {
-    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
-    mocks.judgeState = ordering([
-      "action:settings",
-      "mcp:slack",
-      "action:sessions",
-    ]);
-    const { rerender } = render(<CommandPalette />);
-
-    await userEvent.type(input(), "s");
-    expect(
-      screen.getByRole("option", { selected: true }).textContent,
-    ).toContain("Settings");
-
-    mocks.judgeState = ordering([
-      "action:sessions",
-      "action:settings",
-      "mcp:slack",
-    ]);
-    rerender(<CommandPalette />);
-    expect(
-      screen.getByRole("option", { selected: true }).textContent,
-    ).toContain("Sessions");
-
-    await userEvent.keyboard("{Enter}");
-    expect(runSessions).toHaveBeenCalledWith("open");
-  });
-
-  // A background refetch rebuilds the candidate array with identical content;
-  // re-asking then would abort a good request in flight for nothing.
-  it("does not ask the judge again when the candidates are rebuilt unchanged", async () => {
-    const { rerender } = render(<CommandPalette />);
-
-    await userEvent.type(input(), "sl");
-    const asked = mocks.judge.mock.calls.length;
-    expect(asked).toBeGreaterThan(0);
-
-    mocks.candidates = (mocks.candidates as LauncherCandidate[]).map((c) => ({
-      ...c,
-      keywords: [...c.keywords],
-    }));
-    rerender(<CommandPalette />);
-    expect(mocks.judge.mock.calls.length).toBe(asked);
-
-    // Content that changes what Jev would see does re-ask.
-    mocks.candidates = (mocks.candidates as LauncherCandidate[]).map((c) =>
-      c.id === "mcp:slack" ? { ...c, detail: "MCP server · disabled" } : c,
-    );
-    rerender(<CommandPalette />);
-    expect(mocks.judge.mock.calls.length).toBe(asked + 1);
-  });
-
-  // cmdk walks ↑/↓ through the DOM, so interleaved groups must not pull a
-  // later row of the first group ahead of a better-ranked row.
-  it("renders ranked rows flat, in ranked order, without group headings", async () => {
-    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
-    mocks.judgeState = ordering([
-      "action:settings",
-      "mcp:slack",
-      "action:sessions",
-    ]);
     render(<CommandPalette />);
 
     await userEvent.type(input(), "s");
@@ -541,9 +309,9 @@ describe("CommandPalette", () => {
       .getAllByRole("option")
       .map((o) => o.textContent ?? "")
       .filter((text) => !text.includes("Ask Project Assistant"));
-    expect(titles[0]).toContain("Settings");
-    expect(titles[1]).toContain("Slack");
-    expect(titles[2]).toContain("Sessions");
+    expect(titles[0]).toContain("Slack");
+    expect(titles[1]).toContain("Sessions");
+    expect(titles[2]).toContain("Settings");
     const headings = Array.from(
       document.body.querySelectorAll("[cmdk-group-heading]"),
     ).map((h) => h.textContent);
@@ -553,7 +321,7 @@ describe("CommandPalette", () => {
     await userEvent.keyboard("{ArrowDown}");
     expect(
       screen.getByRole("option", { selected: true }).textContent,
-    ).toContain("Slack");
+    ).toContain("Sessions");
   });
 
   it("keeps group headings for the idle list", () => {
@@ -564,27 +332,5 @@ describe("CommandPalette", () => {
       document.body.querySelectorAll("[cmdk-group-heading]"),
     ).map((h) => h.textContent);
     expect(headings).toContain("Pages");
-  });
-
-  it("renders the round-trip latency when the judgment is fresh", async () => {
-    mocks.judgeState = DISABLE_SLACK;
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "s");
-
-    expect(screen.getByText("123 ms")).toBeDefined();
-  });
-
-  it("keeps fuzzy order and never asks the judge once it is disabled", async () => {
-    mocks.judgeState = { ...IDLE_JUDGE, disabled: true };
-    render(<CommandPalette />);
-
-    await userEvent.type(input(), "s");
-
-    expect(mocks.judge).not.toHaveBeenCalled();
-    expect(screen.getByRole("option", { name: /Slack/ })).toBeDefined();
-    expect(screen.getByRole("option", { name: /Settings/ })).toBeDefined();
-    expect(screen.queryByLabelText("Ready")).toBeNull();
-    expect(screen.queryByText(/ ms$/)).toBeNull();
   });
 });

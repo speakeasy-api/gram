@@ -74,7 +74,7 @@ type AttachmentRemediation struct {
 }
 
 // serverAccessScopes are the scopes that satisfy mcp:connect.
-var serverAccessScopes = []string{string(authz.ScopeMCPConnect), string(authz.ScopeMCPRead), string(authz.ScopeMCPWrite)}
+var serverAccessScopes = []string{string(authz.ScopeMCPConnect)}
 
 // grantPlan collects the grants an organization is missing, per principal.
 type grantPlan struct {

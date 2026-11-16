@@ -6,6 +6,7 @@ import { aiIntegrationsDeleteAnthropicInferenceConfig } from "../funcs/aiIntegra
 import { aiIntegrationsDeleteConfig } from "../funcs/aiIntegrationsDeleteConfig.js";
 import { aiIntegrationsGetAnthropicInferenceConfig } from "../funcs/aiIntegrationsGetAnthropicInferenceConfig.js";
 import { aiIntegrationsGetConfig } from "../funcs/aiIntegrationsGetConfig.js";
+import { aiIntegrationsListOrgUnits } from "../funcs/aiIntegrationsListOrgUnits.js";
 import { aiIntegrationsListSchedules } from "../funcs/aiIntegrationsListSchedules.js";
 import { aiIntegrationsRetrySchedule } from "../funcs/aiIntegrationsRetrySchedule.js";
 import { aiIntegrationsSetScheduleEnabled } from "../funcs/aiIntegrationsSetScheduleEnabled.js";
@@ -15,6 +16,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AIIntegrationConfig } from "../models/components/aiintegrationconfig.js";
 import { AIIntegrationScheduleState } from "../models/components/aiintegrationschedulestate.js";
 import { AnthropicInferenceConfig } from "../models/components/anthropicinferenceconfig.js";
+import { ListAIIntegrationOrgUnitsResult } from "../models/components/listaiintegrationorgunitsresult.js";
 import { ListAIIntegrationSchedulesResult } from "../models/components/listaiintegrationschedulesresult.js";
 import {
   DeleteAIIntegrationConfigRequest,
@@ -32,6 +34,10 @@ import {
   GetAnthropicInferenceConfigRequest,
   GetAnthropicInferenceConfigSecurity,
 } from "../models/operations/getanthropicinferenceconfig.js";
+import {
+  ListAIIntegrationOrgUnitsRequest,
+  ListAIIntegrationOrgUnitsSecurity,
+} from "../models/operations/listaiintegrationorgunits.js";
 import {
   ListAIIntegrationSchedulesRequest,
   ListAIIntegrationSchedulesSecurity,
@@ -124,6 +130,25 @@ export class AiIntegrations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AIIntegrationConfig> {
     return unwrapAsync(aiIntegrationsGetConfig(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listOrgUnits aiIntegrations
+   *
+   * @remarks
+   * List the Google Workspace organizational units a saved gemini_compliance connection can export, using its stored service account and delegated admin. Requires the admin.directory.orgunit.readonly delegation scope.
+   */
+  async listOrgUnits(
+    request: ListAIIntegrationOrgUnitsRequest,
+    security?: ListAIIntegrationOrgUnitsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIIntegrationOrgUnitsResult> {
+    return unwrapAsync(aiIntegrationsListOrgUnits(
       this,
       request,
       security,

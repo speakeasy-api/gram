@@ -1,4 +1,7 @@
-import { startLoginRedirect, redirectOnUnauthorized } from "@/lib/adminAuth";
+import {
+  redirecting,
+  redirectingClient as sharedRedirectingClient,
+} from "@/lib/adminSdkClient";
 export { isRedirectingToLogin, redirectOnUnauthorized } from "@/lib/adminAuth";
 
 import {
@@ -143,7 +146,6 @@ import {
 } from "@tanstack/react-query";
 
 import { GramCore } from "@gram/admin-client/core";
-import { HTTPClient } from "@gram/admin-client/lib/http";
 import { buildAdminGetSessionQuery } from "@gram/admin-client/react-query/adminGetSession.core";
 import {
   buildAdminListOrganizationActivityInfiniteQuery,
@@ -168,21 +170,7 @@ import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/mod
 // fetch defaults preserve the ambient first-party gram_admin cookie; do not set
 // credentials, mode, Authorization, or Cookie here.
 const mutationClient = new GramCore({ serverURL: window.location.origin });
-const redirectingHTTPClient = new HTTPClient().addHook("response", (response) =>
-  startLoginRedirect(response),
-);
-const redirectingClient = new GramCore({
-  serverURL: window.location.origin,
-  httpClient: redirectingHTTPClient,
-});
-
-async function redirecting<T>(operation: Promise<T>): Promise<T> {
-  try {
-    return await operation;
-  } catch (error) {
-    return redirectOnUnauthorized(error);
-  }
-}
+const redirectingClient = sharedRedirectingClient();
 
 function createAdminSessionQuery() {
   const generated = buildAdminGetSessionQuery(redirectingClient);

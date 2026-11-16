@@ -21,6 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -138,4 +141,24 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	require.NoError(t, err)
 	_, err = resolve(workload)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "revoking the owner's session also revokes cron upstream access")
+}
+
+func TestBindExecutionProfileFailsTheTurnOnlyUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "execution_profile_bind")
+	require.NoError(t, err)
+	ctx := t.Context()
+	project := newProvisioningProject(t, db, "execution-profile-bind")
+	core := newProvisioningCore(t, db)
+	// A target with no trigger cannot bind.
+	target := executionprofiles.Target{OrganizationID: "org-test", ProjectID: project, AssistantID: uuid.New(), TriggerID: uuid.Nil, Context: executionprofiles.ContextUserless}
+
+	version, err := core.bindExecutionProfile(ctx, target)
+	require.NoError(t, err, "the upstream client choice serves the turn, so it runs unbound")
+	require.False(t, version.Valid)
+
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: "org-test", FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	_, err = core.bindExecutionProfile(ctx, target)
+	require.Error(t, err, "an unbound turn has no choice to serve any proxied server with")
 }

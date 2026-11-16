@@ -63,6 +63,11 @@ type GetDomainResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// The custom domain is actively being registered
 	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool `form:"is_reconciling" json:"is_reconciling" xml:"is_reconciling"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string `form:"reconciliation_status" json:"reconciliation_status" xml:"reconciliation_status"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
@@ -139,6 +144,11 @@ type CreateDomainResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// The custom domain is actively being registered
 	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool `form:"is_reconciling" json:"is_reconciling" xml:"is_reconciling"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string `form:"reconciliation_status" json:"reconciliation_status" xml:"reconciliation_status"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
@@ -206,6 +216,11 @@ type UpdateDomainResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// The custom domain is actively being registered
 	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool `form:"is_reconciling" json:"is_reconciling" xml:"is_reconciling"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string `form:"reconciliation_status" json:"reconciliation_status" xml:"reconciliation_status"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
@@ -273,6 +288,11 @@ type SetRootMcpEndpointResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// The custom domain is actively being registered
 	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool `form:"is_reconciling" json:"is_reconciling" xml:"is_reconciling"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string `form:"reconciliation_status" json:"reconciliation_status" xml:"reconciliation_status"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
@@ -327,6 +347,78 @@ type ListRootMcpServersResponseBody struct {
 	McpServers []*RootMcpServerOptionResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 }
 
+// ReconcileDomainResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body.
+type ReconcileDomainResponseBody struct {
+	// The ID of the custom domain
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the organization this domain belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The custom domain name
+	Domain string `form:"domain" json:"domain" xml:"domain"`
+	// Whether the domain is verified
+	Verified bool `form:"verified" json:"verified" xml:"verified"`
+	// Whether the domain is activated in ingress
+	Activated bool `form:"activated" json:"activated" xml:"activated"`
+	// When the custom domain was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the custom domain was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The custom domain is actively being registered
+	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool `form:"is_reconciling" json:"is_reconciling" xml:"is_reconciling"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string `form:"reconciliation_status" json:"reconciliation_status" xml:"reconciliation_status"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
+	// The latest observed domain health status. One of: unknown, healthy,
+	// unhealthy.
+	HealthStatus *string `form:"health_status,omitempty" json:"health_status,omitempty" xml:"health_status,omitempty"`
+	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
+	// dns_target_mismatch, resource_missing, certificate_missing,
+	// certificate_not_ready, certificate_expired, certificate_invalid,
+	// check_failed.
+	HealthIssue *string `form:"health_issue,omitempty" json:"health_issue,omitempty" xml:"health_issue,omitempty"`
+	// When the domain health was last checked.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the current unhealthy period began.
+	UnhealthySince *string `form:"unhealthy_since,omitempty" json:"unhealthy_since,omitempty" xml:"unhealthy_since,omitempty"`
+	// When the currently observed TLS certificate expires.
+	CertificateExpiresAt *string `form:"certificate_expires_at,omitempty" json:"certificate_expires_at,omitempty" xml:"certificate_expires_at,omitempty"`
+	// The number of consecutive failed health checks
+	ConsecutiveFailures *int32 `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+	// The MCP endpoint currently mapped to the domain root, if any
+	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
+	// The token served for OpenAI app-submission domain verification, if configured
+	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType string `form:"suggested_record_type" json:"suggested_record_type" xml:"suggested_record_type"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
+}
+
 // CheckHealthResponseBody is the type of the "domains" service "checkHealth"
 // endpoint HTTP response body.
 type CheckHealthResponseBody struct {
@@ -346,6 +438,11 @@ type CheckHealthResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// The custom domain is actively being registered
 	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool `form:"is_reconciling" json:"is_reconciling" xml:"is_reconciling"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string `form:"reconciliation_status" json:"reconciliation_status" xml:"reconciliation_status"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
@@ -1497,6 +1594,188 @@ type ListRootMcpServersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ReconcileDomainUnauthorizedResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "unauthorized" error.
+type ReconcileDomainUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainForbiddenResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "forbidden" error.
+type ReconcileDomainForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainBadRequestResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "bad_request" error.
+type ReconcileDomainBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainNotFoundResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "not_found" error.
+type ReconcileDomainNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainConflictResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "conflict" error.
+type ReconcileDomainConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainUnsupportedMediaResponseBody is the type of the "domains"
+// service "reconcileDomain" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ReconcileDomainUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainInvalidResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "invalid" error.
+type ReconcileDomainInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainInvariantViolationResponseBody is the type of the "domains"
+// service "reconcileDomain" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ReconcileDomainInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainUnexpectedResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "unexpected" error.
+type ReconcileDomainUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReconcileDomainGatewayErrorResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "gateway_error" error.
+type ReconcileDomainGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CheckHealthUnauthorizedResponseBody is the type of the "domains" service
 // "checkHealth" endpoint HTTP response body for the "unauthorized" error.
 type CheckHealthUnauthorizedResponseBody struct {
@@ -2062,6 +2341,11 @@ type CustomDomainResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// The custom domain is actively being registered
 	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool `form:"is_reconciling" json:"is_reconciling" xml:"is_reconciling"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string `form:"reconciliation_status" json:"reconciliation_status" xml:"reconciliation_status"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
@@ -2179,6 +2463,8 @@ func NewGetDomainResponseBody(res *domains.CustomDomain) *GetDomainResponseBody 
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
 		IsUpdating:               res.IsUpdating,
+		IsReconciling:            res.IsReconciling,
+		ReconciliationStatus:     res.ReconciliationStatus,
 		HealthStatus:             res.HealthStatus,
 		HealthIssue:              res.HealthIssue,
 		HealthCheckedAt:          res.HealthCheckedAt,
@@ -2239,6 +2525,8 @@ func NewCreateDomainResponseBody(res *domains.CustomDomain) *CreateDomainRespons
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
 		IsUpdating:               res.IsUpdating,
+		IsReconciling:            res.IsReconciling,
+		ReconciliationStatus:     res.ReconciliationStatus,
 		HealthStatus:             res.HealthStatus,
 		HealthIssue:              res.HealthIssue,
 		HealthCheckedAt:          res.HealthCheckedAt,
@@ -2277,6 +2565,8 @@ func NewUpdateDomainResponseBody(res *domains.CustomDomain) *UpdateDomainRespons
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
 		IsUpdating:               res.IsUpdating,
+		IsReconciling:            res.IsReconciling,
+		ReconciliationStatus:     res.ReconciliationStatus,
 		HealthStatus:             res.HealthStatus,
 		HealthIssue:              res.HealthIssue,
 		HealthCheckedAt:          res.HealthCheckedAt,
@@ -2315,6 +2605,8 @@ func NewSetRootMcpEndpointResponseBody(res *domains.CustomDomain) *SetRootMcpEnd
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
 		IsUpdating:               res.IsUpdating,
+		IsReconciling:            res.IsReconciling,
+		ReconciliationStatus:     res.ReconciliationStatus,
 		HealthStatus:             res.HealthStatus,
 		HealthIssue:              res.HealthIssue,
 		HealthCheckedAt:          res.HealthCheckedAt,
@@ -2360,6 +2652,46 @@ func NewListRootMcpServersResponseBody(res *domains.ListRootMcpServersResult) *L
 	return body
 }
 
+// NewReconcileDomainResponseBody builds the HTTP response body from the result
+// of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainResponseBody(res *domains.CustomDomain) *ReconcileDomainResponseBody {
+	body := &ReconcileDomainResponseBody{
+		ID:                       res.ID,
+		OrganizationID:           res.OrganizationID,
+		Domain:                   res.Domain,
+		Verified:                 res.Verified,
+		Activated:                res.Activated,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
+		IsUpdating:               res.IsUpdating,
+		IsReconciling:            res.IsReconciling,
+		ReconciliationStatus:     res.ReconciliationStatus,
+		HealthStatus:             res.HealthStatus,
+		HealthIssue:              res.HealthIssue,
+		HealthCheckedAt:          res.HealthCheckedAt,
+		UnhealthySince:           res.UnhealthySince,
+		CertificateExpiresAt:     res.CertificateExpiresAt,
+		ConsecutiveFailures:      res.ConsecutiveFailures,
+		RootMcpEndpointID:        res.RootMcpEndpointID,
+		OpenaiAppsChallengeToken: res.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      res.SuggestedRecordType,
+		DNSTargetToken:           res.DNSTargetToken,
+		DNSTarget:                res.DNSTarget,
+		DNSRoutingMethod:         res.DNSRoutingMethod,
+		DNSConfigurationStatus:   res.DNSConfigurationStatus,
+		DNSCheckedAt:             res.DNSCheckedAt,
+	}
+	if res.IPAllowlist != nil {
+		body.IPAllowlist = make([]string, len(res.IPAllowlist))
+		for i, val := range res.IPAllowlist {
+			body.IPAllowlist[i] = val
+		}
+	} else {
+		body.IPAllowlist = []string{}
+	}
+	return body
+}
+
 // NewCheckHealthResponseBody builds the HTTP response body from the result of
 // the "checkHealth" endpoint of the "domains" service.
 func NewCheckHealthResponseBody(res *domains.CustomDomain) *CheckHealthResponseBody {
@@ -2372,6 +2704,8 @@ func NewCheckHealthResponseBody(res *domains.CustomDomain) *CheckHealthResponseB
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
 		IsUpdating:               res.IsUpdating,
+		IsReconciling:            res.IsReconciling,
+		ReconciliationStatus:     res.ReconciliationStatus,
 		HealthStatus:             res.HealthStatus,
 		HealthIssue:              res.HealthIssue,
 		HealthCheckedAt:          res.HealthCheckedAt,
@@ -3271,6 +3605,147 @@ func NewListRootMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListR
 	return body
 }
 
+// NewReconcileDomainUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainUnauthorizedResponseBody(res *goa.ServiceError) *ReconcileDomainUnauthorizedResponseBody {
+	body := &ReconcileDomainUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainForbiddenResponseBody builds the HTTP response body from
+// the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainForbiddenResponseBody(res *goa.ServiceError) *ReconcileDomainForbiddenResponseBody {
+	body := &ReconcileDomainForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainBadRequestResponseBody builds the HTTP response body from
+// the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainBadRequestResponseBody(res *goa.ServiceError) *ReconcileDomainBadRequestResponseBody {
+	body := &ReconcileDomainBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainNotFoundResponseBody builds the HTTP response body from
+// the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainNotFoundResponseBody(res *goa.ServiceError) *ReconcileDomainNotFoundResponseBody {
+	body := &ReconcileDomainNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainConflictResponseBody builds the HTTP response body from
+// the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainConflictResponseBody(res *goa.ServiceError) *ReconcileDomainConflictResponseBody {
+	body := &ReconcileDomainConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainUnsupportedMediaResponseBody(res *goa.ServiceError) *ReconcileDomainUnsupportedMediaResponseBody {
+	body := &ReconcileDomainUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainInvalidResponseBody builds the HTTP response body from the
+// result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainInvalidResponseBody(res *goa.ServiceError) *ReconcileDomainInvalidResponseBody {
+	body := &ReconcileDomainInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "reconcileDomain" endpoint of the "domains"
+// service.
+func NewReconcileDomainInvariantViolationResponseBody(res *goa.ServiceError) *ReconcileDomainInvariantViolationResponseBody {
+	body := &ReconcileDomainInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainUnexpectedResponseBody builds the HTTP response body from
+// the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainUnexpectedResponseBody(res *goa.ServiceError) *ReconcileDomainUnexpectedResponseBody {
+	body := &ReconcileDomainUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReconcileDomainGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "reconcileDomain" endpoint of the "domains" service.
+func NewReconcileDomainGatewayErrorResponseBody(res *goa.ServiceError) *ReconcileDomainGatewayErrorResponseBody {
+	body := &ReconcileDomainGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCheckHealthUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "checkHealth" endpoint of the "domains" service.
 func NewCheckHealthUnauthorizedResponseBody(res *goa.ServiceError) *CheckHealthUnauthorizedResponseBody {
@@ -3760,6 +4235,15 @@ func NewSetRootMcpEndpointPayload(body *SetRootMcpEndpointRequestBody, sessionTo
 // endpoint payload.
 func NewListRootMcpServersPayload(sessionToken *string) *domains.ListRootMcpServersPayload {
 	v := &domains.ListRootMcpServersPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewReconcileDomainPayload builds a domains service reconcileDomain endpoint
+// payload.
+func NewReconcileDomainPayload(sessionToken *string) *domains.ReconcileDomainPayload {
+	v := &domains.ReconcileDomainPayload{}
 	v.SessionToken = sessionToken
 
 	return v

@@ -17,7 +17,7 @@ type AdminContext struct {
 	WriteOperations []WriteOperation `json:"available_write_operations"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable, hookFleetAvailable bool, runtime *Runtime) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable, providerHealthAvailable, hookFleetAvailable, customDomainsAvailable, assistantsAvailable, memoryEvalsAvailable bool, runtime *Runtime) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -80,8 +80,20 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		if serverHealthAvailable {
 			workflows = append(workflows, "inspect one MCP server's authentication configuration, session counts and tool call outcomes")
 		}
+		if providerHealthAvailable {
+			workflows = append(workflows, "inspect sign-in provider health across organizations, as counts only")
+		}
 		if hookFleetAvailable {
 			workflows = append(workflows, "inspect an organization's hooks installs, versions and legacy endpoint traffic")
+		}
+		if customDomainsAvailable {
+			workflows = append(workflows, "inspect custom domains with their designated CNAME targets and observed DNS routing methods")
+		}
+		if assistantsAvailable {
+			workflows = append(workflows, "inspect an organization's assistants with their agent identity state, runtime and creator membership")
+		}
+		if memoryEvalsAvailable {
+			workflows = append(workflows, "compare Organizational Memory eval runs: answer model scores by arm on the synthetic demo corpus, with summary and digest model cost")
 		}
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil && runtime.writes.writes.Enabled {

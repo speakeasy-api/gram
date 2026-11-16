@@ -2,17 +2,20 @@ export const FEATURE_FLAGS = {
   inferenceWorkloadSetup: "inference-workload-setup",
   // UI-only visibility; saved runtime selection and backend authorization are independent.
   assistantKitRuntime: "assistant-kit-runtime",
+  // UI-only rollout gate; Channels operations enforce organization grants.
+  channels: "channels",
   budgets: "gram-budgets",
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
   explore: "gram-explore",
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
-  mcpResearch: "gram-mcp-research",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",
-  oktaConnections: "okta-connections",
+  // UI-only rollout gate for the Sync from Okta option of Add MCP server; the
+  // Okta application and suggestion APIs behind it are not gated.
+  oktaMcpImport: "okta-mcp-import",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine

@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/agenthooks/agenthookstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
 // transcriptServerMaxBodyBytes is the server's request body cap
@@ -213,9 +215,12 @@ func TestCoworkShipsNewLinesOnEachStop(t *testing.T) {
 	require.Equal(t, first.OffsetEnd, uploads[1].OffsetStart)
 	require.Equal(t, []string{"a-2", "u-2"}, entryUUIDs(t, uploads[1]))
 
-	// Nothing new: no request at all.
+	// Nothing new: no upload. (Per-event hooks run in Cowork too, so a
+	// prompt agenthooks backfills from the transcript may reach the ingest
+	// endpoint; only transcript uploads are counted here.)
 	invokeClaude(t, cfg, claudeStop(transcript))
-	require.Equal(t, int32(2), ts.requests.Load())
+	uploads, _ = ts.recorded()
+	require.Len(t, uploads, 2)
 }
 
 func TestCoworkRetriesUnsettledUpload(t *testing.T) {
@@ -443,23 +448,88 @@ func TestCoworkKeepsChunkWithoutAcknowledgement(t *testing.T) {
 	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
 }
 
-func TestCoworkRelaysNoOtherEvent(t *testing.T) {
+// TestCoworkRelaysGatedEvents: inside the Cowork VM, prompt, tool and
+// permission events reach the server as in Claude Code, so policy is enforced
+// in real time. Their envelopes carry session.surface "cowork" so the server keys
+// their rows by the ids the shipped transcript shares; the observe-only events
+// stay local.
+func TestCoworkRelaysGatedEvents(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	ts := newTranscriptServer(t)
-	cfg := coworkConfig(t, ts.URL)
+	fs := newFakeServer(t, func(p components.IngestRequestBody) (int, decision) {
+		if p.Event.Type == components.TypeToolRequested {
+			return http.StatusOK, decision{Decision: "deny", Reason: "", Message: "Blocked by policy"}
+		}
+		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := coworkConfig(t, fs.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
 
+	res := invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "list the files"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.NotContains(t, string(res.Stdout), `"decision":"block"`)
+
+	res = invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}, "tool_use_id": "toolu_1"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "the server's deny is enforced in Cowork")
+
 	for _, payload := range []map[string]any{
-		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "list the files"},
-		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}, "tool_use_id": "toolu_1"},
 		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "SessionStart", "source": "startup"},
 		{"session_id": "sess-cowork-1", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "SubagentStop", "stop_hook_active": false},
 	} {
 		res := invokeClaude(t, cfg, payload)
 		require.Equal(t, 0, res.ExitCode, res.Stderr)
 	}
-	require.Equal(t, int32(0), ts.requests.Load())
+
+	require.Equal(t, 2, fs.count(), "only the prompt and the tool request reach the server")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	for _, req := range fs.requests {
+		require.NotNil(t, req.Session)
+		require.NotNil(t, req.Session.Surface)
+		require.Equal(t, coworkSurface, *req.Session.Surface, "Cowork events say where they come from")
+	}
+}
+
+// TestCoworkAskShowsPermissionPrompt: the server answers a warned Cowork tool
+// call with "ask", which Claude Code shows as its own Allow / Deny prompt.
+// "ask" on any other event is a deny.
+func TestCoworkAskShowsPermissionPrompt(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ask := decision{Decision: "ask", Reason: "", Message: "Speakeasy warning. EXAMPLE-MATCH looks like sensitive information."}
+	fs := newFakeServer(t, func(p components.IngestRequestBody) (int, decision) {
+		if p.Event.Type == components.TypeToolRequested {
+			return http.StatusOK, ask
+		}
+		if p.Data != nil && p.Data.Prompt != nil && p.Data.Prompt.Text != nil && *p.Data.Prompt.Text == "ask me" {
+			return http.StatusOK, ask
+		}
+		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := coworkConfig(t, fs.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser)
+
+	res := invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-ask", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "echo EXAMPLE-MATCH"}, "tool_use_id": "toolu_ask"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"ask"`)
+	require.Contains(t, string(res.Stdout), "EXAMPLE-MATCH looks like sensitive information.")
+
+	res = invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-ask", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "ask me"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Contains(t, string(res.Stdout), `"decision":"block"`, "a prompt cannot be asked, so it is blocked")
+}
+
+func TestClaudeCodeEventsKeepCapture(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+
+	res := invokeClaude(t, cfg, map[string]any{"session_id": "sess-cli-1", "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "list the files"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Equal(t, 1, fs.count())
+	require.Nil(t, fs.last().Session.Surface, "outside Cowork the event is the capture path")
 }
 
 func TestTranscriptUploadSettled(t *testing.T) {
@@ -731,4 +801,46 @@ func TestCoworkUploadNamesTheClaudeAccount(t *testing.T) {
 	uploads, _ := ts.recorded()
 	require.Len(t, uploads, 1)
 	require.Equal(t, "cowork@example.com", uploads[0].UserEmail)
+}
+
+// TestCoworkSurfacesServerWarnings: the Stop-side transcript scan warns about
+// prompts no Cowork hook handled, such as the first message of a session.
+// The warnings the server returns make Claude continue once and tell the user;
+// a Stop that ships nothing new finishes as before.
+func TestCoworkSurfacesServerWarnings(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	// The server warns on every upload, and twice for one policy, to show the
+	// relay dedupes and never continues a continuation.
+	ts.setBody(func(int) []byte {
+		w := `{"policy_id":"p-1","policy_name":"PII policy","message":"EXAMPLE-MATCH looks like sensitive information."}`
+		return []byte(`{"stored":2,"warnings":[` + w + `,` + w + `]}`)
+	})
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
+
+	res := invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	var out struct {
+		Decision      string `json:"decision"`
+		Reason        string `json:"reason"`
+		SystemMessage string `json:"systemMessage"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(res.Stdout), &out), res.Stdout)
+	require.Equal(t, "block", out.Decision, "Claude continues so the user is told")
+	require.Contains(t, out.Reason, `Speakeasy policy "PII policy": EXAMPLE-MATCH looks like sensitive information.`)
+	require.Equal(t, `Speakeasy policy "PII policy": EXAMPLE-MATCH looks like sensitive information.`, out.SystemMessage)
+
+	require.Contains(t, out.Reason, "<speakeasy-warning>", "the quoted warning is fenced as data")
+
+	// Claude's reply lands; the continuation Stop ships it and finishes even
+	// though the server still answers with a warning.
+	appendTranscript(t, transcript, `{"type":"assistant","uuid":"a-2","message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"Your message matched the policy."}]}}`+"\n")
+	continued := claudeStop(transcript)
+	continued["stop_hook_active"] = true
+	res = invokeClaude(t, cfg, continued)
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.NotContains(t, string(res.Stdout), `"decision":"block"`)
+	require.Equal(t, int32(2), ts.requests.Load())
 }

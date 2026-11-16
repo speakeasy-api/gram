@@ -19,7 +19,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
@@ -297,15 +296,19 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Shutdown funcs run concurrently, so everything publishing through
 	// psbroker stops in order inside its close.
 	var drainRisk func(context.Context) error
+	var shutdownConnections func(context.Context) error
 	stopPubSub := shutdown.funcs[pubsubShutdown]
 	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
 		var errs []error
+		// The recorder publishes its exports, so only the publishers wait for it.
+		waitConnections := startShutdown(ctx, shutdownConnections)
 		if drainRisk != nil {
 			errs = append(errs, drainRisk(ctx))
 		}
 		if enforcementShutdown != nil {
 			errs = append(errs, enforcementShutdown(ctx))
 		}
+		errs = append(errs, waitConnections())
 		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
 	}
 
@@ -315,7 +318,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled, toolIOLogsEnabled,
 		tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	shutdown.funcs = append(shutdown.funcs, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
@@ -365,8 +368,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")))
-	shutdown.funcs = append(shutdown.funcs, connectionRecorder.Shutdown)
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
+	shutdownConnections = connectionRecorderShutdown(connectionRecorder)
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 	if err != nil {
 		return err
@@ -544,12 +547,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 		})
 	})
 	mux.Use(middleware.DropInboundOTelBaggage)
-	mux.Use(func(h http.Handler) http.Handler {
-		return otelhttp.NewHandler(h, "http",
-			otelhttp.WithServerName("gram-mcp"),
-			otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
-		)
-	})
+	mux.Use(middleware.PublicHTTPTracing("gram-mcp"))
 	mux.Use(middleware.RouteLabelerMiddleware)
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))

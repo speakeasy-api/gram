@@ -473,43 +473,43 @@ url = "https://github.com/speakeasy-api/openapi/releases/download/v1.24.0/openap
 url_api = "https://api.github.com/repos/speakeasy-api/openapi/releases/assets/454075702"
 
 [[tools."github:speakeasy-api/speakeasy"]]
-version = "1.803.0"
+version = "1.808.1"
 backend = "github:speakeasy-api/speakeasy"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-arm64"]
-checksum = "sha256:10f8c8add0b03209d27df43399f2c93ea64de981ee7a0b34bacaffcc9c76078b"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_arm64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926702"
+checksum = "sha256:85b611592329b1e30db4a2e1718aee8094c1631ea8b8e34906407bf1fb3a2bf5"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_arm64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734229"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-arm64-musl"]
-checksum = "sha256:10f8c8add0b03209d27df43399f2c93ea64de981ee7a0b34bacaffcc9c76078b"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_arm64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926702"
+checksum = "sha256:85b611592329b1e30db4a2e1718aee8094c1631ea8b8e34906407bf1fb3a2bf5"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_arm64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734229"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-x64"]
-checksum = "sha256:adae2df2b6c1aaca9d8380900df19a087a95bd35eced0217465e4b12fc6cccee"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926705"
+checksum = "sha256:9882904478c8aca5b868449de3b989f268f6632a7100c27eb50a8c749211f879"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734221"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-x64-musl"]
-checksum = "sha256:adae2df2b6c1aaca9d8380900df19a087a95bd35eced0217465e4b12fc6cccee"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926705"
+checksum = "sha256:9882904478c8aca5b868449de3b989f268f6632a7100c27eb50a8c749211f879"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734221"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.macos-arm64"]
-checksum = "sha256:655b71b6fca7ee6a226b4e7702114df025a80a79841baffdac53a962c815add5"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_darwin_arm64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926706"
+checksum = "sha256:a897bd519aba0ecc1904d8618e0e93aefc411e2b3e14088931b3418d7d0a254d"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_darwin_arm64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734231"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.macos-x64"]
-checksum = "sha256:947308d553cf464ec74f97cfbec13d3eacdecfce648c67a67249ca0a90bea242"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_darwin_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926700"
+checksum = "sha256:ca00b1394eb3261091076fa0e7114c0224e0295089098dbcfc770da33f725a30"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_darwin_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734225"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.windows-x64"]
-checksum = "sha256:ebfb07e6e726a4a6c877cd9b45e5caa52365ae09bc142b48cbe526050fedda54"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_windows_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926697"
+checksum = "sha256:8119dc55295dce354b1a44c2bc8e81523f20cb5dae4f36615601c02f4a606778"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_windows_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734228"
 
 [[tools."github:sqlc-dev/sqlc"]]
 version = "1.31.1"
@@ -590,36 +590,36 @@ url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1
 url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832572"
 
 [[tools.go]]
-version = "1.27.3"
+version = "1.27.4"
 backend = "core:go"
 
 [tools.go."platforms.linux-arm64"]
-checksum = "sha256:a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49"
-url = "https://dl.google.com/go/go1.27.3.linux-arm64.tar.gz"
+checksum = "sha256:3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92"
+url = "https://dl.google.com/go/go1.27.4.linux-arm64.tar.gz"
 
 [tools.go."platforms.linux-arm64-musl"]
-checksum = "sha256:a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49"
-url = "https://dl.google.com/go/go1.27.3.linux-arm64.tar.gz"
+checksum = "sha256:3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92"
+url = "https://dl.google.com/go/go1.27.4.linux-arm64.tar.gz"
 
 [tools.go."platforms.linux-x64"]
-checksum = "sha256:65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40"
-url = "https://dl.google.com/go/go1.27.3.linux-amd64.tar.gz"
+checksum = "sha256:7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
+url = "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz"
 
 [tools.go."platforms.linux-x64-musl"]
-checksum = "sha256:65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40"
-url = "https://dl.google.com/go/go1.27.3.linux-amd64.tar.gz"
+checksum = "sha256:7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
+url = "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz"
 
 [tools.go."platforms.macos-arm64"]
-checksum = "sha256:dd3908cf20959d798c1e06ebe5b72213f0505ce01373b40ce3110975a6cd99c2"
-url = "https://dl.google.com/go/go1.27.3.darwin-arm64.tar.gz"
+checksum = "sha256:91a44a2b8a716600ad94a4f143e156116620db8828086a6e3602291be9bd0bb4"
+url = "https://dl.google.com/go/go1.27.4.darwin-arm64.tar.gz"
 
 [tools.go."platforms.macos-x64"]
-checksum = "sha256:b6f8e931e4ab497fcde6da8ae4499a58f9d258e55c8a80824a516eae5950a750"
-url = "https://dl.google.com/go/go1.27.3.darwin-amd64.tar.gz"
+checksum = "sha256:2b799377704ef12db39bd254995d5c348c9cc8d86562ca817724390e56c38f43"
+url = "https://dl.google.com/go/go1.27.4.darwin-amd64.tar.gz"
 
 [tools.go."platforms.windows-x64"]
-checksum = "sha256:f26081f438319757f8a1b46d7d0b2c5ec7583d4038e485e0aa725cfde7885fff"
-url = "https://dl.google.com/go/go1.27.3.windows-amd64.zip"
+checksum = "sha256:178ab98950ac69ab25069307dc6ade79f3816e414cce95b4da166a115cde1e7e"
+url = "https://dl.google.com/go/go1.27.4.windows-amd64.zip"
 
 [[tools.golangci-lint]]
 version = "2.15.0"

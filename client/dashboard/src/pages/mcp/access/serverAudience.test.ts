@@ -71,9 +71,26 @@ describe("blockingRules", () => {
 });
 
 describe("blockingRules names only the blocks that took something away", () => {
-  // The mcp:blocked_* scopes are independent. A block on a capability nobody
-  // was granted changed nothing, and naming it sends an administrator to a
-  // role that is not the reason.
+  // A block on a capability nobody was granted changed nothing, and naming it
+  // sends an administrator to a role that is not the reason.
+  it("names a view block that took manage away too", () => {
+    const viewBlock = entry({
+      principalUrn: "role:global:admin",
+      displayName: "Admin",
+      level: "blocked_view",
+      appliesTo: "resource",
+    });
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      viewBlock,
+    ];
+
+    expect(effectiveReach(reaching)).toBeNull();
+    expect(blockingRules(reaching).map((rule) => rule.displayName)).toEqual([
+      "Admin",
+    ]);
+  });
+
   it("ignores a block on a capability the grants never opened", () => {
     const reaching = [
       gtmGrant,
@@ -139,6 +156,48 @@ describe("principal precedence", () => {
     ];
 
     expect(effectiveReach(reaching, [], hana)?.capabilities).toContain("view");
+  });
+
+  it("lets an own view rule outrank a role's view block for view only", () => {
+    // The view block also takes manage; a direct view rule restores view and
+    // nothing it does not grant.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+      ownRule({ level: "view" }),
+    ];
+
+    expect(effectiveReach(reaching, [], hana)?.capabilities).toEqual(["view"]);
+  });
+
+  it("keeps narrowed connect when a view block takes whole-server manage", () => {
+    // The view block takes view and manage; the narrowed connect rule is
+    // independent of both and still reaches its tools.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:organization:gtm",
+        level: "use",
+        tools: ["search"],
+      }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+    ];
+
+    const reach = effectiveReach(reaching, [
+      { name: "search", annotations: [] },
+    ]);
+    expect(reach?.capabilities).toEqual(["use"]);
+    expect(reach?.toolsLabel).toBe("Search");
   });
 
   it("does not let a rule covering every server outrank a block", () => {
@@ -304,4 +363,25 @@ it("counts distinct tools when multiple grants contribute to a summary", () => {
       dispositions: ["future_one", "future_two"],
     }),
   ).toBe("unknown annotation tools and search");
+});
+
+describe("effectiveReach without an explicit connect rule", () => {
+  // mcp:read and mcp:write do not imply mcp:connect, so viewing or managing
+  // a server reaches none of its tools.
+  it("does not count view or manage as connect", () => {
+    const tools: ToolSelectionTool[] = [
+      { name: "search", annotations: [] },
+      { name: "deploy", annotations: [] },
+    ];
+    for (const level of ["view", "manage"] as const) {
+      const rules = [entry({ principalUrn: "role:organization:gtm", level })];
+      for (const catalog of [[], tools]) {
+        const reach = effectiveReach(rules, catalog);
+        expect(reach?.capabilities).not.toContain("use");
+        expect(reach?.capabilities).toContain("view");
+        expect(reach?.toolsLabel).toBe("None");
+        expect(reach?.reachableTools).toEqual([]);
+      }
+    }
+  });
 });

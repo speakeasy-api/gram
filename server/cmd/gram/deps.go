@@ -85,6 +85,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -1846,6 +1847,93 @@ func enableIssuerKeyAutoActivation(provisioner *identityproviderconnections.Prov
 
 // issuerKeySweeper keeps a nil provisioner a nil interface.
 func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// newKMSEncryptionClients returns the symmetric KMS client factories. Locally
+// both hand out one persistent in-process client, so data wrapped in one run
+// stays readable in the next and the server and worker agree on keys. Disabling
+// a key is per process locally: a key the worker's sweep disables stays usable
+// in the server until it restarts. Database state still records the disable,
+// so this only weakens the KMS half of the check in local development.
+func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Context) (gcpkms.EncryptionClientFactory, gcpkms.EncryptionProvisioningClientFactory, error) {
+	if c.String("environment") != "local" {
+		return gcpkms.NewEncryptionClient, gcpkms.NewEncryptionProvisioningClient, nil
+	}
+
+	logger.WarnContext(ctx, "using in-process kms encryption client: local development has no cloud kms to reach")
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve local kms encryption key directory: %w", err)
+	}
+	client, err := gcpkms.NewPersistentLocalEncryptionClient(filepath.Join(configDir, "gram", "local-kms", "encryption.pem"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("load local kms encryption key: %w", err)
+	}
+
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.EncryptionClient, error) {
+			return client, nil
+		}, func(_ context.Context, _ oauth2.TokenSource) (gcpkms.EncryptionProvisioningClient, error) {
+			return client, nil
+		}, nil
+}
+
+// newOrgEncryption builds the organization encryption service and
+// provisioner, or nils when no platform credential is configured: the feature
+// is then off and every consumer fails closed.
+func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (*orgencryption.Service, *orgencryption.Provisioner, error) {
+	rawCredentialID := strings.TrimSpace(c.String(orgEncryptionCredentialIDFlag))
+	if rawCredentialID == "" {
+		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
+		return nil, nil, nil
+	}
+	credentialID, err := uuid.Parse(rawCredentialID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse organization encryption credential id: %w", err)
+	}
+
+	keyRing := strings.TrimSpace(c.String(orgEncryptionKMSKeyRingFlag))
+	if keyRing == "" {
+		if c.String("environment") != "local" {
+			return nil, nil, errors.New("organization encryption kms key ring is required when a credential is configured")
+		}
+		keyRing = orgEncryptionKMSKeyRingLocalDefault
+	}
+
+	keys := orgencryption.KeyConfig{
+		KeyRing:                keyRing,
+		PlatformCredentialID:   credentialID,
+		PlatformServiceAccount: strings.TrimSpace(c.String(orgEncryptionServiceAccountFlag)),
+	}
+
+	clients, provisioning, err := newKMSEncryptionClients(ctx, logger, c)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	service, err := orgencryption.NewService(logger, db, gcpIdentity, clients, keys)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build organization encryption service: %w", err)
+	}
+
+	provisioner, err := orgencryption.NewProvisioner(logger, db, gcpIdentity, clients, provisioning, auditLogger, service, orgencryption.ProvisionerConfig{
+		Keys:                keys,
+		SwitchGracePeriod:   c.Duration(orgEncryptionSwitchGracePeriodFlag),
+		ManagedKeyRetention: c.Duration(orgEncryptionManagedKeyRetention),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("build organization encryption provisioner: %w", err)
+	}
+
+	return service, provisioner, nil
+}
+
+// orgEncryptionSweeper keeps a nil provisioner a nil interface.
+func orgEncryptionSweeper(provisioner *orgencryption.Provisioner) background.OrganizationEncryptionSweeper {
 	if provisioner == nil {
 		return nil
 	}

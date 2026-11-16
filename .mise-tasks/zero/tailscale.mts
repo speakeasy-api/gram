@@ -251,7 +251,12 @@ export async function setupTailscale(
         // which the Tailnet certificate does not cover. An explicit URL is
         // developer-owned and stays.
         ...(local.env?.["GRAM_ASSISTANT_RUNTIME_SERVER_URL"] === undefined
-          ? [["GRAM_ASSISTANT_RUNTIME_SERVER_URL", "{{env.GRAM_SERVER_URL}}"]]
+          ? [
+              [
+                "GRAM_ASSISTANT_RUNTIME_SERVER_URL",
+                "{{env.GRAM_SERVER_URL}}",
+              ] satisfies [string, string],
+            ]
           : []),
       ]
     : // The tailnet stopped issuing certificates for this name: fall back to

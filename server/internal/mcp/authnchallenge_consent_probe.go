@@ -23,7 +23,7 @@ const probeReserve = 2 * time.Second
 // the close floor and the verdict's write window. A 401 or 403 after the SDK's optional
 // discovery leg is a rejection, a tool list is valid, and anything else is
 // unknown. Closing the session is the SDK's DELETE.
-func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, name string) (remotesessions.ValidationOutcome, string) {
+func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, name string) (remotesessions.ValidationOutcome, string, probeFailure) {
 	timeout := s.metaRuntime.ValidationTimeout
 	if parentDeadline, ok := ctx.Deadline(); ok {
 		timeout = min(timeout, time.Until(parentDeadline))
@@ -35,16 +35,29 @@ func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build 
 
 	session, rt, err := s.connectMetaMember(probeCtx, logger, build, reserve/2)
 	if err != nil {
-		return classifyProbe(probeCtx, rt, err, name)
+		outcome, reason := classifyProbe(probeCtx, rt, err, name)
+		return outcome, reason, newProbeFailure(probeCtx, rt, err)
 	}
 	_, err = session.ListTools(probeCtx, nil)
 	if cerr := session.Close(); cerr != nil {
 		logger.DebugContext(ctx, "close probe session", attr.SlogError(cerr))
 	}
 	if err != nil {
-		return classifyProbe(probeCtx, rt, err, name)
+		outcome, reason := classifyProbe(probeCtx, rt, err, name)
+		return outcome, reason, newProbeFailure(probeCtx, rt, err)
 	}
-	return remotesessions.ValidationOutcomeValid, ""
+	return remotesessions.ValidationOutcomeValid, "", probeFailure{status: 0, tunnelError: "", err: nil}
+}
+
+// probeFailure is what the failed exchange showed, for naming who failed.
+type probeFailure struct {
+	status      int
+	tunnelError string
+	err         error
+}
+
+func newProbeFailure(ctx context.Context, rt *memberRoundTripper, err error) probeFailure {
+	return probeFailure{status: rt.status(), tunnelError: rt.tunnelError(), err: errors.Join(err, rt.failure(), ctx.Err())}
 }
 
 // classifyProbe maps a failed leg to a verdict and a fixed-phrase reason; nothing upstream sent is quoted.

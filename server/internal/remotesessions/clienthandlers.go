@@ -254,6 +254,14 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, err
 	}
 
+	templateID, err := conv.PtrToNullUUID(payload.TemplateClientID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid template_client_id").LogError(ctx, logger)
+	}
+	if templateID.Valid && (owner == CredentialOwnerSelf || payload.JSONWebKeySetID != nil) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "template_client_id creates a personal sign-in client that authenticates with the template's secret; it takes no credential_owner self and no json_web_key_set_id").LogError(ctx, logger)
+	}
+
 	authMethod := selfClientCreateAuthMethod(owner, payload.TokenEndpointAuthMethod)
 	hasSecret := payload.ClientSecret != nil && *payload.ClientSecret != ""
 
@@ -319,6 +327,28 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, err
 	}
 
+	legacyCallbackURL := false
+	if templateID.Valid {
+		template, err := loadClientTemplate(ctx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, templateID.UUID, issuerID, clientID)
+		if err == nil {
+			err = template.requireSecret(conv.PtrValOr(authMethod, ""), hasSecret)
+		}
+		if err != nil {
+			return nil, identityOopsError(err, "read template remote session client").LogError(ctx, logger)
+		}
+		if !hasSecret {
+			secretCiphertext = template.secretEncrypted
+			if payload.ClientSecretExpiresAt == nil {
+				provenance.clientSecretExpiresAt = template.clientSecretExpiresAt
+			}
+		}
+		if payload.ClientIDIssuedAt == nil {
+			provenance.clientIDIssuedAt = template.clientIDIssuedAt
+		}
+		callbackBaseURL = template.callbackBaseURL
+		legacyCallbackURL = template.legacyCallbackURL
+	}
+
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ForwardClientName:               false,
 		ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
@@ -332,7 +362,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
-		LegacyCallbackUrl:               false,
+		LegacyCallbackUrl:               legacyCallbackURL,
 		JsonWebKeySetID:                 keySetID,
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CallbackBaseUrl:                 callbackBaseURL,
@@ -343,7 +373,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
 	}
 
-	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs)
+	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs, templateID)
 }
 
 // CreateCimd registers a remote_session_client in Client ID Metadata Document
@@ -429,7 +459,7 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
 	}
 
-	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs)
+	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 }
 
 // validateNewClientIssuers checks the remote_session_issuer is reachable from
@@ -513,6 +543,7 @@ func (s *Service) finalizeClientCreate(
 	scope bindingWriteScope,
 	created repo.RemoteSessionClient,
 	userIssuerIDs []uuid.UUID,
+	templateID uuid.NullUUID,
 ) (*types.RemoteSessionClient, error) {
 	for _, userIssuerID := range userIssuerIDs {
 		if err := txRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
@@ -528,16 +559,32 @@ func (s *Service) finalizeClientCreate(
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
 
-	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:       authCtx.Email,
-		ActorSlug:              nil,
-		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
-		ClientID:               created.ClientID,
-		SnapshotAfter:          snapshot,
-	}); err != nil {
+	if templateID.Valid {
+		err = s.auditLogger.LogRemoteSessionClientDuplicate(ctx, dbtx, audit.LogRemoteSessionClientDuplicateEvent{
+			OrganizationID:               authCtx.ActiveOrganizationID,
+			ProjectID:                    *authCtx.ProjectID,
+			Actor:                        urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:             authCtx.Email,
+			ActorSlug:                    nil,
+			RemoteSessionClientURN:       urn.NewRemoteSessionClient(created.ID),
+			ClientID:                     created.ClientID,
+			SourceRemoteSessionClientURN: urn.NewRemoteSessionClient(templateID.UUID),
+			Registration:                 audit.RemoteSessionClientDuplicateRegistrationCopied,
+			SnapshotAfter:                snapshot,
+		})
+	} else {
+		err = s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:       authCtx.Email,
+			ActorSlug:              nil,
+			RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
+			ClientID:               created.ClientID,
+			SnapshotAfter:          snapshot,
+		})
+	}
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session client creation").LogError(ctx, logger)
 	}
 

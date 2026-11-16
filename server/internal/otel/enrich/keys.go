@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 )
 
 const (
@@ -116,7 +118,15 @@ func IsAgentKey(key string) bool {
 const (
 	pipelineKeyPrefix  = "speakeasy."
 	directoryKeyPrefix = "directory."
+
+	// mcpConnectionKeyPrefix holds the attributes on exported MCP connection logs.
+	mcpConnectionKeyPrefix = "speakeasy.mcp_connection."
 )
+
+// IsMcpConnectionKey reports whether a key is one only the connection recorder may write.
+func IsMcpConnectionKey(key string) bool {
+	return strings.HasPrefix(key, mcpConnectionKeyPrefix)
+}
 
 // IsPipelineKey reports whether a key is in a namespace the pipeline owns,
 // speakeasy or directory. The transform drops what a producer sends there
@@ -124,4 +134,14 @@ const (
 // claim another tenant, pose as another scope or give a person a group.
 func IsPipelineKey(key string) bool {
 	return strings.HasPrefix(key, pipelineKeyPrefix) || strings.HasPrefix(key, directoryKeyPrefix)
+}
+
+// IsReservedLogKey reports whether a producer with the given provenance source
+// may not write key. It is IsPipelineKey, except that the connection recorder
+// writes speakeasy.mcp_connection itself.
+func IsReservedLogKey(source, key string) bool {
+	if source == dialect.ConnectionLogSource && IsMcpConnectionKey(key) {
+		return false
+	}
+	return IsPipelineKey(key)
 }
