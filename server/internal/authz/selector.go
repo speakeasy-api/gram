@@ -148,6 +148,12 @@ func scopeAllowsSelectorKey(scope Scope, key string) bool {
 // is being called; viewing or managing a server names no tool.
 var storedLimitScopes = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPBlockedRead, ScopeMCPBlockedWrite}
 
+// StoredLimitScopes returns the scopes whose stored rules may still carry a
+// tool or disposition limit, for the one-off rewrite that removes them.
+func StoredLimitScopes() []Scope {
+	return slices.Clone(storedLimitScopes)
+}
+
 // StoredSelectorInEffect returns the selector a stored grant takes effect
 // with, and false when the grant has no effect at all. Both follow from how
 // checks are matched: no check for viewing or managing a server names a tool,

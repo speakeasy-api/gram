@@ -31,6 +31,7 @@ guide documents the flags, output, and recovery.
 | Stored assistant grants for legacy built-in Admin and Member roles          | [ASSISTANT_ROLE_GRANTS_BACKFILL.md](./ASSISTANT_ROLE_GRANTS_BACKFILL.md)               |
 | Kit runtime workload admission audit entries moved to `security_audit_logs` | [AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md](./AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md)     |
 | `remote_sessions.organization_id` from each session's client                | [REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md](./REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md) |
+| Tool and annotation limits removed from stored MCP view and manage rules    | [MCP_GRANT_LIMITS_REWRITE.md](./MCP_GRANT_LIMITS_REWRITE.md)                           |
 
 The rest of this document covers the pipeline.
 

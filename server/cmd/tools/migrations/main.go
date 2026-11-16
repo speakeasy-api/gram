@@ -16,6 +16,8 @@
 //     AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md. It defaults to a dry run.
 //   - remote-sessions-organization: PostgreSQL application-data backfill; see
 //     REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md. It defaults to a dry run.
+//   - mcp-grant-limits: PostgreSQL application-data rewrite; see
+//     MCP_GRANT_LIMITS_REWRITE.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -109,9 +111,11 @@ func run() int {
 		return runAuditKitRuntimeSecurity(args, os.Stdout, os.Getenv)
 	case remoteSessionsOrganizationName:
 		return runRemoteSessionsOrganization(args, os.Stdout, os.Getenv)
+	case mcpGrantLimitsCommand:
+		return runMCPGrantLimits(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, mcp-grant-limits)")
 		return 2
 	}
 }
