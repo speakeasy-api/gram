@@ -306,6 +306,25 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerMcpServers"}`)
 	})
 
+	Method("listRemoteSessionClientBindings", func() {
+		Description("List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.")
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The user_session_issuer whose client bindings are listed.", func() { Format(FormatUUID) })
+			Required("user_session_issuer_id")
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuerRemoteSessionClientBindings)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings")
+			Param("user_session_issuer_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listOrganizationUserSessionIssuerRemoteSessionClientBindings")
+		Meta("openapi:extension:x-speakeasy-name-override", "listRemoteSessionClientBindings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerRemoteSessionClientBindings"}`)
+	})
+
 	Method("getAuthenticationHostImpact", func() {
 		Description("Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.")
 		Payload(func() {
@@ -683,6 +702,33 @@ var ListUserSessionIssuerMcpServersResult = Type("ListUserSessionIssuerMcpServer
 	Attribute("items", ArrayOf(UserSessionIssuerMcpServer))
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 	Required("items")
+})
+
+var UserSessionIssuerRemoteSessionClient = Type("UserSessionIssuerRemoteSessionClient", func() {
+	Description("A live remote session client, named by the authorization server it belongs to.")
+	Attribute("id", String, "The remote_session_client id.", func() { Format(FormatUUID) })
+	Attribute("client_id", String, "The OAuth client id registered with the authorization server.")
+	Attribute("remote_session_issuer_id", String, "The authorization server (remote_session_issuer) id.", func() { Format(FormatUUID) })
+	Attribute("remote_session_issuer_name", String, "The authorization server's name, or its slug when it has none.")
+	Attribute("remote_session_issuer_url", String, "The authorization server's issuer URL.")
+	Required("id", "client_id", "remote_session_issuer_id", "remote_session_issuer_name", "remote_session_issuer_url")
+})
+
+var UserSessionIssuerServerRemoteSessionClient = Type("UserSessionIssuerServerRemoteSessionClient", func() {
+	Description("One remote session client associated with a live MCP server attached to a user_session_issuer.")
+	Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })
+	Attribute("mcp_server_name", String, "The MCP server display name.")
+	Attribute("project_id", String, "The owning project id.", func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The owning project name.")
+	Attribute("remote_session_client", UserSessionIssuerRemoteSessionClient, "The associated remote session client.")
+	Required("mcp_server_id", "mcp_server_name", "project_id", "project_name", "remote_session_client")
+})
+
+var UserSessionIssuerRemoteSessionClientBindings = Type("UserSessionIssuerRemoteSessionClientBindings", func() {
+	Description("The remote session clients a user_session_issuer binds, and those its live MCP servers are associated with.")
+	Attribute("bound_clients", ArrayOf(UserSessionIssuerRemoteSessionClient), "Remote session clients the user_session_issuer binds.")
+	Attribute("server_clients", ArrayOf(UserSessionIssuerServerRemoteSessionClient), "One entry per live MCP server and associated remote session client.")
+	Required("bound_clients", "server_clients")
 })
 
 var OrganizationUserSessionIssuerReference = Type("OrganizationUserSessionIssuerReference", func() {

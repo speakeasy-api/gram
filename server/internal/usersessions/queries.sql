@@ -338,6 +338,53 @@ WHERE sqlc.narg('cursor')::uuid IS NULL OR attachment.id < sqlc.narg('cursor')::
 ORDER BY attachment.id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: ListUserSessionIssuerBoundRemoteSessionClients :many
+-- The live remote session clients an issuer binds, with the authorization
+-- server each one belongs to.
+SELECT
+    client.id,
+    client.client_id,
+    remote_issuer.id AS remote_session_issuer_id,
+    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
+    remote_issuer.issuer AS remote_session_issuer_url
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND client.deleted IS FALSE
+  AND remote_issuer.deleted IS FALSE
+ORDER BY client.id;
+
+-- name: ListUserSessionIssuerServerRemoteSessionClients :many
+-- The remote session clients associated with each live MCP server attached to
+-- an issuer in the organization, with the authorization server each client
+-- belongs to.
+SELECT
+    server.id AS mcp_server_id,
+    COALESCE(server.name, server.slug, server.id::text)::text AS mcp_server_name,
+    project.id AS project_id,
+    project.name AS project_name,
+    client.id,
+    client.client_id,
+    remote_issuer.id AS remote_session_issuer_id,
+    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
+    remote_issuer.issuer AS remote_session_issuer_url
+FROM mcp_servers AS server
+JOIN projects AS project ON project.id = server.project_id
+JOIN mcp_server_remote_session_clients AS association
+    ON association.mcp_server_id = server.id
+   AND association.project_id = server.project_id
+JOIN remote_session_clients AS client ON client.id = association.remote_session_client_id
+JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
+WHERE server.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND server.deleted IS FALSE
+  AND project.organization_id = @organization_id::text
+  AND project.deleted IS FALSE
+  AND association.deleted IS FALSE
+  AND client.deleted IS FALSE
+  AND remote_issuer.deleted IS FALSE
+ORDER BY server.id, client.id;
+
 -- name: CountOrganizationManagedUserSessionIssuerMCPServers :one
 -- How many servers ListOrganizationManagedUserSessionIssuerMCPServers lists,
 -- by the same rules.

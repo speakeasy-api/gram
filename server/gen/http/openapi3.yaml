@@ -56724,6 +56724,96 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerMcpServers
+    /rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings:
+        get:
+            description: List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+            operationId: listOrganizationUserSessionIssuerRemoteSessionClientBindings
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer whose client bindings are listed.
+                  in: query
+                  name: user_session_issuer_id
+                  required: true
+                  schema:
+                    description: The user_session_issuer whose client bindings are listed.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuerRemoteSessionClientBindings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listRemoteSessionClientBindings organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: listRemoteSessionClientBindings
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerRemoteSessionClientBindings
     /rpc/organizationUserSessionIssuers.migrate:
         post:
             description: Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Access tokens issued through the authorization_code and refresh_token grants are audience-bound to the issuer, so once a repointed MCP server verifies bearers against the target, outstanding access tokens minted under the source are rejected until the client refreshes. Migrated sessions and refresh tokens keep working, so the refresh succeeds without re-authorization. Tokens from the jwt-bearer (ID-JAG) grant are bound to the resource URL and are unaffected. Requires org:admin.
@@ -140742,6 +140832,76 @@ components:
                 - clients_after
                 - pinned_client_ids
                 - hosted
+        UserSessionIssuerRemoteSessionClient:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: The OAuth client id registered with the authorization server.
+                id:
+                    type: string
+                    description: The remote_session_client id.
+                    format: uuid
+                remote_session_issuer_id:
+                    type: string
+                    description: The authorization server (remote_session_issuer) id.
+                    format: uuid
+                remote_session_issuer_name:
+                    type: string
+                    description: The authorization server's name, or its slug when it has none.
+                remote_session_issuer_url:
+                    type: string
+                    description: The authorization server's issuer URL.
+            description: A live remote session client, named by the authorization server it belongs to.
+            required:
+                - id
+                - client_id
+                - remote_session_issuer_id
+                - remote_session_issuer_name
+                - remote_session_issuer_url
+        UserSessionIssuerRemoteSessionClientBindings:
+            type: object
+            properties:
+                bound_clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerRemoteSessionClient'
+                    description: Remote session clients the user_session_issuer binds.
+                server_clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerServerRemoteSessionClient'
+                    description: One entry per live MCP server and associated remote session client.
+            description: The remote session clients a user_session_issuer binds, and those its live MCP servers are associated with.
+            required:
+                - bound_clients
+                - server_clients
+        UserSessionIssuerServerRemoteSessionClient:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The MCP server id.
+                    format: uuid
+                mcp_server_name:
+                    type: string
+                    description: The MCP server display name.
+                project_id:
+                    type: string
+                    description: The owning project id.
+                    format: uuid
+                project_name:
+                    type: string
+                    description: The owning project name.
+                remote_session_client:
+                    $ref: '#/components/schemas/UserSessionIssuerRemoteSessionClient'
+            description: One remote session client associated with a live MCP server attached to a user_session_issuer.
+            required:
+                - mcp_server_id
+                - mcp_server_name
+                - project_id
+                - project_name
+                - remote_session_client
         UserSessionUpstream:
             type: object
             properties:

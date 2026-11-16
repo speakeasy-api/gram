@@ -209,7 +209,7 @@ func UsageCommands() []string {
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
-		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
+		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|list-remote-session-client-bindings|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"gateway-sessions (list-gateway-sessions|list-gateway-session-facets)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
@@ -5199,6 +5199,10 @@ func ParseEndpoint(
 		organizationUserSessionIssuersListMcpServersLimitFlag               = organizationUserSessionIssuersListMcpServersFlags.String("limit", "", "")
 		organizationUserSessionIssuersListMcpServersSessionTokenFlag        = organizationUserSessionIssuersListMcpServersFlags.String("session-token", "", "")
 
+		organizationUserSessionIssuersListRemoteSessionClientBindingsFlags                   = flag.NewFlagSet("list-remote-session-client-bindings", flag.ExitOnError)
+		organizationUserSessionIssuersListRemoteSessionClientBindingsUserSessionIssuerIDFlag = organizationUserSessionIssuersListRemoteSessionClientBindingsFlags.String("user-session-issuer-id", "REQUIRED", "")
+		organizationUserSessionIssuersListRemoteSessionClientBindingsSessionTokenFlag        = organizationUserSessionIssuersListRemoteSessionClientBindingsFlags.String("session-token", "", "")
+
 		organizationUserSessionIssuersGetAuthenticationHostImpactFlags                     = flag.NewFlagSet("get-authentication-host-impact", flag.ExitOnError)
 		organizationUserSessionIssuersGetAuthenticationHostImpactIDFlag                    = organizationUserSessionIssuersGetAuthenticationHostImpactFlags.String("id", "REQUIRED", "")
 		organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHostFlag = organizationUserSessionIssuersGetAuthenticationHostImpactFlags.String("use-authentication-host", "REQUIRED", "")
@@ -6751,6 +6755,7 @@ func ParseEndpoint(
 	organizationUserSessionIssuersGetIssuerFlags.Usage = organizationUserSessionIssuersGetIssuerUsage
 	organizationUserSessionIssuersUpdateIssuerFlags.Usage = organizationUserSessionIssuersUpdateIssuerUsage
 	organizationUserSessionIssuersListMcpServersFlags.Usage = organizationUserSessionIssuersListMcpServersUsage
+	organizationUserSessionIssuersListRemoteSessionClientBindingsFlags.Usage = organizationUserSessionIssuersListRemoteSessionClientBindingsUsage
 	organizationUserSessionIssuersGetAuthenticationHostImpactFlags.Usage = organizationUserSessionIssuersGetAuthenticationHostImpactUsage
 	organizationUserSessionIssuersSetAuthenticationHostFlags.Usage = organizationUserSessionIssuersSetAuthenticationHostUsage
 	organizationUserSessionIssuersGetIssuerDeletePreflightFlags.Usage = organizationUserSessionIssuersGetIssuerDeletePreflightUsage
@@ -10176,6 +10181,9 @@ func ParseEndpoint(
 
 			case "list-mcp-servers":
 				epf = organizationUserSessionIssuersListMcpServersFlags
+
+			case "list-remote-session-client-bindings":
+				epf = organizationUserSessionIssuersListRemoteSessionClientBindingsFlags
 
 			case "get-authentication-host-impact":
 				epf = organizationUserSessionIssuersGetAuthenticationHostImpactFlags
@@ -13614,6 +13622,9 @@ func ParseEndpoint(
 			case "list-mcp-servers":
 				endpoint = c.ListMcpServers()
 				data, err = organizationusersessionissuersc.BuildListMcpServersPayload(*organizationUserSessionIssuersListMcpServersUserSessionIssuerIDFlag, *organizationUserSessionIssuersListMcpServersCursorFlag, *organizationUserSessionIssuersListMcpServersLimitFlag, *organizationUserSessionIssuersListMcpServersSessionTokenFlag)
+			case "list-remote-session-client-bindings":
+				endpoint = c.ListRemoteSessionClientBindings()
+				data, err = organizationusersessionissuersc.BuildListRemoteSessionClientBindingsPayload(*organizationUserSessionIssuersListRemoteSessionClientBindingsUserSessionIssuerIDFlag, *organizationUserSessionIssuersListRemoteSessionClientBindingsSessionTokenFlag)
 			case "get-authentication-host-impact":
 				endpoint = c.GetAuthenticationHostImpact()
 				data, err = organizationusersessionissuersc.BuildGetAuthenticationHostImpactPayload(*organizationUserSessionIssuersGetAuthenticationHostImpactIDFlag, *organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHostFlag, *organizationUserSessionIssuersGetAuthenticationHostImpactSessionTokenFlag)
@@ -36164,6 +36175,7 @@ func organizationUserSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    get-issuer: Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update an organization-owned user_session_issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-session-client-bindings: List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-authentication-host-impact: Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-authentication-host: Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.`)
@@ -36285,6 +36297,26 @@ func organizationUserSessionIssuersListMcpServersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-mcp-servers --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\"")
+}
+
+func organizationUserSessionIssuersListRemoteSessionClientBindingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers list-remote-session-client-bindings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-remote-session-client-bindings --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersGetAuthenticationHostImpactUsage() {

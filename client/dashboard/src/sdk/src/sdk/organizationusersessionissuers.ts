@@ -14,6 +14,7 @@ import { organizationUserSessionIssuersGetMigratePreflight } from "../funcs/orga
 import { organizationUserSessionIssuersList } from "../funcs/organizationUserSessionIssuersList.js";
 import { organizationUserSessionIssuersListCimdClients } from "../funcs/organizationUserSessionIssuersListCimdClients.js";
 import { organizationUserSessionIssuersListMcpServers } from "../funcs/organizationUserSessionIssuersListMcpServers.js";
+import { organizationUserSessionIssuersListRemoteSessionClientBindings } from "../funcs/organizationUserSessionIssuersListRemoteSessionClientBindings.js";
 import { organizationUserSessionIssuersMigrate } from "../funcs/organizationUserSessionIssuersMigrate.js";
 import { organizationUserSessionIssuersMove } from "../funcs/organizationUserSessionIssuersMove.js";
 import { organizationUserSessionIssuersSetAuthenticationHost } from "../funcs/organizationUserSessionIssuersSetAuthenticationHost.js";
@@ -26,6 +27,7 @@ import { OrganizationUserSessionIssuerMigratePreflight } from "../models/compone
 import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
 import { UserSessionIssuerAuthenticationHostImpact } from "../models/components/usersessionissuerauthenticationhostimpact.js";
 import { UserSessionIssuerCimdClient } from "../models/components/usersessionissuercimdclient.js";
+import { UserSessionIssuerRemoteSessionClientBindings } from "../models/components/usersessionissuerremotesessionclientbindings.js";
 import {
   CreateOrganizationUserSessionIssuerRequest,
   CreateOrganizationUserSessionIssuerSecurity,
@@ -72,6 +74,10 @@ import {
   ListOrganizationUserSessionIssuerMcpServersResponse,
   ListOrganizationUserSessionIssuerMcpServersSecurity,
 } from "../models/operations/listorganizationusersessionissuermcpservers.js";
+import {
+  ListOrganizationUserSessionIssuerRemoteSessionClientBindingsRequest,
+  ListOrganizationUserSessionIssuerRemoteSessionClientBindingsSecurity,
+} from "../models/operations/listorganizationusersessionissuerremotesessionclientbindings.js";
 import {
   ListOrganizationUserSessionIssuersRequest,
   ListOrganizationUserSessionIssuersResponse,
@@ -347,6 +353,30 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
       security,
       options,
     ));
+  }
+
+  /**
+   * listRemoteSessionClientBindings organizationUserSessionIssuers
+   *
+   * @remarks
+   * List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+   */
+  async listRemoteSessionClientBindings(
+    request:
+      ListOrganizationUserSessionIssuerRemoteSessionClientBindingsRequest,
+    security?:
+      | ListOrganizationUserSessionIssuerRemoteSessionClientBindingsSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionIssuerRemoteSessionClientBindings> {
+    return unwrapAsync(
+      organizationUserSessionIssuersListRemoteSessionClientBindings(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
   }
 
   /**

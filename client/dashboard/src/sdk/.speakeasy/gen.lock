@@ -507,6 +507,7 @@ trackedFiles:
   src/funcs/organizationUserSessionIssuersList.ts: {}
   src/funcs/organizationUserSessionIssuersListCimdClients.ts: {}
   src/funcs/organizationUserSessionIssuersListMcpServers.ts: {}
+  src/funcs/organizationUserSessionIssuersListRemoteSessionClientBindings.ts: {}
   src/funcs/organizationUserSessionIssuersMigrate.ts: {}
   src/funcs/organizationUserSessionIssuersMove.ts: {}
   src/funcs/organizationUserSessionIssuersSetAuthenticationHost.ts: {}
@@ -2256,6 +2257,9 @@ trackedFiles:
   src/models/components/usersessionissuermcpserver.ts: {}
   src/models/components/usersessionissuermigrationclient.ts: {}
   src/models/components/usersessionissuermigrationserverimpact.ts: {}
+  src/models/components/usersessionissuerremotesessionclient.ts: {}
+  src/models/components/usersessionissuerremotesessionclientbindings.ts: {}
+  src/models/components/usersessionissuerserverremotesessionclient.ts: {}
   src/models/components/usersessionupstream.ts: {}
   src/models/components/usersessionworkload.ts: {}
   src/models/components/usersessionworkloadadmission.ts: {}
@@ -2811,6 +2815,7 @@ trackedFiles:
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listorganizationusersessionissuercimdclients.ts: {}
   src/models/operations/listorganizationusersessionissuermcpservers.ts: {}
+  src/models/operations/listorganizationusersessionissuerremotesessionclientbindings.ts: {}
   src/models/operations/listorganizationusersessionissuers.ts: {}
   src/models/operations/listorgencryptionkeys.ts: {}
   src/models/operations/listpackages.ts: {}
@@ -3903,6 +3908,8 @@ trackedFiles:
   src/react-query/organizationUserSessionIssuerMcpServers.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.core.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.ts: {}
+  src/react-query/organizationUserSessionIssuerRemoteSessionClientBindings.core.ts: {}
+  src/react-query/organizationUserSessionIssuerRemoteSessionClientBindings.ts: {}
   src/react-query/organizationUserSessionIssuers.core.ts: {}
   src/react-query/organizationUserSessionIssuers.ts: {}
   src/react-query/pauseTrigger.ts: {}
@@ -10793,6 +10800,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOrganizationUserSessionIssuerRemoteSessionClientBindings:
+    speakeasy-default-list-organization-user-session-issuer-remote-session-client-bindings:
+      parameters:
+        query:
+          user_session_issuer_id: "d144812c-ddb0-4000-94cf-44b327fc244a"
+      responses:
+        "200":
+          application/json: {"bound_clients": [{"client_id": "<id>", "id": "f357a53a-de8d-480d-b770-8ba4420dcfbe", "remote_session_issuer_id": "c05c907f-05f9-430f-90af-bc78bfba9756", "remote_session_issuer_name": "<value>", "remote_session_issuer_url": "https://smug-scarification.org/"}], "server_clients": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listOrganizationUserSessionIssuers:
     speakeasy-default-list-organization-user-session-issuers:
       responses:
