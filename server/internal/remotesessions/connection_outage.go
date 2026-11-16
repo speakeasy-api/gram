@@ -5,7 +5,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
 // ConnectionOutageHappened attributes an ErrRemoteSessionUnavailable to its known owner.
@@ -60,12 +59,4 @@ func OutageAddressOption(err error) mcpconnectionattempts.Option {
 		return mcpconnectionattempts.Provider(refreshErr.IssuerURL)
 	}
 	return mcpconnectionattempts.FailedElsewhere()
-}
-
-// SignInAddressReason is the browser page reason for a sign-in provider address Speakeasy did not dial.
-func SignInAddressReason(address guardian.AddressFailure) oauthui.Reason {
-	if address == guardian.AddressNotFound {
-		return oauthui.ReasonSignInAddressMissing
-	}
-	return oauthui.ReasonSignInAddress
 }

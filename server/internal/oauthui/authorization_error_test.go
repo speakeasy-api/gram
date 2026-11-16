@@ -248,22 +248,11 @@ func TestAuthorizationErrorPageSignInAddress(t *testing.T) {
 	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadGateway, Code: "gateway_error", Reason: oauthui.ReasonSignInAddress, ClientName: "Example Client", ServerName: "example-server"}))
 	page := strings.Join(strings.Fields(response.Body.String()), " ")
 	require.Equal(t, http.StatusBadGateway, response.Code)
-	require.Contains(t, page, "because its sign-in provider uses a private or internal address Speakeasy can't reach. This isn't something you did.")
-	require.Contains(t, page, "Ask your IT administrators to check the addresses used by this server's sign-in provider.")
+	require.Contains(t, page, "because of how its sign-in is set up. This isn't something you did.")
+	require.Contains(t, page, "Ask your IT administrators to fix this server's sign-in. Share the technical details below with them.")
 	require.NotContains(t, page, "isn't available right now")
 	require.NotContains(t, page, "shortly")
 	require.NotContains(t, page, "problem on our side")
-}
-
-func TestAuthorizationErrorPageSignInAddressMissing(t *testing.T) {
-	t.Parallel()
-
-	response := httptest.NewRecorder()
-	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadGateway, Code: "gateway_error", Reason: oauthui.ReasonSignInAddressMissing, ClientName: "Example Client", ServerName: "example-server"}))
-	page := strings.Join(strings.Fields(response.Body.String()), " ")
-	require.Contains(t, page, "because its sign-in provider uses an address that does not point anywhere. This isn't something you did.")
-	require.Contains(t, page, "Ask your IT administrators to check the addresses used by this server's sign-in provider.")
-	require.NotContains(t, page, "private or internal")
 }
 
 func TestAuthorizationErrorRecoveryLink(t *testing.T) {

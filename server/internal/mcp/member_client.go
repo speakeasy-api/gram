@@ -436,12 +436,12 @@ type memberDiscoveryError struct {
 
 func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 
-// memberNoAnswerMessage says why a member call got no answer: an address Speakeasy did not dial, or no reply.
+// memberNoAnswerMessage says why a member call got no answer: its setup stops it, or no reply came.
 func memberNoAnswerMessage(slug string, address guardian.AddressFailure) string {
 	if address == guardian.AddressFine {
 		return fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", slug)
 	}
-	return fmt.Sprintf("server %q %s. Ask your administrator to check the server's address", slug, address.Problem())
+	return fmt.Sprintf("server %q can't connect because of how it is set up. Ask your administrator to fix it", slug)
 }
 
 // memberUpstreamFailedError is a member call that reached its upstream at host, which failed it.

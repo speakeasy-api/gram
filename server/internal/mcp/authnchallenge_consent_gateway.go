@@ -118,14 +118,10 @@ func (g gatewayServer) Ready() bool {
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
 	case gatewayServerUnavailable:
-		switch {
-		case g.address == guardian.AddressFine:
+		if g.address == guardian.AddressFine {
 			return unavailableLabel(g.cause)
-		case g.signInAddress:
-			return "Can't connect · its sign-in provider " + g.address.Problem() + " · ask your administrator"
-		default:
-			return "Can't connect · it " + g.address.Problem() + " · ask your administrator"
 		}
+		return adminLabel(notSetUpCorrectly)
 	case gatewayServerNoAccess:
 		return "No access"
 	case gatewayServerNoSignIn:
@@ -149,15 +145,23 @@ func (g gatewayServer) StatusLabel() string {
 // unavailableGenericLabel is the card for a cause it does not name.
 const unavailableGenericLabel = "Unavailable · try again shortly, or ask your administrator"
 
+// notSetUpCorrectly is the one clause for anything an administrator must set right, addresses included.
+const notSetUpCorrectly = "it isn't set up correctly"
+
+// adminLabel is a card an administrator acts on.
+func adminLabel(clause string) string {
+	return "Can't connect · " + clause + " · ask your administrator"
+}
+
 // unavailableCauses is the short cause a card names; who fixes it frames the card.
 var unavailableCauses = map[mcpconnectionattempts.Code]string{
 	mcpconnectionattempts.CodeProviderRateLimited:      "it's busy",
 	mcpconnectionattempts.CodeProviderServerError:      "it had an error",
 	mcpconnectionattempts.CodeProviderUnreachable:      "it didn't answer",
 	mcpconnectionattempts.CodeRemoteSessionUnavailable: "its sign-in service is down",
-	mcpconnectionattempts.CodeSharedCredentialRejected: "it isn't set up correctly",
-	mcpconnectionattempts.CodeStaticKeyRejected:        "it isn't set up correctly",
-	mcpconnectionattempts.CodeCredentialMisconfigured:  "it isn't set up correctly",
+	mcpconnectionattempts.CodeSharedCredentialRejected: notSetUpCorrectly,
+	mcpconnectionattempts.CodeStaticKeyRejected:        notSetUpCorrectly,
+	mcpconnectionattempts.CodeCredentialMisconfigured:  notSetUpCorrectly,
 	mcpconnectionattempts.CodeTunnelUnavailable:        "it can't be reached",
 }
 
@@ -170,7 +174,7 @@ func unavailableLabel(cause mcpconnectionattempts.Code) string {
 	case meaning.WhoFixes == mcpconnectionattempts.WhoProvider:
 		return "Unavailable · " + clause + " · try again in a few minutes"
 	case meaning.WhoFixes == mcpconnectionattempts.WhoAdmin:
-		return "Can't connect · " + clause + " · ask your administrator"
+		return adminLabel(clause)
 	}
 	return unavailableGenericLabel
 }
@@ -180,16 +184,12 @@ func (g gatewayServer) NeedsAttention() bool {
 	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage() || g.AddressNotice() != ""
 }
 
-// AddressNotice says an address an admin must fix stops this server, empty when none does.
+// AddressNotice says this server's setup stops it and an administrator must fix it, empty otherwise.
 func (g gatewayServer) AddressNotice() string {
-	switch {
-	case g.Status != gatewayServerUnavailable || g.address == guardian.AddressFine:
+	if g.Status != gatewayServerUnavailable || g.address == guardian.AddressFine {
 		return ""
-	case g.signInAddress:
-		return g.Name + " can't connect because its sign-in provider " + g.address.Problem() + ". Ask your administrator to check the sign-in provider's address."
-	default:
-		return g.Name + " " + g.address.Problem() + ". Ask your administrator to check the server's address."
 	}
+	return g.Name + " can't connect because of how it is set up. Waiting won't fix this. Ask your administrator to fix it."
 }
 
 // ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.

@@ -70,8 +70,9 @@ func TestExchangeToBlockedAddressIsNotProviderFailure(t *testing.T) {
 	}).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback", nil))
 	text := strings.Join(strings.Fields(page.Body.String()), " ")
 	require.Equal(t, http.StatusBadGateway, page.Code, "the status is unchanged")
-	require.Contains(t, text, "because its sign-in provider uses a private or internal address Speakeasy can't reach")
-	require.Contains(t, text, "Ask your IT administrators to check the addresses used by this server's sign-in provider")
+	require.Contains(t, text, "because of how its sign-in is set up. This isn't something you did.")
+	require.Contains(t, text, "Ask your IT administrators to fix this server's sign-in.")
+	require.Contains(t, text, "the sign-in provider uses a private or internal address", "the technical details keep the reason")
 	require.NotContains(t, text, "isn't available right now")
 	require.NotContains(t, text, "idp.example.com isn't")
 
