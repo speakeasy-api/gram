@@ -465,24 +465,20 @@ func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure 
 	return toolconfig.ClientGrantUnavailable
 }
 
-// clientGrantFailureMessage tells the caller what to check when a tool could not get its access token.
+const (
+	clientGrantRetryMessage = "This tool couldn't sign in to the service it uses. Try again in a few minutes. If it keeps happening, ask your administrator."
+	clientGrantSetupMessage = "This tool couldn't sign in to the service it uses because of how it is set up. Ask your administrator to fix it."
+)
+
+// clientGrantFailureMessage tells the caller only whether waiting can help; the connection log says why.
 func clientGrantFailureMessage(failure toolconfig.ClientGrantFailure) string {
-	const prefix = "The tool could not get its access token: "
-	const checkURL = " Check the tool's token URL. If you did not set this tool up, ask your administrator."
-	const unusableAnswer = prefix + "its token service gave an answer Speakeasy could not use." + checkURL
 	switch failure {
-	case toolconfig.ClientGrantBlocked:
-		return prefix + "its token URL " + guardian.AddressNotAllowed.Problem() + "." + checkURL
-	case toolconfig.ClientGrantAddressNotFound:
-		return prefix + "its token URL " + guardian.AddressNotFound.Problem() + "." + checkURL
-	case toolconfig.ClientGrantRejected:
-		return prefix + "its token service refused the request. Check the tool's client ID, client secret, scopes and token URL. If you did not set this tool up, ask your administrator."
 	case toolconfig.ClientGrantUnavailable:
-		return prefix + "its token service could not be reached or answered with an error. If trying again does not help, check the tool's token URL. If you did not set this tool up, ask your administrator."
-	case toolconfig.ClientGrantMisconfigured:
-		return unusableAnswer
+		return clientGrantRetryMessage
+	case toolconfig.ClientGrantBlocked, toolconfig.ClientGrantAddressNotFound, toolconfig.ClientGrantRejected, toolconfig.ClientGrantMisconfigured:
+		return clientGrantSetupMessage
 	default:
-		return unusableAnswer
+		return clientGrantSetupMessage
 	}
 }
 

@@ -45,13 +45,13 @@ var machineSecurity = &HTTPToolSecurity{
 	EnvVariables: []string{"MACHINE_CLIENT_ID", "MACHINE_CLIENT_SECRET", "MACHINE_TOKEN_URL", "MACHINE_ACCESS_TOKEN"},
 }
 
-// clientGrantMessages pins each failure's exact text.
+// clientGrantMessages pins each failure's exact text: one for a retry, one for a setup problem.
 var clientGrantMessages = map[toolconfig.ClientGrantFailure]string{
-	toolconfig.ClientGrantAddressNotFound: "The tool could not get its access token: its token URL uses an address that does not point anywhere. Check the tool's token URL. If you did not set this tool up, ask your administrator.",
-	toolconfig.ClientGrantMisconfigured:   "The tool could not get its access token: its token service gave an answer Speakeasy could not use. Check the tool's token URL. If you did not set this tool up, ask your administrator.",
-	toolconfig.ClientGrantRejected:        "The tool could not get its access token: its token service refused the request. Check the tool's client ID, client secret, scopes and token URL. If you did not set this tool up, ask your administrator.",
-	toolconfig.ClientGrantUnavailable:     "The tool could not get its access token: its token service could not be reached or answered with an error. If trying again does not help, check the tool's token URL. If you did not set this tool up, ask your administrator.",
-	toolconfig.ClientGrantBlocked:         "The tool could not get its access token: its token URL uses a private or internal address Speakeasy can't reach. Check the tool's token URL. If you did not set this tool up, ask your administrator.",
+	toolconfig.ClientGrantUnavailable:     "This tool couldn't sign in to the service it uses. Try again in a few minutes. If it keeps happening, ask your administrator.",
+	toolconfig.ClientGrantAddressNotFound: "This tool couldn't sign in to the service it uses because of how it is set up. Ask your administrator to fix it.",
+	toolconfig.ClientGrantMisconfigured:   "This tool couldn't sign in to the service it uses because of how it is set up. Ask your administrator to fix it.",
+	toolconfig.ClientGrantRejected:        "This tool couldn't sign in to the service it uses because of how it is set up. Ask your administrator to fix it.",
+	toolconfig.ClientGrantBlocked:         "This tool couldn't sign in to the service it uses because of how it is set up. Ask your administrator to fix it.",
 }
 
 // A failed token request reports why and which secret it used, and adds nothing to the response headers.

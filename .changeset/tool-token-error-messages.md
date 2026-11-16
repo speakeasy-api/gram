@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-HTTP tools that get their access token with client credentials now explain in plain language why the token request failed and what to check.
+HTTP tools that sign in with client credentials now tell the caller in plain language when the sign-in failed and who to ask.
