@@ -155,9 +155,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// Pass-Through Token Server's issuer and Linear's.
 		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 9, "demo seed postflight: expected 9 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
-		// The workforce issuer, and the Enterprise Sign-In (ID-JAG) Server's
-		// own federated sign-in.
-		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 2, "demo seed postflight: expected 2 organization user session issuers, found %d"},
+		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
 		// The workforce issuer shows a shared authorization server.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDWorkforceIssuer(ctx, repo.PostflightIDWorkforceIssuerParams{
@@ -166,7 +164,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			})
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
 		{byProj(s.q.PostflightIDUserSessionClients), 9, "demo seed postflight: expected 9 registered agents, found %d"},
-		// EMA: one ready binding, no cached credentials, and no saved
+		// EMA: two ready bindings, no cached credentials, and one saved
 		// provider order. The workforce issuer accepts ID-JAGs from the
 		// fictional provider, but interactive sign-in does not go through it.
 		{func(ctx context.Context) (int64, error) {
@@ -178,13 +176,15 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the workforce issuer to trust Acme Identity for inbound EMA only, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDReadyEMABindings(ctx, repo.PostflightIDReadyEMABindingsParams{OrgID: org, ProjectID: proj})
-		}, 1, "demo seed postflight: expected 1 ready EMA binding, found %d"},
+		}, 2, "demo seed postflight: expected 2 ready EMA bindings, found %d"},
 		{byOrg(s.q.PostflightIDEMACredentials), 0, "demo seed postflight: expected no EMA credentials, found %d"},
 		{byOrg(s.q.PostflightIDTrustedIssuerSessions), 0, "demo seed postflight: expected no trusted issuer sessions, found %d"},
-		{byOrg(s.q.PostflightIDSavedEMAProviders), 0, "demo seed postflight: expected no saved EMA provider, found %d"},
-		// The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
-		// Pro, the Enterprise Sign-In (ID-JAG) Server's authorization server, and Linear.
-		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 7, "demo seed postflight: expected 7 project remote session issuers, found %d"},
+		{byOrg(s.q.PostflightIDSavedEMAProviders), 1, "demo seed postflight: expected 1 saved EMA provider, found %d"},
+		// The Per-User OAuth Server's remote identity provider, the identity
+		// chaining example, Jamf Pro, the two EMA services' authorization
+		// servers, the fixture's DCR-only authorization server, Linear and
+		// Notion.
+		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 8, "demo seed postflight: expected 8 project remote session issuers, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 4, "demo seed postflight: expected 4 Remote MCP identity clients (the Per-User OAuth Server's, the Auto-Configured OAuth Server's, Linear's and Notion's), found %d"},
@@ -218,9 +218,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				ProjectID: proj, Resource: fixtureauth.OAuthResource(fixtureauth.BaseURL(s.serverURL)),
 			})
 		}, 1, "demo seed postflight: expected the Per-User OAuth Server's protected resource on the hosted fixture with both scopes pinned, found %d matching rows"},
-		// The Per-User OAuth Server's one OAuth client, the Enterprise
-		// Sign-In (ID-JAG) Server's own client, Linear's and Notion's.
-		{byProj(s.q.PostflightIDServerClientAssociations), 5, "demo seed postflight: expected 5 MCP server upstream client associations, found %d"},
+		// The Per-User OAuth Server's one OAuth client, each EMA service's own
+		// client, and the Auto-Configured OAuth Server's, Linear's and Notion's.
+		{byProj(s.q.PostflightIDServerClientAssociations), 6, "demo seed postflight: expected 6 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Per-User OAuth Server
 		// and Service Account Server sign-ins on their own server, the gateway
 		// sign-ins on both members.
@@ -237,7 +237,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackServerID:      s.det("mcpserver-slack"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 29, "demo seed postflight: expected exactly 29 matching upstream client choices, found %d"},
+		}, 32, "demo seed postflight: expected exactly 32 matching upstream client choices, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},

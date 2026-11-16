@@ -70,7 +70,7 @@ type LocalFixturesOptions struct {
 	// Slack connects the org to the developer's Slack test app, when set.
 	Slack LocalSlackOptions
 	// Upstreams wires the servers that need the developer's machine: the
-	// Enterprise Sign-In (ID-JAG) Server and the Linear and Notion clients.
+	// Linear and Notion clients.
 	Upstreams LocalUpstreamOptions
 }
 
@@ -90,8 +90,7 @@ type LocalFixturesOptions struct {
 //     live in the seed proper;
 //   - a global catalog logo entry and public platform asset when SiteURL is set;
 //   - the upstreams that need the developer's machine (fixture_servers.go):
-//     the Enterprise Sign-In (ID-JAG) Server through the dev-idp, and the
-//     Linear and Notion clients registered with those vendors.
+//     the Linear and Notion clients registered with those vendors.
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
 // registry entries, platform assets, and system roles are global.
@@ -170,9 +169,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}},
 		{"adopt developer", func() error {
 			return q.LocalAdoptDeveloper(ctx, repo.LocalAdoptDeveloperParams{OrganizationID: spec.OrgID, UserID: dev.ID, WorkosUserID: workosID})
-		}},
-		{"provision developer in the directory", func() error {
-			return q.LocalProvisionDeveloperDirectoryUser(ctx, repo.LocalProvisionDeveloperDirectoryUserParams{OrganizationID: spec.OrgID, UserID: dev.ID, Email: dev.Email, DisplayName: dev.Name})
 		}},
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})

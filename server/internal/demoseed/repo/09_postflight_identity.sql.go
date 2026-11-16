@@ -1435,7 +1435,7 @@ WITH live AS (
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 29
+WHERE (SELECT count(*) FROM live) = 32
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])

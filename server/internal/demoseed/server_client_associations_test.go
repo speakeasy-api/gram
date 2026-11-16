@@ -25,8 +25,8 @@ func TestLocalServerClientAssociations(t *testing.T) {
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
 // The Pass-Through Token Server has its own issuer with no bound client, so
-// it uses none. The Enterprise Sign-In (ID-JAG) Server uses its authorization
-// server's client. The Auto-Configured OAuth Server (mcpserver-notion) uses
+// it uses none. Each EMA service's server uses its authorization server's
+// client. The Auto-Configured OAuth Server (mcpserver-notion) uses
 // the client registered with the MCP fixture's DCR-only authorization server.
 // The Linear and Notion vendor servers (mcpserver-<vendor>-app;
 // mcpserver-linear is the Per-User OAuth Server) use their metadata document
@@ -41,6 +41,7 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	want := map[uuid.UUID][]uuid.UUID{
 		det("mcpserver-linear"):      {det("remote-identity-client-linear")},
 		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
+		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
 		det("mcpserver-linear-app"):  {det("remote-identity-client-linear-app")},
 		det("mcpserver-notion"):      {det("remote-identity-client-notion")},
 		det("mcpserver-notion-app"):  {det("remote-identity-client-notion-app")},

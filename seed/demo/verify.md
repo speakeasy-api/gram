@@ -602,18 +602,19 @@ open their effective assignments; the dropdown always offers compact member sear
 
 30. **Enterprise Managed Authorization**
     - Open **Team → IDP and SSO → Identity providers**. The Services table
-      lists one server, the Enterprise Sign-In (ID-JAG) Server (default
-      order, Not accepted yet in the demo org).
-    - The Enterprise Sign-In (ID-JAG) Server has its own organization
-      sign-in (`enterprise-sign-in`) that federates through Acme Identity, a
-      ready binding to its authorization server ("Enterprise Sign-In
-      Authorization Server") and that server's one client. In the demo org
-      the hosts are reserved placeholders, so a sign-in there fails by
-      design; locally the dev-idp plays Acme Identity (check 36).
+      lists Acme Tracker (default order, "Each server's own identity
+      provider", Not accepted yet) and Acme Wiki (saved order: Acme
+      Identity, Not accepted yet), one server each.
+    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
+      `https://login.acme-identity.example` to copy, and the saved order with
+      **Use default**.
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
-      it (the organization gateway) stays on the
-      organization's own login.
+      it (GitHub, the organization gateway) keeps working, and the trust
+      changes nothing outbound: **MCP → Acme Tracker → Settings** still has no
+      Enterprise Managed Authorization section, and Acme Identity is not
+      offered as a provider a service can accept on the strength of this
+      trust.
     - Call the Platform MCP `get_inbound_ema_trust` tool. It must report:
       - `acme-workforce` trusting Acme Identity: `issuer_url`
         `https://login.acme-identity.example`, and a `key_set_url` that is a
@@ -627,98 +628,16 @@ open their effective assignments; the dropdown always offers compact member sear
         step 31).
       - `directory.resolvable_directory_users` greater than zero and
         `directory.synced` true.
-    - Locally, after the check 36 sign-in, the server's binding reads as
-      accepted and `remote_session_ema_credentials` holds one row for the
-      developer.
-
-31. **Gateway discovery modes**
-    - Open a gateway with tools.
-    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
-    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
-    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
-    - Connect a client to the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
-
-32. **Gateway tool picker**
-    - Confirm All tools (live), All tools (frozen), and Specific tools are offered. The server list and picker must agree on connected, reconnect, setup, no-access, and unavailable states, including row actions. A failed discovery never enables an unrestricted fallback.
-    - Check an identity-provider-managed server: consent performs its exchange and discovers its tools before marking it connected. A failed exchange must not produce a misleading reconnect action.
-    - With a custom-domain allowlist enabled, the platform-host consent page must refuse approval, link to the custom domain, and make no upstream discovery or identity-provider exchanges. Approval from the admitted custom domain may capture tools. The page must show usable connection status before JavaScript loads.
-    - Choose All tools (frozen), approve, then reconnect the MCP client without new browser consent: listing and schema discovery must work without contacting upstream servers. Calls still reach the upstream and enforce current access.
-    - Choose All tools (live), approve, then add a new gateway member or connect one that was unavailable. Neither may appear or execute until the person consents again. New tools on an already approved member may appear in live mode.
-    - Connect an MCP client to the Multi-Server Gateway. On the consent screen, choose Specific tools: tools are grouped under each member server and show their tool names without the server prefix.
-    - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
-    - Reconnect: the consent screen opens with the previous choice selected.
-    - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
-
-33. **Python Code Gateway** (local seed with the local code runner; the shared demo org stores it as Progressive)
-    - Open Inspect: confirm exactly one execute tool, Python helper documentation,
-      and the two permitted member prefixes. Execute `await tools.search("health")`.
-    - Describe a returned path, then call a local read-only fixture tool and inspect
-      its return value and completed nested-call outcome. Print a value and confirm
-      the submitted source remains visible after editing the next snippet.
-    - Select Progressive/Direct overrides and reconnect; return to the gateway
-      default and confirm execute returns. Reconnect through the consent screen
-      with Specific tools and a Code Mode override: search and calls only reach the
-      chosen tools.
-    - In Settings select Code Mode, save, and verify a new default connection. A missing
-      runtime must prevent new Code selections with a visible error or
-      unavailable option; stored Code defaults and connections are served in
-      Progressive mode until the runtime returns.
-    - Run the seed twice and the demoseed safety test: the third gateway, its two
-      members and endpoint must survive, with no rows changed in other tenants.
-    - Connect to the organization gateway (`/mcp/gateway/acme-demo` on the demo
-      org, or `/mcp/gateway/speakeasy` after `mise run seed`), choose
-      Code Mode on the consent page ("Gateway default (Progressive)" stays the
-      default), and confirm one execute tool whose search and calls reach
-      servers from every project you can reach.
-    - Command K: search "Python Code Gateway". It is listed under Gateways and
-      opens the gateway's overview.
-
-34. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
-    organization)
-    - Open **MCP → OpenAPI Server (API Key) → Skills**. It lists Support Refunds and
-      Triage Incident, each with a Latest badge and a "Last loaded over MCP"
-      value. As a writer, **Add skill** opens a picker without those two and
-      each row has a remove button.
-    - Open **MCP → Multi-Server Gateway → Skills**. It lists Triage Incident and
-      Runbook.
-    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Multi-Server
-      Gateway (opens the gateway's Skills tab) and Organization gateway, and
-      there is no **Add to organization gateway** button. Support Refunds
-      lists only OpenAPI Server (API Key) and offers the button to project writers.
-    - In the read-only demo org no add or remove control shows. With the flag
-      off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
-      returns to the server or gateway overview, and the skill page has no
-      "Served over MCP" section.
-35. **Owner-scoped inspection (local seed only)** — the shared demo visitor
-    holds every scope, so only a session as the persona shows the owner view.
-    The persona's user row and membership exist locally (`kwame@` the local
-    seed domain), and the dev-idp can sign in as them: call `users.create`
-    with that email and `display_name: Kwame Mensah`, pass the returned
-    `user_id` and the `speakeasy` organization's UUID to `memberships.create`,
-    then pass that `user_id` to `devIdp.setCurrentUser` (mode `oauth2-1`), or
-    pick the user in the dev-idp dashboard's Local mode pane. Login resolves
-    users by email, so the session lands on the seeded row.
-    - **Team → Members** lists Kwame Mensah with the Member role only.
-    - **Agents** lists **Deploy watcher** as Active, owned by Kwame Mensah.
-    - **Agent Sessions** as the persona shows exactly five sessions: the three
-      Deploy watcher sessions (actor is the agent, no user) and the two the
-      persona ran. Opening a Deploy watcher session shows the prompt, the
-      tool calls with their JSON results, and the answer.
-    - **Tool Logs** as the persona lists only the `tools:http:acme:*` calls of
-      those five sessions: the agent's rows name Deploy watcher as actor with
-      no person, the persona's rows name them.
-    - As the local admin (who holds both scopes) the same rows appear among
-      everyone else's, and no other member's sessions appear as the persona.
-
-36. **Seeded MCP servers** (names in both orgs; live checks locally and in
-    the public demo org)
+    - Both servers are seeded disabled. Connect through the organization
+      gateway: its consent page must not list Acme Tracker or Acme Wiki.
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (API Key),
       Server-Specific Sign-In, External OAuth Server
       (each toolset's canonical wrapper), Per-User OAuth Server, Service
-      Account Server, Pass-Through Token Server, Auto-Configured OAuth Server
-      and Enterprise Sign-In (ID-JAG) Server, plus Linear and Notion: ten in
-      all. No server is named for a vendor it does not reach.
+      Account Server, Pass-Through Token Server and Auto-Configured OAuth
+      Server, plus Linear and Notion: nine in all (Acme Tracker and Acme Wiki
+      are seeded disabled). No server is named for a vendor it does not
+      reach.
     - Locally, with the stack running and after `mise run seed`, connect an MCP
       client to each `GRAM_SERVER_URL/mcp/<org>-<slug>` endpoint and call a
       tool. The fixture-backed servers reach the MCP fixture every Speakeasy
@@ -751,13 +670,6 @@ open their effective assignments; the dropdown always offers compact member sear
         authorization server refuses metadata document clients). A client's
         sign-in connects through the fixture and `whoami` returns the picked
         email.
-      - `enterprise-sign-in` (`whoami`): Speakeasy's sign-in goes to the
-        dev-idp (the company identity provider); the consent page shows the
-        service as handled by enterprise sign-in, with nothing to connect.
-        After **Give access**, `whoami` returns the developer's email with
-        `auth: ema`: Speakeasy got the upstream token through the ID-JAG
-        exchange. The fixture serves `/rpc/demoseed/mcp/ema` only when
-        `GRAM_DEVIDP_EXTERNAL_URL` is set.
       - `linear` and `notion` (each needs your own vendor account and internet
         access): the seed log says it registered the seeded server's client
         with the vendor (cached in `local/cache/demoseed-linear-client.json`
@@ -769,12 +681,9 @@ open their effective assignments; the dropdown always offers compact member sear
         tool (for example Linear's `list_teams` or Notion's `notion-search`)
         returns your workspace's data. Its server page reads **Connected**
         under **Settings → Identity**.
-    - Repeat the fixture-backed checks (every server above except
-      `enterprise-sign-in`) in the public demo org at
+    - Repeat the fixture-backed checks in the public demo org at
       https://app.getgram.ai/explore-demo: they reach the fixture hosted at
-      https://ai.speakeasy.com/rpc/demoseed. The Enterprise Sign-In (ID-JAG)
-      Server stays display-only there: its upstream is the placeholder
-      `mcp-fixture.example.com/mcp/ema`, so its sign-in fails by design.
+      https://ai.speakeasy.com/rpc/demoseed.
 
 ## On failure
 

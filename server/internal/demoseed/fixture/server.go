@@ -11,10 +11,6 @@
 //     sign-in exercises DCR where /mcp/oauth's uses a metadata document.
 //   - /mcp/shared: an MCP endpoint that accepts the checked-in shared token
 //     (fixtureauth.SharedToken), or a caller's own fixture access token.
-//   - /mcp/ema: an MCP endpoint whose protected-resource metadata names the
-//     dev-idp's resource authorization server, so Speakeasy reaches it
-//     through Enterprise Managed Authorization (an ID-JAG exchange). Served
-//     only when Config.DevIDPURL is set, which is local development only.
 //   - /acme-api: a stub of the demo seed's "Acme Internal API" OpenAPI
 //     document, so the seeded generated servers' tool calls return data.
 //
@@ -73,14 +69,10 @@ type Config struct {
 	AccessTokenTTL time.Duration
 	// SuggestedEmails are offered on the sign-in page.
 	SuggestedEmails []string
-	// HTTPClient fetches client ID metadata documents and introspects
-	// dev-idp access tokens. Without one, metadata document clients and the
-	// Enterprise Managed Authorization endpoint are refused.
+	// HTTPClient fetches client ID metadata documents. Without one, metadata
+	// document clients are refused.
 	HTTPClient *guardian.HTTPClient
 	Logger     *slog.Logger
-	// DevIDPURL is the dev-idp's external URL (GRAM_DEVIDP_EXTERNAL_URL).
-	// Empty leaves the Enterprise Managed Authorization endpoint unserved.
-	DevIDPURL string
 	// NoMetadataDocuments makes the authorization server take only
 	// dynamically registered clients, as fixtureauth.PathDCR's does.
 	NoMetadataDocuments bool
@@ -156,10 +148,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(fixtureauth.PathSharedMCP, s.mcpHandler(s.authenticateShared))
 	mux.Handle(fixtureauth.PathOwnTokenMCP, s.mcpHandler(s.authenticateOwnToken))
 	mux.Handle(fixtureauth.PathOpenMCP, s.mcpHandler(authenticateOpen))
-	if s.cfg.DevIDPURL != "" {
-		mux.HandleFunc("GET /.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP, s.emaProtectedResourceMetadata)
-		mux.Handle(fixtureauth.PathEMAMCP, s.mcpHandler(s.authenticateEMA))
-	}
 
 	// Demo API stub.
 	mux.Handle(fixtureauth.PathAPI+"/", http.StripPrefix(fixtureauth.PathAPI, apiStub()))
@@ -249,18 +237,6 @@ func (s *Server) protectedResourceMetadata(path string) http.HandlerFunc {
 			"bearer_methods_supported": []string{"header"},
 		})
 	}
-}
-
-// emaProtectedResourceMetadata names the dev-idp resource authorization
-// server, not the fixture's own, as the issuer of PathEMAMCP's tokens.
-func (s *Server) emaProtectedResourceMetadata(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"resource":                 fixtureauth.Resource(s.issuer, fixtureauth.PathEMAMCP),
-		"resource_name":            "Speakeasy MCP fixture (" + fixtureauth.PathEMAMCP + ")",
-		"authorization_servers":    []string{fixtureauth.EMAAuthorizationServer(s.cfg.DevIDPURL)},
-		"scopes_supported":         []string{fixtureauth.EMAScope},
-		"bearer_methods_supported": []string{"header"},
-	})
 }
 
 // ---------------------------------------------------------------------------
@@ -768,69 +744,6 @@ func (s *Server) authenticateOAuth(path string) authenticator {
 		}
 		return id, nil
 	}
-}
-
-// introspection is the part of an RFC 7662 response the fixture reads.
-type introspection struct {
-	Active   bool   `json:"active"`
-	Scope    string `json:"scope"`
-	Username string `json:"username"`
-	Exp      int64  `json:"exp"`
-	Aud      string `json:"aud"`
-	Iss      string `json:"iss"`
-}
-
-// authenticateEMA takes access tokens the dev-idp's resource authorization
-// server issued for PathEMAMCP. The fixture asks that server's introspection
-// endpoint, which also reports revocation and the signed-in person's email.
-func (s *Server) authenticateEMA(r *http.Request) (identity, *authFailure) {
-	resource := fixtureauth.Resource(s.issuer, fixtureauth.PathEMAMCP)
-	authServer := fixtureauth.EMAAuthorizationServer(s.cfg.DevIDPURL)
-	challenge := fmt.Sprintf(`Bearer resource_metadata=%q, scope=%q`,
-		s.issuer+"/.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP, fixtureauth.EMAScope)
-	tok := bearer(r)
-	if tok == "" {
-		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
-	}
-	got, err := s.introspect(r.Context(), authServer+"/introspect", tok)
-	if err != nil {
-		s.cfg.Logger.WarnContext(r.Context(), "introspect dev-idp token", attr.SlogError(err))
-		return noIdentity, &authFailure{status: http.StatusServiceUnavailable, challenge: challenge, message: "the dev-idp could not check the token"}
-	}
-	switch {
-	case !got.Active:
-		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token is not active"}
-	case got.Aud != resource:
-		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token audience is not this server"}
-	case got.Iss != authServer:
-		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token was issued by another authorization server"}
-	}
-	exp := time.Unix(got.Exp, 0)
-	return identity{Name: got.Username, Auth: "ema", Scopes: strings.Fields(got.Scope), ExpiresAt: &exp}, nil
-}
-
-func (s *Server) introspect(ctx context.Context, endpoint, token string) (introspection, error) {
-	if s.cfg.HTTPClient == nil {
-		return introspection{}, fmt.Errorf("call introspection endpoint: %w", errNoHTTPClient)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(url.Values{"token": {token}}.Encode()))
-	if err != nil {
-		return introspection{}, fmt.Errorf("build introspection request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := s.cfg.HTTPClient.Do(req)
-	if err != nil {
-		return introspection{}, fmt.Errorf("call introspection endpoint: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return introspection{}, fmt.Errorf("introspection endpoint returned %s", resp.Status)
-	}
-	var out introspection
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
-		return introspection{}, fmt.Errorf("decode introspection response: %w", err)
-	}
-	return out, nil
 }
 
 // authenticateShared takes the shared token, or a caller's own token: a

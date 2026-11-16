@@ -73,26 +73,8 @@ const (
 	PathOwnTokenMCP = "/mcp/own-token" //nolint:gosec // a URL path, not a credential
 	// PathOpenMCP needs no credentials at all.
 	PathOpenMCP = "/mcp/open"
-	// PathEMAMCP takes access tokens from the dev-idp's resource
-	// authorization server, which Speakeasy obtains through Enterprise
-	// Managed Authorization (an ID-JAG exchange). The fixture serves it only
-	// when it knows the dev-idp's URL.
-	PathEMAMCP = "/mcp/ema"
-	PathAPI    = "/acme-api"
+	PathAPI     = "/acme-api"
 )
-
-// EMAResourceSlug is the dev-idp resource whose authorization server issues
-// the tokens PathEMAMCP accepts. The local seed registers it at the dev-idp.
-const EMAResourceSlug = "speakeasy-mcp-fixture"
-
-// EMAScope is the one scope the dev-idp grants for PathEMAMCP.
-const EMAScope = ScopeNotesRead
-
-// EMAAuthorizationServer is the issuer of the dev-idp resource authorization
-// server for PathEMAMCP, for a dev-idp served at devIDPURL.
-func EMAAuthorizationServer(devIDPURL string) string {
-	return strings.TrimRight(devIDPURL, "/") + "/resource-as/" + EMAResourceSlug
-}
 
 // OwnTokenHeader is the request header PathOwnTokenMCP reads the caller's own
 // token from.

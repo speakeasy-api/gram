@@ -460,12 +460,6 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_DEVIDP_BACKEND"},
 			Hidden:  true,
 		},
-		&cli.StringFlag{
-			Name:    "demoseed-fixture-devidp-url",
-			Usage:   "Local dev-idp URL whose tokens the demo seed MCP fixture's Enterprise Sign-In endpoint takes (empty: not served)",
-			EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
-			Hidden:  true,
-		},
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
 			Usage:   "Enable OpenTelemetry traces",
@@ -1536,7 +1530,6 @@ func newStartCommand() *cli.Command {
 				SuggestedEmails:     []string{"alex@fixture.test", "sam@fixture.test"},
 				HTTPClient:          guardianPolicy.PooledClient(),
 				Logger:              logger.With(attr.SlogComponent("demoseed-fixture")),
-				DevIDPURL:           c.String("demoseed-fixture-devidp-url"),
 				NoMetadataDocuments: false,
 				// Sign-ins only ever go back to Speakeasy's own callbacks.
 				RedirectOrigins: fixtureRedirectOrigins(serverURL, callbackOrigins),
