@@ -20,7 +20,8 @@ vi.mock("@/hooks/useRBAC", () => ({
 
 const DENIED = /chat:read scope to view this session's transcript/;
 
-// The way into chat:read is its own component, covered in its own tests.
+// ChatReadAccess renders RequestScopeAccess, which require-scope.test.tsx and
+// temporary-access.test.tsx cover; here it only needs to be placed.
 vi.mock("../finding-drawer-parts", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   ChatReadAccess: ({ chatId }: { chatId?: string }) => (
@@ -99,13 +100,15 @@ beforeEach(() => {
 });
 
 describe("EvidenceTitle", () => {
-  it("offers no chat-backed controls without chat:read, and never loads the chat", () => {
+  it("offers only the way into chat:read without it, and never loads the chat", () => {
     hasScope.mockReturnValue(false);
     renderTitle("chat-1");
 
     expect(screen.getByText(TITLE)).toBeTruthy();
+    // No control that opens or expands the chat; the access control stands in.
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByTestId("chat-read-access").textContent).toBe("chat-1");
     expect(hasScope).toHaveBeenCalledWith("chat:read", "chat-1");
     expect(loadChat).not.toHaveBeenCalled();
     expect(listFindings).not.toHaveBeenCalled();

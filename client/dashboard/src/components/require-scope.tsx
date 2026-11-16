@@ -236,6 +236,8 @@ type RequestScopeAccessProps = {
   /** When true, every missing scope is requested, not only the first. */
   all?: boolean;
   resourceId?: string;
+  /** The project the gated resource belongs to, for project-wide grants. */
+  projectId?: string;
   /**
    * For an admin who can give themselves the access: names the resource for
    * the "covers" choice (this one, or every one of its kind).
@@ -255,11 +257,17 @@ function useSelfGrantableScope(
   scopes: Scope[],
   all: boolean,
   resourceId: string | undefined,
+  projectId: string | undefined,
 ): Scope | null {
   const { hasScope } = useRBAC();
   const { catalogue } = useScopeCatalogue();
   if (!hasScope("org:admin")) return null;
-  const missing = scopes.filter((s) => !hasScope(s, resourceId));
+  // A gate on "anything in this project" has no single resource to grant, and
+  // a grant on every resource would reach past the project. Ask instead.
+  if (projectId && (resourceId === undefined || resourceId === "*")) {
+    return null;
+  }
+  const missing = scopes.filter((s) => !hasScope(s, resourceId, projectId));
   if (all && missing.length !== 1) return null;
   return missing.find((s) => catalogue.get(s)?.temporaryGrantable) ?? null;
 }
@@ -277,6 +285,7 @@ export function RequestScopeAccess(
     props.scopes,
     props.all ?? false,
     props.resourceId,
+    props.projectId,
   );
   if (selfGrantScope) {
     return (
@@ -304,6 +313,7 @@ function RequestScopeAccessForm({
   scopes,
   all = false,
   resourceId,
+  projectId,
   className,
 }: RequestScopeAccessProps): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
@@ -314,7 +324,7 @@ function RequestScopeAccessForm({
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
   const requestableScopes = getRequestableScopes(scopes).filter(
-    (s) => !hasScope(s, resourceId),
+    (s) => !hasScope(s, resourceId, projectId),
   );
   if (requestableScopes.length === 0) return null;
 
@@ -434,7 +444,12 @@ function Unauthorized({
         <h2 className="text-lg font-medium">{title}</h2>
         <p className="text-muted-foreground text-sm">{description}</p>
 
-        <RequestScopeAccess scopes={scopes} all={all} resourceId={resourceId} />
+        <RequestScopeAccess
+          scopes={scopes}
+          all={all}
+          resourceId={resourceId}
+          projectId={projectId}
+        />
 
         {scopes.length > 0 && (
           /* The wrapper keeps the collapsed height (h-7 == trigger height) in

@@ -20,6 +20,7 @@ export function resolutionSummary(
     | "resolutionRoleSlug"
     | "resolutionTemporaryGrant"
   >,
+  now: Date,
   formatDeadline: (deadline: Date) => string,
 ): string | null {
   if (!row.resolvedAt) return null;
@@ -35,7 +36,13 @@ export function resolutionSummary(
       if (!grant || grant.status === "revoked") {
         return "Temporary access, revoked";
       }
-      if (grant.status === "expired" || !grant.expiresAt) {
+      // The fetched status goes stale while the page stays open; the
+      // deadline decides once it passes.
+      if (
+        grant.status === "expired" ||
+        !grant.expiresAt ||
+        grant.expiresAt <= now
+      ) {
         return "Temporary access, expired";
       }
       return `Temporary access · ends ${formatDeadline(grant.expiresAt)}`;
@@ -50,10 +57,14 @@ export function resolutionSummary(
 /** Whether the challenge was answered by a temporary grant that still applies. */
 export function hasActiveTemporaryGrant(
   row: Pick<ChallengeBucket, "resolutionType" | "resolutionTemporaryGrant">,
+  now: Date,
 ): boolean {
+  const grant = row.resolutionTemporaryGrant;
   return (
     row.resolutionType === "temporary_grant" &&
-    row.resolutionTemporaryGrant?.status === "active"
+    grant?.status === "active" &&
+    grant.expiresAt !== undefined &&
+    grant.expiresAt > now
   );
 }
 

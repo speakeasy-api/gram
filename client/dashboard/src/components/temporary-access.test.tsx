@@ -131,6 +131,26 @@ describe("SelfGrantAccess", () => {
   });
 
   it("covers every chat when the admin widens the grant", () => {
+    challenges.value = [
+      {
+        id: "denied-here",
+        outcome: "deny",
+        principalUrn: "user:admin-1",
+        scope: "chat:read",
+        resourceKind: "chat",
+        resourceId: "chat-1",
+        selector: { resource_kind: "chat", resource_id: "chat-1" },
+      },
+      {
+        id: "denied-elsewhere",
+        outcome: "deny",
+        principalUrn: "user:admin-1",
+        scope: "chat:read",
+        resourceKind: "chat",
+        resourceId: "chat-2",
+        selector: { resource_kind: "chat", resource_id: "chat-2" },
+      },
+    ];
     renderWithClient(
       <SelfGrantAccess
         scope="chat:read"
@@ -145,7 +165,8 @@ describe("SelfGrantAccess", () => {
     const form =
       createGrant.mutate.mock.calls[0]![0].request.createTemporaryGrantForm;
     expect(form.selector).toEqual({ resourceKind: "chat", resourceId: "*" });
-    expect(form.challengeIds).toBeUndefined();
+    // A grant on every chat answers the denial on the other chat too.
+    expect(form.challengeIds).toEqual(["denied-here", "denied-elsewhere"]);
   });
 
   it("runs onGranted once the grant is created", async () => {

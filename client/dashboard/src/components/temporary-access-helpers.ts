@@ -53,7 +53,9 @@ export function temporaryAccessDeadline(
       const endOfDay = new Date(now);
       endOfDay.setHours(23, 59, 0, 0);
       if (endOfDay.getTime() - now.getTime() < MIN_LEAD) return null;
-      return endOfDay;
+      // A 25-hour day (daylight saving ends) can put 23:59 more than 24 hours
+      // away, which the API refuses.
+      return new Date(Math.min(endOfDay.getTime(), now.getTime() + MAX_LEAD));
     }
   }
 }

@@ -78,7 +78,7 @@ describe("TemporaryAccessPanel", () => {
     renderPanel();
 
     const panel = screen.getByRole("region", { name: "Temporary access" });
-    expect(panel.textContent).toContain("2");
+    expect(panel.textContent).toMatch(/Temporary access\s*2\s*ends/);
     const rows = screen.getAllByRole("listitem");
     // Soonest deadline first.
     expect(rows[0]!.textContent).toContain("Session 0f1e2d3c");

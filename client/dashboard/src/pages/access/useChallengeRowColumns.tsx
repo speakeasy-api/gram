@@ -26,6 +26,7 @@ import {
   resolutionSummary,
 } from "./challengeHelpers";
 import { formatDeadline } from "@/components/temporary-access-helpers";
+import { useNow } from "@/hooks/useNow";
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
@@ -51,6 +52,10 @@ export function useChallengeRowColumns(
     }
     return m;
   }, [membersData]);
+
+  // A temporary grant's badge turns to Resolved at its deadline without a
+  // refetch: re-render each minute so the comparison moves with the clock.
+  const now = useNow(60_000);
 
   return useMemo(() => {
     const isChild = (row: ChallengeBucket) =>
@@ -187,12 +192,12 @@ export function useChallengeRowColumns(
               <OutcomeBadge
                 outcome={row.outcome}
                 resolved={resolved}
-                temporary={hasActiveTemporaryGrant(row)}
+                temporary={hasActiveTemporaryGrant(row, now)}
               />
             </div>
           );
-          const summary = resolutionSummary(row, (deadline) =>
-            formatDeadline(deadline, new Date()),
+          const summary = resolutionSummary(row, now, (deadline) =>
+            formatDeadline(deadline, now),
           );
           if (!summary) return badge;
           return (
@@ -325,5 +330,6 @@ export function useChallengeRowColumns(
     onToggleBucket,
     expandedChildIds,
     recentlyResolvedIds,
+    now,
   ]);
 }

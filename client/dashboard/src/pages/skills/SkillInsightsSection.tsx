@@ -310,7 +310,7 @@ export function ScoredSessions({
                 The <code className="font-mono">chat:read</code> scope is
                 required to view session rationale and links.
               </Text>
-              <ChatReadAccess />
+              {!isRBACLoading && <ChatReadAccess />}
             </div>
           )}
           {canReadChats && query.isPending && <SkeletonTable />}

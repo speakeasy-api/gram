@@ -87,8 +87,9 @@ function SelfGrantAccessForm({
     resourceId === undefined || covers === "all" ? "*" : resourceId;
 
   // Only fetched once the form opens: the admin's own recent denials of this
-  // scope, to resolve together with the grant.
-  const [lookbackFrom] = React.useState(
+  // scope, to resolve together with the grant. The window starts from when
+  // the form opens, not from when the page loaded.
+  const [lookbackFrom, setLookbackFrom] = React.useState(
     () => new Date(Date.now() - TEMPORARY_ACCESS_CHALLENGE_LOOKBACK_MS),
   );
   const challengesQuery = useChallenges(
@@ -163,7 +164,12 @@ function SelfGrantAccessForm({
         variant="secondary"
         size="sm"
         className={className}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setLookbackFrom(
+            new Date(Date.now() - TEMPORARY_ACCESS_CHALLENGE_LOOKBACK_MS),
+          );
+          setOpen(true);
+        }}
       >
         <Button.LeftIcon>
           <Clock className="size-3.5" />

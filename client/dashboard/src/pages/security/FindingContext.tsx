@@ -446,7 +446,7 @@ export function FindingContext({
         <RevealFailedNote onRetry={reveal} />
       )}
       {maskable && !canReveal && !restricted && !forbidden && (
-        <NoRevealAccessNote chatId={chatId} />
+        <NoRevealAccessNote chatId={chatId || undefined} />
       )}
       {canReveal && chatId && (
         <ActiveTemporaryAccess scope={REVEAL_SCOPE} resourceId={chatId} />

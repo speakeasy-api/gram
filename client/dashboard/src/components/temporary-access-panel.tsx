@@ -1,5 +1,6 @@
 import { useUser } from "@/contexts/Auth";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useNow } from "@/hooks/useNow";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -25,15 +26,6 @@ import {
 const TICK_MS = 15_000;
 // Grants given or revoked elsewhere (another tab, an admin) show up within this.
 const REFETCH_MS = 60_000;
-
-function useNow(intervalMs: number): Date {
-  const [now, setNow] = React.useState(() => new Date());
-  React.useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
 
 /**
  * The viewer's temporary access, floating bottom-right on every page while any
@@ -76,8 +68,9 @@ export function TemporaryAccessPanel(): React.JSX.Element | null {
     <section
       aria-label="Temporary access"
       className={cn(
-        "bg-card fixed right-6 bottom-6 z-[60] border shadow-lg",
-        collapsed ? "w-auto" : "w-[22rem] max-w-[calc(100vw-3rem)]",
+        // Below dialogs and sheets (z-50), so their footers stay reachable.
+        "bg-card fixed right-6 bottom-6 z-40 border shadow-lg",
+        collapsed ? "w-auto" : "w-80 max-w-[calc(100vw-3rem)]",
       )}
     >
       <button
