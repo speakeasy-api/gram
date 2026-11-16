@@ -11,7 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestProviderCounts_Status(t *testing.T) {
@@ -387,27 +386,33 @@ func TestProviderHealth_FewSignInAbandonsStayNormal(t *testing.T) {
 	require.Equal(t, ProviderNormal, report.Status, "one organization's closed tabs cannot trip it")
 }
 
-// A person's gateway listing and call failing on one member during one outage count once.
-func TestProviderHealth_ListingAndCallFailuresOfOneOutageCountOnce(t *testing.T) {
+// A gateway listing's failure leaves provider health as it was; the call failing in the same outage counts once.
+func TestProviderHealth_ListingFailuresAreNotCounted(t *testing.T) {
 	t.Parallel()
 
 	f := newProviderFixture(t, "mcp.cloudflare.com")
 	org, member := "org-"+uuid.NewString(), uuid.New()
-	person, other := urn.NewUserSubject("user-"+uuid.NewString()), urn.NewUserSubject("user-"+uuid.NewString())
-	failed := func(step Step, subject urn.SessionSubject) {
-		attempt := AttemptAt(uuid.New(), f.now.Add(-10*time.Minute), GatewayScope(org, uuid.New(), uuid.New(), AppDCR))
-		f.write(attempt, func(a Attempt, at time.Time) (Row, error) {
-			return RowAt(a, step, CodeProviderServerError, true, at, Provider("https://"+f.provider+"/mcp"), Member(member), Subject(&subject))
-		})
+	failed := func(step Step, final bool) func(Attempt, time.Time) (Row, error) {
+		return func(a Attempt, at time.Time) (Row, error) {
+			return RowAt(a, step, CodeProviderServerError, final, at, Provider("https://"+f.provider+"/mcp"), Member(member))
+		}
 	}
-	failed(StepDiscoveryMember, person)
-	failed(StepMCPRequest, person)
-	failed(StepMCPRequest, other)
-	failed(StepMCPRequest, other)
-	failed(StepDiscoveryMember, other)
+	gateway := func() Attempt {
+		return AttemptAt(uuid.New(), f.now.Add(-10*time.Minute), GatewayScope(org, uuid.New(), uuid.New(), AppDCR))
+	}
+	f.write(gateway(), failed(StepDiscoveryMember, true))
+	listingOnly := f.read(time.Hour, 0)
+	require.Zero(t, listingOnly.Counts.Attempts, "a listing alone names no provider")
+	require.Empty(t, listingOnly.Failures)
 
+	f.write(gateway(), failed(StepMCPRequest, true))
+	// A sign-in attempt that stopped on a failed listing is the sign-in provider's attempt, not its failure.
+	f.write(f.attempt(org, 90*time.Minute), f.step(StepProviderSignIn, ResultSignedIn, false), failed(StepDiscoveryMember, false))
 	report := f.read(time.Hour, 0)
-	require.Equal(t, uint64(3), report.Counts.Failures, "one for the first person, two calls for the other")
-	require.Equal(t, uint64(3), report.Counts.Attempts)
-	require.Equal(t, 1, report.Counts.Organizations)
+	require.Equal(t, uint64(2), report.Counts.Attempts, "the call and the sign-in, not the listing")
+	require.Equal(t, uint64(1), report.Counts.Failures, "the call alone")
+	require.ElementsMatch(t, []ProviderFailure{
+		{Step: StepMCPRequest.String(), Reason: CodeProviderServerError.String(), Attempts: 1},
+		{Step: StepDiscoveryMember.String(), Reason: CodeProviderServerError.String(), Attempts: 1},
+	}, report.Failures, "how attempts ended, which the sign-in's listing did as before")
 }

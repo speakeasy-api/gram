@@ -187,6 +187,12 @@ func isProviderSignInStep(step string) bool {
 	return step == StepProviderSignIn.String() || step == StepProviderToken.String()
 }
 
+// providerFailure is an ending the provider owns; a gateway listing's never is.
+func providerFailure(step, reason string) bool {
+	meaning, ok := MeaningOf(reason)
+	return ok && meaning.WhoFixes == WhoProvider && step != StepDiscoveryMember.String()
+}
+
 func ratio(part, whole uint64) float64 {
 	if whole == 0 {
 		return 0
@@ -315,26 +321,6 @@ type providerAttempt struct {
 
 	// ReconnectLoop says a needs-sign-in or rejected row came after a provider sign-in.
 	ReconnectLoop bool `ch:"reconnect_loop"`
-
-	// Member is the earliest gateway member named, empty when none.
-	Member string `ch:"member"`
-}
-
-// memberOutage is one person's gateway member failing at one provider.
-type memberOutage struct {
-	organization, subject, member, provider string
-}
-
-// memberOutage keys a provider-side failure of a gateway listing or call; others are counted alone.
-func (a providerAttempt) memberOutage(ending Ending) (memberOutage, bool) {
-	none := memberOutage{organization: "", subject: "", member: "", provider: ""}
-	if a.SubjectURN == "" || a.Member == "" || (ending.Step != StepDiscoveryMember.String() && ending.Step != StepMCPRequest.String()) {
-		return none, false
-	}
-	if meaning, ok := MeaningOf(ending.Reason); !ok || meaning.WhoFixes != WhoProvider {
-		return none, false
-	}
-	return memberOutage{organization: a.OrganizationID, subject: a.SubjectURN, member: a.Member, provider: a.ProviderHost}, true
 }
 
 // providerAttemptsQuery reduces each attempt that started in a range and reached a
@@ -344,9 +330,7 @@ func providerAttemptsQuery(filter string) string {
 	return `
 	SELECT` + attemptEndingColumns + `,
 		toBool(countIf(step = 'provider_sign_in' AND step_result = 'signed_in') > 0
-			AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop,
-		argMinIf(subject_urn, (event_time, subject_urn), subject_urn != '') AS subject,
-		argMinIf(member_id, (event_time, member_id), member_id != '') AS member
+			AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop
 	FROM ` + eventsTable + `
 	WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND NOT has(?, organization_id)
@@ -491,8 +475,7 @@ func providerFilter(provider string, args []any) (string, []any) {
 
 // readStatus counts the attempts that ended in the last OutageWindow, per attempt so
 // organizations can be counted. It scans one live window further back, for attempts
-// that started earlier and ended inside it. A person's listing and call failures on one
-// gateway member at one provider are one outage, counted as whichever step saw more.
+// that started earlier and ended inside it.
 func (h *ProviderHealth) readStatus(ctx context.Context, now time.Time, provider string, keep func(string) (string, bool), tally func(string) *providerTally) error {
 	statusFrom := now.Add(-OutageWindow)
 	filter, args := providerFilter(provider, []any{statusFrom.Add(-AttemptLiveWindow).UnixNano(), now.UnixNano(), ExcludedOrganizations()})
@@ -501,52 +484,19 @@ func (h *ProviderHealth) readStatus(ctx context.Context, now time.Time, provider
 		return fmt.Errorf("query provider status: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return rows.Close() })
-	outages := map[memberOutage]map[string][]providerAttempt{}
 	for rows.Next() {
 		var a providerAttempt
 		if err := rows.ScanStruct(&a); err != nil {
 			return fmt.Errorf("scan provider attempt: %w", err)
 		}
-		label, ok := keep(a.ProviderHost)
-		if !ok {
-			continue
+		if label, ok := keep(a.ProviderHost); ok {
+			tally(label).add(a, now, statusFrom)
 		}
-		ending := a.End(now)
-		if outage, ok := a.memberOutage(ending); ok && a.endedIn(now, statusFrom) {
-			if outages[outage] == nil {
-				outages[outage] = map[string][]providerAttempt{}
-			}
-			outages[outage][ending.Step] = append(outages[outage][ending.Step], a)
-			continue
-		}
-		tally(label).add(a, now, statusFrom)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read provider status: %w", err)
 	}
-	for outage, steps := range outages {
-		label, _ := keep(outage.provider)
-		for _, a := range heaviestStep(steps) {
-			tally(label).add(a, now, statusFrom)
-		}
-	}
 	return nil
-}
-
-// heaviestStep is the attempts of the step that counts the most, the call on a tie.
-func heaviestStep(steps map[string][]providerAttempt) []providerAttempt {
-	var heaviest []providerAttempt
-	most := uint64(0)
-	for _, step := range []string{StepMCPRequest.String(), StepDiscoveryMember.String()} {
-		weight := uint64(0)
-		for _, a := range steps[step] {
-			weight += max(a.Weight, 1)
-		}
-		if weight > most {
-			heaviest, most = steps[step], weight
-		}
-	}
-	return heaviest
 }
 
 // readDetails adds failures, abandons and reconnect loops for attempts that ended
@@ -594,21 +544,17 @@ func (a providerAttempt) endedAt() time.Time {
 	return a.StartedAt.Add(AttemptLiveWindow)
 }
 
-func (a providerAttempt) endedIn(now, from time.Time) bool {
-	ended := a.endedAt()
-	return !ended.After(now) && !ended.Before(from)
-}
-
 // add counts one attempt that ended in the status window. A live attempt can still
 // recover, so it is left out until it ends.
 func (t *providerTally) add(a providerAttempt, now, statusFrom time.Time) {
-	if !a.endedIn(now, statusFrom) {
+	ended := a.endedAt()
+	if ended.After(now) || ended.Before(statusFrom) {
 		return
 	}
 	weight := max(a.Weight, 1)
 	ending := a.End(now)
 	t.counts.Attempts += weight
-	if meaning, ok := MeaningOf(ending.Reason); ok && meaning.WhoFixes == WhoProvider {
+	if providerFailure(ending.Step, ending.Reason) {
 		t.counts.Failures += weight
 		t.organizations[a.OrganizationID] = struct{}{}
 	}
@@ -675,7 +621,7 @@ func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provid
 		}
 		t := tally(label)
 		t.counts.BaselineAttempts += attempts
-		if meaning, ok := MeaningOf(reason); ok && meaning.WhoFixes == WhoProvider {
+		if providerFailure(step, reason) {
 			t.counts.BaselineFailures += attempts
 		}
 		if Outcome(outcome) == OutcomeAbandoned && isProviderSignInStep(step) {
