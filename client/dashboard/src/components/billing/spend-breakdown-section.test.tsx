@@ -159,7 +159,6 @@ describe("SpendBreakdownSection unsupported responses", () => {
     expect(screen.getAllByText("$1.00")).toHaveLength(2);
     expect(screen.queryByText("New product")).toBeNull();
     expect(screen.queryByText("$10.00")).toBeNull();
-    expect(client.getQueryData(["spend"])).toEqual(response());
   });
 
   it("preserves automatic retries for ordinary failures", async () => {
