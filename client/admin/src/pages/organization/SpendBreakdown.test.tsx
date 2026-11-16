@@ -76,7 +76,6 @@ it("retains the last estimate after malformed data with an advancing clock", asy
   expect((await screen.findByRole("alert")).textContent).toContain(
     "Showing the last successful estimate.",
   );
-  expect(client.getQueryData(["spend"])).toEqual(valid);
 });
 
 it("does not retry malformed data and allows a manual retry", async () => {

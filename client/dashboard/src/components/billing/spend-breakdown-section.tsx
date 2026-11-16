@@ -9,11 +9,7 @@ import { type Column, Table } from "@/components/ui/Table";
 import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildGetSpendBreakdownQuery } from "@gram/client/react-query/getSpendBreakdown.js";
-import {
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BillingCyclePicker } from "./billing-cycle-picker";
@@ -103,7 +99,6 @@ const getSpendColumns = (showRaw: boolean): Column<SpendProduct>[] => [
 
 export function SpendBreakdownSection(): JSX.Element | null {
   const client = useGramContext();
-  const queryClient = useQueryClient();
   const [showRaw, setShowRaw] = useState(false);
   const spendColumns = useMemo(() => getSpendColumns(showRaw), [showRaw]);
   const [selectedProductIds, setSelectedProductIds] =
@@ -113,28 +108,14 @@ export function SpendBreakdownSection(): JSX.Element | null {
   );
   const periodState = useMeterPeriod(knownCycles);
   const period = periodState.period;
-  const spendQuery = buildGetSpendBreakdownQuery(
-    client,
-    periodState.requestPeriod ?? undefined,
-  );
-  const defaultRetry = queryClient.defaultQueryOptions(spendQuery).retry ?? 3;
   const query = useQuery({
-    ...spendQuery,
-    // Reject invalid responses before caching, retaining the last valid estimates.
-    queryFn: async (context) =>
-      validateSpendBreakdown(await spendQuery.queryFn(context)),
-    retry: (failureCount, error) => {
-      if (error instanceof UnsupportedSpendBreakdownError) return false;
-      if (typeof defaultRetry === "function") {
-        return defaultRetry(failureCount, error);
-      }
-      return (
-        defaultRetry === true ||
-        (typeof defaultRetry === "number" && failureCount < defaultRetry)
-      );
-    },
+    ...buildGetSpendBreakdownQuery(
+      client,
+      periodState.requestPeriod ?? undefined,
+    ),
     throwOnError: false,
     placeholderData: keepPreviousData,
+    select: validateSpendBreakdown,
   });
   const data: SpendBreakdownData | undefined = query.data;
 
