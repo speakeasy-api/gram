@@ -193,7 +193,7 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 	// revoke into a failed request. See upstreamrevoke.go.
 	s.revoker.RevokeDetached(ctx, RevokedCredentials{
 		RemoteSessionClientID: revoked.RemoteSessionClientID,
-		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
+		AccessTokenEncrypted:  revoked.AccessTokenEncrypted.String,
 		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
 	})
 

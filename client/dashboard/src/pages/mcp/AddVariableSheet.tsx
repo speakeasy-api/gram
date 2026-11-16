@@ -316,7 +316,7 @@ export function AddVariableSheet({
                   <SimpleTooltip
                     tooltip={
                       entry.isSecret
-                        ? "Encrypted, and only ever shown as a redacted preview"
+                        ? "Encrypted, and only ever shown masked"
                         : "Stored in the clear, and readable after saving"
                     }
                   >

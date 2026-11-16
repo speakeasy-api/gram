@@ -1,7 +1,10 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { DiscoveredEndpoints } from "./issuerFormUtils";
+import {
+  discoveredFromDraft,
+  type DiscoveredEndpoints,
+} from "./issuerFormUtils";
 
 // Initial form values for the Issuer URL + endpoint fields. Pass `null` for
 // the Attach sheet (everything starts blank); pass the loaded record's values
@@ -152,41 +155,7 @@ function useIssuerDiscoveryImpl(
             });
         }
       };
-      const draft = await fetchDraft();
-      return {
-        url,
-        authorizationEndpoint: draft.authorizationEndpoint ?? "",
-        tokenEndpoint: draft.tokenEndpoint ?? "",
-        registrationEndpoint: draft.registrationEndpoint ?? "",
-        jwksUri: draft.jwksUri ?? "",
-        scopesSupported: draft.scopesSupported ?? [],
-        grantTypesSupported: draft.grantTypesSupported ?? [],
-        authorizationGrantProfilesSupported:
-          draft.authorizationGrantProfilesSupported ?? [],
-        responseTypesSupported: draft.responseTypesSupported ?? [],
-        tokenEndpointAuthMethodsSupported:
-          draft.tokenEndpointAuthMethodsSupported ?? [],
-        // Discovery ran, so a document that omits the field captures as [] —
-        // never null, which is reserved for "never captured" seeded records.
-        codeChallengeMethodsSupported:
-          draft.codeChallengeMethodsSupported ?? [],
-        clientIdMetadataDocumentSupported:
-          draft.clientIdMetadataDocumentSupported,
-        revocationEndpoint: draft.revocationEndpoint ?? "",
-        serviceDocumentation: draft.serviceDocumentation ?? "",
-        opPolicyUri: draft.opPolicyUri ?? "",
-        opTosUri: draft.opTosUri ?? "",
-        userinfoEndpoint: draft.userinfoEndpoint ?? "",
-        introspectionEndpoint: draft.introspectionEndpoint ?? "",
-        introspectionEndpointAuthMethodsSupported:
-          draft.introspectionEndpointAuthMethodsSupported ?? [],
-        idTokenSigningAlgValuesSupported:
-          draft.idTokenSigningAlgValuesSupported ?? [],
-        claimsSupported: draft.claimsSupported ?? [],
-        backchannelLogoutSupported: draft.backchannelLogoutSupported,
-        authorizationResponseIssParameterSupported:
-          draft.authorizationResponseIssParameterSupported,
-      };
+      return discoveredFromDraft(url, await fetchDraft());
     },
     onSuccess: (snapshot) => {
       // Discard a stale discovery whose URL no longer matches the field so we

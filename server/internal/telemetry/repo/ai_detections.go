@@ -417,8 +417,7 @@ type ListAIDetectionSummariesParams struct {
 	// ExactUserEmail restricts to one canonical enrolled-user identity.
 	ExactUserEmail string
 	// CanonicalIdentityOrg enables the identity fold for the UserEmails
-	// and ExactUserEmail filters: set it to the org id when the canonical
-	// identity fold is rolled out to the org, "" otherwise.
+	// and ExactUserEmail filters: the org id folds, "" does not.
 	CanonicalIdentityOrg string
 }
 
@@ -509,7 +508,7 @@ var aiDetectionEvidenceAggregates = []string{
 }
 
 // foldedUserEmailExpr is the user_email column folded through the identity
-// map where the fold is rolled out to the org, and the bare column otherwise.
+// map when a canonical org is set, and the bare column otherwise.
 func foldedUserEmailExpr(canonicalOrgLit string) string {
 	if canonicalOrgLit == "" {
 		return "user_email"
@@ -533,20 +532,20 @@ func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (str
 		sb = sb.Where(squirrel.Eq{"resolved_category": arg.Categories})
 	}
 	if len(arg.UserEmails) > 0 {
-		// Fold the team filter through the identity map where rolled out, so
+		// Fold the team filter through the identity map when set, so
 		// detections stored under an employee's linked alias emails still
 		// match their directory email.
 		if canonicalOrgLit != "" {
 			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "user_email", arg.UserEmails))
 		} else {
-			sb = sb.Where(squirrel.Eq{"user_email": arg.UserEmails}) //nolint:glint // norawuseremailfilter: fold not rolled out to this org; both sides are lowercase-normalized
+			sb = sb.Where(squirrel.Eq{"user_email": arg.UserEmails}) //nolint:glint // norawuseremailfilter: no canonical org to fold under; both sides are lowercase-normalized
 		}
 	}
 	if arg.ExactUserEmail != "" {
 		if canonicalOrgLit != "" {
 			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "user_email", []string{arg.ExactUserEmail}))
 		} else {
-			sb = sb.Where("lowerUTF8(user_email) = ?", arg.ExactUserEmail) //nolint:glint // norawuseremailfilter: fold not rolled out to this org; both sides are lowercase-normalized
+			sb = sb.Where("lowerUTF8(user_email) = ?", arg.ExactUserEmail) //nolint:glint // norawuseremailfilter: no canonical org to fold under; both sides are lowercase-normalized
 		}
 	}
 
@@ -566,9 +565,8 @@ func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (str
 type ListAIDetectionUsersParams struct {
 	OrganizationID string
 	TargetID       string
-	// CanonicalIdentityOrg enables the identity fold on user_email: set it to
-	// the org id when the canonical identity fold is rolled out to the org,
-	// "" otherwise. Folded, a person's alias emails collapse into one row.
+	// CanonicalIdentityOrg enables the identity fold on user_email: the org
+	// id folds, "" does not. Folded, a person's alias emails collapse into one row.
 	CanonicalIdentityOrg string
 }
 

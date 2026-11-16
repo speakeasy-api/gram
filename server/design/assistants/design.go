@@ -324,6 +324,7 @@ var CreateAssistantForm = Type("CreateAssistantForm", func() {
 
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
+	Attribute("reasoning_effort", String, "The reasoning effort used by the assistant.", func() { Enum("none", "low", "medium", "high"); Default("medium") })
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.")
 	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.")
@@ -342,6 +343,7 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 	})
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
+	Attribute("reasoning_effort", String, "The reasoning effort used by the assistant.", func() { Enum("none", "low", "medium", "high") })
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.")
 	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.")
