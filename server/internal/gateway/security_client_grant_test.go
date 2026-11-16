@@ -45,6 +45,15 @@ var machineSecurity = &HTTPToolSecurity{
 	EnvVariables: []string{"MACHINE_CLIENT_ID", "MACHINE_CLIENT_SECRET", "MACHINE_TOKEN_URL", "MACHINE_ACCESS_TOKEN"},
 }
 
+// clientGrantMessages pins each failure's exact text.
+var clientGrantMessages = map[toolconfig.ClientGrantFailure]string{
+	toolconfig.ClientGrantAddressNotFound: "The tool could not get its access token: its token URL uses an address that does not point anywhere. Check the tool's token URL. If you did not set this tool up, ask your administrator.",
+	toolconfig.ClientGrantMisconfigured:   "The tool could not get its access token: its token service gave an answer Speakeasy could not use. Check the tool's token URL. If you did not set this tool up, ask your administrator.",
+	toolconfig.ClientGrantRejected:        "The tool could not get its access token: its token service refused the request. Check the tool's client ID, client secret, scopes and token URL. If you did not set this tool up, ask your administrator.",
+	toolconfig.ClientGrantUnavailable:     "The tool could not get its access token: its token service could not be reached or answered with an error. If trying again does not help, check the tool's token URL. If you did not set this tool up, ask your administrator.",
+	toolconfig.ClientGrantBlocked:         "The tool could not get its access token: its token URL uses a private or internal address Speakeasy can't reach. Check the tool's token URL. If you did not set this tool up, ask your administrator.",
+}
+
 // A failed token request reports why and which secret it used, and adds nothing to the response headers.
 func TestClientGrantFailureIsReported(t *testing.T) {
 	t.Parallel()
@@ -98,14 +107,7 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 			require.Equal(t, tc.want, report.GrantFailure)
 			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true, Carrier: "Authorization"}}, report.Sent)
 			require.Equal(t, []string{"Content-Type"}, keys(w.Header()))
-			require.JSONEq(t, `{"error":`+strconv.Quote(clientGrantFailureMessage(tc.want))+`}`, w.Body.String())
-			switch tc.want {
-			case toolconfig.ClientGrantRejected:
-				require.Contains(t, w.Body.String(), "its token service refused the request. Check the tool's client ID, client secret, scopes and token URL. If you did not set this tool up, ask your administrator.")
-			case toolconfig.ClientGrantMisconfigured:
-				require.Contains(t, w.Body.String(), "its token service gave an answer Speakeasy could not use. Check the tool's token URL. If you did not set this tool up, ask your administrator.")
-			case toolconfig.ClientGrantUnavailable, toolconfig.ClientGrantBlocked, toolconfig.ClientGrantAddressNotFound:
-			}
+			require.JSONEq(t, `{"error":`+strconv.Quote(clientGrantMessages[tc.want])+`}`, w.Body.String())
 			parsed, err := url.Parse(tc.tokenURL)
 			require.NoError(t, err)
 			require.NotContains(t, w.Body.String(), parsed.Hostname())

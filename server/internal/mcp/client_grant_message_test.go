@@ -235,6 +235,14 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
 		{
+			name:     "lookup timeout",
+			tokenURL: func(*testing.T) string { return "https://" + tokenHost + ":8443/oauth/token" },
+			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "i/o timeout", Name: tokenHost, Server: "198.51.100.53:53", IsTimeout: true})},
+			secret:   []string{tokenHost, "198.51.100.53", "8443"},
+			want:     unreached,
+			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
+		},
+		{
 			name: "connection refused",
 			tokenURL: func(t *testing.T) string {
 				t.Helper()
