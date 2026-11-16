@@ -292,7 +292,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 		state.Authentication, state.Instructions = connectionRouteFailure(err, codeConnectAvailable(gate))
 		return state
 	}
-	verdict, _, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
+	verdict, _, failure := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
 	now = time.Now().UTC()
 	state.CheckedAt = &now
 	switch verdict {
@@ -304,6 +304,9 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	default:
 		state.Authentication = "unreachable"
 		state.Instructions = "The upstream could not be verified; try again later."
+		if address := guardian.AddressFailureOf(failure.err, dial.tunneled); address != guardian.AddressFine {
+			state.Instructions = "This server " + address.Problem() + ". Ask your administrator to check the server's address."
+		}
 	}
 	return state
 }

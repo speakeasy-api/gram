@@ -107,7 +107,7 @@ func (c *requestConnections) Name() string {
 
 // InterceptToolsCallRefusal implements [proxy.ToolsCallRefusalInterceptor].
 func (c *requestConnections) InterceptToolsCallRefusal(ctx context.Context, err error) {
-	if code, ok := refusalHappened(err); ok {
+	if code, ok := refusalHappened(err, c.tunneled); ok {
 		c.record(ctx, code)
 	}
 }
@@ -296,7 +296,8 @@ func UpstreamFailureHappened(status int, credentialRejected bool, credential Ups
 }
 
 // refusalHappened classifies a refusal; an unknown error is ours and a held call is not an end state.
-func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
+// tunneled says the server is reached through a tunnel, whose dials are never an address problem.
+func refusalHappened(err error, tunneled bool) (mcpconnectionattempts.Code, bool) {
 	// A tool the catalog doesn't have is not a connection outcome.
 	if _, held := errors.AsType[*proxy.ToolResultError](err); held || errors.Is(err, errToolNotOnUpstream) {
 		var none mcpconnectionattempts.Code
@@ -321,6 +322,10 @@ func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
 		if reject.Code == proxy.RejectCodeForbidden {
 			return mcpconnectionattempts.CodePolicyBlocked, true
 		}
+	}
+	// A cold tool catalog lists the server first, so its address can stop the call here.
+	if code, ok := mcpconnectionattempts.AddressHappened(err, tunneled); ok {
+		return code, true
 	}
 	return mcpconnectionattempts.CodeInternalError, true
 }

@@ -88,11 +88,11 @@
         state.textContent = s.status === "connected" ? "Signed in" : "No sign-in needed";
         li.append(state);
       } else if (s.status === "unavailable") {
-        unavailable++;
-        state.className = "warn";
-        state.textContent = "Temporarily unavailable";
-        li.append(state);
         const outage = s.outage || {};
+        if (!outage.needsAdmin) unavailable++;
+        state.className = "warn";
+        state.textContent = outage.needsAdmin ? "Can't connect" : "Temporarily unavailable";
+        li.append(state);
         const note = document.createElement("div");
         note.className = "detail note";
         note.textContent = outage.message || "Try again shortly.";

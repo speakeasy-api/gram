@@ -140,3 +140,58 @@ func TestUpstreamFailureHappened_TimeoutWinsOverAddress(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
 }
+
+// coldCatalogRefusal sends a tools/call whose tool the catalog has not seen, so the server is listed first through policy.
+func coldCatalogRefusal(t *testing.T, policy *guardian.Policy, upstreamURL string) (mcpconnectionattempts.Code, error) {
+	t.Helper()
+
+	p := newKillswitchTestProxy(t, upstreamURL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
+	p.GuardianPolicy = policy
+	store := &fakeToolCatalogStore{catalog: map[string]string{}}
+	err := newAuthzInterceptor(t, store, newCatalogSync(store, p.ListUpstreamTools)).InterceptToolsCallRequest(blockDestructiveContext(t), newCatalogCall(t, "delete_repository"))
+	require.Error(t, err)
+	code, ok := refusalHappened(err, false)
+	require.True(t, ok)
+	return code, err
+}
+
+func TestToolsCallConnections_ColdCatalogAtBlockedAddress(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("a blocked address must not be dialed")
+	}))
+	t.Cleanup(upstream.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+
+	code, _ := coldCatalogRefusal(t, policy, upstream.URL)
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, code)
+
+	tunneledCode, _ := refusalHappened(fmt.Errorf("list: %w", guardian.ErrBlockedIP), true)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, tunneledCode, "a tunnel dial is ours")
+}
+
+func TestToolsCallConnections_ColdCatalogAtMissingHost(t *testing.T) {
+	t.Parallel()
+
+	code, _ := coldCatalogRefusal(t, resolvingPolicy(t, &net.DNSError{Err: "no such host", Name: "mcp.example.invalid", IsNotFound: true}), "http://mcp.example.invalid/mcp")
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotFound, code)
+}
+
+// A failure that is not an address keeps the row it had.
+func TestToolsCallConnections_ColdCatalogOtherFailuresKeepTheirRow(t *testing.T) {
+	t.Parallel()
+
+	code, _ := coldCatalogRefusal(t, resolvingPolicy(t, errors.New("resolver down")), "http://mcp.example.invalid/mcp")
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code, "a lookup that fails for now")
+
+	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(refused.Close)
+	open, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	code, _ = coldCatalogRefusal(t, open, refused.URL)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code, "a server that answered")
+}

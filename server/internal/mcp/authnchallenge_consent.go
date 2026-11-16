@@ -415,6 +415,9 @@ type remoteSessionCard struct {
 	// SignInAddress: the sign-in provider's address can't be used, so an administrator must fix it.
 	SignInAddress bool
 
+	// signInAddressFailure is which address problem SignInAddress is.
+	signInAddressFailure guardian.AddressFailure
+
 	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
 	Verified   bool
 	Rejected   bool
@@ -2310,10 +2313,10 @@ func (s *Service) buildRemoteSessionCards(
 		if chained {
 			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
 		}
-		unavailable, unavailableTunnel, signInAddress := false, false, false
+		unavailable, unavailableTunnel, signInAddressFailure := false, false, guardian.AddressFine
 		if connected && state.AccessExpiresAt != nil && !state.AccessExpiresAt.After(renderedAt) {
-			signInAddress = s.remoteChallengeMgr.RecordedAddress(ctx, *challengeState.Subject, c.ID) != guardian.AddressFine
-			if !signInAddress {
+			signInAddressFailure = s.remoteChallengeMgr.RecordedAddress(ctx, *challengeState.Subject, c.ID)
+			if signInAddressFailure == guardian.AddressFine {
 				unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
 			}
 		}
@@ -2365,7 +2368,8 @@ func (s *Service) buildRemoteSessionCards(
 			TokenExpiresIn:         tokenExpiresIn,
 			Unavailable:            unavailable,
 			UnavailableTunnel:      unavailableTunnel,
-			SignInAddress:          signInAddress,
+			SignInAddress:          signInAddressFailure != guardian.AddressFine,
+			signInAddressFailure:   signInAddressFailure,
 			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
 			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
 			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,

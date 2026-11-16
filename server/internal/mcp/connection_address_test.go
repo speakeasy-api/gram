@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dns"
@@ -136,6 +137,9 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 		require.NotNil(t, status.Servers[0].Outage, call)
 		require.Equal(t, "member can't connect because its sign-in provider "+want+".", status.Servers[0].Outage.Message, call)
 		require.Empty(t, status.Servers[0].Outage.ReconnectURL, call)
+		require.True(t, status.Servers[0].Outage.NeedsAdmin, call)
+		require.Contains(t, status.Text(), "- member: can't connect (", call)
+		require.NotContains(t, status.Text(), "temporarily unavailable", call)
 		require.NotContains(t, status.Servers[0].Detail, "reconnect at", call)
 	}
 	require.Zero(t, f.refreshes.Load(), "nothing reached the provider")
@@ -174,4 +178,65 @@ func TestServeConsent_SignInProviderAddressCard(t *testing.T) {
 	require.NotContains(t, page, "> Reconnect </button>")
 	require.NotContains(t, page, "Service connected")
 	require.NotContains(t, page, "data-auto-close")
+}
+
+// Code Mode's verify names a member's own refused address instead of asking to try later.
+func TestCodeServersVerifyMemberAtBlockedAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, testenv.NewMeterProvider(t), guardian.WithBlockedCIDRBlocks("192.0.2.0/24"))
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "verify-address-"+uuid.NewString()[:8], issuer)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, "https://192.0.2.10/mcp")
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
+
+	page, err := host.Servers(ctx, codemode.PageArgs{Server: "remote", Verify: true})
+	require.NoError(t, err)
+	require.Equal(t, "unreachable", page.Items[0].Connection.Authentication)
+	require.Equal(t, "This server uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address.", page.Items[0].Connection.Instructions)
+}
+
+// The gateway list says a member's sign-in provider address is the problem, inside the cooldown that follows it.
+func TestServeConsent_GatewayListSaysTheSignInProviderAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, clientID := outageConsentFixture(t, "address-gateway")
+	refreshableConnection(t, ctx, fx, clientID, time.Now().Add(-time.Minute), serviceUnavailable)
+	session, err := remotesessions_repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: clientID})
+	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	locks := cache.NewRedisCacheAdapter(redisClient)
+	require.NoError(t, locks.Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotFound, time.Minute))
+	require.NoError(t, locks.Set(ctx, remotesessions.RefreshCooldownKey(session), time.Now().Add(time.Minute), time.Minute))
+
+	list := fx
+	list.server = ""
+	_, page, _ := render(t, list)
+	outcomes := gatewayOutcomesFromPage(page)
+	require.Len(t, outcomes, 1)
+	require.Equal(t, "unavailable", outcomes[0].Status)
+	require.Equal(t, "Can't connect · its sign-in provider uses an address that does not point anywhere · ask your administrator", outcomes[0].Label)
+	require.NotContains(t, page, "try again shortly")
+}
+
+// A gateway member whose own address is refused says so on the gateway list.
+func TestGatewayConsentMemberAtBlockedAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{}, mcp.TunnelPublicConfig{}, guardian.WithBlockedCIDRBlocks("192.0.2.0/24"))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "gateway-address-" + uuid.NewString()[:8]
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
+	blockedSlug := "blocked-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Blocked", blockedSlug, 1, "https://192.0.2.10/mcp")
+
+	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	outcomes := gatewayOutcomesFromPage(consentGetPageWithContext(t, ctx, ti, slug, stateID))
+	require.Len(t, outcomes, 1)
+	require.Equal(t, "unavailable", outcomes[0].Status)
+	require.Equal(t, "Can't connect · it uses an address Speakeasy does not connect to directly · ask your administrator", outcomes[0].Label)
 }

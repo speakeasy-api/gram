@@ -312,17 +312,17 @@ func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaM
 	}
 	name := cmp.Or(member.name, member.slug)
 	if unavailable.address != guardian.AddressFine {
-		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: signInAddressText(name+" can't connect", unavailable.address) + ".", ReconnectURL: ""})
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: signInAddressText(name+" can't connect", unavailable.address) + ".", ReconnectURL: "", NeedsAdmin: true})
 	}
 	if unavailable.session == nil {
-		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: ""})
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: "", NeedsAdmin: false})
 	}
 	kind := remotesessions.OutageKindOf(unavailable.session)
 	reconnectURL := ""
 	if kind == remotesessions.RefreshOutageProvider {
 		reconnectURL = gate.memberCallerURL(member)
 	}
-	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL})
+	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL, NeedsAdmin: false})
 }
 
 // refreshProvenance reports an error known to come from a refresh that wrote its own failed row.

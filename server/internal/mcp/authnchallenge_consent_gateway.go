@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -86,6 +87,12 @@ type gatewayServer struct {
 	// connectionDown marks a service of this server any recorded outage stopped.
 	connectionDown bool
 
+	// address is an address Speakeasy did not dial that stopped this server.
+	address guardian.AddressFailure
+
+	// signInAddress says that address is its sign-in provider's, not the server's own.
+	signInAddress bool
+
 	// Auth is the server's upstream credential choice, where typed auth
 	// client resolution is enforced.
 	Auth *consentServerAuth
@@ -106,7 +113,14 @@ func (g gatewayServer) Ready() bool {
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
 	case gatewayServerUnavailable:
-		return "Unavailable · try again shortly, or ask your administrator"
+		switch {
+		case g.address == guardian.AddressFine:
+			return "Unavailable · try again shortly, or ask your administrator"
+		case g.signInAddress:
+			return "Can't connect · its sign-in provider " + g.address.Problem() + " · ask your administrator"
+		default:
+			return "Can't connect · it " + g.address.Problem() + " · ask your administrator"
+		}
 	case gatewayServerNoAccess:
 		return "No access"
 	case gatewayServerNoSignIn:
@@ -313,13 +327,16 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: guardian.AddressFine, signInAddress: false, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
 				server.providerOutage = server.providerOutage || (card.Unavailable && !card.UnavailableTunnel)
 				server.connectionDown = server.connectionDown || card.Unavailable
+				if card.SignInAddress {
+					server.address, server.signInAddress = card.signInAddressFailure, true
+				}
 			}
 		}
 		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {
@@ -343,6 +360,7 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 		for _, outcome := range outcomes {
 			if outcome.Slug == server.Slug {
 				server.Status = outcome.Status
+				server.address, server.signInAddress = outcome.address, outcome.signInAddress
 				break
 			}
 		}
@@ -382,7 +400,7 @@ func (c remoteSessionCard) reconnectsDespiteOutage() bool {
 
 // cardStatus is the status one service gives the servers it signs in to.
 func cardStatus(card remoteSessionCard) gatewayServerStatus {
-	if card.Unavailable {
+	if card.Unavailable || card.SignInAddress {
 		return gatewayServerUnavailable
 	}
 	reconnect := card.Expired || card.Unroutable || card.IdentityReconnect || card.Rejected || card.Inactive
