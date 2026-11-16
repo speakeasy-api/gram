@@ -38,7 +38,10 @@ fi
 state_dir="${GRAM_TAILNET_GATEWAY_STATE_DIR:-$(dirname "$GRAM_TAILNET_GATEWAY_TOKEN_PATH")/tsnet}"
 mkdir -p "$state_dir"
 
+# Host status changes wake the private-network group's reconciler, which polls
+# the network-ingress queue.
 exec env \
+  GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE="${GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE:-network-ingress}" \
   GRAM_TAILNET_GATEWAY_STATE_DIR="${state_dir}" \
   GRAM_TAILNET_GATEWAY_UPSTREAM_URL="${upstream_url}" \
   GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE="${upstream_ca_file}" \
