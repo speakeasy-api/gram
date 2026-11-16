@@ -82,7 +82,7 @@ func (m *MockResolver) handleQuery(ctx context.Context, raw []byte) []byte {
 	q := query.Questions[0]
 
 	answers, err := m.answersForQuestion(ctx, q)
-	if dnsErr, ok := errors.AsType[*net.DNSError](err); ok && dnsErr.IsNotFound {
+	if dnsErr, ok := errors.AsType[*net.DNSError](err); ok && dnsErr != nil && dnsErr.IsNotFound {
 		return m.buildResponse(query.Header, &q, dnsmessage.RCodeNameError)
 	}
 	if err != nil {

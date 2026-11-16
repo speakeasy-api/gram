@@ -390,7 +390,7 @@ func TestMemberClientFailure_NamesOnlyAReachedUpstream(t *testing.T) {
 		text     string
 		host     string
 	}{
-		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), dial: dial, code: mcpconnectionattempts.CodeAddressNotAllowed, text: `server "fixture" uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address`, host: "mcp.example.com"},
+		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), dial: dial, code: mcpconnectionattempts.CodeAddressNotAllowed, text: `server "fixture" uses a private or internal address Speakeasy can't reach. Ask your administrator to check the server's address`, host: "mcp.example.com"},
 		{name: "missing", exchange: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "mcp.example.com", IsNotFound: true}}, dial: dial, code: mcpconnectionattempts.CodeAddressNotFound, text: `server "fixture" uses an address that does not point anywhere. Ask your administrator to check the server's address`, host: "mcp.example.com"},
 		{name: "unresolved", exchange: fmt.Errorf("lookup: %w", guardian.ErrBadHost), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},
 		{name: "redirect hop", exchange: redirectedToBlocked(t), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},
@@ -777,6 +777,7 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		{name: "token endpoint refused", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantRejected, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "token endpoint down", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantUnavailable, want: mcpconnectionattempts.CodeRemoteSessionUnavailable, who: mcpconnectionattempts.WhoProvider},
 		{name: "token url blocked", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantBlocked, want: mcpconnectionattempts.CodeAddressNotAllowed, who: mcpconnectionattempts.WhoAdmin},
+		{name: "token url missing", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantAddressNotFound, want: mcpconnectionattempts.CodeAddressNotFound, who: mcpconnectionattempts.WhoAdmin},
 		{name: "token url wrong", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantMisconfigured, want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
 		{name: "caller's client secret refused", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(user("CALLER_SECRET"))}, failure: toolconfig.ClientGrantRejected, want: none},
 		{name: "caller's client secret rejected upstream", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(user("CALLER_SECRET"))}, want: none},

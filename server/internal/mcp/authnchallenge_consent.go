@@ -470,7 +470,7 @@ type cardPanel struct {
 
 // Panel decides the detail lines from the card's state.
 func (c remoteSessionCard) Panel() cardPanel {
-	reconnect := c.Unavailable || c.SignInAddress || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
+	reconnect := c.connectionDown() || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
 	hasGrant := c.Connected || c.Expired || c.Unroutable
 	p := cardPanel{
 		GrantLive:            c.Connected && !reconnect,
@@ -732,7 +732,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if unfinished := r.URL.Query().Get("validate_unfinished"); unfinished != "" {
 		for i := range cards {
 			// An Unavailable card already says so, from stored state.
-			if cards[i].ClientID == unfinished && !cards[i].Unavailable {
+			if cards[i].ClientID == unfinished && !cards[i].connectionDown() {
 				cards[i].ValidationNotice = validationUnfinishedNotice
 			}
 		}
@@ -805,7 +805,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
 		// The page's count: a chained service counts once its exchange works. consentCardsApprovable decides approval.
-		if (c.Connected && !c.Unavailable) || c.ChainCheck == chainCheckConnected {
+		if (c.Connected && !c.connectionDown()) || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
@@ -1374,8 +1374,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, err)
 				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
-				if remotesessions.OutageAddress(err) != guardian.AddressFine {
-					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, oauthui.ReasonSignInAddress))
+				if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, remotesessions.SignInAddressReason(address)))
 				}
 				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
 					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
@@ -1884,9 +1884,19 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
+// connectionDown reports a connected card whose credential can't be renewed right now: an outage, or an address an admin must fix.
+func (c remoteSessionCard) connectionDown() bool {
+	return c.Unavailable || c.SignInAddress
+}
+
+// SignInAddressStatus is the card's status line for a sign-in provider address Speakeasy did not dial.
+func (c remoteSessionCard) SignInAddressStatus() string {
+	return "Sign-in provider " + c.signInAddressFailure.Problem() + " · ask your administrator"
+}
+
 // needsAction reports a card with a reconnect or verification still open.
 func (c remoteSessionCard) needsAction() bool {
-	return c.Unavailable || c.SignInAddress || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified)
+	return c.connectionDown() || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified)
 }
 
 // expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
