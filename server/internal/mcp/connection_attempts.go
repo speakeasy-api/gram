@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
@@ -699,9 +700,9 @@ func remoteLoginRefusalHappened(err error) mcpconnectionattempts.Code {
 }
 
 // recordTokenClientRefusal records /token refusing the client of an authorization
-// code. A client that never resolved is no proof of a real flow: a metric, never a row.
+// code or ID-JAG. A client that never resolved is no proof of a real flow: a metric, never a row.
 func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID, reason string) {
-	if grantType != oauthwire.GrantTypeAuthorizationCode {
+	if grantType != oauthwire.GrantTypeAuthorizationCode && grantType != oauthwire.GrantTypeJWTBearer {
 		return
 	}
 	what, recorded := tokenClientRefusalHappened(reason)
@@ -742,9 +743,9 @@ func tokenClientRefusalHappened(reason string) (mcpconnectionattempts.Code, bool
 	return mcpconnectionattempts.CodeClientAuthFailed, true
 }
 
-// recordTokenClientFailure records /token unable to check an authorization code's client.
+// recordTokenClientFailure records /token unable to check an authorization code's or ID-JAG's client.
 func (s *Service) recordTokenClientFailure(r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID string, reason mcpmetrics.IDJAGRejectionReason) {
-	if grantType != oauthwire.GrantTypeAuthorizationCode {
+	if grantType != oauthwire.GrantTypeAuthorizationCode && grantType != oauthwire.GrantTypeJWTBearer {
 		return
 	}
 	what, check := mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.ClientIDAdmitted
@@ -890,7 +891,7 @@ func refuseWorkloadGrantRow(ctx context.Context, t *mcpconnectionattempts.Tracke
 	t.Refuse(ctx, code, detail)
 }
 
-// workloadGrantHappened names a refused workload or assistant token grant; the detail is the logged reason.
+// workloadGrantHappened names a refused workload or assistant token grant, or any grant's headless upstream choice; the detail is the logged reason.
 // Workload refusals before the assertion's signature verifies never reach it: they are a metric.
 func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
 	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
@@ -933,4 +934,30 @@ func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnection
 		}
 	}
 	return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("")
+}
+
+// idJAGAssertionHappened names an ID-JAG the validator refused or could not check; the detail is its reason.
+func idJAGAssertionHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
+	reason := idjag.ReasonOf(err)
+	detail := mcpconnectionattempts.Detail(string(reason))
+	switch {
+	case reason == idjag.ReasonKeyUnresolvable:
+		return mcpconnectionattempts.CodeIDPTransientFailure, detail
+	case idjag.IsOutage(err):
+		return mcpconnectionattempts.CodeAssertionCheckUnavailable, detail
+	case idjag.IsStoreFault(err):
+		return mcpconnectionattempts.CodeInternalError, detail
+	case reason == idjag.ReasonTrustUnavailable, reason == idjag.ReasonIssuerMismatch:
+		return mcpconnectionattempts.CodeIssuerNotTrusted, detail
+	case reason == idjag.ReasonVerifierMisconfigured:
+		return mcpconnectionattempts.CodeAssertionVerifierMisconfigured, detail
+	case reason == idjag.ReasonNotProvisioned:
+		return mcpconnectionattempts.CodeSubjectNotProvisioned, detail
+	case reason == idjag.ReasonResourceNotIndicated:
+		return mcpconnectionattempts.CodeInvalidRequest, detail
+	case strings.HasPrefix(string(reason), "assertion_"):
+		return mcpconnectionattempts.CodeAssertionInvalid, detail
+	default:
+		return mcpconnectionattempts.CodeAssertionOther, detail
+	}
 }
