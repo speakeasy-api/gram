@@ -82,7 +82,7 @@ For a list endpoint, load the candidate rows, build one ref per row, call `Filte
 
 In the handler's test, add one case without the grant that asserts `oops.CodeForbidden`, and one case with it through `authztest.WithExactGrants(t, ctx, authz.NewGrant(scope, resourceID))`.
 
-A typed id proves an id is well formed, not that the resource is the caller's. That rests on the handler loading the row inside the caller's project, so keep a handler test in which a caller from another project and organization names the resource (`environments/tenant_binding_test.go`). The engine itself only compares org checks: one about an organization other than the caller's is logged for now, and will be refused after the logging window.
+A typed id proves an id is well formed, not that the resource is the caller's. That rests on the handler loading the row inside the caller's project, so keep a handler test in which a caller from another project and organization names the resource (`environments/tenant_binding_test.go`). The engine itself only compares org checks: one about an organization other than the caller's is refused for every caller, so check an org permission on the organization the caller is acting in.
 
 ## Adding or changing a permission
 

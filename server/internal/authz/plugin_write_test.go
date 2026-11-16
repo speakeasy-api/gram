@@ -32,7 +32,7 @@ func TestRequirePluginWrite(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := engine.RequirePluginWrite(GrantsToContext(enterpriseSessionCtx(t), tc.grants), "org-one", "project-one")
+			err := engine.RequirePluginWrite(GrantsToContext(enterpriseSessionCtxWithOrg(t, "org-one"), tc.grants), "org-one", "project-one")
 			if tc.allowed {
 				require.NoError(t, err)
 			} else {
