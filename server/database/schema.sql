@@ -2818,11 +2818,14 @@ CREATE TABLE IF NOT EXISTS network_ingresses (
   -- Tailnet gateway StatefulSet that polls this ingress. 'shared' is the
   -- multi-tenant default; a dedicated value pins an org to its own gateway.
   gateway_shard TEXT NOT NULL DEFAULT 'shared',
-  -- Label of the Tailscale Service the gateway last defined for this ingress
-  -- (svc:<label>). When the hostname changes the reconciler deletes this
-  -- service, and teardown deletes it with the current one. NULL until the
-  -- gateway first defines a service.
+  -- Unused: superseded by gateway_service_hostnames. Left in place until a
+  -- later contract migration drops it.
   gateway_service_hostname TEXT,
+  -- Labels of the Tailscale Services (svc:<label>) the gateway may have
+  -- defined for this ingress. A label is added before its service is defined
+  -- and removed once the service is deleted, so a rename never loses track
+  -- of a service still on the tailnet. Teardown deletes every recorded one.
+  gateway_service_hostnames TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2852,7 +2855,9 @@ COMMENT ON COLUMN network_ingresses.health_checked_at IS '@access: confidential'
 COMMENT ON COLUMN network_ingresses.connected_since IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.runtime IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.gateway_shard IS '@access: confidential';
-COMMENT ON COLUMN network_ingresses.gateway_service_hostname IS 'Label of the Tailscale Service the gateway last defined for this ingress; a copy of a former hostname.
+COMMENT ON COLUMN network_ingresses.gateway_service_hostname IS 'Unused; superseded by gateway_service_hostnames.
+@access: restricted';
+COMMENT ON COLUMN network_ingresses.gateway_service_hostnames IS 'Labels of the Tailscale Services the gateway may have defined for this ingress; copies of current and former hostnames.
 @access: restricted';
 COMMENT ON COLUMN network_ingresses.created_at IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.updated_at IS '@access: confidential';
@@ -2909,7 +2914,7 @@ CREATE TABLE IF NOT EXISTS network_ingress_nodes (
   -- encrypted by the application. Cleared once the node has persisted state.
   auth_key_encrypted TEXT,
   auth_key_expires_at timestamptz,
-  -- pending | starting | online | draining | error | stopped (app-validated)
+  -- pending | starting | online | draining | error | stopped | needs_login | awaiting_approval (app-validated)
   status TEXT NOT NULL DEFAULT 'pending',
   -- Stable Tailscale node id used to delete the device on teardown.
   node_id TEXT,
