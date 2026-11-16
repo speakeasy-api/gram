@@ -219,14 +219,11 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 	return states, nil
 }
 
-// codeModeSetupInstructions answers a server its setup stops; the reason stays on the connection row.
-const codeModeSetupInstructions = "This server can't connect because of how it is set up. Retrying won't help. Ask your administrator to fix it."
-
 // connectionRouteFailure names the state of a member that could not be routed.
 func connectionRouteFailure(err error, canConnect bool) (authentication, instructions string) {
 	if outage, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
 		if outage.address != guardian.AddressFine {
-			return "unreachable", codeModeSetupInstructions
+			return "unreachable", outage.address.EndUserMessage("This server", guardian.SignInAddress)
 		}
 		if outage.session == nil {
 			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support."
@@ -307,8 +304,8 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	default:
 		state.Authentication = "unreachable"
 		state.Instructions = "The upstream could not be verified; try again later."
-		if guardian.AddressFailureOf(failure.err, dial.tunneled) != guardian.AddressFine {
-			state.Instructions = codeModeSetupInstructions
+		if address := guardian.AddressFailureOf(failure.err, dial.tunneled); address != guardian.AddressFine {
+			state.Instructions = address.EndUserMessage("This server", guardian.OwnAddress)
 		}
 	}
 	return state
