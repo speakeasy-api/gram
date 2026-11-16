@@ -175,6 +175,22 @@ vi.mock("@/contexts/Sdk", () => ({
       listBindings: async () => ({ items: await mocks.bindings() }),
       attachBinding: mocks.attach,
       detachBinding: mocks.detach,
+      // The runtime requires every registration the issuer lists unless a
+      // test says otherwise.
+      // Read through the issuer list's own data without recording a call,
+      // so tests that count or inspect those calls are unaffected.
+      listServerClientAssociations: async (request: {
+        gramProject?: string;
+      }) => {
+        const read = mocks.sessionClients.getMockImplementation();
+        const clients = ((read
+          ? await read({ gramProject: request.gramProject })
+          : []) ?? []) as Array<{ id: string }>;
+        return {
+          associations: [],
+          requiredClientIds: clients.map((client) => client.id),
+        };
+      },
     },
     remoteSessionClients: {
       list: async (request: object) => [
@@ -3909,6 +3925,8 @@ describe("The MCP sign-in tab", () => {
 
     await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.extendAgentKeys).not.toHaveBeenCalled();
+    // The question sits inside the server's row, which opens to answer it.
+    fireEvent.click(await screen.findByRole("button", { name: /^Tracker/ }));
     fireEvent.click(
       await screen.findByRole("combobox", {
         name: "Credential the key uses on Tracker",

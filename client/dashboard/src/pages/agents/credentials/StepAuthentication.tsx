@@ -23,6 +23,7 @@ import {
   serversNeedingConnection,
 } from "./connectionAttention";
 import { KeyCredentialChoice } from "./KeyCredentialChoice";
+import { ACCOUNT_CHOICE } from "./keyCredentialChoices";
 import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
@@ -130,6 +131,12 @@ export function StepAuthentication({
           const connection = displayed.get(server.id);
           const shared =
             !server.issuerId || connection?.status === "not-required";
+          // The agent's keys use a shared credential chosen on this row, so
+          // nobody's own connection is needed for them.
+          const choice = credentialChoice?.show(server.id)
+            ? credentialChoice.value(server.id)
+            : undefined;
+          const sharedChosen = !shared && !!choice && choice !== ACCOUNT_CHOICE;
           const expired = connection?.status === "ended";
           const sessions =
             connection?.status === "ready" || connection?.status === "ended"
@@ -137,20 +144,23 @@ export function StepAuthentication({
               : [];
           const session = sessions[0];
           const mine = session?.subjectUrn === `user:${user.id}`;
-          const label = shared
-            ? "Shared credential"
-            : expired
-              ? "Expired"
-              : connection?.status === "ready"
-                ? mine
-                  ? "Your connection"
-                  : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
-                : connection?.status === "checking" || !connection
-                  ? "Checking connection…"
-                  : connection.status === "error"
-                    ? "Could not check connection"
-                    : "Requires connection";
-          const missingSignIns = missingSignInsSentence(server, connection);
+          const label =
+            shared || sharedChosen
+              ? "Shared credential"
+              : expired
+                ? "Expired"
+                : connection?.status === "ready"
+                  ? mine
+                    ? "Your connection"
+                    : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
+                  : connection?.status === "checking" || !connection
+                    ? "Checking connection…"
+                    : connection.status === "error"
+                      ? "Could not check connection"
+                      : "Requires connection";
+          const missingSignIns = sharedChosen
+            ? null
+            : missingSignInsSentence(server, connection);
           return (
             <AccordionItem
               key={server.id}
@@ -183,11 +193,13 @@ export function StepAuthentication({
                       // Blue, like the step's MCP sign-in arrow: each pill
                       // says how Speakeasy signs in to that server.
                       variant={
-                        expired || connection?.status === "missing"
-                          ? "warning"
-                          : shared || connection?.status === "ready"
-                            ? "information"
-                            : "neutral"
+                        sharedChosen
+                          ? "information"
+                          : expired || connection?.status === "missing"
+                            ? "warning"
+                            : shared || connection?.status === "ready"
+                              ? "information"
+                              : "neutral"
                       }
                       size="sm"
                     >
@@ -221,34 +233,35 @@ export function StepAuthentication({
                   <X className="size-4" />
                 </Button>
               </div>
-              {credentialChoice?.show(server.id) &&
-                (server.kind === "Remote" || server.kind === "Tunneled") &&
-                // Whether it signs in accounts is only known once its
-                // connection has been read.
-                (!server.issuerId ||
-                  (connection !== undefined &&
-                    connection.status !== "checking")) && (
-                  <KeyCredentialChoice
-                    className="pb-3"
-                    serverId={server.id}
-                    serverName={server.name}
-                    // A server that signs each caller in also offers the
-                    // account connected for the agent, beside its shared
-                    // credentials.
-                    accounts={!!server.issuerId && !shared}
-                    pickSole
-                    label={`Choose how the agent's keys sign in to ${server.name}`}
-                    value={credentialChoice.value(server.id)}
-                    onChange={(authClientId) =>
-                      credentialChoice.onChange(server.id, authClientId)
-                    }
-                  />
-                )}
               <AccordionContent>
-                {shared ? (
+                {credentialChoice?.show(server.id) &&
+                  (server.kind === "Remote" || server.kind === "Tunneled") &&
+                  // Whether it signs in accounts is only known once its
+                  // connection has been read.
+                  (!server.issuerId ||
+                    (connection !== undefined &&
+                      connection.status !== "checking")) && (
+                    <KeyCredentialChoice
+                      className="pb-3"
+                      serverId={server.id}
+                      serverName={server.name}
+                      // A server that signs each caller in also offers the
+                      // account connected for the agent, beside its shared
+                      // credentials.
+                      accounts={!!server.issuerId && !shared}
+                      pickSole
+                      label={`Choose how the agent's keys sign in to ${server.name}`}
+                      value={credentialChoice.value(server.id)}
+                      onChange={(authClientId) =>
+                        credentialChoice.onChange(server.id, authClientId)
+                      }
+                    />
+                  )}
+                {shared || sharedChosen ? (
                   <Text small muted>
-                    This server uses a shared credential. No personal connection
-                    is needed.
+                    {sharedChosen
+                      ? "The agent's keys use the shared credential chosen above. No personal connection is needed."
+                      : "This server uses a shared credential. No personal connection is needed."}
                   </Text>
                 ) : (
                   <div className="flex flex-wrap items-center gap-3 py-1">

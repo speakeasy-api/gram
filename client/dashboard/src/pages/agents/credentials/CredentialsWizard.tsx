@@ -54,6 +54,7 @@ import {
   type ServerSelection,
 } from "./StepServers";
 import {
+  ACCOUNT_CHOICE,
   keyCredentialChoices,
   keyCredentialPlan,
 } from "./keyCredentialChoices";
@@ -565,6 +566,14 @@ export function CredentialsWizard({
   // null until the person picks, so the default can follow the project as it
 
   const [selected, setSelected] = useState<ServerSelection[]>([]);
+  // A server whose keys use a shared credential chosen for it needs nobody's
+  // own connection: it neither waits on one nor has one attached.
+  const usesOwnConnection = (server: InventoryServer): boolean => {
+    const choice = selected.find(
+      (entry) => entry.server.id === server.id,
+    )?.authClientId;
+    return !choice || choice === ACCOUNT_CHOICE;
+  };
   const [error, setError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1496,7 +1505,10 @@ export function CredentialsWizard({
       const missing = await attachOwnerConnections(
         sdk,
         agent.id,
-        allServers ? listedServers : selected.map((entry) => entry.server),
+        (allServers
+          ? listedServers
+          : selected.map((entry) => entry.server)
+        ).filter(usesOwnConnection),
         undefined,
         true,
         typedConnections,
@@ -1590,7 +1602,7 @@ export function CredentialsWizard({
         const missing = await attachOwnerConnections(
           sdk,
           targetId,
-          reach,
+          reach.filter(usesOwnConnection),
           signal,
           allServers,
           typedConnections,
@@ -2283,6 +2295,7 @@ export function CredentialsWizard({
     .filter(
       (server) =>
         server.issuerId &&
+        usesOwnConnection(server) &&
         !connectionSelectable(connections.byServer.get(server.id)),
     );
   const unconnectedNote = (() => {

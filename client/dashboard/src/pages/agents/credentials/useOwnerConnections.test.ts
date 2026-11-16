@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => {
     auth: new Map<string, { data?: unknown; isError?: boolean }>(),
     clients: [] as unknown[],
     sessions: [] as unknown[],
+    // The registrations the runtime requires of each server; every issuer
+    // registration when left unset.
+    required: undefined as string[] | undefined,
     enforcement: "legacy" as string,
   };
 });
@@ -43,6 +46,15 @@ vi.mock("@tanstack/react-query", () => ({
           }),
           refetch: mocks.refetch,
         };
+      if (queryKey[1] === "required")
+        return {
+          data: {
+            requiredClientIds:
+              mocks.required ??
+              (mocks.clients as Array<{ id: string }>).map((c) => c.id),
+          },
+          refetch: mocks.refetch,
+        };
       return {
         data: queryKey[1] === "clients" ? mocks.clients : mocks.sessions,
         refetch: mocks.refetch,
@@ -55,6 +67,7 @@ afterEach(() => {
   mocks.auth.clear();
   mocks.clients = [];
   mocks.sessions = [];
+  mocks.required = undefined;
   mocks.enforcement = "legacy";
 });
 
@@ -280,6 +293,21 @@ describe("a server sharing an org-wide issuer with another server", () => {
     expect(
       connection?.status === "missing" ? connection.signIns?.[0]?.name : null,
     ).toBe("Shared registration");
+  });
+
+  it("needs only the registrations the runtime requires of the server, not the issuer's others", () => {
+    // The issuer also lists another server's registration; the runtime asks
+    // this server's callers for its own alone, so its own connection is enough.
+    mocks.clients = [
+      otherServersSignIn,
+      { id: "client_own", credentialOwner: "subject" },
+    ];
+    mocks.required = ["client_own"];
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [ownSession],
+    });
   });
 
   it("keeps the server checking until enforcement is known", () => {

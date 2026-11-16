@@ -185,7 +185,11 @@ export interface ConnectionApi {
   authClients: Pick<AuthClients, "getMcpServerAuthentication">;
   remoteSessions: Pick<
     RemoteSessions,
-    "list" | "listBindings" | "attachBinding" | "detachBinding"
+    | "list"
+    | "listBindings"
+    | "attachBinding"
+    | "detachBinding"
+    | "listServerClientAssociations"
   >;
   remoteSessionClients: Pick<RemoteSessionClients, "list">;
 }
@@ -229,6 +233,45 @@ async function personalServers(
     unreadable: servers.filter((_, index) => reads[index] === "unreadable"),
     signIns,
   };
+}
+
+/**
+ * The registrations on a server's user session issuer that the selected
+ * servers sharing that issuer require, by the rule the runtime enforces
+ * (`required_client_ids`): a server needs its own registrations, not the ones
+ * other servers on a shared issuer bring. Without enforcement this is what the
+ * issuer's sign-ins narrow to.
+ */
+async function issuerSignInsRequired(
+  api: ConnectionApi,
+  personal: InventoryServer[],
+  issuer: InventoryServer,
+  signal?: AbortSignal,
+): Promise<ServerSignIn[]> {
+  const gramProject = issuer.projectSlug;
+  const sharing = personal.filter(
+    (server) =>
+      server.projectId === issuer.projectId &&
+      server.issuerId === issuer.issuerId,
+  );
+  const [clients, ...required] = await Promise.all([
+    collectPageItems(
+      api.remoteSessionClients.list(
+        { gramProject, userSessionIssuerId: issuer.issuerId! },
+        undefined,
+        { signal },
+      ),
+    ),
+    ...sharing.map((server) =>
+      api.remoteSessions.listServerClientAssociations(
+        { gramProject, mcpServerId: server.id },
+        undefined,
+        { signal },
+      ),
+    ),
+  ]);
+  const ids = new Set(required.flatMap((read) => read.requiredClientIds));
+  return clients.filter((client) => ids.has(client.id));
 }
 
 /**
@@ -294,14 +337,7 @@ export async function attachOwnerConnections(
     const scope = { gramProject, principalId: agentId, userSessionIssuerId };
     const typed = typedSignIns(server);
     const [clients, candidates, bindings] = await Promise.all([
-      typed ??
-        collectPageItems(
-          api.remoteSessionClients.list(
-            { gramProject, userSessionIssuerId },
-            undefined,
-            { signal },
-          ),
-        ),
+      typed ?? issuerSignInsRequired(api, personal, server, signal),
       collectPageItems(api.remoteSessions.list(scope, undefined, { signal })),
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);

@@ -277,6 +277,8 @@ function api(options: {
     remoteSessionClientId: string;
     remoteSession?: RemoteSession;
   }>;
+  /** The registrations the runtime requires of each server, by server id. */
+  required?: Record<string, string[]>;
 }) {
   const attachBinding = vi.fn().mockResolvedValue({});
   const detachBinding = vi.fn().mockResolvedValue(undefined);
@@ -295,6 +297,14 @@ function api(options: {
       listBindings: vi.fn().mockResolvedValue({ items: options.bindings }),
       attachBinding,
       detachBinding,
+      listServerClientAssociations: vi.fn(
+        async ({ mcpServerId }: { mcpServerId: string }) => ({
+          associations: [],
+          requiredClientIds:
+            options.required?.[mcpServerId] ??
+            options.clients.map((client) => client.id),
+        }),
+      ),
     },
   } as unknown as ConnectionApi;
   return { fake, attachBinding, detachBinding, getMcpServerAuthentication };
@@ -385,12 +395,29 @@ describe("attachOwnerConnections", () => {
       });
     });
 
-    it("asks for the issuer's sign-ins when it is not, as the issuer routes the call", async () => {
+    it("asks for the sign-ins the runtime requires when it is not", async () => {
       const { fake, attachBinding } = shared();
       await expect(
         attachOwnerConnections(fake, "agent_new", [server]),
       ).rejects.toThrow(/no longer available/);
       expect(attachBinding).not.toHaveBeenCalled();
+    });
+
+    it("does not ask for another server's registration the runtime does not require", async () => {
+      // The issuer lists both; the runtime requires only this server's own.
+      const { fake, attachBinding } = api({
+        auth: () => Promise.resolve(authentication([own])),
+        clients: [client("client_other_server"), client("client_one")],
+        candidates: [session({})],
+        bindings: [],
+        required: { [server.id]: ["client_one"] },
+      });
+      const missing = await attachOwnerConnections(fake, "agent_new", [server]);
+      expect(missing).toEqual([]);
+      expect(attachBinding).toHaveBeenCalledTimes(1);
+      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+        attachBindingRequestBody: { remoteSessionId: "session_mine" },
+      });
     });
   });
 

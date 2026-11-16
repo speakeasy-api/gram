@@ -113,6 +113,23 @@ export function useOwnerConnections(
     })),
   });
 
+  // Which of its issuer's registrations each server needs, by the rule the
+  // runtime enforces: its own, not those other servers on a shared issuer
+  // bring. Read for every server, as the issuer's list is the fallback.
+  const required = useQueries({
+    queries: personal.map((server) => ({
+      queryKey: ["owner-connections", "required", ownerScope, server.id],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        sdk.remoteSessions.listServerClientAssociations(
+          { gramProject: server.projectSlug, mcpServerId: server.id },
+          undefined,
+          { signal },
+        ),
+      enabled,
+      retry: false,
+      throwOnError: false,
+    })),
+  });
   const bindings = useQueries({
     queries: issuers.map((request) => ({
       queryKey: ["owner-connections", "bindings", ownerScope, agentId, request],
@@ -168,13 +185,21 @@ export function useOwnerConnections(
         : undefined;
     if (typed) return { data: typed, isError: false };
     const read = clients[issuerIndex(server)];
+    const requiredRead = required[personal.indexOf(server)];
+    const requiredIds = requiredRead?.data
+      ? new Set(requiredRead.data.requiredClientIds)
+      : undefined;
     return {
-      data: read?.data?.map((client) => ({
-        id: client.id,
-        credentialOwner: client.credentialOwner,
-        name: signInNames.get(client.id) ?? client.displayName,
-      })),
-      isError: !!read?.isError,
+      data: requiredIds
+        ? read?.data
+            ?.filter((client) => requiredIds.has(client.id))
+            .map((client) => ({
+              id: client.id,
+              credentialOwner: client.credentialOwner,
+              name: signInNames.get(client.id) ?? client.displayName,
+            }))
+        : undefined,
+      isError: !!read?.isError || !!requiredRead?.isError,
     };
   };
   const byServer = new Map<string, ServerConnection>();
