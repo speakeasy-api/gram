@@ -141,7 +141,7 @@ func renderVocabulary(source string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("registry vocabulary.go has no %q line", strings.TrimSpace(packageLine))
 	}
-	if strings.Contains(declarations, "\nimport ") {
+	if strings.Contains("\n"+declarations, "\nimport") {
 		return nil, fmt.Errorf("registry vocabulary.go must not import anything: it is copied into package authz")
 	}
 	var b strings.Builder
