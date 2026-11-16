@@ -244,6 +244,7 @@ function SettingsLink({
 function isCanonicalResource(resource: string): boolean {
   if (
     !/^https?:\/\//i.test(resource) ||
+    // oxlint-disable-next-line no-control-regex -- Resource identifiers must reject control characters.
     /[?#\s\\\u0000-\u001f\u007f]/.test(resource) ||
     /%(?![0-9a-f]{2})/i.test(resource)
   )
