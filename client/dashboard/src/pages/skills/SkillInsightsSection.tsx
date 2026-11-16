@@ -24,6 +24,7 @@ import type { SkillInsightPoint } from "@gram/client/models/components/skillinsi
 import type { SkillVersionInsight } from "@gram/client/models/components/skillversioninsight.js";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
+import { ChatReadAccess } from "@/pages/security/finding-drawer-parts";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { type Column, Table } from "@/components/ui/Table";
@@ -304,10 +305,13 @@ export function ScoredSessions({
             </div>
           )}
           {!canReadChats && (
-            <Text small muted>
-              The <code className="font-mono">chat:read</code> scope is required
-              to view session rationale and links.
-            </Text>
+            <div className="flex flex-col items-start gap-2">
+              <Text small muted>
+                The <code className="font-mono">chat:read</code> scope is
+                required to view session rationale and links.
+              </Text>
+              {!isRBACLoading && <ChatReadAccess />}
+            </div>
           )}
           {canReadChats && query.isPending && <SkeletonTable />}
           {canReadChats && query.error && (

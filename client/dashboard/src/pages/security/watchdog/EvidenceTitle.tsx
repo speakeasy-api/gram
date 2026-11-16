@@ -29,7 +29,8 @@ import { TriangleAlert } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { TRANSCRIPT_DENIED_REASON, useCanReadFindingChat } from "../unmask";
+import { ChatReadAccess } from "../finding-drawer-parts";
+import { TRANSCRIPT_DENIED_NOTE, useCanReadFindingChat } from "../unmask";
 import { collectChatFindings } from "./collect-findings";
 
 /**
@@ -131,10 +132,13 @@ export function EvidenceTitle({
           )}
         </div>
         {transcriptDenied && (
-          <p className="text-warning flex items-start gap-1 text-xs">
-            <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
-            <span>{TRANSCRIPT_DENIED_REASON}</span>
-          </p>
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-warning flex items-start gap-1 text-xs">
+              <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
+              <span>{TRANSCRIPT_DENIED_NOTE}</span>
+            </p>
+            <ChatReadAccess chatId={findingChatId} />
+          </div>
         )}
         {/* Outside the title button so the text can be selected. */}
         {expanded && (
