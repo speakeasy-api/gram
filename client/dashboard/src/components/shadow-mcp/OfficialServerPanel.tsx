@@ -68,12 +68,37 @@ export function OfficialServerPanel({
 }: {
   server: ShadowMCPInventoryServer;
 }): JSX.Element | null {
+  // The sheet lives above the panel's states: making a server official
+  // links it, the panel switches to its linked state, and the sheet stays
+  // open on its result.
+  const [sheet, setSheet] = useState<{
+    open: boolean;
+    probe: ProbeURLResult | null;
+  }>({ open: false, probe: null });
   // A local command has no URL to serve; it never reaches this page, and
   // the guard keeps the panel honest if that changes.
   if (server.targetKind === "stdio_command") return null;
-  if (server.officialServer) return <LinkedPanel server={server} />;
-  return <UnlinkedPanel server={server} />;
+  return (
+    <>
+      {server.officialServer ? (
+        <LinkedPanel server={server} />
+      ) : (
+        <UnlinkedPanel
+          server={server}
+          onMakeOfficial={(probe) => setSheet({ open: true, probe })}
+        />
+      )}
+      <MakeOfficialSheet
+        server={server}
+        probe={sheet.probe}
+        open={sheet.open}
+        onOpenChange={(open) => setSheet((current) => ({ ...current, open }))}
+      />
+    </>
+  );
 }
+
+type MakeOfficialHandler = (probe: ProbeURLResult | null) => void;
 
 function PanelHeading({
   title,
@@ -300,14 +325,20 @@ function ChecksSkeleton() {
   );
 }
 
-function UnlinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
+function UnlinkedPanel({
+  server,
+  onMakeOfficial,
+}: {
+  server: ShadowMCPInventoryServer;
+  onMakeOfficial: MakeOfficialHandler;
+}) {
   const suggested = server.suggestedOfficialServer;
   return (
     <section aria-label="Make this server official" className={PANEL_CLASS}>
       {suggested ? (
         <SuggestedLink server={server} />
       ) : (
-        <MakeOfficial server={server} />
+        <MakeOfficial server={server} onMakeOfficial={onMakeOfficial} />
       )}
       <LinkAnotherServer server={server} />
     </section>
@@ -372,7 +403,13 @@ function SuggestedLink({ server }: { server: ShadowMCPInventoryServer }) {
   );
 }
 
-function MakeOfficial({ server }: { server: ShadowMCPInventoryServer }) {
+function MakeOfficial({
+  server,
+  onMakeOfficial,
+}: {
+  server: ShadowMCPInventoryServer;
+  onMakeOfficial: MakeOfficialHandler;
+}) {
   const routes = useRoutes();
   const organization = useOrganization();
   const project = useProject();
@@ -381,7 +418,6 @@ function MakeOfficial({ server }: { server: ShadowMCPInventoryServer }) {
   const [result, setResult] = useState<ProbeURLResult | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [sheetOpen, setSheetOpen] = useState(false);
   // Keyed by project and server so a request sent for one server never
   // reads as sent for another. It only remembers that this browser asked;
   // the request itself was delivered when the button was pressed.
@@ -426,11 +462,18 @@ function MakeOfficial({ server }: { server: ShadowMCPInventoryServer }) {
   const wantsSheet = searchParams.get(SHADOW_MCP_MAKE_OFFICIAL_PARAM) === "1";
   useEffect(() => {
     if (!wantsSheet || !readiness) return;
-    if (readiness.ready) setSheetOpen(true);
+    if (readiness.ready) onMakeOfficial(result);
     const next = new URLSearchParams(searchParams);
     next.delete(SHADOW_MCP_MAKE_OFFICIAL_PARAM);
     setSearchParams(next, { replace: true });
-  }, [wantsSheet, readiness, searchParams, setSearchParams]);
+  }, [
+    wantsSheet,
+    readiness,
+    result,
+    onMakeOfficial,
+    searchParams,
+    setSearchParams,
+  ]);
 
   // A server whose sign-in needs a hand-registered client may still be in the
   // catalog, whose page walks through that setup. The catalog is only read
@@ -473,7 +516,7 @@ function MakeOfficial({ server }: { server: ShadowMCPInventoryServer }) {
           description="Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
         />
         {readiness?.ready ? (
-          <Button size="sm" onClick={() => setSheetOpen(true)}>
+          <Button size="sm" onClick={() => onMakeOfficial(result)}>
             <Button.Text>Make official</Button.Text>
           </Button>
         ) : null}
@@ -556,7 +599,7 @@ function MakeOfficial({ server }: { server: ShadowMCPInventoryServer }) {
             <Button
               variant="tertiary"
               size="sm"
-              onClick={() => setSheetOpen(true)}
+              onClick={() => onMakeOfficial(result)}
             >
               <Button.Text>Set it up myself</Button.Text>
             </Button>
@@ -573,13 +616,6 @@ function MakeOfficial({ server }: { server: ShadowMCPInventoryServer }) {
           </div>
         </div>
       ) : null}
-
-      <MakeOfficialSheet
-        server={server}
-        probe={result}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />
     </>
   );
 }

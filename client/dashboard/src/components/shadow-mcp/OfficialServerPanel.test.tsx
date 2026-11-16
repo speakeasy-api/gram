@@ -148,6 +148,36 @@ describe("OfficialServerPanel", () => {
     ).toBeTruthy();
   });
 
+  it("keeps the sheet open on its result once the server is linked", async () => {
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    const view = renderPanel(server());
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Make official" }),
+    );
+
+    // Linking refreshes the server: the panel shows the link, and the sheet
+    // stays where it is.
+    view.rerender(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/page"]}>
+          <OfficialServerPanel
+            server={server({
+              officialServer: {
+                mcpServerId: "11111111-1111-4111-8111-111111111111",
+                name: "Tracker",
+                directAccessAllowed: false,
+              },
+            })}
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
+    );
+    expect(screen.getByText("Onboarded")).toBeTruthy();
+    expect(
+      screen.getByRole("dialog", { name: "Make official sheet" }),
+    ).toBeTruthy();
+  });
+
   it("opens the sheet when the list asked for it and the checks pass", async () => {
     mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
     renderPanel(server(), "/page?make-official=1");
