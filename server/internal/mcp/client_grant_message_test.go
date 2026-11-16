@@ -80,7 +80,7 @@ func (ti *testInstance) addClientCredentialsTool(ctx context.Context, t *testing
 		InPlacement:         pgtype.Text{},
 		Scheme:              pgtype.Text{},
 		BearerFormat:        pgtype.Text{},
-		EnvVariables:        []string{"MACHINE_CLIENT_ID", "MACHINE_CLIENT_SECRET"},
+		EnvVariables:        []string{"MACHINE_CLIENT_ID", "MACHINE_CLIENT_SECRET", "MACHINE_TOKEN_URL"},
 		OauthTypes:          []string{"client_credentials"},
 		OauthFlows:          flows,
 	})
@@ -104,8 +104,8 @@ type clientGrantCall struct {
 	rec     *mcpconnectionattemptstest.Recording
 }
 
-// callClientCredentialsTool calls a tool whose token URL is tokenURL, as an admin set it up, and returns what each surface kept.
-func callClientCredentialsTool(t *testing.T, tokenURL, serverURL string, guardianOpts ...func(*guardian.Policy)) clientGrantCall {
+// callClientCredentialsTool calls a tool whose token URL is tokenURL, as an admin set it up, with headers the caller sent, and returns what each surface kept.
+func callClientCredentialsTool(t *testing.T, tokenURL, serverURL string, headers map[string]string, guardianOpts ...func(*guardian.Policy)) clientGrantCall {
 	t.Helper()
 
 	logs := &syncBuffer{}
@@ -123,7 +123,7 @@ func callClientCredentialsTool(t *testing.T, tokenURL, serverURL string, guardia
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
-	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("machine_tool"), "", nil)
+	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("machine_tool"), "", headers)
 	require.NoError(t, err)
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
 
@@ -180,14 +180,22 @@ func TestClientGrantFailureMessage(t *testing.T) {
 	}
 
 	const (
-		toAdminAddress = ". Ask your administrator to check the tool's token URL."
-		prefix         = "The tool could not get its access token: "
-		unavailable    = prefix + "its token service could not be reached or answered with an error. Try again in a few minutes. If it keeps happening, ask your administrator to check the tool's token URL."
+		prefix     = "The tool could not get its access token: "
+		adminURL   = " Ask your administrator to check the token URL in the tool's OpenAPI document or environment."
+		callerURL  = " Check the token URL you set for this tool."
+		unreached  = prefix + "its token service could not be reached or answered with an error. If trying again does not help, ask your administrator to check the token URL in the tool's OpenAPI document or environment."
+		refused    = prefix + "its token service refused the request. Ask your administrator to check the tool's client ID, client secret, scopes and token URL."
+		unusable   = prefix + "its token service gave an answer Speakeasy could not use." + adminURL
+		callerSent = prefix + "its token service refused the request. Check the client ID and client secret you set for this tool."
 	)
+	blocked := prefix + "its token URL " + guardian.AddressNotAllowed.Problem() + "."
+	missing := prefix + "its token URL " + guardian.AddressNotFound.Problem() + "."
+	callerClient := map[string]string{"Mcp-Machine-Client-Id": "caller-client", "Mcp-Machine-Client-Secret": "caller-secret"}
 
 	for _, tc := range []struct {
 		name     string
 		tokenURL func(t *testing.T) string
+		headers  map[string]string
 		options  []func(*guardian.Policy)
 		secret   []string
 		logged   string
@@ -199,7 +207,17 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL: func(*testing.T) string { return "https://192.0.2.10:8443/oauth/token" },
 			options:  []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")},
 			secret:   []string{"192.0.2.10", "8443"},
-			want:     prefix + "its token URL uses an address Speakeasy does not connect to directly" + toAdminAddress,
+			want:     blocked + adminURL,
+			code:     mcpconnectionattempts.CodeAddressNotAllowed,
+		},
+		{
+			name:     "refused address the caller set",
+			tokenURL: func(*testing.T) string { return "https://" + tokenHost + "/unused" },
+			headers:  map[string]string{"Mcp-Machine-Token-Url": "https://192.0.2.10:8443/oauth/token"},
+			options:  []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")},
+			secret:   []string{"192.0.2.10", "8443"},
+			logged:   "192.0.2.10",
+			want:     blocked + callerURL,
 			code:     mcpconnectionattempts.CodeAddressNotAllowed,
 		},
 		{
@@ -207,7 +225,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + ":8443/oauth/token" },
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "no such host", Name: tokenHost, Server: "198.51.100.53:53", IsNotFound: true})},
 			secret:   []string{tokenHost, "198.51.100.53", "8443"},
-			want:     prefix + "its token URL uses an address that does not point anywhere" + toAdminAddress,
+			want:     missing + adminURL,
 			code:     mcpconnectionattempts.CodeAddressNotFound,
 		},
 		{
@@ -215,7 +233,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + ":8443/oauth/token" },
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "server misbehaving", Name: tokenHost, Server: "198.51.100.53:53", IsTemporary: true})},
 			secret:   []string{tokenHost, "198.51.100.53", "8443"},
-			want:     unavailable,
+			want:     unreached,
 			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
 		{
@@ -226,8 +244,18 @@ func TestClientGrantFailureMessage(t *testing.T) {
 				down.Close()
 				return down.URL + "/oauth/token"
 			},
-			want: unavailable,
+			want: unreached,
 			code: mcpconnectionattempts.CodeRemoteSessionUnavailable,
+		},
+		{
+			name:     "unreachable token URL the caller set",
+			tokenURL: func(*testing.T) string { return "https://" + tokenHost + "/unused" },
+			headers:  map[string]string{"Mcp-Machine-Token-Url": "https://" + tokenHost + ":8443/oauth/token"},
+			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "server misbehaving", Name: tokenHost, Server: "198.51.100.53:53", IsTemporary: true})},
+			secret:   []string{tokenHost, "198.51.100.53", "8443"},
+			logged:   tokenHost,
+			want:     prefix + "its token service could not be reached or answered with an error. If trying again does not help, check the token URL you set for this tool.",
+			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
 		{
 			name: "token service refuses the client",
@@ -237,8 +265,41 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			},
 			secret: []string{"invalid_client", "secret-detail"},
 			logged: "secret-detail",
-			want:   prefix + "its token service refused the request. Ask your administrator to check the tool's client ID, client secret and scopes.",
+			want:   refused,
 			code:   mcpconnectionattempts.CodeSharedCredentialRejected,
+		},
+		{
+			name: "token service rejects the request",
+			tokenURL: func(t *testing.T) string {
+				t.Helper()
+				return answering(t, http.StatusBadRequest, `{"error":"invalid_scope","error_description":"scope-detail"}`)
+			},
+			secret: []string{"invalid_scope", "scope-detail"},
+			logged: "scope-detail",
+			want:   refused,
+			code:   mcpconnectionattempts.CodeSharedCredentialRejected,
+		},
+		{
+			name: "token service refuses the caller's client",
+			tokenURL: func(t *testing.T) string {
+				t.Helper()
+				return answering(t, http.StatusUnauthorized, `{"error":"invalid_client","error_description":"client secret-detail is unknown"}`)
+			},
+			headers: callerClient,
+			secret:  []string{"invalid_client", "secret-detail", "caller-secret"},
+			logged:  "secret-detail",
+			want:    callerSent,
+		},
+		{
+			name: "token URL that does not exist",
+			tokenURL: func(t *testing.T) string {
+				t.Helper()
+				return answering(t, http.StatusNotFound, `missing-detail`)
+			},
+			secret: []string{"missing-detail"},
+			logged: "missing-detail",
+			want:   unusable,
+			code:   mcpconnectionattempts.CodeCredentialMisconfigured,
 		},
 		{
 			name: "token service error",
@@ -248,7 +309,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			},
 			secret: []string{"stack-detail", "10.1.2.3", "5432"},
 			logged: "stack-detail",
-			want:   unavailable,
+			want:   unreached,
 			code:   mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
 	} {
@@ -258,7 +319,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL := tc.tokenURL(t)
 			parsed, err := url.Parse(tokenURL)
 			require.NoError(t, err)
-			call := callClientCredentialsTool(t, tokenURL, toolServer(t).URL, tc.options...)
+			call := callClientCredentialsTool(t, tokenURL, toolServer(t).URL, tc.headers, tc.options...)
 
 			require.True(t, call.isError)
 			require.Equal(t, tc.want, toolErrorMessage(t, call.text))
@@ -270,9 +331,13 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			require.NotRegexp(t, networkDetail, call.text)
 			require.Contains(t, call.stored, tc.want)
 
-			row := call.rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.code)
-			require.Equal(t, row.Reason, tc.code.String())
-			require.Len(t, call.rec.Rows(), 1)
+			if tc.code == (mcpconnectionattempts.Code{}) {
+				call.rec.RequireNothing()
+			} else {
+				row := call.rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.code)
+				require.Equal(t, tc.code.String(), row.Reason)
+				require.Len(t, call.rec.Rows(), 1)
+			}
 
 			require.Contains(t, call.logs, "could not process client credentials")
 			require.Contains(t, call.logs, "failed to make client credentials token request")
@@ -295,7 +360,7 @@ func TestClientGrantSuccessUnchanged(t *testing.T) {
 	}))
 	t.Cleanup(token.Close)
 
-	call := callClientCredentialsTool(t, token.URL+"/oauth/token", toolServer(t).URL)
+	call := callClientCredentialsTool(t, token.URL+"/oauth/token", toolServer(t).URL, nil)
 	require.False(t, call.isError)
 	require.JSONEq(t, `{"authorization":"Bearer machine-token"}`, call.text)
 	call.rec.RequireNothing()

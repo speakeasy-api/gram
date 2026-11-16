@@ -307,7 +307,7 @@ func handleToolsCall(
 		Credentials: &toolconfig.CredentialReport{
 			Sent:            nil,
 			GrantFailure:    "",
-			CallerVariables: nil,
+			CallerVariables: callerVariables(credentialSources),
 			ServerVariable:  "",
 			Challenges:      nil,
 		},
@@ -688,6 +688,17 @@ const (
 	// credentialSourceShared is the organization's shared sign-in.
 	credentialSourceShared credentialSource = "shared"
 )
+
+// callerVariables lists the user configuration variables the caller set in request headers.
+func callerVariables(sources map[string]credentialSource) []string {
+	var variables []string
+	for variable, source := range sources {
+		if source == credentialSourceCaller {
+			variables = append(variables, variable)
+		}
+	}
+	return variables
+}
 
 // httpToolRejectionHappened says who fixes an HTTP tool call whose provider rejected its credential (see [remotemcp.CredentialRejected]),
 // from the credentials the call actually sent. A caller's own credential, or none, writes nothing, and so does a

@@ -98,7 +98,14 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 			require.Equal(t, tc.want, report.GrantFailure)
 			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true, Carrier: "Authorization"}}, report.Sent)
 			require.Equal(t, []string{"Content-Type"}, keys(w.Header()))
-			require.JSONEq(t, `{"error":`+strconv.Quote(clientGrantFailureMessage(tc.want))+`}`, w.Body.String())
+			require.JSONEq(t, `{"error":`+strconv.Quote(clientGrantFailureMessage(tc.want, false))+`}`, w.Body.String())
+			switch tc.want {
+			case toolconfig.ClientGrantRejected:
+				require.Contains(t, w.Body.String(), "its token service refused the request. Ask your administrator to check the tool's client ID, client secret, scopes and token URL.")
+			case toolconfig.ClientGrantMisconfigured:
+				require.Contains(t, w.Body.String(), "its token service gave an answer Speakeasy could not use. Ask your administrator to check the token URL in the tool's OpenAPI document or environment.")
+			case toolconfig.ClientGrantUnavailable, toolconfig.ClientGrantBlocked, toolconfig.ClientGrantAddressNotFound:
+			}
 			parsed, err := url.Parse(tc.tokenURL)
 			require.NoError(t, err)
 			require.NotContains(t, w.Body.String(), parsed.Hostname())

@@ -178,10 +178,11 @@ func processSecurity(
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
 							failure, ok := errors.AsType[*clientCredentialsError](err)
-							message := clientGrantFailureMessage(toolconfig.ClientGrantMisconfigured)
+							reason := toolconfig.ClientGrantMisconfigured
 							if ok {
-								message = clientGrantFailureMessage(failure.failure)
+								reason = failure.failure
 							}
+							message := clientGrantFailureMessage(reason, callerSetGrant(env, security, reason))
 							if ok && env.Credentials != nil {
 								applied[http.CanonicalHeaderKey("Authorization")] = credentialFrom(variable, grant)
 								env.Credentials.GrantFailure = failure.failure
@@ -464,24 +465,54 @@ func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure 
 	return toolconfig.ClientGrantUnavailable
 }
 
-// clientGrantFailureMessage tells the caller what to check when a tool could not get its access token.
-func clientGrantFailureMessage(failure toolconfig.ClientGrantFailure) string {
+// clientGrantFailureMessage tells whoever set the failing value what to check when a tool could not get its access token.
+func clientGrantFailureMessage(failure toolconfig.ClientGrantFailure, byCaller bool) string {
 	const prefix = "The tool could not get its access token: "
-	const askAdmin = ". Ask your administrator to check the tool's token URL."
+	const unusableAnswer = "its token service gave an answer Speakeasy could not use."
+	checkURL := " Ask your administrator to check the token URL in the tool's OpenAPI document or environment."
+	if byCaller {
+		checkURL = " Check the token URL you set for this tool."
+	}
 	switch failure {
 	case toolconfig.ClientGrantBlocked:
-		return prefix + "its token URL " + guardian.AddressNotAllowed.Problem() + askAdmin
+		return prefix + "its token URL " + guardian.AddressNotAllowed.Problem() + "." + checkURL
 	case toolconfig.ClientGrantAddressNotFound:
-		return prefix + "its token URL " + guardian.AddressNotFound.Problem() + askAdmin
+		return prefix + "its token URL " + guardian.AddressNotFound.Problem() + "." + checkURL
 	case toolconfig.ClientGrantRejected:
-		return prefix + "its token service refused the request. Ask your administrator to check the tool's client ID, client secret and scopes."
+		if byCaller {
+			return prefix + "its token service refused the request. Check the client ID and client secret you set for this tool."
+		}
+		return prefix + "its token service refused the request. Ask your administrator to check the tool's client ID, client secret, scopes and token URL."
 	case toolconfig.ClientGrantUnavailable:
-		return prefix + "its token service could not be reached or answered with an error. Try again in a few minutes. If it keeps happening, ask your administrator to check the tool's token URL."
+		if byCaller {
+			return prefix + "its token service could not be reached or answered with an error. If trying again does not help, check the token URL you set for this tool."
+		}
+		return prefix + "its token service could not be reached or answered with an error. If trying again does not help, ask your administrator to check the token URL in the tool's OpenAPI document or environment."
 	case toolconfig.ClientGrantMisconfigured:
-		return prefix + "its token service gave an answer Speakeasy could not use" + askAdmin
+		return prefix + unusableAnswer + checkURL
 	default:
-		return prefix + "its token service gave an answer Speakeasy could not use" + askAdmin
+		return prefix + unusableAnswer + checkURL
 	}
+}
+
+// callerSetGrant reports whether the caller set the value a failed grant points at: the client for a refusal, else the token URL.
+func callerSetGrant(env toolconfig.ToolCallEnv, security *HTTPToolSecurity, failure toolconfig.ClientGrantFailure) bool {
+	if env.Credentials == nil || env.UserConfig == nil {
+		return false
+	}
+	markers := []string{"TOKEN_URL"}
+	if failure == toolconfig.ClientGrantRejected {
+		markers = []string{"CLIENT_ID", "CLIENT_SECRET"}
+	}
+	for _, variable := range security.EnvVariables {
+		if !slices.ContainsFunc(markers, func(marker string) bool { return strings.Contains(variable, marker) }) || env.UserConfig.Get(variable) == "" {
+			continue
+		}
+		if slices.ContainsFunc(env.Credentials.CallerVariables, func(caller string) bool { return strings.EqualFold(caller, variable) }) {
+			return true
+		}
+	}
+	return false
 }
 
 func clientCredentialsStatusFailure(status int) toolconfig.ClientGrantFailure {
