@@ -4,6 +4,7 @@ import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { scopeLabel } from "@/pages/access/scopeCatalogue";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -140,6 +141,8 @@ function SelfGrantAccessForm({
       },
       {
         onSuccess: () => {
+          setOpen(false);
+          setReason("");
           invalidateTemporaryAccess(queryClient);
           onGranted?.();
         },
@@ -158,27 +161,6 @@ function SelfGrantAccessForm({
     );
   };
 
-  if (!open) {
-    return (
-      <Button
-        variant="secondary"
-        size="sm"
-        className={className}
-        onClick={() => {
-          setLookbackFrom(
-            new Date(Date.now() - TEMPORARY_ACCESS_CHALLENGE_LOOKBACK_MS),
-          );
-          setOpen(true);
-        }}
-      >
-        <Button.LeftIcon>
-          <Clock className="size-3.5" />
-        </Button.LeftIcon>
-        <Button.Text>Grant myself temporary access</Button.Text>
-      </Button>
-    );
-  }
-
   const durationOptions = (
     Object.keys(DURATION_LABELS) as TemporaryAccessDuration[]
   ).map((value) => {
@@ -192,98 +174,121 @@ function SelfGrantAccessForm({
   });
 
   return (
-    <form
-      className={cn(
-        "bg-card flex w-full flex-col gap-4 border p-4 text-left",
-        className,
-      )}
-      aria-label="Grant myself temporary access"
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-    >
-      <div className="flex flex-col gap-1">
-        <span className="text-eyebrow">Temporary access</span>
-        <p className="text-sm">
-          {scopeLabel(catalogue, scope)}{" "}
-          <span className="text-muted-foreground font-mono text-xs">
-            {scope}
-          </span>
-        </p>
-      </div>
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        className={className}
+        onClick={() => {
+          setLookbackFrom(
+            new Date(Date.now() - TEMPORARY_ACCESS_CHALLENGE_LOOKBACK_MS),
+          );
+          setConflict(null);
+          setOpen(true);
+        }}
+      >
+        <Button.LeftIcon>
+          <Clock className="size-3.5" />
+        </Button.LeftIcon>
+        <Button.Text>Grant myself temporary access</Button.Text>
+      </Button>
 
-      {coverage && resourceId !== undefined && (
-        <Field>
-          <FieldLabel>Covers</FieldLabel>
-          <SegmentedControl
-            ariaLabel="Covers"
-            value={covers}
-            onChange={setCovers}
-            options={[
-              { value: "one", label: coverage.one },
-              { value: "all", label: coverage.all },
-            ]}
-          />
-        </Field>
-      )}
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          // A grant in flight finishes in this dialog, so it stays open.
+          if (!next && createGrant.isPending) return;
+          setOpen(next);
+        }}
+      >
+        <Dialog.Content className="sm:max-w-lg">
+          <form
+            className="flex flex-col gap-5"
+            aria-label="Grant myself temporary access"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+          >
+            <Dialog.Header>
+              <Dialog.Title>Grant yourself temporary access</Dialog.Title>
+              <Dialog.Description>
+                {scopeLabel(catalogue, scope)}{" "}
+                <span className="font-mono text-xs">{scope}</span>. Applies to
+                you right away and is logged as self-granted.
+              </Dialog.Description>
+            </Dialog.Header>
 
-      <Field>
-        <FieldLabel>How long</FieldLabel>
-        <SegmentedControl
-          ariaLabel="How long"
-          value={duration}
-          onChange={setDuration}
-          options={durationOptions}
-        />
-        <FieldDescription>
-          {deadline
-            ? `Ends ${formatDeadline(deadline, now)}. You can revoke it earlier.`
-            : "Pick another duration."}
-        </FieldDescription>
-      </Field>
+            {coverage && resourceId !== undefined && (
+              <Field>
+                <FieldLabel>Covers</FieldLabel>
+                <SegmentedControl
+                  ariaLabel="Covers"
+                  value={covers}
+                  onChange={setCovers}
+                  options={[
+                    { value: "one", label: coverage.one },
+                    { value: "all", label: coverage.all },
+                  ]}
+                />
+              </Field>
+            )}
 
-      <Field>
-        <FieldLabel htmlFor="self-grant-reason">Reason</FieldLabel>
-        <Input
-          id="self-grant-reason"
-          value={reason}
-          onChange={setReason}
-          placeholder="What are you investigating?"
-          maxLength={1000}
-          required
-        />
-        <FieldDescription>
-          Recorded in the audit log with the grant.
-        </FieldDescription>
-      </Field>
+            <Field>
+              <FieldLabel>How long</FieldLabel>
+              <SegmentedControl
+                ariaLabel="How long"
+                value={duration}
+                onChange={setDuration}
+                options={durationOptions}
+              />
+              <FieldDescription>
+                {deadline
+                  ? `Ends ${formatDeadline(deadline, now)}. You can revoke it earlier.`
+                  : "Pick another duration."}
+              </FieldDescription>
+            </Field>
 
-      {conflict && (
-        <p className="text-muted-foreground text-sm" role="status">
-          {conflict}
-        </p>
-      )}
+            <Field>
+              <FieldLabel htmlFor="self-grant-reason">Reason</FieldLabel>
+              <Input
+                id="self-grant-reason"
+                value={reason}
+                onChange={setReason}
+                placeholder="What are you investigating?"
+                maxLength={1000}
+                required
+              />
+              <FieldDescription>
+                Recorded in the audit log with the grant.
+              </FieldDescription>
+            </Field>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="primary" size="sm" disabled={!canSubmit}>
-          <Button.Text>
-            {createGrant.isPending ? "Granting…" : "Grant access"}
-          </Button.Text>
-        </Button>
-        <Button
-          type="button"
-          variant="tertiary"
-          size="sm"
-          onClick={() => setOpen(false)}
-          disabled={createGrant.isPending}
-        >
-          <Button.Text>Cancel</Button.Text>
-        </Button>
-        <span className="text-muted-foreground text-xs">
-          Applies to you right away. Logged as self-granted.
-        </span>
-      </div>
-    </form>
+            {conflict && (
+              <p className="text-muted-foreground text-sm" role="status">
+                {conflict}
+              </p>
+            )}
+
+            <Dialog.Footer>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setOpen(false)}
+                disabled={createGrant.isPending}
+              >
+                <Button.Text>Cancel</Button.Text>
+              </Button>
+              <Button type="submit" variant="primary" disabled={!canSubmit}>
+                <Button.Text>
+                  {createGrant.isPending ? "Granting…" : "Grant access"}
+                </Button.Text>
+              </Button>
+            </Dialog.Footer>
+          </form>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
 

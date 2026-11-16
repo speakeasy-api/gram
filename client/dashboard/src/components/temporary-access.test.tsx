@@ -184,7 +184,26 @@ describe("SelfGrantAccess", () => {
       />,
     );
     openAndFill("Investigate");
+    expect(screen.getByRole("dialog")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Grant access" }));
     await waitFor(() => expect(onGranted).toHaveBeenCalledTimes(1));
+    // The dialog closes once the grant is created.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("opens the form in a dialog and closes it on Cancel", async () => {
+    renderWithClient(<SelfGrantAccess scope="chat:read" resourceId="chat-1" />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /grant myself temporary access/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("Grant yourself temporary access");
+    expect(dialog.textContent).toContain("chat:read");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(createGrant.mutate).not.toHaveBeenCalled();
   });
 });
