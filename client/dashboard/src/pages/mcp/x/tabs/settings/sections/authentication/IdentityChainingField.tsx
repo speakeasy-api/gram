@@ -252,7 +252,7 @@ function isCanonicalResource(resource: string): boolean {
   try {
     const url = new URL(resource);
     const authority = resource.split("/")[2] ?? "";
-    if (!url.hostname || /[@%]/.test(authority)) return false;
+    if (!url.hostname || !authority || /[@%]/.test(authority)) return false;
     if (url.protocol === "https:") return true;
     return (
       /^localhost(?::\d*)?$/.test(authority) ||

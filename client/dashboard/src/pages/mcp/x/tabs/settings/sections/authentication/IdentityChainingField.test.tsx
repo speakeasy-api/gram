@@ -626,6 +626,8 @@ describe("identity chaining vouched for by Speakeasy", () => {
     "https://example.com/mcp?",
     "https://example.com/mcp#",
     "https://user@example.com/mcp",
+    "https:///mcp",
+    "https:////mcp",
     "http://example.com/mcp",
     "http://[::ffff:128.0.0.1]/mcp",
     "not a URL",
