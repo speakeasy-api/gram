@@ -144,10 +144,9 @@ type OAuthRepo interface {
 // metadata for a toolset, or nil if the toolset is not OAuth-configured.
 //
 // oauthSlug is the slug used to address the Speakeasy-hosted OAuth endpoints
-// (`/oauth/{oauthSlug}/...`). Today the OAuth machinery is keyed by
-// `toolsets.mcp_slug`, so callers should pass that value even when the
-// protected-resource URL uses an `mcp_endpoints.slug` instead — see the
-// companion resourceURL argument on [ResolveOAuthProtectedResourceFromToolset].
+// (`/oauth/{oauthSlug}/...`): the `mcp_endpoints.slug` the request arrived
+// at — see the companion resourceURL argument on
+// [ResolveOAuthProtectedResourceFromToolset].
 //
 // resourceURL is the absolute URL of the protected resource. For metadata-based
 // External OAuth configurations, protected-resource metadata

@@ -122,8 +122,7 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
--- enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
--- legacyalias: drop disabled_wrapper with AIM-670.
+-- enables_mcp needs an endpoint.
 SELECT t.id, t.slug, EXISTS (
   SELECT 1
   FROM mcp_servers w
@@ -133,15 +132,7 @@ SELECT t.id, t.slug, EXISTS (
     AND w.visibility = 'disabled'
     AND w.deleted IS FALSE
     AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
-)::bool AS enables_mcp, EXISTS (
-  SELECT 1
-  FROM mcp_servers w
-  WHERE w.id = t.id
-    AND w.toolset_id = t.id
-    AND w.project_id = t.project_id
-    AND w.visibility = 'disabled'
-    AND w.deleted IS FALSE
-)::bool AS disabled_wrapper
+)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -355,8 +346,6 @@ LIMIT 1;
 -- (ListAddressableMCPEndpointsByMCPServerIDs): for a hosted row in endpointaddr.PrimaryEndpoint's order (domain
 -- root, then another custom-domain endpoint, then platform), as its toolset view and plugins advertise, a domain
 -- root at the bare domain; for any other row platform first, whose slug the assistant view reports.
--- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
--- caller fills in from legacyalias until the toolset slug fallback is removed.
 SELECT
   ams.assistant_id,
   ams.mcp_server_id,
@@ -364,8 +353,6 @@ SELECT
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
-  -- legacyalias: drop with AIM-670.
-  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   (ep.domain IS NOT NULL AND ep.is_domain_root IS TRUE)::bool AS endpoint_is_domain_root,
   t.default_environment_slug,

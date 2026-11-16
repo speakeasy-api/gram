@@ -31,7 +31,6 @@ guide documents the flags, output, and recovery.
 | Stored assistant grants for legacy built-in Admin and Member roles          | [ASSISTANT_ROLE_GRANTS_BACKFILL.md](./ASSISTANT_ROLE_GRANTS_BACKFILL.md)               |
 | Kit runtime workload admission audit entries moved to `security_audit_logs` | [AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md](./AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md)     |
 | `remote_sessions.organization_id` from each session's client                | [REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md](./REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md) |
-| Explicit endpoints for addresses legacy toolset aliases serve               | [LEGACY_ALIAS_ENDPOINTS_BACKFILL.md](./LEGACY_ALIAS_ENDPOINTS_BACKFILL.md)             |
 | Clear scopes copied onto remote session clients before #7199                | [CLIENT_SCOPES_BACKFILL.md](./CLIENT_SCOPES_BACKFILL.md)                               |
 
 The rest of this document covers the pipeline.
