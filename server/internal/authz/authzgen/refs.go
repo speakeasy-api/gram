@@ -263,14 +263,12 @@ func renderDimensionSet(b *strings.Builder, ref, scope, match string, set regist
 		params = append(params, paramName(key))
 	}
 	fmt.Fprintf(b, "// %s requests %s with %s. An empty value is left out of the\n", set.Method, scope, strings.Join(set.Keys, " and "))
-	b.WriteString("// check, except an empty disposition, which is carried as unannotated.\n")
+	b.WriteString("// check: a tool with no true hint is unannotated, and an empty disposition\n")
+	b.WriteString("// means the tool's annotations are unknown.\n")
 	fmt.Fprintf(b, "func (r %sRef) %s(%s string) Check {\n", ref, set.Method, strings.Join(params, ", "))
 	b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 	for i, key := range set.Keys {
 		fmt.Fprintf(b, "\tif %s != \"\" {\n\t\tdimensions[%q] = %s\n\t}\n", params[i], key, params[i])
-	}
-	if slices.Contains(set.Keys, registry.SelectorKeyDisposition) {
-		fmt.Fprintf(b, "\tdimensions[%q] = toolCallDisposition(dimensions[%q])\n", registry.SelectorKeyDisposition, registry.SelectorKeyDisposition)
 	}
 	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s).asToolCall()\n}\n\n", scope, match)
 }
