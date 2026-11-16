@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
@@ -116,13 +117,15 @@ function ClientRow({ use }: { use: ClientUse }): JSX.Element {
         </div>
       </td>
       <td className="px-4 py-3 align-top">
-        {use.bound ? (
-          <Text small>Bound</Text>
-        ) : (
-          <Text small className="text-warning">
-            Not bound
-          </Text>
-        )}
+        <Checkbox
+          checked={use.bound}
+          aria-label={use.bound ? "Bound" : "Not bound"}
+          tabIndex={-1}
+          className={cn(
+            "pointer-events-none mt-0.5",
+            !use.bound && "border-warning",
+          )}
+        />
       </td>
       <td className="px-4 py-3 align-top">
         {use.servers.length > 0 ? (

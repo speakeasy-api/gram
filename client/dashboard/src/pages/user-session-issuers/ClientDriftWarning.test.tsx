@@ -92,9 +92,14 @@ it("shows each mismatch when the warning is opened", () => {
   ).toBeTruthy();
 
   const rows = within(dialog).getAllByRole("row").slice(1);
-  expect(rows.map((row) => row.textContent)).toEqual([
-    expect.stringMatching(/^stray.*Not bound.*Linear/),
-    expect.stringMatching(/^unused.*Bound.*No server uses it/),
-    expect.stringMatching(/^github.*Bound.*GitHub/),
+  expect(
+    rows.map((row) => [
+      row.textContent,
+      within(row).getByRole("checkbox").getAttribute("aria-label"),
+    ]),
+  ).toEqual([
+    [expect.stringMatching(/^stray.*Linear/), "Not bound"],
+    [expect.stringMatching(/^unused.*No server uses it/), "Bound"],
+    [expect.stringMatching(/^github.*GitHub/), "Bound"],
   ]);
 });
