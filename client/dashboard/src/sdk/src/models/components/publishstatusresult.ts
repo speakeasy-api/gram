@@ -74,7 +74,7 @@ export type PublishStatusResult = {
    */
   upToDate?: boolean | undefined;
   /**
-   * Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: observability is enabled for the project, the pinned hooks release's relay carries the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema. Present when connected.
+   * Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: the pinned hooks release's relay carries the vibe provider and the org name satisfies the Agent Plugins 1.0 name schema. Present (true or false) when connected and observability is enabled for the project.
    */
   vibeObservabilityAvailable?: boolean | undefined;
   /**

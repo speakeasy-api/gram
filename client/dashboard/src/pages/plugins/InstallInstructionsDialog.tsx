@@ -1072,16 +1072,13 @@ function VibeInstallContent({
 
   // The dialog installs either the org's observability plugin (no specific
   // plugin selected) or one feature plugin. The Quick install (server-generated
-  // ZIP) exists only for the observability package, and renders whenever that
-  // package is published — the publish status carries its real install name,
-  // so the copy never shows a placeholder. Feature plugins publish as
+  // ZIP) exists only for the observability package, and renders whenever the
+  // vibe package is available — the ZIP does not depend on the marketplace
+  // repo — while the real install name comes from the publish status when the
+  // published repo carries the package. Feature plugins publish as
   // <slug>-vibe/ in the marketplace repo, but only when they are portable
   // Agent Plugins 1.0 packages.
-  // The Quick install (server-generated ZIP) renders whenever the vibe
-  // package is available — the ZIP does not depend on the marketplace repo —
-  // while the real install name comes from the publish status when the
-  // published repo carries the package.
-  const observabilityPublished = Boolean(observabilityAvailable);
+  const showQuickInstall = Boolean(observabilityAvailable);
   const observabilityName = observabilityPluginSlug ?? "<org>-observability";
   const isObservability = !pluginSlug || pluginSlug === observabilityPluginSlug;
   const installSlug = isObservability
@@ -1114,7 +1111,7 @@ function VibeInstallContent({
   return (
     <div className="min-w-0 space-y-6">
       {/* ── Quick install ─────────────────────────────────────────────────── */}
-      {observabilityPublished && (
+      {showQuickInstall && (
         <>
           <div>
             <h3 className="mb-2 text-sm font-semibold">Quick install</h3>

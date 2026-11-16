@@ -556,28 +556,29 @@ func vibeHomeDir() string {
 // itself resolves a name collision, so the first entry wins. Dedup is on the
 // normalised name (Vibe renders "-" and spaces as "_" in tool names): two
 // sources declaring names that normalise alike are a collision, and when
-// their URLs differ the alias is ambiguous and neither URL is reported, so a
-// hosted server cannot be claimed through the wrong entry. Config-file
+// their URLs or commands differ the alias is ambiguous and neither endpoint
+// is reported, so a call cannot be attributed to the wrong server. Config-file
 // discovery is best-effort, like Pi's.
 func loadVibeMCPServers(cwd string) []agenthooks.MCPServer {
 	var out []agenthooks.MCPServer
-	seen := map[string]string{}    // normalised alias -> URL
-	ambiguous := map[string]bool{} // alias declared with differing URLs
+	type endpoint struct{ url, command string }
+	seen := map[string]endpoint{}  // normalised alias -> endpoint
+	ambiguous := map[string]bool{} // alias declared with a differing endpoint
 	add := func(name, rawURL, command string) {
 		name = strings.TrimSpace(name)
 		alias := normalizeVibeServerName(name)
 		if name == "" || alias == "" {
 			return
 		}
-		rawURL = strings.TrimSpace(rawURL)
+		ep := endpoint{url: strings.TrimSpace(rawURL), command: command}
 		if prev, ok := seen[alias]; ok {
-			if prev != rawURL {
+			if prev != ep {
 				ambiguous[alias] = true
 			}
 			return
 		}
-		seen[alias] = rawURL
-		out = append(out, agenthooks.MCPServer{Name: name, URL: rawURL, Command: command})
+		seen[alias] = ep
+		out = append(out, agenthooks.MCPServer{Name: name, URL: ep.url, Command: ep.command})
 	}
 
 	if home := vibeHomeDir(); home != "" {

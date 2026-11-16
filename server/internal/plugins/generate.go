@@ -2631,8 +2631,9 @@ func renderVibeHooksTOML() []byte {
 	b.WriteString("# Git for Windows; PowerShell-only hosts are not supported).\n")
 	b.WriteString("# The pre_tool hook is strict: an undecodable payload or a crashed hook\n")
 	b.WriteString("# denies the call instead of letting it run unobserved. Strict does not\n")
-	b.WriteString("# cover an unreachable Speakeasy server — the relay fails open on\n")
-	b.WriteString("# transport, same as Claude Code.\n")
+	b.WriteString("# cover an unreachable Speakeasy server — there the relay follows the\n")
+	b.WriteString("# organization's fail-open setting (fail open when enabled, block the call\n")
+	b.WriteString("# otherwise), same as Claude Code.\n")
 	for _, event := range vibeObservabilityHookEvents {
 		// Only pre_tool is strict: the server can only block prompt and
 		// pre-tool events, so strict post_tool would just clear the result of

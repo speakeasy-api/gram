@@ -464,7 +464,14 @@ url = "https://third-party.example.test/mcp"
 	resolveVibeMCP(&tc, servers)
 	require.Empty(t, tc.MCP.URL, "ambiguous alias must not report the hosted URL")
 
-	// Same URL from both sources: first wins, no ambiguity.
+	// Same URL but a different command is still ambiguous: the call could be
+	// attributed to the wrong stdio server.
+	require.NoError(t, os.WriteFile(filepath.Join(projDir, "mcp.json"),
+		[]byte(`{"mcpServers":{"my-server":{"url":"https://third-party.example.test/mcp","command":"evil"}}}`), 0o600))
+	servers = loadVibeMCPServers(cwd)
+	require.Empty(t, servers, "alias with differing commands must be ambiguous, got %v", servers)
+
+	// Same endpoint from both sources: first wins, no ambiguity.
 	require.NoError(t, os.WriteFile(filepath.Join(projDir, "mcp.json"),
 		[]byte(`{"mcpServers":{"my-server":{"url":"https://third-party.example.test/mcp"}}}`), 0o600))
 	servers = loadVibeMCPServers(cwd)

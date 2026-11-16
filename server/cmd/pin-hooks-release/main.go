@@ -310,29 +310,60 @@ func templateData(data pins) struct {
 	}
 }
 
-// providerConstPattern matches the relay-local provider declarations, e.g.
-// `const ProviderVibe agenthooks.Provider = "vibe"` in hooks/relay/vibe.go.
-var providerConstPattern = regexp.MustCompile(`(?m)^const (Provider\w+) agenthooks\.Provider = "([^"]+)"$`)
-
 // scanRelayProviders returns the sorted provider slugs the relay source in
-// dir declares — the providers the released binary supports.
+// dir declares — the providers the released binary supports. It parses each
+// file with Go's AST rather than a regexp so grouped (`const (...)`) or
+// reformatted declarations are found too, and fails when no provider constant
+// is found at all: silently pinning an empty list would close every provider
+// gate without anyone noticing.
 func scanRelayProviders(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("read relay source %s: %w", dir, err)
 	}
 	seen := map[string]bool{}
+	fset := token.NewFileSet()
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(dir, e.Name())) // #nosec G304 -- release-workflow-supplied dir inside the repo checkout
+		path := filepath.Join(dir, e.Name())
+		file, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", e.Name(), err)
+			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
-		for _, m := range providerConstPattern.FindAllSubmatch(b, -1) {
-			seen[string(m[2])] = true
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				value, ok := spec.(*ast.ValueSpec)
+				if !ok || len(value.Names) != 1 || len(value.Values) != 1 {
+					continue
+				}
+				// const ProviderX agenthooks.Provider = "slug"
+				sel, ok := value.Type.(*ast.SelectorExpr)
+				if !ok || sel.Sel.Name != "Provider" {
+					continue
+				}
+				pkg, ok := sel.X.(*ast.Ident)
+				if !ok || pkg.Name != "agenthooks" {
+					continue
+				}
+				if !strings.HasPrefix(value.Names[0].Name, "Provider") {
+					continue
+				}
+				slug := stringLiteral(value.Values[0])
+				if slug == "" {
+					continue
+				}
+				seen[slug] = true
+			}
 		}
+	}
+	if len(seen) == 0 {
+		return nil, fmt.Errorf("no Provider* agenthooks.Provider constants found under %s; refusing to pin an empty provider list", dir)
 	}
 	out := make([]string, 0, len(seen))
 	for p := range seen {

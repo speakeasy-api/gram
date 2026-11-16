@@ -366,9 +366,9 @@ type GetPublishStatusResponseBody struct {
 	// Present when connected.
 	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
 	// Whether the Mistral Vibe observability plugin ZIP can be downloaded right
-	// now: observability is enabled for the project, the pinned hooks release's
-	// relay carries the vibe provider, and the org name satisfies the Agent
-	// Plugins 1.0 name schema. Present when connected.
+	// now: the pinned hooks release's relay carries the vibe provider and the org
+	// name satisfies the Agent Plugins 1.0 name schema. Present (true or false)
+	// when connected and observability is enabled for the project.
 	VibeObservabilityAvailable *bool `form:"vibe_observability_available,omitempty" json:"vibe_observability_available,omitempty" xml:"vibe_observability_available,omitempty"`
 	// Slug of the generated Mistral Vibe observability plugin's install directory
 	// (`~/.vibe/plugins/<slug>`) — present only when connected, observability is

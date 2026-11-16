@@ -67,11 +67,12 @@ var (
 	tokenPrefixRE = regexp.MustCompile(`(?i)://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)`)
 )
 
-// splitCommandFields splits a command line on unquoted whitespace, keeping
-// each quoted segment (single or double quotes) as one field with the quotes
-// stripped. A secret argument containing whitespace therefore stays a single
-// token and is masked whole, instead of leaking its remaining words when the
-// flattened command is re-split on spaces.
+// splitCommandFields splits a command line on unquoted whitespace (spaces,
+// tabs, CR, LF — a `sh -c 'true\nAPI_KEY=secret'` wrapper is newline-separated),
+// keeping each quoted segment (single or double quotes) as one field with the
+// quotes stripped. A secret argument containing whitespace therefore stays a
+// single token and is masked whole, instead of leaking its remaining words
+// when the flattened command is re-split on spaces.
 func splitCommandFields(raw string) []string {
 	var out []string
 	var cur strings.Builder
@@ -89,7 +90,7 @@ func splitCommandFields(raw string) []string {
 		case c == '\'' || c == '"':
 			inQuote = c
 			started = true
-		case c == ' ' || c == '\t':
+		case c == ' ' || c == '\t' || c == '\r' || c == '\n':
 			if started || cur.Len() > 0 {
 				out = append(out, cur.String())
 				cur.Reset()
@@ -232,7 +233,7 @@ func redactCommand(raw string) string {
 			// such field so a secret not at its start is still masked — e.g.
 			// `node /tmp/o'brien/server.js --api-key <secret>` or
 			// `sh -c 'cd /app && API_KEY=<secret> node server.js'`.
-			if strings.ContainsAny(f, " \t") {
+			if strings.ContainsAny(f, " \t\r\n") {
 				out = append(out, redactCommand(f))
 			} else {
 				out = append(out, f)
