@@ -2391,7 +2391,7 @@ func exchangeFailureAnswer(ctx context.Context, logger *slog.Logger, err error, 
 	failure := exchangeFailure(ctx, logger, err, tunneled)
 	if address := guardian.AddressFailureOf(err, tunneled); address != guardian.AddressFine {
 		// Still tagged as caused outside Speakeasy, so the response headers stay as they were.
-		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, oops.WithBrowserAdminDetail(oops.WithBrowserReason(failure, oauthui.ReasonSignInAddress), SignInAddressDetail(address)))
+		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, oops.WithBrowserAdminDetail(oops.WithBrowserReason(failure, SignInAddressReason(address)), SignInAddressDetail(address)))
 	}
 	if !exchangeFailureIsProviderOutage(failure, err) {
 		return failure

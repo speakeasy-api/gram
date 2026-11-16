@@ -390,8 +390,8 @@ func TestMemberClientFailure_NamesOnlyAReachedUpstream(t *testing.T) {
 		text     string
 		host     string
 	}{
-		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), dial: dial, code: mcpconnectionattempts.CodeAddressNotAllowed, text: `server "fixture" can't connect because of how it is set up. Waiting won't fix this. Ask your administrator to fix it.`, host: "mcp.example.com"},
-		{name: "missing", exchange: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "mcp.example.com", IsNotFound: true}}, dial: dial, code: mcpconnectionattempts.CodeAddressNotFound, text: `server "fixture" can't connect because of how it is set up. Waiting won't fix this. Ask your administrator to fix it.`, host: "mcp.example.com"},
+		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), dial: dial, code: mcpconnectionattempts.CodeAddressNotAllowed, text: `server "fixture" can't connect: its address is a private or internal one that Speakeasy can't reach. Waiting won't fix this. Ask your administrator to fix the server's address.`, host: "mcp.example.com"},
+		{name: "missing", exchange: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "mcp.example.com", IsNotFound: true}}, dial: dial, code: mcpconnectionattempts.CodeAddressNotFound, text: `server "fixture" can't connect: its address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's address.`, host: "mcp.example.com"},
 		{name: "unresolved", exchange: fmt.Errorf("lookup: %w", guardian.ErrBadHost), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},
 		{name: "redirect hop", exchange: redirectedToBlocked(t), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},
 		{name: "tunneled", exchange: fmt.Errorf("dial gateway: %w", guardian.ErrBlockedIP), dial: memberDial{tunneled: true}, code: mcpconnectionattempts.CodeInternalError, text: noAnswer, host: ""},

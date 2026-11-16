@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
 // ConnectionOutageHappened attributes an ErrRemoteSessionUnavailable to its known owner.
@@ -64,4 +65,12 @@ func OutageAddressOption(err error) mcpconnectionattempts.Option {
 // SignInAddressDetail says which sign-in provider address problem it is, for an administrator only.
 func SignInAddressDetail(address guardian.AddressFailure) string {
 	return "The sign-in provider " + address.Problem() + "."
+}
+
+// SignInAddressReason is the sign-in error page's reason for an address problem.
+func SignInAddressReason(address guardian.AddressFailure) oauthui.Reason {
+	if address == guardian.AddressNotFound {
+		return oauthui.ReasonSignInAddressMissing
+	}
+	return oauthui.ReasonSignInAddress
 }

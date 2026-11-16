@@ -56,8 +56,8 @@ func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bo
 	case errors.Is(err, context.Canceled):
 		return oops.E(oops.CodeBadRequest, err, "client cancelled request").LogError(ctx, p.Logger)
 	default:
-		if guardian.AddressFailureOf(err, p.Identity.TunneledMCPServerID != "") != guardian.AddressFine {
-			return oops.E(oops.CodeGatewayError, err, "%s", guardian.SetupMessage("This server")).LogError(ctx, p.Logger)
+		if address := guardian.AddressFailureOf(err, p.Identity.TunneledMCPServerID != ""); address != guardian.AddressFine {
+			return oops.E(oops.CodeGatewayError, err, "%s", address.EndUserMessage("This server", guardian.OwnAddress)).LogError(ctx, p.Logger)
 		}
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").LogError(ctx, p.Logger)
 	}

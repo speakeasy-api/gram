@@ -223,7 +223,7 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 func connectionRouteFailure(err error, canConnect bool) (authentication, instructions string) {
 	if outage, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
 		if outage.address != guardian.AddressFine {
-			return "unreachable", guardian.SetupMessage("This server")
+			return "unreachable", outage.address.EndUserMessage("This server", guardian.SignInAddress)
 		}
 		if outage.session == nil {
 			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support."
@@ -304,8 +304,8 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	default:
 		state.Authentication = "unreachable"
 		state.Instructions = "The upstream could not be verified; try again later."
-		if guardian.AddressFailureOf(failure.err, dial.tunneled) != guardian.AddressFine {
-			state.Instructions = guardian.SetupMessage("This server")
+		if address := guardian.AddressFailureOf(failure.err, dial.tunneled); address != guardian.AddressFine {
+			state.Instructions = address.EndUserMessage("This server", guardian.OwnAddress)
 		}
 	}
 	return state

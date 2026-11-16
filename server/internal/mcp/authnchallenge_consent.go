@@ -1880,7 +1880,7 @@ func isUniqueViolation(err error) bool {
 // agentConnectionsOutage presents an agent's connection outage on the sign-in error page; an address cause adds its problem to Technical details only.
 func agentConnectionsOutage(outage *oops.ShareableError, err error) error {
 	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
-		return fmt.Errorf("check agent connections: %w", oops.WithBrowserAdminDetail(oops.WithBrowserReason(outage, oauthui.ReasonSignInAddress), remotesessions.SignInAddressDetail(address)))
+		return fmt.Errorf("check agent connections: %w", oops.WithBrowserAdminDetail(oops.WithBrowserReason(outage, remotesessions.SignInAddressReason(address)), remotesessions.SignInAddressDetail(address)))
 	}
 	if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
 		return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
@@ -1895,7 +1895,7 @@ func (c remoteSessionCard) connectionDown() bool {
 
 // SignInAddressStatus is the card's status line when its sign-in setup stops it; the reason stays on the connection row.
 func (c remoteSessionCard) SignInAddressStatus() string {
-	return "Can't connect · this sign-in isn't set up correctly · ask your administrator"
+	return c.signInAddressFailure.CardStatus(guardian.ThisSignInAddress)
 }
 
 // needsAction reports a card with a reconnect or verification still open.

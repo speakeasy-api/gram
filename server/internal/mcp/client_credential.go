@@ -164,7 +164,7 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 			return linkedMemberOutage(member, err, "")
 		}
 		if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
-			return memberAddressOutage(guardian.SetupMessage(fmt.Sprintf("server %q", member.slug)), nil, address)
+			return memberAddressOutage(address.EndUserMessage(fmt.Sprintf("server %q", member.slug), guardian.SignInAddress), nil, address)
 		}
 		if remotesessions.TokenEndpointCausedOutage(err) {
 			return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't available right now. Retry shortly. If it keeps happening, ask your administrator", member.slug), nil)
@@ -226,7 +226,7 @@ func outageWaitWords(wait time.Duration) string {
 // linkedMemberOutage offers reconnecting only when the connect page has a Reconnect button for it.
 func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
-		return memberAddressOutage(guardian.SetupMessage(fmt.Sprintf("server %q", member.slug)), err, address)
+		return memberAddressOutage(address.EndUserMessage(fmt.Sprintf("server %q", member.slug), guardian.SignInAddress), err, address)
 	}
 	retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(err)) + "."
 	switch remotesessions.OutageKindOf(err) {

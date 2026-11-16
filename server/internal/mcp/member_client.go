@@ -430,7 +430,7 @@ func memberNoAnswerMessage(slug string, address guardian.AddressFailure) string 
 	if address == guardian.AddressFine {
 		return fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", slug)
 	}
-	return guardian.SetupMessage(fmt.Sprintf("server %q", slug))
+	return address.EndUserMessage(fmt.Sprintf("server %q", slug), guardian.OwnAddress)
 }
 
 // memberUpstreamFailedError is a member call that reached its upstream at host, which failed it.
