@@ -263,3 +263,53 @@ export function onboardReadiness(
     ],
   };
 }
+
+/** The catalog fields the Shadow MCP page needs to point at an entry. */
+export type ShadowMCPCatalogCandidate = {
+  registrySpecifier: string;
+  title?: string;
+  remotes?: Array<{ url: string }>;
+};
+
+/**
+ * One URL in the form both lists use: no trailing slash, a lowercase scheme
+ * and host, and no default port. Paths stay case sensitive.
+ */
+function comparableServerUrl(raw: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return raw.trim().replace(/\/+$/, "");
+  }
+  const defaultPort =
+    (parsed.protocol === "https:" && parsed.port === "443") ||
+    (parsed.protocol === "http:" && parsed.port === "80");
+  const host = defaultPort ? parsed.hostname : parsed.host;
+  const path = parsed.pathname.replace(/\/+$/, "");
+  return `${parsed.protocol}//${host.toLowerCase()}${path}${parsed.search}`;
+}
+
+/**
+ * The catalog entry that serves this Shadow MCP server's URL, if there is
+ * one. A catalog entry carries the setup steps for a server whose sign-in
+ * provider needs a client registered by hand, so it is the next step when
+ * the server cannot be made official automatically.
+ */
+export function shadowMCPCatalogMatch<T extends ShadowMCPCatalogCandidate>(
+  catalog: readonly T[],
+  serverUrl: string,
+): T | null {
+  const target = comparableServerUrl(serverUrl);
+  const match = catalog.find((entry) =>
+    (entry.remotes ?? []).some(
+      (remote) => comparableServerUrl(remote.url) === target,
+    ),
+  );
+  return match ?? null;
+}
+
+/** Whether the catalog can help: only a sign-in that needs a manual setup. */
+export function catalogCanHelpWith(blockerCode: string | undefined): boolean {
+  return blockerCode === "sign_in_manual" || blockerCode === "sign_in_unknown";
+}

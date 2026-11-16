@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   toastSuccess: vi.fn(),
   save: vi.fn(),
+  catalogServers: [] as Array<{
+    registrySpecifier: string;
+    title?: string;
+    remotes: Array<{ url: string }>;
+  }>,
 }));
 
 vi.mock("@gram/client/react-query/probeRemoteMcpURL.js", () => ({
@@ -29,6 +34,12 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       add: { remote: { href: () => "/acme/projects/default/mcp/add/remote" } },
+      catalog: {
+        detail: {
+          href: (specifier: string) =>
+            `/acme/projects/default/mcp/catalog/${specifier}`,
+        },
+      },
       details: {
         overview: {
           href: (param: string) => `/acme/projects/default/mcp/${param}`,
@@ -48,6 +59,12 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
         { id: "server-off", name: "Old Server", visibility: "disabled" },
       ],
     },
+  }),
+}));
+vi.mock("@/pages/catalog/hooks", () => ({
+  useListMCPCatalog: () => ({
+    data: { servers: mocks.catalogServers },
+    isLoading: false,
   }),
 }));
 vi.mock("./useSaveShadowMCPOfficialServer", () => ({
@@ -101,6 +118,7 @@ describe("OfficialServerPanel", () => {
     mocks.toastSuccess.mockReset();
     mocks.save.mockReset();
     mocks.save.mockResolvedValue(undefined);
+    mocks.catalogServers = [];
     window.localStorage.clear();
   });
   afterEach(cleanup);
@@ -153,6 +171,7 @@ describe("OfficialServerPanel", () => {
         server_url: "https://tracker.example.com/mcp",
         server_name: "Tracker",
         blocker: "unreachable:guardian_rejected",
+        catalog_specifier: null,
         people_using_it: 5,
         calls: 13,
       },
@@ -160,6 +179,65 @@ describe("OfficialServerPanel", () => {
     expect(mocks.toastSuccess).toHaveBeenCalled();
     const requested = screen.getByRole("button", { name: "Help requested" });
     expect((requested as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("sends a manual sign-in to the catalog entry for the same URL", async () => {
+    mocks.catalogServers = [
+      {
+        registrySpecifier: "com.example/tracker",
+        title: "Tracker Cloud",
+        remotes: [{ url: "https://tracker.example.com/mcp/" }],
+      },
+    ];
+    mocks.probe.mockResolvedValue({
+      outcome: "authentication_required",
+      protectedResourceMetadataUrl:
+        "https://tracker.example.com/.well-known/oauth-protected-resource",
+      signInSetup: "manual",
+    });
+    renderPanel(server());
+
+    expect(
+      await screen.findByText("Set it up from the Speakeasy catalog"),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Set up from the catalog" })
+        .getAttribute("href"),
+    ).toBe("/acme/projects/default/mcp/catalog/com.example%2Ftracker");
+    expect(screen.queryByText("This server needs a manual setup")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Request help" }));
+    expect(mocks.capture).toHaveBeenCalledWith(
+      "shadow_mcp_onboarding_requested",
+      expect.objectContaining({
+        blocker: "sign_in_manual",
+        catalog_specifier: "com.example/tracker",
+      }),
+    );
+  });
+
+  it("asks for a manual setup when the catalog has no entry", async () => {
+    mocks.catalogServers = [
+      {
+        registrySpecifier: "com.example/other",
+        remotes: [{ url: "https://other.example.com/mcp" }],
+      },
+    ];
+    mocks.probe.mockResolvedValue({
+      outcome: "authentication_required",
+      protectedResourceMetadataUrl:
+        "https://tracker.example.com/.well-known/oauth-protected-resource",
+      signInSetup: "manual",
+    });
+    renderPanel(server());
+
+    expect(
+      await screen.findByText("This server needs a manual setup"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "Set up from the catalog" }),
+    ).toBeNull();
   });
 
   it("lets the admin run the check again when it fails", async () => {

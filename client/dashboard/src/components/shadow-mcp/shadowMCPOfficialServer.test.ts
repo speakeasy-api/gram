@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  catalogCanHelpWith,
+  shadowMCPCatalogMatch,
   canMakeShadowMCPServerOfficial,
   shadowMCPOfficialState,
   onboardReadiness,
@@ -255,5 +257,44 @@ describe("shadowMCPOfficialState", () => {
     expect(shadowMCPOfficialState({ officialServer: undefined }, false)).toBe(
       null,
     );
+  });
+});
+
+describe("shadowMCPCatalogMatch", () => {
+  const catalog = [
+    {
+      registrySpecifier: "com.example/tracker",
+      title: "Tracker",
+      remotes: [{ url: "https://MCP.Example.com:443/mcp/" }],
+    },
+    { registrySpecifier: "com.example/other", remotes: [] },
+  ];
+
+  it("matches a remote URL that differs only in form", () => {
+    expect(
+      shadowMCPCatalogMatch(catalog, "https://mcp.example.com/mcp")
+        ?.registrySpecifier,
+    ).toBe("com.example/tracker");
+  });
+
+  it("does not match a different path", () => {
+    expect(shadowMCPCatalogMatch(catalog, "https://mcp.example.com/v2")).toBe(
+      null,
+    );
+  });
+
+  it("does not match a different port", () => {
+    expect(
+      shadowMCPCatalogMatch(catalog, "https://mcp.example.com:8443/mcp"),
+    ).toBe(null);
+  });
+});
+
+describe("catalogCanHelpWith", () => {
+  it("helps only with sign-in that needs a manual setup", () => {
+    expect(catalogCanHelpWith("sign_in_manual")).toBe(true);
+    expect(catalogCanHelpWith("sign_in_unknown")).toBe(true);
+    expect(catalogCanHelpWith("unreachable:timeout")).toBe(false);
+    expect(catalogCanHelpWith(undefined)).toBe(false);
   });
 });

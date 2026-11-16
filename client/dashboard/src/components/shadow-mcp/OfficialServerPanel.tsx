@@ -23,6 +23,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
+import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ProbeURLResult } from "@gram/client/models/components/probeurlresult.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -32,9 +33,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
+  catalogCanHelpWith,
   onboardReadiness,
   SHADOW_MCP_OFFICIAL_STATE_LABEL,
   type OnboardCheck,
+  shadowMCPCatalogMatch,
   shadowMCPOfficialServerDescription,
   shadowMCPOnboardHref,
 } from "./shadowMCPOfficialServer";
@@ -242,6 +245,22 @@ function MakeOfficialPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const serverName =
     server.serverName || server.urlHost || server.canonicalServerUrl;
 
+  // A server whose sign-in needs a hand-registered client may still be in the
+  // catalog, whose page walks through that setup. The catalog is only read
+  // when it can help.
+  const catalogCanHelp =
+    readiness !== null &&
+    !readiness.ready &&
+    catalogCanHelpWith(readiness.blockerCode);
+  const catalog = useListMCPCatalog(undefined, undefined, {
+    enabled: catalogCanHelp,
+  });
+  const catalogEntry =
+    catalogCanHelp && catalog.data?.servers
+      ? shadowMCPCatalogMatch(catalog.data.servers as CatalogServer[], url)
+      : null;
+  const catalogPending = catalogCanHelp && catalog.isLoading;
+
   const requestHelp = () => {
     // The URL is the canonical form the inventory already shows: no query
     // string and no credentials. Staff need it to set the server up.
@@ -251,6 +270,7 @@ function MakeOfficialPanel({ server }: { server: ShadowMCPInventoryServer }) {
       server_url: server.canonicalServerUrl,
       server_name: serverName,
       blocker: readiness?.blockerCode ?? "check_failed",
+      catalog_specifier: catalogEntry?.registrySpecifier ?? null,
       people_using_it: server.userCount,
       calls: server.observedUseCount,
     });
@@ -297,7 +317,47 @@ function MakeOfficialPanel({ server }: { server: ShadowMCPInventoryServer }) {
         </div>
       ) : null}
 
-      {readiness && !readiness.ready ? (
+      {readiness && !readiness.ready && catalogEntry ? (
+        <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <Icon
+              name="book-open"
+              className="text-muted-foreground mt-0.5 size-4 shrink-0"
+            />
+            <div className="min-w-0 space-y-1">
+              <Text variant="small" className="font-medium">
+                Set it up from the Speakeasy catalog
+              </Text>
+              <Text muted small className="max-w-xl">
+                {`${catalogEntry.title || serverName} is in the catalog. Add it from there, then enter the client you registered with its sign-in provider. It becomes official when you turn it on.`}
+              </Text>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={requested}
+              onClick={requestHelp}
+            >
+              <Button.Text>
+                {requested ? "Help requested" : "Request help"}
+              </Button.Text>
+            </Button>
+            <Button size="sm" asChild>
+              <Link
+                to={routes.mcp.catalog.detail.href(
+                  encodeURIComponent(catalogEntry.registrySpecifier),
+                )}
+              >
+                <Button.Text>Set up from the catalog</Button.Text>
+              </Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {readiness && !readiness.ready && !catalogEntry && !catalogPending ? (
         <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <div className="min-w-0 space-y-1">
             <Text variant="small" className="font-medium">

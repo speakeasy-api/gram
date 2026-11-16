@@ -9,4 +9,4 @@ Direct connections to an onboarded server are blocked wherever a Shadow MCP poli
 
 Under Advanced, closed by default, an admin can choose any server in the project as a Shadow MCP server's official version, and can keep direct connections working while the official server is tested. Such a server shows as Testing until direct connections are blocked again. Each change is recorded in the audit log.
 
-The URL check reports how Speakeasy can register with a server's sign-in provider: dynamic client registration, a client ID metadata document, or neither. A provider that supports neither needs a client registered by hand, so the Shadow MCP page offers a request for help instead of Make official.
+The URL check reports how Speakeasy can register with a server's sign-in provider: dynamic client registration, a client ID metadata document, or neither. A provider that supports neither needs a client registered by hand. When the Speakeasy catalog has an entry for the same URL, the Shadow MCP page links to it, since the catalog adds the server and its settings take the hand-registered client. Otherwise the page offers a request for help instead of Make official.
