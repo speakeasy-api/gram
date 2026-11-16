@@ -417,11 +417,11 @@ func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {
 	t.Parallel()
 
 	member := metaMember{slug: "m"}
-	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true}, http.StatusUnauthorized)
+	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true}, http.StatusUnauthorized, false, true)
 	require.Contains(t, err.Error(), "Ask an admin of the server's project to fix the server's credential")
 	require.NotContains(t, err.Error(), "reconnect")
 
-	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false}, http.StatusUnauthorized)
+	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false}, http.StatusUnauthorized, false, true)
 	require.Contains(t, err.Error(), "Ask your administrator to reconnect it")
 }
 
@@ -453,6 +453,6 @@ func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
 	t.Parallel()
 
 	member := metaMember{slug: "m"}
-	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized), `server "m" requires authentication and has no credential for this caller. Ask your administrator to connect it`)
-	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
+	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized, false, true), `server "m" requires authentication and has no credential for this caller. Ask your administrator to connect it`)
+	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized, false, true), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }

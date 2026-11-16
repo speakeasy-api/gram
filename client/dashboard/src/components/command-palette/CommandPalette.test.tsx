@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +28,11 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   prefilter: vi.fn(),
   rank: vi.fn(),
+  launcherOptions: [] as Array<{
+    query: string;
+    enabled: boolean;
+    inProject: boolean;
+  }>,
 }));
 
 vi.mock("@/contexts/CommandPalette", () => ({
@@ -43,7 +54,14 @@ vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
 }));
 vi.mock("./candidates", () => ({
-  useLauncherCandidates: () => mocks.candidates,
+  useLauncherCandidates: (options: {
+    query: string;
+    enabled: boolean;
+    inProject: boolean;
+  }) => {
+    mocks.launcherOptions.push(options);
+    return mocks.candidates;
+  },
 }));
 vi.mock("./ranker", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./ranker")>();
@@ -127,6 +145,7 @@ beforeEach(() => {
   mocks.capture.mockReset();
   mocks.prefilter.mockReset();
   mocks.rank.mockReset();
+  mocks.launcherOptions = [];
   palette.isOpen = true;
   palette.close.mockReset();
   runSettings.mockReset();
@@ -137,6 +156,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("CommandPalette", () => {
+  it("debounces two-character resource queries for 200ms", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<CommandPalette />);
+      fireEvent.change(input(), { target: { value: "ab" } });
+      expect(mocks.launcherOptions.at(-1)?.query).toBe("");
+      await act(async () => {
+        vi.advanceTimersByTime(199);
+      });
+      expect(mocks.launcherOptions.at(-1)?.query).toBe("");
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(mocks.launcherOptions.at(-1)?.query).toBe("ab");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("captures one performance event per open under StrictMode", () => {
     const view = render(
       <StrictMode>

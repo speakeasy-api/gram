@@ -73,20 +73,26 @@ function challengeToBucket(c: AuthzChallenge): ChallengeBucket {
     resolutionType: c.resolutionType,
     resolvedBy: c.resolvedBy,
     resolutionRoleSlug: c.resolutionRoleSlug,
+    resolutionTemporaryGrant: c.resolutionTemporaryGrant,
   };
 }
 
 export function OutcomeBadge({
   outcome,
   resolved,
+  temporary,
 }: {
   outcome: BucketOutcome;
   resolved?: boolean;
+  /** Resolved by a temporary grant that still applies. */
+  temporary?: boolean;
 }): JSX.Element {
   if (resolved) {
     return (
       <MoonshineBadge variant="neutral">
-        <MoonshineBadge.Text>Resolved</MoonshineBadge.Text>
+        <MoonshineBadge.Text>
+          {temporary ? "Temporary" : "Resolved"}
+        </MoonshineBadge.Text>
       </MoonshineBadge>
     );
   }
@@ -651,6 +657,15 @@ export function ChallengesTab(): JSX.Element {
             <Text variant="body" className="text-muted-foreground text-sm">
               A denied challenge that has since been addressed by granting the
               required access.
+            </Text>
+          </div>
+          <div className="flex items-start gap-3">
+            <MoonshineBadge variant="neutral" className="mt-0.5 shrink-0">
+              <MoonshineBadge.Text>Temporary</MoonshineBadge.Text>
+            </MoonshineBadge>
+            <Text variant="body" className="text-muted-foreground text-sm">
+              Resolved by temporary access that still applies. Hover the badge
+              to see when it ends; once it ends the row reads Resolved.
             </Text>
           </div>
         </div>

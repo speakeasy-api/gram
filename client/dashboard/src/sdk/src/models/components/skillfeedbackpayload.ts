@@ -26,13 +26,15 @@ export type SkillFeedbackPayloadOutcome = ClosedEnum<
 /**
  * Contract version.
  */
-export const SchemaVersion = {
+export const SkillFeedbackPayloadSchemaVersion = {
   HookSkillFeedbackV1: "hook.skill-feedback.v1",
 } as const;
 /**
  * Contract version.
  */
-export type SchemaVersion = ClosedEnum<typeof SchemaVersion>;
+export type SkillFeedbackPayloadSchemaVersion = ClosedEnum<
+  typeof SkillFeedbackPayloadSchemaVersion
+>;
 
 /**
  * Agent-volunteered feedback about a distributed skill.
@@ -49,7 +51,7 @@ export type SkillFeedbackPayload = {
   /**
    * Contract version.
    */
-  schemaVersion: SchemaVersion;
+  schemaVersion: SkillFeedbackPayloadSchemaVersion;
   /**
    * Canonical name of the skill that was used.
    */
@@ -62,8 +64,9 @@ export const SkillFeedbackPayloadOutcome$outboundSchema: z.ZodMiniEnum<
 > = z.enum(SkillFeedbackPayloadOutcome);
 
 /** @internal */
-export const SchemaVersion$outboundSchema: z.ZodMiniEnum<typeof SchemaVersion> =
-  z.enum(SchemaVersion);
+export const SkillFeedbackPayloadSchemaVersion$outboundSchema: z.ZodMiniEnum<
+  typeof SkillFeedbackPayloadSchemaVersion
+> = z.enum(SkillFeedbackPayloadSchemaVersion);
 
 /** @internal */
 export type SkillFeedbackPayload$Outbound = {
@@ -81,7 +84,7 @@ export const SkillFeedbackPayload$outboundSchema: z.ZodMiniType<
   z.object({
     note: z.optional(z.string()),
     outcome: SkillFeedbackPayloadOutcome$outboundSchema,
-    schemaVersion: SchemaVersion$outboundSchema,
+    schemaVersion: SkillFeedbackPayloadSchemaVersion$outboundSchema,
     skill: z.string(),
   }),
   z.transform((v) => {

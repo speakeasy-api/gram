@@ -9,21 +9,21 @@ import (
 )
 
 type GetSetupHandoffToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp"`
-	ProviderKey    string `json:"provider_key" jsonschema:"reviewed provider key returned by register_catalog_mcp"`
-	CatalogRef     string `json:"catalog_ref" jsonschema:"reviewed catalog reference returned by register_catalog_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
+	ProviderKey string `json:"provider_key" jsonschema:"reviewed provider key returned by register_catalog_mcp"`
+	CatalogRef  string `json:"catalog_ref" jsonschema:"reviewed catalog reference returned by register_catalog_mcp"`
 }
 
 type GetSetupHandoffToolOutput struct {
-	ProjectID      string `json:"project_id"`
-	RegistrationID string `json:"registration_id"`
-	ProviderKey    string `json:"provider_key"`
-	CatalogRef     string `json:"catalog_ref"`
-	SetupURL       string `json:"setup_url"`
-	Intent         string `json:"intent"`
-	Handoff        string `json:"handoff,omitempty"`
-	ExpiresAt      string `json:"expires_at,omitempty"`
+	ProjectID   string `json:"project_id"`
+	MCPID       string `json:"mcp_id"`
+	ProviderKey string `json:"provider_key"`
+	CatalogRef  string `json:"catalog_ref"`
+	SetupURL    string `json:"setup_url"`
+	Intent      string `json:"intent"`
+	Handoff     string `json:"handoff,omitempty"`
+	ExpiresAt   string `json:"expires_at,omitempty"`
 }
 
 func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService) {
@@ -42,7 +42,14 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 		if err != nil {
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
-		setupInput := IssueSetupHandoffInput{ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID, ProviderKey: input.ProviderKey, CatalogRef: input.CatalogRef, NextAction: ""}
+		registrationID, err := registrations.registrationIDForMCP(ctx, principal, input.ProjectSlug, input.MCPID, "get_setup_handoff")
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, GetSetupHandoffToolOutput{}, nil
+			}
+			return nil, GetSetupHandoffToolOutput{}, err
+		}
+		setupInput := IssueSetupHandoffInput{ProjectSlug: input.ProjectSlug, RegistrationID: registrationID, ProviderKey: input.ProviderKey, CatalogRef: input.CatalogRef, NextAction: ""}
 		if isBrowserCatalogProviderKey(input.ProviderKey) || input.ProviderKey == directRemoteProviderKey {
 			if err := registrations.budgets.Handoff.Allow(ctx, principal); err != nil {
 				if budgetResult, ok := operationBudgetToolResult(err); ok {
@@ -55,11 +62,11 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 				return nil, GetSetupHandoffToolOutput{}, err
 			}
 			return nil, GetSetupHandoffToolOutput{
-				RegistrationID: input.RegistrationID,
-				ProviderKey:    input.ProviderKey,
-				CatalogRef:     input.CatalogRef,
-				SetupURL:       setupURL,
-				Intent:         "dashboard_source_settings",
+				MCPID:       input.MCPID,
+				ProviderKey: input.ProviderKey,
+				CatalogRef:  input.CatalogRef,
+				SetupURL:    setupURL,
+				Intent:      "dashboard_source_settings",
 			}, nil
 		}
 		issued, err := registrations.IssueSetupHandoff(ctx, principal, setupInput)
@@ -70,14 +77,14 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
 		return nil, GetSetupHandoffToolOutput{
-			ProjectID:      issued.ProjectID.String(),
-			RegistrationID: issued.RegistrationID.String(),
-			ProviderKey:    issued.ProviderKey,
-			CatalogRef:     issued.CatalogReference,
-			SetupURL:       providerSetupStartPath,
-			Intent:         issued.Intent,
-			Handoff:        issued.Value,
-			ExpiresAt:      issued.ExpiresAt.UTC().Format(time.RFC3339),
+			ProjectID:   issued.ProjectID.String(),
+			MCPID:       input.MCPID,
+			ProviderKey: issued.ProviderKey,
+			CatalogRef:  issued.CatalogReference,
+			SetupURL:    providerSetupStartPath,
+			Intent:      issued.Intent,
+			Handoff:     issued.Value,
+			ExpiresAt:   issued.ExpiresAt.UTC().Format(time.RFC3339),
 		}, nil
 	})
 }

@@ -1036,12 +1036,15 @@ type AuthzChallengeResolution struct {
 	ResourceKind string
 	// @access: opaque-confidential
 	ResourceID string
-	// How the challenge was resolved: role_assigned, dismissed.
+	// How the challenge was resolved: role_assigned, temporary_grant, dismissed.
 	// @access: confidential
 	ResolutionType string
 	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
 	// @access: confidential
 	RoleSlug pgtype.Text
+	// When resolution_type=temporary_grant, the principal_grants row that was granted with an expiry. Soft reference: the grant row may be revoked (deleted) later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
 	// URN of the admin who resolved the challenge.
 	// @access: confidential
 	ResolvedBy string
@@ -3890,6 +3893,8 @@ type McpServer struct {
 	// @access: confidential
 	RequiresUpstreamAuth pgtype.Bool
 	// @access: confidential
+	SetupGuideCompletedAt pgtype.Timestamptz
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -4259,6 +4264,16 @@ type NetworkIngress struct {
 	// @access: confidential
 	ConnectedSince pgtype.Timestamptz
 	// @access: confidential
+	Runtime pgtype.Text
+	// @access: confidential
+	GatewayShard string
+	// Superseded by gateway_service_hostnames and no longer written; read only as the recorded label of a row whose gateway_service_hostnames is empty.
+	// @access: restricted
+	GatewayServiceHostname pgtype.Text
+	// Labels of the Tailscale Services the gateway may have defined for this ingress; copies of current and former hostnames.
+	// @access: restricted
+	GatewayServiceHostnames []string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -4266,6 +4281,79 @@ type NetworkIngress struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type NetworkIngressCertificateState struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// tsnet certificate state key: "<domain>.crt", "<domain>.key" or the ACME account key name.
+	// @access: confidential
+	StateKey string
+	// Certificate, private key or ACME account key, encrypted under the organization's key.
+	// @access: secret-restricted
+	ValueEncrypted string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NetworkIngressNode struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	PodName pgtype.Text
+	// @access: secret-restricted
+	AuthKeyEncrypted pgtype.Text
+	// @access: confidential
+	AuthKeyExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	Status string
+	// @access: restricted
+	NodeID pgtype.Text
+	// @access: restricted
+	DnsName pgtype.Text
+	// @access: confidential
+	LastError pgtype.Text
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	ConnectedSince pgtype.Timestamptz
+	// @access: confidential
+	RetiredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NetworkIngressNodeState struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	StateKey string
+	// @access: secret-restricted
+	ValueEncrypted string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type OktaApplication struct {
@@ -5652,9 +5740,6 @@ type PrincipalGrant struct {
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	// @access: confidential
 	Scope string
-	// Whether this grant allows or denies the scope. NULL = allow for backward compatibility.
-	// @access: confidential
-	Effect pgtype.Text
 	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
 	// @access: confidential
 	DropResource pgtype.Text

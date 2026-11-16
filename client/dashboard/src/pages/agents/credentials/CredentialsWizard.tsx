@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -53,6 +54,7 @@ import {
   type ServerSelection,
 } from "./StepServers";
 import {
+  ACCOUNT_CHOICE,
   keyCredentialChoices,
   keyCredentialPlan,
 } from "./keyCredentialChoices";
@@ -113,6 +115,7 @@ import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
 import { connectionSelectable } from "./ownerConnections";
+import { missingSignInsSentence } from "./connectionAttention";
 import { attachOwnerConnections } from "./ownerConnections";
 import {
   WizardFooter,
@@ -423,6 +426,16 @@ export function CredentialsWizard({
   // is delivered. Every step is a destination because none of them creates
   // anything until the key is issued.
   const existing = agent !== undefined;
+  // A link that names a platform, such as the Claude Tag button, can reach
+  // someone who may not trust one. Say so before they choose servers and sign
+  // in, rather than only at Agent sign-in, which refuses them.
+  const presetRefusedForLink =
+    initialPlatformKey !== undefined &&
+    !editing &&
+    !existing &&
+    !rbacLoading &&
+    !rbacError &&
+    !canFederate;
   // An agent opened again usually has a working key already. The install
   // step cannot show it, but must not read as if the agent were unconnected.
   // Same options and permission gate as the agent's own pages, so all of them
@@ -527,6 +540,17 @@ export function CredentialsWizard({
   // null until the person picks, so the default can follow the project as it
 
   const [selected, setSelected] = useState<ServerSelection[]>([]);
+  // A server whose keys use a shared credential chosen for it needs nobody's
+  // own connection: it neither waits on one nor has one attached.
+  const usesOwnConnection = (server: InventoryServer): boolean => {
+    // "All servers" carries no per-row choice into the key, so every server
+    // falls back to the owner's own connection.
+    if (allServers) return true;
+    const choice = selected.find(
+      (entry) => entry.server.id === server.id,
+    )?.authClientId;
+    return !choice || choice === ACCOUNT_CHOICE;
+  };
   const [error, setError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -548,6 +572,9 @@ export function CredentialsWizard({
   const [platformKey, setPlatformKey] = useState<string | null>(
     initialPlatformKey ?? null,
   );
+  // Only while the setup still trusts that platform: someone who switches to
+  // an API key is no longer asking for anything their role refuses.
+  const presetRefused = presetRefusedForLink && credential === "workload";
   // Applied once the catalog and the admission have both arrived, and only
   // while the reader has not chosen something else.
   const adopted = useRef(false);
@@ -1455,7 +1482,10 @@ export function CredentialsWizard({
       const missing = await attachOwnerConnections(
         sdk,
         agent.id,
-        allServers ? listedServers : selected.map((entry) => entry.server),
+        (allServers
+          ? listedServers
+          : selected.map((entry) => entry.server)
+        ).filter(usesOwnConnection),
         undefined,
         true,
         typedConnections,
@@ -1549,7 +1579,7 @@ export function CredentialsWizard({
         const missing = await attachOwnerConnections(
           sdk,
           targetId,
-          reach,
+          reach.filter(usesOwnConnection),
           signal,
           allServers,
           typedConnections,
@@ -2255,6 +2285,35 @@ export function CredentialsWizard({
     }
   };
 
+  // The selected servers Continue waits on. Named in the footer, since every
+  // row on the sign-in step starts closed and a bare "the servers that need
+  // authentication" left the reader to find them.
+  const unconnected = selected
+    .map((entry) => entry.server)
+    .filter(
+      (server) =>
+        server.issuerId &&
+        usesOwnConnection(server) &&
+        !connectionSelectable(connections.byServer.get(server.id)),
+    );
+  const unconnectedNote = (() => {
+    const names = new Intl.ListFormat("en", { type: "conjunction" }).format(
+      unconnected.map((server) => server.name),
+    );
+    // What each one still needs, named by server once there is more than one.
+    const needs = unconnected.flatMap((server) => {
+      const sentence = missingSignInsSentence(
+        server,
+        connections.byServer.get(server.id),
+      );
+      if (!sentence) return [];
+      return [
+        unconnected.length === 1 ? sentence : `${server.name}: ${sentence}`,
+      ];
+    });
+    return [`Connect or remove ${names}.`, ...needs].join(" ");
+  })();
+
   const blocked = authStop
     ? authStop
     : step === 0
@@ -2274,14 +2333,8 @@ export function CredentialsWizard({
         : step === 2 &&
             offersConnections &&
             !allServers &&
-            selected.some(
-              (entry) =>
-                entry.server.issuerId &&
-                !connectionSelectable(
-                  connections.byServer.get(entry.server.id),
-                ),
-            )
-          ? "Connect or remove the servers that need authentication."
+            unconnected.length > 0
+          ? unconnectedNote
           : step === 2 && !editing && !allServers && selected.length === 0
             ? "Select at least one MCP server."
             : null;
@@ -2602,6 +2655,20 @@ export function CredentialsWizard({
 
   return (
     <div className="space-y-6">
+      {presetRefused && (
+        <Alert variant="warning" title={null}>
+          {/* The catalog that names the platform needs workload access too,
+              so the one preset the agents page links to is named here. */}
+          Setting up{" "}
+          {platform?.displayName ??
+            (initialPlatformKey === "claude-tag"
+              ? "Claude Tag"
+              : "a platform's sign-in")}{" "}
+          needs permission to manage workload identities, and your role does not
+          include it. Ask an organization admin to set it up, or to give you
+          that permission.
+        </Alert>
+      )}
       <WizardStepper
         // Issuing another key shows only the steps it walks through, so the
         // count reads "1 of 3" rather than starting on step 4.

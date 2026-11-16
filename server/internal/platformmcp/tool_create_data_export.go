@@ -48,14 +48,15 @@ func (r *PostgresReader) WithDataExportMutations(auditLogger *audit.Logger, dash
 }
 
 type CreateDataExportInput struct {
-	ProjectID     string `json:"project_id,omitempty" jsonschema:"project ID that will export telemetry; supply exactly one project selector"`
-	ProjectSlug   string `json:"project_slug,omitempty" jsonschema:"project slug that will export telemetry; supply exactly one project selector"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID     string `json:"-"`
+	ProjectSlug   string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	Name          string `json:"name" jsonschema:"display name for the OTEL destination"`
 	EndpointURL   string `json:"endpoint_url" jsonschema:"HTTP or HTTPS OTEL collector endpoint without credentials, query parameters, or fragments"`
 	DataSource    string `json:"data_source" jsonschema:"data to export: product_telemetry, risk_findings, tool_call_logs, or mcp_connection_logs"`
 	SensitiveData string `json:"sensitive_data,omitempty" jsonschema:"whether sensitive fields are included: exclude (default) or include"`
 	Enabled       *bool  `json:"enabled,omitempty" jsonschema:"whether delivery starts immediately; defaults to true"`
-	MinSeverity   string `json:"min_severity,omitempty" jsonschema:"only for mcp_connection_logs: lowest level sent, error (default; failed connections), warn (adds blocked connections), or info (adds declined connections)"`
+	MinSeverity   string `json:"min_severity,omitempty" jsonschema:"only for mcp_connection_logs: lowest level sent, error (default; failed connections), warn (adds blocked connections and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts; only those steps are sent with speakeasy.mcp_connection.final=false), or info (adds declined connections)"`
 	Confirmed     bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms the project, endpoint, data source, enabled state, sensitive-data policy, and, for mcp_connection_logs only, the minimum level"`
 }
 
@@ -226,7 +227,7 @@ func registerDataExportMutationTool(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "create_data_export",
 		Title:       "Create a Data Export",
-		Description: "Create one OTEL destination and connect one project's product telemetry, risk findings, tool call logs, or MCP connection logs to it. Before calling, show the user the exact project, endpoint, data source, enabled state, minimum level for MCP connection logs, and whether sensitive fields are included, then obtain explicit confirmation. MCP connection logs send failed connections by default (min_severity error); warn adds blocked connections and info adds declined ones; set_data_export_min_severity changes it later. Constraints: header secrets are never accepted in chat; the destination is created without headers and the returned management URL is where the user securely adds any required authentication. One route per project and data source is allowed. MCP connection logs leave out organization gateways.",
+		Description: "Create one OTEL destination and connect one project's product telemetry, risk findings, tool call logs, or MCP connection logs to it. Before calling, show the user the exact project, endpoint, data source, enabled state, minimum level for MCP connection logs, and whether sensitive fields are included, then obtain explicit confirmation. MCP connection logs send failed connections by default (min_severity error); warn adds blocked connections and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts (only those steps are sent with speakeasy.mcp_connection.final=false); info adds declined ones; set_data_export_min_severity changes it later. Constraints: header secrets are never accepted in chat; the destination is created without headers and the returned management URL is where the user securely adds any required authentication. One route per project and data source is allowed. MCP connection logs leave out organization gateways.",
 		Annotations: createDataExportAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateDataExportInput) (*mcp.CallToolResult, CreateDataExportOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -267,7 +268,7 @@ func dataExportMutationToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrDataExportInvalidInput):
 		refusal = dataExportMutationRefusal{Code: "invalid_input", Message: "Choose exactly one existing project, provide a valid HTTP or HTTPS endpoint without credentials, query parameters, or fragments, and use a supported data source and sensitive-data policy. min_severity is only for mcp_connection_logs and must be info, warn, or error."}
 	case errors.Is(err, ErrForbidden):
-		refusal = dataExportMutationRefusal{Code: "project_not_found", Message: "No accessible project matched that project ID or slug. Read the project inventory and choose one of the returned projects."}
+		refusal = dataExportMutationRefusal{Code: "project_not_found", Message: "No accessible project matched that project slug. Read the project inventory and choose one of the returned projects."}
 	default:
 		return nil, false
 	}

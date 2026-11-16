@@ -1,4 +1,4 @@
-h1:CPsMv8zrUYWxXF15TV9Bs+YGgDGl04lm2mrGcFUvPOc=
+h1:xkt+u8a6P55+zYAlZJJ+PVco/Kh7MgRR0BsmxnbGGO4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -538,3 +538,9 @@ h1:CPsMv8zrUYWxXF15TV9Bs+YGgDGl04lm2mrGcFUvPOc=
 20261113204803_organization-encryption-transitions.sql h1:IFju+8RafxFhfdOo1nEgZCDIXkztkZkqDhyDxAOZ/hs=
 20261113214850_oauth-org-encrypted-columns.sql h1:uL+EhMHEsOPPNqcRhfI0n4FAqk0nZqjP24BM+yPZoCw=
 20261113214907_oauth-org-encrypted-indexes.sql h1:Bl3sszlmu2Eh/+WHIeAx820BZ/j/THZm5Kbwh3bOcQE=
+20261116091018_add_mcp_servers_setup_guide_completed_at.sql h1:wdQkMQLmJJEZqET1ZgvR7I0veOZhCoYbVDOmW21FcrU=
+20261116115045_drop_principal_grants_effect.sql h1:DurpE8GIDUOPNbnn+WPo4trvnayKEQU0eZ/vCCUFWAg=
+20261116122014_challenge-resolution-temporary-grant.sql h1:njROQQV1YS6taRcOznKeJKg+MDoEVyxQXDtfjTftW4w=
+20261116145951_command_search_prefix_indexes.sql h1:X8SclKw9E9VAeWOecjMqKBn9yxiPUiVzOQBRLneRAJ0=
+20261116152521_network-ingress-gateway-nodes.sql h1:GYKf326hFzfGH1KgKvxkmqZiUP/sgqRWuGUp2/s16MA=
+20261116174350_network-ingresses-add-gateway-service-hostnames.sql h1:oqw0AT+V/BS5/8amHLJ0SRA68guGGUE/bM4LUlI7mXM=

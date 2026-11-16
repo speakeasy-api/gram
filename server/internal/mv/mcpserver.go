@@ -33,6 +33,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		PrimaryEndpointID:     nil,
 		PrimaryEndpointURL:    nil,
 		HasEndpoint:           nil,
+		SetupGuideCompletedAt: conv.PtrEmpty(conv.FromPGTimestamptz(server.SetupGuideCompletedAt)),
 		CreatedAt:             server.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             server.UpdatedAt.Time.Format(time.RFC3339),
 	}

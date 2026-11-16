@@ -154,6 +154,20 @@ func metricAnyValue(value otelattr.Value) (*otelv1.Metric_AnyValue, error) {
 		return (&otelv1.Metric_AnyValue_builder{
 			ArrayValue: (&otelv1.Metric_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
+	case otelattr.MAP:
+		input := value.AsMap()
+		values := make([]*otelv1.Metric_KeyValue, len(input))
+		for i, item := range input {
+			converted, err := metricAnyValue(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("convert map item %d: %w", i, err)
+			}
+			key := string(item.Key)
+			values[i] = (&otelv1.Metric_KeyValue_builder{Key: &key, Value: converted}).Build()
+		}
+		return (&otelv1.Metric_AnyValue_builder{
+			KvlistValue: (&otelv1.Metric_KeyValueList_builder{Values: values}).Build(),
+		}).Build(), nil
 	case otelattr.EMPTY:
 		return (&otelv1.Metric_AnyValue_builder{}).Build(), nil
 	}

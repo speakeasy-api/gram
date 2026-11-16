@@ -863,6 +863,7 @@ COMMENT ON COLUMN skills.created_at IS '@access: confidential';
 COMMENT ON COLUMN skills.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE INDEX IF NOT EXISTS skills_project_id_lower_display_name_idx ON skills (project_id, lower(display_name)) WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS skills_suggestion_sweep_idx ON skills (project_id, last_seen_at DESC, id DESC) WHERE archived_at IS NULL;
@@ -1243,6 +1244,10 @@ CREATE INDEX IF NOT EXISTS plugins_project_id_idx
   ON plugins (project_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_id_key ON plugins (project_id, id);
+
+CREATE INDEX IF NOT EXISTS plugins_organization_project_lower_name_idx
+  ON plugins (organization_id, project_id, lower(name))
+  WHERE deleted IS FALSE;
 
 -- Only one plugin per project may be the default (fallback) target that new
 -- servers land in absent explicit routing to a named plugin.
@@ -2522,6 +2527,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
 ON environments (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS environments_project_id_lower_name_idx
+ON environments (project_id, lower(name))
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS trigger_instances (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -2803,6 +2812,22 @@ CREATE TABLE IF NOT EXISTS network_ingresses (
   last_error TEXT,
   health_checked_at timestamptz,
   connected_since timestamptz,
+  -- Which runtime serves this ingress: NULL or 'operator' for the Tailscale
+  -- Kubernetes operator, 'gateway' for the tsnet tailnet gateway.
+  runtime TEXT,
+  -- Tailnet gateway StatefulSet that polls this ingress. 'shared' is the
+  -- multi-tenant default; a dedicated value pins an org to its own gateway.
+  gateway_shard TEXT NOT NULL DEFAULT 'shared',
+  -- Superseded by gateway_service_hostnames and no longer written. The
+  -- reconciler still reads it as the recorded label of a row whose
+  -- gateway_service_hostnames is empty, until a later contract migration
+  -- drops it.
+  gateway_service_hostname TEXT,
+  -- Labels of the Tailscale Services (svc:<label>) the gateway may have
+  -- defined for this ingress. A label is added before its service is defined
+  -- and removed once the service is deleted, so a rename never loses track
+  -- of a service still on the tailnet. Teardown deletes every recorded one.
+  gateway_service_hostnames TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2830,6 +2855,12 @@ COMMENT ON COLUMN network_ingresses.dns_name IS '@access: restricted';
 COMMENT ON COLUMN network_ingresses.last_error IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.health_checked_at IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.connected_since IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.runtime IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.gateway_shard IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.gateway_service_hostname IS 'Superseded by gateway_service_hostnames and no longer written; read only as the recorded label of a row whose gateway_service_hostnames is empty.
+@access: restricted';
+COMMENT ON COLUMN network_ingresses.gateway_service_hostnames IS 'Labels of the Tailscale Services the gateway may have defined for this ingress; copies of current and former hostnames.
+@access: restricted';
 COMMENT ON COLUMN network_ingresses.created_at IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.updated_at IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.deleted_at IS '@access: confidential';
@@ -2851,9 +2882,145 @@ WHERE deleted IS FALSE AND dns_name IS NOT NULL;
 CREATE INDEX IF NOT EXISTS network_ingresses_organization_id_custom_domain_id_idx
 ON network_ingresses (organization_id, custom_domain_id);
 
+-- Tenant-qualified target for the gateway node and state rows.
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingresses_organization_id_id_key
+ON network_ingresses (organization_id, id);
+
+-- Serves the tailnet gateway's poll for the ingresses its shard must host.
+CREATE INDEX IF NOT EXISTS network_ingresses_gateway_poll_idx
+ON network_ingresses (gateway_shard, id)
+WHERE enabled IS TRUE AND deleted IS FALSE AND runtime = 'gateway';
+
 CREATE INDEX IF NOT EXISTS network_ingresses_custom_domain_id_idx
 ON network_ingresses (custom_domain_id)
 WHERE deleted IS FALSE AND custom_domain_id IS NOT NULL;
+
+-- One row per (ingress, slot). A slot is a durable tailnet node identity
+-- (hostname speakeasy-gw-<slot>) hosted by the tailnet gateway pod whose
+-- StatefulSet ordinal equals the slot. The reconciler creates slot rows and
+-- one-shot auth keys; gateway pods write the heartbeat columns.
+--
+-- Every hosted slot is rewritten by a heartbeat every few seconds, so the
+-- table is laid out for HOT updates: no heartbeat column is indexed, and the
+-- reduced fillfactor makes same-page row versions and opportunistic pruning
+-- the common case; autovacuum still reclaims whatever pruning misses. Keep
+-- status, last_seen_at and the other heartbeat columns out of any index.
+CREATE TABLE IF NOT EXISTS network_ingress_nodes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  network_ingress_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  slot integer NOT NULL,
+  -- Last gateway pod that heartbeated this slot. Informational only.
+  pod_name TEXT,
+  -- One-shot, preauthorized, tagged auth key minted by the reconciler and
+  -- encrypted by the application. Cleared once the node has persisted state.
+  auth_key_encrypted TEXT,
+  auth_key_expires_at timestamptz,
+  -- pending | starting | online | draining | error | stopped | needs_login | awaiting_approval | awaiting_certificate (app-validated)
+  status TEXT NOT NULL DEFAULT 'pending',
+  -- Stable Tailscale node id used to delete the device on teardown.
+  node_id TEXT,
+  -- Fully qualified Tailscale Service name reported by the hosting node.
+  dns_name TEXT,
+  last_error TEXT,
+  last_seen_at timestamptz,
+  connected_since timestamptz,
+  -- Set by the reconciler to drain the slot; the gateway stops hosting it and
+  -- the device is deleted on the next reconcile.
+  retired_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT network_ingress_nodes_pkey PRIMARY KEY (id),
+  -- Tenant-qualified so a node row can never point at another organization's ingress.
+  CONSTRAINT network_ingress_nodes_organization_id_network_ingress_id_fkey FOREIGN KEY (organization_id, network_ingress_id) REFERENCES network_ingresses (organization_id, id) ON DELETE NO ACTION
+) WITH (fillfactor = 70);
+
+COMMENT ON COLUMN network_ingress_nodes.id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.network_ingress_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.organization_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.slot IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.pod_name IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.auth_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingress_nodes.auth_key_expires_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.status IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.node_id IS '@access: restricted';
+COMMENT ON COLUMN network_ingress_nodes.dns_name IS '@access: restricted';
+COMMENT ON COLUMN network_ingress_nodes.last_error IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.connected_since IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.retired_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.created_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_nodes.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingress_nodes_network_ingress_id_slot_key
+ON network_ingress_nodes (network_ingress_id, slot);
+
+CREATE INDEX IF NOT EXISTS network_ingress_nodes_organization_id_idx
+ON network_ingress_nodes (organization_id);
+
+-- Persisted tsnet node state (machine key, node key, profiles) for one
+-- (ingress, slot), so gateway pods reconnect as the same device instead of
+-- registering a new one. Values are encrypted by the application.
+CREATE TABLE IF NOT EXISTS network_ingress_node_states (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  network_ingress_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  slot integer NOT NULL,
+  state_key TEXT NOT NULL CHECK (state_key <> ''),
+  value_encrypted TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT network_ingress_node_states_pkey PRIMARY KEY (id),
+  -- Tenant-qualified so state can never be attached to another organization's ingress.
+  CONSTRAINT network_ingress_node_states_organization_id_ingress_fkey FOREIGN KEY (organization_id, network_ingress_id) REFERENCES network_ingresses (organization_id, id) ON DELETE NO ACTION
+);
+
+COMMENT ON COLUMN network_ingress_node_states.id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_node_states.network_ingress_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_node_states.organization_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_node_states.slot IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_node_states.state_key IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_node_states.value_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingress_node_states.created_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_node_states.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingress_node_states_network_ingress_id_slot_state_key_key
+ON network_ingress_node_states (network_ingress_id, slot, state_key);
+
+-- TLS state a gateway connection's slots share. Every slot serves the same
+-- Tailscale Service name, so one certificate, its key and the ACME account
+-- that issues it are kept per connection rather than per slot.
+CREATE TABLE IF NOT EXISTS network_ingress_certificate_states (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  network_ingress_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  state_key TEXT NOT NULL CHECK (state_key <> ''),
+  value_encrypted TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT network_ingress_certificate_states_pkey PRIMARY KEY (id),
+  -- Tenant-qualified so a certificate can never be attached to another organization's ingress.
+  CONSTRAINT network_ingress_certificate_states_organization_id_ingress_fkey FOREIGN KEY (organization_id, network_ingress_id) REFERENCES network_ingresses (organization_id, id) ON DELETE NO ACTION
+);
+
+COMMENT ON COLUMN network_ingress_certificate_states.id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_certificate_states.network_ingress_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_certificate_states.organization_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_certificate_states.state_key IS 'tsnet certificate state key: "<domain>.crt", "<domain>.key" or the ACME account key name.
+@access: confidential';
+COMMENT ON COLUMN network_ingress_certificate_states.value_encrypted IS 'Certificate, private key or ACME account key, encrypted under the organization''s key.
+@access: secret-restricted';
+COMMENT ON COLUMN network_ingress_certificate_states.created_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingress_certificate_states.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingress_certificate_states_network_ingress_id_state_key_key
+ON network_ingress_certificate_states (network_ingress_id, state_key);
 
 -- External OAuth Server Metadata (RFC 8414 compliant)
 -- For direct external OAuth provider connections
@@ -4707,6 +4874,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS assistants_project_id_lower_name_idx
+ON assistants (project_id, lower(name))
+WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_organization_project_id_key
@@ -6355,6 +6526,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS toolsets_project_id_lower_name_idx
+ON toolsets (project_id, lower(name))
+WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_custom_domain_id_key
 ON toolsets (mcp_slug, custom_domain_id)
 WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE;
@@ -7616,6 +7791,13 @@ ON users (email);
 -- connected-user resolution), which the raw-column users_email_key cannot.
 CREATE INDEX IF NOT EXISTS users_email_lower_idx
 ON users (lower(email));
+
+-- Serves bounded Command K member-name prefix searches. Email prefixes use
+-- users_email_lower_idx above. Organization membership remains enforced by the
+-- tenant-scoped relationship join.
+CREATE INDEX IF NOT EXISTS users_display_name_lower_active_idx
+ON users (lower(display_name))
+WHERE deleted_at IS NULL;
 
 -- user_accounts is the registry of external AI provider accounts (Claude today;
 -- other providers in the future) observed for a Gram organization, each linked to
@@ -9798,7 +9980,6 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   principal_urn TEXT NOT NULL,
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
-  effect TEXT,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
   expires_at timestamptz,
@@ -9808,8 +9989,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}'),
-  CONSTRAINT principal_grants_effect_check CHECK (effect IS NULL OR effect IN ('allow', 'deny'))
+  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
 );
 
 COMMENT ON COLUMN principal_grants.id IS '@access: confidential';
@@ -9825,8 +10005,6 @@ COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn
 @access: confidential';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 @access: confidential';
-COMMENT ON COLUMN principal_grants.effect IS 'Whether this grant allows or denies the scope. NULL = allow for backward compatibility.
-@access: confidential';
 COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.
 @access: confidential';
 COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
@@ -9836,9 +10014,6 @@ COMMENT ON COLUMN principal_grants.expires_at IS 'When a temporary grant stops a
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
-
-CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_effect_selector_key
-ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors);
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
@@ -10427,6 +10602,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   -- Whether the upstream needs authentication: true needs it, false needs none,
   -- NULL is undecided.
   requires_upstream_auth boolean,
+  -- When an admin marked the upstream provider's manual setup guide as done.
+  -- NULL means not done yet.
+  setup_guide_completed_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -10465,12 +10643,19 @@ COMMENT ON COLUMN mcp_servers.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.updated_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.setup_guide_completed_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.requires_upstream_auth IS 'Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
 @access: confidential';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
 WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_servers_project_id_lower_name_listable_idx
+ON mcp_servers (project_id, lower(name))
+WHERE deleted IS FALSE
+  AND toolset_id IS NULL
+  AND builtin_backend IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_slug_key
 ON mcp_servers (project_id, slug)
@@ -11126,6 +11311,10 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_servers_project_id_id_key
 ON meta_mcp_servers (project_id, id);
+
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_organization_project_lower_name_idx
+ON meta_mcp_servers (organization_id, project_id, lower(name))
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS meta_mcp_server_members (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -11984,6 +12173,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS risk_custom_detection_rules_project_rule_id_ke
 ON risk_custom_detection_rules (project_id, rule_id)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS risk_custom_rules_org_project_lower_title_idx
+ON risk_custom_detection_rules (organization_id, project_id, lower(title))
+WHERE deleted IS FALSE;
+
 -- Exclusions suppress false-positive risk findings. They are applied going
 -- forward (the scanner drops matching findings) and retroactively (a sweep
 -- flags matching rows in risk_results so the dashboard hides them).
@@ -12334,6 +12527,7 @@ CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
 
   resolution_type TEXT NOT NULL,
   role_slug TEXT,
+  temporary_grant_id uuid,
 
   resolved_by TEXT NOT NULL,
 
@@ -12355,9 +12549,11 @@ COMMENT ON COLUMN authz_challenge_resolutions.challenge_id IS 'UUID of the denie
 @access: opaque-confidential';
 COMMENT ON COLUMN authz_challenge_resolutions.principal_urn IS 'The principal that was denied, copied from the challenge for query convenience.
 @access: opaque-restricted';
-COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, dismissed.
+COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, temporary_grant, dismissed.
 @access: confidential';
 COMMENT ON COLUMN authz_challenge_resolutions.role_slug IS 'When resolution_type=role_assigned, the role slug that was assigned to the principal.
+@access: confidential';
+COMMENT ON COLUMN authz_challenge_resolutions.temporary_grant_id IS 'When resolution_type=temporary_grant, the principal_grants row that was granted with an expiry. Soft reference: the grant row may be revoked (deleted) later.
 @access: confidential';
 COMMENT ON COLUMN authz_challenge_resolutions.resolved_by IS 'URN of the admin who resolved the challenge.
 @access: confidential';

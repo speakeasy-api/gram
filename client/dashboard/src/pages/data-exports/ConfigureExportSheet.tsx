@@ -84,7 +84,7 @@ const MIN_SEVERITY_OPTIONS: Array<{
     value: MinSeverity.Warn,
     label: "Warnings and errors",
     description:
-      "Also blocked connections, such as someone without access to a server.",
+      "Also blocked connections, such as someone without access to a server, and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts.",
   },
   {
     value: MinSeverity.Info,
