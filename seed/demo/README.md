@@ -138,7 +138,9 @@ needs and the shared demo org must never have:
   demo org never gets a functions deployment production would have to run.
 - **Working upstream servers.** The seed has five working MCP servers: three
   named for the configuration they test, plus Linear and Notion, real
-  vendors. (The Enterprise Sign-In (ID-JAG) Server works locally only, below.) Most
+  vendors. (The Enterprise Sign-In (ID-JAG) Server works locally only, below;
+  Acme Wiki, a second Enterprise Managed Authorization example, is seeded
+  disabled.) Most
   of the setup is shared, so the same servers work in the public demo org and
   in the local org right after `mise run seed`; the local fixtures add only
   what needs the developer's machine (below).

@@ -25,9 +25,10 @@ func TestLocalServerClientAssociations(t *testing.T) {
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
 // Example OAuth (mcpserver-linear) uses its metadata document client, the
-// Enterprise Sign-In (ID-JAG) Server its authorization server's client, and
-// Linear and Notion (mcpserver-<vendor>-app) their metadata document
-// clients. Example Shared Credential has no bound client, so it uses none.
+// Enterprise Sign-In (ID-JAG) Server and Acme Wiki their authorization
+// servers' clients, and Linear and Notion (mcpserver-<vendor>-app) their
+// metadata document clients. Example Shared Credential has no bound client,
+// so it uses none.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
@@ -37,6 +38,7 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	want := map[uuid.UUID][]uuid.UUID{
 		det("mcpserver-linear"):      {det("remote-identity-client-linear")},
 		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
+		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
 		det("mcpserver-linear-app"):  {det("remote-identity-client-linear-app")},
 		det("mcpserver-notion-app"):  {det("remote-identity-client-notion-app")},
 	}

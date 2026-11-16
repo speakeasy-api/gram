@@ -631,6 +631,26 @@ func (q *Queries) ServersInsertEMAProtectedResource(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertEMAProviderOrder = `-- name: ServersInsertEMAProviderOrder :exec
+INSERT INTO remote_session_ema_providers
+  (id, organization_id, vendor_issuer, remote_session_issuer_id, position)
+VALUES
+  ($1::uuid, $2::text, 'https://auth.acme-wiki.example',
+   $3::uuid, 0)
+`
+
+type ServersInsertEMAProviderOrderParams struct {
+	ID                    uuid.UUID
+	OrgID                 string
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// A saved order for Acme Wiki, so its service page shows "Use default".
+func (q *Queries) ServersInsertEMAProviderOrder(ctx context.Context, arg ServersInsertEMAProviderOrderParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAProviderOrder, arg.ID, arg.OrgID, arg.RemoteSessionIssuerID)
+	return err
+}
+
 const serversInsertEMARemoteMCPServer = `-- name: ServersInsertEMARemoteMCPServer :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   ($1::uuid, $2::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
@@ -735,6 +755,162 @@ type ServersInsertEMAVendorIssuerParams struct {
 // offers an interactive sign-in the server does not have.
 func (q *Queries) ServersInsertEMAVendorIssuer(ctx context.Context, arg ServersInsertEMAVendorIssuerParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAVendorIssuer, arg.ID, arg.ProjectID, arg.OrgID)
+	return err
+}
+
+const serversInsertEMAWikiBinding = `-- name: ServersInsertEMAWikiBinding :exec
+INSERT INTO remote_session_ema_bindings
+  (id, project_id, organization_id, user_session_issuer_id,
+   remote_session_issuer_id, resource, remote_session_client_id, generation,
+   state, grant_source, created_at, updated_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::uuid,
+   'https://mcp.acme-wiki.example/mcp', $6::uuid, 1,
+   'ready', 'administrator_declared',
+   now() - interval '1 day', now() - interval '1 day')
+`
+
+type ServersInsertEMAWikiBindingParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrgID               string
+	UserSessionIssuerID uuid.UUID
+	IssuerID            uuid.UUID
+	ClientID            uuid.UUID
+}
+
+func (q *Queries) ServersInsertEMAWikiBinding(ctx context.Context, arg ServersInsertEMAWikiBindingParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAWikiBinding,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.UserSessionIssuerID,
+		arg.IssuerID,
+		arg.ClientID,
+	)
+	return err
+}
+
+const serversInsertEMAWikiMCPServer = `-- name: ServersInsertEMAWikiMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Acme Wiki', 'acme-wiki',
+   NULL, $3::uuid, $4::uuid, 'disabled')
+`
+
+type ServersInsertEMAWikiMCPServerParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	RemoteID            uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) ServersInsertEMAWikiMCPServer(ctx context.Context, arg ServersInsertEMAWikiMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAWikiMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.RemoteID,
+		arg.UserSessionIssuerID,
+	)
+	return err
+}
+
+const serversInsertEMAWikiProtectedResource = `-- name: ServersInsertEMAWikiProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   'https://mcp.acme-wiki.example/mcp',
+   'https://mcp.acme-wiki.example/.well-known/oauth-protected-resource/mcp',
+   ARRAY['https://auth.acme-wiki.example'], ARRAY['pages:read'],
+   now() - interval '2 hours')
+`
+
+type ServersInsertEMAWikiProtectedResourceParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) ServersInsertEMAWikiProtectedResource(ctx context.Context, arg ServersInsertEMAWikiProtectedResourceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAWikiProtectedResource, arg.ID, arg.ProjectID, arg.OrgID)
+	return err
+}
+
+const serversInsertEMAWikiRemoteMCPServer = `-- name: ServersInsertEMAWikiRemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  ($1::uuid, $2::uuid, 'Acme Wiki', 'acme-wiki',
+   'streamable-http', 'https://mcp.acme-wiki.example/mcp')
+`
+
+type ServersInsertEMAWikiRemoteMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Acme Wiki: a second EMA service behind the same enterprise sign-in, seeded
+// disabled and display-only in every org. Its service has not accepted a
+// provider yet, and it carries a saved provider order. Reserved example hosts
+// and invalid ciphertext keep every row inert.
+func (q *Queries) ServersInsertEMAWikiRemoteMCPServer(ctx context.Context, arg ServersInsertEMAWikiRemoteMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAWikiRemoteMCPServer, arg.ID, arg.ProjectID)
+	return err
+}
+
+const serversInsertEMAWikiVendorClient = `-- name: ServersInsertEMAWikiVendorClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, 'demo-acme-wiki-client',
+   'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
+   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['pages:read'])
+`
+
+type ServersInsertEMAWikiVendorClientParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+	IssuerID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertEMAWikiVendorClient(ctx context.Context, arg ServersInsertEMAWikiVendorClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAWikiVendorClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.IssuerID,
+	)
+	return err
+}
+
+const serversInsertEMAWikiVendorIssuer = `-- name: ServersInsertEMAWikiVendorIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, token_endpoint, name,
+   grant_types_supported, authorization_grant_profiles_supported,
+   token_endpoint_auth_methods_supported)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   'acme-wiki-auth', 'https://auth.acme-wiki.example',
+   'https://auth.acme-wiki.example/oauth/token', 'Acme Wiki',
+   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+   ARRAY['client_secret_basic'])
+`
+
+type ServersInsertEMAWikiVendorIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) ServersInsertEMAWikiVendorIssuer(ctx context.Context, arg ServersInsertEMAWikiVendorIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAWikiVendorIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
 }
 
