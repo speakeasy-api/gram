@@ -173,3 +173,56 @@ func TestIngest_CoworkEventRowRespectsSessionCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, messages)
 }
+
+// Cowork skips SessionStart, so a live Cowork session often has no cached
+// OTEL service name or SessionStart variant. Its hook rows must still be
+// labelled cowork from the event's own session.surface, the same as its
+// transcript rows. A plain Claude Code event keeps its claude-code label.
+func TestIngest_CoworkHookRowsLabelledCoworkWithoutCachedSurface(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	ingest := func(sessionID string, cowork bool) {
+		surface := surfaceCowork
+		promptID := "prompt-1"
+		prompt := "list the files"
+		promptEvent := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+		promptEvent.Session.TurnID = &promptID
+		promptEvent.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+
+		toolID, toolName := "toolu_1", "Bash"
+		toolEvent := canonicalIngestPayload("claude", "tool.requested", sessionID)
+		toolEvent.Session.TurnID = &promptID
+		toolEvent.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{ID: &toolID, Name: &toolName, Input: map[string]any{"command": "ls"}}}
+
+		for _, payload := range []*gen.IngestPayload{promptEvent, toolEvent} {
+			if cowork {
+				payload.Session.Surface = &surface
+			}
+			_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+			require.NoError(t, err)
+		}
+	}
+	sources := func(sessionID string) []string {
+		messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+		require.NoError(t, err)
+		out := make([]string, 0, len(messages))
+		for _, m := range messages {
+			out = append(out, m.Source.String)
+		}
+		return out
+	}
+
+	coworkSession := uuid.NewString()
+	ingest(coworkSession, true)
+	require.Equal(t, []string{"cowork", "cowork"}, sources(coworkSession), "cowork hook rows carry the cowork source")
+
+	claudeSession := uuid.NewString()
+	ingest(claudeSession, false)
+	require.Equal(t, []string{"claude-code", "claude-code"}, sources(claudeSession), "a plain Claude Code session is unchanged")
+}
