@@ -11,6 +11,7 @@ import { ClientDriftWarning } from "./ClientDriftWarning";
 
 const bindings = vi.hoisted(() => ({
   data: undefined as UserSessionIssuerRemoteSessionClientBindings | undefined,
+  isError: false,
 }));
 
 vi.mock(
@@ -18,6 +19,7 @@ vi.mock(
   () => ({
     useOrganizationUserSessionIssuerRemoteSessionClientBindings: () => ({
       data: bindings.data,
+      isError: bindings.isError,
     }),
   }),
 );
@@ -25,6 +27,7 @@ vi.mock(
 afterEach(() => {
   cleanup();
   bindings.data = undefined;
+  bindings.isError = false;
 });
 
 function client(id: string) {
@@ -57,6 +60,16 @@ it("stays hidden when bound and used clients match", () => {
     boundClients: [client("github")],
     serverClients: [uses("GitHub", "github")],
   };
+  render(<ClientDriftWarning issuerId="usi-1" />);
+  expect(screen.queryByRole("button")).toBeNull();
+});
+
+it("stays hidden when a refetch fails after earlier drift", () => {
+  bindings.data = {
+    boundClients: [client("unused")],
+    serverClients: [],
+  };
+  bindings.isError = true;
   render(<ClientDriftWarning issuerId="usi-1" />);
   expect(screen.queryByRole("button")).toBeNull();
 });

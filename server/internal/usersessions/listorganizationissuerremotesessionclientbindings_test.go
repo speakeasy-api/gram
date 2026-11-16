@@ -9,6 +9,8 @@ import (
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -54,11 +56,25 @@ func TestOrganizationUserSessionIssuerListRemoteSessionClientBindings(t *testing
 	otherToolset := createPlainToolset(t, ctx, ti, projectID, "bindings-other-toolset")
 	otherServerID := attachIssuerMCPServer(t, ctx, ti, projectID, otherIssuerID, otherToolset, "bindings-other-server")
 
+	// A server attached to another issuer still uses this one when a gateway
+	// attached to this issuer fronts it.
+	gatewayed := seedRevocableClient(t, ctx, ti, otherIssuerID, "gatewayed", "", false)
+	memberToolset := createPlainToolset(t, ctx, ti, projectID, "bindings-member-toolset")
+	memberServerID := attachIssuerMCPServer(t, ctx, ti, projectID, otherIssuerID, memberToolset, "bindings-member-server")
+	gateways := metamcprepo.New(ti.conn)
+	gateway, err := gateways.CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Name: "Bindings gateway", UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	_, err = gateways.CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{ProjectID: projectID, MetaMcpServerID: gateway.ID, McpServerID: memberServerID, SortOrder: 0})
+	require.NoError(t, err)
+
 	fixtures := testrepo.New(ti.conn)
 	for _, association := range []struct{ server, client uuid.UUID }{
 		{serverID, shared},
 		{serverID, stray},
 		{otherServerID, stray},
+		{memberServerID, gatewayed},
 	} {
 		require.NoError(t, fixtures.InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
 			ProjectID:             projectID,
@@ -76,18 +92,27 @@ func TestOrganizationUserSessionIssuerListRemoteSessionClientBindings(t *testing
 		remoteClient(unused, "unused"),
 	}, withoutIssuerIDs(t, listed.BoundClients))
 
-	require.Len(t, listed.ServerClients, 2)
-	serverClients := make([]*orggen.UserSessionIssuerRemoteSessionClient, 0, len(listed.ServerClients))
+	type use struct{ server, client string }
+	uses := make([]use, 0, len(listed.ServerClients))
 	for _, entry := range listed.ServerClients {
-		require.Equal(t, serverID.String(), entry.McpServerID)
-		require.Equal(t, "bindings-server", entry.McpServerName)
 		require.Equal(t, projectID.String(), entry.ProjectID)
-		serverClients = append(serverClients, entry.RemoteSessionClient)
+		uses = append(uses, use{entry.McpServerName, entry.RemoteSessionClient.RemoteSessionIssuerName})
 	}
-	require.ElementsMatch(t, []*orggen.UserSessionIssuerRemoteSessionClient{
-		remoteClient(shared, "shared"),
-		remoteClient(stray, "stray"),
-	}, withoutIssuerIDs(t, serverClients))
+	require.ElementsMatch(t, []use{
+		{"bindings-server", "shared"},
+		{"bindings-server", "stray"},
+		{"bindings-member-server", "gatewayed"},
+	}, uses)
+}
+
+func TestOrganizationUserSessionIssuerListRemoteSessionClientBindingsHidesOtherOrganizations(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	foreignID := seedOtherOrganizationIssuer(t, ctx, ti)
+
+	_, err := ti.service.ListRemoteSessionClientBindings(ctx, &orggen.ListRemoteSessionClientBindingsPayload{UserSessionIssuerID: foreignID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestOrganizationUserSessionIssuerListRemoteSessionClientBindingsEmpty(t *testing.T) {

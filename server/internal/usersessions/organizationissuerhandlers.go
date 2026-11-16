@@ -409,7 +409,10 @@ func (s *Service) ListRemoteSessionClientBindings(ctx context.Context, payload *
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
 	}
 
-	boundRows, err := q.ListUserSessionIssuerBoundRemoteSessionClients(ctx, issuerID)
+	boundRows, err := q.ListUserSessionIssuerBoundRemoteSessionClients(ctx, repo.ListUserSessionIssuerBoundRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer bound remote session clients").LogError(ctx, s.logger)
 	}

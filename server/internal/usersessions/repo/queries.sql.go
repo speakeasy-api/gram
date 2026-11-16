@@ -4607,8 +4607,19 @@ JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote
 WHERE link.user_session_issuer_id = $1::uuid
   AND client.deleted IS FALSE
   AND remote_issuer.deleted IS FALSE
+  AND (client.organization_id IS NULL OR client.organization_id = $2::text)
+  AND (client.project_id IS NULL OR EXISTS (
+    SELECT 1 FROM projects AS client_project
+    WHERE client_project.id = client.project_id
+      AND client_project.organization_id = $2::text
+  ))
 ORDER BY client.id
 `
+
+type ListUserSessionIssuerBoundRemoteSessionClientsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
 
 type ListUserSessionIssuerBoundRemoteSessionClientsRow struct {
 	ID                      uuid.UUID
@@ -4619,9 +4630,10 @@ type ListUserSessionIssuerBoundRemoteSessionClientsRow struct {
 }
 
 // The live remote session clients an issuer binds, with the authorization
-// server each one belongs to.
-func (q *Queries) ListUserSessionIssuerBoundRemoteSessionClients(ctx context.Context, userSessionIssuerID uuid.UUID) ([]ListUserSessionIssuerBoundRemoteSessionClientsRow, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuerBoundRemoteSessionClients, userSessionIssuerID)
+// server each one belongs to. Clients scoped to another organization, or to a
+// project outside it, are left out.
+func (q *Queries) ListUserSessionIssuerBoundRemoteSessionClients(ctx context.Context, arg ListUserSessionIssuerBoundRemoteSessionClientsParams) ([]ListUserSessionIssuerBoundRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerBoundRemoteSessionClients, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -4986,7 +4998,17 @@ JOIN mcp_server_remote_session_clients AS association
    AND association.project_id = server.project_id
 JOIN remote_session_clients AS client ON client.id = association.remote_session_client_id
 JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
-WHERE server.user_session_issuer_id = $1::uuid
+WHERE (server.user_session_issuer_id = $1::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_server_members AS member
+      JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+      WHERE member.mcp_server_id = server.id
+        AND member.deleted IS FALSE
+        AND gateway.deleted IS FALSE
+        AND gateway.organization_id = $2::text
+        AND gateway.user_session_issuer_id = $1::uuid
+    ))
   AND server.deleted IS FALSE
   AND project.organization_id = $2::text
   AND project.deleted IS FALSE
@@ -5013,9 +5035,10 @@ type ListUserSessionIssuerServerRemoteSessionClientsRow struct {
 	RemoteSessionIssuerUrl  string
 }
 
-// The remote session clients associated with each live MCP server attached to
+// The remote session clients associated with each live MCP server that uses
 // an issuer in the organization, with the authorization server each client
-// belongs to.
+// belongs to. A server uses the issuer when it is attached directly or is a
+// member of a live gateway attached to it.
 func (q *Queries) ListUserSessionIssuerServerRemoteSessionClients(ctx context.Context, arg ListUserSessionIssuerServerRemoteSessionClientsParams) ([]ListUserSessionIssuerServerRemoteSessionClientsRow, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuerServerRemoteSessionClients, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {

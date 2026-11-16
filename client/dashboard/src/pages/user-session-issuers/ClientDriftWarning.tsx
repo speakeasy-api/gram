@@ -8,8 +8,8 @@ import { compareClients, drifts, type ClientUse } from "./clientDrift";
 
 /**
  * A warning by a provider's MCP servers when the clients it binds and the
- * clients its servers use don't match. Nothing shows when they agree, or
- * while the comparison can't be loaded.
+ * clients its servers use don't match. Nothing shows when they agree, while
+ * the comparison loads, or when it fails.
  */
 export function ClientDriftWarning({
   issuerId,
@@ -25,7 +25,10 @@ export function ClientDriftWarning({
     () => (query.data ? compareClients(query.data) : null),
     [query.data],
   );
-  if (!drift || drift.unused + drift.unbound === 0) return null;
+  // A failed refetch keeps the last data; don't warn from a stale answer.
+  if (query.isError || !drift || drift.unused + drift.unbound === 0) {
+    return null;
+  }
 
   const mismatched = drift.unused + drift.unbound;
   const label = `${mismatched} ${mismatched === 1 ? "client doesn't" : "clients don't"} match`;
