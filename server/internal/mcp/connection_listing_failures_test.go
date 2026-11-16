@@ -3,7 +3,10 @@ package mcp_test
 import (
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -53,8 +56,8 @@ func listingCases() []listingCase {
 		return func(t *testing.T) string { t.Helper(); return statusUpstream(t, status).URL }
 	}
 	return []listingCase{
-		{name: "saved key rejected", url: failing(http.StatusUnauthorized), savedKey: true, reason: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin, named: true, status: "unavailable", label: "Can't connect · it rejected the credential set up for it · ask your administrator"},
-		{name: "rate limited", url: failing(http.StatusTooManyRequests), reason: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it's limiting requests right now · try again in a few minutes"},
+		{name: "saved key rejected", url: failing(http.StatusUnauthorized), savedKey: true},
+		{name: "rate limited", url: failing(http.StatusTooManyRequests), reason: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it's limiting requests · try again in a few minutes"},
 		{name: "server error", url: failing(http.StatusInternalServerError), reason: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it had an error · try again in a few minutes"},
 		{name: "stopped", url: stoppedUpstream, reason: mcpconnectionattempts.CodeProviderUnreachable, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it didn't answer · try again in a few minutes"},
 		{name: "unreadable listing", url: func(t *testing.T) string {
@@ -97,7 +100,7 @@ func TestGatewayConsentListingFailures(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range listingCases() {
-		// A plain configured header makes the page ask for setup before it lists; typed saved keys are covered in the internal test.
+		// A key with no sign-in makes the page ask for setup before it lists; a key beside a sign-in is TestGatewayConsentSavedKeyBesideASignIn.
 		if tc.savedKey {
 			continue
 		}
@@ -168,8 +171,8 @@ func TestGatewayDirectListingFailures(t *testing.T) {
 	}
 }
 
-// A person's own connection the upstream rejects is recorded on the listing; a member they have not connected is not.
-func TestGatewayDirectListingPersonCredential(t *testing.T) {
+// A person's own connection is theirs to make: a listing that loses it writes no row, rejected or not yet made.
+func TestGatewayDirectListingPersonCredentialWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	for _, connected := range []bool{true, false} {
@@ -187,7 +190,7 @@ func TestGatewayDirectListingPersonCredential(t *testing.T) {
 			metaSlug := "meta-listing-" + uuid.NewString()[:8]
 			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
 			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-listing", "", []uuid.UUID{issuerID})
-			member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 			subject := createTestUser(t, ctx, ti, "meta-listing-user-"+uuid.NewString())
 			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
 			if connected {
@@ -198,14 +201,108 @@ func TestGatewayDirectListingPersonCredential(t *testing.T) {
 			w, err := servePublicHTTP(t, t.Context(), ti, metaSlug, makeMetaRPCBody(t, "tools/list", map[string]any{}), bearer, nil)
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, w.Code)
-			if !connected {
-				require.Empty(t, discoveryReasons(rec), "a sign-in not done yet is not a failure")
-				return
-			}
-			row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeProviderRejected)
-			requireListingRow(t, row, listingCase{who: mcpconnectionattempts.WhoPerson, named: true}, member.mcpServerID, upstream)
+			require.Empty(t, discoveryReasons(rec))
 		})
 	}
+}
+
+// A member with a saved key and a sign-in the person has not made shows Not connected, which connecting fixes.
+func TestGatewayConsentSavedKeyBesideASignIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{}, mcp.TunnelPublicConfig{})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "gateway-key-" + uuid.NewString()[:8]
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer.ID)
+	upstream := statusUpstream(t, http.StatusUnauthorized).URL
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gateway-key", "", []uuid.UUID{issuer.ID})
+	member := createMetaMember(t, ctx, ti.conn, projectID, gateway.ID, "member", upstream, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, remoteClient)), 0)
+	seedRemoteHeader(t, ctx, ti.conn, projectID, member.remoteServerID, "Authorization", "Bearer saved-key", "", false)
+
+	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	withConsentFlow(t, ctx, ti, stateID)
+	page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+	outcomes := gatewayOutcomesFromPage(page)
+	require.Len(t, outcomes, 1)
+	require.Equal(t, "not_connected", outcomes[0].Status)
+	require.Equal(t, "Not connected", outcomes[0].Label)
+	require.Equal(t, []string{mcpconnectionattempts.CodeNeedsSignIn.String()}, discoveryReasons(rec))
+	require.NotContains(t, page, "rejected the credential set up for it")
+}
+
+// The gateway listing's own time running out is no member's failure: a slow member, and one that never got a turn, keep member_tools_missing.
+func TestGatewayDirectListingTimeIsNotTheUpstreams(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	// More slow members than a listing describes at once, so one waits for a turn it never gets.
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(slow.Close)
+	members := 7
+	for i := range members {
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Slow", "slow-"+uuid.NewString()[:8], int32(i+2), slow.URL)
+	}
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	rows := rec.Rows()
+	require.Len(t, rows, members)
+	for _, row := range rows {
+		require.Equal(t, mcpconnectionattempts.CodeMemberToolsMissing.String(), row.Reason)
+		require.Empty(t, row.ProviderHost)
+	}
+}
+
+// A rate limit already answered stands when the retry after it runs out of listing time.
+func TestGatewayDirectListingKeepsAnAnswerPastTheListingTime(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	var requests atomic.Int32
+	var first atomic.Int64
+	// The first try's requests are rate limited; the retry's hang past the listing time.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		first.CompareAndSwap(0, time.Now().UnixNano())
+		if time.Since(time.Unix(0, first.Load())) < 300*time.Millisecond {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	member := seedListingMember(t, ti, *authCtx.ProjectID, gateway.ID, listingCase{}, upstream.URL)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+
+	_, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Greater(t, requests.Load(), int32(1), "the member was retried")
+	row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeProviderRateLimited)
+	requireListingRow(t, row, listingCase{who: mcpconnectionattempts.WhoProvider, named: true}, member.ID, upstream.URL)
 }
 
 func happenedReason(what mcpconnectionattempts.Happened) string {

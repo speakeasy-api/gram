@@ -76,8 +76,9 @@ type memberDescribeResult struct {
 // failures, and returns results in member order. Every describe and retry
 // shares one listing deadline.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
-	ctx, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
+	budget, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
 	defer cancelAll()
+	ctx = context.WithValue(budget, listingBudgetKey{}, budget)
 	results := make([]memberDescribeResult, len(members))
 	slots := semaphore.NewWeighted(maxConcurrentMemberDescribes)
 	var group sync.WaitGroup
@@ -111,10 +112,15 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 			slots.Release(1)
 			return result
 		}
+		previous := result
 		memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 		result.catalog, result.err = s.describeMetaMember(memberCtx, logger, gate, member)
 		cancel()
 		slots.Release(1)
+		// A retry the listing's time cut short keeps the upstream's own earlier answer.
+		if attempt > 1 && result.catalog == nil && listingBudgetSpent(ctx) {
+			return previous
+		}
 		failure, ok := errors.AsType[memberDiscoveryError](result.err)
 		if !ok || !failure.retryable || attempt == maxMemberDescribeAttempts {
 			return result
@@ -140,6 +146,15 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 		}
 		timer.Stop()
 	}
+}
+
+// listingBudgetKey holds a whole listing's own deadline on its context.
+type listingBudgetKey struct{}
+
+// listingBudgetSpent reports the listing's own time ran out.
+func listingBudgetSpent(ctx context.Context) bool {
+	budget, ok := ctx.Value(listingBudgetKey{}).(context.Context)
+	return ok && budget.Err() != nil
 }
 
 // retryFitsListing reports whether a retry starting after wait still has

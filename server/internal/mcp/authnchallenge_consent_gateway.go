@@ -94,8 +94,8 @@ type gatewayServer struct {
 	// signInAddress says that address is its sign-in provider's, not the server's own.
 	signInAddress bool
 
-	// failure is what its listing failure records, and upstreamHost its upstream when that failed it.
-	failure      mcpconnectionattempts.Code
+	// cause is the listing failure's code; upstreamHost names the upstream only when it failed.
+	cause        mcpconnectionattempts.Code
 	upstreamHost string
 
 	// Auth is the server's upstream credential choice, where typed auth
@@ -120,7 +120,7 @@ func (g gatewayServer) StatusLabel() string {
 	case gatewayServerUnavailable:
 		switch {
 		case g.address == guardian.AddressFine:
-			return unavailableLabel(g.failure)
+			return unavailableLabel(g.cause)
 		case g.signInAddress:
 			return "Can't connect · its sign-in provider " + g.address.Problem() + " · ask your administrator"
 		default:
@@ -146,23 +146,33 @@ func (g gatewayServer) StatusLabel() string {
 	return ""
 }
 
-// unavailableLabel says why a server did not list its tools, who acts, and whether waiting helps.
-func unavailableLabel(failure mcpconnectionattempts.Code) string {
-	switch failure {
-	case mcpconnectionattempts.CodeProviderRateLimited:
-		return "Unavailable · it's limiting requests right now · try again in a few minutes"
-	case mcpconnectionattempts.CodeProviderServerError:
-		return "Unavailable · it had an error · try again in a few minutes"
-	case mcpconnectionattempts.CodeProviderUnreachable, mcpconnectionattempts.CodeProviderUnavailable:
-		return "Unavailable · it didn't answer · try again in a few minutes"
-	case mcpconnectionattempts.CodeSharedCredentialRejected, mcpconnectionattempts.CodeStaticKeyRejected:
-		return "Can't connect · it rejected the credential set up for it · ask your administrator"
-	case mcpconnectionattempts.CodeCredentialMisconfigured:
-		return "Can't connect · its connection isn't set up correctly · ask your administrator"
-	case mcpconnectionattempts.CodeTunnelUnavailable:
-		return "Can't connect · its private connection is down · ask your administrator"
+// unavailableGenericLabel is the card for a cause it does not name.
+const unavailableGenericLabel = "Unavailable · try again shortly, or ask your administrator"
+
+// unavailableCauses is the short cause a card names; who fixes it frames the card.
+var unavailableCauses = map[mcpconnectionattempts.Code]string{
+	mcpconnectionattempts.CodeProviderRateLimited:      "it's limiting requests",
+	mcpconnectionattempts.CodeProviderServerError:      "it had an error",
+	mcpconnectionattempts.CodeProviderUnreachable:      "it didn't answer",
+	mcpconnectionattempts.CodeRemoteSessionUnavailable: "its sign-in service didn't answer",
+	mcpconnectionattempts.CodeSharedCredentialRejected: "it rejected the credential set up for it",
+	mcpconnectionattempts.CodeStaticKeyRejected:        "it rejected the credential set up for it",
+	mcpconnectionattempts.CodeCredentialMisconfigured:  "its connection isn't set up correctly",
+	mcpconnectionattempts.CodeTunnelUnavailable:        "its private connection is down",
+}
+
+// unavailableLabel says why a member did not list its tools and who acts.
+func unavailableLabel(cause mcpconnectionattempts.Code) string {
+	clause, named := unavailableCauses[cause]
+	meaning, known := mcpconnectionattempts.MeaningOf(cause.String())
+	switch {
+	case !named || !known:
+	case meaning.WhoFixes == mcpconnectionattempts.WhoProvider:
+		return "Unavailable · " + clause + " · try again in a few minutes"
+	case meaning.WhoFixes == mcpconnectionattempts.WhoAdmin:
+		return "Can't connect · " + clause + " · ask your administrator"
 	}
-	return "Unavailable · try again shortly, or ask your administrator"
+	return unavailableGenericLabel
 }
 
 // NeedsAttention reports whether the status line should warn.
@@ -363,7 +373,7 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: guardian.AddressFine, signInAddress: false, failure: mcpconnectionattempts.Code{}, upstreamHost: "", Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: guardian.AddressFine, signInAddress: false, cause: mcpconnectionattempts.Code{}, upstreamHost: "", Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
@@ -397,7 +407,7 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 			if outcome.Slug == server.Slug {
 				server.Status = outcome.Status
 				server.address, server.signInAddress = outcome.address, outcome.signInAddress
-				server.failure, server.upstreamHost = outcome.failure, outcome.host
+				server.cause, server.upstreamHost = outcome.cause, outcome.host
 				break
 			}
 		}

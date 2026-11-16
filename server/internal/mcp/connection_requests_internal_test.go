@@ -864,6 +864,7 @@ func TestRecordHostedToolsCallOutcomeNeedsACallerForPersonRejection(t *testing.T
 }
 
 // A listing lost to a member failure records what a call would, naming the upstream only when it failed the listing.
+// A credential error writes no row, as before.
 func TestListingFailureReadsAsACall(t *testing.T) {
 	t.Parallel()
 
@@ -877,10 +878,10 @@ func TestListingFailureReadsAsACall(t *testing.T) {
 		want    mcpconnectionattempts.Code
 		named   bool
 	}{
-		{name: "person's credential rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: bearerSent}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderRejected, named: true},
-		{name: "saved key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true, provider: upstream}, want: mcpconnectionattempts.CodeStaticKeyRejected, named: true},
-		{name: "shared credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: memberRejection{authorizationSent: true, challenges: []string{`Bearer error="invalid_token"`}}}, dial: memberDial{clientCredential: true, provider: upstream}, want: mcpconnectionattempts.CodeSharedCredentialRejected, named: true},
+		{name: "person's connection rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: bearerSent}, dial: memberDial{provider: upstream}},
+		{name: "saved key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true, provider: upstream}},
 		{name: "not connected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true, provider: upstream}},
+		{name: "shared credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: memberRejection{authorizationSent: true, challenges: []string{`Bearer error="invalid_token"`}}}, dial: memberDial{clientCredential: true, provider: upstream}, want: mcpconnectionattempts.CodeSharedCredentialRejected, named: true},
 		{name: "rate limited", outcome: stubMemberOutcome{code: http.StatusTooManyRequests}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderRateLimited, named: true},
 		{name: "server error", outcome: stubMemberOutcome{code: http.StatusInternalServerError}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderServerError, named: true},
 		{name: "no answer", outcome: stubMemberOutcome{err: errors.New("dial failed")}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderUnreachable, named: true},
@@ -911,38 +912,28 @@ func TestListingFailureReadsAsACall(t *testing.T) {
 	}
 }
 
-// The connect page's card and row for a member that did not list agree on the cause, and name the upstream only when it failed.
-func TestGatewayMemberStatusCarriesTheListingFailure(t *testing.T) {
+// The listing's own time running out is no member's failure, unless the upstream had already answered.
+func TestMemberClientFailure_ListingTimeIsNotTheUpstreams(t *testing.T) {
 	t.Parallel()
 
-	member := uuid.New()
-	gateway := &gatewayConsentView{}
-	for _, tc := range []struct {
-		status  gatewayServerStatus
-		failure mcpconnectionattempts.Code
-		label   string
-	}{
-		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeSharedCredentialRejected, label: "Can't connect · it rejected the credential set up for it · ask your administrator"},
-		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeStaticKeyRejected, label: "Can't connect · it rejected the credential set up for it · ask your administrator"},
-		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeCredentialMisconfigured, label: "Can't connect · its connection isn't set up correctly · ask your administrator"},
-		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeTunnelUnavailable, label: "Can't connect · its private connection is down · ask your administrator"},
-		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeInternalError, label: "Unavailable · try again shortly, or ask your administrator"},
-		{status: gatewayServerReconnect, failure: mcpconnectionattempts.CodeProviderRejected, label: "Needs reconnecting"},
-	} {
-		host := ""
-		if tc.failure != mcpconnectionattempts.CodeCredentialMisconfigured && tc.failure != mcpconnectionattempts.CodeTunnelUnavailable && tc.failure != mcpconnectionattempts.CodeInternalError {
-			host = "member.example.com"
-		}
-		server := gatewayServer{Slug: "member", ServerID: member.String(), Status: tc.status, failure: tc.failure, upstreamHost: host}
-		require.Equal(t, tc.label, server.StatusLabel(), tc.failure.String())
-		status, ok := gatewayMemberStatus(gateway, server)
-		require.True(t, ok)
-		require.Equal(t, tc.failure, status.what)
+	budget, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	ctx := context.WithValue(budget, listingBudgetKey{}, budget)
+	dial := memberDial{provider: "https://member.example.com/mcp"}
+	member := metaMember{slug: "fixture", serverID: uuid.New()}
 
-		rec := mcpconnectionattemptstest.New(t)
-		(&Service{connections: rec.Recorder}).recordMemberStatuses(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.Begin(mcpconnectionattempts.GatewayScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)), []memberStatus{status})
-		require.Equal(t, host, rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, tc.failure).ProviderHost, tc.failure.String())
-	}
+	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{answered: true}, dial, member, context.DeadlineExceeded)
+	_, classified := errors.AsType[memberConnectionError](err)
+	require.False(t, classified)
+	code, recorded := (&metaGateContext{}).listingFailureHappened(member, err)
+	require.True(t, recorded)
+	require.Equal(t, mcpconnectionattempts.CodeMemberToolsMissing, code)
+	require.Empty(t, memberUpstreamHost(err))
+
+	err = memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{code: http.StatusTooManyRequests}, dial, member, errors.New("rate limited"))
+	failure, classified := errors.AsType[memberConnectionError](err)
+	require.True(t, classified)
+	require.Equal(t, mcpconnectionattempts.CodeProviderRateLimited, failure.code, "an answer already received stands")
 }
 
 // An agent's missing connection is not a person's sign-in to come: the listing records it, as a call does.
@@ -955,4 +946,59 @@ func TestListingFailureRecordsAnAgentsMissingConnection(t *testing.T) {
 	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
 	(&Service{connections: rec.Recorder}).recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: err}})
 	require.Empty(t, rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeInvalidRemoteSession).ProviderHost)
+}
+
+// The connect page's row for a member that did not list carries its cause, naming the upstream only when it failed.
+func TestGatewayMemberStatusCarriesTheListingFailure(t *testing.T) {
+	t.Parallel()
+
+	member := uuid.New()
+	for _, tc := range []struct {
+		cause mcpconnectionattempts.Code
+		host  string
+	}{
+		{cause: mcpconnectionattempts.CodeSharedCredentialRejected, host: "member.example.com"},
+		{cause: mcpconnectionattempts.CodeProviderRateLimited, host: "member.example.com"},
+		{cause: mcpconnectionattempts.CodeCredentialMisconfigured},
+		{cause: mcpconnectionattempts.CodeTunnelUnavailable},
+		{cause: mcpconnectionattempts.CodeInternalError},
+	} {
+		server := gatewayServer{Slug: "member", ServerID: member.String(), Status: gatewayServerUnavailable, cause: tc.cause, upstreamHost: tc.host}
+		status, ok := gatewayMemberStatus(&gatewayConsentView{}, server)
+		require.True(t, ok)
+		require.Equal(t, tc.cause, status.what)
+
+		rec := mcpconnectionattemptstest.New(t)
+		(&Service{connections: rec.Recorder}).recordMemberStatuses(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.Begin(mcpconnectionattempts.GatewayScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)), []memberStatus{status})
+		require.Equal(t, tc.host, rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, tc.cause).ProviderHost, tc.cause.String())
+	}
+}
+
+// Every cause a listing records gets a card framed by who fixes it, or the generic card.
+func TestUnavailableLabelFollowsWhoFixes(t *testing.T) {
+	t.Parallel()
+
+	listed := []mcpconnectionattempts.Code{
+		mcpconnectionattempts.CodeProviderRateLimited, mcpconnectionattempts.CodeProviderServerError, mcpconnectionattempts.CodeProviderUnreachable,
+		mcpconnectionattempts.CodeRemoteSessionUnavailable, mcpconnectionattempts.CodeSharedCredentialRejected, mcpconnectionattempts.CodeStaticKeyRejected,
+		mcpconnectionattempts.CodeCredentialMisconfigured, mcpconnectionattempts.CodeTunnelUnavailable, mcpconnectionattempts.CodeTunnelAtCapacity,
+		mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRequest,
+		mcpconnectionattempts.CodeNoServerAccess, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.CodeMemberToolsMissing,
+	}
+	for _, code := range listed {
+		label := unavailableLabel(code)
+		meaning, ok := mcpconnectionattempts.MeaningOf(code.String())
+		require.True(t, ok, code.String())
+		_, named := unavailableCauses[code]
+		switch {
+		case meaning.WhoFixes == mcpconnectionattempts.WhoProvider:
+			require.True(t, named, "%s is the provider's, so waiting helps and the card says so", code)
+			require.Regexp(t, `^Unavailable · .+ · try again in a few minutes$`, label, code.String())
+		case named && meaning.WhoFixes == mcpconnectionattempts.WhoAdmin:
+			require.Regexp(t, `^Can't connect · .+ · ask your administrator$`, label, code.String())
+		default:
+			require.False(t, named, code.String())
+			require.Equal(t, unavailableGenericLabel, label, code.String())
+		}
+	}
 }

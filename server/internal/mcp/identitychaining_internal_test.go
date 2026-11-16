@@ -232,12 +232,12 @@ func TestMetaMemberChainer(t *testing.T) {
 func TestListingFailureHappenedForChainingRefusals(t *testing.T) {
 	t.Parallel()
 	ineligible := memberConnectionError{&metaMemberError{message: "contact your administrator"}, mcpconnectionattempts.CodeIneligibleIdentity}
-	code, recorded := listingFailureHappened(ineligible)
+	code, recorded := (&metaGateContext{}).listingFailureHappened(metaMember{}, ineligible)
 	require.True(t, recorded)
 	require.Equal(t, mcpconnectionattempts.CodeIneligibleIdentity, code)
 
 	reauth := memberConnectionError{memberCredentialError{&metaMemberError{message: "reconnect"}}, mcpconnectionattempts.CodeReauthenticationRequired}
-	_, recorded = listingFailureHappened(reauth)
+	_, recorded = (&metaGateContext{}).listingFailureHappened(metaMember{}, reauth)
 	require.False(t, recorded)
 }
 

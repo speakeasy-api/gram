@@ -271,8 +271,8 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
 	// The card names what its listing failure was, so the row does too.
-	if server.failure != (mcpconnectionattempts.Code{}) {
-		what = server.failure
+	if server.cause != (mcpconnectionattempts.Code{}) {
+		what = server.cause
 	}
 	if code, ok := mcpconnectionattempts.AddressCode(server.address); ok && server.Status == gatewayServerUnavailable {
 		what = code
@@ -836,30 +836,23 @@ func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateConte
 		if errors.Is(ctx.Err(), context.Canceled) && errors.Is(failed.err, context.Canceled) {
 			continue
 		}
-		if what, recorded := listingFailureHappened(failed.err); recorded {
-			if what == mcpconnectionattempts.CodeInvalidRemoteSession {
-				what = gate.memberNoCredentialHappened(failed.member)
-			}
+		if what, recorded := gate.listingFailureHappened(failed.member, failed.err); recorded {
 			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err)))
 		}
 	}
 }
 
-// listingFailureHappened classifies a member a listing lost as a call on it is classified.
-// A credential is a failure only when the upstream rejected it; a sign-in not done yet is none.
-func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
-	failure, classified := errors.AsType[memberConnectionError](err)
-	classified = classified && failure.code != (mcpconnectionattempts.Code{})
+// listingFailureHappened is what a lost member's listing records, as a call would; credential errors record nothing.
+func (g *metaGateContext) listingFailureHappened(member metaMember, err error) (mcpconnectionattempts.Code, bool) {
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
-		if classified && upstreamRejectedCredential(failure.code) {
-			return failure.code, true
-		}
 		return mcpconnectionattempts.Code{}, false
 	}
 	if address, _ := memberAddressCause(err); address != guardian.AddressFine {
 		return mcpconnectionattempts.AddressCode(address)
 	}
-	if classified {
+	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeInvalidRemoteSession {
+		return g.memberNoCredentialHappened(member), true
+	} else if ok && failure.code != (mcpconnectionattempts.Code{}) {
 		return failure.code, true
 	}
 	if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
@@ -868,13 +861,20 @@ func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
 	return mcpconnectionattempts.CodeMemberToolsMissing, true
 }
 
-func upstreamRejectedCredential(code mcpconnectionattempts.Code) bool {
-	return code == mcpconnectionattempts.CodeProviderRejected || adminCredentialRejected(code)
+// adminCredentialRejected is a member whose admin-saved credential the upstream rejected.
+func adminCredentialRejected(err error) (mcpconnectionattempts.Code, bool) {
+	failure, ok := errors.AsType[memberConnectionError](err)
+	return failure.code, ok && (failure.code == mcpconnectionattempts.CodeSharedCredentialRejected || failure.code == mcpconnectionattempts.CodeStaticKeyRejected)
 }
 
-// adminCredentialRejected is a rejected credential an admin set, which the person can't fix by reconnecting.
-func adminCredentialRejected(code mcpconnectionattempts.Code) bool {
-	return code == mcpconnectionattempts.CodeSharedCredentialRejected || code == mcpconnectionattempts.CodeStaticKeyRejected
+// personConnects reports a member status the person fixes by connecting.
+func personConnects(status gatewayServerStatus) bool {
+	switch status {
+	case gatewayServerConnected, gatewayServerReconnect, gatewayServerNotConnected, gatewayServerChained, gatewayServerChainPending:
+		return true
+	case gatewayServerUnavailable, gatewayServerNoAccess, gatewayServerNoSignIn, gatewayServerNotSetUp:
+	}
+	return false
 }
 
 // memberAddressCause is the address Speakeasy did not dial that stopped a member, and whether it is its sign-in provider's.

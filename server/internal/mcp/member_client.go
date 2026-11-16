@@ -531,7 +531,10 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	case errors.Is(ctx.Err(), context.Canceled):
 		// The caller went away, so this says nothing about the member.
 		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
-	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
+	case listingBudgetSpent(ctx) && status == 0:
+		// The listing's own time ran out, not the member's.
+		return upstreamFailure(fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug), false)
+	case (ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded)) && !listingBudgetSpent(ctx):
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
 		if memberDeadlineRanOut(ctx, rt, dial, err, exchangeErr) {
 			code = mcpconnectionattempts.CodeProviderUnreachable
