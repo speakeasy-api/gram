@@ -53,6 +53,7 @@ func TestToolDispositionResolver_DerivesFromMetadata(t *testing.T) {
 	require.Equal(t, map[string]string{
 		"list_items":  "read_only",
 		"delete_item": "destructive",
+		"ping":        "unannotated",
 	}, got)
 
 	annotations, err := ti.dispositions.ToolAnnotations(
@@ -196,8 +197,8 @@ func TestToolCatalog_RecordMissingToolsAddsOnlyNewToolsAndAuditsAsSystem(t *test
 	require.Equal(t, map[string]string{
 		"edited":      "read_only",
 		"delete_item": "destructive",
-		"ping":        "",
-	}, catalog, "existing entries keep their labels and a tool with no hints is still recorded")
+		"ping":        "unannotated",
+	}, catalog, "existing entries keep their labels and a tool with no hints is recorded as unannotated")
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)

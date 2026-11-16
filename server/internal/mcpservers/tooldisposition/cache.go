@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -119,7 +120,8 @@ func New(logger *slog.Logger, db *pgxpool.Pool, c cache.Cache) *Cache {
 	}
 }
 
-// Dispositions returns the disposition token for every classified tool on a server.
+// Dispositions returns the disposition token for every tool on a server,
+// unannotated for a tool with no hint set.
 func (c *Cache) Dispositions(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
 	serverUUID, err := uuid.Parse(mcpServerID)
 	if err != nil {
@@ -138,7 +140,7 @@ func (c *Cache) Dispositions(ctx context.Context, mcpServerID, projectID string)
 }
 
 // ToolCatalog returns every recorded tool mapped to its disposition token, which
-// is empty for a recorded tool with no behavior class. A missing key means the
+// is unannotated for a recorded tool with no hint set. A missing key means the
 // tool has never been recorded.
 func (c *Cache) ToolCatalog(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
 	serverUUID, err := uuid.Parse(mcpServerID)
@@ -325,9 +327,17 @@ func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (
 			row.OpenWorldHint,
 		)
 		resolved.Annotations[row.ToolName] = annotations
-		if disposition := conv.DispositionFromAnnotations(annotations); disposition != "" {
-			resolved.Dispositions[row.ToolName] = disposition
+		disposition, conflicting := authz.DispositionFromHints(
+			conv.FromPGBool[bool](row.ReadOnlyHint),
+			conv.FromPGBool[bool](row.DestructiveHint),
+			conv.FromPGBool[bool](row.IdempotentHint),
+			conv.FromPGBool[bool](row.OpenWorldHint),
+		)
+		if conflicting {
+			c.logger.WarnContext(ctx, "tool says it is both read-only and destructive; treating it as destructive",
+				attr.SlogToolName(row.ToolName), attr.SlogMcpServerID(serverID))
 		}
+		resolved.Dispositions[row.ToolName] = disposition
 	}
 
 	c.storeResolved(ctx, generation, resolveGeneration, resolved)
