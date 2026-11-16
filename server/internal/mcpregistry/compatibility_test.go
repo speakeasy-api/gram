@@ -2,6 +2,7 @@ package mcpregistry
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -67,4 +68,26 @@ func TestCompatibilityHiddenAndUnlinkedDiscovery(t *testing.T) {
 	require.NoError(t, err)
 	_, err = s.Save(ctx, unlinked.ID, Token(unlinked), json.RawMessage(raw))
 	require.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestCompatibilityInvalidHistoricalVersionCannotBecomeEmpty(t *testing.T) {
+	t.Parallel()
+	ctx, s, db := newTestService(t)
+	for i, version := range []string{``, `,"version":null`, `,"version":1`} {
+		name := "example.test/legacy-" + strconv.Itoa(i)
+		id := uuid.New()
+		raw := `{"server":{"name":"` + name + `","description":"Demo"` + version + `,"remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]}}`
+		require.NoError(t, repo.New(db).InsertRegistryEntryFixture(ctx, repo.InsertRegistryEntryFixtureParams{ID: id, Data: []byte(raw), Published: false}))
+		old, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		empty := strings.Replace(basicRecord, "example.test/demo", name, 1)
+		empty = strings.Replace(empty, `"1.0.0"`, `""`, 1)
+		_, err = s.Save(ctx, id, Token(old), json.RawMessage(empty))
+		var invalid *InvalidError
+		require.ErrorAs(t, err, &invalid, version)
+		require.Equal(t, []Issue{{Path: "/server/version", Message: "version is immutable"}}, invalid.Issues, version)
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, old, got)
+	}
 }

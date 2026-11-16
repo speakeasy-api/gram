@@ -232,6 +232,7 @@ func TestOktaHiddenParentKeepsOwnership(t *testing.T) {
 	_, err = s.Create(ctx, []byte(oktaRecord("example.test/other", "linear")))
 	var invalid *InvalidError
 	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, []Issue{{Path: oktaNamespacePath + "/oinNames/0", Message: "OIN name is already mapped by entry example.test/owner"}}, invalid.Issues)
 }
 
 func TestOktaUnlinkedLegacyClaimBlocksCreateAndSave(t *testing.T) {

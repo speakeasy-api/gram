@@ -186,7 +186,9 @@ func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token s
 		if recordName(old.Data) != recordName(data) {
 			return Entry{}, &InvalidError{Issues: []Issue{{Path: "/server/name", Message: "name is immutable"}}}
 		}
-		if recordVersion(old.Data) != recordVersion(data) {
+		oldVersion, oldOK := recordVersion(old.Data)
+		newVersion, newOK := recordVersion(data)
+		if oldVersion != newVersion || oldOK != newOK {
 			return Entry{}, &InvalidError{Issues: []Issue{{Path: "/server/version", Message: "version is immutable"}}}
 		}
 		if err := checkStructure(old.Data, data); err != nil {

@@ -39,7 +39,9 @@ type oktaMappingOwner struct {
 	name string
 }
 
-// oktaMappings returns the stable server that claims each OIN name.
+// oktaMappings returns the stable server that claims each OIN name. Retained
+// rows can predate duplicate rejection, so the byte-ordered smallest server
+// name owns a shared claim, matching the registry's name ordering.
 func (s *Service) oktaMappings(ctx context.Context) (map[string]oktaMappingOwner, error) {
 	rows, err := repo.New(s.db).AdminListRegistryOktaMappings(ctx)
 	if err != nil {
@@ -47,7 +49,9 @@ func (s *Service) oktaMappings(ctx context.Context) (map[string]oktaMappingOwner
 	}
 	claimed := make(map[string]oktaMappingOwner, len(rows))
 	for _, row := range rows {
-		claimed[row.OinName] = oktaMappingOwner{id: row.RegistryServerID, name: row.EntryName}
+		if current, ok := claimed[row.OinName]; !ok || row.EntryName < current.name {
+			claimed[row.OinName] = oktaMappingOwner{id: row.RegistryServerID, name: row.EntryName}
+		}
 	}
 	return claimed, nil
 }

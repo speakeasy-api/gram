@@ -47,19 +47,21 @@ func lockEntry(ctx context.Context, q *repo.Queries, id uuid.UUID) (Entry, error
 	return entry(q.LockEntry(ctx, id))
 }
 
-// recordVersion matches PostgreSQL's exact, case-sensitive server/version JSON path.
-func recordVersion(raw json.RawMessage) string {
+// recordVersion matches PostgreSQL's exact, case-sensitive server/version JSON
+// path. ok is false when the stored version is missing, null, or not a string,
+// so invalid historical versions never compare equal to an empty version.
+func recordVersion(raw json.RawMessage) (version string, ok bool) {
 	var doc map[string]json.RawMessage
 	if json.Unmarshal(raw, &doc) != nil {
-		return ""
+		return "", false
 	}
 	var server map[string]json.RawMessage
 	if json.Unmarshal(doc["server"], &server) != nil {
-		return ""
+		return "", false
 	}
-	var version string
-	if json.Unmarshal(server["version"], &version) != nil {
-		return ""
+	var value *string
+	if json.Unmarshal(server["version"], &value) != nil || value == nil {
+		return "", false
 	}
-	return version
+	return *value, true
 }

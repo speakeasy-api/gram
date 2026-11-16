@@ -2,6 +2,7 @@ package mcpregistry
 
 import (
 	_ "embed"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -69,6 +70,16 @@ func TestCreateServerIdentityAtomic(t *testing.T) {
 	_, err = s.Create(ctx, []byte(basicRecord))
 	require.ErrorIs(t, err, ErrConflict)
 	count, err := repo.New(db).CountRegistryServers(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+
+	// An unlinked legacy entry lets the parent insert succeed and the entry
+	// insert fail; the new parent must roll back with it.
+	legacy := strings.Replace(basicRecord, "example.test/demo", "example.test/unlinked", 1)
+	require.NoError(t, repo.New(db).InsertRegistryUnlinkedEntryFixture(ctx, repo.InsertRegistryUnlinkedEntryFixtureParams{ID: uuid.New(), Data: []byte(legacy), Published: false}))
+	_, err = s.Create(ctx, []byte(legacy))
+	require.Error(t, err)
+	count, err = repo.New(db).CountRegistryServers(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 }
