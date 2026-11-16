@@ -128,6 +128,10 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
+		// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+		if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogWarn(ctx, logger)
+		}
 		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
 			return nil, nil, err
 		}
@@ -260,11 +264,24 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
+// slugRules selects whether a new hosted address must meet the slug length limit and carry the organization slug
+// prefix.
+type slugRules string
+
+const (
+	// slugRulesRequired applies both, as every API create does.
+	slugRulesRequired slugRules = "required"
+
+	// slugRulesExemptLegacyAlias skips both for an address a legacy toolset alias already serves, so the backfill
+	// that makes the address explicit keeps the URL clients hold.
+	slugRulesExemptLegacyAlias slugRules = "exempt_legacy_alias"
+)
+
 // checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
-// slug length, the organization's verified and activated custom domain only, the organization prefix on the
-// platform and for free accounts, and a private network mode's ingress namespace.
-func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID) error {
-	if len(slug) > maxHostedSlugLength {
+// slug length and the organization prefix on the platform and for free accounts unless rules exempts them, the
+// organization's verified and activated custom domain only, and a private network mode's ingress namespace.
+func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID, rules slugRules) error {
+	if rules != slugRulesExemptLegacyAlias && len(slug) > maxHostedSlugLength {
 		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if customDomainID.Valid {
@@ -272,8 +289,10 @@ func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, 
 			return err
 		}
 	}
-	if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
-		return err
+	if rules != slugRulesExemptLegacyAlias {
+		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
+			return err
+		}
 	}
 	// Endpoints left on a deleted domain cannot serve, so they do not hold back a new address.
 	live, err := repo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
