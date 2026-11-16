@@ -67,7 +67,7 @@ func TestGatewayMemberAtBlockedAddress(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.NotEmpty(t, row.MemberID)
 	require.Equal(t, "192.0.2.10", row.ProviderHost, "the member's configured host")
-	require.Equal(t, `server "member" uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
+	require.Equal(t, `server "member" uses a private or internal address Speakeasy can't reach. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 	require.NotContains(t, text, "192.0.2.10")
 }
 
@@ -122,7 +122,7 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
-	const want = "uses an address Speakeasy does not connect to directly. Ask your administrator to check the sign-in provider's address"
+	const want = "uses a private or internal address Speakeasy can't reach. Ask your administrator to check the sign-in provider's address"
 
 	for _, call := range []string{"first", "inside the cooldown"} {
 		text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
@@ -198,7 +198,7 @@ func TestCodeServersVerifyMemberAtBlockedAddress(t *testing.T) {
 	page, err := host.Servers(ctx, codemode.PageArgs{Server: "remote", Verify: true})
 	require.NoError(t, err)
 	require.Equal(t, "unreachable", page.Items[0].Connection.Authentication)
-	require.Equal(t, "This server uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address.", page.Items[0].Connection.Instructions)
+	require.Equal(t, "This server uses a private or internal address Speakeasy can't reach. Ask your administrator to check the server's address.", page.Items[0].Connection.Instructions)
 }
 
 // The gateway list says a member's sign-in provider address is the problem, inside the cooldown that follows it.
@@ -274,7 +274,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 		label  string
 		reason mcpconnectionattempts.Code
 	}{
-		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · it uses an address Speakeasy does not connect to directly · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · it uses a private or internal address Speakeasy can't reach · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotAllowed},
 		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · it uses an address that does not point anywhere · ask your administrator", reason: mcpconnectionattempts.CodeAddressNotFound},
 		{name: "broken server", url: broken.URL, label: "Unavailable · try again shortly, or ask your administrator", reason: mcpconnectionattempts.CodeMemberToolsMissing},
 	} {

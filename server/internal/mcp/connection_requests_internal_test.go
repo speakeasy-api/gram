@@ -390,7 +390,7 @@ func TestMemberClientFailure_NamesOnlyAReachedUpstream(t *testing.T) {
 		text     string
 		host     string
 	}{
-		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), dial: dial, code: mcpconnectionattempts.CodeAddressNotAllowed, text: `server "fixture" uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address`, host: "mcp.example.com"},
+		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), dial: dial, code: mcpconnectionattempts.CodeAddressNotAllowed, text: `server "fixture" uses a private or internal address Speakeasy can't reach. Ask your administrator to check the server's address`, host: "mcp.example.com"},
 		{name: "missing", exchange: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "mcp.example.com", IsNotFound: true}}, dial: dial, code: mcpconnectionattempts.CodeAddressNotFound, text: `server "fixture" uses an address that does not point anywhere. Ask your administrator to check the server's address`, host: "mcp.example.com"},
 		{name: "unresolved", exchange: fmt.Errorf("lookup: %w", guardian.ErrBadHost), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},
 		{name: "redirect hop", exchange: redirectedToBlocked(t), dial: dial, code: mcpconnectionattempts.CodeProviderUnreachable, text: noAnswer, host: ""},

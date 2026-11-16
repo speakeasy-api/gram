@@ -1374,8 +1374,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, err)
 				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
-				if remotesessions.OutageAddress(err) != guardian.AddressFine {
-					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, oauthui.ReasonSignInAddress))
+				if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, remotesessions.SignInAddressReason(address)))
 				}
 				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
 					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))

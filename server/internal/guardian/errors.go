@@ -64,7 +64,7 @@ func AddressFailureOf(err error, tunneled bool) AddressFailure {
 func (f AddressFailure) Problem() string {
 	switch f {
 	case AddressNotAllowed:
-		return "uses an address Speakeasy does not connect to directly"
+		return "uses a private or internal address Speakeasy can't reach"
 	case AddressNotFound:
 		return "uses an address that does not point anywhere"
 	case AddressFine:
