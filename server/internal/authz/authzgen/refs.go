@@ -29,6 +29,56 @@ func RefName(kind authz.Kind) string {
 	return camel(string(kind))
 }
 
+// CollectionName is the Go name of the ProjectRef method that names every
+// resource of a kind in one project: environment becomes Environments.
+func CollectionName(kind authz.Kind) string {
+	return RefName(kind) + "s"
+}
+
+// hasCollection reports whether a kind gets a generated collection: its
+// resources sit in a project and its ref takes that project and nothing else.
+func hasCollection(r authz.Registry, t authz.ResourceType) bool {
+	if _, ok := handWrittenRefs[t.Kind]; ok || t.Parent != "project" {
+		return false
+	}
+	var keys []string
+	for _, d := range t.Dimensions {
+		if refDimension(r, d) {
+			keys = append(keys, d.Key)
+		}
+	}
+	return len(keys) == 1 && keys[0] == "project_id"
+}
+
+// renderCollections writes, for every kind inside a project, a request for
+// all of the project's resources of that kind. It is the kind's permission
+// with the project id as the resource, which is how checks without a single
+// resource (listing, creating, a slug that did not resolve) have always been
+// stored, so existing grants keep matching.
+func renderCollections(b *strings.Builder, r authz.Registry) {
+	b.WriteString("// Collections name every resource of one kind inside a project, for requests\n")
+	b.WriteString("// with no single resource: listing, creating, or a lookup that found nothing.\n")
+	b.WriteString("// Each is the kind's permission with the project id as the resource.\n\n")
+	for _, t := range r.Types {
+		if !hasCollection(r, t) {
+			continue
+		}
+		name := RefName(t.Kind)
+		plural := CollectionName(t.Kind)
+		fmt.Fprintf(b, "// %sCollection names every %s resource of one project.\ntype %sCollection struct{ project string }\n\n", name, t.Kind, name)
+		fmt.Fprintf(b, "// %s names every %s resource of the project.\n", plural, t.Kind)
+		fmt.Fprintf(b, "func (r ProjectRef) %s() %sCollection {\n\treturn %sCollection{project: r.id}\n}\n\n", plural, name, name)
+		for _, p := range t.Permissions {
+			if slices.ContainsFunc(p.Dimensions, func(d authz.Dimension) bool { return refDimension(r, d) }) {
+				continue
+			}
+			method := ActionMethodName(p.Action)
+			fmt.Fprintf(b, "// %s requests %s on every %s resource of the project.\n", method, ScopeConstantName(t.ScopeFor(p)), t.Kind)
+			fmt.Fprintf(b, "func (c %sCollection) %s() Check {\n\treturn %s(c.project, c.project).%s()\n}\n\n", name, method, name, method)
+		}
+	}
+}
+
 // ActionMethodName is the Go name of the ref method for action:
 // plugin_write becomes PluginWrite.
 func ActionMethodName(action authz.Action) string {
@@ -163,6 +213,8 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
 		}
 	}
+
+	renderCollections(&b, r)
 
 	kinds := make([]string, 0, len(handWrittenRefs))
 	for kind := range handWrittenRefs {

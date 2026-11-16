@@ -297,6 +297,69 @@ func (r WorkloadRef) Write() Check {
 	return newRefCheck(ScopeWorkloadWrite, r.id, r.dimensions(), MatchLoose)
 }
 
+// Collections name every resource of one kind inside a project, for requests
+// with no single resource: listing, creating, or a lookup that found nothing.
+// Each is the kind's permission with the project id as the resource.
+
+// MCPServerCollection names every mcp resource of one project.
+type MCPServerCollection struct{ project string }
+
+// MCPServers names every mcp resource of the project.
+func (r ProjectRef) MCPServers() MCPServerCollection {
+	return MCPServerCollection{project: r.id}
+}
+
+// Read requests ScopeMCPRead on every mcp resource of the project.
+func (c MCPServerCollection) Read() Check {
+	return MCPServer(c.project, c.project).Read()
+}
+
+// Write requests ScopeMCPWrite on every mcp resource of the project.
+func (c MCPServerCollection) Write() Check {
+	return MCPServer(c.project, c.project).Write()
+}
+
+// Connect requests ScopeMCPConnect on every mcp resource of the project.
+func (c MCPServerCollection) Connect() Check {
+	return MCPServer(c.project, c.project).Connect()
+}
+
+// EnvironmentCollection names every environment resource of one project.
+type EnvironmentCollection struct{ project string }
+
+// Environments names every environment resource of the project.
+func (r ProjectRef) Environments() EnvironmentCollection {
+	return EnvironmentCollection{project: r.id}
+}
+
+// Read requests ScopeEnvironmentRead on every environment resource of the project.
+func (c EnvironmentCollection) Read() Check {
+	return Environment(c.project, c.project).Read()
+}
+
+// Write requests ScopeEnvironmentWrite on every environment resource of the project.
+func (c EnvironmentCollection) Write() Check {
+	return Environment(c.project, c.project).Write()
+}
+
+// AssistantCollection names every assistant resource of one project.
+type AssistantCollection struct{ project string }
+
+// Assistants names every assistant resource of the project.
+func (r ProjectRef) Assistants() AssistantCollection {
+	return AssistantCollection{project: r.id}
+}
+
+// Read requests ScopeAssistantRead on every assistant resource of the project.
+func (c AssistantCollection) Read() Check {
+	return Assistant(c.project, c.project).Read()
+}
+
+// Write requests ScopeAssistantWrite on every assistant resource of the project.
+func (c AssistantCollection) Write() Check {
+	return Assistant(c.project, c.project).Write()
+}
+
 // Kinds without a generated ref, and the hand-written constructor each uses:
 //
 //   - inference: InferenceExecuteCheck: the project is both the resource and its parent
