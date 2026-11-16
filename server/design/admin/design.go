@@ -206,6 +206,7 @@ var AdminMcpServer = Type("AdminMcpServer", func() {
 	Attribute("id", String, "The mcp_servers row ID, or the toolset ID for a toolset-only server.")
 	Attribute("name", String, "Display name of the server.")
 	Attribute("url", String, "The URL clients connect to. Omitted when the server has no routable address.")
+	Attribute("upstream_url", String, "The upstream URL for a remote MCP server. Omitted for other server types.")
 	Attribute("visibility", String, "The visibility of the server.", func() {
 		Enum("disabled", "private", "public")
 	})
@@ -1501,4 +1502,6 @@ var _ = Service("admin", func() {
 	projectRedeployMethods()
 	customDomainMethods()
 	platformExternalCredentialMethods()
+	memoryEvalMethods()
+	assistantMethods()
 })

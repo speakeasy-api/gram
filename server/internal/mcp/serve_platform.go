@@ -280,9 +280,19 @@ func (s *Service) handlePlatformToolsetRequest(
 		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion, s.platformSkillsEnabled(ctx, authCtx))
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case mcpversions.MethodToolsList:
-		return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
-	case mcpversions.MethodToolsCall:
+	case mcpversions.MethodToolsList, mcpversions.MethodToolsCall:
+		// Listing and calling run in the same acting context, so the tools a
+		// caller is offered are exactly the ones it may call.
+		if toolset.ActingContext != nil {
+			acting, err := toolset.ActingContext(ctx)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "prepare platform toolset request").LogError(ctx, s.logger)
+			}
+			ctx = acting
+		}
+		if req.Method == mcpversions.MethodToolsList {
+			return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
+		}
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
 	case mcpversions.MethodResourcesList:
 		// The platform toolset has resources only while it declares the

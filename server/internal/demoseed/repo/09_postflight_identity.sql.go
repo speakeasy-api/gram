@@ -176,7 +176,7 @@ WHERE t.organization_id = $1::text AND t.project_id = $2::uuid
   AND a.id = $3::uuid
   AND ag.project_id = $2::uuid AND ag.owner_user_id = $4::text
   AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
-  AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
+  AND i.issuer = $5::text AND i.jwks_uri = $6::text AND i.allow_wildcard_admission IS FALSE
   AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
   AND t.subject = 'assistant-trigger:' || r.id::text
   AND (SELECT count(*) FROM principal_grants g
@@ -188,6 +188,8 @@ type PostflightIDBoundAssistantRootParams struct {
 	ProjectID   uuid.UUID
 	AssistantID uuid.UUID
 	OwnerUserID string
+	Issuer      string
+	JwksUri     string
 }
 
 func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg PostflightIDBoundAssistantRootParams) (int64, error) {
@@ -196,6 +198,8 @@ func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg Postfl
 		arg.ProjectID,
 		arg.AssistantID,
 		arg.OwnerUserID,
+		arg.Issuer,
+		arg.JwksUri,
 	)
 	var count int64
 	err := row.Scan(&count)

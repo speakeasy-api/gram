@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -147,11 +146,7 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 	case oops.CodeNotFound:
 		result.Code, result.Message = "not_found", "That project or review request is not available to you."
 	case oops.CodeForbidden:
-		if strings.Contains(shareable.Error(), "MCP approval is not enabled") {
-			result.Code, result.Message = unavailableCode, "MCP review requests are not available for this organization."
-		} else {
-			result.Code, result.Message = "forbidden", "You do not have permission to submit or read this MCP review request."
-		}
+		result.Code, result.Message = "forbidden", "You do not have permission to submit or read this MCP review request."
 	case oops.CodeUnavailable:
 		result.Code, result.Message = unavailableCode, "MCP review requests are temporarily unavailable."
 	default:

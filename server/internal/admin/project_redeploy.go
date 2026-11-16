@@ -56,7 +56,6 @@ type ProjectRedeployState struct {
 	OpenAPIAssets      int
 	FunctionAssets     int
 	Packages           int
-	ExternalMCPs       int
 
 	// InFlightDeploymentID is a newer deployment started within the deployment
 	// workflow's run timeout that has not finished. One older than that is no
@@ -120,7 +119,6 @@ func LockProjectRedeployStateTx(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		OpenAPIAssets:      len(active.Openapiv3Assets),
 		FunctionAssets:     len(active.FunctionsAssets),
 		Packages:           len(active.Packages),
-		ExternalMCPs:       len(active.ExternalMcps),
 
 		InFlightDeploymentID: inFlight,
 	}, nil
@@ -172,7 +170,6 @@ func (s *Service) GetProjectRedeployPreview(ctx context.Context, payload *gen.Ge
 		OpenapiAssets:      state.OpenAPIAssets,
 		FunctionAssets:     state.FunctionAssets,
 		Packages:           state.Packages,
-		ExternalMcps:       state.ExternalMCPs,
 	}, nil
 }
 

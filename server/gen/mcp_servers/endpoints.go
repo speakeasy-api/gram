@@ -21,6 +21,7 @@ type Endpoints struct {
 	ListMcpServers          goa.Endpoint
 	ListMcpServersForOrg    goa.Endpoint
 	UpdateMcpServer         goa.Endpoint
+	SetSetupGuideCompleted  goa.Endpoint
 	ListToolFilters         goa.Endpoint
 	SetToolMetadataBatch    goa.Endpoint
 	AddToolMetadataBatch    goa.Endpoint
@@ -41,6 +42,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListMcpServers:          NewListMcpServersEndpoint(s, a.APIKeyAuth),
 		ListMcpServersForOrg:    NewListMcpServersForOrgEndpoint(s, a.APIKeyAuth),
 		UpdateMcpServer:         NewUpdateMcpServerEndpoint(s, a.APIKeyAuth),
+		SetSetupGuideCompleted:  NewSetSetupGuideCompletedEndpoint(s, a.APIKeyAuth),
 		ListToolFilters:         NewListToolFiltersEndpoint(s, a.APIKeyAuth),
 		SetToolMetadataBatch:    NewSetToolMetadataBatchEndpoint(s, a.APIKeyAuth),
 		AddToolMetadataBatch:    NewAddToolMetadataBatchEndpoint(s, a.APIKeyAuth),
@@ -59,6 +61,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListMcpServers = m(e.ListMcpServers)
 	e.ListMcpServersForOrg = m(e.ListMcpServersForOrg)
 	e.UpdateMcpServer = m(e.UpdateMcpServer)
+	e.SetSetupGuideCompleted = m(e.SetSetupGuideCompleted)
 	e.ListToolFilters = m(e.ListToolFilters)
 	e.SetToolMetadataBatch = m(e.SetToolMetadataBatch)
 	e.AddToolMetadataBatch = m(e.AddToolMetadataBatch)
@@ -325,6 +328,65 @@ func NewUpdateMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.UpdateMcpServer(ctx, p)
+	}
+}
+
+// NewSetSetupGuideCompletedEndpoint returns an endpoint function that calls
+// the method "setSetupGuideCompleted" of service "mcpServers".
+func NewSetSetupGuideCompletedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSetupGuideCompletedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSetupGuideCompleted(ctx, p)
 	}
 }
 

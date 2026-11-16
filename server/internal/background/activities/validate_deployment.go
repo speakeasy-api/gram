@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -50,7 +51,7 @@ func (v *ValidateDeployment) Do(ctx context.Context, projectID uuid.UUID, deploy
 		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").LogError(ctx, v.logger)
 	}
 
-	org, err := mv.DescribeOrganization(ctx, v.logger, orgRepo, v.billingRepo, orgData.ID)
+	org, err := orgaccount.Describe(ctx, v.logger, orgRepo, v.billingRepo, orgData.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").LogError(ctx, v.logger)
 	}

@@ -8,9 +8,11 @@ import {
   type UserSessionClientsPageParams,
 } from "@gram/client/react-query/userSessionClients.js";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
+
+const GATEWAY_INVENTORY_STALE_TIME_MS = 30_000;
 
 /** Named gateways and registrations, never a crawl of session history. */
 export function useGatewayConnectionCandidates({
@@ -35,6 +37,7 @@ export function useGatewayConnectionCandidates({
     ...gatewaysQuery,
     queryKey: [...gatewaysQuery.queryKey, organization.id],
     enabled: enabled && canReadGateways,
+    staleTime: GATEWAY_INVENTORY_STALE_TIME_MS,
     retry: false,
     throwOnError: false,
   });
@@ -54,6 +57,7 @@ export function useGatewayConnectionCandidates({
     initialPageParam: undefined as UserSessionClientsPageParams,
     getNextPageParam: (page) => page["~next"],
     enabled: clientsEnabled,
+    staleTime: GATEWAY_INVENTORY_STALE_TIME_MS,
     retry: false,
     throwOnError: false,
   });
@@ -63,14 +67,15 @@ export function useGatewayConnectionCandidates({
     isFetchNextPageError,
     fetchNextPage,
   } = clients;
+  const opens = useRef(0);
+  const lastFetchOpen = useRef(0);
   useEffect(() => {
-    if (
-      !clientsEnabled ||
-      !hasNextPage ||
-      isFetchingNextPage ||
-      isFetchNextPageError
-    )
-      return;
+    if (clientsEnabled) opens.current += 1;
+  }, [clientsEnabled]);
+  useEffect(() => {
+    if (!clientsEnabled || !hasNextPage || isFetchingNextPage) return;
+    if (isFetchNextPageError && lastFetchOpen.current === opens.current) return;
+    lastFetchOpen.current = opens.current;
     void fetchNextPage().catch(() => undefined);
   }, [
     clientsEnabled,
@@ -84,34 +89,61 @@ export function useGatewayConnectionCandidates({
     if (!enabled) return [];
     const result: LauncherCandidate[] = [];
     if (canReadOrg) {
+      // Opened from the organization's settings, so it is findable by name.
       result.push({
-        id: `gateway-connections:organization:${organization.id}`,
+        id: `gateway:organization:${organization.id}`,
         kind: "page",
-        title: "Organization Gateway Connections",
-        detail: "Sessions across projects",
-        keywords: ["gateway", "sessions", "connections", "organization"],
+        title: "Organization Gateway",
+        detail: "Every server your team can reach",
+        keywords: ["gateway", "organization", "mcp", "overview"],
         verbs: ["open"],
         icon: "network",
         group: "Pages",
         run: () => {
-          void navigate(
-            `${routes.mcp.organizationGateway.href()}?tab=connections`,
-          );
+          void navigate(routes.mcp.organizationGateway.href());
+        },
+      });
+    }
+    if (canReadProject) {
+      // The project's MCP list leads with this gateway by name. Its page needs
+      // only access to the project.
+      result.push({
+        id: `gateway:project:${project.id}`,
+        kind: "page",
+        title: "Project Gateway",
+        detail: "Every server in this project your team can reach",
+        keywords: ["gateway", "project", "mcp", "overview"],
+        verbs: ["open"],
+        icon: "network",
+        group: "Pages",
+        run: () => {
+          void navigate(routes.mcp.projectGateway.href());
         },
       });
       result.push({
-        id: `gateway-activity:organization:${organization.id}`,
+        id: `gateway-connections:project:${project.id}`,
         kind: "page",
-        title: "Organization Gateway Activity",
-        detail: "Calls across projects",
-        keywords: ["gateway", "activity", "usage", "calls", "organization"],
+        title: "Project Gateway Connections",
+        detail: "Sessions through this project's gateway",
+        keywords: ["gateway", "sessions", "connections", "project"],
         verbs: ["open"],
         icon: "network",
         group: "Pages",
         run: () => {
-          void navigate(
-            `${routes.mcp.organizationGateway.href()}?tab=activity`,
-          );
+          void navigate(`${routes.mcp.projectGateway.href()}?tab=connections`);
+        },
+      });
+      result.push({
+        id: `gateway-activity:project:${project.id}`,
+        kind: "page",
+        title: "Project Gateway Activity",
+        detail: "Calls through this project's gateway",
+        keywords: ["gateway", "activity", "usage", "calls", "project"],
+        verbs: ["open"],
+        icon: "network",
+        group: "Pages",
+        run: () => {
+          void navigate(`${routes.mcp.projectGateway.href()}?tab=activity`);
         },
       });
     }
@@ -158,8 +190,10 @@ export function useGatewayConnectionCandidates({
   }, [
     enabled,
     canReadOrg,
+    canReadProject,
     canReadGateways,
     organization.id,
+    project.id,
     gateways.data,
     gateways.isError,
     clients.data,

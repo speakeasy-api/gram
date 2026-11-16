@@ -20,6 +20,7 @@ import {
   getSession,
   listOrganizationMembers,
   listOrganizationProjects,
+  listOrganizationAssistants,
   listOrganizations,
   listUsers,
   listUserOrganizations,
@@ -33,6 +34,7 @@ import {
   type AdminStripeSubscription,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
+  type AdminOrganizationAssistants,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
   type ListProjectMcpServersResult,
@@ -134,6 +136,18 @@ export function organizationProjectsQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-projects", organizationID] as const,
     queryFn: () => listOrganizationProjects(organizationID),
+  });
+}
+
+export function organizationAssistantsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationAssistants,
+  readonly ["gram-admin-organization-assistants", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-organization-assistants", organizationID] as const,
+    queryFn: () => listOrganizationAssistants(organizationID),
   });
 }
 

@@ -33,7 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -526,7 +526,7 @@ func (s *Service) memberServerContext(ctx context.Context, logger *slog.Logger, 
 	if project.ID != gate.organizationID {
 		return ctx
 	}
-	accountType, _ := mv.ResolveOrganizationTier(ctx, logger, s.billingRepository, project.ID, billing.Tier(project.GramAccountType))
+	accountType, _ := orgaccount.ResolveTier(ctx, logger, s.billingRepository, project.ID, billing.Tier(project.GramAccountType))
 	return remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
 		OrganizationID:   project.ID,
 		OrganizationSlug: project.Slug,
@@ -543,7 +543,7 @@ func (s *Service) memberAttributionContext(ctx context.Context, logger *slog.Log
 	if _, ok := contextvalues.GetAuthContext(ctx); ok {
 		return ctx
 	}
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, gate.organizationID)
+	orgMetadata, err := orgaccount.Describe(ctx, s.logger, s.orgsRepo, s.billingRepository, gate.organizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "attribute meta MCP member call", attr.SlogError(err))
 		return ctx

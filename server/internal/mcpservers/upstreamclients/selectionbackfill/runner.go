@@ -134,6 +134,17 @@ type Report struct {
 	// any write.
 	Pairs map[Outcome]int `json:"pairs"`
 
+	// ConsentScoped counts the pairs in Pairs that configuration decides, that
+	// hold no recorded choice, and that belong to a credential issued for the
+	// servers approved at consent. Issuance recorded that credential's choices
+	// for those servers only, and it is refused anywhere else, so these are
+	// not choices it is missing. A pair with a recorded choice that no longer
+	// serves is not counted: the server was approved, and a run replaces the
+	// choice. Which servers were approved is not kept, so a run with Apply
+	// records the counted pairs all the same: a choice for a server the
+	// credential is never presented to grants nothing.
+	ConsentScoped int `json:"consent_scoped"`
+
 	// Written counts choices this run recorded.
 	Written int64 `json:"written"`
 
@@ -155,6 +166,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		Credentials:    0,
 		FullyCovered:   0,
 		Pairs:          make(map[Outcome]int),
+		ConsentScoped:  0,
 		Written:        0,
 		Gaps:           []Gap{},
 	}
@@ -200,6 +212,9 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			for _, row := range coverage {
 				outcome := Classify(row)
 				report.Pairs[outcome]++
+				if credential.ConsentScoped && !row.Recorded && (outcome == OutcomeClient || outcome == OutcomeNoAuth) {
+					report.ConsentScoped++
+				}
 				if !opts.Apply && !outcome.Decided() {
 					covered = false
 					report.Gaps = append(report.Gaps, Gap{CredentialID: credential.CredentialID, MCPServerID: row.McpServerID, Outcome: outcome})

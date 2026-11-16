@@ -61,10 +61,10 @@ func (q *Queries) DeployInsertAsset(ctx context.Context, arg DeployInsertAssetPa
 
 const deployInsertAssistant = `-- name: DeployInsertAssistant :exec
 INSERT INTO assistants
-  (id, organization_id, project_id, created_by_user_id, name, model, instructions)
+  (id, organization_id, project_id, created_by_user_id, name, model, reasoning_effort, instructions)
 VALUES
   ($1, $2::text, $3::uuid, $4::text,
-   $5, 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.')
+   $5, 'anthropic/claude-sonnet-4.6', 'medium', 'Help summarize project activity.')
 `
 
 type DeployInsertAssistantParams struct {
@@ -165,8 +165,7 @@ const deployInsertAssistantWorkloadIssuer = `-- name: DeployInsertAssistantWorkl
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
 VALUES ($1, $2::text, $3::uuid,
-        $4, 'https://platform.example.invalid',
-        'https://platform.example.invalid/.well-known/jwks.json', FALSE)
+        $4, $5, $6, FALSE)
 `
 
 type DeployInsertAssistantWorkloadIssuerParams struct {
@@ -174,16 +173,22 @@ type DeployInsertAssistantWorkloadIssuerParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	Name           string
+	Issuer         string
+	JwksUri        string
 }
 
-// Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
-// the existing Speakeasy JWKS endpoint; this example cannot sign or run work.
+// The project's assistant trigger trust registration, under the deployment's
+// signing issuer. Runtime provisioning looks it up by issuer and creates it
+// under this same name, so any other issuer would block every later binding
+// in the project.
 func (q *Queries) DeployInsertAssistantWorkloadIssuer(ctx context.Context, arg DeployInsertAssistantWorkloadIssuerParams) error {
 	_, err := q.db.Exec(ctx, deployInsertAssistantWorkloadIssuer,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Name,
+		arg.Issuer,
+		arg.JwksUri,
 	)
 	return err
 }

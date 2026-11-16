@@ -29,6 +29,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/adminmcp"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -42,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -185,6 +185,11 @@ func newAdminCommand() *cli.Command {
 			Name:    "server-url",
 			Usage:   "The public URL of the Speakeasy server, used to build MCP server URLs. Defaults to site-url.",
 			EnvVars: []string{"GRAM_SERVER_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "authz-issuer-url",
+			Usage:   "Speakeasy platform signing issuer origin. Without it the assistant identity migration is unavailable.",
+			EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -535,6 +540,12 @@ func newAdminCommand() *cli.Command {
 			if temporalEnv != nil {
 				projectRedeployer = deployments.NewStaffRedeployer(logger, tracerProvider, db, temporalEnv, audit.NewLogger())
 				adminService.SetProjectRedeployer(projectRedeployer)
+				adminService.SetMemoryEvalRunStarter(&background.TemporalMemoryEvalRunStarter{TemporalEnv: temporalEnv})
+			}
+			var assistantIdentities *assistantidentity.Service
+			if c.String("authz-issuer-url") != "" {
+				assistantIdentities = newAssistantIdentities(c, audit.NewLogger())
+				adminService.SetAssistantIdentities(assistantIdentities)
 			}
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
@@ -575,7 +586,7 @@ func newAdminCommand() *cli.Command {
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
 			}
-			adminService.SetExternalCredentialService(externalcredentials.NewPlatformService(logger, tracerProvider, db, newGCPIdentity(ctx, logger, c)))
+			adminService.SetGCPIdentity(newGCPIdentity(ctx, logger, c))
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")
@@ -591,7 +602,7 @@ func newAdminCommand() *cli.Command {
 				}
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
-				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil, ProjectRedeployer: projectRedeployer}
+				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil, ProjectRedeployer: projectRedeployer, AssistantIdentities: assistantIdentities}
 				if platformAssets != nil {
 					imageUploads, err := assets.NewPlatformImageUploads(platformAssets, staffCache, adminServerURL, siteURL, logger)
 					if err != nil {

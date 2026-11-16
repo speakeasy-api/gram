@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * restore oktaServerSuggestions
  *
  * @remarks
- * Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.
+ * Restore a dismissed suggestion currently made to the organization. Requires org:admin.
  */
 export function oktaServerSuggestionsRestore(
   client: GramCore,

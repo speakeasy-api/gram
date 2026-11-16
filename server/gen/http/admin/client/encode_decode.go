@@ -27608,6 +27608,1678 @@ func DecodeDeleteGcpIamPlatformCredentialResponse(decoder func(*http.Response) g
 	}
 }
 
+// BuildGetMemoryEvalOptionsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getMemoryEvalOptions"
+// endpoint
+func (c *Client) BuildGetMemoryEvalOptionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMemoryEvalOptionsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getMemoryEvalOptions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMemoryEvalOptionsRequest returns an encoder for requests sent to
+// the admin getMemoryEvalOptions server.
+func EncodeGetMemoryEvalOptionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetMemoryEvalOptionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getMemoryEvalOptions", "*admin.GetMemoryEvalOptionsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetMemoryEvalOptionsResponse returns a decoder for responses returned
+// by the admin getMemoryEvalOptions endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetMemoryEvalOptionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMemoryEvalOptionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMemoryEvalOptionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			res := NewGetMemoryEvalOptionsAdminMemoryEvalOptionsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMemoryEvalOptionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMemoryEvalOptionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMemoryEvalOptionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMemoryEvalOptionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMemoryEvalOptionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMemoryEvalOptionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMemoryEvalOptionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMemoryEvalOptionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+				}
+				err = ValidateGetMemoryEvalOptionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+				}
+				return nil, NewGetMemoryEvalOptionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMemoryEvalOptionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+				}
+				err = ValidateGetMemoryEvalOptionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+				}
+				return nil, NewGetMemoryEvalOptionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getMemoryEvalOptions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMemoryEvalOptionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalOptions", err)
+			}
+			err = ValidateGetMemoryEvalOptionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalOptions", err)
+			}
+			return nil, NewGetMemoryEvalOptionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getMemoryEvalOptions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListMemoryEvalRunsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listMemoryEvalRuns" endpoint
+func (c *Client) BuildListMemoryEvalRunsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMemoryEvalRunsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listMemoryEvalRuns", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMemoryEvalRunsRequest returns an encoder for requests sent to the
+// admin listMemoryEvalRuns server.
+func EncodeListMemoryEvalRunsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListMemoryEvalRunsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listMemoryEvalRuns", "*admin.ListMemoryEvalRunsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListMemoryEvalRunsResponse returns a decoder for responses returned by
+// the admin listMemoryEvalRuns endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListMemoryEvalRunsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMemoryEvalRunsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMemoryEvalRunsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			res := NewListMemoryEvalRunsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMemoryEvalRunsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMemoryEvalRunsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMemoryEvalRunsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMemoryEvalRunsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMemoryEvalRunsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMemoryEvalRunsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMemoryEvalRunsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMemoryEvalRunsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+				}
+				err = ValidateListMemoryEvalRunsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+				}
+				return nil, NewListMemoryEvalRunsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMemoryEvalRunsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+				}
+				err = ValidateListMemoryEvalRunsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+				}
+				return nil, NewListMemoryEvalRunsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listMemoryEvalRuns", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMemoryEvalRunsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listMemoryEvalRuns", err)
+			}
+			err = ValidateListMemoryEvalRunsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listMemoryEvalRuns", err)
+			}
+			return nil, NewListMemoryEvalRunsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listMemoryEvalRuns", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetMemoryEvalRunRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "getMemoryEvalRun" endpoint
+func (c *Client) BuildGetMemoryEvalRunRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMemoryEvalRunAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getMemoryEvalRun", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMemoryEvalRunRequest returns an encoder for requests sent to the
+// admin getMemoryEvalRun server.
+func EncodeGetMemoryEvalRunRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetMemoryEvalRunPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getMemoryEvalRun", "*admin.GetMemoryEvalRunPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMemoryEvalRunResponse returns a decoder for responses returned by
+// the admin getMemoryEvalRun endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetMemoryEvalRunResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMemoryEvalRunResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMemoryEvalRunResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			res := NewGetMemoryEvalRunAdminMemoryEvalRunOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMemoryEvalRunUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMemoryEvalRunForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMemoryEvalRunBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMemoryEvalRunNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMemoryEvalRunConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMemoryEvalRunUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMemoryEvalRunInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMemoryEvalRunInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+				}
+				err = ValidateGetMemoryEvalRunInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+				}
+				return nil, NewGetMemoryEvalRunInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMemoryEvalRunUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+				}
+				err = ValidateGetMemoryEvalRunUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+				}
+				return nil, NewGetMemoryEvalRunUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getMemoryEvalRun", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMemoryEvalRunGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMemoryEvalRun", err)
+			}
+			err = ValidateGetMemoryEvalRunGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMemoryEvalRun", err)
+			}
+			return nil, NewGetMemoryEvalRunGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getMemoryEvalRun", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildStartMemoryEvalRunRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "startMemoryEvalRun" endpoint
+func (c *Client) BuildStartMemoryEvalRunRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: StartMemoryEvalRunAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "startMemoryEvalRun", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeStartMemoryEvalRunRequest returns an encoder for requests sent to the
+// admin startMemoryEvalRun server.
+func EncodeStartMemoryEvalRunRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.StartMemoryEvalRunPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "startMemoryEvalRun", "*admin.StartMemoryEvalRunPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewStartMemoryEvalRunRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "startMemoryEvalRun", err)
+		}
+		return nil
+	}
+}
+
+// DecodeStartMemoryEvalRunResponse returns a decoder for responses returned by
+// the admin startMemoryEvalRun endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeStartMemoryEvalRunResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeStartMemoryEvalRunResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body StartMemoryEvalRunResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			res := NewStartMemoryEvalRunAdminMemoryEvalRunOK(&body)
+			return res, nil
+		case http.StatusTooManyRequests:
+			var (
+				body StartMemoryEvalRunRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunRateLimitExceeded(&body)
+		case http.StatusUnauthorized:
+			var (
+				body StartMemoryEvalRunUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body StartMemoryEvalRunForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body StartMemoryEvalRunBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body StartMemoryEvalRunNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body StartMemoryEvalRunConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body StartMemoryEvalRunUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body StartMemoryEvalRunInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body StartMemoryEvalRunInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+				}
+				err = ValidateStartMemoryEvalRunInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+				}
+				return nil, NewStartMemoryEvalRunInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body StartMemoryEvalRunUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+				}
+				err = ValidateStartMemoryEvalRunUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+				}
+				return nil, NewStartMemoryEvalRunUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "startMemoryEvalRun", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body StartMemoryEvalRunGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "startMemoryEvalRun", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListOrganizationAssistantsRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "listOrganizationAssistants" endpoint
+func (c *Client) BuildListOrganizationAssistantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListOrganizationAssistantsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listOrganizationAssistants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListOrganizationAssistantsRequest returns an encoder for requests sent
+// to the admin listOrganizationAssistants server.
+func EncodeListOrganizationAssistantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListOrganizationAssistantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listOrganizationAssistants", "*admin.ListOrganizationAssistantsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListOrganizationAssistantsResponse returns a decoder for responses
+// returned by the admin listOrganizationAssistants endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListOrganizationAssistantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListOrganizationAssistantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListOrganizationAssistantsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			res := NewListOrganizationAssistantsAdminOrganizationAssistantsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListOrganizationAssistantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListOrganizationAssistantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListOrganizationAssistantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListOrganizationAssistantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListOrganizationAssistantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListOrganizationAssistantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListOrganizationAssistantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListOrganizationAssistantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+				}
+				err = ValidateListOrganizationAssistantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+				}
+				return nil, NewListOrganizationAssistantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListOrganizationAssistantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+				}
+				err = ValidateListOrganizationAssistantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+				}
+				return nil, NewListOrganizationAssistantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listOrganizationAssistants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListOrganizationAssistantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationAssistants", err)
+			}
+			err = ValidateListOrganizationAssistantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationAssistants", err)
+			}
+			return nil, NewListOrganizationAssistantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listOrganizationAssistants", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMigrateOrganizationAssistantIdentitiesRequest instantiates a HTTP
+// request object with method and path set to call the "admin" service
+// "migrateOrganizationAssistantIdentities" endpoint
+func (c *Client) BuildMigrateOrganizationAssistantIdentitiesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MigrateOrganizationAssistantIdentitiesAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "migrateOrganizationAssistantIdentities", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMigrateOrganizationAssistantIdentitiesRequest returns an encoder for
+// requests sent to the admin migrateOrganizationAssistantIdentities server.
+func EncodeMigrateOrganizationAssistantIdentitiesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.MigrateOrganizationAssistantIdentitiesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "migrateOrganizationAssistantIdentities", "*admin.MigrateOrganizationAssistantIdentitiesPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewMigrateOrganizationAssistantIdentitiesRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "migrateOrganizationAssistantIdentities", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMigrateOrganizationAssistantIdentitiesResponse returns a decoder for
+// responses returned by the admin migrateOrganizationAssistantIdentities
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeMigrateOrganizationAssistantIdentitiesResponse may return the
+// following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMigrateOrganizationAssistantIdentitiesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MigrateOrganizationAssistantIdentitiesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			res := NewMigrateOrganizationAssistantIdentitiesAdminAssistantIdentityMigrationRunOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body MigrateOrganizationAssistantIdentitiesUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body MigrateOrganizationAssistantIdentitiesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MigrateOrganizationAssistantIdentitiesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MigrateOrganizationAssistantIdentitiesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MigrateOrganizationAssistantIdentitiesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MigrateOrganizationAssistantIdentitiesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MigrateOrganizationAssistantIdentitiesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MigrateOrganizationAssistantIdentitiesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MigrateOrganizationAssistantIdentitiesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+				}
+				err = ValidateMigrateOrganizationAssistantIdentitiesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+				}
+				return nil, NewMigrateOrganizationAssistantIdentitiesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MigrateOrganizationAssistantIdentitiesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+				}
+				err = ValidateMigrateOrganizationAssistantIdentitiesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+				}
+				return nil, NewMigrateOrganizationAssistantIdentitiesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantIdentities", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MigrateOrganizationAssistantIdentitiesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			err = ValidateMigrateOrganizationAssistantIdentitiesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantIdentities", err)
+			}
+			return nil, NewMigrateOrganizationAssistantIdentitiesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantIdentities", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMigrateOrganizationAssistantsToKitRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "migrateOrganizationAssistantsToKit" endpoint
+func (c *Client) BuildMigrateOrganizationAssistantsToKitRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MigrateOrganizationAssistantsToKitAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "migrateOrganizationAssistantsToKit", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMigrateOrganizationAssistantsToKitRequest returns an encoder for
+// requests sent to the admin migrateOrganizationAssistantsToKit server.
+func EncodeMigrateOrganizationAssistantsToKitRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.MigrateOrganizationAssistantsToKitPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "migrateOrganizationAssistantsToKit", "*admin.MigrateOrganizationAssistantsToKitPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewMigrateOrganizationAssistantsToKitRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "migrateOrganizationAssistantsToKit", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMigrateOrganizationAssistantsToKitResponse returns a decoder for
+// responses returned by the admin migrateOrganizationAssistantsToKit endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeMigrateOrganizationAssistantsToKitResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMigrateOrganizationAssistantsToKitResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MigrateOrganizationAssistantsToKitResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			res := NewMigrateOrganizationAssistantsToKitAdminAssistantKitMigrationRunOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MigrateOrganizationAssistantsToKitUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MigrateOrganizationAssistantsToKitForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MigrateOrganizationAssistantsToKitBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MigrateOrganizationAssistantsToKitNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MigrateOrganizationAssistantsToKitConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MigrateOrganizationAssistantsToKitUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MigrateOrganizationAssistantsToKitInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MigrateOrganizationAssistantsToKitInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				err = ValidateMigrateOrganizationAssistantsToKitInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				return nil, NewMigrateOrganizationAssistantsToKitInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MigrateOrganizationAssistantsToKitUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				err = ValidateMigrateOrganizationAssistantsToKitUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				return nil, NewMigrateOrganizationAssistantsToKitUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantsToKit", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MigrateOrganizationAssistantsToKitGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantsToKit", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -27643,12 +29315,13 @@ func unmarshalAdminProjectResponseBodyToAdminAdminProject(v *AdminProjectRespons
 // type *admin.AdminMcpServer from a value of type *AdminMcpServerResponseBody.
 func unmarshalAdminMcpServerResponseBodyToAdminAdminMcpServer(v *AdminMcpServerResponseBody) *admin.AdminMcpServer {
 	res := &admin.AdminMcpServer{
-		ID:         *v.ID,
-		Name:       *v.Name,
-		URL:        v.URL,
-		Visibility: *v.Visibility,
-		Source:     *v.Source,
-		CreatedAt:  *v.CreatedAt,
+		ID:          *v.ID,
+		Name:        *v.Name,
+		URL:         v.URL,
+		UpstreamURL: v.UpstreamURL,
+		Visibility:  *v.Visibility,
+		Source:      *v.Source,
+		CreatedAt:   *v.CreatedAt,
 	}
 
 	return res
@@ -29540,9 +31213,10 @@ func unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdm
 		return nil
 	}
 	res := &admin.AdminUpstreamOAuthMigrationExecutionProfiles{
-		Complete:        *v.Complete,
-		Targets:         *v.Targets,
-		PendingVersions: *v.PendingVersions,
+		Complete:            *v.Complete,
+		Targets:             *v.Targets,
+		PendingVersions:     *v.PendingVersions,
+		UnexercisedVersions: v.UnexercisedVersions,
 	}
 	res.Gaps = make([]*admin.AdminUpstreamOAuthMigrationExecutionProfileGap, len(v.Gaps))
 	for i, val := range v.Gaps {
@@ -29594,13 +31268,14 @@ func unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEn
 // of type *AdminUpstreamOAuthMigrationStatusResponseBody.
 func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus(v *AdminUpstreamOAuthMigrationStatusResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
 	res := &admin.AdminUpstreamOAuthMigrationStatus{
-		OrganizationID:       *v.OrganizationID,
-		Migrated:             *v.Migrated,
-		Servers:              *v.Servers,
-		PendingAssociations:  *v.PendingAssociations,
-		Credentials:          *v.Credentials,
-		PendingSelections:    *v.PendingSelections,
-		ReconnectCredentials: *v.ReconnectCredentials,
+		OrganizationID:          *v.OrganizationID,
+		Migrated:                *v.Migrated,
+		Servers:                 *v.Servers,
+		PendingAssociations:     *v.PendingAssociations,
+		Credentials:             *v.Credentials,
+		PendingSelections:       *v.PendingSelections,
+		ConsentScopedSelections: v.ConsentScopedSelections,
+		ReconnectCredentials:    *v.ReconnectCredentials,
 	}
 	res.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(v.UnresolvedServers))
 	for i, val := range v.UnresolvedServers {
@@ -29660,6 +31335,139 @@ func unmarshalExternalCredentialSummaryResponseBodyToAdminExternalCredentialSumm
 		Name:           *v.Name,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminMemoryEvalRunConfigResponseBodyToAdminAdminMemoryEvalRunConfig
+// builds a value of type *admin.AdminMemoryEvalRunConfig from a value of type
+// *AdminMemoryEvalRunConfigResponseBody.
+func unmarshalAdminMemoryEvalRunConfigResponseBodyToAdminAdminMemoryEvalRunConfig(v *AdminMemoryEvalRunConfigResponseBody) *admin.AdminMemoryEvalRunConfig {
+	res := &admin.AdminMemoryEvalRunConfig{
+		JudgeModel:   *v.JudgeModel,
+		SummaryModel: *v.SummaryModel,
+		DigestModel:  *v.DigestModel,
+		Runs:         *v.Runs,
+	}
+	res.AnswerModels = make([]string, len(v.AnswerModels))
+	for i, val := range v.AnswerModels {
+		res.AnswerModels[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAdminMemoryEvalRunResponseBodyToAdminAdminMemoryEvalRun builds a
+// value of type *admin.AdminMemoryEvalRun from a value of type
+// *AdminMemoryEvalRunResponseBody.
+func unmarshalAdminMemoryEvalRunResponseBodyToAdminAdminMemoryEvalRun(v *AdminMemoryEvalRunResponseBody) *admin.AdminMemoryEvalRun {
+	res := &admin.AdminMemoryEvalRun{
+		ID:          *v.ID,
+		Status:      *v.Status,
+		CostUsd:     v.CostUsd,
+		Error:       v.Error,
+		RequestedBy: *v.RequestedBy,
+		ReportJSON:  v.ReportJSON,
+		StartedAt:   v.StartedAt,
+		FinishedAt:  v.FinishedAt,
+		CreatedAt:   *v.CreatedAt,
+	}
+	res.Config = unmarshalAdminMemoryEvalRunConfigResponseBodyToAdminAdminMemoryEvalRunConfig(v.Config)
+
+	return res
+}
+
+// marshalAdminAdminMemoryEvalRunConfigToAdminMemoryEvalRunConfigRequestBody
+// builds a value of type *AdminMemoryEvalRunConfigRequestBody from a value of
+// type *admin.AdminMemoryEvalRunConfig.
+func marshalAdminAdminMemoryEvalRunConfigToAdminMemoryEvalRunConfigRequestBody(v *admin.AdminMemoryEvalRunConfig) *AdminMemoryEvalRunConfigRequestBody {
+	res := &AdminMemoryEvalRunConfigRequestBody{
+		JudgeModel:   v.JudgeModel,
+		SummaryModel: v.SummaryModel,
+		DigestModel:  v.DigestModel,
+		Runs:         v.Runs,
+	}
+	if v.AnswerModels != nil {
+		res.AnswerModels = make([]string, len(v.AnswerModels))
+		for i, val := range v.AnswerModels {
+			res.AnswerModels[i] = val
+		}
+	} else {
+		res.AnswerModels = []string{}
+	}
+
+	return res
+}
+
+// marshalAdminMemoryEvalRunConfigRequestBodyToAdminAdminMemoryEvalRunConfig
+// builds a value of type *admin.AdminMemoryEvalRunConfig from a value of type
+// *AdminMemoryEvalRunConfigRequestBody.
+func marshalAdminMemoryEvalRunConfigRequestBodyToAdminAdminMemoryEvalRunConfig(v *AdminMemoryEvalRunConfigRequestBody) *admin.AdminMemoryEvalRunConfig {
+	res := &admin.AdminMemoryEvalRunConfig{
+		JudgeModel:   v.JudgeModel,
+		SummaryModel: v.SummaryModel,
+		DigestModel:  v.DigestModel,
+		Runs:         v.Runs,
+	}
+	if v.AnswerModels != nil {
+		res.AnswerModels = make([]string, len(v.AnswerModels))
+		for i, val := range v.AnswerModels {
+			res.AnswerModels[i] = val
+		}
+	} else {
+		res.AnswerModels = []string{}
+	}
+
+	return res
+}
+
+// unmarshalAdminOrganizationAssistantResponseBodyToAdminAdminOrganizationAssistant
+// builds a value of type *admin.AdminOrganizationAssistant from a value of
+// type *AdminOrganizationAssistantResponseBody.
+func unmarshalAdminOrganizationAssistantResponseBodyToAdminAdminOrganizationAssistant(v *AdminOrganizationAssistantResponseBody) *admin.AdminOrganizationAssistant {
+	res := &admin.AdminOrganizationAssistant{
+		ID:                 *v.ID,
+		Name:               *v.Name,
+		ProjectID:          *v.ProjectID,
+		ProjectSlug:        *v.ProjectSlug,
+		ProjectName:        *v.ProjectName,
+		Status:             *v.Status,
+		IdentityState:      *v.IdentityState,
+		AgentID:            v.AgentID,
+		RuntimeVersion:     *v.RuntimeVersion,
+		CreatedByUserID:    v.CreatedByUserID,
+		CreatedByUserEmail: v.CreatedByUserEmail,
+		CreatorActive:      *v.CreatorActive,
+		CreatedAt:          *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminAssistantIdentityMigrationResultResponseBodyToAdminAdminAssistantIdentityMigrationResult
+// builds a value of type *admin.AdminAssistantIdentityMigrationResult from a
+// value of type *AdminAssistantIdentityMigrationResultResponseBody.
+func unmarshalAdminAssistantIdentityMigrationResultResponseBodyToAdminAdminAssistantIdentityMigrationResult(v *AdminAssistantIdentityMigrationResultResponseBody) *admin.AdminAssistantIdentityMigrationResult {
+	res := &admin.AdminAssistantIdentityMigrationResult{
+		AssistantID: *v.AssistantID,
+		ProjectID:   *v.ProjectID,
+		Name:        *v.Name,
+		Outcome:     *v.Outcome,
+	}
+
+	return res
+}
+
+// unmarshalAdminAssistantKitMigrationResultResponseBodyToAdminAdminAssistantKitMigrationResult
+// builds a value of type *admin.AdminAssistantKitMigrationResult from a value
+// of type *AdminAssistantKitMigrationResultResponseBody.
+func unmarshalAdminAssistantKitMigrationResultResponseBodyToAdminAdminAssistantKitMigrationResult(v *AdminAssistantKitMigrationResultResponseBody) *admin.AdminAssistantKitMigrationResult {
+	res := &admin.AdminAssistantKitMigrationResult{
+		AssistantID: *v.AssistantID,
+		ProjectID:   *v.ProjectID,
+		Name:        *v.Name,
+		Outcome:     *v.Outcome,
 	}
 
 	return res
