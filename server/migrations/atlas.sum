@@ -1,4 +1,4 @@
-h1:0LGgWavPlGFG14Tv702TYLC9UyvfJHYiAPRYV57k81Q=
+h1:NL5/VWTgbk1WeURjE7bk4ZITOehYQ4EjaHjghaYOQtI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -541,3 +541,4 @@ h1:0LGgWavPlGFG14Tv702TYLC9UyvfJHYiAPRYV57k81Q=
 20261116091018_add_mcp_servers_setup_guide_completed_at.sql h1:wdQkMQLmJJEZqET1ZgvR7I0veOZhCoYbVDOmW21FcrU=
 20261116115045_drop_principal_grants_effect.sql h1:DurpE8GIDUOPNbnn+WPo4trvnayKEQU0eZ/vCCUFWAg=
 20261116122014_challenge-resolution-temporary-grant.sql h1:njROQQV1YS6taRcOznKeJKg+MDoEVyxQXDtfjTftW4w=
+20261116133047_shadow-mcp-official-servers.sql h1:sZSoRRCv5UNqsOsLHnnbxv7BH2UxKfVHwtD6tFj8swY=

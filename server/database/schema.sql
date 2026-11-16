@@ -11156,6 +11156,56 @@ CREATE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_idx
 ON meta_mcp_server_members (meta_mcp_server_id, sort_order, created_at, id)
 WHERE deleted IS FALSE;
 
+-- An administrator's choice about the official version of one Shadow MCP
+-- server, keyed by the server's upstream URL. Without a row, the official
+-- version is the project's MCP server that proxies to the same URL. A row
+-- names a different server, or keeps direct connections to the upstream
+-- working while the official version is tested.
+CREATE TABLE IF NOT EXISTS shadow_mcp_official_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  -- The Shadow MCP server's upstream URL in inventory form, without a
+  -- trailing slash.
+  server_url TEXT NOT NULL CHECK (server_url <> ''),
+  -- The MCP server chosen as the official version. NULL keeps the server
+  -- that proxies to server_url.
+  mcp_server_id uuid,
+  -- True keeps direct connections to server_url working after an official
+  -- version exists, for example while it is tested.
+  allow_direct_access boolean NOT NULL DEFAULT false,
+  created_by_user_id TEXT,
+  updated_by_user_id TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT shadow_mcp_official_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT shadow_mcp_official_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT shadow_mcp_official_servers_project_id_mcp_server_id_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN shadow_mcp_official_servers.id IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.server_url IS '@access: restricted';
+COMMENT ON COLUMN shadow_mcp_official_servers.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.allow_direct_access IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.updated_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN shadow_mcp_official_servers.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS shadow_mcp_official_servers_project_id_server_url_key
+ON shadow_mcp_official_servers (project_id, server_url)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS shadow_mcp_official_servers_mcp_server_id_idx
+ON shadow_mcp_official_servers (mcp_server_id)
+WHERE mcp_server_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS meta_mcp_server_members_mcp_server_id_idx
 ON meta_mcp_server_members (mcp_server_id)
 WHERE deleted IS FALSE;
