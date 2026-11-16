@@ -33,11 +33,13 @@ var (
 
 	// fenceSubqueryPatterns must all match the fence subquery: it compares the
 	// transition's organization with the written row's own organization
-	// column, and names a use case.
+	// column, names a use case, and locks the transition row FOR KEY SHARE
+	// so a transition waits for the write to commit.
 	fenceSubqueryPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)\bWHERE\b`),
 		regexp.MustCompile(`(?is)\b\w+\.organization_id\s*=\s*\w+\.organization_id\b`),
 		regexp.MustCompile(`(?is)\b(?:\w+\.)?use_case\s*=\s*(?:'[^']+'|@\w+|sqlc\.arg\s*\()`),
+		regexp.MustCompile(`(?is)\bFOR\s+KEY\s+SHARE\b`),
 	}
 
 	// lineCommentPattern matches a SQL line comment.

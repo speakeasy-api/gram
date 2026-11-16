@@ -71,8 +71,9 @@ const (
 	// MinimumDualWriteFloor is the shortest time in dual_write that finalize
 	// accepts, whatever the caller asks for. After it, no process can still
 	// hold a platform_key state read or decision from before the
-	// enrollment, so no write that skips the organization-key copy can
-	// land after finalize.
+	// enrollment. A write decided before enrollment had no transition row to
+	// lock, so this floor, together with short write transactions, is what
+	// keeps such a write from landing after finalize.
 	MinimumDualWriteFloor = transitionCacheTTL + MaxDecisionHold + minimumDualWriteSlack
 
 	// DefaultMinimumDualWrite is a suggested soak time for callers that offer
@@ -82,9 +83,9 @@ const (
 	DefaultMinimumDualWrite = 24 * time.Hour
 
 	// DefaultClearSettleDelay is how long clearing waits after a pass before
-	// counting platform-key copies again. A write statement that started
-	// before finalize committed can still land after a batch cleared its row,
-	// because its fence check reads the state as of its own start.
+	// counting platform-key copies again. The fence's row lock already keeps
+	// fenced writes from landing after finalize; this catches any write that
+	// bypasses the fence.
 	DefaultClearSettleDelay = time.Minute
 
 	// maxClearPasses bounds the clear, settle and count cycles in one call.
@@ -452,8 +453,8 @@ func checkFinalizeTiming(row repo.OrganizationEncryptionTransition, now time.Tim
 // ClearPlatformCopies destroys the platform-key copies of a finalized use case
 // in batches, then records that clearing finished. It is safe to repeat: a
 // call after completion returns at once, and an interrupted call resumes.
-// After each pass it waits ClearSettleDelay and counts again, because a write
-// that started before finalize committed can land after its row was cleared.
+// After each pass it waits ClearSettleDelay and counts again, as a backstop for
+// writes that bypass the fence.
 func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID string, useCase UseCase, stores []CopyStore, actor Actor) (Transition, error) {
 	if err := t.requireWritable(useCase); err != nil {
 		return Transition{}, err

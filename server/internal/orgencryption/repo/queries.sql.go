@@ -394,6 +394,47 @@ func (q *Queries) ExternalKeyProtectsOrganizationData(ctx context.Context, arg E
 	return protects, err
 }
 
+const fencedWriteFixture = `-- name: FencedWriteFixture :execrows
+UPDATE organization_encryption_unreadable_values AS v
+SET error_code = $1
+WHERE v.organization_id = $2
+  AND v.use_case = $3
+  AND v.source_column = $4
+  AND v.row_id = $5
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = v.organization_id AND t.use_case = $3
+    FOR KEY SHARE
+  ), 0) = $6::bigint
+`
+
+type FencedWriteFixtureParams struct {
+	ErrorCode         string
+	OrganizationID    string
+	UseCase           string
+	SourceColumn      string
+	RowID             string
+	DecidedGeneration int64
+}
+
+// Test fixture: a fenced write shaped like a feature's, against a table that
+// has an organization_id column, so tests can exercise the fence predicate
+// and its row lock on real Postgres.
+func (q *Queries) FencedWriteFixture(ctx context.Context, arg FencedWriteFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, fencedWriteFixture,
+		arg.ErrorCode,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.SourceColumn,
+		arg.RowID,
+		arg.DecidedGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveDataEncryptionKey = `-- name: GetActiveDataEncryptionKey :one
 SELECT id, organization_id, encryption_config_id, use_case, state, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
 FROM data_encryption_keys

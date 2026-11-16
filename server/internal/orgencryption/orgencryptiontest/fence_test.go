@@ -22,6 +22,15 @@ WHERE id = @id
   AND COALESCE((
     SELECT t.generation FROM organization_encryption_transitions AS t
     WHERE t.organization_id = widgets.organization_id AND t.use_case = 'widget-secrets'
+    FOR KEY SHARE
+  ), 0) = @generation;
+
+-- name: SetSecretFencedWithoutTheLock :exec
+UPDATE widgets SET secret_org_encrypted = @org
+WHERE id = @id
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = widgets.organization_id AND t.use_case = 'widget-secrets'
   ), 0) = @generation;
 
 -- name: SetSecretUnfenced :exec
@@ -44,6 +53,7 @@ WHERE id = @id
   AND COALESCE((
     SELECT t.generation FROM organization_encryption_transitions AS t
     WHERE t.organization_id = @organization_id AND t.use_case = 'widget-secrets'
+    FOR KEY SHARE
   ), 0) = @generation;
 
 -- name: SetSecretFencedOnALiteral :exec
@@ -52,6 +62,7 @@ WHERE id = @id
   AND COALESCE((
     SELECT t.generation FROM organization_encryption_transitions AS t
     WHERE t.organization_id = widgets.organization_id AND t.use_case = 'widget-secrets'
+    FOR KEY SHARE
   ), 0) = 0;
 
 -- name: SetSecretWithMarkerInAString :exec
@@ -78,6 +89,7 @@ func TestUnfencedWrites_ReportsWritesWithoutTheFence(t *testing.T) {
 	got := orgencryptiontest.UnfencedWrites(fenceQueries, "secret_encrypted", "secret_org_encrypted")
 
 	require.Equal(t, []string{
+		"SetSecretFencedWithoutTheLock",
 		"SetSecretUnfenced",
 		"SetSecretWithoutCoalesce",
 		"SetSecretAliasWithoutAs",

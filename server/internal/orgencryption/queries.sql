@@ -567,3 +567,19 @@ WHERE organization_id = @organization_id
   AND use_case = @use_case
   AND source_column = @source_column
   AND row_id = @row_id;
+
+-- Test fixture: a fenced write shaped like a feature's, against a table that
+-- has an organization_id column, so tests can exercise the fence predicate
+-- and its row lock on real Postgres.
+-- name: FencedWriteFixture :execrows
+UPDATE organization_encryption_unreadable_values AS v
+SET error_code = @error_code
+WHERE v.organization_id = @organization_id
+  AND v.use_case = @use_case
+  AND v.source_column = @source_column
+  AND v.row_id = @row_id
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = v.organization_id AND t.use_case = @use_case
+    FOR KEY SHARE
+  ), 0) = @decided_generation::bigint;

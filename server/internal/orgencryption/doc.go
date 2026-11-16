@@ -53,12 +53,29 @@
 //	AND COALESCE((
 //	  SELECT t.generation FROM organization_encryption_transitions AS t
 //	  WHERE t.organization_id = <table>.organization_id AND t.use_case = '<use case>'
+//	  FOR KEY SHARE
 //	), 0) = @decided_generation
 //
 // The COALESCE is required: an organization with no transition row is at
 // generation 0, and without it every write of a platform_key organization
-// would be fenced. orgencryptiontest.RequireFencedWrites checks a feature's
-// queries.sql for this shape.
+// would be fenced.
+//
+// FOR KEY SHARE is required too. The subquery alone reads the state as of the
+// statement's start, and a write could commit long after a transition that
+// committed in between. The lock closes that gap: a writer holds it on the
+// transition row until its own transaction ends, and every transition locks
+// that row FOR UPDATE first, so a transition waits for open writes to commit.
+// A write that reaches the row while a transition holds it waits, then
+// re-checks the committed row and is fenced if the generation moved. The
+// lock does not conflict with ordinary updates of the transition row, such
+// as the runner's bookkeeping. orgencryptiontest.RequireFencedWrites checks a
+// feature's queries.sql for this whole shape.
+//
+// An organization with no transition row has nothing to lock, so keep writes
+// that touch either copy short: one statement in autocommit, or a short
+// transaction that never waits on a provider or a person while it is open. A
+// writer that held a transaction open across enrollment and the minimum time
+// in dual_write could still write a platform_key copy after finalize.
 //
 // An INSERT fences through INSERT ... SELECT ... WHERE or ON CONFLICT ... DO
 // UPDATE ... WHERE. A statement that matches no row because of the fence
@@ -67,8 +84,6 @@
 // call to a provider: a refresh may already have rotated the refresh token,
 // and the only copy of the new one is the plaintext the caller holds.
 //
-// The subquery reads the transition state as of the statement's start, so a
-// statement that started before finalize committed can still land after a
-// clearing batch. Transitions.ClearPlatformCopies counts again after a settle
-// delay to catch such writes.
+// Transitions.ClearPlatformCopies still waits a settle delay and counts again
+// after clearing, as a backstop for any write that bypasses the fence.
 package orgencryption
