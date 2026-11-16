@@ -595,8 +595,10 @@ func TestCertificateRequestsShareAPodWideLimit(t *testing.T) {
 	<-requests
 	_, _ = tracker.Poll()
 	<-fetch.called
-	settle(t, tracker)
-	require.Empty(t, requests, "the request gives its slot back")
+	// The request clears attempting before its goroutine returns the slot,
+	// so wait on the slot itself.
+	require.Eventually(t, func() bool { return len(requests) == 0 }, 5*time.Second, time.Millisecond,
+		"the request gives its slot back")
 }
 
 // pastRefresh is long enough for a held certificate's jittered refresh to
