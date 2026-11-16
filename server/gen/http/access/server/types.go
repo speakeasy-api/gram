@@ -145,11 +145,11 @@ type SetShadowMCPOfficialServerRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The Shadow MCP server's URL.
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
-	// The MCP server to treat as the official version. Omit it to use the server
-	// that proxies to the same URL.
+	// The MCP server to link as the official version. Omit it to remove the link.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Keep direct connections to the Shadow MCP server working under the ordinary
-	// Shadow MCP rules instead of blocking them.
+	// Switch the link off: keep direct connections to the Shadow MCP server
+	// working under the ordinary Shadow MCP rules instead of blocking them.
+	// Requires mcp_server_id.
 	AllowDirectAccess *bool `form:"allow_direct_access,omitempty" json:"allow_direct_access,omitempty" xml:"allow_direct_access,omitempty"`
 }
 
@@ -576,10 +576,13 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
-	// The MCP server this project serves through Speakeasy for the same upstream
-	// URL. Present once the server is onboarded: direct use is then blocked
-	// wherever a Shadow MCP policy applies, and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While
+	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
+	// and the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to link. Present only while no official server is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 }
 
 // ListShadowMCPInventoryUsersResponseBody is the type of the "access" service
@@ -9831,10 +9834,13 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
-	// The MCP server this project serves through Speakeasy for the same upstream
-	// URL. Present once the server is onboarded: direct use is then blocked
-	// wherever a Shadow MCP policy applies, and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While
+	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
+	// and the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to link. Present only while no official server is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 }
 
 // ShadowMCPAccessSummaryResponseBody is used to define fields on response body
@@ -9915,13 +9921,19 @@ type ShadowMCPOfficialServerResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
-	// True when an administrator chose this server. False when it is the server
-	// that proxies to the same URL.
-	Chosen bool `form:"chosen" json:"chosen" xml:"chosen"`
-	// True while direct connections to the Shadow MCP server keep working under
-	// the ordinary Shadow MCP rules, for example while the official server is
-	// tested.
+	// True while the link is switched off: direct connections to the Shadow MCP
+	// server follow the ordinary Shadow MCP rules instead of being blocked.
 	DirectAccessAllowed bool `form:"direct_access_allowed" json:"direct_access_allowed" xml:"direct_access_allowed"`
+}
+
+// ShadowMCPSuggestedOfficialServerResponseBody is used to define fields on
+// response body types.
+type ShadowMCPSuggestedOfficialServerResponseBody struct {
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The server's display name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The server's slug, when it has one.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
@@ -11020,6 +11032,9 @@ func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventorySe
 	}
 	if res.OfficialServer != nil {
 		body.OfficialServer = marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(res.OfficialServer)
+	}
+	if res.SuggestedOfficialServer != nil {
+		body.SuggestedOfficialServer = marshalAccessShadowMCPSuggestedOfficialServerToShadowMCPSuggestedOfficialServerResponseBody(res.SuggestedOfficialServer)
 	}
 	return body
 }

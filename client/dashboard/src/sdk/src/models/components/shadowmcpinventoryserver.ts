@@ -25,6 +25,10 @@ import {
   ShadowMCPOfficialServer,
   ShadowMCPOfficialServer$inboundSchema,
 } from "./shadowmcpofficialserver.js";
+import {
+  ShadowMCPSuggestedOfficialServer,
+  ShadowMCPSuggestedOfficialServer$inboundSchema,
+} from "./shadowmcpsuggestedofficialserver.js";
 
 /**
  * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
@@ -77,12 +81,16 @@ export type ShadowMCPInventoryServer = {
   latestRequest?: ShadowMCPInventoryRequestSummary | undefined;
   observedUseCount: number;
   /**
-   * The official, Speakeasy-served version of a Shadow MCP server.
+   * The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.
    */
   officialServer?: ShadowMCPOfficialServer | undefined;
   requestCount: number;
   serverName?: string | undefined;
   serverSlug: string;
+  /**
+   * A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+   */
+  suggestedOfficialServer?: ShadowMCPSuggestedOfficialServer | undefined;
   /**
    * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
    */
@@ -137,6 +145,9 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     request_count: z.int(),
     server_name: z.optional(z.string()),
     server_slug: z.string(),
+    suggested_official_server: z.optional(
+      ShadowMCPSuggestedOfficialServer$inboundSchema,
+    ),
     target_kind: z.optional(TargetKind$inboundSchema),
     top_users: z.array(z.string()),
     url_host: z.string(),
@@ -158,6 +169,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "request_count": "requestCount",
       "server_name": "serverName",
       "server_slug": "serverSlug",
+      "suggested_official_server": "suggestedOfficialServer",
       "target_kind": "targetKind",
       "top_users": "topUsers",
       "url_host": "urlHost",

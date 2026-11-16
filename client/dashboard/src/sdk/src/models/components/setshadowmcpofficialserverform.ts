@@ -7,11 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SetShadowMCPOfficialServerForm = {
   /**
-   * Keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them.
+   * Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.
    */
   allowDirectAccess: boolean;
   /**
-   * The MCP server to treat as the official version. Omit it to use the server that proxies to the same URL.
+   * The MCP server to link as the official version. Omit it to remove the link.
    */
   mcpServerId?: string | undefined;
   projectId: string;

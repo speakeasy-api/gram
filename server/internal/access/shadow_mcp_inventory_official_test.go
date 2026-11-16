@@ -18,7 +18,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
 
-func TestService_ReadShadowMCPInventoryTarget_ReportsOfficialServer(t *testing.T) {
+func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -71,13 +71,34 @@ func TestService_ReadShadowMCPInventoryTarget_ReportsOfficialServer(t *testing.T
 	})
 	require.NoError(t, err)
 
-	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		TargetKind:     shadowMCPTargetKindServerURL,
-		TargetKey:      "https://github.example.com/mcp",
-	})
-	require.NoError(t, err)
+	read := func() *gen.ShadowMCPInventoryServer {
+		server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			TargetKind:     shadowMCPTargetKindServerURL,
+			TargetKey:      "https://github.example.com/mcp",
+		})
+		require.NoError(t, err)
+		return server
+	}
+
+	// A server that proxies to the same URL is only offered until linked.
+	server := read()
+	require.Nil(t, server.OfficialServer)
+	require.NotNil(t, server.SuggestedOfficialServer)
+	require.Equal(t, official.ID.String(), server.SuggestedOfficialServer.McpServerID)
+	require.Equal(t, "Tracker (official)", server.SuggestedOfficialServer.Name)
+
+	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp",
+		McpServerID:       new(official.ID.String()),
+		AllowDirectAccess: false,
+	}))
+
+	server = read()
+	require.Nil(t, server.SuggestedOfficialServer)
 	require.NotNil(t, server.OfficialServer)
 	require.Equal(t, official.ID.String(), server.OfficialServer.McpServerID)
 	require.Equal(t, "Tracker (official)", server.OfficialServer.Name)
@@ -96,6 +117,7 @@ func TestService_ReadShadowMCPInventoryTarget_ReportsOfficialServer(t *testing.T
 	require.Len(t, list.Servers, 1)
 	require.NotNil(t, list.Servers[0].OfficialServer)
 	require.Equal(t, official.ID.String(), list.Servers[0].OfficialServer.McpServerID)
+	require.False(t, list.Servers[0].OfficialServer.DirectAccessAllowed)
 }
 
 func TestService_ReadShadowMCPInventoryTarget_NoOfficialServerByDefault(t *testing.T) {
@@ -152,7 +174,7 @@ func seedAccessOfficialServer(t *testing.T, ctx context.Context, ti *testInstanc
 	return server.ID
 }
 
-func TestService_SetShadowMCPOfficialServer_ChooseKeepDirectAndRestore(t *testing.T) {
+func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -172,8 +194,8 @@ func TestService_SetShadowMCPOfficialServer_ChooseKeepDirectAndRestore(t *testin
 	}
 	require.Nil(t, read().OfficialServer)
 
-	// Choose an unrelated server as the official version, and keep direct
-	// connections working while it is tested.
+	// Link an unrelated server as the official version, with the link
+	// switched off while it is tested.
 	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
 		SessionToken:      nil,
 		ProjectID:         authCtx.ProjectID.String(),
@@ -185,7 +207,6 @@ func TestService_SetShadowMCPOfficialServer_ChooseKeepDirectAndRestore(t *testin
 	require.NotNil(t, official)
 	require.Equal(t, chosenID.String(), official.McpServerID)
 	require.Equal(t, "Company Tools", official.Name)
-	require.True(t, official.Chosen)
 	require.True(t, official.DirectAccessAllowed)
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
@@ -208,7 +229,16 @@ func TestService_SetShadowMCPOfficialServer_ChooseKeepDirectAndRestore(t *testin
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 
-	// Restoring the default removes the choice.
+	// Without the linked server there is nothing to switch off.
+	require.Error(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp",
+		McpServerID:       nil,
+		AllowDirectAccess: true,
+	}))
+
+	// Removing the link leaves the server unmanaged.
 	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
 		SessionToken:      nil,
 		ProjectID:         authCtx.ProjectID.String(),

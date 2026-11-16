@@ -23,7 +23,7 @@ import {
   SHADOW_MCP_OFFICIAL_STATE_LABEL,
   shadowMCPOfficialServerDescription,
   shadowMCPOfficialState,
-  shadowMCPOnboardHref,
+  shadowMCPMakeOfficialHref,
 } from "./shadowMCPOfficialServer";
 import {
   type DecideAccessTarget,
@@ -89,7 +89,7 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
     return (
       <SimpleTooltip tooltip={shadowMCPOfficialServerDescription(server)}>
         <span tabIndex={0} className="inline-flex cursor-help">
-          <Badge variant={officialState === "testing" ? "warning" : "success"}>
+          <Badge variant={officialState === "unlinked" ? "warning" : "success"}>
             <Badge.Text>
               {SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]}
             </Badge.Text>
@@ -322,7 +322,9 @@ export function ShadowMCPInventoryTable({
         label: "Make official",
         onClick: () =>
           void navigate(
-            shadowMCPOnboardHref(routes.mcp.add.remote.href(), server),
+            shadowMCPMakeOfficialHref(
+              routes.shadowAI.mcps.detail.href(server.serverSlug),
+            ),
           ),
       },
     ];

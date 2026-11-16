@@ -107,11 +107,12 @@ type Service interface {
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
-	// Choose the official version of one project-scoped Shadow MCP server, or keep
-	// direct connections to it working. Omitting mcp_server_id with
-	// allow_direct_access false restores the default: the server that proxies to
-	// the same URL is official, and direct connections are blocked wherever a
-	// Shadow MCP policy applies. Requires an authenticated session authorized for
+	// Link one project-scoped Shadow MCP server to its official version, switch
+	// the link off or on, or remove it. A link with allow_direct_access false
+	// blocks direct connections wherever a Shadow MCP policy applies and points
+	// agents at the linked server; true keeps the link but lets direct connections
+	// follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access
+	// false) removes the link. Requires an authenticated session authorized for
 	// org:admin on the active organization.
 	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
@@ -1648,11 +1649,11 @@ type SetShadowMCPOfficialServerPayload struct {
 	ProjectID    string
 	// The Shadow MCP server's URL.
 	ServerURL string
-	// The MCP server to treat as the official version. Omit it to use the server
-	// that proxies to the same URL.
+	// The MCP server to link as the official version. Omit it to remove the link.
 	McpServerID *string
-	// Keep direct connections to the Shadow MCP server working under the ordinary
-	// Shadow MCP rules instead of blocking them.
+	// Switch the link off: keep direct connections to the Shadow MCP server
+	// working under the ordinary Shadow MCP rules instead of blocking them.
+	// Requires mcp_server_id.
 	AllowDirectAccess bool
 }
 
@@ -1761,10 +1762,13 @@ type ShadowMCPInventoryServer struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
-	// The MCP server this project serves through Speakeasy for the same upstream
-	// URL. Present once the server is onboarded: direct use is then blocked
-	// wherever a Shadow MCP policy applies, and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While
+	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
+	// and the block points agents here.
 	OfficialServer *ShadowMCPOfficialServer
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to link. Present only while no official server is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
@@ -1804,7 +1808,8 @@ type ShadowMCPInventoryUserSource struct {
 	ObservedUseCount int
 }
 
-// The official, Speakeasy-served version of a Shadow MCP server.
+// The official, Speakeasy-served version of a Shadow MCP server, linked by an
+// administrator.
 type ShadowMCPOfficialServer struct {
 	McpServerID string
 	// The official server's display name.
@@ -1816,13 +1821,19 @@ type ShadowMCPOfficialServer struct {
 	URL *string
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string
-	// True when an administrator chose this server. False when it is the server
-	// that proxies to the same URL.
-	Chosen bool
-	// True while direct connections to the Shadow MCP server keep working under
-	// the ordinary Shadow MCP rules, for example while the official server is
-	// tested.
+	// True while the link is switched off: direct connections to the Shadow MCP
+	// server follow the ordinary Shadow MCP rules instead of being blocked.
 	DirectAccessAllowed bool
+}
+
+// A project MCP server that already serves a Shadow MCP server's upstream URL
+// and can be linked as its official version.
+type ShadowMCPSuggestedOfficialServer struct {
+	McpServerID string
+	// The server's display name.
+	Name string
+	// The server's slug, when it has one.
+	Slug *string
 }
 
 // SyncDirectoryGroupsPayload is the payload type of the access service

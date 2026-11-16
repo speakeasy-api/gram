@@ -178,8 +178,8 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
  */
 function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
-  // The same rule as the inventory row: an onboarded server reads as
-  // onboarded unless someone is waiting on a request for the direct URL.
+  // The same rule as the inventory row: a linked server reads as onboarded
+  // unless someone is waiting on a request for the direct URL.
   // Where it is served is the panel's job, so the tile only names the state.
   const officialState = shadowMCPOfficialState(server, status === "pending");
 
@@ -193,7 +193,7 @@ function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
             : shadowMCPInventoryStatusLabel(status)
         }
         tone={
-          officialState === "testing"
+          officialState === "unlinked"
             ? "warning"
             : officialState
               ? "success"
@@ -202,10 +202,10 @@ function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
         size="xs"
         className={SUMMARY_TILE_CLASS}
         description={
-          officialState === "testing"
-            ? "Direct connections still work"
+          officialState === "unlinked"
+            ? "Link off: direct connections work"
             : officialState
-              ? "Served by your organization"
+              ? "Linked to an official server"
               : shadowMCPInventoryStatusDescription(server)
         }
       />

@@ -145,11 +145,11 @@ type SetShadowMCPOfficialServerRequestBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The Shadow MCP server's URL.
 	ServerURL string `form:"server_url" json:"server_url" xml:"server_url"`
-	// The MCP server to treat as the official version. Omit it to use the server
-	// that proxies to the same URL.
+	// The MCP server to link as the official version. Omit it to remove the link.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Keep direct connections to the Shadow MCP server working under the ordinary
-	// Shadow MCP rules instead of blocking them.
+	// Switch the link off: keep direct connections to the Shadow MCP server
+	// working under the ordinary Shadow MCP rules instead of blocking them.
+	// Requires mcp_server_id.
 	AllowDirectAccess bool `form:"allow_direct_access" json:"allow_direct_access" xml:"allow_direct_access"`
 }
 
@@ -572,10 +572,13 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
-	// The MCP server this project serves through Speakeasy for the same upstream
-	// URL. Present once the server is onboarded: direct use is then blocked
-	// wherever a Shadow MCP policy applies, and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While
+	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
+	// and the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to link. Present only while no official server is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 }
 
 // ListShadowMCPInventoryUsersResponseBody is the type of the "access" service
@@ -9899,10 +9902,13 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
-	// The MCP server this project serves through Speakeasy for the same upstream
-	// URL. Present once the server is onboarded: direct use is then blocked
-	// wherever a Shadow MCP policy applies, and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While
+	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
+	// and the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to link. Present only while no official server is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 }
 
 // ShadowMCPAccessSummaryResponseBody is used to define fields on response body
@@ -9983,13 +9989,19 @@ type ShadowMCPOfficialServerResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
-	// True when an administrator chose this server. False when it is the server
-	// that proxies to the same URL.
-	Chosen *bool `form:"chosen,omitempty" json:"chosen,omitempty" xml:"chosen,omitempty"`
-	// True while direct connections to the Shadow MCP server keep working under
-	// the ordinary Shadow MCP rules, for example while the official server is
-	// tested.
+	// True while the link is switched off: direct connections to the Shadow MCP
+	// server follow the ordinary Shadow MCP rules instead of being blocked.
 	DirectAccessAllowed *bool `form:"direct_access_allowed,omitempty" json:"direct_access_allowed,omitempty" xml:"direct_access_allowed,omitempty"`
+}
+
+// ShadowMCPSuggestedOfficialServerResponseBody is used to define fields on
+// response body types.
+type ShadowMCPSuggestedOfficialServerResponseBody struct {
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The server's display name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The server's slug, when it has one.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
@@ -14715,6 +14727,9 @@ func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCP
 	if body.OfficialServer != nil {
 		v.OfficialServer = unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(body.OfficialServer)
 	}
+	if body.SuggestedOfficialServer != nil {
+		v.SuggestedOfficialServer = unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer(body.SuggestedOfficialServer)
+	}
 
 	return v
 }
@@ -19186,6 +19201,11 @@ func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventory
 	}
 	if body.OfficialServer != nil {
 		if err2 := ValidateShadowMCPOfficialServerResponseBody(body.OfficialServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.SuggestedOfficialServer != nil {
+		if err2 := ValidateShadowMCPSuggestedOfficialServerResponseBody(body.SuggestedOfficialServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -31639,6 +31659,11 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.SuggestedOfficialServer != nil {
+		if err2 := ValidateShadowMCPSuggestedOfficialServerResponseBody(body.SuggestedOfficialServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -31763,11 +31788,23 @@ func ValidateShadowMCPOfficialServerResponseBody(body *ShadowMCPOfficialServerRe
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Chosen == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("chosen", "body"))
-	}
 	if body.DirectAccessAllowed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("direct_access_allowed", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateShadowMCPSuggestedOfficialServerResponseBody runs the validations
+// defined on ShadowMCPSuggestedOfficialServerResponseBody
+func ValidateShadowMCPSuggestedOfficialServerResponseBody(body *ShadowMCPSuggestedOfficialServerResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))

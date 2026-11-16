@@ -86,7 +86,7 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 // the direct one yet. A failed lookup reads as "none", which keeps the guard
 // on its ordinary rules rather than blocking on an infrastructure blip.
 func (s *Service) shadowMCPOfficialServer(ctx context.Context, organizationID string, projectID string, fullURL string) (shadowmcp.OfficialServer, bool) {
-	none := shadowmcp.OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: "", Chosen: false, DirectAccessAllowed: false}
+	none := shadowmcp.OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: "", DirectAccessAllowed: false}
 	if s.shadowMCPClient == nil || strings.TrimSpace(fullURL) == "" {
 		return none, false
 	}

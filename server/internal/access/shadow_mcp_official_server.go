@@ -18,10 +18,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// SetShadowMCPOfficialServer records an administrator's choice about the
-// official version of one Shadow MCP server: a server other than the one
-// that proxies to the same URL, keeping direct connections working, or the
-// default, which removes the stored choice.
+// SetShadowMCPOfficialServer links one Shadow MCP server to its official
+// version, switches the link off or on, or removes it. Without
+// mcp_server_id the link is removed, which leaves the Shadow MCP server
+// unmanaged so another server can be linked.
 func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.SetShadowMCPOfficialServerPayload) error {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {
@@ -52,6 +52,11 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 		}
 		chosen = uuid.NullUUID{UUID: server.ID, Valid: true}
 	}
+	// Switching a link off keeps the linked server; without one there is
+	// nothing to switch off.
+	if !chosen.Valid && payload.AllowDirectAccess {
+		return oops.E(oops.CodeBadRequest, nil, "switching a link off needs the linked mcp server").LogError(ctx, s.logger)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -74,17 +79,17 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 
 	var after *audit.ShadowMCPOfficialServerSnapshot
 	userID := conv.ToPGTextEmpty(ac.UserID)
-	isDefault := !chosen.Valid && !payload.AllowDirectAccess
-	if isDefault {
+	removeLink := !chosen.Valid
+	if removeLink {
 		if before == nil {
-			// Already the default: nothing changed, so nothing is recorded.
+			// No link to remove: nothing changed, so nothing is recorded.
 			return nil
 		}
 		if _, err := q.DeleteShadowMCPOfficialServerChoice(ctx, shadowmcprepo.DeleteShadowMCPOfficialServerChoiceParams{UserID: userID, ProjectID: projectID, ServerUrl: key}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "clear shadow mcp official server choice").LogError(ctx, s.logger)
 		}
 	}
-	if !isDefault {
+	if !removeLink {
 		saved, err := q.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
 			ProjectID:         projectID,
 			ServerUrl:         key,

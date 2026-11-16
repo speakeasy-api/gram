@@ -73,9 +73,6 @@ vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
 vi.mock("@/pages/sources/remote-mcp/hooks", () => ({
   useCreateRemoteMcpSource: () => ({ mutateAsync: state.create }),
 }));
-vi.mock("@/components/shadow-mcp/useSaveShadowMCPOfficialServer", () => ({
-  useSaveShadowMCPOfficialServer: () => ({ save: vi.fn(), isPending: false }),
-}));
 vi.mock("@/pages/sources/unproxied-mcp/hooks", () => ({
   useCreateUnproxiedMcpSource: () => ({ mutateAsync: state.create }),
 }));

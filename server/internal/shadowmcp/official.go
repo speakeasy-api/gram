@@ -17,8 +17,9 @@ import (
 )
 
 // OfficialServer is the MCP server a project serves through Speakeasy in
-// place of an upstream URL that people also reach directly. It is the
-// approved way to use that upstream, so a blocked direct call can point at it.
+// place of an upstream URL that people also reach directly. An administrator
+// links it to the Shadow MCP server; it is then the approved way to use that
+// upstream, so a blocked direct call can point at it.
 type OfficialServer struct {
 	MCPServerID uuid.UUID
 	// Name is what the dashboard calls the server; never empty.
@@ -31,13 +32,19 @@ type OfficialServer struct {
 	URL string
 	// GatewayName is set when URL is a gateway's address.
 	GatewayName string
-	// Chosen is true when an administrator named this server, rather than
-	// it being the server that proxies to the same URL.
-	Chosen bool
-	// DirectAccessAllowed keeps direct connections to the upstream under the
-	// ordinary Shadow MCP rules instead of blocking them, for example while
-	// the official server is tested.
+	// DirectAccessAllowed means the link is switched off: the server stays
+	// linked, but direct connections to the upstream follow the ordinary
+	// Shadow MCP rules instead of being blocked.
 	DirectAccessAllowed bool
+}
+
+// SuggestedOfficialServer is a project MCP server that proxies to the same
+// upstream URL as a Shadow MCP server that has no link yet. It is offered to
+// the administrator as the server to link; it is not official until linked.
+type SuggestedOfficialServer struct {
+	MCPServerID uuid.UUID
+	Name        string
+	Slug        string
 }
 
 // OfficialServerDBTX is the database surface the official-server lookup
@@ -59,26 +66,21 @@ func OfficialServerKey(rawURL string) (string, bool) {
 	return strings.TrimRight(inventory.CanonicalURL, "/"), true
 }
 
-// officialCandidate is a server that may stand for an upstream URL, before
-// its address is resolved.
-type officialCandidate struct {
-	key    string
-	id     uuid.UUID
-	name   string
-	slug   string
-	chosen bool
-}
-
-type officialChoice struct {
+// officialLink is a stored link from an upstream URL to a live MCP server,
+// before the server's address is resolved.
+type officialLink struct {
 	key               string
+	id                uuid.UUID
+	name              string
+	slug              string
 	allowDirectAccess bool
-	chosen            *officialCandidate
 }
 
-func choiceFromRow(serverURL string, allowDirectAccess bool, chosenID uuid.NullUUID, chosenName, chosenSlug string) officialChoice {
-	choice := officialChoice{key: serverURL, allowDirectAccess: allowDirectAccess, chosen: nil}
+// linkFromRow reads one stored link. A link whose server was deleted or
+// disabled reads as no link: the Shadow MCP server is unmanaged again.
+func linkFromRow(serverURL string, allowDirectAccess bool, chosenID uuid.NullUUID, chosenName, chosenSlug string) (officialLink, bool) {
 	if !chosenID.Valid {
-		return choice
+		return officialLink{key: "", id: uuid.Nil, name: "", slug: "", allowDirectAccess: false}, false
 	}
 	name := strings.TrimSpace(chosenName)
 	if name == "" {
@@ -87,63 +89,56 @@ func choiceFromRow(serverURL string, allowDirectAccess bool, chosenID uuid.NullU
 	if name == "" {
 		name = "MCP server"
 	}
-	choice.chosen = &officialCandidate{key: serverURL, id: chosenID.UUID, name: name, slug: chosenSlug, chosen: true}
-	return choice
+	return officialLink{key: serverURL, id: chosenID.UUID, name: name, slug: chosenSlug, allowDirectAccess: allowDirectAccess}, true
 }
 
-// OfficialServers maps every upstream URL the project has an official
-// server for to that server. Look a URL up with [OfficialServerFor].
+// OfficialServers maps every upstream URL the project has linked to an
+// official server to that server. Look a URL up with [OfficialServerFor].
 //
-// By default the official server for a URL is the project's MCP server that
-// proxies to it: the shared URL is the link, so deleting or disabling that
-// server ends it with nothing to clean up. An administrator can name another
-// server instead, or keep direct connections working; those choices live in
-// shadow_mcp_official_servers. When several servers proxy to one URL, the
-// oldest stands for it.
+// Links live in shadow_mcp_official_servers and are made by an
+// administrator: a project server that happens to proxy to the same URL is
+// only a suggestion (see [SuggestedOfficialServers]) until it is linked.
+// Deleting or disabling a linked server ends the link.
 func OfficialServers(ctx context.Context, db OfficialServerDBTX, organizationID string, projectID uuid.UUID, serverURL *url.URL) (map[string]OfficialServer, error) {
+	rows, err := shadowmcprepo.New(db).ListShadowMCPOfficialServerChoices(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list shadow mcp official server links: %w", err)
+	}
+	links := make([]officialLink, 0, len(rows))
+	for _, row := range rows {
+		if link, ok := linkFromRow(row.ServerUrl, row.AllowDirectAccess, row.ChosenMcpServerID, row.ChosenMcpServerName.String, row.ChosenMcpServerSlug.String); ok {
+			links = append(links, link)
+		}
+	}
+	return resolveOfficialServers(ctx, db, organizationID, projectID, serverURL, links)
+}
+
+// SuggestedOfficialServers maps upstream URLs to the project's MCP server
+// that proxies to the same URL, the oldest when several do. The dashboard
+// offers it as the server to link when the URL has no link yet.
+func SuggestedOfficialServers(ctx context.Context, db remotemcprepo.DBTX, projectID uuid.UUID) (map[string]SuggestedOfficialServer, error) {
 	rows, err := remotemcprepo.New(db).ListLiveRemoteBackedMcpServers(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote-backed mcp servers: %w", err)
 	}
-	choiceRows, err := shadowmcprepo.New(db).ListShadowMCPOfficialServerChoices(ctx, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("list shadow mcp official server choices: %w", err)
-	}
-	choices := make([]officialChoice, 0, len(choiceRows))
-	for _, row := range choiceRows {
-		choices = append(choices, choiceFromRow(row.ServerUrl, row.AllowDirectAccess, row.ChosenMcpServerID, row.ChosenMcpServerName.String, row.ChosenMcpServerSlug.String))
-	}
-	return resolveOfficialServers(ctx, db, organizationID, projectID, serverURL, urlMatchCandidates(rows, ""), choices)
-}
-
-// urlMatchCandidates turns the project's remote-backed servers into one
-// candidate per upstream URL, the oldest first. A non-empty onlyKey keeps
-// just that URL.
-func urlMatchCandidates(rows []remotemcprepo.ListLiveRemoteBackedMcpServersRow, onlyKey string) []officialCandidate {
-	seen := map[string]bool{}
-	out := make([]officialCandidate, 0, len(rows))
+	out := make(map[string]SuggestedOfficialServer, len(rows))
 	for _, row := range rows {
 		key, ok := OfficialServerKey(row.RemoteUrl)
-		if !ok || seen[key] || (onlyKey != "" && key != onlyKey) {
+		if !ok {
 			continue
 		}
-		seen[key] = true
-		out = append(out, officialCandidate{key: key, id: row.McpServerID, name: officialServerName(row), slug: row.McpServerSlug.String, chosen: false})
+		if _, seen := out[key]; seen {
+			continue
+		}
+		out[key] = SuggestedOfficialServer{MCPServerID: row.McpServerID, Name: officialServerName(row), Slug: row.McpServerSlug.String}
 	}
-	return out
+	return out, nil
 }
 
-func resolveOfficialServers(ctx context.Context, db OfficialServerDBTX, organizationID string, projectID uuid.UUID, serverURL *url.URL, urlMatches []officialCandidate, choices []officialChoice) (map[string]OfficialServer, error) {
-	byKey := make(map[string]officialCandidate, len(urlMatches)+len(choices))
-	for _, candidate := range urlMatches {
-		byKey[candidate.key] = candidate
-	}
-	directAccess := map[string]bool{}
-	for _, choice := range choices {
-		directAccess[choice.key] = choice.allowDirectAccess
-		if choice.chosen != nil {
-			byKey[choice.key] = *choice.chosen
-		}
+func resolveOfficialServers(ctx context.Context, db OfficialServerDBTX, organizationID string, projectID uuid.UUID, serverURL *url.URL, links []officialLink) (map[string]OfficialServer, error) {
+	byKey := make(map[string]officialLink, len(links))
+	for _, link := range links {
+		byKey[link.key] = link
 	}
 	if len(byKey) == 0 {
 		return map[string]OfficialServer{}, nil
@@ -176,8 +171,7 @@ func resolveOfficialServers(ctx context.Context, db OfficialServerDBTX, organiza
 			Slug:                candidate.slug,
 			URL:                 own[candidate.id].URL,
 			GatewayName:         "",
-			Chosen:              candidate.chosen,
-			DirectAccessAllowed: directAccess[key],
+			DirectAccessAllowed: candidate.allowDirectAccess,
 		}
 		if gateway, ok := gateways[candidate.id]; ok {
 			server.URL = gateway.url
@@ -199,7 +193,7 @@ func OfficialServerFor(servers map[string]OfficialServer, rawURL string) (Offici
 }
 
 func noOfficialServer() OfficialServer {
-	return OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: "", Chosen: false, DirectAccessAllowed: false}
+	return OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: "", DirectAccessAllowed: false}
 }
 
 func officialServerName(row remotemcprepo.ListLiveRemoteBackedMcpServersRow) string {
@@ -277,45 +271,35 @@ func officialServerGateways(ctx context.Context, db OfficialServerDBTX, organiza
 	return out, nil
 }
 
-// OfficialServerForURL finds the official server the project serves for one
-// observed server URL. The realtime hook guard calls it for calls that are
-// about to be judged, so it reports failure rather than guessing: a caller
-// that cannot tell must not treat the URL as having an official version.
+// OfficialServerForURL finds the official server linked to one observed
+// server URL. The realtime hook guard calls it for calls that are about to
+// be judged, so it reports failure rather than guessing: a caller that
+// cannot tell must not treat the URL as having an official version.
 //
-// The common answer is "none", and that costs two indexed reads: endpoints
-// are resolved only for the server that stands for the URL.
+// The common answer is "none", and that costs one indexed read: endpoints
+// are resolved only for a linked server.
 func (c *Client) OfficialServerForURL(ctx context.Context, organizationID string, projectID uuid.UUID, rawURL string) (OfficialServer, bool, error) {
 	key, ok := OfficialServerKey(rawURL)
 	if !ok {
 		return noOfficialServer(), false, nil
 	}
 
-	var choices []officialChoice
-	choice, err := shadowmcprepo.New(c.db).GetShadowMCPOfficialServerChoice(ctx, shadowmcprepo.GetShadowMCPOfficialServerChoiceParams{
+	row, err := shadowmcprepo.New(c.db).GetShadowMCPOfficialServerChoice(ctx, shadowmcprepo.GetShadowMCPOfficialServerChoiceParams{
 		ProjectID: projectID,
 		ServerUrl: key,
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
-		return noOfficialServer(), false, fmt.Errorf("get shadow mcp official server choice: %w", err)
-	default:
-		choices = append(choices, choiceFromRow(choice.ServerUrl, choice.AllowDirectAccess, choice.ChosenMcpServerID, choice.ChosenMcpServerName.String, choice.ChosenMcpServerSlug.String))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return noOfficialServer(), false, nil
 	}
-
-	var urlMatches []officialCandidate
-	if len(choices) == 0 || choices[0].chosen == nil {
-		rows, err := remotemcprepo.New(c.db).ListLiveRemoteBackedMcpServers(ctx, projectID)
-		if err != nil {
-			return noOfficialServer(), false, fmt.Errorf("list remote-backed mcp servers: %w", err)
-		}
-		urlMatches = urlMatchCandidates(rows, key)
+	if err != nil {
+		return noOfficialServer(), false, fmt.Errorf("get shadow mcp official server link: %w", err)
 	}
-	if len(urlMatches) == 0 && (len(choices) == 0 || choices[0].chosen == nil) {
+	link, ok := linkFromRow(row.ServerUrl, row.AllowDirectAccess, row.ChosenMcpServerID, row.ChosenMcpServerName.String, row.ChosenMcpServerSlug.String)
+	if !ok {
 		return noOfficialServer(), false, nil
 	}
 
-	servers, err := resolveOfficialServers(ctx, c.db, organizationID, projectID, c.serverURL, urlMatches, choices)
+	servers, err := resolveOfficialServers(ctx, c.db, organizationID, projectID, c.serverURL, []officialLink{link})
 	if err != nil {
 		return noOfficialServer(), false, err
 	}

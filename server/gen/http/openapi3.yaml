@@ -14383,7 +14383,7 @@ paths:
                 type: mutation
     /rpc/access.setShadowMCPOfficialServer:
         post:
-            description: 'Choose the official version of one project-scoped Shadow MCP server, or keep direct connections to it working. Omitting mcp_server_id with allow_direct_access false restores the default: the server that proxies to the same URL is official, and direct connections are blocked wherever a Shadow MCP policy applies. Requires an authenticated session authorized for org:admin on the active organization.'
+            description: Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.
             operationId: setShadowMCPOfficialServer
             parameters:
                 - allowEmptyValue: true
@@ -131498,10 +131498,10 @@ components:
             properties:
                 allow_direct_access:
                     type: boolean
-                    description: Keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them.
+                    description: 'Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.'
                 mcp_server_id:
                     type: string
-                    description: The MCP server to treat as the official version. Omit it to use the server that proxies to the same URL.
+                    description: The MCP server to link as the official version. Omit it to remove the link.
                     format: uuid
                 project_id:
                     type: string
@@ -131982,6 +131982,8 @@ components:
                     type: string
                 server_slug:
                     type: string
+                suggested_official_server:
+                    $ref: '#/components/schemas/ShadowMCPSuggestedOfficialServer'
                 target_kind:
                     type: string
                     description: 'What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.'
@@ -132083,12 +132085,9 @@ components:
         ShadowMCPOfficialServer:
             type: object
             properties:
-                chosen:
-                    type: boolean
-                    description: True when an administrator chose this server. False when it is the server that proxies to the same URL.
                 direct_access_allowed:
                     type: boolean
-                    description: True while direct connections to the Shadow MCP server keep working under the ordinary Shadow MCP rules, for example while the official server is tested.
+                    description: 'True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.'
                 gateway_name:
                     type: string
                     description: The gateway that serves the official server, when url is a gateway's address.
@@ -132104,12 +132103,27 @@ components:
                 url:
                     type: string
                     description: Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.
-            description: The official, Speakeasy-served version of a Shadow MCP server.
+            description: The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.
             required:
                 - mcp_server_id
                 - name
-                - chosen
                 - direct_access_allowed
+        ShadowMCPSuggestedOfficialServer:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    description: The server's display name.
+                slug:
+                    type: string
+                    description: The server's slug, when it has one.
+            description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+            required:
+                - mcp_server_id
+                - name
         ShareSkillRequestBody:
             type: object
             properties:

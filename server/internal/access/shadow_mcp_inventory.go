@@ -255,10 +255,11 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 	}, nil
 }
 
-// attachShadowMCPOfficialServers marks the rows whose upstream URL the
-// project already serves through Speakeasy. A failed lookup leaves the rows
-// unmarked rather than failing the inventory: the page still lists what was
-// observed, and only the onboarded state is missing.
+// attachShadowMCPOfficialServers marks the rows linked to an official
+// server, and offers a project server that proxies to the same URL to the
+// rows without a link. A failed lookup leaves the rows unmarked rather than
+// failing the inventory: the page still lists what was observed, and only
+// the onboarded state is missing.
 func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizationID string, projectID uuid.UUID, servers []*gen.ShadowMCPInventoryServer) {
 	hasURLRow := false
 	for _, server := range servers {
@@ -280,12 +281,29 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 		)
 		return
 	}
+	suggested, err := shadowmcp.SuggestedOfficialServers(ctx, s.db, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "suggest official servers for shadow mcp inventory",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID.String()),
+		)
+		suggested = nil
+	}
 	for _, server := range servers {
 		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
 			continue
 		}
 		match, ok := shadowmcp.OfficialServerFor(official, server.CanonicalServerURL)
 		if !ok {
+			key, keyOK := shadowmcp.OfficialServerKey(server.CanonicalServerURL)
+			if suggestion, found := suggested[key]; keyOK && found {
+				server.SuggestedOfficialServer = &gen.ShadowMCPSuggestedOfficialServer{
+					McpServerID: suggestion.MCPServerID.String(),
+					Name:        suggestion.Name,
+					Slug:        conv.PtrEmpty(suggestion.Slug),
+				}
+			}
 			continue
 		}
 		server.OfficialServer = &gen.ShadowMCPOfficialServer{
@@ -294,7 +312,6 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 			Slug:                conv.PtrEmpty(match.Slug),
 			URL:                 conv.PtrEmpty(match.URL),
 			GatewayName:         conv.PtrEmpty(match.GatewayName),
-			Chosen:              match.Chosen,
 			DirectAccessAllowed: match.DirectAccessAllowed,
 		}
 	}
@@ -1631,25 +1648,26 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 	}
 
 	return &gen.ShadowMCPInventoryServer{
-		CanonicalServerURL: row.CanonicalServerURL,
-		ServerSlug:         shadowMCPInventoryServerSlug(row.CanonicalServerURL),
-		URLHost:            row.URLHost,
-		TargetKind:         conv.PtrEmpty(targetKind),
-		ServerName:         serverName,
-		FirstSeen:          formatTimeValue(row.FirstSeen),
-		LastSeen:           formatTimeValue(row.LastSeen),
-		LastCalled:         formatTimePtrValue(usage.LastCalled),
-		ObservedUseCount:   shadowMCPInventoryCount(usage.CallCount),
-		UserCount:          shadowMCPInventoryCount(usage.UserCount),
-		TopUsers:           topUsers,
-		Access:             rowState.Access,
-		AccessSummary:      rowState.Summary,
-		RequestCount:       rowState.RequestCount,
-		LatestRequest:      rowState.LatestRequest,
-		ApprovalRequest:    rowState.ApprovalRequest,
-		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
-		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
-		OfficialServer:     nil,
+		CanonicalServerURL:      row.CanonicalServerURL,
+		ServerSlug:              shadowMCPInventoryServerSlug(row.CanonicalServerURL),
+		URLHost:                 row.URLHost,
+		TargetKind:              conv.PtrEmpty(targetKind),
+		ServerName:              serverName,
+		FirstSeen:               formatTimeValue(row.FirstSeen),
+		LastSeen:                formatTimeValue(row.LastSeen),
+		LastCalled:              formatTimePtrValue(usage.LastCalled),
+		ObservedUseCount:        shadowMCPInventoryCount(usage.CallCount),
+		UserCount:               shadowMCPInventoryCount(usage.UserCount),
+		TopUsers:                topUsers,
+		Access:                  rowState.Access,
+		AccessSummary:           rowState.Summary,
+		RequestCount:            rowState.RequestCount,
+		LatestRequest:           rowState.LatestRequest,
+		ApprovalRequest:         rowState.ApprovalRequest,
+		AllowedPolicyIds:        rowState.AllowedPolicyIDs,
+		BlockedPolicyIds:        rowState.BlockedPolicyIDs,
+		OfficialServer:          nil,
+		SuggestedOfficialServer: nil,
 	}
 }
 

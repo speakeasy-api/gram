@@ -10714,6 +10714,9 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	if v.OfficialServer != nil {
 		res.OfficialServer = marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v.OfficialServer)
 	}
+	if v.SuggestedOfficialServer != nil {
+		res.SuggestedOfficialServer = marshalAccessShadowMCPSuggestedOfficialServerToShadowMCPSuggestedOfficialServerResponseBody(v.SuggestedOfficialServer)
+	}
 
 	return res
 }
@@ -10786,8 +10789,23 @@ func marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v
 		Slug:                v.Slug,
 		URL:                 v.URL,
 		GatewayName:         v.GatewayName,
-		Chosen:              v.Chosen,
 		DirectAccessAllowed: v.DirectAccessAllowed,
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPSuggestedOfficialServerToShadowMCPSuggestedOfficialServerResponseBody
+// builds a value of type *ShadowMCPSuggestedOfficialServerResponseBody from a
+// value of type *access.ShadowMCPSuggestedOfficialServer.
+func marshalAccessShadowMCPSuggestedOfficialServerToShadowMCPSuggestedOfficialServerResponseBody(v *access.ShadowMCPSuggestedOfficialServer) *ShadowMCPSuggestedOfficialServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPSuggestedOfficialServerResponseBody{
+		McpServerID: v.McpServerID,
+		Name:        v.Name,
+		Slug:        v.Slug,
 	}
 
 	return res

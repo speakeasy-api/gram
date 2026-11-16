@@ -1,36 +1,15 @@
 import type { ProbeURLResult } from "@gram/client/models/components/probeurlresult.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 
-/** The query the "Make official" link carries to the new-server form. */
-export const SHADOW_MCP_ONBOARD_SOURCE = "shadow-mcp";
-
-function shadowMCPServerDisplayName(
-  server: Pick<
-    ShadowMCPInventoryServer,
-    "serverName" | "urlHost" | "canonicalServerUrl"
-  >,
-): string {
-  return server.serverName || server.urlHost || server.canonicalServerUrl;
-}
-
 /**
- * The new-server form with this server's URL and name filled in. The form
- * checks the connection itself before it saves, so a link taken from the
- * list is as safe as one taken after the checks on the server's page.
+ * The query flag that opens the Make official sheet on a Shadow MCP
+ * server's page, so the list's row action lands the admin in the same flow.
  */
-export function shadowMCPOnboardHref(
-  newRemoteServerHref: string,
-  server: Pick<
-    ShadowMCPInventoryServer,
-    "serverName" | "urlHost" | "canonicalServerUrl"
-  >,
-): string {
-  const params = new URLSearchParams({
-    url: server.canonicalServerUrl,
-    name: shadowMCPServerDisplayName(server),
-    from: SHADOW_MCP_ONBOARD_SOURCE,
-  });
-  return `${newRemoteServerHref}?${params.toString()}`;
+export const SHADOW_MCP_MAKE_OFFICIAL_PARAM = "make-official";
+
+/** A Shadow MCP server's page, with the Make official sheet open. */
+export function shadowMCPMakeOfficialHref(serverPageHref: string): string {
+  return `${serverPageHref}?${SHADOW_MCP_MAKE_OFFICIAL_PARAM}=1`;
 }
 
 /** Whether a row can be made official at all: only a server with a URL can. */
@@ -41,7 +20,7 @@ export function canMakeShadowMCPServerOfficial(
 }
 
 /**
- * What an onboarded server's status line says. Direct connections are only
+ * What a linked server's status line says. Direct connections are only
  * blocked where a Shadow MCP policy applies, so with none the line says the
  * direct connection still works rather than claiming a block.
  */
@@ -51,13 +30,13 @@ export function shadowMCPOfficialServerDescription(
   const official = server.officialServer;
   if (!official) return "";
   const served = official.gatewayName
-    ? `Served as “${official.name}” through the gateway “${official.gatewayName}”.`
-    : `Served as “${official.name}”.`;
+    ? `Linked to “${official.name}”, served through the gateway “${official.gatewayName}”.`
+    : `Linked to “${official.name}”.`;
   if (!official.url) {
     return `${served} It has no address yet, so direct connections still work.`;
   }
   if (official.directAccessAllowed) {
-    return `${served} Direct connections still work while you test it.`;
+    return `${served} The link is off, so direct connections follow the usual rules.`;
   }
   if (server.accessSummary?.state === "unenforced") {
     return `${served} No Shadow MCP policy is on, so direct connections still work.`;
@@ -66,22 +45,22 @@ export function shadowMCPOfficialServerDescription(
 }
 
 /**
- * The state an official version puts a Shadow MCP server in. "testing" means
- * an official server exists but direct connections were kept working, which
- * an admin should not forget about, so it reads differently from
- * "onboarded". A server someone is waiting on keeps its pending state.
+ * The state a linked official version puts a Shadow MCP server in.
+ * "unlinked" means the link exists but is switched off, which an admin
+ * should not forget about, so it reads differently from "onboarded". A
+ * server someone is waiting on keeps its pending state.
  */
 export function shadowMCPOfficialState(
   server: Pick<ShadowMCPInventoryServer, "officialServer">,
   pending: boolean,
-): "onboarded" | "testing" | null {
+): "onboarded" | "unlinked" | null {
   if (!server.officialServer || pending) return null;
-  return server.officialServer.directAccessAllowed ? "testing" : "onboarded";
+  return server.officialServer.directAccessAllowed ? "unlinked" : "onboarded";
 }
 
 export const SHADOW_MCP_OFFICIAL_STATE_LABEL = {
   onboarded: "Onboarded",
-  testing: "Testing",
+  unlinked: "Unlinked",
 } as const;
 
 type OnboardCheckState = "pass" | "fail" | "skipped";

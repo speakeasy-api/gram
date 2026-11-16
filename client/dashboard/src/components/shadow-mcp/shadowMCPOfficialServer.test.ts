@@ -6,35 +6,15 @@ import {
   shadowMCPOfficialState,
   onboardReadiness,
   shadowMCPOfficialServerDescription,
-  shadowMCPOnboardHref,
+  shadowMCPMakeOfficialHref,
 } from "./shadowMCPOfficialServer";
 import { testAccessSummary } from "./shadowMCPInventoryTestFixtures";
 
-describe("shadowMCPOnboardHref", () => {
-  it("carries the server's URL and name to the new-server form", () => {
-    const href = shadowMCPOnboardHref("/acme/projects/p/mcp/add/remote", {
-      serverName: "Sentry",
-      urlHost: "mcp.sentry.dev",
-      canonicalServerUrl: "https://mcp.sentry.dev/mcp",
-    });
-
-    const url = new URL(href, "https://app.example.com");
-    expect(url.pathname).toBe("/acme/projects/p/mcp/add/remote");
-    expect(url.searchParams.get("url")).toBe("https://mcp.sentry.dev/mcp");
-    expect(url.searchParams.get("name")).toBe("Sentry");
-    expect(url.searchParams.get("from")).toBe("shadow-mcp");
-  });
-
-  it("names an unnamed server by its host", () => {
-    const href = shadowMCPOnboardHref("/mcp/add/remote", {
-      serverName: undefined,
-      urlHost: "tools.example.com",
-      canonicalServerUrl: "https://tools.example.com/mcp",
-    });
-
+describe("shadowMCPMakeOfficialHref", () => {
+  it("opens the Make official sheet on the server's page", () => {
     expect(
-      new URL(href, "https://app.example.com").searchParams.get("name"),
-    ).toBe("tools.example.com");
+      shadowMCPMakeOfficialHref("/acme/projects/p/shadow-ai/mcps/sentry-1"),
+    ).toBe("/acme/projects/p/shadow-ai/mcps/sentry-1?make-official=1");
   });
 });
 
@@ -61,7 +41,6 @@ describe("canMakeShadowMCPServerOfficial", () => {
         officialServer: {
           mcpServerId: "id",
           name: "Sentry",
-          chosen: false,
           directAccessAllowed: false,
         },
       }),
@@ -74,7 +53,6 @@ describe("shadowMCPOfficialServerDescription", () => {
     mcpServerId: "id",
     name: "Linear",
     url: "https://app.example.com/mcp/linear",
-    chosen: false,
     directAccessAllowed: false,
   };
 
@@ -85,7 +63,7 @@ describe("shadowMCPOfficialServerDescription", () => {
         accessSummary: testAccessSummary("blocked"),
       }),
     ).toBe(
-      "Served as “Linear”. Direct connections are blocked and agents are sent there.",
+      "Linked to “Linear”. Direct connections are blocked and agents are sent there.",
     );
   });
 
@@ -98,14 +76,14 @@ describe("shadowMCPOfficialServerDescription", () => {
     ).toContain("through the gateway “Team Gateway”");
   });
 
-  it("says direct connections still work while the admin tests it", () => {
+  it("says direct connections follow the usual rules while unlinked", () => {
     expect(
       shadowMCPOfficialServerDescription({
         officialServer: { ...official, directAccessAllowed: true },
         accessSummary: testAccessSummary("blocked"),
       }),
     ).toBe(
-      "Served as “Linear”. Direct connections still work while you test it.",
+      "Linked to “Linear”. The link is off, so direct connections follow the usual rules.",
     );
   });
 
@@ -124,7 +102,6 @@ describe("shadowMCPOfficialServerDescription", () => {
         officialServer: {
           mcpServerId: "id",
           name: "GitHub",
-          chosen: false,
           directAccessAllowed: false,
         },
         accessSummary: testAccessSummary("blocked"),
@@ -234,11 +211,10 @@ describe("shadowMCPOfficialState", () => {
   const official = {
     mcpServerId: "id",
     name: "Linear",
-    chosen: false,
     directAccessAllowed: false,
   };
 
-  it("reads as onboarded, or testing while direct connections are kept", () => {
+  it("reads as onboarded, or unlinked while the link is off", () => {
     expect(shadowMCPOfficialState({ officialServer: official }, false)).toBe(
       "onboarded",
     );
@@ -247,7 +223,7 @@ describe("shadowMCPOfficialState", () => {
         { officialServer: { ...official, directAccessAllowed: true } },
         false,
       ),
-    ).toBe("testing");
+    ).toBe("unlinked");
   });
 
   it("leaves a pending request or an unmanaged server alone", () => {

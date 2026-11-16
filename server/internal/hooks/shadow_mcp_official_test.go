@@ -29,11 +29,15 @@ type officialServerSeed struct {
 	// EndpointSlug gives the server its own address; empty leaves it
 	// without one.
 	EndpointSlug string
+	// Unlinked leaves the server unlinked from the Shadow MCP server at its
+	// own URL; by default an administrator has linked it.
+	Unlinked bool
 }
 
 // seedOfficialServer creates what the dashboard creates when a remote MCP
-// server is added: the remote source, the MCP server in front of it, and
-// (optionally) the endpoint agents connect to.
+// server is made official: the remote source, the MCP server in front of
+// it, (optionally) the endpoint agents connect to, and the link from the
+// Shadow MCP server at the same URL.
 func seedOfficialServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, seed officialServerSeed) uuid.UUID {
 	t.Helper()
 
@@ -78,6 +82,9 @@ func seedOfficialServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 		})
 		require.NoError(t, err)
 	}
+	if !seed.Unlinked {
+		setOfficialServerChoice(t, ctx, conn, projectID, seed.RemoteURL, uuid.NullUUID{UUID: server.ID, Valid: true}, false)
+	}
 	return server.ID
 }
 
@@ -91,7 +98,7 @@ func TestEnforceShadowMCPToolAccess_OfficialServerBlocksDirectUseDespiteBypassGr
 
 	serverURL := "https://tracker.example.com/mcp"
 	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "Tracker", RemoteURL: serverURL, Visibility: "", EndpointSlug: "tracker-" + uuid.NewString(),
+		Name: "Tracker", RemoteURL: serverURL, Visibility: "", EndpointSlug: "tracker-" + uuid.NewString(), Unlinked: false,
 	})
 
 	// An approval of the direct URL from before the server was onboarded.
@@ -133,7 +140,7 @@ func TestEnforceShadowMCPToolAccess_OfficialServerBlocksDirectUseUnderAllowAll(t
 	// The stored URL ends in a slash and the observed one does not: they
 	// name one upstream.
 	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "Wiki", RemoteURL: "https://wiki.example.com/mcp/", Visibility: "", EndpointSlug: "wiki-" + uuid.NewString(),
+		Name: "Wiki", RemoteURL: "https://wiki.example.com/mcp/", Visibility: "", EndpointSlug: "wiki-" + uuid.NewString(), Unlinked: false,
 	})
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
@@ -160,11 +167,11 @@ func TestEnforceShadowMCPToolAccess_OfficialServerThatCannotBeReachedDoesNotBloc
 
 	// No endpoint: there is nowhere to send people yet.
 	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "No Address", RemoteURL: "https://no-address.example.com/mcp", Visibility: "", EndpointSlug: "",
+		Name: "No Address", RemoteURL: "https://no-address.example.com/mcp", Visibility: "", EndpointSlug: "", Unlinked: false,
 	})
 	// Disabled: it has an address, but nobody can use it.
 	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "Disabled", RemoteURL: "https://disabled.example.com/mcp", Visibility: "disabled", EndpointSlug: "disabled-" + uuid.NewString(),
+		Name: "Disabled", RemoteURL: "https://disabled.example.com/mcp", Visibility: "disabled", EndpointSlug: "disabled-" + uuid.NewString(), Unlinked: false,
 	})
 
 	for _, directURL := range []string{"https://no-address.example.com/mcp", "https://disabled.example.com/mcp"} {
@@ -193,7 +200,7 @@ func TestRenderShadowMCPUserBlockReason_SendsAgentToOfficialServer(t *testing.T)
 	serverURL := "https://tracker.example.com/mcp"
 	endpointSlug := "tracker-" + uuid.NewString()
 	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "Tracker", RemoteURL: serverURL, Visibility: "", EndpointSlug: endpointSlug,
+		Name: "Tracker", RemoteURL: serverURL, Visibility: "", EndpointSlug: endpointSlug, Unlinked: false,
 	})
 
 	reason := ti.service.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
@@ -225,7 +232,7 @@ func TestRenderShadowMCPUserBlockReason_SendsAgentToGatewayThatServesOfficialSer
 
 	serverURL := "https://chat.example.com/mcp"
 	serverID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "Chat", RemoteURL: serverURL, Visibility: "", EndpointSlug: "chat-" + uuid.NewString(),
+		Name: "Chat", RemoteURL: serverURL, Visibility: "", EndpointSlug: "chat-" + uuid.NewString(), Unlinked: false,
 	})
 
 	gatewayID, err := testrepo.New(ti.conn).CreateMCPGatewayFixture(ctx, testrepo.CreateMCPGatewayFixtureParams{
@@ -292,10 +299,11 @@ func TestEnforceShadowMCPToolAccess_KeptDirectAccessFollowsOrdinaryRules(t *test
 	require.NotNil(t, authCtx.ProjectID)
 
 	serverURL := "https://testing.example.com/mcp"
-	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "Testing", RemoteURL: serverURL, Visibility: "", EndpointSlug: "testing-" + uuid.NewString(),
+	testingID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "Testing", RemoteURL: serverURL, Visibility: "", EndpointSlug: "testing-" + uuid.NewString(), Unlinked: false,
 	})
-	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, true)
+	// The link is switched off while the official server is tested.
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: testingID, Valid: true}, true)
 
 	// Allow-by-default: the direct connection keeps working while the
 	// official server is tested.
@@ -327,7 +335,7 @@ func TestRenderShadowMCPUserBlockReason_SendsAgentToChosenServer(t *testing.T) {
 	directURL := "https://direct.example.com/mcp"
 	chosenSlug := "chosen-" + uuid.NewString()
 	chosenID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
-		Name: "Company Tools", RemoteURL: "https://internal.example.com/mcp", Visibility: "", EndpointSlug: chosenSlug,
+		Name: "Company Tools", RemoteURL: "https://internal.example.com/mcp", Visibility: "", EndpointSlug: chosenSlug, Unlinked: false,
 	})
 	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, directURL, uuid.NullUUID{UUID: chosenID, Valid: true}, false)
 
@@ -374,4 +382,31 @@ func TestRenderShadowMCPUserBlockReason_KeepsRequestLinkWithoutOfficialServer(t 
 	})
 
 	require.NotContains(t, reason, "official version")
+}
+
+func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsNotOfficialUntilLinked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// The project happens to serve the same upstream, but nobody linked it.
+	serverURL := "https://coincidence.example.com/mcp"
+	serverID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "Coincidence", RemoteURL: serverURL, Visibility: "", EndpointSlug: "coincidence-" + uuid.NewString(), Unlinked: true,
+	})
+	evidence := shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "coincidence"}
+	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+		allowAllTestPolicy(uuid.NewString()), "search", evidence)
+	require.False(t, denied)
+	require.Empty(t, detail)
+
+	// Linking it makes it official.
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: serverID, Valid: true}, false)
+	detail, denied = ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+		allowAllTestPolicy(uuid.NewString()), "search", evidence)
+	require.True(t, denied)
+	require.Contains(t, detail, `official version "Coincidence"`)
 }
