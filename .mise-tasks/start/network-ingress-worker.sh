@@ -23,7 +23,12 @@ fi
 # Local development has no Tailscale Kubernetes operator, so only the gateway
 # provider is registered. One slot matches the single local gateway process;
 # a second slot would never come online and leave connections degraded.
+# Reconciliation runs on its own queue, polled by the private-network group's
+# reconciler (network-ingress-worker). It is set here rather than in mise.toml
+# so a single-process `gram start`, which requires the reconcile queue to
+# match its Temporal queue, keeps working under the mise environment.
 exec env \
+  GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE="${GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE:-network-ingress}" \
   GRAM_NETWORK_INGRESS_WORKER_CONTROL_ADDRESS="127.0.0.1:${GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT}" \
   GRAM_NETWORK_INGRESS_PROVIDER_MUTATIONS_ENABLED=true \
   GRAM_NETWORK_INGRESS_OPERATOR_PROVIDER_ENABLED=false \

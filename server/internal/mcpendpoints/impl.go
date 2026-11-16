@@ -475,10 +475,6 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	}
 
 	slug := string(payload.Slug)
-	if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogError(ctx, logger)
-	}
-
 	preexisting, err := repo.New(s.db).GetMCPEndpointByID(ctx, repo.GetMCPEndpointByIDParams{
 		ID:        endpointID,
 		ProjectID: *authCtx.ProjectID,
@@ -537,6 +533,12 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	}
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return nil, oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
+	}
+	// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
+		if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogWarn(ctx, logger)
+		}
 	}
 
 	beforeView := mv.BuildMcpEndpointView(existing)

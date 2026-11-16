@@ -9,11 +9,14 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
@@ -23,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -371,4 +375,18 @@ func (s *Service) SetIDJAGTrust(store idjag.Store) {
 // StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
 func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
 	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
+}
+
+// NewExportingConnectionRecorder stores every row; exported shuts it down and returns what the export published.
+func NewExportingConnectionRecorder(t *testing.T) (recorder *mcpconnectionattempts.Recorder, exported func() []otellog.Record) {
+	t.Helper()
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder = mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	return recorder, func() []otellog.Record {
+		require.NoError(t, recorder.Shutdown(t.Context()))
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		return slices.Clone(sink.records)
+	}
 }

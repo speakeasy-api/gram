@@ -7,6 +7,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import {
   attachOwnerConnections,
   connectionSelectable,
+  missingSignInNames,
   offersPersonalSignIn,
   serverConnection,
   serverSignIns,
@@ -158,7 +159,12 @@ describe("serverConnection", () => {
         [session({})],
         now,
       ),
-    ).toEqual({ status: "missing" });
+    ).toEqual({
+      status: "missing",
+      signIns: [client("client_two")],
+      connected: 1,
+      connectedNames: [undefined],
+    });
     // The attachment endpoint accepts only sessions made through this
     // server's own issuer.
     const elsewhere = serverConnection(
@@ -167,8 +173,100 @@ describe("serverConnection", () => {
       [session({ userSessionIssuerId: "issuer_other" })],
       now,
     );
-    expect(elsewhere).toEqual({ status: "missing" });
+    expect(elsewhere).toEqual({
+      status: "missing",
+      signIns: [client("client_one")],
+      connected: 0,
+    });
     expect(connectionSelectable(elsewhere)).toBe(false);
+  });
+
+  it("lists every sign-in still missing, not only the first", () => {
+    // An issuer shared across the organization: the server's own sign-in is
+    // connected, and two registrations from other servers are not.
+    const connection = serverConnection(
+      "issuer_one",
+      [
+        { id: "client_one", credentialOwner: "subject", name: "Linear" },
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+        { id: "client_three", credentialOwner: "subject" },
+      ],
+      [session({})],
+      now,
+    );
+    expect(connection).toEqual({
+      status: "missing",
+      signIns: [
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+        { id: "client_three", credentialOwner: "subject" },
+      ],
+      connected: 1,
+      connectedNames: ["Linear"],
+    });
+    expect(missingSignInNames(connection)).toEqual({
+      names: ["Stripe"],
+      unnamed: 1,
+    });
+  });
+
+  it("counts a sign-in whose connection ended as outstanding, not connected", () => {
+    // One sign-in ended, another was never made: neither works, so neither
+    // may read as connected in "1 of 2 sign-ins connected".
+    const connection = serverConnection(
+      "issuer_one",
+      [
+        { id: "client_one", credentialOwner: "subject", name: "Linear" },
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+      ],
+      [session({ accessExpiresAt: earlier })],
+      now,
+    );
+    expect(connection).toEqual({
+      status: "missing",
+      signIns: [
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+        { id: "client_one", credentialOwner: "subject", name: "Linear" },
+      ],
+      connected: 0,
+    });
+  });
+
+  it("keeps the count of sign-ins that share a name", () => {
+    expect(
+      missingSignInNames({
+        status: "missing",
+        signIns: [
+          { id: "client_one", credentialOwner: "subject", name: "Linear" },
+          { id: "client_two", credentialOwner: "subject", name: "Linear" },
+        ],
+        connected: 0,
+      }),
+    ).toEqual({ names: ["2 Linear sign-ins"], unnamed: 0 });
+  });
+
+  it("is ready with any one working sign-in when one is enough", () => {
+    // Under enforcement the caller chooses among the server's own sign-ins.
+    const connection = serverConnection(
+      "issuer_one",
+      [client("client_one"), client("client_two")],
+      [session({})],
+      now,
+      { anyOne: true },
+    );
+    expect(connection).toEqual({ status: "ready", sessions: [session({})] });
+    expect(
+      serverConnection(
+        "issuer_one",
+        [client("client_one"), client("client_two")],
+        [],
+        now,
+        { anyOne: true },
+      ),
+    ).toEqual({
+      status: "missing",
+      signIns: [client("client_one"), client("client_two")],
+      connected: 0,
+    });
   });
 
   it("prefers a working connection over one that has ended", () => {
@@ -206,6 +304,8 @@ function api(options: {
     remoteSessionClientId: string;
     remoteSession?: RemoteSession;
   }>;
+  /** The registrations the runtime requires of each server, by server id. */
+  required?: Record<string, string[]>;
 }) {
   const attachBinding = vi.fn().mockResolvedValue({});
   const detachBinding = vi.fn().mockResolvedValue(undefined);
@@ -224,6 +324,14 @@ function api(options: {
       listBindings: vi.fn().mockResolvedValue({ items: options.bindings }),
       attachBinding,
       detachBinding,
+      listServerClientAssociations: vi.fn(
+        async ({ mcpServerId }: { mcpServerId: string }) => ({
+          associations: [],
+          requiredClientIds:
+            options.required?.[mcpServerId] ??
+            options.clients.map((client) => client.id),
+        }),
+      ),
     },
   } as unknown as ConnectionApi;
   return { fake, attachBinding, detachBinding, getMcpServerAuthentication };
@@ -314,12 +422,111 @@ describe("attachOwnerConnections", () => {
       });
     });
 
-    it("asks for the issuer's sign-ins when it is not, as the issuer routes the call", async () => {
+    it("attaches the one connected sign-in when enforced and the server has two", async () => {
+      const { fake, attachBinding } = api({
+        auth: () =>
+          Promise.resolve(
+            authentication([
+              own,
+              {
+                ...own,
+                id: "auth_second",
+                remoteSessionClientId: "client_two",
+              },
+            ]),
+          ),
+        clients: [],
+        candidates: [session({})],
+        bindings: [],
+      });
+      const missing = await attachOwnerConnections(
+        fake,
+        "agent_new",
+        [server],
+        undefined,
+        false,
+        true,
+      );
+      expect(missing).toEqual([]);
+      expect(attachBinding).toHaveBeenCalledTimes(1);
+    });
+
+    it("needs one of each server's own sign-ins when enforced servers share the issuer", async () => {
+      // client_one serves this server; the second server signs in only
+      // through client_two, which the caller never connected.
+      const second = { ...server, id: "server_second", name: "Second" };
+      const run = (skipMissing: boolean) =>
+        attachOwnerConnections(
+          api({
+            auth: (mcpServerId) =>
+              Promise.resolve(
+                authentication([
+                  mcpServerId === second.id
+                    ? {
+                        ...own,
+                        id: "auth_two",
+                        remoteSessionClientId: "client_two",
+                      }
+                    : own,
+                ]),
+              ),
+            clients: [],
+            candidates: [session({})],
+            bindings: [],
+          }).fake,
+          "agent_new",
+          [server, second],
+          undefined,
+          skipMissing,
+          true,
+        );
+      await expect(run(true)).resolves.toEqual(["Second"]);
+      await expect(run(false)).rejects.toThrow(
+        "Your connection to Second is no longer available.",
+      );
+    });
+
+    it("keeps every issuer registration for a hosted server", async () => {
+      const hostedServer = { ...server, kind: "Hosted" } as InventoryServer;
+      const { fake, attachBinding } = api({
+        auth: () => Promise.resolve(authentication([own])),
+        clients: [client("client_other_server"), client("client_one")],
+        candidates: [session({})],
+        bindings: [],
+        required: { [server.id]: ["client_one"] },
+      });
+      await expect(
+        attachOwnerConnections(fake, "agent_new", [hostedServer]),
+      ).rejects.toThrow(/no longer available/);
+      expect(
+        fake.remoteSessions.listServerClientAssociations,
+      ).not.toHaveBeenCalled();
+      expect(attachBinding).not.toHaveBeenCalled();
+    });
+
+    it("asks for the sign-ins the runtime requires when it is not", async () => {
       const { fake, attachBinding } = shared();
       await expect(
         attachOwnerConnections(fake, "agent_new", [server]),
       ).rejects.toThrow(/no longer available/);
       expect(attachBinding).not.toHaveBeenCalled();
+    });
+
+    it("does not ask for another server's registration the runtime does not require", async () => {
+      // The issuer lists both; the runtime requires only this server's own.
+      const { fake, attachBinding } = api({
+        auth: () => Promise.resolve(authentication([own])),
+        clients: [client("client_other_server"), client("client_one")],
+        candidates: [session({})],
+        bindings: [],
+        required: { [server.id]: ["client_one"] },
+      });
+      const missing = await attachOwnerConnections(fake, "agent_new", [server]);
+      expect(missing).toEqual([]);
+      expect(attachBinding).toHaveBeenCalledTimes(1);
+      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+        attachBindingRequestBody: { remoteSessionId: "session_mine" },
+      });
     });
   });
 
@@ -499,6 +706,17 @@ describe("serverSignIns", () => {
         ],
       }),
     ).toEqual([{ id: "client_own", credentialOwner: "subject" }]);
+  });
+
+  it("carries each auth client's name, so a missing sign-in can be named", () => {
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [{ ...base, name: "Linear" }],
+      }),
+    ).toEqual([
+      { id: "client_own", credentialOwner: "subject", name: "Linear" },
+    ]);
   });
 
   it("has no answer while a personal auth client names no registration", () => {

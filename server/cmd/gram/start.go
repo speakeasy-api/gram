@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
+	"github.com/speakeasy-api/gram/server/internal/commandsearch"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -689,10 +690,14 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
 		&cli.StringFlag{
 			Name:     "loops-api-key",
-			Usage:    "Loops API key for transactional emails (invite emails). Empty or 'unset' disables email sending.",
+			Usage:    "Loops API key for workflows, contacts, and legacy transactional delivery.",
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{Name: "email-provider", Usage: "Transactional email provider: loops or resend", EnvVars: []string{"GRAM_EMAIL_PROVIDER"}, Value: "loops"},
+		&cli.StringFlag{Name: "resend-api-key", Usage: "Resend API key for transactional email delivery", EnvVars: []string{"RESEND_API_KEY"}},
+		&cli.StringFlag{Name: "email-from", Usage: "Explicit transactional sender address (required for Resend)", EnvVars: []string{"GRAM_EMAIL_FROM"}},
+		&cli.StringFlag{Name: "email-reply-to", Usage: "Transactional reply-to address (required for Resend)", EnvVars: []string{"GRAM_EMAIL_REPLY_TO"}},
 		&cli.StringFlag{
 			Name:     "email-template-ids",
 			Usage:    "JSON mapping of application email template keys to environment-specific Loops IDs",
@@ -1797,6 +1802,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL).
 				WithFeatureProvider(featureFlags)
 			skills.Attach(mux, skillsService)
+			commandsearch.Attach(mux, commandsearch.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures))
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil, upstreamRevoker).WithNetworkAccessEligibility(networkIngressAdmission).
 				WithPublicationRequests(publicationEmit)
 			mcpMetadataService.WithPluginPublication(publicationEmit, pluginsPublishSignaler)
@@ -2111,7 +2117,7 @@ func newStartCommand() *cli.Command {
 				customDomainARecords,
 				customDomainTargetSuffix,
 			).WithPublicationRequests(plugins.PublicationRequests{Enabled: publicationEmit}))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
+			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, productFeatures, trialEmailNotifier, meterReadConn))
 			tm.Attach(mux, telemSvc)
 			analytics.Attach(mux, analyticsSvc)
 			widgets.Attach(mux, widgetsSvc)

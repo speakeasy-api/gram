@@ -182,16 +182,25 @@ WHERE id = @id
   AND organization_id = @organization_id;
 
 -- name: GetNetworkIngressGatewayOwner :one
--- Tombstones are included: teardown needs the owner and label after soft delete.
-SELECT organization_id, hostname, runtime, gateway_service_hostname
+-- Tombstones are included: teardown needs the owner and labels after soft delete.
+SELECT organization_id, hostname, runtime, gateway_service_hostname, gateway_service_hostnames
 FROM network_ingresses
 WHERE id = @id;
 
--- name: SetNetworkIngressGatewayServiceHostname :exec
--- Records the label of the service the gateway just defined. updated_at is the
--- desired-state version and is deliberately not touched.
+-- name: AddNetworkIngressGatewayServiceHostname :exec
+-- Records a label before the gateway defines its service, so every service the
+-- gateway defined is recorded. updated_at is the desired-state version and is
+-- deliberately not touched.
 UPDATE network_ingresses
-SET gateway_service_hostname = @hostname
+SET gateway_service_hostnames = array_append(gateway_service_hostnames, @hostname::text)
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND NOT (@hostname::text = ANY (gateway_service_hostnames));
+
+-- name: RemoveNetworkIngressGatewayServiceHostname :exec
+-- Forgets a label once its service is deleted. updated_at is not touched.
+UPDATE network_ingresses
+SET gateway_service_hostnames = array_remove(gateway_service_hostnames, @hostname::text)
 WHERE id = @id
   AND organization_id = @organization_id;
 

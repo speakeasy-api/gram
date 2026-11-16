@@ -14,7 +14,6 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/email"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -58,8 +57,7 @@ func newNotificationTestService(t *testing.T, accountType string, whitelisted bo
 		GramAccountType: accountType,
 	}))
 	sender := &captureSender{}
-	flags := new(feature.InMemory)
-	return NewService(testenv.NewLogger(t), db, sender, flags, testOrgHosts(t)), sender, organizationID
+	return NewService(testenv.NewLogger(t), db, sender, testOrgHosts(t)), sender, organizationID
 }
 
 // testOrgHosts serves the dashboard on ai.example.test, keeps organizations
@@ -120,7 +118,7 @@ func TestSendTrialEndingSoonUsesConfiguredBillingEmailAndStableTrialIdentity(t *
 	require.Equal(t, "https://app.example.test/example-org/billing", template.ActionURL)
 }
 
-func TestSendAccessPausedTrialDemotionFailsClosedAndUsesOrganizationGate(t *testing.T) {
+func TestSendAccessPausedTrialDemotionDelivers(t *testing.T) {
 	t.Parallel()
 	service, sender, organizationID := newNotificationTestService(t, "free", false)
 	now := time.Now().UTC().Truncate(time.Second)
@@ -140,18 +138,13 @@ func TestSendAccessPausedTrialDemotionFailsClosedAndUsesOrganizationGate(t *test
 	input := SendAccessPausedInput{EventID: "event-placeholder", OrganizationID: organizationID, Kind: AccessPausedTrialDemotion}
 
 	require.NoError(t, service.SendAccessPaused(t.Context(), input))
-	require.Empty(t, sender.sends)
-	flags, ok := service.features.(*feature.InMemory)
-	require.True(t, ok)
-	flags.SetFlag(feature.FlagPaygSelfServeBilling, organizationID, true)
-	require.NoError(t, service.SendAccessPaused(t.Context(), input))
 	require.Len(t, sender.sends, 1)
 	template, ok := sender.sends[0].template.(email.AccessPaused)
 	require.True(t, ok)
 	require.Equal(t, "https://app.example.test/example-org", template.ActionURL)
 }
 
-func TestSendAccessPausedSubscriptionLossDoesNotDependOnRolloutFlag(t *testing.T) {
+func TestSendAccessPausedSubscriptionLossDelivers(t *testing.T) {
 	t.Parallel()
 	service, sender, organizationID := newNotificationTestService(t, "free", false)
 	_, err := usagerepo.New(service.db).UpsertBillingEmail(t.Context(), usagerepo.UpsertBillingEmailParams{

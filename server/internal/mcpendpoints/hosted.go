@@ -127,6 +127,10 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
+		// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+		if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogWarn(ctx, logger)
+		}
 		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
 			return nil, nil, err
 		}
@@ -255,8 +259,8 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 }
 
 // checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
-// slug length, the organization's verified and activated custom domain only, the organization prefix on the
-// platform and for free accounts, and a private network mode's ingress namespace.
+// slug length and the organization prefix on the platform and for free accounts, the
+// organization's verified and activated custom domain only, and a private network mode's ingress namespace.
 func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID) error {
 	if len(slug) > maxHostedSlugLength {
 		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)

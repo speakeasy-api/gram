@@ -34,6 +34,8 @@ agent:00000000-0000-0000-0000-000000000004
 
 Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
+Agent Identity is in beta and is available under **Identity → Agents** in the dashboard. Existing rollout gates and authorization requirements still apply.
+
 The current RBAC implementation supports `user`, `role`, `agent`, and `api_key` principals. An `api_key:<api_keys.id>` principal is a legacy API key holding its own server and auth client policy; it is written only through `keys.create` and is not grantable anywhere else (see "API key policies and the mandatory check").
 
 Agent principals are grantable in two places in the RBAC administration surfaces: on a role, through the role editor, and on a single MCP server, through that server's access list. An agent's own direct grants are managed separately, through the agent policy API (`agents.createPolicyGrant` and friends), which is also what agent key issuance delegates from. Role membership for agents lives in `agent_role_assignments` rather than `organization_role_assignments`, because agents have no WorkOS identity and their membership is never reconciled outward.
