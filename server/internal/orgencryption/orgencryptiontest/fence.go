@@ -2,13 +2,19 @@ package orgencryptiontest
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// unfencedMarker exempts one statement from the fence check.
-const unfencedMarker = "-- orgencryption:unfenced"
+const (
+	// unfencedMarker exempts one statement from the fence check.
+	unfencedMarker = "-- orgencryption:unfenced"
+
+	// transitionTable is the table the fence subquery reads and locks.
+	transitionTable = "organization_encryption_transitions"
+)
 
 var (
 	// unfencedMarkerPattern matches unfencedMarker only as its own comment
@@ -33,14 +39,21 @@ var (
 
 	// fenceSubqueryPatterns must all match the fence subquery: it compares the
 	// transition's organization with the written row's own organization
-	// column, names a use case, and locks the transition row FOR KEY SHARE
-	// so a transition waits for the write to commit.
+	// column, and names a use case.
 	fenceSubqueryPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)\bWHERE\b`),
 		regexp.MustCompile(`(?is)\b\w+\.organization_id\s*=\s*\w+\.organization_id\b`),
 		regexp.MustCompile(`(?is)\b(?:\w+\.)?use_case\s*=\s*(?:'[^']+'|@\w+|sqlc\.arg\s*\()`),
-		regexp.MustCompile(`(?is)\bFOR\s+KEY\s+SHARE\b`),
 	}
+
+	// fenceAliasPattern reads the alias the fence subquery gives the
+	// transition table, if any, from the text right after the table name.
+	fenceAliasPattern = regexp.MustCompile(`(?is)^\s+(?:AS\s+)?(\w+)`)
+
+	// fenceLockPattern matches the locking clause that must end the fence
+	// subquery, FOR KEY SHARE, with an optional OF list in the first group.
+	// A transition waits for a write holding this lock to commit.
+	fenceLockPattern = regexp.MustCompile(`(?is)\bFOR\s+KEY\s+SHARE(?:\s+OF\s+(\w+(?:\s*,\s*\w+)*))?\s*$`)
 
 	// lineCommentPattern matches a SQL line comment.
 	lineCommentPattern = regexp.MustCompile(`--[^\n]*`)
@@ -88,11 +101,11 @@ func UnfencedWrites(queriesSQL string, columns ...string) []string {
 }
 
 // fenced reports whether statement carries a fence predicate whose subquery
-// passes every fenceSubqueryPatterns check.
+// passes every fenceSubqueryPatterns check and locks the transition row.
 func fenced(statement string) bool {
 	for _, match := range fencePattern.FindAllStringSubmatch(statement, -1) {
 		subquery := match[1]
-		ok := true
+		ok := locksTransitionRow(subquery)
 		for _, pattern := range fenceSubqueryPatterns {
 			if !pattern.MatchString(subquery) {
 				ok = false
@@ -101,6 +114,36 @@ func fenced(statement string) bool {
 		}
 		if ok {
 			return true
+		}
+	}
+
+	return false
+}
+
+// locksTransitionRow reports whether the fence subquery, given as the text
+// after the transition table name, ends with FOR KEY SHARE on the transition
+// table: either with no OF list, or with an OF list that names the table or
+// its alias. A lock on another relation would leave the transition row
+// unprotected.
+func locksTransitionRow(subquery string) bool {
+	lock := fenceLockPattern.FindStringSubmatch(subquery)
+	if lock == nil {
+		return false
+	}
+	if lock[1] == "" {
+		return true
+	}
+
+	names := []string{transitionTable}
+	if alias := fenceAliasPattern.FindStringSubmatch(subquery); alias != nil && !strings.EqualFold(alias[1], "WHERE") {
+		names = append(names, alias[1])
+	}
+
+	for locked := range strings.SplitSeq(lock[1], ",") {
+		for _, name := range names {
+			if strings.EqualFold(strings.TrimSpace(locked), name) {
+				return true
+			}
 		}
 	}
 
