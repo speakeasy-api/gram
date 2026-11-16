@@ -2,34 +2,6 @@ package authz
 
 import "slices"
 
-// MCPToolCallDimensions carries the typed attributes of an MCP tool call.
-// Zero-value fields are omitted from the check dimensions. Disposition is the
-// tool's classification from DispositionFromHints, unannotated for a tool with
-// no true hint; leave it empty only when the tool's annotations are unknown,
-// such as a tool missing from the catalog, so a grant limited to any
-// disposition refuses the call.
-type MCPToolCallDimensions struct {
-	Tool        string
-	Disposition string
-	ProjectID   string
-}
-
-// MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
-// dims.ProjectID is required: evaluation rejects an MCP check without one.
-func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
-	dimensions := map[string]string{}
-	if dims.Disposition != "" {
-		dimensions[SelectorKeyDisposition] = dims.Disposition
-	}
-	if dims.Tool != "" {
-		dimensions[SelectorKeyTool] = dims.Tool
-	}
-	if dims.ProjectID != "" {
-		dimensions[SelectorKeyProjectID] = dims.ProjectID
-	}
-	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationToolCall}
-}
-
 // validateCheckOperation holds a check to the operation it was built as.
 // Only a tool call carries a tool or a disposition: a check that names a tool
 // without being built as a tool call is refused, so it can never be read as a
@@ -61,50 +33,6 @@ func validateCheckOperation(c Check) error {
 // block that takes it away.
 func isConnectScope(scope Scope) bool {
 	return scope == ScopeMCPConnect || scope == ScopeMCPBlockedConnect
-}
-
-// MCPCheck builds a Check for an MCP scope (read/write/connect) with project_id
-// injected as a dimension so project-scoped grants can match. resourceID is the
-// server or toolset ID for operations on one server, or the project ID for
-// project-level operations. projectID is required: evaluation rejects an MCP
-// check without one. A connect check is a connection: it names no tool, so a
-// grant limited to some tools still covers it.
-func MCPCheck(scope Scope, resourceID, projectID string) Check {
-	var dimensions map[string]string
-	if projectID != "" {
-		dimensions = map[string]string{SelectorKeyProjectID: projectID}
-	}
-	check := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
-	if isConnectScope(scope) {
-		return check.asConnection()
-	}
-	return check
-}
-
-// AssistantCheck builds a Check for an assistant scope. resourceID is the
-// assistant ID for operations on one assistant, or the project ID for
-// project-level operations such as creating an assistant. projectID is injected
-// as a dimension, so a project-wide grant ({"resource_id":"*","project_id":P})
-// covers every assistant in P, while a grant naming one assistant
-// ({"resource_id":A}) covers only that assistant.
-func AssistantCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
-}
-
-// EnvironmentCheck builds a Check for an environment scope. resourceID is the
-// environment ID for operations on one environment, or the project ID for
-// project-level operations that have no concrete environment (create, or a
-// slug that did not resolve). projectID is always injected as a dimension, so a
-// project-wide grant ({"resource_id":"*","project_id":P}) covers every
-// environment in P, while a grant naming one environment covers only that one.
-func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
-}
-
-// HooksIngestCheck builds the org:hooks_ingest check for projectID. It always
-// carries the project, so a project-bounded grant covers only its project.
-func HooksIngestCheck(organizationID, projectID string) Check {
-	return Check{Scope: ScopeOrgHooksIngest, ResourceKind: "", ResourceID: organizationID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
 
 // MCPAuthClientDimensions carries the trusted attributes of one use of an auth
@@ -275,27 +203,6 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 		Base:      GrantCheck{Check: RiskPolicyEvaluateCheck(policyID), Instance: instance},
 		Exclusion: GrantCheck{Check: bypass, Instance: instance},
 	}
-}
-
-// ChatReadCheck builds a Check authorizing read access to agent chat sessions.
-// It is satisfied by an unrestricted chat:read grant, or by chat:write via
-// scope expansion. No system role holds either — not even admin — so access to
-// sessions a caller owns comes from owner-matching in the chat handlers, not
-// from this scope. resourceID is a placeholder that does not affect matching —
-// every chat grant wildcards resource_id — so any concrete value (the chat or
-// project id) works.
-func ChatReadCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
-}
-
-// ChatWriteCheck builds a Check authorizing destructive mutation of agent chat
-// sessions — renaming, attaching feedback, and deleting. It is deliberately
-// separate from ChatReadCheck: a session reviewer granted chat:read can read
-// every transcript (and pin one as a shared bookmark) but must not be able to
-// destroy one. Owner-matching in the chat handlers still lets anyone mutate
-// their own sessions without a grant.
-func ChatWriteCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatWrite, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
 
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {

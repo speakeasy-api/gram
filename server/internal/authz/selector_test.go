@@ -464,7 +464,7 @@ func TestSelector_Matches_riskPolicyServerURL(t *testing.T) {
 func TestMCPCheck_injectsProjectID(t *testing.T) {
 	t.Parallel()
 
-	check := MCPCheck(ScopeMCPRead, "server_456", "proj_123")
+	check := MCPServer(MCPServerIDFrom("server_456"), ProjectIDFrom("proj_123")).Read()
 	require.Equal(t, ScopeMCPRead, check.Scope)
 	require.Equal(t, "server_456", check.ResourceID)
 	require.Equal(t, "proj_123", check.Dimensions[SelectorKeyProjectID])
@@ -473,7 +473,7 @@ func TestMCPCheck_injectsProjectID(t *testing.T) {
 func TestMCPCheck_emptyProjectIDOmitsDimension(t *testing.T) {
 	t.Parallel()
 
-	check := MCPCheck(ScopeMCPRead, "server_456", "")
+	check := mcpCheck(ScopeMCPRead, "server_456", "")
 	require.Nil(t, check.Dimensions)
 }
 
@@ -507,7 +507,7 @@ func TestHooksIngestCheck_MatchesOnlyItsProjectBound(t *testing.T) {
 	bounded := []Grant{NewGrantWithSelector(ScopeOrgHooksIngest, selector)}
 	unbounded := []Grant{NewGrant(ScopeOrgHooksIngest, "org-123")}
 
-	require.True(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-1")))
-	require.False(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-2")))
-	require.True(t, GrantsSatisfy(unbounded, HooksIngestCheck("org-123", "project-2")), "a grant naming no project covers every project")
+	require.True(t, GrantsSatisfy(bounded, Org(OrgIDFrom("org-123")).HooksIngest(ProjectIDFrom("project-1"))))
+	require.False(t, GrantsSatisfy(bounded, Org(OrgIDFrom("org-123")).HooksIngest(ProjectIDFrom("project-2"))))
+	require.True(t, GrantsSatisfy(unbounded, Org(OrgIDFrom("org-123")).HooksIngest(ProjectIDFrom("project-2"))), "a grant naming no project covers every project")
 }

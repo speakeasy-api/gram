@@ -240,7 +240,7 @@ func TestServerScopesKeepLenientMatching(t *testing.T) {
 	t.Parallel()
 
 	grant := NewGrantWithSelector(ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: "toolset_1", SelectorKeyDisposition: DispositionReadOnly})
-	allowed, err := GrantsAuthorize([]Grant{grant}, MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP))
+	allowed, err := GrantsAuthorize([]Grant{grant}, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect())
 	require.NoError(t, err)
 	require.True(t, allowed)
 }
@@ -277,7 +277,7 @@ func TestEngineRequiresRepresentedUserPolicyForAgents(t *testing.T) {
 
 	unpermitted := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{connect}})
 	requireForbidden(t, engine.Require(unpermitted, personalClientCheck("user_u"))) // U must hold mcp:auth too
-	require.NoError(t, engine.Require(unpermitted, MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP)), "other scopes ignore U's policy")
+	require.NoError(t, engine.Require(unpermitted, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect()), "other scopes ignore U's policy")
 
 	ineligible := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{}})
 	requireForbidden(t, engine.Require(ineligible, sharedClientCheck(authProjectP)))
@@ -342,7 +342,7 @@ func TestUnenforcedPathsDenyAuthClientChecks(t *testing.T) {
 
 	own := personalClientCheck(sessionUserID)
 	shared := sharedClientCheck(authProjectP)
-	other := MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP)
+	other := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect()
 
 	requireForbidden(t, engine.Require(ctx, own))
 	requireForbidden(t, engine.Require(ctx, other, shared))

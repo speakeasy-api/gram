@@ -72,12 +72,11 @@ func (i *ToolsCallAuthzInterceptor) Name() string {
 // silent-omission semantics are reserved for tools/list parity, which is
 // gated on payload mutation support).
 //
-// [authz.MCPToolCallCheck] names its first parameter `toolsetID` for legacy
-// reasons, but the helper only stores it as the opaque `ResourceID` on the
-// returned [authz.Check]; passing the mcp_servers UUID is semantically
-// correct. It is the same resource id the handler runs the upfront
-// server-level `mcp:connect` check against, so per-tool and server-level
-// enforcement agree on what they are authorizing.
+// The [authz.MCPServerRef] is built from the mcp_servers UUID, which becomes
+// the opaque `ResourceID` on the returned [authz.Check]. It is the same
+// resource id the handler runs the upfront server-level `mcp:connect` check
+// against, so per-tool and server-level enforcement agree on what they are
+// authorizing.
 func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
 	// Defensive: the proxy's typed dispatch (toolsCallRequestFromUserRequest)
 	// only constructs a ToolsCallRequest with non-nil Params, so this branch

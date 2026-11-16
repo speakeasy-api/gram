@@ -227,11 +227,11 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search", ProjectID: serverProject})),
+	require.True(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("search", "")),
 		"a named tool is allowed")
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "delete_everything", ProjectID: serverProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("delete_everything", "")),
 		"a tool the rule does not name is not")
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(otherServerID, authz.MCPToolCallDimensions{Tool: "search", ProjectID: otherServerProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(otherServerID), authz.ProjectIDFrom(otherServerProject)).ToolCall("search", "")),
 		"and neither is the same tool on another server")
 
 	// Widened to the whole server.
@@ -247,7 +247,7 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "delete_everything", ProjectID: serverProject})),
+	require.True(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("delete_everything", "")),
 		"an unnarrowed rule covers every tool")
 
 	// Narrowed by annotation instead: read-only tools only.
@@ -263,9 +263,9 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only", ProjectID: serverProject})),
+	require.True(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("search", "read_only")),
 		"a read-only tool is allowed")
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "purge", Disposition: "destructive", ProjectID: serverProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("purge", "destructive")),
 		"a destructive one is not")
 
 	// Removed entirely.
@@ -279,7 +279,7 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search", ProjectID: serverProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("search", "")),
 		"removing the rule removes the access")
 }
 
@@ -1322,10 +1322,10 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	require.NoError(t, err)
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, ti.conn, authCtx.ActiveOrganizationID, principal)
 	require.NoError(t, err)
-	allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, serverID, mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)))
+	allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID))).Connect())
 	require.NoError(t, err)
 	require.False(t, allowed)
-	allowed, err = authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, otherServerID, mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherServerID)))
+	allowed, err = authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(otherServerID), authz.ProjectIDFrom(mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherServerID))).Connect())
 	require.NoError(t, err)
 	require.True(t, allowed)
 	// Server-local policy removal leaves shared upstream authority intact.

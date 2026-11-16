@@ -32,11 +32,11 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 
 	err = engine.Require(ctx,
 		Check{Scope: ScopeProjectRead, ResourceID: "proj:123"},
-		MCPCheck(ScopeMCPConnect, "toolA", testProjectID),
+		MCPServer(MCPServerIDFrom("toolA"), ProjectIDFrom(testProjectID)).Connect(),
 	)
 	require.NoError(t, err)
 
-	err = engine.Require(ctx, MCPCheck(ScopeMCPConnect, "toolB", testProjectID))
+	err = engine.Require(ctx, MCPServer(MCPServerIDFrom("toolB"), ProjectIDFrom(testProjectID)).Connect())
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -70,9 +70,9 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	require.Equal(t, []string{"proj:123"}, projectIDs)
 
 	toolIDs, err := engine.Filter(ctx, []Check{
-		MCPCheck(ScopeMCPConnect, "toolA", testProjectID),
-		MCPCheck(ScopeMCPConnect, "toolB", testProjectID),
-		MCPCheck(ScopeMCPConnect, "toolC", testProjectID),
+		MCPServer(MCPServerIDFrom("toolA"), ProjectIDFrom(testProjectID)).Connect(),
+		MCPServer(MCPServerIDFrom("toolB"), ProjectIDFrom(testProjectID)).Connect(),
+		MCPServer(MCPServerIDFrom("toolC"), ProjectIDFrom(testProjectID)).Connect(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolA", "toolB"}, toolIDs)
@@ -100,8 +100,8 @@ func TestFilter_withDimensions(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "allowed_tool", Disposition: "", ProjectID: testProjectID}),
-		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "denied_tool", Disposition: "", ProjectID: testProjectID}),
+		MCPServer(MCPServerIDFrom("toolsetX"), ProjectIDFrom(testProjectID)).ToolCall("allowed_tool", ""),
+		MCPServer(MCPServerIDFrom("toolsetX"), ProjectIDFrom(testProjectID)).ToolCall("denied_tool", ""),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolsetX"}, results)
