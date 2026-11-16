@@ -241,6 +241,9 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ## name, renewed by `mise run tls:tailscale`). zero:tailscale sets it locally
 ## when the tailnet has HTTPS certificates enabled.
 GRAM_TLS_PROVIDER = { default = "mkcert" }
+## The local seed keeps the clients it registers with Linear and Notion here
+## (gitignored), so reseeding reuses them.
+GRAM_DEMOSEED_CACHE_DIR = "{{ config_root }}/local/cache"
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""

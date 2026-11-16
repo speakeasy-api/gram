@@ -67,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
@@ -1520,6 +1521,22 @@ func newStartCommand() *cli.Command {
 			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
+			// The demo seed's MCP fixture: a self-contained OAuth and MCP server
+			// with fake data that the seeded demo servers reach, so they work in
+			// every environment (internal/demoseed/fixture).
+			// Metadata document fetches must not hold a sign-in open.
+			fixtureHTTPClient := guardianPolicy.PooledClient()
+			fixtureHTTPClient.Timeout = 10 * time.Second
+			fixture.Attach(mux, fixture.New(fixture.Config{
+				BaseURL:             fixture.BaseURL(serverURL),
+				AccessTokenTTL:      time.Hour,
+				SuggestedEmails:     []string{"alex@fixture.test", "sam@fixture.test"},
+				HTTPClient:          fixtureHTTPClient,
+				Logger:              logger.With(attr.SlogComponent("demoseed-fixture")),
+				NoMetadataDocuments: false,
+				// Sign-ins only ever go back to Speakeasy's own callbacks.
+				RedirectOrigins: fixtureRedirectOrigins(serverURL, callbackOrigins),
+			}))
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			distributionAdmission := admission.NewGuard()
@@ -2475,4 +2492,17 @@ func parsePlatformHosts(c *cli.Context, authenticationHost *mcp.AuthenticationHo
 // platformOrigins lists the browser origins of the platform hosts.
 func platformOrigins(hosts map[string]string) []string {
 	return slices.Sorted(maps.Values(hosts))
+}
+
+// fixtureRedirectOrigins are the origins Speakeasy's remote sign-in callbacks
+// use: the server's own, and the configured outbound and registration
+// callback origins.
+func fixtureRedirectOrigins(serverURL *url.URL, origins remotesessions.CallbackOrigins) []string {
+	out := []string{serverURL.Scheme + "://" + serverURL.Host}
+	for _, u := range []*url.URL{origins.Outbound, origins.Registration} {
+		if u != nil && u.Host != "" {
+			out = append(out, u.Scheme+"://"+u.Host)
+		}
+	}
+	return out
 }
