@@ -25,6 +25,8 @@ Run from `server/`. `GRAM_DATABASE_URL` must point directly at the intended Post
 
 Deploy the server change that refuses new limits on view and manage rules first, so no new row of this kind can be written. Then run the preview, then the apply, against each environment. The order is not critical for access: until the apply runs, the rows keep working as they do today.
 
+Run the apply only after the MCP connect backfill (`BackfillMcpConnectGrants` in the admin API) has run for the last time in that environment. That backfill copies each view or manage rule to a connect rule with the same selector, limit included. Once this rewrite has removed a limit, a later backfill run would copy the rule as an unlimited connect rule and widen access.
+
 ## Preview (default)
 
 ```sh
