@@ -21,7 +21,7 @@ concurrency:
 
 env:
   # Exact Reflow CLI release; bump deliberately.
-  REFLOW_VERSION: 0.1.0-c18a45f494d3695fe099
+  REFLOW_VERSION: 0.1.0-a0e559b5aadc048e626c
   REFLOW_API: https://app.reflow.io
 
 jobs:
@@ -34,8 +34,7 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 100
     permissions:
-      contents: read
-      pull-requests: write # sticky report comment
+      contents: read # the Reflow GitHub App writes the pull request comment
     env:
       GOMAXPROCS: 8
       REFLOW_COLLECTION: ${{ vars.REFLOW_COLLECTION_ID }}
@@ -127,7 +126,7 @@ jobs:
         run: |
           args=(--ci-context "$RUNNER_TEMP/reflow-ci.json" --branch "$HEAD_REF" --out-dir "$RUNNER_TEMP/reflow-ci" --publish)
           if [ -n "$BASE_BRANCH" ]; then
-            args+=(--base-branch "$BASE_BRANCH")
+            args+=(--base-branch "$BASE_BRANCH" --post)
           fi
           mise run reflow:golden "${args[@]}"
 
@@ -136,37 +135,6 @@ jobs:
         run: |
           if [ -f "$RUNNER_TEMP/reflow-ci/report.md" ]; then
             cat "$RUNNER_TEMP/reflow-ci/report.md" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Pull request comment
-        if: always() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          OUTCOME: ${{ steps.golden.outcome }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          report="$RUNNER_TEMP/reflow-ci/report.md"
-          marker='<!-- reflow-golden -->'
-          body="$RUNNER_TEMP/reflow-comment.md"
-          {
-            echo "$marker"
-            if [ -f "$report" ]; then
-              echo "## Reflow golden flows: ${OUTCOME}"
-              echo
-              cat "$report"
-            else
-              echo "## Reflow golden flows: no report"
-              echo
-              echo "The job stopped before the golden flows reported. See [the run]($RUN_URL)."
-            fi
-          } > "$body"
-          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
-            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$body" > /dev/null
-          else
-            gh pr comment "$PR_NUMBER" --body-file "$body"
           fi
 
       - name: Collect stack logs
