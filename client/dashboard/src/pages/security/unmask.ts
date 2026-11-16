@@ -15,10 +15,8 @@ export const REVEAL_DENIED_REASON =
   "You need the chat:read scope to reveal flagged values.";
 // Shown wherever a finding's session transcript would open but the same scope
 // is missing, so the missing link or the sheet's 403 doesn't pass silently.
-export const TRANSCRIPT_DENIED_REASON =
-  "You don't have access to view session transcripts. Contact your admin to request the chat:read scope.";
-// The same refusal where the way in sits right below it (ChatReadAccess), so
-// it does not tell an admin who can grant themselves access to ask an admin.
+// The way in (ChatReadAccess) sits right below it, so it does not tell an
+// admin who can grant themselves access to ask an admin.
 export const TRANSCRIPT_DENIED_NOTE =
   "You need the chat:read scope to view this session's transcript.";
 
