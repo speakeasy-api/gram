@@ -26,9 +26,11 @@ type GatewaySessionManagement interface {
 // ListGatewaySessionsInput selects one gateway without using a working project.
 type ListGatewaySessionsInput struct {
 	// Scope makes organization-wide reads an explicit choice.
-	Scope string `json:"scope" jsonschema:"organization or gateway; gateway requires gateway_id"`
-	// GatewayID names an exact project gateway in the caller's organization.
-	GatewayID *string `json:"gateway_id,omitempty" jsonschema:"exact project gateway UUID; omit for organization scope"`
+	Scope string `json:"scope" jsonschema:"organization, gateway, or project; gateway requires gateway_id and project requires project_id"`
+	// GatewayID names an exact stored gateway in the caller's organization.
+	GatewayID *string `json:"gateway_id,omitempty" jsonschema:"exact gateway UUID for gateway scope; omit otherwise"`
+	// ProjectID names the project whose Project Gateway is listed.
+	ProjectID *string `json:"project_id,omitempty" jsonschema:"exact project UUID for project scope, selecting that project's Project Gateway; omit otherwise"`
 	// Search is supplied by the caller, never inferred from returned identities.
 	Search *string `json:"search,omitempty" jsonschema:"literal identity name, email, or subject search; at most 200 Unicode characters; identities are omitted from results"`
 	// ServerID restricts configured upstream associations, not historical usage.
@@ -83,7 +85,7 @@ func listGatewaySessions(ctx context.Context, service GatewaySessionManagement, 
 	if service == nil {
 		return zero, ErrUnavailable
 	}
-	if (input.Scope != "organization" && input.Scope != "gateway") || (input.Scope == "gateway") != (input.GatewayID != nil) || input.Limit < 0 || input.Limit > 100 {
+	if (input.Scope != "organization" && input.Scope != "gateway" && input.Scope != "project") || (input.Scope == "gateway") != (input.GatewayID != nil) || (input.Scope == "project") != (input.ProjectID != nil) || input.Limit < 0 || input.Limit > 100 {
 		return zero, oops.C(oops.CodeBadRequest)
 	}
 	actor, ok := contextvalues.GetAuthContext(ctx)
@@ -97,7 +99,7 @@ func listGatewaySessions(ctx context.Context, service GatewaySessionManagement, 
 	// Preserve the live actor and grants. The management service derives a manual
 	// gateway's project; organization scope deliberately ignores the working one.
 	result, err := service.ListGatewaySessions(ctx, &gatewaygen.ListGatewaySessionsPayload{
-		GatewayID: input.GatewayID, SessionToken: nil, ApikeyToken: nil,
+		GatewayID: input.GatewayID, ProjectID: input.ProjectID, SessionToken: nil, ApikeyToken: nil,
 		Search: input.Search, ServerID: input.ServerID, ProviderID: input.ProviderID,
 		Status: conv.Default(input.Status, "active"), CreatedAfter: input.CreatedAfter, CreatedBefore: input.CreatedBefore,
 		Sort: conv.Default(input.Sort, "newest"), Cursor: input.Cursor, Limit: conv.Default(input.Limit, 50),
@@ -128,7 +130,7 @@ func registerGatewaySessionTool(reg *Registrar, service GatewaySessionManagement
 	// organization-admin identity, so only external administrators are admitted.
 	addTool(reg, &mcp.Tool{ //nolint:exhaustruct // Optional SDK fields use documented defaults.
 		Name: listGatewaySessionsToolName, Title: "List Gateway Sessions",
-		Description: "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, or an exact project gateway ID. Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
+		Description: "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, an exact gateway ID, or an exact project ID to list that project's Project Gateway (the Organization Gateway limited to the project's servers). Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: gatewaySessionInputSchema(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListGatewaySessionsInput) (*mcp.CallToolResult, ListGatewaySessionsOutput, error) {
@@ -149,9 +151,9 @@ func gatewaySessionToolResult(err error) (*mcp.CallToolResult, bool) {
 	} else if shared, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shared.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			result.Code, result.Message = "invalid_request", "Choose organization scope or gateway scope with an exact gateway UUID. Use supported filters, RFC3339 date bounds, a limit from 1 to 100, and a cursor from the same query."
+			result.Code, result.Message = "invalid_request", "Choose organization scope, gateway scope with an exact gateway UUID, or project scope with an exact project UUID. Use supported filters, RFC3339 date bounds, a limit from 1 to 100, and a cursor from the same query."
 		case oops.CodeNotFound, oops.CodeForbidden:
-			result.Code, result.Message = "not_found", "That gateway is not available to you."
+			result.Code, result.Message = "not_found", "That gateway or project is not available to you."
 		case oops.CodeUnauthorized:
 			result.Code, result.Message = "permission_denied", "Sign in as an organization administrator."
 		default:

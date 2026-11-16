@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 )
 
-const projectRedeploySideEffects = "Creates a new deployment from the active one and processes every source again, deploying function runners again. External MCP sources are not carried over. The customer's deployment history and audit log show the redeploy, and their webhooks receive it. The current deployment stays active until the new one succeeds, and stays active if it fails."
+const projectRedeploySideEffects = "Creates a new deployment from the active one and processes every source again, deploying function runners again. The customer's deployment history and audit log show the redeploy, and their webhooks receive it. The current deployment stays active until the new one succeeds, and stays active if it fails."
 
 // RedeployProjectInput is one exact project redeploy.
 type RedeployProjectInput struct {
@@ -38,8 +38,6 @@ type projectRedeployReceipt struct {
 	ProjectName        string `json:"project_name"`
 	SourceDeploymentID string `json:"source_deployment_id"`
 	DeploymentID       string `json:"deployment_id"`
-	ExternalMCPsBefore int    `json:"external_mcps_before"`
-	ExternalMCPsAfter  int    `json:"external_mcps_after"`
 	SideEffects        string `json:"side_effects"`
 }
 
@@ -101,7 +99,7 @@ func (w *projectRedeployWriter) apply(ctx context.Context, input RedeployProject
 		return projectRedeployReceipt{
 			OrganizationID: state.OrganizationID, ProjectID: state.ProjectID.String(), ProjectName: state.ProjectName,
 			SourceDeploymentID: state.ActiveDeploymentID.String(), DeploymentID: clone.ID,
-			ExternalMCPsBefore: state.ExternalMCPs, ExternalMCPsAfter: 0, SideEffects: projectRedeploySideEffects,
+			SideEffects: projectRedeploySideEffects,
 		}, nil
 	})
 	if err != nil {

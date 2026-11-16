@@ -11,7 +11,9 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -72,6 +74,11 @@ type LocalFixturesOptions struct {
 	// Upstreams wires the servers that need the developer's machine: the
 	// Linear and Notion clients.
 	Upstreams LocalUpstreamOptions
+	// ClickHouse receives the local-only servers' telemetry; nil skips it.
+	ClickHouse driver.Conn
+	// MockMCPURL is the local mock MCP server (server/cmd/mock-mcp) to
+	// register as a working remote MCP server; empty leaves it out.
+	MockMCPURL string
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -90,7 +97,8 @@ type LocalFixturesOptions struct {
 //     live in the seed proper;
 //   - a global catalog logo entry and public platform asset when SiteURL is set;
 //   - the upstreams that need the developer's machine (fixture_servers.go):
-//     the Linear and Notion clients registered with those vendors.
+//     the Linear and Notion clients registered with those vendors;
+//   - the Inspect tab's local-only remote servers (runLocalInspectFixtures).
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
 // registry entries, platform assets, and system roles are global.
@@ -249,8 +257,23 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}
 	}
 
+	inspect, err := runLocalInspectFixtures(ctx, logger, q, time.Now(), opts.MockMCPURL)
+	if err != nil {
+		return fmt.Errorf("local fixture %q: %w", "inspect tab servers", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit local fixtures: %w", err)
+	}
+
+	if opts.ClickHouse != nil && opts.MockMCPURL != "" {
+		// Under the seed lock, so a concurrent seed cannot purge or insert the
+		// same rows between the existence check and the insert.
+		if err := withSeedLock(ctx, logger, db, func(*pgxpool.Conn) error {
+			return insertLocalInspectTelemetry(ctx, inspect, opts.ClickHouse)
+		}); err != nil {
+			return fmt.Errorf("local fixture %q: %w", "inspect tab telemetry", err)
+		}
 	}
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)

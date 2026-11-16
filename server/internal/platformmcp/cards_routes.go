@@ -139,7 +139,7 @@ var cardTools = map[string]cardSpec{
 	// Gateways.
 	"create_gateway":              {kind: cardKindReceipt, route: "P/mcp/gateway/{gateway}", label: "Open gateway"},
 	"set_gateway_members":         {kind: cardKindReceipt, route: "P/mcp/gateway/{gateway}", label: "Open gateway"},
-	"get_my_project_gateway":      {kind: cardKindDetail, route: "P/mcp/organization-gateway", label: "Open gateway"},
+	"get_my_project_gateway":      {kind: cardKindDetail, route: "P/mcp/project-gateway", label: "Open gateway"},
 	"get_my_organization_gateway": {kind: cardKindDetail, route: "O/gateway", label: "Open gateway"},
 
 	// Data exports.

@@ -194,6 +194,7 @@ export function setGatewaySessionsData(
   queryKeyBase: [
     parameters: {
       gatewayId?: string | undefined;
+      projectId?: string | undefined;
       search?: string | undefined;
       serverId?: string | undefined;
       providerId?: string | undefined;
@@ -219,6 +220,7 @@ export function invalidateGatewaySessions(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       gatewayId?: string | undefined;
+      projectId?: string | undefined;
       search?: string | undefined;
       serverId?: string | undefined;
       providerId?: string | undefined;

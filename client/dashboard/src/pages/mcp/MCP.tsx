@@ -1,7 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
-import { OrganizationGatewayCard } from "@/components/mcp/OrganizationGatewayCard";
-import { useOrganizationGatewayEntry } from "@/components/mcp/useOrganizationGatewayEntry";
+import { ProjectGatewayCard } from "@/components/mcp/ProjectGatewayCard";
+import { useProjectGatewayEntry } from "@/components/mcp/useProjectGatewayEntry";
 import {
   MCPServerCard,
   MCPServerCardSkeleton,
@@ -13,7 +13,7 @@ import {
 import {
   GatewayTableRow,
   MCPServerTableRow,
-  OrganizationGatewayTableRow,
+  ProjectGatewayTableRow,
   MCPTableRowSkeleton,
 } from "@/components/mcp/mcp-table-rows";
 import { Page } from "@/components/page-layout";
@@ -300,29 +300,29 @@ function MCPOverview() {
   // "Add new", which are exactly what you need when nothing came back. And
   // whenever a filter or search is set, so it can always be cleared from here.
   const showFilters = !isLoading && (hasItems || hasRefreshError || isNarrowed);
-  // The Organization Gateway is the organization's, not one of this project's servers,
+  // The Project Gateway is not one of this project's servers but all of them,
   // so it leads the unfiltered list and steps aside once the list is narrowed —
   // except to gateways alone, since it is one.
-  const organizationGateway = useOrganizationGatewayEntry();
+  const projectGateway = useProjectGatewayEntry();
   const onlyGatewaysSelected =
     mcpFilters.values.source.length === 1 &&
     mcpFilters.values.source[0] === "gateway";
   const narrowedToGatewaysOnly =
     onlyGatewaysSelected &&
     !hasActiveMcpFilters({ ...mcpFilters.values, source: [] });
-  const showOrganizationGateway =
-    organizationGateway.show &&
+  const showProjectGateway =
+    projectGateway.show &&
     search === "" &&
     (!hasActiveMcpFilters(mcpFilters.values) || narrowedToGatewaysOnly);
-  const organizationGatewayCard = showOrganizationGateway && (
-    <OrganizationGatewayCard isOff={organizationGateway.isOff} />
+  const projectGatewayCard = showProjectGateway && (
+    <ProjectGatewayCard isOff={projectGateway.isOff} />
   );
   const showNoMatches =
     !isLoading &&
     isNarrowed &&
     filteredMcpServers.length === 0 &&
     filteredGateways.length === 0 &&
-    !showOrganizationGateway;
+    !showProjectGateway;
 
   const newMcpServerButton = (
     <RequireScope scope="mcp:write" level="component">
@@ -350,7 +350,7 @@ function MCPOverview() {
 
   // The empty state is for a project with nothing in it yet. A filter or search
   // set from the URL still takes the list path, which carries the toolbar to
-  // clear it and keeps the Organization Gateway out of "No MCP servers yet".
+  // clear it and keeps the Project Gateway out of "No MCP servers yet".
   if (
     !isLoading &&
     !hasRefreshError &&
@@ -360,9 +360,9 @@ function MCPOverview() {
   ) {
     return (
       <>
-        {organizationGatewayCard && (
+        {projectGatewayCard && (
           <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-            {organizationGatewayCard}
+            {projectGatewayCard}
           </div>
         )}
         <MCPEmptyState cta={newMcpServerButton} />
@@ -462,7 +462,7 @@ function MCPOverview() {
               </>
             ) : (
               <>
-                {organizationGatewayCard}
+                {projectGatewayCard}
                 {filteredGateways.map((gateway) => (
                   <GatewayCard key={gateway.id} gateway={gateway} />
                 ))}
@@ -490,10 +490,10 @@ function MCPOverview() {
               </>
             ) : (
               <>
-                {showOrganizationGateway && (
-                  <OrganizationGatewayTableRow
-                    url={organizationGateway.url}
-                    isOff={organizationGateway.isOff}
+                {showProjectGateway && (
+                  <ProjectGatewayTableRow
+                    url={projectGateway.url}
+                    isOff={projectGateway.isOff}
                   />
                 )}
                 {filteredGateways.map((gateway) => (

@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.148.1
+
+### Patch Changes
+
+- ec8198a: Disable browser translation to prevent React DOM crashes and restore cross-origin font loading for embedded pages.
+
 ## 0.148.0
 
 ### Minor Changes

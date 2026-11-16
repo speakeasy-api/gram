@@ -47,6 +47,9 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("proj", s.projectID().String()),
 		clickhouse.Named("marker", s.spec.Marker),
 		clickhouse.Named("github", s.det("mcpserver-github").String()),
+		clickhouse.Named("linear_app", s.det("mcpserver-linear-app").String()),
+		clickhouse.Named("notion_app", s.det("mcpserver-notion-app").String()),
+		clickhouse.Named("directgateway", s.directGatewayID().String()),
 		clickhouse.Named("orggateway", orggateway.GatewayID(s.orgID()).String()),
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
 		clickhouse.Named("owner_agent", s.ownerAgentID().String()),
@@ -129,6 +132,25 @@ func (s *seeder) chTelemetryChecks() []chCheck {
      AND mcp_server_id = @github) < 24`,
 			settings: "",
 			msg:      "demo seed postflight: removed gateway member dispatches missing",
+		},
+		// The Inspect tab's per-tool health for Linear and Notion reads direct
+		// calls (no gateway) by mcp_server_id.
+		{
+			cond: `(SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
+     AND meta_mcp_server_id = ''
+     AND event_source = 'tool_call'
+     AND mcp_server_id IN (@linear_app, @notion_app)) != ` + strconv.Itoa(directCallCount(inspectRemoteTools["linear-app"])+directCallCount(inspectRemoteTools["notion-app"])),
+			settings: "",
+			msg:      "demo seed postflight: direct remote server calls missing or duplicated",
+		},
+		{
+			cond: `(SELECT uniqExact(mcp_server_id) FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
+     AND meta_mcp_server_id = @directgateway
+     AND event_source = 'tool_call') < 2`,
+			settings: "",
+			msg:      "demo seed postflight: direct gateway member dispatches missing",
 		},
 		{
 			cond: `(SELECT count() FROM telemetry_logs

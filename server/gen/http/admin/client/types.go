@@ -3170,8 +3170,6 @@ type GetProjectRedeployPreviewResponseBody struct {
 	FunctionAssets *int `form:"function_assets,omitempty" json:"function_assets,omitempty" xml:"function_assets,omitempty"`
 	// Packages carried into the new deployment.
 	Packages *int `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
-	// External MCP sources the new deployment would drop.
-	ExternalMcps *int `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // RedeployProjectResponseBody is the type of the "admin" service
@@ -48345,7 +48343,6 @@ func NewGetProjectRedeployPreviewAdminProjectRedeployPreviewOK(body *GetProjectR
 		OpenapiAssets:      *body.OpenapiAssets,
 		FunctionAssets:     *body.FunctionAssets,
 		Packages:           *body.Packages,
-		ExternalMcps:       *body.ExternalMcps,
 	}
 
 	return v
@@ -54541,9 +54538,6 @@ func ValidateGetProjectRedeployPreviewResponseBody(body *GetProjectRedeployPrevi
 	}
 	if body.Packages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
-	}
-	if body.ExternalMcps == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcps", "body"))
 	}
 	return
 }

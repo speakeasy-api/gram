@@ -3890,6 +3890,8 @@ type McpServer struct {
 	// @access: confidential
 	RequiresUpstreamAuth pgtype.Bool
 	// @access: confidential
+	SetupGuideCompletedAt pgtype.Timestamptz
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz

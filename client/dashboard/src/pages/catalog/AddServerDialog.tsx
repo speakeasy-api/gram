@@ -79,7 +79,6 @@ export interface AddServerDialogProps {
   servers: CatalogServer[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onServersAdded?: () => void;
   onInstallFinished?: (result: {
     projectSlug?: string;
     status: "succeeded" | "failed";
@@ -194,7 +193,6 @@ export function AddServerDialog({
   servers,
   open,
   onOpenChange,
-  onServersAdded,
   onInstallFinished,
   projectSlug,
   bulk,
@@ -495,24 +493,6 @@ export function AddServerDialog({
     navigate,
     routes,
   ]);
-
-  // Notify parent when all installs are done
-  const allInstallsDone =
-    releaseState.phase === "complete" &&
-    releaseState.statuses.length > 0 &&
-    releaseState.statuses.every(
-      (s) => s.status === "completed" || s.status === "failed",
-    );
-  const prevAllDoneRef = useRef(false);
-  useEffect(() => {
-    if (allInstallsDone && !prevAllDoneRef.current) {
-      prevAllDoneRef.current = true;
-      onServersAdded?.();
-    }
-    if (!allInstallsDone) {
-      prevAllDoneRef.current = false;
-    }
-  }, [allInstallsDone, onServersAdded]);
 
   useEffect(() => {
     if (!open || !onInstallFinished || finishedRef.current) return;

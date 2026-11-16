@@ -28,7 +28,7 @@ func (s *seeder) chDetectionsAndFindings(ctx context.Context, ch driver.Conn) er
 		s.chfGatewayMemberCalls,
 		s.chfOrganizationGatewayCalls,
 		s.chfGatewayGoneCalls,
-		s.chfVendorAppCalls,
+		s.chfDirectRemoteCalls,
 		s.chfGatewayHooks,
 		s.chfBillingMeterReadings,
 	}
@@ -956,63 +956,23 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 	return rows
 }
 
-// chfVendorAppTools are the tools Linear's and Notion's MCP servers expose,
-// so their seeded calls read like the real thing.
-var chfVendorAppTools = map[string][]string{
-	"linear": {"list_issues", "get_issue", "save_issue", "list_projects", "save_comment", "list_teams"},
-	"notion": {"notion-search", "notion-fetch", "notion-create-pages", "notion-update-page", "notion-get-users"},
-}
-
-// chfVendorAppCalls: people calling Linear and Notion directly over the last
-// twelve days. Remote calls carry the "tools:externalmcp:<remote id>:" urn
-// the proxy emits, joined to the vendor servers' Postgres rows
-// (vendor_apps.go).
-func (s *seeder) chfVendorAppCalls(ctx context.Context, ch driver.Conn) error {
-	rows := make([]chfTelemetryRow, 0, 72)
-	for _, v := range vendorApps {
-		member := v.id(s, "mcpserver").String()
-		remote := v.id(s, "remotemcp").String()
-		tools := chfVendorAppTools[v.key]
-		for n := range 36 {
-			salt := "vendor-" + v.key
-			tool := tools[hash64(salt+"t", n)%uint64(len(tools))]
-			urn := "tools:externalmcp:" + remote + ":" + tool
-			status := 200
-			switch hash64(salt+"e", n) % 24 {
-			case 0:
-				status = 401
-			case 1:
-				status = 429
-			}
-			email := s.email(demoUsers[hash64(salt+"u", n)%uint64(len(demoUsers))].handle)
-			attrs := `{"gram.tool.urn":"` + urn + `"` +
-				`,"gram.tool.name":"` + tool + `"` +
-				`,"gram.event.source":"tool_call"` +
-				`,"gram.mcp_server.id":"` + member + `"` +
-				`,"gram.remote_mcp_server.id":"` + remote + `"` +
-				`,"gram.tool_call.source":"` + remote + `"` +
-				`,"http.response.status_code":` + strconv.Itoa(status) +
-				`,"http.server.request.duration":` + chfRound3(0.2+float64(hash64(salt+"d", n)%180)/100) +
-				`,"gram.project.id":"` + s.projectID().String() + `"` +
-				`,"user.email":"` + email + `"` +
-				`,"gram.external_user.id":"` + email + `"` +
-				chfEmailClient(email) +
-				`,"gram.hook.source":"claude-code"}`
-			ts := s.chfNoFuture(s.chfDay(n % 12).
-				Add(time.Duration(8+hash64(salt+"h", n)%10) * time.Hour).
-				Add(time.Duration(hash64(salt+"m", n)%60) * time.Minute))
-			rows = append(rows, chfTelemetryRow{
-				ts:      ts,
-				body:    "Tool call: " + tool,
-				traceID: md5Hex(s.name(salt + "-call-" + strconv.Itoa(n))),
-				attrs:   attrs,
-				urn:     urn,
-				service: "gram-mcp-gateway",
-				chatID:  nil,
-			})
-		}
+// chfDirectRemoteCalls: calls made straight to Linear and Notion (not
+// through a gateway), per tool, for the Inspect tab's per-tool health; plus
+// calls to both dispatched through the Direct mode gateway.
+func (s *seeder) chfDirectRemoteCalls(ctx context.Context, ch driver.Conn) error {
+	var rows []chfTelemetryRow
+	for _, server := range []string{"linear-app", "notion-app"} {
+		rows = append(rows, s.directRemoteCalls(server, s.det("mcpserver-"+server), s.det("remotemcp-"+server), "", inspectRemoteTools[server])...)
 	}
-	return s.chfInsertTelemetry(ctx, ch, "vendor app call telemetry", rows)
+	for _, server := range []string{"linear-app", "notion-app"} {
+		tools := make([]inspectTool, 0, 4)
+		for _, t := range inspectRemoteTools[server][:4] {
+			t.calls /= 5
+			tools = append(tools, t)
+		}
+		rows = append(rows, s.directRemoteCalls("gwdirect-"+server, s.det("mcpserver-"+server), s.det("remotemcp-"+server), s.directGatewayID().String(), tools)...)
+	}
+	return s.chfInsertTelemetry(ctx, ch, "direct remote server call telemetry", rows)
 }
 
 // chfGatewayGoneCalls: dispatches to the Pass-Through Token Server from before it left the gateway
