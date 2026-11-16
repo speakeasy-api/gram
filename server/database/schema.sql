@@ -863,6 +863,7 @@ COMMENT ON COLUMN skills.created_at IS '@access: confidential';
 COMMENT ON COLUMN skills.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE INDEX IF NOT EXISTS skills_project_id_lower_display_name_idx ON skills (project_id, lower(display_name)) WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS skills_suggestion_sweep_idx ON skills (project_id, last_seen_at DESC, id DESC) WHERE archived_at IS NULL;
@@ -1243,6 +1244,10 @@ CREATE INDEX IF NOT EXISTS plugins_project_id_idx
   ON plugins (project_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_id_key ON plugins (project_id, id);
+
+CREATE INDEX IF NOT EXISTS plugins_organization_project_lower_name_idx
+  ON plugins (organization_id, project_id, lower(name))
+  WHERE deleted IS FALSE;
 
 -- Only one plugin per project may be the default (fallback) target that new
 -- servers land in absent explicit routing to a named plugin.
@@ -2520,6 +2525,10 @@ COMMENT ON COLUMN environments.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
 ON environments (project_id, slug)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS environments_project_id_lower_name_idx
+ON environments (project_id, lower(name))
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS trigger_instances (
@@ -4707,6 +4716,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS assistants_project_id_lower_name_idx
+ON assistants (project_id, lower(name))
+WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_organization_project_id_key
@@ -6355,6 +6368,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS toolsets_project_id_lower_name_idx
+ON toolsets (project_id, lower(name))
+WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_custom_domain_id_key
 ON toolsets (mcp_slug, custom_domain_id)
 WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE;
@@ -7616,6 +7633,13 @@ ON users (email);
 -- connected-user resolution), which the raw-column users_email_key cannot.
 CREATE INDEX IF NOT EXISTS users_email_lower_idx
 ON users (lower(email));
+
+-- Serves bounded Command K member-name prefix searches. Email prefixes use
+-- users_email_lower_idx above. Organization membership remains enforced by the
+-- tenant-scoped relationship join.
+CREATE INDEX IF NOT EXISTS users_display_name_lower_active_idx
+ON users (lower(display_name))
+WHERE deleted_at IS NULL;
 
 -- user_accounts is the registry of external AI provider accounts (Claude today;
 -- other providers in the future) observed for a Gram organization, each linked to
@@ -10469,6 +10493,12 @@ CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS mcp_servers_project_id_lower_name_listable_idx
+ON mcp_servers (project_id, lower(name))
+WHERE deleted IS FALSE
+  AND toolset_id IS NULL
+  AND builtin_backend IS NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_slug_key
 ON mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
@@ -11123,6 +11153,10 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_servers_project_id_id_key
 ON meta_mcp_servers (project_id, id);
+
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_organization_project_lower_name_idx
+ON meta_mcp_servers (organization_id, project_id, lower(name))
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS meta_mcp_server_members (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -11979,6 +12013,10 @@ COMMENT ON COLUMN risk_custom_detection_rules.deleted IS '@access: confidential'
 
 CREATE UNIQUE INDEX IF NOT EXISTS risk_custom_detection_rules_project_rule_id_key
 ON risk_custom_detection_rules (project_id, rule_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_custom_rules_org_project_lower_title_idx
+ON risk_custom_detection_rules (organization_id, project_id, lower(title))
 WHERE deleted IS FALSE;
 
 -- Exclusions suppress false-positive risk findings. They are applied going
