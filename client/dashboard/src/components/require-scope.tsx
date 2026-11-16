@@ -303,7 +303,7 @@ export function RequestScopeAccess(
   // carry over to the next.
   return (
     <RequestScopeAccessForm
-      key={`${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
+      key={`${props.projectId ?? ""}|${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
       {...props}
     />
   );
