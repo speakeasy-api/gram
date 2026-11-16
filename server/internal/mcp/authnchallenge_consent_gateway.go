@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -93,6 +94,10 @@ type gatewayServer struct {
 	// signInAddress says that address is its sign-in provider's, not the server's own.
 	signInAddress bool
 
+	// failure is what its listing failure records, and upstreamHost its upstream when that failed it.
+	failure      mcpconnectionattempts.Code
+	upstreamHost string
+
 	// Auth is the server's upstream credential choice, where typed auth
 	// client resolution is enforced.
 	Auth *consentServerAuth
@@ -115,7 +120,7 @@ func (g gatewayServer) StatusLabel() string {
 	case gatewayServerUnavailable:
 		switch {
 		case g.address == guardian.AddressFine:
-			return "Unavailable · try again shortly, or ask your administrator"
+			return unavailableLabel(g.failure)
 		case g.signInAddress:
 			return "Can't connect · its sign-in provider " + g.address.Problem() + " · ask your administrator"
 		default:
@@ -139,6 +144,25 @@ func (g gatewayServer) StatusLabel() string {
 		return "Sign-in not set up"
 	}
 	return ""
+}
+
+// unavailableLabel says why a server did not list its tools, who acts, and whether waiting helps.
+func unavailableLabel(failure mcpconnectionattempts.Code) string {
+	switch failure {
+	case mcpconnectionattempts.CodeProviderRateLimited:
+		return "Unavailable · it's limiting requests right now · try again in a few minutes"
+	case mcpconnectionattempts.CodeProviderServerError:
+		return "Unavailable · it had an error · try again in a few minutes"
+	case mcpconnectionattempts.CodeProviderUnreachable, mcpconnectionattempts.CodeProviderUnavailable:
+		return "Unavailable · it didn't answer · try again in a few minutes"
+	case mcpconnectionattempts.CodeSharedCredentialRejected, mcpconnectionattempts.CodeStaticKeyRejected:
+		return "Can't connect · it rejected the credential set up for it · ask your administrator"
+	case mcpconnectionattempts.CodeCredentialMisconfigured:
+		return "Can't connect · its connection isn't set up correctly · ask your administrator"
+	case mcpconnectionattempts.CodeTunnelUnavailable:
+		return "Can't connect · its private connection is down · ask your administrator"
+	}
+	return "Unavailable · try again shortly, or ask your administrator"
 }
 
 // NeedsAttention reports whether the status line should warn.
@@ -327,7 +351,7 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: guardian.AddressFine, signInAddress: false, Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: guardian.AddressFine, signInAddress: false, failure: mcpconnectionattempts.Code{}, upstreamHost: "", Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
@@ -361,6 +385,7 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 			if outcome.Slug == server.Slug {
 				server.Status = outcome.Status
 				server.address, server.signInAddress = outcome.address, outcome.signInAddress
+				server.failure, server.upstreamHost = outcome.failure, outcome.host
 				break
 			}
 		}

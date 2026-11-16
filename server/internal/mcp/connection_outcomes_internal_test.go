@@ -778,7 +778,7 @@ func TestVerdictExport_MCPServerFailureDoesNotNameTheIssuer(t *testing.T) {
 	}
 }
 
-// A listing lost to an address Speakeasy did not dial names the address; any other loss keeps member_tools_missing.
+// A listing lost to an address Speakeasy did not dial names the address; a transport loss reads as a call does.
 func TestListingFailureNamesAnAddressOnly(t *testing.T) {
 	t.Parallel()
 
@@ -796,8 +796,8 @@ func TestListingFailureNamesAnAddressOnly(t *testing.T) {
 		{name: "own address refused", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: fmt.Errorf("192.0.2.10: %w", guardian.ErrBlockedIP)}), want: mcpconnectionattempts.CodeAddressNotAllowed},
 		{name: "own name missing", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}), want: mcpconnectionattempts.CodeAddressNotFound},
 		{name: "sign-in provider address", err: memberAddressOutage("stopped", nil, guardian.AddressNotFound), want: mcpconnectionattempts.CodeAddressNotFound},
-		{name: "lookup failing for now", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true}}), want: mcpconnectionattempts.CodeMemberToolsMissing},
-		{name: "connection reset", err: lost(&net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}), want: mcpconnectionattempts.CodeMemberToolsMissing},
+		{name: "lookup failing for now", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true}}), want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "connection reset", err: lost(&net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}), want: mcpconnectionattempts.CodeProviderUnreachable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

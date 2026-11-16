@@ -403,7 +403,7 @@ func TestMemberClientFailure_NamesOnlyAReachedUpstream(t *testing.T) {
 		require.Equal(t, tc.code, failure.code, tc.name)
 		require.Equal(t, tc.text, err.Error(), tc.name)
 
-		service.recordMemberFailure(t.Context(), gate, member, failure.code, memberUpstreamHost(err))
+		service.recordMemberFailure(t.Context(), gate, member, failure.code, mcpconnectionattempts.Provider(memberUpstreamHost(err)))
 		rows := rec.Rows()
 		require.Equal(t, tc.host, rows[len(rows)-1].ProviderHost, tc.name)
 	}
@@ -860,4 +860,98 @@ func TestRecordHostedToolsCallOutcomeNeedsACallerForPersonRejection(t *testing.T
 	signedIn := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{UserID: "person"})
 	row := record(signedIn, mcpconnectionattempts.CodeProviderRejected).RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
 	require.Equal(t, urn.NewUserSubject("person").String(), row.SubjectURN)
+}
+
+// A listing lost to a member failure records what a call would, naming the upstream only when it failed the listing.
+func TestListingFailureReadsAsACall(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://member.example.com/mcp"
+	keySent := memberRejection{configuredSent: true}
+	bearerSent := memberRejection{authorizationSent: true}
+	for _, tc := range []struct {
+		name    string
+		outcome stubMemberOutcome
+		dial    memberDial
+		want    mcpconnectionattempts.Code
+		named   bool
+	}{
+		{name: "person's credential rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: bearerSent}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderRejected, named: true},
+		{name: "saved key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true, provider: upstream}, want: mcpconnectionattempts.CodeStaticKeyRejected, named: true},
+		{name: "shared credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: memberRejection{authorizationSent: true, challenges: []string{`Bearer error="invalid_token"`}}}, dial: memberDial{clientCredential: true, provider: upstream}, want: mcpconnectionattempts.CodeSharedCredentialRejected, named: true},
+		{name: "not connected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true, provider: upstream}},
+		{name: "rate limited", outcome: stubMemberOutcome{code: http.StatusTooManyRequests}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderRateLimited, named: true},
+		{name: "server error", outcome: stubMemberOutcome{code: http.StatusInternalServerError}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderServerError, named: true},
+		{name: "no answer", outcome: stubMemberOutcome{err: errors.New("dial failed")}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeProviderUnreachable, named: true},
+		{name: "tunnel down", outcome: stubMemberOutcome{code: http.StatusBadGateway, tunnelErr: wire.TunnelErrorNoLiveSession}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeTunnelUnavailable},
+		{name: "server behind the tunnel", outcome: stubMemberOutcome{code: http.StatusInternalServerError}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeProviderServerError},
+		{name: "route store down", outcome: stubMemberOutcome{err: fmt.Errorf("%w: store unavailable", errMemberUnroutable)}, dial: memberDial{provider: upstream}, want: mcpconnectionattempts.CodeInternalError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			member := metaMember{slug: "fixture", serverID: uuid.New()}
+			err := memberClientFailure(t.Context(), testenv.NewLogger(t), tc.outcome, tc.dial, member, errors.New("list failed"))
+			rec := mcpconnectionattemptstest.New(t)
+			gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
+			(&Service{connections: rec.Recorder}).recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: err}})
+			if tc.want == (mcpconnectionattempts.Code{}) {
+				rec.RequireNothing()
+				return
+			}
+			row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, tc.want)
+			require.Equal(t, member.serverID.String(), row.MemberID)
+			if tc.named {
+				require.Equal(t, "member.example.com", row.ProviderHost)
+			} else {
+				require.Empty(t, row.ProviderHost)
+			}
+		})
+	}
+}
+
+// The connect page's card and row for a member that did not list agree on the cause, and name the upstream only when it failed.
+func TestGatewayMemberStatusCarriesTheListingFailure(t *testing.T) {
+	t.Parallel()
+
+	member := uuid.New()
+	gateway := &gatewayConsentView{}
+	for _, tc := range []struct {
+		status  gatewayServerStatus
+		failure mcpconnectionattempts.Code
+		label   string
+	}{
+		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeSharedCredentialRejected, label: "Can't connect · it rejected the credential set up for it · ask your administrator"},
+		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeStaticKeyRejected, label: "Can't connect · it rejected the credential set up for it · ask your administrator"},
+		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeCredentialMisconfigured, label: "Can't connect · its connection isn't set up correctly · ask your administrator"},
+		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeTunnelUnavailable, label: "Can't connect · its private connection is down · ask your administrator"},
+		{status: gatewayServerUnavailable, failure: mcpconnectionattempts.CodeInternalError, label: "Unavailable · try again shortly, or ask your administrator"},
+		{status: gatewayServerReconnect, failure: mcpconnectionattempts.CodeProviderRejected, label: "Needs reconnecting"},
+	} {
+		host := ""
+		if tc.failure != mcpconnectionattempts.CodeCredentialMisconfigured && tc.failure != mcpconnectionattempts.CodeTunnelUnavailable && tc.failure != mcpconnectionattempts.CodeInternalError {
+			host = "member.example.com"
+		}
+		server := gatewayServer{Slug: "member", ServerID: member.String(), Status: tc.status, failure: tc.failure, upstreamHost: host}
+		require.Equal(t, tc.label, server.StatusLabel(), tc.failure.String())
+		status, ok := gatewayMemberStatus(gateway, server)
+		require.True(t, ok)
+		require.Equal(t, tc.failure, status.what)
+
+		rec := mcpconnectionattemptstest.New(t)
+		(&Service{connections: rec.Recorder}).recordMemberStatuses(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.Begin(mcpconnectionattempts.GatewayScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)), []memberStatus{status})
+		require.Equal(t, host, rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, tc.failure).ProviderHost, tc.failure.String())
+	}
+}
+
+// An agent's missing connection is not a person's sign-in to come: the listing records it, as a call does.
+func TestListingFailureRecordsAnAgentsMissingConnection(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "fixture", serverID: uuid.New()}
+	err := memberConnectionError{agentServerCredentialError(member.slug), mcpconnectionattempts.CodeInvalidRemoteSession}
+	rec := mcpconnectionattemptstest.New(t)
+	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
+	(&Service{connections: rec.Recorder}).recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: err}})
+	require.Empty(t, rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeInvalidRemoteSession).ProviderHost)
 }

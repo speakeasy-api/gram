@@ -443,9 +443,9 @@ type memberUpstreamFailedError struct {
 func (e memberUpstreamFailedError) Unwrap() error { return e.error }
 
 // memberUpstreamHost names the upstream a member failure was the upstream's own, else none.
-func memberUpstreamHost(err error) mcpconnectionattempts.Option {
+func memberUpstreamHost(err error) string {
 	failed, _ := errors.AsType[memberUpstreamFailedError](err)
-	return mcpconnectionattempts.Provider(failed.host)
+	return failed.host
 }
 
 // upstreamFailed marks failure as the upstream's own when code says the upstream itself failed.

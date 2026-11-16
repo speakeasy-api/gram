@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestProviderCounts_Status(t *testing.T) {
@@ -384,4 +385,29 @@ func TestProviderHealth_FewSignInAbandonsStayNormal(t *testing.T) {
 
 	report := f.read(time.Hour, 0)
 	require.Equal(t, ProviderNormal, report.Status, "one organization's closed tabs cannot trip it")
+}
+
+// A person's gateway listing and call failing on one member during one outage count once.
+func TestProviderHealth_ListingAndCallFailuresOfOneOutageCountOnce(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.cloudflare.com")
+	org, member := "org-"+uuid.NewString(), uuid.New()
+	person, other := urn.NewUserSubject("user-"+uuid.NewString()), urn.NewUserSubject("user-"+uuid.NewString())
+	failed := func(step Step, subject urn.SessionSubject) {
+		attempt := AttemptAt(uuid.New(), f.now.Add(-10*time.Minute), GatewayScope(org, uuid.New(), uuid.New(), AppDCR))
+		f.write(attempt, func(a Attempt, at time.Time) (Row, error) {
+			return RowAt(a, step, CodeProviderServerError, true, at, Provider("https://"+f.provider+"/mcp"), Member(member), Subject(&subject))
+		})
+	}
+	failed(StepDiscoveryMember, person)
+	failed(StepMCPRequest, person)
+	failed(StepMCPRequest, other)
+	failed(StepMCPRequest, other)
+	failed(StepDiscoveryMember, other)
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, uint64(3), report.Counts.Failures, "one for the first person, two calls for the other")
+	require.Equal(t, uint64(3), report.Counts.Attempts)
+	require.Equal(t, 1, report.Counts.Organizations)
 }

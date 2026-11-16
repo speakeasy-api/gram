@@ -42,6 +42,10 @@ type consentMemberOutcome struct {
 
 	// signInAddress says that address is its sign-in provider's.
 	signInAddress bool
+
+	// failure is what its listing failure records; host names its upstream when the upstream failed it.
+	failure mcpconnectionattempts.Code
+	host    string
 }
 
 // captureGatewayConsentInventory captures one complete attempt before rendering
@@ -285,7 +289,9 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		} else if member.authClient != nil && member.authClient.reason == authClientReasonAmbiguous {
 			status = gatewayServerNotSetUp
 		} else if failure := failures[member.slug]; failure != nil {
-			if _, credential := errors.AsType[memberCredentialError](failure); credential {
+			// An admin's rejected credential is not the person's to reconnect.
+			listed, _ := listingFailureHappened(failure)
+			if _, credential := errors.AsType[memberCredentialError](failure); credential && !adminCredentialRejected(listed) {
 				switch configuredStatus[member.slug] {
 				case gatewayServerConnected, gatewayServerReconnect:
 					status = gatewayServerReconnect
@@ -303,11 +309,17 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			}
 		}
 		address, signInAddress := guardian.AddressFine, false
+		failure, host := mcpconnectionattempts.Code{}, ""
+		if lost := failures[member.slug]; lost != nil && (status == gatewayServerUnavailable || status == gatewayServerReconnect) {
+			if code, recorded := listingFailureHappened(lost); recorded {
+				failure, host = code, memberUpstreamHost(lost)
+			}
+		}
 		if status == gatewayServerUnavailable {
 			address, signInAddress = memberAddressCause(failures[member.slug])
 		}
-		label := (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: address, signInAddress: signInAddress, Auth: nil}).StatusLabel()
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: label, address: address, signInAddress: signInAddress})
+		label := (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: address, signInAddress: signInAddress, failure: failure, upstreamHost: host, Auth: nil}).StatusLabel()
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: label, address: address, signInAddress: signInAddress, failure: failure, host: host})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}
