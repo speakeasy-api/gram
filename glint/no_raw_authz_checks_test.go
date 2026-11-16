@@ -33,6 +33,14 @@ func TestNoRawAuthzChecksSkipsAuthz(t *testing.T) {
 	}
 }
 
+// Only internal/authz itself is exempt: a package under it is checked.
+func TestNoRawAuthzChecksCoversAuthzSubpackages(t *testing.T) {
+	t.Parallel()
+
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, newNoRawAuthzChecksAnalyzer(noRawAuthzChecksSettings{Disabled: false, Packages: nil}), "github.com/speakeasy-api/gram/server/internal/authz/authzsub")
+}
+
 // A package outside the configured prefixes is left alone.
 func TestNoRawAuthzChecksSkipsPackagesOutsideTheList(t *testing.T) {
 	t.Parallel()
