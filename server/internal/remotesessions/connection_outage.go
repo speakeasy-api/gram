@@ -64,7 +64,7 @@ func OutageAddressOption(err error) mcpconnectionattempts.Option {
 
 // SignInAddressDetail says which sign-in provider address problem it is, for an administrator only.
 func SignInAddressDetail(address guardian.AddressFailure) string {
-	return "The sign-in provider " + address.Problem() + "."
+	return address.Problem("The sign-in provider") + "."
 }
 
 // SignInAddressReason is the sign-in error page's reason for an address problem.

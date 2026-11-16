@@ -402,7 +402,7 @@ func TestConsentAgentOutagePageNamesTheProblemOnlyInTechnicalDetails(t *testing.
 		body     string
 	}{
 		"refused": {endpoint: "https://192.0.2.10/token", opts: []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")}, detail: "The sign-in provider uses a private or internal address Speakeasy can't reach.", message: "can't connect: its sign-in address is a private or internal one that Speakeasy can't reach. Waiting won't fix this. Ask your administrator to fix the server's sign-in address.", body: "because its sign-in address is a private or internal one that Speakeasy can't reach. This isn't something you did."},
-		"missing": {endpoint: "https://token.example.invalid/token", opts: []func(*guardian.Policy){guardian.WithResolver(missingIssuer)}, detail: "The sign-in provider uses an address that does not point anywhere.", message: "can't connect: its sign-in address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's sign-in address.", body: "because its sign-in address doesn't exist. This isn't something you did."},
+		"missing": {endpoint: "https://token.example.invalid/token", opts: []func(*guardian.Policy){guardian.WithResolver(missingIssuer)}, detail: "The sign-in provider's address doesn't exist.", message: "can't connect: its sign-in address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's sign-in address.", body: "because its sign-in address doesn't exist. This isn't something you did."},
 	} {
 		outage := signInAddressOutage(t, tc.endpoint, tc.opts...)
 
