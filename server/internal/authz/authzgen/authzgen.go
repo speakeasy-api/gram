@@ -1,6 +1,10 @@
 // Package authzgen renders the files generated from the authorization model,
 // registry.Definitions. `mise run gen:authz` writes them; TestGeneratedFilesAreCurrent
 // fails CI when one is stale.
+//
+// It imports the registry and nothing from package authz. Everything it
+// writes into authz it spells by name, so it builds, and can rewrite the
+// generated files, even when they are missing or do not compile.
 package authzgen
 
 import (
@@ -10,7 +14,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
 
@@ -45,7 +48,12 @@ func Render(r registry.Registry) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
+	vocabulary, err := renderVocabulary(registry.VocabularySource)
+	if err != nil {
+		return nil, err
+	}
 	return []File{
+		{Path: "internal/authz/vocabulary_gen.go", Content: vocabulary},
 		{Path: "internal/authz/scopes_gen.go", Content: scopes},
 		{Path: "internal/authz/refs_gen.go", Content: refs},
 		{Path: "internal/authz/tables_gen.go", Content: tables},
@@ -60,7 +68,7 @@ var scopeWordSeparator = regexp.MustCompile(`[:_]`)
 
 // ScopeConstantName turns a stored scope into its Go constant name:
 // mcp:blocked_read becomes ScopeMCPBlockedRead.
-func ScopeConstantName(scope authz.Scope) string {
+func ScopeConstantName(scope registry.Scope) string {
 	var b strings.Builder
 	b.WriteString("Scope")
 	for _, word := range scopeWordSeparator.Split(string(scope), -1) {
@@ -85,9 +93,9 @@ func renderScopeConstants(r registry.Registry) ([]byte, error) {
 	b.WriteString(header)
 	b.WriteString("package authz\n\n")
 	b.WriteString("// Every scope the model declares, in declaration order. Blocks follow the\n// permission they subtract from.\nconst (\n")
-	seen := make(map[string]authz.Scope)
+	seen := make(map[string]registry.Scope)
 	var dup error
-	line := func(scope authz.Scope, doc string) {
+	line := func(scope registry.Scope, doc string) {
 		name := ScopeConstantName(scope)
 		if !token.IsIdentifier(name) && dup == nil {
 			dup = fmt.Errorf("scope %q renders as %q, which is not a Go identifier", scope, name)
@@ -119,6 +127,30 @@ func renderScopeConstants(r registry.Registry) ([]byte, error) {
 	formatted, err := format.Source([]byte(b.String()))
 	if err != nil {
 		return nil, fmt.Errorf("format scopes_gen.go: %w", err)
+	}
+	return formatted, nil
+}
+
+// renderVocabulary writes the registry's vocabulary into package authz: the
+// declarations of vocabulary.go as they stand, under package authz. The
+// evaluator gets the same names and values as the model with no import
+// between them.
+func renderVocabulary(source string) ([]byte, error) {
+	const packageLine = "package registry\n"
+	_, declarations, ok := strings.Cut(source, packageLine)
+	if !ok {
+		return nil, fmt.Errorf("registry vocabulary.go has no %q line", strings.TrimSpace(packageLine))
+	}
+	if strings.Contains(declarations, "\nimport ") {
+		return nil, fmt.Errorf("registry vocabulary.go must not import anything: it is copied into package authz")
+	}
+	var b strings.Builder
+	b.WriteString("// Code generated from registry/vocabulary.go by authzgen. DO NOT EDIT.\n// Regenerate with `mise run gen:authz`.\n\n")
+	b.WriteString("package authz\n")
+	b.WriteString(declarations)
+	formatted, err := format.Source([]byte(b.String()))
+	if err != nil {
+		return nil, fmt.Errorf("format vocabulary_gen.go: %w", err)
 	}
 	return formatted, nil
 }

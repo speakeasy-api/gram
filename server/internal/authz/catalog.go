@@ -2,67 +2,8 @@ package authz
 
 import "slices"
 
-// Sensitivity says why granting a scope deserves a warning. The empty value
-// marks a scope that needs none.
-type Sensitivity string
-
-const (
-	// SensitivityNone marks a scope that needs no warning before it is granted.
-	SensitivityNone Sensitivity = ""
-
-	// SensitivityConversations marks a scope that exposes other members'
-	// agent session transcripts.
-	SensitivityConversations Sensitivity = "conversations"
-
-	// SensitivityToolLogs marks a scope that exposes tool arguments, results
-	// and prompt text from every member of a project.
-	SensitivityToolLogs Sensitivity = "tool_logs"
-
-	// SensitivityDestructiveAdmin marks a scope that can remove members or
-	// change what every role can do.
-	SensitivityDestructiveAdmin Sensitivity = "destructive_admin"
-)
-
-// ScopeCategory groups scopes the way the dashboard presents them. It differs
-// from the resource kind a check carries where one resource kind holds several
-// permission families: plugin:write and log:read are both checked against a
-// project, but they are not project permissions to a person reading a role.
-type ScopeCategory string
-
-const (
-	ScopeCategoryOrg           ScopeCategory = "org"
-	ScopeCategoryProject       ScopeCategory = "project"
-	ScopeCategoryMCP           ScopeCategory = "mcp"
-	ScopeCategoryMCPAuthClient ScopeCategory = "mcp_auth_client"
-	ScopeCategoryEnvironment   ScopeCategory = "environment"
-	ScopeCategorySkill         ScopeCategory = "skill"
-	ScopeCategoryPlugin        ScopeCategory = "plugin"
-	ScopeCategoryAssistant     ScopeCategory = "assistant"
-	ScopeCategoryRiskPolicy    ScopeCategory = "risk_policy"
-	ScopeCategorySession       ScopeCategory = "session"
-	ScopeCategoryInference     ScopeCategory = "inference"
-	ScopeCategoryLog           ScopeCategory = "log"
-	ScopeCategoryAgent         ScopeCategory = "agent"
-	ScopeCategoryWorkload      ScopeCategory = "workload"
-)
-
-// ScopeCategories lists every category in presentation order.
-var ScopeCategories = []ScopeCategory{
-	ScopeCategoryOrg,
-	ScopeCategoryProject,
-	ScopeCategoryMCP,
-	ScopeCategoryMCPAuthClient,
-	ScopeCategoryEnvironment,
-	ScopeCategorySkill,
-	ScopeCategoryPlugin,
-	ScopeCategoryAssistant,
-	ScopeCategoryRiskPolicy,
-	ScopeCategorySession,
-	ScopeCategoryInference,
-	ScopeCategoryLog,
-	ScopeCategoryAgent,
-	ScopeCategoryWorkload,
-}
+// Sensitivity is generated from the registry into sensitivity_gen.go;
+// ScopeCategory and ScopeCategories into scopes_vocabulary_gen.go.
 
 // ScopeEntry is what a person needs to know about one scope before granting
 // it: a short name, what it allows, where it sits in the dashboard, and

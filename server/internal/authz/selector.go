@@ -17,40 +17,12 @@ import (
 // either equal the corresponding check value or be the wildcard "*".
 type Selector map[string]string
 
-const (
-	SelectorKeyResourceKind   = "resource_kind"
-	SelectorKeyResourceID     = "resource_id"
-	SelectorKeyTool           = "tool"
-	SelectorKeyDisposition    = "disposition"
-	SelectorKeyProjectID      = "project_id"
-	SelectorKeyServerURL      = "server_url"
-	SelectorKeyServerIdentity = "server_identity"
-	// SelectorKeyClientType and SelectorKeyConnectionOwner narrow mcp:auth and
-	// mcp:blocked_auth grants to an auth client type and to the owner of a
-	// personal connection.
-	SelectorKeyClientType      = "client_type"
-	SelectorKeyConnectionOwner = "connection_owner"
-	// SelectorKeyUpstreamClient narrows mcp:auth and mcp:blocked_auth grants
-	// on personal clients to one upstream OAuth client, the
-	// remote_session_clients id behind it. With a connection owner it names one
-	// logical connection across every auth client sharing that upstream
-	// client, which is what a connection owner's block names.
-	SelectorKeyUpstreamClient = "upstream_client"
-)
+// The SelectorKey*, AuthClientType* and Disposition* names are generated from
+// the registry into selectors_gen.go.
 
 // SelectorValueRepresentedUser is the connection_owner value naming the user a
 // request acts for. The engine binds it; checks never carry it.
 const SelectorValueRepresentedUser = "$represented_user"
-
-// Auth client types an mcp:auth check can name. Only remote_session clients
-// are personal: their checks carry the connection owner.
-const (
-	AuthClientTypeRemoteSession    = "remote_session"
-	AuthClientTypeServiceAccount   = "service_account"
-	AuthClientTypeStaticCredential = "static_credential" //nolint:gosec // client type name, not a credential
-	AuthClientTypePassThrough      = "pass_through"
-	AuthClientTypeEMA              = "ema"
-)
 
 // IsSharedAuthClientType reports whether clientType serves every caller with
 // one credential that belongs to nobody, as opposed to a person's own
@@ -163,14 +135,6 @@ func legacyResourceKindForScope(scope Scope) string {
 	}
 	return ResourceKindWildcard
 }
-
-// Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
-const (
-	DispositionReadOnly    = "read_only"
-	DispositionDestructive = "destructive"
-	DispositionIdempotent  = "idempotent"
-	DispositionOpenWorld   = "open_world"
-)
 
 // scopeAllowsSelectorKey reports whether a single permission declares key
 // beyond its type's dimensions. Today that is project_id on org:hooks_ingest:
