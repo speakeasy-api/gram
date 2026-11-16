@@ -34,6 +34,7 @@ func TestSignInRefusalReason(t *testing.T) {
 		{signins.ReasonDeprovisioned, ReasonIneligibleIdentity},
 		{signins.ReasonEmailNotVerified, ReasonUnverifiedEmail},
 		{signins.ReasonSSOEmailNotVerified, ReasonIneligibleIdentity},
+		{signins.ReasonAccountDomainNotVerified, ReasonIneligibleIdentity},
 		{signins.ReasonEmailDomain, ReasonIneligibleIdentity},
 	} {
 		require.Equal(t, tc.want, signInRefusalReason(tc.reason), tc.reason)
@@ -61,6 +62,7 @@ func TestSpeakeasyAuthorizeIdentityJudgesEligibilityOnTheConsentSignIn(t *testin
 		{runtime, signins.ReasonEmailNotVerified, ReasonReauthenticationRequired},
 		{consent, signins.ReasonUnmanagedAccount, ReasonUnmanagedAccount},
 		{consent, signins.ReasonEmailNotVerified, ReasonUnverifiedEmail},
+		{consent, signins.ReasonAccountDomainNotVerified, ReasonIneligibleIdentity},
 	} {
 		outcome := source.authorizeIdentity(t.Context(), testenv.NewLogger(t), tc.req, &selection{}, signins.Result{Reason: tc.reason, Identity: nil})
 		require.Equal(t, tc.want, outcome.Reason, "%s consent=%v", tc.reason, tc.req.consent())

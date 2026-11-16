@@ -56,14 +56,17 @@ func classify(row repo.GetSignInEligibilityRow) (string, Reason) {
 	case MethodSSO:
 		return TierSSO, ReasonEligible
 	case MethodGoogleOAuth:
-		if !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
-			return "", ReasonUnmanagedAccount
+		if reason := managedDomain(row.IdpHostedDomain.String, row.VerifiedDomains); reason != ReasonEligible {
+			return "", reason
 		}
 		return TierGoogle, ReasonEligible
 	case MethodMicrosoftOAuth:
 		tenant := row.IdpTenantID.String
-		if tenant == "" || strings.EqualFold(tenant, MicrosoftConsumerTenantID) || !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
+		if tenant == "" || strings.EqualFold(tenant, MicrosoftConsumerTenantID) {
 			return "", ReasonUnmanagedAccount
+		}
+		if reason := managedDomain(row.IdpHostedDomain.String, row.VerifiedDomains); reason != ReasonEligible {
+			return "", reason
 		}
 		if !tenantAllowed(tenant, row.AllowedMicrosoftTenantIds) {
 			return "", ReasonTenantNotAllowed
@@ -98,6 +101,18 @@ func tenantAllowed(tenant string, allowed []string) bool {
 		pinned, err := uuid.Parse(a)
 		return err == nil && strings.EqualFold(a, pinned.String()) && pinned == id && !strings.EqualFold(a, MicrosoftConsumerTenantID)
 	})
+}
+
+// managedDomain: no domain is a personal account or missing evidence; one the organization hasn't verified is the admin's.
+func managedDomain(domain string, verified []string) Reason {
+	switch {
+	case domain == "":
+		return ReasonUnmanagedAccount
+	case !onVerifiedDomain(domain, verified):
+		return ReasonAccountDomainNotVerified
+	default:
+		return ReasonEligible
+	}
 }
 
 func onVerifiedDomain(domain string, verified []string) bool {

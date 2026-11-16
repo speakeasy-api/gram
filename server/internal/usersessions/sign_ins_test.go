@@ -248,11 +248,17 @@ func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 			t.Helper()
 			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodMicrosoftOAuth, evidence("example.com", workTenant, time.Now()), time.Now()).ID
 		}},
-		{name: "email the identity provider did not verify", want: signins.ReasonEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
+		{name: "email single sign-on did not verify", want: signins.ReasonSSOEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
 			t.Helper()
 			ev := evidence("", "", time.Now())
 			ev.VerifiedEmail = ""
 			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodSSO, ev, time.Now()).ID
+		}},
+		{name: "email not verified at password sign-in", want: signins.ReasonEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
+			t.Helper()
+			ev := evidence("", "", time.Now())
+			ev.VerifiedEmail = ""
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodPassword, ev, time.Now()).ID
 		}},
 		{name: "profile email changed after sign-in", want: signins.ReasonEmailChanged, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
 			t.Helper()

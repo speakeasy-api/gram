@@ -36,9 +36,9 @@ const (
 	// Signing in again does not change it; an administrator must.
 	ReasonIneligibleIdentity Reason = "ineligible_identity"
 
-	// ReasonUnmanagedAccount: the consent sign-in used an account Speakeasy
-	// can't confirm the organization manages, such as a personal Google
-	// account. The person fixes it by signing in with their work account.
+	// ReasonUnmanagedAccount: the consent sign-in shows no work account, such
+	// as a personal Google account. The person fixes it by signing in with
+	// their work account.
 	ReasonUnmanagedAccount Reason = "unmanaged_account"
 
 	// ReasonUnverifiedEmail: the consent sign-in's email was not verified.

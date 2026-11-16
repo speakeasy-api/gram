@@ -82,7 +82,11 @@ func TestJudge(t *testing.T) {
 		{name: "sso too old", mutate: func(r *repo.GetSignInEligibilityRow) { r.IdpAuthenticatedAt.Time = now.Add(-MaxAge - time.Minute) }, want: ReasonExpired},
 		{name: "google workspace account", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "Example.com") }, want: ReasonEligible},
 		{name: "personal google account on the company email", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "") }, want: ReasonUnmanagedAccount},
-		{name: "google workspace of another domain", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "other.test") }, want: ReasonUnmanagedAccount},
+		{name: "google workspace of an unverified domain", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "other.test") }, want: ReasonAccountDomainNotVerified},
+		{name: "google evidence missing", mutate: func(r *repo.GetSignInEligibilityRow) {
+			r.AuthenticationMethod.String = MethodGoogleOAuth
+			r.IdpHostedDomain = pgtype.Text{String: "", Valid: false}
+		}, want: ReasonUnmanagedAccount},
 		{name: "google older than a day", mutate: func(r *repo.GetSignInEligibilityRow) {
 			google(r, "example.com")
 			r.IdpAuthenticatedAt.Time = now.Add(-25 * time.Hour)
@@ -106,7 +110,9 @@ func TestJudge(t *testing.T) {
 		}, want: ReasonTenantNotAllowed},
 		{name: "personal microsoft account", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, MicrosoftConsumerTenantID, "example.com") }, want: ReasonUnmanagedAccount},
 		{name: "microsoft without a tenant", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "", "example.com") }, want: ReasonUnmanagedAccount},
-		{name: "microsoft account of another domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "other.test") }, want: ReasonUnmanagedAccount},
+		{name: "microsoft account of an unverified domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "other.test") }, want: ReasonAccountDomainNotVerified},
+		{name: "microsoft evidence missing", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "", "") }, want: ReasonUnmanagedAccount},
+		{name: "microsoft tenant without a domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "") }, want: ReasonUnmanagedAccount},
 		{name: "magic link", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = MethodMagicAuth }, want: ReasonEligible},
 		{name: "magic link older than four hours", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AuthenticationMethod.String = MethodMagicAuth

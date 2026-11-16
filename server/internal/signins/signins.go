@@ -59,6 +59,8 @@ const (
 	ReasonTenantNotAllowed     Reason = "microsoft_tenant_not_allowed"
 	// ReasonSSOEmailNotVerified: the company's single sign-on sent no verified email, which only its administrator fixes.
 	ReasonSSOEmailNotVerified Reason = "sso_email_not_verified"
+	// ReasonAccountDomainNotVerified: a managed account whose domain the organization hasn't verified.
+	ReasonAccountDomainNotVerified Reason = "account_domain_not_verified"
 )
 
 // Identity is the verified identity of an eligible grant.

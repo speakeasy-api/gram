@@ -139,7 +139,7 @@ func signInRefusalReason(reason signins.Reason) Reason {
 	case signins.ReasonEmailNotVerified:
 		return ReasonUnverifiedEmail
 	case signins.ReasonMethodNotEligible, signins.ReasonMethodNotAllowed, signins.ReasonTenantNotAllowed, signins.ReasonOrganizationDisabled,
-		signins.ReasonNotMember, signins.ReasonDeprovisioned, signins.ReasonSSOEmailNotVerified, signins.ReasonEmailDomain:
+		signins.ReasonNotMember, signins.ReasonDeprovisioned, signins.ReasonSSOEmailNotVerified, signins.ReasonEmailDomain, signins.ReasonAccountDomainNotVerified:
 		return ReasonIneligibleIdentity
 	case signins.ReasonEligible, signins.ReasonSessionNotFound, signins.ReasonSessionExpired, signins.ReasonNotLinked, signins.ReasonNotUserSubject,
 		signins.ReasonSignInRevoked, signins.ReasonExpired, signins.ReasonEmailChanged, signins.ReasonAuthTimeUnknown:

@@ -831,10 +831,10 @@ func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
 
 	for _, tc := range []struct {
 		reason identitychaining.Reason
-		says   []string
+		says   string
 	}{
-		{identitychaining.ReasonUnmanagedAccount, []string{"can't confirm the account you signed in with is your work account", "personal Google account", "Connecting again with this account won't help.", "Sign in to Speakeasy with your work account, then connect again", "use a separate sign-in", "If you already did, ask your administrator."}},
-		{identitychaining.ReasonUnverifiedEmail, []string{"Your email address wasn't verified when you signed in to Speakeasy", "Connecting again won't help until it is.", "Verify your email address, sign in to Speakeasy again, then connect again", "use a separate sign-in"}},
+		{identitychaining.ReasonUnmanagedAccount, "Speakeasy couldn't confirm that you signed in with your work account, so it can't connect you to %s. Sign in to Speakeasy with your work account, then connect again. If you already did, ask your administrator. You can also use a separate sign-in."},
+		{identitychaining.ReasonUnverifiedEmail, "Your email address wasn't verified when you signed in to Speakeasy, so it can't connect you to %s. Verify your email, sign in to Speakeasy again, then connect again. You can also use a separate sign-in."},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -844,9 +844,9 @@ func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
 			for range 3 {
 				message = requireRefusedChainCheck(t, fx)
 			}
-			for _, part := range tc.says {
-				require.Contains(t, message, part)
-			}
+			before, after, _ := strings.Cut(tc.says, "%s")
+			require.True(t, strings.HasPrefix(message, before), message)
+			require.True(t, strings.HasSuffix(message, after), message)
 			require.NotContains(t, message, string(tc.reason), "codes stay in logs")
 
 			require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
@@ -1261,8 +1261,8 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 		who    mcpconnectionattempts.WhoFixes
 		says   string
 	}{
-		{identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnverifiedIdentity, mcpconnectionattempts.WhoPerson, "Sign in to Speakeasy with your work account, then connect again"},
-		{identitychaining.ReasonUnverifiedEmail, mcpconnectionattempts.CodeUnverifiedIdentity, mcpconnectionattempts.WhoPerson, "Verify your email address, sign in to Speakeasy again, then connect again"},
+		{identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnverifiedIdentity, mcpconnectionattempts.WhoPerson, "Sign in to Speakeasy with your work account, then connect again."},
+		{identitychaining.ReasonUnverifiedEmail, mcpconnectionattempts.CodeUnverifiedIdentity, mcpconnectionattempts.WhoPerson, "Verify your email, sign in to Speakeasy again, then connect again."},
 		{identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Ask your administrator"},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
