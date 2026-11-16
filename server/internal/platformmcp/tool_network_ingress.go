@@ -49,6 +49,14 @@ const networkIngressServiceNotApproved = "provider_service_not_approved"
 // k8s.NetworkIngressErrorProviderCertificateUnavailable for the same reason.
 const networkIngressCertificateUnavailable = "provider_certificate_unavailable"
 
+// networkIngressProviderRateLimited and networkIngressProviderAPIUnavailable
+// mirror k8s.NetworkIngressErrorProviderRateLimited and
+// k8s.NetworkIngressErrorProviderAPIUnavailable for the same reason.
+const (
+	networkIngressProviderRateLimited    = "provider_rate_limited"
+	networkIngressProviderAPIUnavailable = "provider_api_unavailable"
+)
+
 // networkIngressEncryptionKeyUnavailable mirrors
 // k8s.NetworkIngressErrorEncryptionKeyUnavailable for the same reason.
 const networkIngressEncryptionKeyUnavailable = "encryption_key_unavailable"
@@ -184,6 +192,10 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 	// gateway cannot store its secrets. The fix is the key, not the ingress.
 	case ingress.LastError == networkIngressEncryptionKeyUnavailable:
 		return networkIngressNextRestoreKey
+	// Tailscale's API refused for a while or was unreachable. The reconciler
+	// retries on its own, so there is nothing to repair.
+	case ingress.LastError == networkIngressProviderRateLimited || ingress.LastError == networkIngressProviderAPIUnavailable:
+		return networkIngressNextWait
 	case ingress.Status == "error" || ingress.Status == "degraded":
 		return networkIngressNextRepair
 	case ingress.Status != "online" || ingress.DNSName == "":

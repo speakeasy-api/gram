@@ -130,6 +130,12 @@ func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 		{"organization key unusable", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
 			i.Status, i.LastError, i.DNSName = "error", "encryption_key_unavailable", ""
 		})}, networkIngressNextRestoreKey},
+		{"Tailscale rate limiting", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError = "error", "provider_rate_limited"
+		})}, networkIngressNextWait},
+		{"Tailscale API unreachable", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError = "error", "provider_api_unavailable"
+		})}, networkIngressNextWait},
 		{"degraded", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "degraded" })}, networkIngressNextRepair},
 		{"pending", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "pending" })}, networkIngressNextWait},
 		{"online without DNS", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.DNSName = "" })}, networkIngressNextWait},
