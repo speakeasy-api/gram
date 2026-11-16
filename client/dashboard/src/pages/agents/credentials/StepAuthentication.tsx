@@ -177,7 +177,7 @@ export function StepAuthentication({
                         {server.name}
                       </span>
                     </span>
-                    {session && (
+                    {session && !sharedChosen && (
                       <IdentityAvatar
                         label={
                           session.subjectDisplayName ||
@@ -203,13 +203,13 @@ export function StepAuthentication({
                       }
                       size="sm"
                     >
-                      {session && !mine && (
+                      {session && !mine && !sharedChosen && (
                         <LockKeyhole
                           className="mr-1 size-3"
                           aria-hidden="true"
                         />
                       )}
-                      {session && mine && !expired && (
+                      {session && mine && !expired && !sharedChosen && (
                         <Check className="mr-1 size-3" aria-hidden="true" />
                       )}
                       {expired && (
