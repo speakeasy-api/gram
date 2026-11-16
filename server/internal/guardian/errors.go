@@ -59,7 +59,7 @@ func AddressFailureOf(err error, tunneled bool) AddressFailure {
 
 // timedOut reports a net.Error timeout anywhere in err's tree, joined branches included.
 func timedOut(err error) bool {
-	if netErr, ok := err.(net.Error); ok && netErr.Timeout() { //nolint:errorlint // each node of the tree is checked in turn
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return true
 	}
 	switch wrapped := err.(type) { //nolint:errorlint // walks the tree itself
