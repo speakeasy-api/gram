@@ -114,6 +114,18 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		return oops.E(oops.CodeUnexpected, err, "prepare install command").LogError(ctx, s.logger)
 	}
 
+	// The installed runtime dials the gateway where the organization's
+	// lockdown lets it: its custom domain when that domain has an IP allowlist,
+	// since the platform host refuses it there.
+	gatewayBaseURL := serverURL
+	lockdownDomain, err := s.organizationLockdownDomain(ctx, s.logger, organizationID)
+	if err != nil {
+		return err
+	}
+	if lockdownDomain != "" {
+		gatewayBaseURL = "https://" + lockdownDomain
+	}
+
 	code, err := newInstallCode()
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "prepare install command").LogError(ctx, s.logger)
@@ -122,7 +134,7 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		Code:            code,
 		AgentID:         agentID.String(),
 		Key:             httpheaders.AuthorizationBearerToken(r),
-		URL:             serverURL + "/agent-mcp/" + agentID.String(),
+		URL:             gatewayBaseURL + "/agent-mcp/" + agentID.String(),
 		ServerURL:       serverURL,
 		OrganizationID:  organizationID,
 		ProjectSlug:     projectSlug,

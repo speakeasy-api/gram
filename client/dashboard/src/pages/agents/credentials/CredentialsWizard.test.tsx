@@ -65,6 +65,8 @@ const mocks = vi.hoisted(() => ({
   plugins: vi.fn(),
   getPlugin: vi.fn(),
   listPolicyGrants: vi.fn(),
+  // The organization's custom domain, if any.
+  customDomains: [] as { domain: string; ipAllowlist: string[] }[],
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -93,6 +95,14 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 }));
 vi.mock("@gram/client/react-query/remoteSessionsAttachBinding.js", () => ({
   useRemoteSessionsAttachBindingMutation: () => ({ mutateAsync: mocks.attach }),
+}));
+vi.mock("@gram/client/react-query/listDomains.js", () => ({
+  useListDomains: () => ({
+    data: { domains: mocks.customDomains },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("@gram/client/react-query/remoteSessionsDetachBinding.js", () => ({
   useRemoteSessionsDetachBindingMutation: () => ({ mutateAsync: vi.fn() }),
@@ -515,6 +525,7 @@ beforeEach(() => {
   mocks.plugins.mockReturnValue([]);
   mocks.getPlugin.mockReset();
   mocks.listPolicyGrants.mockResolvedValue([]);
+  mocks.customDomains = [];
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.checkPolicyGrants.mockImplementation(answerChecks());
@@ -720,6 +731,23 @@ describe("Provisioning a new agent", () => {
       ),
     );
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("quotes the custom domain when its IP allowlist locks the platform host", async () => {
+    mocks.customDomains = [
+      { domain: "mcp.example.com", ipAllowlist: ["203.0.113.0/24"] },
+    ];
+    fireEvent.click(await reachCredentialStep());
+
+    expect((await screen.findByLabelText("Claude Code")).textContent).toContain(
+      "https://mcp.example.com/agent-mcp/agent_new",
+    );
+    // The setup command is still minted on the platform host: the browser
+    // need not be inside the allowlist.
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
+    expect(String(mocks.fetch.mock.calls[0]?.[0])).not.toContain(
+      "mcp.example.com",
+    );
   });
 
   it("does not ask about the sign-in grant before a server is chosen", async () => {

@@ -45,6 +45,7 @@ import {
   agentGatewayURL,
   isCredentialSafe,
   mintInstallCommand,
+  useAgentGatewayURL,
 } from "./gateway";
 import { StepInstall } from "./StepInstall";
 import {
@@ -993,7 +994,7 @@ export function CredentialsWizard({
   ];
   const connections = useOwnerConnections(connectionServers, true, agent?.id);
 
-  const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
+  const gatewayURL = useAgentGatewayURL(agentID);
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
   // What the platform's runtime needs beyond the servers, such as a device
   // agent's polling and hook events. Empty for an API key and for platforms

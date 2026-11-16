@@ -9,8 +9,11 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -134,4 +137,33 @@ func TestAgentInstall_MintingRequiresAnHTTPSOrigin(t *testing.T) {
 	minted, err := mintInstallCodeFrom(t, ti, "http://app.example.test", fx.agent.ID.String(), fx.token)
 	requireAgentGatewayCode(t, err, oops.CodeBadRequest)
 	require.Empty(t, minted.Body.String(), "no code may be handed out")
+}
+
+// An organization locked to its custom domain by an IP allowlist cannot reach
+// the gateway on the platform host, so the installed runtime is pointed at the
+// domain. Minting itself stays on the platform host, outside the allowlist.
+func TestAgentInstall_AllowlistedCustomDomainIsTheInstalledGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domain := "agent-install-" + uuid.NewString()[:8] + ".example.com"
+	_, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain,
+		IpAllowlist:    []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+
+	minted, err := mintInstallCode(t, ti, fx.agent.ID.String(), fx.token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, minted.Code)
+
+	script, err := fetchInstallScript(t, ti, codeFrom(t, minted))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, script.Code)
+	require.Contains(t, script.Body.String(), "https://"+domain+"/agent-mcp/"+fx.agent.ID.String())
+	require.NotContains(t, script.Body.String(), "https://app.example.test/agent-mcp/")
 }

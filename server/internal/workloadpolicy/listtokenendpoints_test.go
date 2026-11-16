@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -206,4 +207,40 @@ func issuerIDs(items []*types.WorkloadTokenEndpoint) []string {
 		ids = append(ids, item.UserSessionIssuerID)
 	}
 	return ids
+}
+
+// An organization whose custom domain has an IP allowlist is locked out of the
+// platform host, so its MCP servers are reached on the domain and that is the
+// host a platform must be allowed to call. An open domain changes nothing.
+func TestListTokenEndpoints_McpHostFollowsAllowlistedCustomDomain(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	issuer := newOrganizationIssuer(t, ctx, ti, "domain-issuer")
+	setShared(t, ctx, ti, issuer, "")
+	domains := customdomainsrepo.New(ti.conn)
+	_, err := domains.CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: ti.orgID,
+		Domain:         "mcp.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "gram.example.com", result.Items[0].McpHost)
+
+	_, err = domains.UpdateCustomDomainIPAllowlist(ctx, customdomainsrepo.UpdateCustomDomainIPAllowlistParams{
+		OrganizationID: ti.orgID,
+		IpAllowlist:    []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+
+	result, err = ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "mcp.example.com", result.Items[0].McpHost)
+	// The token endpoint stays where the authorization server is.
+	require.Equal(t, testServerURL+"/oauth/usi/"+issuer.ID.String()+"/token", result.Items[0].TokenEndpoint)
 }

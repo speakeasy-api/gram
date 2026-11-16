@@ -146,15 +146,29 @@ func (s *Service) endpointCustomDomainLockdown(ctx context.Context, logger *slog
 // project only to read the organization off it — so surfaces that know their
 // organization directly can ask at that scope.
 func (s *Service) organizationCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (bool, error) {
+	domain, err := s.organizationLockdownDomain(ctx, logger, organizationID)
+	if err != nil {
+		return false, err
+	}
+	return domain != "", nil
+}
+
+// organizationLockdownDomain is the custom domain an organization's MCP
+// traffic is pinned to: its domain when that domain carries an IP allowlist,
+// and empty when the organization has no domain or an open one.
+func (s *Service) organizationLockdownDomain(ctx context.Context, logger *slog.Logger, organizationID string) (string, error) {
 	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return false, nil
+		return "", nil
 	case err != nil:
-		return false, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+		return "", oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
 	}
 
-	return len(domain.IpAllowlist) > 0, nil
+	if len(domain.IpAllowlist) == 0 {
+		return "", nil
+	}
+	return domain.Domain, nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,

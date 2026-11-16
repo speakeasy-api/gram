@@ -1,4 +1,6 @@
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 
 /**
  * The address an agent's runtime dials, and the rules for handing it a key.
@@ -6,13 +8,36 @@ import { getServerURL } from "@/lib/utils";
  * URLs for the same agent.
  */
 
-export function agentGatewayURL(agentID: string): string {
+export function agentGatewayURL(agentID: string, base?: string): string {
   // Absolute, always: an agent runs outside the browser, so a path relative to
   // the dashboard is not an address it can dial. getServerURL can be empty
   // when the build left it unset, in which case the current origin is what is
   // serving MCP.
-  const base = getServerURL() || window.location.origin;
-  return new URL(`/agent-mcp/${agentID}`, base).toString();
+  return new URL(`/agent-mcp/${agentID}`, base ?? platformBase()).toString();
+}
+
+function platformBase(): string {
+  return getServerURL() || window.location.origin;
+}
+
+/**
+ * The origin agents must dial when it is not the platform host. An
+ * organization whose custom domain has an IP allowlist is locked out of the
+ * platform host, so its agents reach the gateway on that domain, where the
+ * allowlist is enforced. Every other organization uses the platform host.
+ */
+export function agentGatewayBase(
+  domain: Pick<CustomDomain, "domain" | "ipAllowlist"> | undefined,
+): string | undefined {
+  if (!domain || domain.ipAllowlist.length === 0) return undefined;
+  return `https://${domain.domain}`;
+}
+
+/** agentGatewayURL on the organization's own origin. Empty without an agent. */
+export function useAgentGatewayURL(agentID: string | null | undefined): string {
+  const { domain } = useCustomDomain();
+  if (!agentID) return "";
+  return agentGatewayURL(agentID, agentGatewayBase(domain));
 }
 
 /**
@@ -45,7 +70,11 @@ export async function mintInstallCommand(
   gatewayURL: string,
   secret: string,
 ): Promise<string> {
-  const response = await fetch(`${gatewayURL}/install-code`, {
+  // Minted on the platform host whatever origin the gateway is quoted on: the
+  // browser may not be inside a custom domain's IP allowlist, and the server
+  // writes the organization's own gateway address into the installed config.
+  const installURL = new URL(new URL(gatewayURL).pathname, platformBase());
+  const response = await fetch(`${installURL.toString()}/install-code`, {
     method: "POST",
     headers: { Authorization: `Bearer ${secret}` },
   });
@@ -59,6 +88,5 @@ export async function mintInstallCommand(
   if (!/^[A-Za-z0-9_-]+$/.test(code)) {
     throw new Error("Could not prepare a setup command (malformed code)");
   }
-  const base = new URL(gatewayURL);
-  return `curl -fsSL ${base.origin}/agent-mcp/install/${code} | sh`;
+  return `curl -fsSL ${installURL.origin}/agent-mcp/install/${code} | sh`;
 }
