@@ -242,22 +242,28 @@ func (q *Queries) GetNetworkIngressCertificateState(ctx context.Context, arg Get
 }
 
 const getNetworkIngressGatewayOwner = `-- name: GetNetworkIngressGatewayOwner :one
-SELECT organization_id, hostname, runtime
+SELECT organization_id, hostname, runtime, gateway_service_hostname
 FROM network_ingresses
 WHERE id = $1
 `
 
 type GetNetworkIngressGatewayOwnerRow struct {
-	OrganizationID string
-	Hostname       string
-	Runtime        pgtype.Text
+	OrganizationID         string
+	Hostname               string
+	Runtime                pgtype.Text
+	GatewayServiceHostname pgtype.Text
 }
 
 // Tombstones are included: teardown needs the owner and label after soft delete.
 func (q *Queries) GetNetworkIngressGatewayOwner(ctx context.Context, id uuid.UUID) (GetNetworkIngressGatewayOwnerRow, error) {
 	row := q.db.QueryRow(ctx, getNetworkIngressGatewayOwner, id)
 	var i GetNetworkIngressGatewayOwnerRow
-	err := row.Scan(&i.OrganizationID, &i.Hostname, &i.Runtime)
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Hostname,
+		&i.Runtime,
+		&i.GatewayServiceHostname,
+	)
 	return i, err
 }
 
@@ -674,6 +680,26 @@ type RetireNetworkIngressNodesParams struct {
 // later slot count increase recreates it as a fresh identity.
 func (q *Queries) RetireNetworkIngressNodes(ctx context.Context, arg RetireNetworkIngressNodesParams) error {
 	_, err := q.db.Exec(ctx, retireNetworkIngressNodes, arg.NetworkIngressID, arg.OrganizationID, arg.MinSlot)
+	return err
+}
+
+const setNetworkIngressGatewayServiceHostname = `-- name: SetNetworkIngressGatewayServiceHostname :exec
+UPDATE network_ingresses
+SET gateway_service_hostname = $1
+WHERE id = $2
+  AND organization_id = $3
+`
+
+type SetNetworkIngressGatewayServiceHostnameParams struct {
+	Hostname       pgtype.Text
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Records the label of the service the gateway just defined. updated_at is the
+// desired-state version and is deliberately not touched.
+func (q *Queries) SetNetworkIngressGatewayServiceHostname(ctx context.Context, arg SetNetworkIngressGatewayServiceHostnameParams) error {
+	_, err := q.db.Exec(ctx, setNetworkIngressGatewayServiceHostname, arg.Hostname, arg.ID, arg.OrganizationID)
 	return err
 }
 

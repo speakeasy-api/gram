@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	nirepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
@@ -680,4 +681,48 @@ func TestProvisionerLogsTheOrganizationOfAFailedTeardown(t *testing.T) {
 	require.Error(t, provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret")))
 	require.Contains(t, logs.String(), f.orgID, "teardown failures name the organization")
 	require.Contains(t, logs.String(), k8s.NetworkIngressErrorProviderRateLimited, "and their bounded error code")
+}
+
+func TestProvisionerRenameDeletesThePreviousServiceOnce(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovrename")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.Contains(t, f.api.Services(), "svc:private")
+
+	// Renamed before any slot has reported a name: the recorded label, not a
+	// heartbeat, says which service to delete.
+	renamed := f.desired(t)
+	renamed.Hostname = "speakeasy"
+	_, err = f.provisioner.Apply(ctx, renamed)
+	require.NoError(t, err)
+	require.Contains(t, f.api.Services(), "svc:speakeasy")
+	require.NotContains(t, f.api.Services(), "svc:private", "the previous label's service is deleted")
+
+	// A slot still reporting the old name does not make later passes delete
+	// it again: something else may define it by then.
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
+	require.NoError(t, f.api.UpsertService(ctx, tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "csecret"}, tailscaleapi.Service{Name: "svc:private", Ports: []string{"tcp:443"}, Tags: nil, Comment: ""}))
+	_, err = f.provisioner.Apply(ctx, renamed)
+	require.NoError(t, err)
+	require.Contains(t, f.api.Services(), "svc:private", "a completed rename deletes the old service only once")
+}
+
+func TestProvisionerTeardownDeletesTheRecordedServiceOfAPendingRename(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovrenameteardown")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	// The hostname changes, and the ingress is deleted before any pass
+	// applies the rename.
+	_, err = nirepo.New(f.db).UpdateNetworkIngressSettings(ctx, nirepo.UpdateNetworkIngressSettingsParams{
+		UpdateHostname: true, Hostname: "speakeasy", UpdateEnabled: false, Enabled: false,
+		UpdateIdentityRequired: false, IdentityRequired: false, OrganizationID: f.orgID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, f.provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret")))
+	require.NotContains(t, f.api.Services(), "svc:private", "the service defined under the old label is deleted too")
 }

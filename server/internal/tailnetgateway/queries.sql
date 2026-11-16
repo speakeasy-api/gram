@@ -183,9 +183,17 @@ WHERE id = @id
 
 -- name: GetNetworkIngressGatewayOwner :one
 -- Tombstones are included: teardown needs the owner and label after soft delete.
-SELECT organization_id, hostname, runtime
+SELECT organization_id, hostname, runtime, gateway_service_hostname
 FROM network_ingresses
 WHERE id = @id;
+
+-- name: SetNetworkIngressGatewayServiceHostname :exec
+-- Records the label of the service the gateway just defined. updated_at is the
+-- desired-state version and is deliberately not touched.
+UPDATE network_ingresses
+SET gateway_service_hostname = @hostname
+WHERE id = @id
+  AND organization_id = @organization_id;
 
 -- name: GetNetworkIngressCertificateState :one
 SELECT value_encrypted
