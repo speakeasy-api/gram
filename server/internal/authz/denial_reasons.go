@@ -25,7 +25,8 @@ const (
 	// DenialReasonDisposition marks a check no grant allows only because of
 	// its disposition dimension, where the caller's access is limited to other
 	// dispositions than read_only (for example idempotent or open_world): a
-	// grant would allow it if the check did not name a disposition.
+	// grant would allow the same check if it named one of those dispositions
+	// instead.
 	DenialReasonDisposition DenialReason = "disposition"
 
 	// DenialReasonNotGranted marks a check no grant allows.
