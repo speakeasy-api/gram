@@ -195,6 +195,8 @@ func TestMetaMemberChainer(t *testing.T) {
 		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false, "", mcpconnectionattempts.Code{}},
 		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs" needs a new company sign-in. Reconnect this gateway in your AI client.`, mcpconnectionattempts.CodeReauthenticationRequired},
 		{"an ineligible account names the administrator", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.CodeIneligibleIdentity},
+		{"a personal account tells the person what to fix", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonUnmanagedAccount, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" can't use your account. Speakeasy can't confirm the account you signed in with is your work account, for example because it's a personal Google account. Reconnecting with this account won't help. Sign in to Speakeasy with your work account, then reconnect this gateway in your AI client. If you already did, contact your administrator.`, mcpconnectionattempts.CodeUnverifiedIdentity},
+		{"an unverified email tells the person what to fix", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonUnverifiedEmail, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" can't use your account. Your email address wasn't verified when you signed in to Speakeasy. Reconnecting won't help until it is. Verify your email address, sign in to Speakeasy again, then reconnect this gateway in your AI client.`, mcpconnectionattempts.CodeUnverifiedIdentity},
 		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.Code{}},
 		{"provider rejecting the saved sign-in offers a reconnect", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.`, mcpconnectionattempts.Code{}},
 		{"temporary failure is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" is temporarily unavailable. Try again in a moment.`, mcpconnectionattempts.Code{}},
@@ -228,16 +230,17 @@ func TestMetaMemberChainer(t *testing.T) {
 	}
 }
 
-// An ineligible account is recorded while listing; a sign-in to redo is left to the consent flow.
+// A refused account is recorded while listing; a sign-in to redo is left to the consent flow.
 func TestListingFailureHappenedForChainingRefusals(t *testing.T) {
 	t.Parallel()
-	ineligible := memberConnectionError{&metaMemberError{message: "contact your administrator"}, mcpconnectionattempts.CodeIneligibleIdentity}
-	code, recorded := listingFailureHappened(ineligible)
-	require.True(t, recorded)
-	require.Equal(t, mcpconnectionattempts.CodeIneligibleIdentity, code)
+	for _, want := range []mcpconnectionattempts.Code{mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.CodeUnverifiedIdentity} {
+		code, recorded := listingFailureHappened(memberConnectionError{&metaMemberError{message: "refused"}, want})
+		require.True(t, recorded)
+		require.Equal(t, want, code)
+	}
 
 	reauth := memberConnectionError{memberCredentialError{&metaMemberError{message: "reconnect"}}, mcpconnectionattempts.CodeReauthenticationRequired}
-	_, recorded = listingFailureHappened(reauth)
+	_, recorded := listingFailureHappened(reauth)
 	require.False(t, recorded)
 }
 

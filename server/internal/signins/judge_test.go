@@ -71,7 +71,11 @@ func TestJudge(t *testing.T) {
 		{name: "revoked", mutate: func(r *repo.GetSignInEligibilityRow) { r.RevokedAt.Valid = true }, want: ReasonSignInRevoked},
 		{name: "fenced by a later revocation cutoff", mutate: func(r *repo.GetSignInEligibilityRow) { r.Fenced = true }, want: ReasonSignInRevoked},
 		{name: "unknown authentication time", mutate: func(r *repo.GetSignInEligibilityRow) { r.IdpAuthenticatedAt.Valid = false }, want: ReasonAuthTimeUnknown},
-		{name: "email not verified at sign-in", mutate: func(r *repo.GetSignInEligibilityRow) { r.VerifiedEmail.Valid = false }, want: ReasonEmailNotVerified},
+		{name: "single sign-on sent no verified email", mutate: func(r *repo.GetSignInEligibilityRow) { r.VerifiedEmail.Valid = false }, want: ReasonSSOEmailNotVerified},
+		{name: "email not verified at password sign-in", mutate: func(r *repo.GetSignInEligibilityRow) {
+			r.AuthenticationMethod.String = MethodPassword
+			r.VerifiedEmail.Valid = false
+		}, want: ReasonEmailNotVerified},
 		{name: "profile email changed since sign-in", mutate: func(r *repo.GetSignInEligibilityRow) { r.UserEmail.String = "jane.doe@example.com" }, want: ReasonEmailChanged},
 		{name: "impersonation", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = "Impersonation" }, want: ReasonMethodNotEligible},
 		{name: "github", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = "GitHubOAuth" }, want: ReasonMethodNotEligible},

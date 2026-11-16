@@ -57,6 +57,8 @@ const (
 	ReasonEmailChanged         Reason = "email_changed"
 	ReasonAuthTimeUnknown      Reason = "authentication_time_unknown"
 	ReasonTenantNotAllowed     Reason = "microsoft_tenant_not_allowed"
+	// ReasonSSOEmailNotVerified: the company's single sign-on sent no verified email, which only its administrator fixes.
+	ReasonSSOEmailNotVerified Reason = "sso_email_not_verified"
 )
 
 // Identity is the verified identity of an eligible grant.
@@ -302,6 +304,8 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 		return reject(ReasonNotMember)
 	case row.IsDeprovisioned:
 		return reject(ReasonDeprovisioned)
+	case (!row.VerifiedEmail.Valid || row.VerifiedEmail.String == "") && tier == TierSSO:
+		return reject(ReasonSSOEmailNotVerified)
 	case !row.VerifiedEmail.Valid || row.VerifiedEmail.String == "":
 		return reject(ReasonEmailNotVerified)
 	}

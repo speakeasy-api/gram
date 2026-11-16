@@ -33,6 +33,27 @@ const issuerGateReasonIdentityChainingReauthentication = "identity_chaining_reau
 // human's account, which only an administrator or another account changes.
 const issuerGateReasonIdentityChainingIneligible = "identity_chaining_ineligible"
 
+// issuerGateReasonIdentityChainingUnverified: the human signed in with a personal account or an unverified email, which they fix.
+const issuerGateReasonIdentityChainingUnverified = "identity_chaining_unverified"
+
+// Person-fixed refusals, for a direct server and a gateway member.
+const (
+	unmanagedAccountMessage = "Speakeasy can't confirm the account you signed in with is your work account, for example because it's a personal Google account. Reconnecting with this account won't help. Sign in to Speakeasy with your work account, then reconnect %s in your AI client. If you already did, contact your administrator."
+	unverifiedEmailMessage  = "Your email address wasn't verified when you signed in to Speakeasy. Reconnecting won't help until it is. Verify your email address, sign in to Speakeasy again, then reconnect %s in your AI client."
+)
+
+// personFixedRefusal is what the person reads for a refusal they fix, or false for any other outcome.
+func personFixedRefusal(outcome identitychaining.Outcome, reconnectTarget string) (string, bool) {
+	switch outcome.Reason {
+	case identitychaining.ReasonUnmanagedAccount:
+		return fmt.Sprintf(unmanagedAccountMessage, reconnectTarget), true
+	case identitychaining.ReasonUnverifiedEmail:
+		return fmt.Sprintf(unverifiedEmailMessage, reconnectTarget), true
+	default:
+		return "", false
+	}
+}
+
 // identityChainer acquires downstream tokens by identity chaining when a human
 // has no usable interactive token for an upstream.
 type identityChainer interface {
@@ -188,6 +209,9 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case outcome.Reason == identitychaining.ReasonIneligibleIdentity:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused an ineligible account",
 			issuerGateReasonIdentityChainingIneligible, mcpconnectionattempts.CodeIneligibleIdentity)
+	case outcome.Reason == identitychaining.ReasonUnmanagedAccount || outcome.Reason == identitychaining.ReasonUnverifiedEmail:
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused a personal account or unverified email",
+			issuerGateReasonIdentityChainingUnverified, mcpconnectionattempts.CodeUnverifiedIdentity)
 	}
 	return none, identityChainingError(outcome)
 }
@@ -269,6 +293,9 @@ func identityChainingError(outcome identitychaining.Outcome) error {
 	if outcome.Retryable {
 		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
 	}
+	if message, ok := personFixedRefusal(outcome, "this server"); ok {
+		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server can't use your account. %s", message)
+	}
 	if exchangeRejectedSignIn(outcome) {
 		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.")
 	}
@@ -313,6 +340,9 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 			return "", memberConnectionError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Reconnect this gateway in your AI client.", member.slug)}}, mcpconnectionattempts.CodeReauthenticationRequired}
 		case outcome.Retryable:
 			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}, status: 0, retryable: outcome.SafeToRepeat() && ctx.Err() == nil, retryAfter: 0}
+		}
+		if message, ok := personFixedRefusal(outcome, "this gateway"); ok {
+			return "", memberConnectionError{&metaMemberError{message: fmt.Sprintf("Company sign-in for server %q can't use your account. %s", member.slug, message)}, mcpconnectionattempts.CodeUnverifiedIdentity}
 		}
 		if exchangeRejectedSignIn(outcome) {
 			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.", member.slug)}

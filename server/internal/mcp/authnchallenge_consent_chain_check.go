@@ -135,8 +135,8 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		attr.SlogIdentityChainingProvider(string(outcome.Provider)),
 	)
 
-	if result.Status == chainCheckRejected && outcome.Reason == identitychaining.ReasonIneligibleIdentity {
-		s.recordIneligibleConsent(ctx, logger, challengeState.connectionAttempt(endpoint), client.ID,
+	if code, refused := chainingRefusalCode(outcome.Reason); refused && result.Status == chainCheckRejected {
+		s.recordRefusedConsent(ctx, logger, challengeState.connectionAttempt(endpoint), client.ID, code,
 			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject),
 			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID))
 	}
@@ -278,6 +278,10 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")
 	case identitychaining.ReasonIneligibleIdentity:
 		return rejected("Your organization can't vouch for your account to %s, for example because your email isn't on one of its verified domains. Ask your administrator, or use a separate sign-in.")
+	case identitychaining.ReasonUnmanagedAccount:
+		return rejected("Speakeasy can't confirm the account you signed in with is your work account, for example because it's a personal Google account, so it can't connect you to %s. Connecting again with this account won't help. Sign in to Speakeasy with your work account, then connect again, or use a separate sign-in. If you already did, ask your administrator.")
+	case identitychaining.ReasonUnverifiedEmail:
+		return rejected("Your email address wasn't verified when you signed in to Speakeasy, so it can't connect you to %s. Connecting again won't help until it is. Verify your email address, sign in to Speakeasy again, then connect again, or use a separate sign-in.")
 	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,
 		identitychaining.ReasonMalformedResponse, identitychaining.ReasonTransientFailure, identitychaining.ReasonUnknownRejection,
 		identitychaining.ReasonStaleConfiguration, identitychaining.ReasonProviderUnavailable:

@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// Only a refusal a new sign-in replaces asks for one; the rest name the administrator.
+// A new sign-in fixes some refusals, the person fixes their own account or email, and the administrator fixes the rest.
 func TestSignInRefusalReason(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -25,14 +25,15 @@ func TestSignInRefusalReason(t *testing.T) {
 		{signins.ReasonExpired, ReasonReauthenticationRequired},
 		{signins.ReasonEmailChanged, ReasonReauthenticationRequired},
 		{signins.ReasonAuthTimeUnknown, ReasonReauthenticationRequired},
-		{signins.ReasonUnmanagedAccount, ReasonIneligibleIdentity},
+		{signins.ReasonUnmanagedAccount, ReasonUnmanagedAccount},
 		{signins.ReasonMethodNotEligible, ReasonIneligibleIdentity},
 		{signins.ReasonMethodNotAllowed, ReasonIneligibleIdentity},
 		{signins.ReasonTenantNotAllowed, ReasonIneligibleIdentity},
 		{signins.ReasonOrganizationDisabled, ReasonIneligibleIdentity},
 		{signins.ReasonNotMember, ReasonIneligibleIdentity},
 		{signins.ReasonDeprovisioned, ReasonIneligibleIdentity},
-		{signins.ReasonEmailNotVerified, ReasonIneligibleIdentity},
+		{signins.ReasonEmailNotVerified, ReasonUnverifiedEmail},
+		{signins.ReasonSSOEmailNotVerified, ReasonIneligibleIdentity},
 		{signins.ReasonEmailDomain, ReasonIneligibleIdentity},
 	} {
 		require.Equal(t, tc.want, signInRefusalReason(tc.reason), tc.reason)
@@ -56,6 +57,10 @@ func TestSpeakeasyAuthorizeIdentityJudgesEligibilityOnTheConsentSignIn(t *testin
 		{consent, signins.ReasonNotMember, ReasonIneligibleIdentity},
 		{consent, signins.ReasonMethodNotAllowed, ReasonIneligibleIdentity},
 		{consent, signins.ReasonSessionExpired, ReasonReauthenticationRequired},
+		{runtime, signins.ReasonUnmanagedAccount, ReasonReauthenticationRequired},
+		{runtime, signins.ReasonEmailNotVerified, ReasonReauthenticationRequired},
+		{consent, signins.ReasonUnmanagedAccount, ReasonUnmanagedAccount},
+		{consent, signins.ReasonEmailNotVerified, ReasonUnverifiedEmail},
 	} {
 		outcome := source.authorizeIdentity(t.Context(), testenv.NewLogger(t), tc.req, &selection{}, signins.Result{Reason: tc.reason, Identity: nil})
 		require.Equal(t, tc.want, outcome.Reason, "%s consent=%v", tc.reason, tc.req.consent())
