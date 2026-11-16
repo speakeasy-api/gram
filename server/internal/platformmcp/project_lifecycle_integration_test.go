@@ -278,6 +278,7 @@ func TestProjectLifecycleNeverReturnsDatabaseErrorText(t *testing.T) {
 	broken.Close()
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "project-lifecycle-db-failure", Version: "0.0.1"}, nil))
+	registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 	registerProjectLifecycleTools(registrar, service)
 	descriptors := map[string]Descriptor{}
 	for _, descriptor := range registrar.Descriptors() {
@@ -294,7 +295,7 @@ func TestProjectLifecycleNeverReturnsDatabaseErrorText(t *testing.T) {
 	}
 
 	created := invoke(createProjectToolName, map[string]any{"name": "Support Team", "idempotency_key": uuid.NewString(), "confirmed": true})
-	renamed := invoke(renameProjectToolName, map[string]any{"project_id": fixture.project.ID.String(), "name": "Renamed", "idempotency_key": uuid.NewString(), "confirmed": true})
+	renamed := invoke(renameProjectToolName, map[string]any{"project_slug": fixture.project.Slug, "name": "Renamed", "idempotency_key": uuid.NewString(), "confirmed": true})
 	previewed := invoke(createProjectToolName, map[string]any{"name": "Support Team", "idempotency_key": uuid.NewString(), "confirmed": false})
 	require.Contains(t, created, unavailableCode)
 	require.Contains(t, renamed, unavailableCode)
@@ -605,6 +606,7 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 
 	describe := func(service *ProjectLifecycleService) map[string]Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "project-lifecycle-manifest", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerProjectLifecycleTools(registrar, service)
 		byName := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {
@@ -654,7 +656,7 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 	require.NotContains(t, unavailable[renameProjectToolName].Description, "administrator",
 		"a rename needs no organization-admin access, as in the dashboard")
 
-	refusal := invokeUnavailable(t, unavailable[createProjectToolName], map[string]any{
+	refusal := invokeUnavailable(t, ContextWithPrincipal(t.Context(), fixture.principal), unavailable[createProjectToolName], map[string]any{
 		"name": "Support Team", "idempotency_key": uuid.NewString(), "confirmed": true,
 	})
 	require.Contains(t, refusal, "Creating or renaming projects is not available")

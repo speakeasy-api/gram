@@ -9,6 +9,10 @@ import * as openEnums from "../../types/enums.js";
 import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ChallengeTemporaryGrant,
+  ChallengeTemporaryGrant$inboundSchema,
+} from "./challengetemporarygrant.js";
 
 export const Operation = {
   Require: "require",
@@ -55,6 +59,7 @@ export type ChallengeBucketReason = OpenEnum<typeof ChallengeBucketReason>;
  */
 export const ResolutionType = {
   RoleAssigned: "role_assigned",
+  TemporaryGrant: "temporary_grant",
   Dismissed: "dismissed",
 } as const;
 /**
@@ -121,6 +126,7 @@ export type ChallengeBucket = {
    * Role slug assigned (when resolution_type=role_assigned).
    */
   resolutionRoleSlug?: string | undefined;
+  resolutionTemporaryGrant?: ChallengeTemporaryGrant | undefined;
   /**
    * How the bucket was resolved.
    */
@@ -209,6 +215,9 @@ export const ChallengeBucket$inboundSchema: z.ZodMiniType<
     project_id: z.optional(z.string()),
     reason: ChallengeBucketReason$inboundSchema,
     resolution_role_slug: z.optional(z.string()),
+    resolution_temporary_grant: z.optional(
+      ChallengeTemporaryGrant$inboundSchema,
+    ),
     resolution_type: z.optional(ResolutionType$inboundSchema),
     resolved_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -234,6 +243,7 @@ export const ChallengeBucket$inboundSchema: z.ZodMiniType<
       "principal_urn": "principalUrn",
       "project_id": "projectId",
       "resolution_role_slug": "resolutionRoleSlug",
+      "resolution_temporary_grant": "resolutionTemporaryGrant",
       "resolution_type": "resolutionType",
       "resolved_at": "resolvedAt",
       "resolved_by": "resolvedBy",

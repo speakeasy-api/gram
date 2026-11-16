@@ -59,8 +59,10 @@ export const AUDIT_ACTIONS = [
   "auth-client:update-audience",
   "auth-client:update-headers",
   "assistant:identity_provision",
+  "assistant:runtime_switch",
   "assistant:tool_call",
   "assistant:update_execution_profile",
+  "assistant:update_reasoning_effort",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
   "aws_iam_credential:update",
@@ -76,6 +78,8 @@ export const AUDIT_ACTIONS = [
   "catalog-promotion:reject",
   "catalog-promotion:restore",
   "catalog-promotion:retry-docs",
+  "channels:update_access",
+  "channels:update_settings",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -83,6 +87,7 @@ export const AUDIT_ACTIONS = [
   "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
+  "custom_domains:reconcile",
   "custom_domains:update",
   "dashboard:create",
   "dashboard:delete",
@@ -165,6 +170,7 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
   "mcp_metadata:update",
+  "memory_memo:create",
   "meta-mcp:add_member",
   "meta-mcp:create",
   "meta-mcp:delete",
@@ -252,6 +258,7 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:delete",
   "remote-mcp:update",
   "remote-session-client:attach-json-web-key-set",
+  "remote-session-client:attach-mcp-server",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
@@ -321,6 +328,7 @@ export const AUDIT_ACTIONS = [
   "spend_rule:archive",
   "spend_rule:create",
   "spend_rule:update",
+  "team_memory:read",
   "template:create",
   "template:delete",
   "template:update",
@@ -500,8 +508,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "changed who can use auth client";
     case "assistant:identity_provision":
       return "gave a dedicated agent to assistant";
+    case "assistant:runtime_switch":
+      return "changed the runtime of assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
+    case "assistant:update_reasoning_effort":
+      return "changed the reasoning effort of assistant";
     case "assistant:update_execution_profile":
       return "changed the upstream credentials of assistant";
 
@@ -600,6 +612,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored catalog promotion candidate";
     case "catalog-promotion:retry-docs":
       return "retried setup documentation for";
+    case "channels:update_access":
+      return "changed Channels access for";
+    case "channels:update_settings":
+      return "changed Channels availability for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -617,6 +633,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated custom domain";
     case "custom_domains:delete":
       return "removed custom domain";
+    case "custom_domains:reconcile":
+      return "reconciled custom domain";
 
     case "data_export_route:create":
       return "created data export route";
@@ -929,6 +947,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a JSON Web Key Set to";
     case "remote-session-client:detach-json-web-key-set":
       return "detached a JSON Web Key Set from";
+    case "remote-session-client:attach-mcp-server":
+      return "attached an MCP server to";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
@@ -1052,6 +1072,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated spend rule";
     case "spend_rule:archive":
       return "archived spend rule";
+
+    case "team_memory:read":
+      return "read team memory for";
+    case "memory_memo:create":
+      return "saved team memo";
 
     case "template:create":
       return "created template";

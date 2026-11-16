@@ -230,7 +230,7 @@ func TestRefreshRemoteSession_SiblingIssuerRefreshesSharedCredential(t *testing.
 		RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
-	plain, err := testenv.NewEncryptionClient(t).Decrypt(stored.AccessTokenEncrypted)
+	plain, err := testenv.NewEncryptionClient(t).Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err)
 	require.Equal(t, "sibling-refreshed-access", plain, "the rotated token must be persisted on the shared row")
 }

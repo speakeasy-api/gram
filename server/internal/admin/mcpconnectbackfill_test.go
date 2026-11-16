@@ -23,8 +23,8 @@ import (
 )
 
 // connectBackfillFixture writes grants straight into principal_grants, so a
-// fixture can hold rows no API writes today: temporary, expired, deny-effect
-// or backdated grants.
+// fixture can hold rows no API writes today: temporary, expired or
+// backdated grants.
 type connectBackfillFixture struct {
 	t     *testing.T
 	db    *pgxpool.Pool
@@ -45,7 +45,6 @@ type fixtureGrant struct {
 	scope     authz.Scope
 	selector  authz.Selector
 	expiresAt *time.Time
-	effect    string
 	createdAt *time.Time
 }
 
@@ -64,7 +63,6 @@ func (f *connectBackfillFixture) grant(g fixtureGrant) {
 		OrganizationID: f.orgID,
 		PrincipalUrn:   g.principal,
 		Scope:          string(g.scope),
-		Effect:         pgtype.Text{String: g.effect, Valid: g.effect != ""},
 		Selectors:      raw,
 		ExpiresAt:      optionalTime(g.expiresAt),
 		CreatedAt:      optionalTime(g.createdAt),
@@ -114,20 +112,26 @@ func mcpSelector(resourceID string, dims ...string) authz.Selector {
 	return selector
 }
 
-// withoutReadWriteImplyingConnect emulates connect checks once mcp:read and
-// mcp:write no longer satisfy mcp:connect: they only reach a connect check
-// through that expansion, so dropping them leaves exactly what connect
-// decisions will see.
-func withoutReadWriteImplyingConnect(grants []authz.Grant) []authz.Grant {
-	return slices.DeleteFunc(slices.Clone(grants), func(g authz.Grant) bool {
-		return g.Scope == authz.ScopeMCPRead || g.Scope == authz.ScopeMCPWrite
-	})
+// withReadWriteImplyingConnect emulates connect checks from before mcp:read
+// and mcp:write stopped satisfying mcp:connect: each read or write grant also
+// counts as a connect grant held by the same principal on the same selector.
+// authz/connect_equivalence_test.go pins that this emulation decides every
+// case the way the engine did while the implication held.
+func withReadWriteImplyingConnect(grants []authz.Grant) []authz.Grant {
+	out := slices.Clone(grants)
+	for _, g := range grants {
+		if g.Scope == authz.ScopeMCPRead || g.Scope == authz.ScopeMCPWrite {
+			g.Scope = authz.ScopeMCPConnect
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // TestBackfillMcpConnectGrantsPreservesConnectDecisions is the migration's
 // safety proof: for every caller, server, project and tool in a fixture
-// organization, connect decisions after the backfill without read and write
-// implying connect equal the decisions before it with that implication.
+// organization, connect decisions after the backfill, now that read and write
+// no longer imply connect, equal the decisions before it while they did.
 func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	t.Parallel()
 	f, svc, ctx := newConnectBackfillFixture(t)
@@ -140,8 +144,8 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	viewers := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString())
 	operators := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString())
 	user := func() urn.Principal { return urn.NewPrincipal(urn.PrincipalTypeUser, "user_"+uuid.NewString()) }
-	namedOverride, wildcardViewer, temporaryViewer, inferredOverride, expiredViewer, toolViewer, denyRow, narrowedViewer :=
-		user(), user(), user(), user(), user(), user(), user(), user()
+	namedOverride, wildcardViewer, temporaryViewer, inferredOverride, expiredViewer, toolViewer, narrowedViewer :=
+		user(), user(), user(), user(), user(), user(), user()
 	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
 	apiKey := urn.NewPrincipal(urn.PrincipalTypeAPIKey, uuid.NewString())
 	workload := urn.NewPrincipal(urn.PrincipalTypeWorkload, uuid.NewString()+":repo:example/app")
@@ -175,8 +179,6 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		// Tool- and disposition-narrowed grants keep every dimension.
 		{principal: toolViewer, scope: authz.ScopeMCPRead, selector: mcpSelector(serverA, authz.SelectorKeyTool, "search", authz.SelectorKeyProjectID, projectA)},
 		{principal: narrowedViewer, scope: authz.ScopeMCPWrite, selector: mcpSelector(serverD, authz.SelectorKeyDisposition, authz.DispositionDestructive)},
-		// Grant loading ignores effect, so a deny-effect row allows today.
-		{principal: denyRow, scope: authz.ScopeMCPRead, selector: mcpSelector(serverB), effect: "deny"},
 		// Non-user principals.
 		{principal: agent, scope: authz.ScopeMCPRead, selector: mcpSelector(serverA)},
 		{principal: apiKey, scope: authz.ScopeMCPWrite, selector: mcpSelector(authz.WildcardResource, authz.SelectorKeyProjectID, projectB)},
@@ -194,7 +196,6 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		"expiredViewer":    {expiredViewer, everyone},
 		"toolViewer":       {toolViewer, operators, everyone},
 		"narrowedViewer":   {narrowedViewer, everyone},
-		"denyRow":          {denyRow},
 		"agent":            {agent, viewers},
 		"apiKey":           {apiKey},
 		"workload":         {workload},
@@ -202,7 +203,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	}
 	var checks []authz.Check
 	for _, server := range []string{serverA, serverB, serverC, serverD, uuid.NewString()} {
-		for _, project := range []string{projectA, projectB, ""} {
+		for _, project := range []string{projectA, projectB, uuid.NewString()} {
 			checks = append(checks, authz.MCPCheck(authz.ScopeMCPConnect, server, project))
 			for _, tool := range []string{"search", "deploy", "other"} {
 				for _, disposition := range []string{"", authz.DispositionReadOnly, authz.DispositionDestructive} {
@@ -212,14 +213,14 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		}
 	}
 
-	decide := func(dropReadWrite bool) map[string]bool {
+	decide := func(legacy bool) map[string]bool {
 		t.Helper()
 		decisions := map[string]bool{}
 		for name, principals := range callers {
 			grants, err := authz.LoadGrants(ctx, f.db, f.orgID, principals)
 			require.NoError(t, err)
-			if dropReadWrite {
-				grants = withoutReadWriteImplyingConnect(grants)
+			if legacy {
+				grants = withReadWriteImplyingConnect(grants)
 			}
 			for i, check := range checks {
 				allowed, err := authz.GrantsAuthorize(grants, check)
@@ -230,8 +231,8 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		return decisions
 	}
 
-	before := decide(false)
-	require.NotEqual(t, before, decide(true), "the fixture must depend on read and write implying connect")
+	before := decide(true)
+	require.NotEqual(t, before, decide(false), "the fixture must depend on read and write implying connect")
 	allowed := 0
 	for _, ok := range before {
 		if ok {
@@ -247,13 +248,13 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	require.Equal(t, int64(1), result.Extended, "the temporary connect grant outlived by write")
 	require.Equal(t, int64(1), result.TakenOver, "the provisioned connect grant next to an explicit read")
 
-	require.Equal(t, before, decide(true), "connect decisions without the implication must match today's")
-	require.Equal(t, before, decide(false), "the backfill must not change today's decisions")
+	require.Equal(t, before, decide(false), "connect decisions without the implication must match the legacy ones")
+	require.Equal(t, before, decide(true), "the backfill must not change the legacy decisions")
 
 	again, err := svc.BackfillMcpConnectGrants(ctx, &gen.BackfillMcpConnectGrantsPayload{})
 	require.NoError(t, err)
 	require.Equal(t, &gen.AdminBackfillMCPConnectGrantsResult{Inserted: 0, Extended: 0, TakenOver: 0}, again, "a rerun writes nothing")
-	require.Equal(t, before, decide(true))
+	require.Equal(t, before, decide(false))
 }
 
 func TestBackfillMcpConnectGrantsCopiesExpiry(t *testing.T) {

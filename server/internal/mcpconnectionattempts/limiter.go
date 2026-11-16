@@ -48,6 +48,8 @@ type onceKey struct {
 	subject        string
 	providerHost   string
 	memberID       string
+	method         string
+	fold           string
 }
 
 // onceEntry is one key's limit and the rows it has held back.
@@ -101,16 +103,16 @@ func newOnceLimiter() *onceLimiter {
 }
 
 func onceKeyOf(row Row) onceKey {
-	// An anonymous subject is new on every request, so it can't separate callers.
+	// Anonymous subjects and refused ones anyone can mint can't tell callers apart, so they fold.
 	subject := row.SubjectURN
-	if strings.HasPrefix(subject, string(urn.SessionSubjectKindAnonymous)+":") {
+	if strings.HasPrefix(subject, string(urn.SessionSubjectKindAnonymous)+":") || row.foldSubjects != "" {
 		subject = ""
 	}
 	what := row.Reason
 	if what == "" {
 		what = row.StepResult
 	}
-	return onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject, providerHost: row.ProviderHost, memberID: row.MemberID}
+	return onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject, providerHost: row.ProviderHost, memberID: row.MemberID, method: row.foldMethod, fold: row.foldSubjects}
 }
 
 func (l *onceLimiter) entry(key onceKey) *onceEntry {

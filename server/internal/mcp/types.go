@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 var (
@@ -80,6 +81,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 			securityKeys:          ot.SecurityKeys,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Token:                 ot.Token,
+			shared:                false,
 		}
 	}
 
@@ -121,5 +123,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,6 +31,8 @@ const (
 	serverKindToolset          = "toolset"
 	serverKindProviderSession  = "provider_session"
 	serverKindIdentityProvider = "identity_provider"
+
+	serverKindAuthorizationServer = "authorization_server"
 )
 
 // maxProviderHostBytes is the DNS limit on a host name plus room for a port.
@@ -66,6 +69,9 @@ var (
 	AppOtherMetadataURL = App{"other_metadata_url", ""}
 )
 
+// appKinds are the app_key values that name a kind of app rather than an app.
+var appKinds = []string{AppDCR.key, AppFirstParty.key, AppUnverified.key, AppWorkload.key, AppCodeMode.key, AppRecoveryLink.key, AppBackground.key, AppOtherMetadataURL.key}
+
 // ClientIDCheck says whether Speakeasy resolved and admitted a client_id. It is about client_id
 // admission only, not the request's final outcome.
 type ClientIDCheck bool
@@ -95,9 +101,8 @@ func AppOf(clientID string, check ClientIDCheck) App {
 		return AppOtherMetadataURL
 	}
 	host := NormalizeProviderHost(clientID)
-	switch host {
-	case "", AppDCR.key, AppFirstParty.key, AppUnverified.key, AppWorkload.key, AppCodeMode.key, AppRecoveryLink.key, AppBackground.key, AppOtherMetadataURL.key:
-		// A host spelled like a kind must not count as that kind.
+	// A host spelled like a kind must not count as that kind.
+	if host == "" || slices.Contains(appKinds, host) {
 		return AppUnverified
 	}
 	if check != ClientIDAdmitted {
@@ -151,6 +156,13 @@ func ProviderSessionScope(organizationID string, projectID uuid.UUID, app App) S
 // provider and no server or project, such as renewing a company sign-in.
 func IdentityProviderScope(organizationID string, app App) Scope {
 	return Scope{organizationID, uuid.Nil, serverKindIdentityProvider, uuid.Nil, app.key, app.family}
+}
+
+// AuthorizationServerScope is an attempt on a shared authorization server, which serves every MCP
+// server of its issuer and reaches no one of them. server_id is the issuer; projectID is the
+// issuer's project, or uuid.Nil for an organization issuer.
+func AuthorizationServerScope(organizationID string, projectID, issuerID uuid.UUID, app App) Scope {
+	return Scope{organizationID, projectID, serverKindAuthorizationServer, issuerID, app.key, app.family}
 }
 
 // projectScope refuses a nil project, so a row can't lose its project by mistake.

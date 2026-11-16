@@ -89,7 +89,9 @@ type ProjectTool struct {
 }
 
 type ListProjectToolsInput struct {
-	ProjectID  string `json:"project_id" jsonschema:"project ID whose tools to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string `json:"-"`
 	Query      string `json:"query,omitempty" jsonschema:"optional match on tool name, tool URN, or source slug"`
 	SourceKind string `json:"source_kind,omitempty" jsonschema:"optional source filter: function or openapi"`
 	Cursor     string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous list_project_tools result"`
@@ -141,7 +143,9 @@ type MCPToolExposure struct {
 }
 
 type ChangeMCPToolsInput struct {
-	ProjectID       string   `json:"project_id" jsonschema:"project ID that owns the MCP server"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string   `json:"-"`
 	MCPID           string   `json:"mcp_id" jsonschema:"exact MCP server ID from find_mcp or get_mcp"`
 	ToolURNs        []string `json:"tool_urns" jsonschema:"exact tool URNs from list_project_tools"`
 	ExpectedVersion string   `json:"expected_version" jsonschema:"exposure_version from the page that completes the latest get_mcp read of this server"`
@@ -804,7 +808,7 @@ func (s *MCPToolExposureService) validate(input ChangeMCPToolsInput) (uuid.UUID,
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, nil, toolExposureInvalid("Provide an explicit project ID.")
+		return uuid.Nil, uuid.Nil, nil, toolExposureInvalid("Provide the project's slug, as list_projects returns it.")
 	}
 	mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
 	if err != nil {

@@ -44,8 +44,9 @@ func (r *PostgresReader) WithDataExports(encryptionClient *encryption.Client, da
 }
 
 type ListDataExportsInput struct {
-	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional project ID; omit both project selectors to list the organization's exports"`
-	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional project slug; omit both project selectors to list the organization's exports"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to list the organization's exports"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of destinations and routes to return in each collection; server clamps this to 100"`
 }
 
@@ -74,6 +75,7 @@ type DataExportRoute struct {
 	DataSource    string `json:"data_source"`
 	Enabled       bool   `json:"enabled"`
 	DestinationID string `json:"destination_id,omitempty"`
+	MinSeverity   string `json:"min_severity,omitempty" jsonschema:"lowest level an mcp_connection_logs route sends: info, warn, or error; omitted for other data sources"`
 }
 
 type ListDataExportsOutput struct {
@@ -165,6 +167,7 @@ func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principa
 			DataSource:    row.DataSource,
 			Enabled:       row.Enabled,
 			DestinationID: uuidString(row.OtelDestinationID),
+			MinSeverity:   dataexports.RouteMinSeverity(row.DataSource, row.MinSeverity),
 		})
 	}
 	return output, nil
@@ -174,7 +177,7 @@ func registerDataExportTools(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_data_exports",
 		Title:       "List Data Exports",
-		Description: "List the organization's configured OpenTelemetry data exports, optionally narrowed to one project. Returns destinations, routes, enabled state, endpoint URLs, the sensitive-data policy, and only header names plus whether each has a value; secret header values are never returned. The structured route-to-destination relationships can be rendered as a Mermaid diagram. The management URL opens the dashboard where exports can be changed.",
+		Description: "List the organization's configured OpenTelemetry data exports, optionally narrowed to one project. Returns destinations, routes, enabled state, the minimum level of MCP connection logs routes, endpoint URLs, the sensitive-data policy, and only header names plus whether each has a value; secret header values are never returned. The structured route-to-destination relationships can be rendered as a Mermaid diagram. The management URL opens the dashboard where exports can be changed.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListDataExportsInput) (*mcp.CallToolResult, ListDataExportsOutput, error) {
 		principal, err := principalFromToolContext(ctx)

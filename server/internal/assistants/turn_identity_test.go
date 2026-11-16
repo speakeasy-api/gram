@@ -157,7 +157,7 @@ func TestProcessThreadEventsFailsRejectedIdentityTerminally(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: projectID, AssistantID: assistantID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
+	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: projectID, AssistantID: assistantID, ActorUserID: "user-1", Staff: nil})
 	require.NoError(t, err)
 	_, err = agentrepo.New(conn).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: uuid.MustParse(*upgraded.AgentID)})
 	require.NoError(t, err)

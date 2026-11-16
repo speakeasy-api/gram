@@ -148,6 +148,12 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  channels: {
+    title: "Channels",
+    url: "channels",
+    icon: "messages-square",
+    stage: "beta",
+  },
   assistants: {
     title: "Assistants",
     url: "assistants",
@@ -254,6 +260,12 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
           },
+          // Okta applications that match catalog servers. Rolled out behind
+          // okta-mcp-import, which the page checks.
+          okta: {
+            title: "Sync from Okta",
+            url: "sync-from-okta",
+          },
         },
       },
       // The single catalog entry point, and a tab of the MCP index rather than
@@ -289,11 +301,19 @@ const ROUTE_STRUCTURE = {
 
       // The Organization Gateway. A static segment beside `add`,
       // `catalog` and `sources`, with the same latent toolset-slug collision.
-      // It lives under MCP rather than the organization settings because it
-      // is opened from the head of the MCP Servers list.
+      // It lives under MCP rather than the organization settings because the
+      // Project Gateway, opened from the head of the MCP Servers list, shares
+      // its page.
       organizationGateway: {
         title: "Organization Gateway",
         url: "organization-gateway",
+      },
+      // The Organization Gateway limited to this project's servers. It is
+      // opened from the head of the MCP Servers list and is on and off with
+      // the Organization Gateway.
+      projectGateway: {
+        title: "Project Gateway",
+        url: "project-gateway",
       },
       // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
       // no slug of its own — routing identity lives on its mcp_endpoints.
@@ -443,8 +463,21 @@ const ROUTE_STRUCTURE = {
     title: "MCP Sessions",
     url: "mcp-sessions",
     icon: "users",
+    subPages: {
+      // Rolled out behind gram-user-session-issuer-dashboard, which the root
+      // checks; without it MCP Sessions shows no tabs.
+      configuration: {
+        title: "Configuration",
+        url: "configuration",
+        subPages: {
+          issuerDetail: {
+            title: "MCP Authentication Provider",
+            url: ":issuerId",
+          },
+        },
+      },
+    },
   },
-
   remoteIdentityProviders: {
     title: "Authorization Servers",
     url: "remote-identity-providers",
@@ -1154,12 +1187,12 @@ const ORG_ROUTE_STRUCTURE = {
   // Rolled out behind gram-user-session-issuer-dashboard, which the root
   // checks; the sidebar hides the entry while it is off.
   userSessionIssuers: {
-    title: "Speakeasy Authorization Servers",
+    title: "MCP Authentication",
     url: "user-session-issuers",
     icon: "key-round",
     subPages: {
       issuerDetail: {
-        title: "Speakeasy Authorization Server",
+        title: "MCP Authentication Provider",
         url: ":issuerId",
       },
     },

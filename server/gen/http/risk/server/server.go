@@ -18,64 +18,65 @@ import (
 
 // Server lists the risk service endpoint HTTP handlers.
 type Server struct {
-	Mounts                         []*MountPoint
-	CreateRiskPolicy               http.Handler
-	ListRiskPolicies               http.Handler
-	ListMCPPlatformToolsets        http.Handler
-	ListRiskPoliciesForMcpServer   http.Handler
-	ListBuiltinExclusions          http.Handler
-	GetRiskPolicy                  http.Handler
-	UpdateRiskPolicy               http.Handler
-	DeleteRiskPolicy               http.Handler
-	ListSessionQuarantines         http.Handler
-	ReleaseSessionQuarantine       http.Handler
-	ListRiskResults                http.Handler
-	ListRiskResultsForAgent        http.Handler
-	UnmaskRiskResult               http.Handler
-	RevealRiskResultPayload        http.Handler
-	ListRiskResultsByChat          http.Handler
-	MarkRiskResultsFalsePositive   http.Handler
-	UnmarkRiskResultsFalsePositive http.Handler
-	ListDismissedRiskResults       http.Handler
-	GetRiskOverview                http.Handler
-	ListRiskCategories             http.Handler
-	ListRiskPresets                http.Handler
-	SuggestRiskPolicy              http.Handler
-	CompileExpr                    http.Handler
-	GetRiskUserBreakdown           http.Handler
-	GetRiskSignals                 http.Handler
-	GetRiskMcpServerCounts         http.Handler
-	GetRiskAnalysisStatus          http.Handler
-	CreateRiskPolicyBypassRequest  http.Handler
-	AcknowledgeRiskPolicyChallenge http.Handler
-	GetRiskPolicyChallenge         http.Handler
-	DeclineRiskPolicyChallenge     http.Handler
-	GetRiskBlock                   http.Handler
-	SubmitRiskBlockFeedback        http.Handler
-	ListRiskPolicyBypassRequests   http.Handler
-	ApproveRiskPolicyBypassRequest http.Handler
-	DenyRiskPolicyBypassRequest    http.Handler
-	RevokeRiskPolicyBypassRequest  http.Handler
-	ListRiskPolicyApprovals        http.Handler
-	GetRiskPolicyApproval          http.Handler
-	DecideRiskPolicyApproval       http.Handler
-	TriggerRiskAnalysis            http.Handler
-	CreateCustomDetectionRule      http.Handler
-	ListCustomDetectionRules       http.Handler
-	GetCustomDetectionRule         http.Handler
-	UpdateCustomDetectionRule      http.Handler
-	DeleteCustomDetectionRule      http.Handler
-	ListRiskExclusions             http.Handler
-	CreateRiskExclusion            http.Handler
-	UpdateRiskExclusion            http.Handler
-	DeleteRiskExclusion            http.Handler
-	SuggestCustomDetectionRule     http.Handler
-	SuggestExclusion               http.Handler
-	TestDetectionRule              http.Handler
-	EvaluatePromptGuardrail        http.Handler
-	SaveRiskEvalReview             http.Handler
-	ListRiskEvalReviews            http.Handler
-	DeleteRiskEvalReview           http.Handler
+	Mounts                           []*MountPoint
+	CreateRiskPolicy                 http.Handler
+	ListRiskPolicies                 http.Handler
+	ListMCPPlatformToolsets          http.Handler
+	ListRiskPoliciesForMcpServer     http.Handler
+	ListBuiltinExclusions            http.Handler
+	GetRiskPolicy                    http.Handler
+	UpdateRiskPolicy                 http.Handler
+	DeleteRiskPolicy                 http.Handler
+	ListSessionQuarantines           http.Handler
+	ReleaseSessionQuarantine         http.Handler
+	ListRiskResults                  http.Handler
+	ListRiskResultsForAgent          http.Handler
+	UnmaskRiskResult                 http.Handler
+	RevealRiskResultPayload          http.Handler
+	ListRiskResultsByChat            http.Handler
+	MarkRiskResultsFalsePositive     http.Handler
+	UnmarkRiskResultsFalsePositive   http.Handler
+	ListDismissedRiskResults         http.Handler
+	GetRiskOverview                  http.Handler
+	ListRiskCategories               http.Handler
+	ListRiskPresets                  http.Handler
+	SuggestRiskPolicy                http.Handler
+	CompileExpr                      http.Handler
+	GetRiskUserBreakdown             http.Handler
+	GetRiskSignals                   http.Handler
+	GetRiskMcpServerCounts           http.Handler
+	GetRiskAnalysisStatus            http.Handler
+	CreateRiskPolicyBypassRequest    http.Handler
+	GetRiskPolicyBypassRequestTarget http.Handler
+	AcknowledgeRiskPolicyChallenge   http.Handler
+	GetRiskPolicyChallenge           http.Handler
+	DeclineRiskPolicyChallenge       http.Handler
+	GetRiskBlock                     http.Handler
+	SubmitRiskBlockFeedback          http.Handler
+	ListRiskPolicyBypassRequests     http.Handler
+	ApproveRiskPolicyBypassRequest   http.Handler
+	DenyRiskPolicyBypassRequest      http.Handler
+	RevokeRiskPolicyBypassRequest    http.Handler
+	ListRiskPolicyApprovals          http.Handler
+	GetRiskPolicyApproval            http.Handler
+	DecideRiskPolicyApproval         http.Handler
+	TriggerRiskAnalysis              http.Handler
+	CreateCustomDetectionRule        http.Handler
+	ListCustomDetectionRules         http.Handler
+	GetCustomDetectionRule           http.Handler
+	UpdateCustomDetectionRule        http.Handler
+	DeleteCustomDetectionRule        http.Handler
+	ListRiskExclusions               http.Handler
+	CreateRiskExclusion              http.Handler
+	UpdateRiskExclusion              http.Handler
+	DeleteRiskExclusion              http.Handler
+	SuggestCustomDetectionRule       http.Handler
+	SuggestExclusion                 http.Handler
+	TestDetectionRule                http.Handler
+	EvaluatePromptGuardrail          http.Handler
+	SaveRiskEvalReview               http.Handler
+	ListRiskEvalReviews              http.Handler
+	DeleteRiskEvalReview             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -133,6 +134,7 @@ func New(
 			{"GetRiskMcpServerCounts", "GET", "/rpc/risk.getMcpServerCounts"},
 			{"GetRiskAnalysisStatus", "GET", "/rpc/risk.getAnalysisStatus"},
 			{"CreateRiskPolicyBypassRequest", "POST", "/rpc/risk.createPolicyBypassRequest"},
+			{"GetRiskPolicyBypassRequestTarget", "POST", "/rpc/risk.getPolicyBypassRequestTarget"},
 			{"AcknowledgeRiskPolicyChallenge", "POST", "/rpc/risk.acknowledgePolicyChallenge"},
 			{"GetRiskPolicyChallenge", "POST", "/rpc/risk.getPolicyChallenge"},
 			{"DeclineRiskPolicyChallenge", "POST", "/rpc/risk.declinePolicyChallenge"},
@@ -163,63 +165,64 @@ func New(
 			{"ListRiskEvalReviews", "GET", "/rpc/riskEvals.listReviews"},
 			{"DeleteRiskEvalReview", "DELETE", "/rpc/riskEvals.deleteReview"},
 		},
-		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
-		ListMCPPlatformToolsets:        NewListMCPPlatformToolsetsHandler(e.ListMCPPlatformToolsets, mux, decoder, encoder, errhandler, formatter),
-		ListRiskPoliciesForMcpServer:   NewListRiskPoliciesForMcpServerHandler(e.ListRiskPoliciesForMcpServer, mux, decoder, encoder, errhandler, formatter),
-		ListBuiltinExclusions:          NewListBuiltinExclusionsHandler(e.ListBuiltinExclusions, mux, decoder, encoder, errhandler, formatter),
-		GetRiskPolicy:                  NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		UpdateRiskPolicy:               NewUpdateRiskPolicyHandler(e.UpdateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		DeleteRiskPolicy:               NewDeleteRiskPolicyHandler(e.DeleteRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		ListSessionQuarantines:         NewListSessionQuarantinesHandler(e.ListSessionQuarantines, mux, decoder, encoder, errhandler, formatter),
-		ReleaseSessionQuarantine:       NewReleaseSessionQuarantineHandler(e.ReleaseSessionQuarantine, mux, decoder, encoder, errhandler, formatter),
-		ListRiskResults:                NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
-		ListRiskResultsForAgent:        NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
-		UnmaskRiskResult:               NewUnmaskRiskResultHandler(e.UnmaskRiskResult, mux, decoder, encoder, errhandler, formatter),
-		RevealRiskResultPayload:        NewRevealRiskResultPayloadHandler(e.RevealRiskResultPayload, mux, decoder, encoder, errhandler, formatter),
-		ListRiskResultsByChat:          NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
-		MarkRiskResultsFalsePositive:   NewMarkRiskResultsFalsePositiveHandler(e.MarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
-		UnmarkRiskResultsFalsePositive: NewUnmarkRiskResultsFalsePositiveHandler(e.UnmarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
-		ListDismissedRiskResults:       NewListDismissedRiskResultsHandler(e.ListDismissedRiskResults, mux, decoder, encoder, errhandler, formatter),
-		GetRiskOverview:                NewGetRiskOverviewHandler(e.GetRiskOverview, mux, decoder, encoder, errhandler, formatter),
-		ListRiskCategories:             NewListRiskCategoriesHandler(e.ListRiskCategories, mux, decoder, encoder, errhandler, formatter),
-		ListRiskPresets:                NewListRiskPresetsHandler(e.ListRiskPresets, mux, decoder, encoder, errhandler, formatter),
-		SuggestRiskPolicy:              NewSuggestRiskPolicyHandler(e.SuggestRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		CompileExpr:                    NewCompileExprHandler(e.CompileExpr, mux, decoder, encoder, errhandler, formatter),
-		GetRiskUserBreakdown:           NewGetRiskUserBreakdownHandler(e.GetRiskUserBreakdown, mux, decoder, encoder, errhandler, formatter),
-		GetRiskSignals:                 NewGetRiskSignalsHandler(e.GetRiskSignals, mux, decoder, encoder, errhandler, formatter),
-		GetRiskMcpServerCounts:         NewGetRiskMcpServerCountsHandler(e.GetRiskMcpServerCounts, mux, decoder, encoder, errhandler, formatter),
-		GetRiskAnalysisStatus:          NewGetRiskAnalysisStatusHandler(e.GetRiskAnalysisStatus, mux, decoder, encoder, errhandler, formatter),
-		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestHandler(e.CreateRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
-		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeHandler(e.AcknowledgeRiskPolicyChallenge, mux, decoder, encoder, errhandler, formatter),
-		GetRiskPolicyChallenge:         NewGetRiskPolicyChallengeHandler(e.GetRiskPolicyChallenge, mux, decoder, encoder, errhandler, formatter),
-		DeclineRiskPolicyChallenge:     NewDeclineRiskPolicyChallengeHandler(e.DeclineRiskPolicyChallenge, mux, decoder, encoder, errhandler, formatter),
-		GetRiskBlock:                   NewGetRiskBlockHandler(e.GetRiskBlock, mux, decoder, encoder, errhandler, formatter),
-		SubmitRiskBlockFeedback:        NewSubmitRiskBlockFeedbackHandler(e.SubmitRiskBlockFeedback, mux, decoder, encoder, errhandler, formatter),
-		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsHandler(e.ListRiskPolicyBypassRequests, mux, decoder, encoder, errhandler, formatter),
-		ApproveRiskPolicyBypassRequest: NewApproveRiskPolicyBypassRequestHandler(e.ApproveRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
-		DenyRiskPolicyBypassRequest:    NewDenyRiskPolicyBypassRequestHandler(e.DenyRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
-		RevokeRiskPolicyBypassRequest:  NewRevokeRiskPolicyBypassRequestHandler(e.RevokeRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
-		ListRiskPolicyApprovals:        NewListRiskPolicyApprovalsHandler(e.ListRiskPolicyApprovals, mux, decoder, encoder, errhandler, formatter),
-		GetRiskPolicyApproval:          NewGetRiskPolicyApprovalHandler(e.GetRiskPolicyApproval, mux, decoder, encoder, errhandler, formatter),
-		DecideRiskPolicyApproval:       NewDecideRiskPolicyApprovalHandler(e.DecideRiskPolicyApproval, mux, decoder, encoder, errhandler, formatter),
-		TriggerRiskAnalysis:            NewTriggerRiskAnalysisHandler(e.TriggerRiskAnalysis, mux, decoder, encoder, errhandler, formatter),
-		CreateCustomDetectionRule:      NewCreateCustomDetectionRuleHandler(e.CreateCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
-		ListCustomDetectionRules:       NewListCustomDetectionRulesHandler(e.ListCustomDetectionRules, mux, decoder, encoder, errhandler, formatter),
-		GetCustomDetectionRule:         NewGetCustomDetectionRuleHandler(e.GetCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
-		UpdateCustomDetectionRule:      NewUpdateCustomDetectionRuleHandler(e.UpdateCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
-		DeleteCustomDetectionRule:      NewDeleteCustomDetectionRuleHandler(e.DeleteCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
-		ListRiskExclusions:             NewListRiskExclusionsHandler(e.ListRiskExclusions, mux, decoder, encoder, errhandler, formatter),
-		CreateRiskExclusion:            NewCreateRiskExclusionHandler(e.CreateRiskExclusion, mux, decoder, encoder, errhandler, formatter),
-		UpdateRiskExclusion:            NewUpdateRiskExclusionHandler(e.UpdateRiskExclusion, mux, decoder, encoder, errhandler, formatter),
-		DeleteRiskExclusion:            NewDeleteRiskExclusionHandler(e.DeleteRiskExclusion, mux, decoder, encoder, errhandler, formatter),
-		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleHandler(e.SuggestCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
-		SuggestExclusion:               NewSuggestExclusionHandler(e.SuggestExclusion, mux, decoder, encoder, errhandler, formatter),
-		TestDetectionRule:              NewTestDetectionRuleHandler(e.TestDetectionRule, mux, decoder, encoder, errhandler, formatter),
-		EvaluatePromptGuardrail:        NewEvaluatePromptGuardrailHandler(e.EvaluatePromptGuardrail, mux, decoder, encoder, errhandler, formatter),
-		SaveRiskEvalReview:             NewSaveRiskEvalReviewHandler(e.SaveRiskEvalReview, mux, decoder, encoder, errhandler, formatter),
-		ListRiskEvalReviews:            NewListRiskEvalReviewsHandler(e.ListRiskEvalReviews, mux, decoder, encoder, errhandler, formatter),
-		DeleteRiskEvalReview:           NewDeleteRiskEvalReviewHandler(e.DeleteRiskEvalReview, mux, decoder, encoder, errhandler, formatter),
+		CreateRiskPolicy:                 NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		ListRiskPolicies:                 NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
+		ListMCPPlatformToolsets:          NewListMCPPlatformToolsetsHandler(e.ListMCPPlatformToolsets, mux, decoder, encoder, errhandler, formatter),
+		ListRiskPoliciesForMcpServer:     NewListRiskPoliciesForMcpServerHandler(e.ListRiskPoliciesForMcpServer, mux, decoder, encoder, errhandler, formatter),
+		ListBuiltinExclusions:            NewListBuiltinExclusionsHandler(e.ListBuiltinExclusions, mux, decoder, encoder, errhandler, formatter),
+		GetRiskPolicy:                    NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		UpdateRiskPolicy:                 NewUpdateRiskPolicyHandler(e.UpdateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		DeleteRiskPolicy:                 NewDeleteRiskPolicyHandler(e.DeleteRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		ListSessionQuarantines:           NewListSessionQuarantinesHandler(e.ListSessionQuarantines, mux, decoder, encoder, errhandler, formatter),
+		ReleaseSessionQuarantine:         NewReleaseSessionQuarantineHandler(e.ReleaseSessionQuarantine, mux, decoder, encoder, errhandler, formatter),
+		ListRiskResults:                  NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
+		ListRiskResultsForAgent:          NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
+		UnmaskRiskResult:                 NewUnmaskRiskResultHandler(e.UnmaskRiskResult, mux, decoder, encoder, errhandler, formatter),
+		RevealRiskResultPayload:          NewRevealRiskResultPayloadHandler(e.RevealRiskResultPayload, mux, decoder, encoder, errhandler, formatter),
+		ListRiskResultsByChat:            NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
+		MarkRiskResultsFalsePositive:     NewMarkRiskResultsFalsePositiveHandler(e.MarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
+		UnmarkRiskResultsFalsePositive:   NewUnmarkRiskResultsFalsePositiveHandler(e.UnmarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
+		ListDismissedRiskResults:         NewListDismissedRiskResultsHandler(e.ListDismissedRiskResults, mux, decoder, encoder, errhandler, formatter),
+		GetRiskOverview:                  NewGetRiskOverviewHandler(e.GetRiskOverview, mux, decoder, encoder, errhandler, formatter),
+		ListRiskCategories:               NewListRiskCategoriesHandler(e.ListRiskCategories, mux, decoder, encoder, errhandler, formatter),
+		ListRiskPresets:                  NewListRiskPresetsHandler(e.ListRiskPresets, mux, decoder, encoder, errhandler, formatter),
+		SuggestRiskPolicy:                NewSuggestRiskPolicyHandler(e.SuggestRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		CompileExpr:                      NewCompileExprHandler(e.CompileExpr, mux, decoder, encoder, errhandler, formatter),
+		GetRiskUserBreakdown:             NewGetRiskUserBreakdownHandler(e.GetRiskUserBreakdown, mux, decoder, encoder, errhandler, formatter),
+		GetRiskSignals:                   NewGetRiskSignalsHandler(e.GetRiskSignals, mux, decoder, encoder, errhandler, formatter),
+		GetRiskMcpServerCounts:           NewGetRiskMcpServerCountsHandler(e.GetRiskMcpServerCounts, mux, decoder, encoder, errhandler, formatter),
+		GetRiskAnalysisStatus:            NewGetRiskAnalysisStatusHandler(e.GetRiskAnalysisStatus, mux, decoder, encoder, errhandler, formatter),
+		CreateRiskPolicyBypassRequest:    NewCreateRiskPolicyBypassRequestHandler(e.CreateRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		GetRiskPolicyBypassRequestTarget: NewGetRiskPolicyBypassRequestTargetHandler(e.GetRiskPolicyBypassRequestTarget, mux, decoder, encoder, errhandler, formatter),
+		AcknowledgeRiskPolicyChallenge:   NewAcknowledgeRiskPolicyChallengeHandler(e.AcknowledgeRiskPolicyChallenge, mux, decoder, encoder, errhandler, formatter),
+		GetRiskPolicyChallenge:           NewGetRiskPolicyChallengeHandler(e.GetRiskPolicyChallenge, mux, decoder, encoder, errhandler, formatter),
+		DeclineRiskPolicyChallenge:       NewDeclineRiskPolicyChallengeHandler(e.DeclineRiskPolicyChallenge, mux, decoder, encoder, errhandler, formatter),
+		GetRiskBlock:                     NewGetRiskBlockHandler(e.GetRiskBlock, mux, decoder, encoder, errhandler, formatter),
+		SubmitRiskBlockFeedback:          NewSubmitRiskBlockFeedbackHandler(e.SubmitRiskBlockFeedback, mux, decoder, encoder, errhandler, formatter),
+		ListRiskPolicyBypassRequests:     NewListRiskPolicyBypassRequestsHandler(e.ListRiskPolicyBypassRequests, mux, decoder, encoder, errhandler, formatter),
+		ApproveRiskPolicyBypassRequest:   NewApproveRiskPolicyBypassRequestHandler(e.ApproveRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		DenyRiskPolicyBypassRequest:      NewDenyRiskPolicyBypassRequestHandler(e.DenyRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		RevokeRiskPolicyBypassRequest:    NewRevokeRiskPolicyBypassRequestHandler(e.RevokeRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		ListRiskPolicyApprovals:          NewListRiskPolicyApprovalsHandler(e.ListRiskPolicyApprovals, mux, decoder, encoder, errhandler, formatter),
+		GetRiskPolicyApproval:            NewGetRiskPolicyApprovalHandler(e.GetRiskPolicyApproval, mux, decoder, encoder, errhandler, formatter),
+		DecideRiskPolicyApproval:         NewDecideRiskPolicyApprovalHandler(e.DecideRiskPolicyApproval, mux, decoder, encoder, errhandler, formatter),
+		TriggerRiskAnalysis:              NewTriggerRiskAnalysisHandler(e.TriggerRiskAnalysis, mux, decoder, encoder, errhandler, formatter),
+		CreateCustomDetectionRule:        NewCreateCustomDetectionRuleHandler(e.CreateCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		ListCustomDetectionRules:         NewListCustomDetectionRulesHandler(e.ListCustomDetectionRules, mux, decoder, encoder, errhandler, formatter),
+		GetCustomDetectionRule:           NewGetCustomDetectionRuleHandler(e.GetCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		UpdateCustomDetectionRule:        NewUpdateCustomDetectionRuleHandler(e.UpdateCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		DeleteCustomDetectionRule:        NewDeleteCustomDetectionRuleHandler(e.DeleteCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		ListRiskExclusions:               NewListRiskExclusionsHandler(e.ListRiskExclusions, mux, decoder, encoder, errhandler, formatter),
+		CreateRiskExclusion:              NewCreateRiskExclusionHandler(e.CreateRiskExclusion, mux, decoder, encoder, errhandler, formatter),
+		UpdateRiskExclusion:              NewUpdateRiskExclusionHandler(e.UpdateRiskExclusion, mux, decoder, encoder, errhandler, formatter),
+		DeleteRiskExclusion:              NewDeleteRiskExclusionHandler(e.DeleteRiskExclusion, mux, decoder, encoder, errhandler, formatter),
+		SuggestCustomDetectionRule:       NewSuggestCustomDetectionRuleHandler(e.SuggestCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		SuggestExclusion:                 NewSuggestExclusionHandler(e.SuggestExclusion, mux, decoder, encoder, errhandler, formatter),
+		TestDetectionRule:                NewTestDetectionRuleHandler(e.TestDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		EvaluatePromptGuardrail:          NewEvaluatePromptGuardrailHandler(e.EvaluatePromptGuardrail, mux, decoder, encoder, errhandler, formatter),
+		SaveRiskEvalReview:               NewSaveRiskEvalReviewHandler(e.SaveRiskEvalReview, mux, decoder, encoder, errhandler, formatter),
+		ListRiskEvalReviews:              NewListRiskEvalReviewsHandler(e.ListRiskEvalReviews, mux, decoder, encoder, errhandler, formatter),
+		DeleteRiskEvalReview:             NewDeleteRiskEvalReviewHandler(e.DeleteRiskEvalReview, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -256,6 +259,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetRiskMcpServerCounts = m(s.GetRiskMcpServerCounts)
 	s.GetRiskAnalysisStatus = m(s.GetRiskAnalysisStatus)
 	s.CreateRiskPolicyBypassRequest = m(s.CreateRiskPolicyBypassRequest)
+	s.GetRiskPolicyBypassRequestTarget = m(s.GetRiskPolicyBypassRequestTarget)
 	s.AcknowledgeRiskPolicyChallenge = m(s.AcknowledgeRiskPolicyChallenge)
 	s.GetRiskPolicyChallenge = m(s.GetRiskPolicyChallenge)
 	s.DeclineRiskPolicyChallenge = m(s.DeclineRiskPolicyChallenge)
@@ -320,6 +324,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetRiskMcpServerCountsHandler(mux, h.GetRiskMcpServerCounts)
 	MountGetRiskAnalysisStatusHandler(mux, h.GetRiskAnalysisStatus)
 	MountCreateRiskPolicyBypassRequestHandler(mux, h.CreateRiskPolicyBypassRequest)
+	MountGetRiskPolicyBypassRequestTargetHandler(mux, h.GetRiskPolicyBypassRequestTarget)
 	MountAcknowledgeRiskPolicyChallengeHandler(mux, h.AcknowledgeRiskPolicyChallenge)
 	MountGetRiskPolicyChallengeHandler(mux, h.GetRiskPolicyChallenge)
 	MountDeclineRiskPolicyChallengeHandler(mux, h.DeclineRiskPolicyChallenge)
@@ -1823,6 +1828,60 @@ func NewCreateRiskPolicyBypassRequestHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createRiskPolicyBypassRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRiskPolicyBypassRequestTargetHandler configures the mux to serve the
+// "risk" service "getRiskPolicyBypassRequestTarget" endpoint.
+func MountGetRiskPolicyBypassRequestTargetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.getPolicyBypassRequestTarget", f)
+}
+
+// NewGetRiskPolicyBypassRequestTargetHandler creates a HTTP handler which
+// loads the HTTP request and calls the "risk" service
+// "getRiskPolicyBypassRequestTarget" endpoint.
+func NewGetRiskPolicyBypassRequestTargetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRiskPolicyBypassRequestTargetRequest(mux, decoder)
+		encodeResponse = EncodeGetRiskPolicyBypassRequestTargetResponse(encoder)
+		encodeError    = EncodeGetRiskPolicyBypassRequestTargetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRiskPolicyBypassRequestTarget")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

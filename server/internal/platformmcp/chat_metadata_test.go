@@ -61,10 +61,21 @@ func (f fakeChatRiskFindings) Counts(_ context.Context, chatIDs []uuid.UUID) (ma
 	return counts, nil
 }
 
+// fixedChatListVisibility answers the visibility question with a fixed scope.
+// The zero value is a project-wide listing.
+type fixedChatListVisibility struct {
+	scope chatListScope
+	err   error
+}
+
+func (v fixedChatListVisibility) resolve(context.Context, Principal, uuid.UUID) (chatListScope, error) {
+	return v.scope, v.err
+}
+
 // newChatMetadataService composes the listing without Postgres or ClickHouse:
-// the project resolver, the chat query and the finding counts are fakes, and
-// the codec is real so references and cursors round-trip exactly as they do
-// in production.
+// the project resolver, the chat query, the visibility and the finding counts
+// are fakes, and the codec is real so references and cursors round-trip
+// exactly as they do in production.
 func newChatMetadataService(t *testing.T, reader chatMetadataReader, budget OperationBudget) (*ChatMetadataService, ResolvedProject) {
 	t.Helper()
 
@@ -74,6 +85,7 @@ func newChatMetadataService(t *testing.T, reader chatMetadataReader, budget Oper
 	return &ChatMetadataService{
 		projects:     &findingProjects{project: project, calls: nil, err: nil},
 		chats:        reader,
+		visibility:   fixedChatListVisibility{scope: chatListScope{userID: "", ownedAgentIDs: nil}, err: nil},
 		references:   codec,
 		budget:       budget,
 		now:          func() time.Time { return chatListTestNow },
@@ -452,7 +464,7 @@ func TestListChatsRefusesWithoutBudgetOrProject(t *testing.T) {
 		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
 	})
 	require.ErrorIs(t, err, ErrUnavailable)
-	require.Nil(t, NewChatMetadataService(nil, nil, allowBudget(), "key"), "no database leaves the service nil so the stub registers")
+	require.Nil(t, NewChatMetadataService(nil, nil, nil, allowBudget(), "key"), "no database leaves the service nil so the stub registers")
 }
 
 // denyOperationLimiter models a throttled bucket.

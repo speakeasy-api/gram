@@ -62,42 +62,30 @@ describe("canConfigureExternalOAuth", () => {
   } as unknown as Toolset;
 
   it("allows external OAuth for an enabled public server with an OAuth authorization code flow", () => {
-    expect(canConfigureExternalOAuth(eligibleToolset, false)).toBe(true);
-  });
-
-  it("allows external OAuth when an attached external MCP source requires it", () => {
-    const externalMcpToolset = {
-      ...eligibleToolset,
-      oauthEnablementMetadata: { oauth2SecurityCount: 0 },
-    } as unknown as Toolset;
-
-    expect(canConfigureExternalOAuth(externalMcpToolset, true)).toBe(true);
+    expect(canConfigureExternalOAuth(eligibleToolset)).toBe(true);
   });
 
   it("does not expose external OAuth for disabled or private servers", () => {
     expect(
-      canConfigureExternalOAuth(
-        { ...eligibleToolset, mcpEnabled: false } as Toolset,
-        true,
-      ),
+      canConfigureExternalOAuth({
+        ...eligibleToolset,
+        mcpEnabled: false,
+      } as Toolset),
     ).toBe(false);
     expect(
-      canConfigureExternalOAuth(
-        { ...eligibleToolset, mcpIsPublic: false } as Toolset,
-        true,
-      ),
+      canConfigureExternalOAuth({
+        ...eligibleToolset,
+        mcpIsPublic: false,
+      } as Toolset),
     ).toBe(false);
   });
 
-  it("does not expose external OAuth without an eligible tool or source", () => {
+  it("does not expose external OAuth without an eligible tool", () => {
     expect(
-      canConfigureExternalOAuth(
-        {
-          ...eligibleToolset,
-          oauthEnablementMetadata: { oauth2SecurityCount: 0 },
-        } as unknown as Toolset,
-        false,
-      ),
+      canConfigureExternalOAuth({
+        ...eligibleToolset,
+        oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+      } as unknown as Toolset),
     ).toBe(false);
   });
 });

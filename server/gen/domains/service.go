@@ -34,6 +34,9 @@ type Service interface {
 	// List the organization's MCP servers that can be mapped to the custom domain
 	// root, including servers not yet attached to the domain
 	ListRootMcpServers(context.Context, *ListRootMcpServersPayload) (res *ListRootMcpServersResult, err error)
+	// Reapply the configured ingress state for the organization's verified custom
+	// domain
+	ReconcileDomain(context.Context, *ReconcileDomainPayload) (res *CustomDomain, err error)
 	// Check the routing and certificate health of the organization's custom domain
 	CheckHealth(context.Context, *CheckHealthPayload) (res *CustomDomain, err error)
 	// Delete a custom domain
@@ -65,7 +68,7 @@ const ServiceName = "domains"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"getDomain", "listDomains", "createDomain", "updateDomain", "setRootMcpEndpoint", "listRootMcpServers", "checkHealth", "deleteDomain", "listMcpEndpoints"}
+var MethodNames = [10]string{"getDomain", "listDomains", "createDomain", "updateDomain", "setRootMcpEndpoint", "listRootMcpServers", "reconcileDomain", "checkHealth", "deleteDomain", "listMcpEndpoints"}
 
 // CheckHealthPayload is the payload type of the domains service checkHealth
 // method.
@@ -101,6 +104,11 @@ type CustomDomain struct {
 	UpdatedAt string
 	// The custom domain is actively being registered
 	IsUpdating bool
+	// The custom domain ingress configuration is being applied
+	IsReconciling bool
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus string
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string
@@ -232,6 +240,12 @@ type ListRootMcpServersPayload struct {
 // listRootMcpServers method.
 type ListRootMcpServersResult struct {
 	McpServers []*RootMcpServerOption
+}
+
+// ReconcileDomainPayload is the payload type of the domains service
+// reconcileDomain method.
+type ReconcileDomainPayload struct {
+	SessionToken *string
 }
 
 type RootMcpServerOption struct {

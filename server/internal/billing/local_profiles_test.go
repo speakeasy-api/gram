@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -176,7 +176,7 @@ func TestStubLocalProfilesKeepPersistedTier(t *testing.T) {
 
 			client := billing.NewStubClientWithLocalProfiles(testenv.NewLogger(t), testenv.NewTracerProvider(t), reader)
 			for range 2 {
-				tier, active := mv.ResolveOrganizationTier(t.Context(), testenv.NewLogger(t), client, "org_placeholder", tt.persisted)
+				tier, active := orgaccount.ResolveTier(t.Context(), testenv.NewLogger(t), client, "org_placeholder", tt.persisted)
 				require.Equal(t, tt.persisted, tier)
 				require.Equal(t, tt.active, active)
 			}

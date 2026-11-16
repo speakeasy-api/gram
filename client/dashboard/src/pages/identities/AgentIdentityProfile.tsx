@@ -291,7 +291,7 @@ export function AgentIdentityProfile({
           <AgentIdentityAudit agent={agent} subject />
           {/* Every call it made, under the usage summary's numbers. */}
           <IdentityToolLogsPanel
-            agentId={agent.id}
+            agent={agent}
             includeLocalTools={showLocalTools}
           />
         </IdentitySection>

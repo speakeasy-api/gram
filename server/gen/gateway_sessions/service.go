@@ -71,9 +71,13 @@ type GatewaySessionsResult struct {
 // ListGatewaySessionFacetsPayload is the payload type of the gatewaySessions
 // service listGatewaySessionFacets method.
 type ListGatewaySessionFacetsPayload struct {
-	// Project gateway id. Omit for the Organization Gateway; organization access
-	// is then required and the selected project is ignored.
-	GatewayID    *string
+	// Project gateway id. Omit, along with project_id, for the Organization
+	// Gateway; organization access is then required.
+	GatewayID *string
+	// Lists the sessions of this project's Project Gateway, which is the
+	// Organization Gateway limited to the project's MCP servers. Cannot be
+	// combined with gateway_id. Requires project access.
+	ProjectID    *string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -81,9 +85,13 @@ type ListGatewaySessionFacetsPayload struct {
 // ListGatewaySessionsPayload is the payload type of the gatewaySessions
 // service listGatewaySessions method.
 type ListGatewaySessionsPayload struct {
-	// Project gateway id. Omit for the Organization Gateway; organization access
-	// is then required and the selected project is ignored.
-	GatewayID    *string
+	// Project gateway id. Omit, along with project_id, for the Organization
+	// Gateway; organization access is then required.
+	GatewayID *string
+	// Lists the sessions of this project's Project Gateway, which is the
+	// Organization Gateway limited to the project's MCP servers. Cannot be
+	// combined with gateway_id. Requires project access.
+	ProjectID    *string
 	SessionToken *string
 	ApikeyToken  *string
 	// Case-insensitive literal search by subject URN, name, or email.

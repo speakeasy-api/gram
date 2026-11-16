@@ -64,11 +64,12 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 			require.True(t, descriptor.Annotations.ReadOnlyHint)
 		}
 
-		// Individual calls are the Tool Logs list, so they need log:read.
+		// Individual calls are the Tool Logs list: every member sees their own,
+		// and log:read widens it at call time rather than at discovery.
 		recent := descriptorByName(t, registrar, "list_recent_tool_calls")
 		require.Equal(t, ExternalAuthorizationMember, recent.Meta.Authorization)
 		require.Equal(t, ProjectScopeExplicit, recent.Meta.ProjectScope)
-		require.Equal(t, discoveryLogRead, recent.Meta.DiscoveryScopes)
+		require.Empty(t, recent.Meta.DiscoveryScopes)
 		require.NotNil(t, recent.Annotations)
 		require.True(t, recent.Annotations.ReadOnlyHint)
 	}
@@ -175,6 +176,10 @@ func (diagnosticsProjectReader) ResolveProjectRead(context.Context, Principal, F
 
 func (diagnosticsProjectReader) ResolveProjectLogRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
 	return ResolvedProject{}, nil
+}
+
+func (diagnosticsProjectReader) ResolveProjectLogScope(context.Context, Principal, FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error) {
+	return ResolvedProject{}, nil, nil
 }
 
 func (diagnosticsProjectReader) GetMCPForDiagnostics(context.Context, Principal, GetMCPInput) (MCP, error) {

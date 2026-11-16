@@ -25,7 +25,7 @@ func registerGetMCPTool(reg *Registrar, reader Reader) {
 			return nil, MCP{}, err
 		}
 		if input.ProjectID == "" || input.MCPID == "" {
-			return nil, MCP{}, fmt.Errorf("project_id and mcp_id are required")
+			return nil, MCP{}, fmt.Errorf("project_slug and mcp_id are required")
 		}
 		if reader == nil {
 			return nil, MCP{}, ErrUnavailable
