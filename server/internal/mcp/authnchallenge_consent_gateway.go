@@ -145,31 +145,35 @@ func (g gatewayServer) StatusLabel() string {
 // unavailableGenericLabel is the card for a cause it does not name.
 const unavailableGenericLabel = "Unavailable · try again shortly, or ask your administrator"
 
-// adminLabel is a card an administrator acts on.
-func adminLabel(clause string) string {
-	return "Can't connect · " + clause + " · ask your administrator"
+// unavailableCard is what a card says is wrong with a server, then what to do.
+type unavailableCard struct {
+	problem string
+	action  string
 }
 
-// unavailableCauses is the short cause a card names; who fixes it frames the card.
-var unavailableCauses = map[mcpconnectionattempts.Code]string{
-	mcpconnectionattempts.CodeProviderRateLimited:      "it's busy",
-	mcpconnectionattempts.CodeProviderServerError:      "it had an error",
-	mcpconnectionattempts.CodeProviderUnreachable:      "it didn't answer",
-	mcpconnectionattempts.CodeRemoteSessionUnavailable: "its sign-in service is down",
-	mcpconnectionattempts.CodeSharedCredentialRejected: "the service rejected its saved sign-in details",
-	mcpconnectionattempts.CodeStaticKeyRejected:        "the service rejected its saved sign-in details",
-	mcpconnectionattempts.CodeCredentialMisconfigured:  "its sign-in isn't set up correctly",
-	mcpconnectionattempts.CodeTunnelUnavailable:        "its private network tunnel is down",
+// waitAction is what to do when the cause is the service's and waiting helps.
+const waitAction = "Try again in a few minutes."
+
+// unavailableCauses is each named cause's card; who fixes it picks the status word.
+var unavailableCauses = map[mcpconnectionattempts.Code]unavailableCard{
+	mcpconnectionattempts.CodeProviderRateLimited:      {problem: "This server is getting too many requests right now.", action: waitAction},
+	mcpconnectionattempts.CodeProviderServerError:      {problem: "This server ran into an error.", action: waitAction},
+	mcpconnectionattempts.CodeProviderUnreachable:      {problem: "This server isn't responding.", action: waitAction},
+	mcpconnectionattempts.CodeRemoteSessionUnavailable: {problem: "This server's sign-in service is having problems.", action: waitAction},
+	mcpconnectionattempts.CodeSharedCredentialRejected: {problem: "The service rejected the sign-in details saved for this server.", action: "Ask your administrator to update them."},
+	mcpconnectionattempts.CodeStaticKeyRejected:        {problem: "The service rejected the sign-in details saved for this server.", action: "Ask your administrator to update them."},
+	mcpconnectionattempts.CodeCredentialMisconfigured:  {problem: "This server's sign-in settings aren't right.", action: "Ask your administrator to check them."},
+	mcpconnectionattempts.CodeTunnelUnavailable:        {problem: "This server's private network tunnel is down.", action: "Ask your administrator to check it."},
 }
 
-// unavailableLabel says why a member did not list its tools and who acts.
+// unavailableLabel says why a member did not list its tools and what to do.
 func unavailableLabel(cause mcpconnectionattempts.Code) string {
-	clause, named := unavailableCauses[cause]
+	card, named := unavailableCauses[cause]
 	if adminFixesCause(cause) {
-		return adminLabel(clause)
+		return "Can't connect · " + card.problem + " " + card.action
 	}
 	if meaning, known := mcpconnectionattempts.MeaningOf(cause.String()); named && known && meaning.WhoFixes == mcpconnectionattempts.WhoProvider {
-		return "Unavailable · " + clause + " · try again in a few minutes"
+		return "Unavailable · " + card.problem + " " + card.action
 	}
 	return unavailableGenericLabel
 }

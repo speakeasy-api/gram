@@ -1044,9 +1044,9 @@ func TestUnavailableLabelFollowsWhoFixes(t *testing.T) {
 		switch {
 		case meaning.WhoFixes == mcpconnectionattempts.WhoProvider:
 			require.True(t, named, "%s is the provider's, so waiting helps and the card says so", code)
-			require.Regexp(t, `^Unavailable · .+ · try again in a few minutes$`, label, code.String())
+			require.Regexp(t, `^Unavailable · .+\. Try again in a few minutes\.$`, label, code.String())
 		case named && meaning.WhoFixes == mcpconnectionattempts.WhoAdmin:
-			require.Regexp(t, `^Can't connect · .+ · ask your administrator$`, label, code.String())
+			require.Regexp(t, `^Can't connect · .+\. Ask your administrator to .+\.$`, label, code.String())
 		default:
 			require.False(t, named, code.String())
 			require.Equal(t, unavailableGenericLabel, label, code.String())
@@ -1059,14 +1059,14 @@ func TestUnavailableLabelWording(t *testing.T) {
 	t.Parallel()
 
 	for code, want := range map[mcpconnectionattempts.Code]string{
-		mcpconnectionattempts.CodeProviderRateLimited:      "Unavailable · it's busy · try again in a few minutes",
-		mcpconnectionattempts.CodeProviderServerError:      "Unavailable · it had an error · try again in a few minutes",
-		mcpconnectionattempts.CodeProviderUnreachable:      "Unavailable · it didn't answer · try again in a few minutes",
-		mcpconnectionattempts.CodeRemoteSessionUnavailable: "Unavailable · its sign-in service is down · try again in a few minutes",
-		mcpconnectionattempts.CodeSharedCredentialRejected: "Can't connect · the service rejected its saved sign-in details · ask your administrator",
-		mcpconnectionattempts.CodeStaticKeyRejected:        "Can't connect · the service rejected its saved sign-in details · ask your administrator",
-		mcpconnectionattempts.CodeCredentialMisconfigured:  "Can't connect · its sign-in isn't set up correctly · ask your administrator",
-		mcpconnectionattempts.CodeTunnelUnavailable:        "Can't connect · its private network tunnel is down · ask your administrator",
+		mcpconnectionattempts.CodeProviderRateLimited:      "Unavailable · This server is getting too many requests right now. Try again in a few minutes.",
+		mcpconnectionattempts.CodeProviderServerError:      "Unavailable · This server ran into an error. Try again in a few minutes.",
+		mcpconnectionattempts.CodeProviderUnreachable:      "Unavailable · This server isn't responding. Try again in a few minutes.",
+		mcpconnectionattempts.CodeRemoteSessionUnavailable: "Unavailable · This server's sign-in service is having problems. Try again in a few minutes.",
+		mcpconnectionattempts.CodeSharedCredentialRejected: "Can't connect · The service rejected the sign-in details saved for this server. Ask your administrator to update them.",
+		mcpconnectionattempts.CodeStaticKeyRejected:        "Can't connect · The service rejected the sign-in details saved for this server. Ask your administrator to update them.",
+		mcpconnectionattempts.CodeCredentialMisconfigured:  "Can't connect · This server's sign-in settings aren't right. Ask your administrator to check them.",
+		mcpconnectionattempts.CodeTunnelUnavailable:        "Can't connect · This server's private network tunnel is down. Ask your administrator to check it.",
 		mcpconnectionattempts.CodeMemberToolsMissing:       unavailableGenericLabel,
 	} {
 		require.Equal(t, want, unavailableLabel(code), code.String())

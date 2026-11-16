@@ -294,7 +294,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 	}{
 		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address is private or internal, so Speakeasy can't reach it. Ask your administrator to fix it.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
 		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · This server's address doesn't exist. Ask your administrator to fix it.", reason: mcpconnectionattempts.CodeAddressNotFound},
-		{name: "broken server", url: broken.URL, label: "Unavailable · it had an error · try again in a few minutes", reason: mcpconnectionattempts.CodeProviderServerError},
+		{name: "broken server", url: broken.URL, label: "Unavailable · This server ran into an error. Try again in a few minutes.", reason: mcpconnectionattempts.CodeProviderServerError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
