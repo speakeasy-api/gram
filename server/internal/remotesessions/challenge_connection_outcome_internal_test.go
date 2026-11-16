@@ -82,7 +82,7 @@ func TestExchangeToBlockedAddressIsNotProviderFailure(t *testing.T) {
 	require.Equal(t, "token exchange failed: the sign-in provider uses a private or internal address Speakeasy can't reach. Ask your administrator to check the sign-in provider's address", failure.Error())
 }
 
-// A missing token endpoint reads the same plain words; only Technical details say it does not point anywhere.
+// A missing token endpoint reads the same plain words; only Technical details say it doesn't exist.
 func TestExchangeToMissingAddressNamesItOnlyInTechnicalDetails(t *testing.T) {
 	t.Parallel()
 
@@ -104,7 +104,7 @@ func TestExchangeToMissingAddressNamesItOnlyInTechnicalDetails(t *testing.T) {
 	text := html.UnescapeString(strings.Join(strings.Fields(page.Body.String()), " "))
 	require.Equal(t, http.StatusBadGateway, page.Code)
 	require.Contains(t, text, "because its sign-in address doesn't exist. This isn't something you did.")
-	require.Contains(t, text, "Problem: The sign-in provider uses an address that does not point anywhere.")
+	require.Contains(t, text, "Problem: The sign-in provider's address doesn't exist.")
 	require.NotContains(t, text, "private or internal")
 }
 

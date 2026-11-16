@@ -314,5 +314,5 @@ var (
 
 	// Configured addresses Speakeasy did not dial.
 	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "This server or its sign-in uses a private or internal address Speakeasy can't reach.", "Use a public address, or connect the private network with a tunnel.")
-	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "The address for this server or its sign-in does not point anywhere.", "Check the server and sign-in addresses.")
+	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "The address for this server or its sign-in doesn't exist.", "Check the server and sign-in addresses.")
 )
