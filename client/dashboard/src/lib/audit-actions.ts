@@ -1107,7 +1107,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "toolset:migrate_to_remote_mcp":
       return "migrated the external MCP server";
     case "toolset:move_legacy_alias":
-      return "moved the legacy address of";
+      return "moved the legacy address";
 
     case "trigger-instance:create":
       return "created trigger";
