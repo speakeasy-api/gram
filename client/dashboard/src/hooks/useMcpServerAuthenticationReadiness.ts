@@ -103,10 +103,18 @@ export function useMcpServerAuthenticationReadiness(
   const upstreamAuth = useUpstreamAuthEnforcement();
   const enforcedIdentity =
     remoteMcpServerId !== "" && upstreamAuth === "enforced";
+  // Tunneled servers list their credentials in Settings too, so the header
+  // reads them; only a remote server's readiness step depends on them.
   const upstreamAuthQuery = useMcpServerAuthentication(
     { mcpServerId: mcpServer?.id ?? "" },
     undefined,
-    { enabled: enforcedIdentity && !!mcpServer?.id, throwOnError: false },
+    {
+      enabled:
+        (enforcedIdentity ||
+          (!!mcpServer?.tunneledMcpServerId && upstreamAuth === "enforced")) &&
+        !!mcpServer?.id,
+      throwOnError: false,
+    },
   );
   // Only worth probing when nothing is configured: that is the one state where
   // the upstream's answer changes what the pill should say.

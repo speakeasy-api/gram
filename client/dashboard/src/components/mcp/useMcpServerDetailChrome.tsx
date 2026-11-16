@@ -596,18 +596,25 @@ function identitySummary(
   // The header always shows this row, so every state has words: one that
   // can't be settled yet says so rather than dropping the row.
   if (!signsInUpstream) return { label: "Not used", href };
-  if (auth.loading || auth.isLoadingRemoteIdentity) {
-    return { label: "Checking…", href };
-  }
-  if (auth.unavailable || auth.identityUnavailable) {
-    return { label: "Couldn't check", href, warn: true };
-  }
+  // Under enforcement only the server's credentials decide it; the legacy
+  // identity queries must not hold it at "Checking…" or fail it.
   if (auth.upstreamAuth === "enforced") {
-    const status = auth.upstreamAuthQuery.data?.status;
-    if (status === undefined) return { label: "Checking…", href };
+    const { data, isError } = auth.upstreamAuthQuery;
+    if (isError) return { label: "Couldn't check", href, warn: true };
+    if (!data) return { label: "Checking…", href };
+    if (data.status === "configured") {
+      // The credentials turned on, as Settings' Credentials list shows them.
+      const count = data.clients.filter((client) => client.enabled).length;
+      if (count > 0) {
+        return {
+          label: count === 1 ? "1 credential" : `${count} credentials`,
+          href,
+        };
+      }
+    }
     const presentation = enumPresentation(
       UPSTREAM_AUTH_STATUS,
-      status,
+      data.status,
       UNKNOWN_STATUS,
     );
     return {
@@ -615,6 +622,12 @@ function identitySummary(
       href,
       warn: presentation.tone === "warning",
     };
+  }
+  if (auth.loading || auth.isLoadingRemoteIdentity) {
+    return { label: "Checking…", href };
+  }
+  if (auth.unavailable || auth.identityUnavailable) {
+    return { label: "Couldn't check", href, warn: true };
   }
   return {
     label: auth.passThroughAuthorization

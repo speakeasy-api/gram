@@ -212,7 +212,9 @@ const identityGate = vi.hoisted(() => ({
   authentication: {
     isPending: false,
     isError: false,
-    data: { status: "configured" } as { status: string } | undefined,
+    data: { status: "configured", clients: [] } as
+      | { status: string; clients: unknown[] }
+      | undefined,
   },
   probe: vi.fn((_remoteMcpServerId: string, _enabled: boolean) => "idle"),
 }));
@@ -586,7 +588,7 @@ describe("remote MCP server readiness under enforcement", () => {
     identityGate.authentication = {
       isPending: false,
       isError: false,
-      data: { status: "configured" },
+      data: { status: "configured", clients: [] },
     };
   });
 
@@ -611,7 +613,7 @@ describe("remote MCP server readiness under enforcement", () => {
     identityGate.authentication = {
       isPending: false,
       isError: false,
-      data: { status },
+      data: { status, clients: [] },
     };
     render(<DetailChrome />, { wrapper: MemoryRouter });
     expect(authenticationCheck().getAttribute("data-ready")).toBe(ready);

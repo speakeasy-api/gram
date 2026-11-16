@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
   plugins: [] as unknown[],
   publishStatus: {} as Record<string, unknown>,
   missingEnvVars: 0,
+  upstreamAuth: "legacy" as "legacy" | "enforced",
+  upstreamAuthQuery: {} as Record<string, unknown>,
   guide: null as {
     only: { title: string } | undefined;
     openGuide: null;
@@ -61,7 +63,7 @@ vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
   useSkillsOverMcpEnabled: () => false,
 }));
 vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
-  useUpstreamAuthEnforcement: () => "legacy",
+  useUpstreamAuthEnforcement: () => state.upstreamAuth,
 }));
 vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
   usePrivateMcpServerUrls: () => ({
@@ -140,7 +142,7 @@ vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
-  useMcpServerAuthentication: () => ({}),
+  useMcpServerAuthentication: () => state.upstreamAuthQuery,
 }));
 vi.mock("@/components/detail/detail-sidebar-nav", () => ({
   DetailSidebarInfoLabel: () => null,
@@ -185,6 +187,8 @@ beforeEach(() => {
   state.plugins = [];
   state.publishStatus = {};
   state.missingEnvVars = 0;
+  state.upstreamAuth = "legacy";
+  state.upstreamAuthQuery = {};
   state.guide = null;
 });
 it.each(["disabled", "loading"] as const)(
@@ -381,4 +385,68 @@ it("lists no setup step for a provider without a guide", () => {
   state.server = REMOTE_SERVER;
   renderReadiness();
   expect(screen.queryByText(/^Set up /)).toBeNull();
+});
+
+function IdentityRow() {
+  const chrome = useMcpServerDetailChrome();
+  return (
+    <span data-warn={String(!!chrome?.identity?.warn)}>
+      {chrome?.identity?.label}
+    </span>
+  );
+}
+function renderIdentity() {
+  render(
+    <MemoryRouter
+      initialEntries={["/example/projects/default/mcp/slack/overview"]}
+    >
+      <Routes>
+        <Route
+          path="/example/projects/default/mcp/:mcpServerSlug/:tab"
+          element={<IdentityRow />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+const credential = (enabled: boolean) => ({
+  id: String(Math.random()),
+  enabled,
+});
+
+it.each([
+  [[true, true], "2 credentials"],
+  [[true, false], "1 credential"],
+])(
+  "counts the turned-on credentials under enforced upstream auth",
+  (enabled, label) => {
+    state.upstreamAuth = "enforced";
+    state.upstreamAuthQuery = {
+      data: { status: "configured", clients: enabled.map(credential) },
+      isPending: false,
+      isError: false,
+    };
+    renderIdentity();
+    expect(screen.getByText(label)).toBeDefined();
+  },
+);
+
+it("names an enforced server with no credentials by its sign-in status", () => {
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = {
+    data: { status: "no_auth_required", clients: [] },
+    isPending: false,
+    isError: false,
+  };
+  renderIdentity();
+  expect(screen.getByText("No authentication")).toBeDefined();
+});
+
+it("warns when an enforced server's credentials can't be read", () => {
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = { isPending: false, isError: true };
+  renderIdentity();
+  expect(screen.getByText("Couldn't check").getAttribute("data-warn")).toBe(
+    "true",
+  );
 });
