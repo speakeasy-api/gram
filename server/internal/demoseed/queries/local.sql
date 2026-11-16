@@ -215,6 +215,16 @@ WHERE id = (
 )
 AND NOT (@tool_urn::text = ANY(tool_urns));
 
+-- Locally a vendor (Linear, Notion) cannot fetch a client ID metadata
+-- document from localhost, so the shared seed's metadata document client
+-- becomes the public client the local seed registered with the vendor by
+-- dynamic registration.
+-- name: LocalVendorAppPointRegisteredClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text, client_id_metadata_uri = NULL,
+    callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
 -- name: LocalUpsertInspectRemoteServer :exec
 -- Remote MCP servers for the Inspect tab that exist only locally: the mock
 -- task tracker (server/cmd/mock-mcp), an unreachable upstream and a disabled

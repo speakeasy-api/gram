@@ -120,8 +120,7 @@ func TestModelInvariant_RequiredDimensionsBoundGrants(t *testing.T) {
 }
 
 // A block takes its permission away from a holder of an inherited wildcard
-// allow, and, except where independentBlockKinds still holds today's
-// behaviour, also takes away every permission that implies it.
+// allow, and also takes away every permission that implies it.
 func TestModelInvariant_BlocksWinOverInheritedAllows(t *testing.T) {
 	t.Parallel()
 
@@ -140,12 +139,7 @@ func TestModelInvariant_BlocksWinOverInheritedAllows(t *testing.T) {
 					continue
 				}
 				grants := []Grant{NewGrant(typ.ScopeFor(higher), WildcardResource), block}
-				allowed := invariantAuthorizes(t, grants, invariantCheck(typ, typ.ScopeFor(higher), "resource-1", "project-1"))
-				if slices.Contains(independentBlockKinds, typ.Kind) {
-					require.True(t, allowed, "%s blocks are independent today (R7); remove the kind from independentBlockKinds to change that", typ.Kind)
-					continue
-				}
-				require.False(t, allowed, "%s must also deny %s, which implies %s", typ.BlockScopeFor(blocked), invariantName(typ, higher), invariantName(typ, blocked))
+				require.False(t, invariantAuthorizes(t, grants, invariantCheck(typ, typ.ScopeFor(higher), "resource-1", "project-1")), "%s must also deny %s, which implies %s", typ.BlockScopeFor(blocked), invariantName(typ, higher), invariantName(typ, blocked))
 			}
 		}
 	}

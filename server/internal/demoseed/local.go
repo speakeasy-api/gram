@@ -71,6 +71,9 @@ type LocalFixturesOptions struct {
 	ObservedEnv map[string]string
 	// Slack connects the org to the developer's Slack test app, when set.
 	Slack LocalSlackOptions
+	// Upstreams wires the servers that need the developer's machine: the
+	// Linear and Notion clients.
+	Upstreams LocalUpstreamOptions
 	// ClickHouse receives the local-only servers' telemetry; nil skips it.
 	ClickHouse driver.Conn
 	// MockMCPURL is the local mock MCP server (server/cmd/mock-mcp) to
@@ -93,6 +96,8 @@ type LocalFixturesOptions struct {
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper;
 //   - a global catalog logo entry and public platform asset when SiteURL is set;
+//   - the upstreams that need the developer's machine (fixture_servers.go):
+//     the Linear and Notion clients registered with those vendors;
 //   - the Inspect tab's local-only remote servers (runLocalInspectFixtures).
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
@@ -242,6 +247,9 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}},
 		{"mcp app toolset entry", func() error {
 			return q.LocalAttachMCPAppToToolset(ctx, repo.LocalAttachMCPAppToToolsetParams{OrganizationID: spec.OrgID, ToolUrn: mcpAppToolURN(), ResourceUrn: mcpAppResourceURN(), ToolsetSlug: MCPAppToolsetSlug})
+		}},
+		{"local upstreams", func() error {
+			return wireLocalUpstreams(ctx, logger, tx, opts.Upstreams)
 		}},
 	} {
 		if err := step.run(); err != nil {

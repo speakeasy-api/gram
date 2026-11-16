@@ -6,6 +6,7 @@
 package demoseed
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	_ "embed"
@@ -13,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -22,13 +24,17 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 //go:embed openapi.yaml
-var openapiDoc []byte
+var openapiDocTemplate []byte
+
+// openapiFixturePlaceholder stands for the hosted MCP fixture in openapi.yaml.
+const openapiFixturePlaceholder = "https://speakeasy.example.com/rpc/demoseed"
 
 const (
 	clickHouseDeleteVisibilityTimeout = 30 * time.Second
@@ -46,7 +52,7 @@ const (
 // summaries.
 //
 // Pass DefaultSpec() for the shared production demo org.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL string, spec Spec) error {
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) error {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -60,7 +66,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
-		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, spec)
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec)
 		if err != nil {
 			return err
 		}
@@ -137,7 +143,7 @@ type txBeginner interface {
 // seedPostgres runs the Postgres seed for spec in one transaction on db, so a
 // failed run leaves the previous data in place. It returns the seeder, whose
 // clock the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL string, spec Spec) (*seeder, error) {
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) (*seeder, error) {
 	if enc == nil {
 		return nil, errors.New("demo seed needs the environment's encryption key")
 	}
@@ -145,7 +151,11 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 	if assistantIssuer == "" {
 		return nil, errors.New("demo seed needs the deployment's assistant trigger issuer origin")
 	}
-	s := &seeder{spec: spec, enc: enc, assistantIssuer: assistantIssuer, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	server, err := parseServerURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	s := &seeder{spec: spec, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {
@@ -162,6 +172,8 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 // which SQL alone cannot: it writes the embedded spec through the asset store
 // (fs locally, GCS in prod) and points the seeded assets row at it.
 func (s *seeder) uploadOpenAPIDoc(ctx context.Context, blob assets.BlobStore) error {
+	// The document's OAuth flow names the MCP fixture this deployment hosts.
+	openapiDoc := bytes.ReplaceAll(openapiDocTemplate, []byte(openapiFixturePlaceholder), []byte(fixtureauth.BaseURL(s.serverURL)))
 	docSHA := sha256.Sum256(openapiDoc)
 	w, objURL, err := blob.Write(ctx, "demoseed/"+s.spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
 	if err != nil {
@@ -214,4 +226,25 @@ func waitForClickHouseDelete(
 		case <-ticker.C:
 		}
 	}
+}
+
+// parseServerURL reads the deployment's own URL. It hosts the MCP fixture the
+// seeded servers reach and serves the seeded clients' metadata documents, so
+// it must be an absolute HTTPS origin, or plain HTTP on a loopback host for
+// local development.
+func parseServerURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(strings.TrimRight(raw, "/"))
+	if err != nil || u.Hostname() == "" {
+		return nil, fmt.Errorf("demo seed needs the deployment's server URL (GRAM_SERVER_URL), got %q", raw)
+	}
+	if u.User != nil {
+		return nil, fmt.Errorf("demo seed server URL %q must not carry credentials", u.Redacted())
+	}
+	if u.Scheme != "https" && (u.Scheme != "http" || !isLoopbackHost(u.Hostname())) {
+		return nil, fmt.Errorf("demo seed server URL %q must be HTTPS", raw)
+	}
+	if u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return nil, fmt.Errorf("demo seed server URL %q must be an origin", raw)
+	}
+	return u, nil
 }
