@@ -569,6 +569,9 @@ export function CredentialsWizard({
   // A server whose keys use a shared credential chosen for it needs nobody's
   // own connection: it neither waits on one nor has one attached.
   const usesOwnConnection = (server: InventoryServer): boolean => {
+    // "All servers" carries no per-row choice into the key, so every server
+    // falls back to the owner's own connection.
+    if (allServers) return true;
     const choice = selected.find(
       (entry) => entry.server.id === server.id,
     )?.authClientId;

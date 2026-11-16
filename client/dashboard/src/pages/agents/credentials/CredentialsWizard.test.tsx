@@ -58,6 +58,9 @@ const mocks = vi.hoisted(() => ({
   nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
+  // The registrations the runtime requires of a server, by server id. A
+  // server left out requires every registration its issuer lists.
+  requiredClientIds: {} as Record<string, string[]>,
   serverAuth: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
@@ -181,7 +184,10 @@ vi.mock("@/contexts/Sdk", () => ({
       // so tests that count or inspect those calls are unaffected.
       listServerClientAssociations: async (request: {
         gramProject?: string;
+        mcpServerId: string;
       }) => {
+        const pinned = mocks.requiredClientIds[request.mcpServerId];
+        if (pinned) return { associations: [], requiredClientIds: pinned };
         const read = mocks.sessionClients.getMockImplementation();
         const clients = ((read
           ? await read({ gramProject: request.gramProject })
@@ -478,6 +484,7 @@ afterEach(() => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.requiredClientIds = {};
   mocks.projectId = "project_one";
   mocks.canFederate = true;
   mocks.canReadWorkloads = true;
@@ -4296,6 +4303,31 @@ describe("Servers that sign in as a person", () => {
       undefined,
       expect.anything(),
     );
+  });
+
+  it("asks only for the sign-ins the runtime requires of a server on a shared issuer", async () => {
+    // Without enforcement the issuer lists another server's registration
+    // too, which the creator never connected. The runtime requires only
+    // Linear's own, so Linear is ready and only its connection is attached.
+    mocks.sessionClients.mockResolvedValue([
+      { id: "client_linear", credentialOwner: "subject" },
+      { id: "client_other", credentialOwner: "subject" },
+    ]);
+    mocks.requiredClientIds = { server_linear: ["client_linear"] };
+    mocks.sessions.mockResolvedValue([
+      { ...mine, remoteSessionClientId: "client_linear" },
+    ]);
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("button", { name: /Linear.*Your connection/ });
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.attach).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Continue locked when a server's auth cannot be read", async () => {

@@ -212,7 +212,7 @@ export function StepAuthentication({
                       {session && mine && !expired && !sharedChosen && (
                         <Check className="mr-1 size-3" aria-hidden="true" />
                       )}
-                      {expired && (
+                      {expired && !sharedChosen && (
                         <AlertTriangle
                           className="mr-1 size-3"
                           aria-hidden="true"
@@ -248,7 +248,16 @@ export function StepAuthentication({
                       // A server that signs each caller in also offers the
                       // account connected for the agent, beside its shared
                       // credentials.
-                      accounts={!!server.issuerId && !shared}
+                      // Only once its own auth says it signs each person in:
+                      // an issuer alone does not, and offering the account
+                      // there would default a key past its only credential.
+                      accounts={
+                        !!server.issuerId &&
+                        !shared &&
+                        (connection?.status === "missing" ||
+                          connection?.status === "ready" ||
+                          connection?.status === "ended")
+                      }
                       pickSole
                       label={`Choose how the agent's keys sign in to ${server.name}`}
                       value={credentialChoice.value(server.id)}

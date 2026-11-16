@@ -117,7 +117,7 @@ export function useOwnerConnections(
   // runtime enforces: its own, not those other servers on a shared issuer
   // bring. Read for every server, as the issuer's list is the fallback.
   const required = useQueries({
-    queries: personal.map((server) => ({
+    queries: personal.map((server, index) => ({
       queryKey: ["owner-connections", "required", ownerScope, server.id],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         sdk.remoteSessions.listServerClientAssociations(
@@ -125,7 +125,12 @@ export function useOwnerConnections(
           undefined,
           { signal },
         ),
-      enabled,
+      // Only for a server whose own auth asks each person to sign in: a
+      // shared one never reads it.
+      enabled: (() => {
+        const data = auth[index]?.data;
+        return enabled && !!data && offersPersonalSignIn(data);
+      })(),
       retry: false,
       throwOnError: false,
     })),
@@ -294,6 +299,9 @@ export function useOwnerConnections(
         [
           ...sessions,
           ...clients,
+          // Which sign-ins a server requires does not change on sign-in, but
+          // a failed read gets another try.
+          ...required.filter((read) => read.isError),
           ...(agentId ? bindings : []),
           // A server's auth does not change when someone signs in, but a
           // failed read gets another try.

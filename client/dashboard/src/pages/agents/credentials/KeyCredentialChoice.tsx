@@ -77,7 +77,14 @@ export function KeyCredentialChoice({
     }
     // A server that signs in each person starts on that personal connection,
     // as a key with no pick is served anyway, so the picker never sits empty.
-    if (choices.isSuccess && accounts && options.length > 0 && !value)
+    // Only before anything was picked: a pick cleared because the server
+    // stopped offering it stays visibly undecided.
+    if (
+      choices.isSuccess &&
+      accounts &&
+      options.length > 0 &&
+      value === undefined
+    )
       onChange(ACCOUNT_CHOICE);
   }, [
     choices.isSuccess,
