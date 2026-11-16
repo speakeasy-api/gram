@@ -14,8 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/mcp-fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
@@ -57,7 +57,7 @@ const localEMAProviderName = "Acme Identity (local dev-idp)"
 // is fixed.
 //
 // A dev-idp that cannot be reached leaves the server display-only.
-func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalMCPFixtureOptions, base string) error {
+func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions, base string) error {
 	if opts.DevIDPURL == "" || opts.DevIDPURL == "unset" || opts.DevIDPClientID == "" || opts.DevIDPClientID == "unset" {
 		logger.InfoContext(ctx, "the dev-idp URL or login client id is not set; the Enterprise Sign-In (ID-JAG) Server stays display-only")
 		return nil
@@ -100,25 +100,25 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 			return q.LocalEMAPointIdentityProviderClient(ctx, repo.LocalEMAPointIdentityProviderClientParams{ClientID: clientID, ClientSecretEncrypted: secret, CallbackBaseUrl: serverURL, ID: s.det("ema-idp-client"), OrganizationID: org})
 		}},
 		{"point the remote server", func() (int64, error) {
-			return q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: resource, ID: s.det("remotemcp-enterprise-sign-in"), ProjectID: proj})
+			return q.FixturePointRemoteServer(ctx, repo.FixturePointRemoteServerParams{Url: resource, ID: s.det("remotemcp-ema-tracker"), ProjectID: proj})
 		}},
 		{"point the authorization server", func() (int64, error) {
-			return q.LocalEMAPointVendorIssuer(ctx, repo.LocalEMAPointVendorIssuerParams{Issuer: authServer, Scopes: scopes, ID: s.det("ema-vendor-enterprise-sign-in"), ProjectID: proj})
+			return q.LocalEMAPointVendorIssuer(ctx, repo.LocalEMAPointVendorIssuerParams{Issuer: authServer, Scopes: scopes, ID: s.det("ema-vendor-tracker"), ProjectID: proj})
 		}},
 		{"point the authorization server client", func() (int64, error) {
-			return q.LocalEMAPointVendorClient(ctx, repo.LocalEMAPointVendorClientParams{ClientID: clientID, ClientSecretEncrypted: secret, Scopes: scopes, ID: s.det("ema-client-enterprise-sign-in"), ProjectID: proj})
+			return q.LocalEMAPointVendorClient(ctx, repo.LocalEMAPointVendorClientParams{ClientID: clientID, ClientSecretEncrypted: secret, Scopes: scopes, ID: s.det("ema-client-tracker"), ProjectID: proj})
 		}},
 		{"point the protected resource", func() (int64, error) {
 			return q.LocalEMAPointProtectedResource(ctx, repo.LocalEMAPointProtectedResourceParams{
 				Resource: resource, MetadataUrl: base + "/.well-known/oauth-protected-resource" + fixtureauth.PathEMAMCP,
-				Issuer: authServer, Scopes: scopes, ID: s.det("protected-resource-enterprise-sign-in"), ProjectID: proj,
+				Issuer: authServer, Scopes: scopes, ID: s.det("protected-resource-ema-tracker"), ProjectID: proj,
 			})
 		}},
 		{"point the binding", func() (int64, error) {
-			return q.LocalEMAPointBinding(ctx, repo.LocalEMAPointBindingParams{Resource: resource, ID: s.det("ema-binding-enterprise-sign-in"), ProjectID: proj})
+			return q.LocalEMAPointBinding(ctx, repo.LocalEMAPointBindingParams{Resource: resource, ID: s.det("ema-binding-tracker"), ProjectID: proj})
 		}},
 		{"point the typed auth client", func() (int64, error) {
-			return q.LocalEMAPointAuthClient(ctx, repo.LocalEMAPointAuthClientParams{Resource: resource, RemoteSessionClientID: s.det("ema-client-enterprise-sign-in"), OrganizationID: org})
+			return q.LocalEMAPointAuthClient(ctx, repo.LocalEMAPointAuthClientParams{Resource: resource, RemoteSessionClientID: s.det("ema-client-tracker"), OrganizationID: org})
 		}},
 	}
 	for _, step := range steps {

@@ -429,22 +429,6 @@ func (q *Queries) PostflightIDGitHubCheckAccessGrants(ctx context.Context, arg P
 	return count, err
 }
 
-const postflightIDInertUpstreamSessions = `-- name: PostflightIDInertUpstreamSessions :one
-SELECT count(*) FROM remote_sessions
-WHERE remote_session_client_id = $1::uuid
-  AND deleted IS FALSE
-  AND access_token_encrypted <> '' AND refresh_token_encrypted IS NULL
-  AND (validation_status IS NULL
-       OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'))
-`
-
-func (q *Queries) PostflightIDInertUpstreamSessions(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDInertUpstreamSessions, remoteSessionClientID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const postflightIDInferenceGrants = `-- name: PostflightIDInferenceGrants :one
 SELECT count(*) FROM principal_grants
 WHERE organization_id = $1::text AND scope = 'inference:execute'
@@ -748,12 +732,19 @@ func (q *Queries) PostflightIDLinearIssuerStamp(ctx context.Context, arg Postfli
 const postflightIDLinearProtectedResource = `-- name: PostflightIDLinearProtectedResource :one
 SELECT count(*) FROM remote_protected_resources
 WHERE project_id = $1::uuid AND deleted IS FALSE
-  AND resource_identifier = 'https://mcp-fixture.example.com/mcp/oauth'
-  AND scope_override = ARRAY['notes:read']
+  AND resource_identifier = $2::text
+  AND scope_override = ARRAY['notes:read', 'notes:write']
 `
 
-func (q *Queries) PostflightIDLinearProtectedResource(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDLinearProtectedResource, projectID)
+type PostflightIDLinearProtectedResourceParams struct {
+	ProjectID uuid.UUID
+	Resource  string
+}
+
+// The fixture servers phase moves it to the hosted fixture and pins both
+// of the fixture's scopes, so a new sign-in can read and write notes.
+func (q *Queries) PostflightIDLinearProtectedResource(ctx context.Context, arg PostflightIDLinearProtectedResourceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDLinearProtectedResource, arg.ProjectID, arg.Resource)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -831,7 +822,7 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 
 // Count live choices outside the intended set: the Per-User OAuth Server through its main client,
 // the Service Account Server with no upstream authentication, the organization gateway's Pass-Through Token Server
-// choice of the caller's own token and its tunneled inventory choice, each on a
+// choice of the caller's own token and its Auto-Configured OAuth Server choice, each on a
 // seeded session.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDMisassignedUpstreamClientChoices,
@@ -868,6 +859,24 @@ WHERE organization_id = $1::text AND state = 'pending'
 
 func (q *Queries) PostflightIDPendingDirectoryReviewItems(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDPendingDirectoryReviewItems, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDPerUserUpstreamSessions = `-- name: PostflightIDPerUserUpstreamSessions :one
+SELECT count(*) FROM remote_sessions
+WHERE remote_session_client_id = $1::uuid
+  AND deleted IS FALSE
+  AND access_token_encrypted <> ''
+  AND (validation_status IS NULL
+       OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'))
+`
+
+// The Per-User OAuth Server's sign-ins. The live ones hold MCP fixture
+// tokens (fixture_servers.go); the expired ones keep the dummy token.
+func (q *Queries) PostflightIDPerUserUpstreamSessions(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDPerUserUpstreamSessions, remoteSessionClientID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1077,7 +1086,6 @@ WHERE b.organization_id = $2::text AND b.project_id = $3::uuid
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
   AND rs.access_token_encrypted <> ''
-  AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE
 `
 
 type PostflightIDSessionAttachmentsParams struct {

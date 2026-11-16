@@ -12,13 +12,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/mcp-fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -116,13 +115,13 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 	devIDP := httptest.NewServer(idp)
 	t.Cleanup(devIDP.Close)
 
-	const base = "https://fixture.example.test:4443"
+	base := fixtureauth.BaseURL(serverURL)
 	const clientID = "speakeasy-local-login"
 	opts := LocalFixturesOptions{
 		DeveloperEmail: testDeveloperEmail,
 		Environment:    "local",
-		MCPFixture: LocalMCPFixtureOptions{
-			BaseURL: base, ServerURL: serverURL, AccessTokenTTL: time.Hour, Encryption: enc,
+		Upstreams: LocalUpstreamOptions{
+			ServerURL: serverURL, Encryption: enc,
 			DevIDPURL: devIDP.URL, DevIDPClientID: clientID, HTTPClient: devIDP.Client(),
 		},
 	}
@@ -135,12 +134,12 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 		seedLocalPostgres(ctx, t, db, spec)
 		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, nil, opts))
 
-		server, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-enterprise-sign-in"))
+		server, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-ema-tracker"))
 		require.NoError(t, err)
 		require.Equal(t, "Enterprise Sign-In (ID-JAG) Server", server.Name.String)
 		require.Equal(t, resource, server.Url)
 
-		wiring, err := q.GetLocalEMAWiringFixture(ctx, s.det("ema-binding-enterprise-sign-in"))
+		wiring, err := q.GetLocalEMAWiringFixture(ctx, s.det("ema-binding-tracker"))
 		require.NoError(t, err)
 		require.Equal(t, resource, wiring.Resource)
 		require.Equal(t, devIDP.URL+devIDPOAuth21Prefix, wiring.IdentityProvider)

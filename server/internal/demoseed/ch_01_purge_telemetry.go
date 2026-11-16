@@ -109,6 +109,8 @@ var chPurgeProjectTables = []string{
 	"attribute_keys",
 	"shadow_mcp_inventory_urls",
 	"mcp_network_traffic_hourly_summaries",
+	// No server the seed writes is tunnelled any more; the purge still clears
+	// the snapshots earlier seeds wrote.
 	"tunnel_metric_snapshots",
 }
 

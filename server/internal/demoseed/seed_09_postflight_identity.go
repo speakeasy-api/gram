@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 
 	"github.com/speakeasy-api/gram/tunnel/jwks"
@@ -90,12 +91,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				ProjectID:        proj,
 				RemoteSessionIds: []uuid.UUID{s.det("attachment-session"), s.det("attachment-session-expired")},
 			})
-		}, 2, "demo seed postflight: expected 2 inert reachable exact-session attachments, found %d"},
+		}, 2, "demo seed postflight: expected 2 reachable exact-session attachments, found %d"},
 		{byOrg(s.q.PostflightIDSessionBindings), 2, "demo seed postflight: expected 2 principal session bindings, found %d"},
 		{byProj(s.q.PostflightIDUserOwnedUpstreamSessions), 6, "demo seed postflight: expected 6 user-owned upstream sessions, found %d"},
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
-		}, 6, "demo seed postflight: expected 6 inert upstream sessions (4 validated-spread, 2 attached), found %d"},
+			return s.q.PostflightIDPerUserUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
+		}, 6, "demo seed postflight: expected 6 Per-User OAuth Server upstream sessions (4 validated-spread, 2 attached), found %d"},
 		{byOrg(s.q.PostflightIDAgents), 7, "demo seed postflight: expected 7 managed agents, found %d"},
 		{byOrg(s.q.PostflightIDAgentSessions), 1, "demo seed postflight: expected 1 managed agent session, found %d"},
 		// This External OAuth row drives the metadata recommendation. Keep its
@@ -152,7 +153,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// Two upstream MCP issuers, two independent gateway issuers, one
 		// Connections issuer, the Auto-Configured OAuth Server's issuer, the
 		// Pass-Through Token Server's issuer and Linear's.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 8, "demo seed postflight: expected 8 project user session issuers, found %d"},
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 9, "demo seed postflight: expected 9 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
 		// The workforce issuer, and the Enterprise Sign-In (ID-JAG) Server's
 		// own federated sign-in.
@@ -183,11 +184,11 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byOrg(s.q.PostflightIDSavedEMAProviders), 0, "demo seed postflight: expected no saved EMA provider, found %d"},
 		// The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
 		// Pro, the Enterprise Sign-In (ID-JAG) Server's authorization server, and Linear.
-		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 5, "demo seed postflight: expected 5 project remote session issuers, found %d"},
+		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 7, "demo seed postflight: expected 7 project remote session issuers, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
-		}, 2, "demo seed postflight: expected 2 Remote MCP identity clients (the Per-User OAuth Server's and Linear's), found %d"},
-		{byProj(s.q.PostflightIDRemoteIdentityBindings), 3, "demo seed postflight: expected 3 Remote MCP User Identity bindings, found %d"},
+		}, 4, "demo seed postflight: expected 4 Remote MCP identity clients (the Per-User OAuth Server's, the Auto-Configured OAuth Server's, Linear's and Notion's), found %d"},
+		{byProj(s.q.PostflightIDRemoteIdentityBindings), 5, "demo seed postflight: expected 5 Remote MCP User Identity bindings, found %d"},
 		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
 		// derive: every live client bound to the Per-User OAuth Server's user session issuer names
 		// one remote issuer, and it is the stamped one. The query returns no
@@ -212,17 +213,21 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearRemoteIssuer: linearRemoteIssuer,
 			})
 		}, 1, "demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %d"},
-		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected the Per-User OAuth Server's protected resource pinned to read, found %d matching rows"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDLinearProtectedResource(ctx, repo.PostflightIDLinearProtectedResourceParams{
+				ProjectID: proj, Resource: fixtureauth.OAuthResource(fixtureauth.BaseURL(s.serverURL)),
+			})
+		}, 1, "demo seed postflight: expected the Per-User OAuth Server's protected resource on the hosted fixture with both scopes pinned, found %d matching rows"},
 		// The Per-User OAuth Server's one OAuth client, the Enterprise
-		// Sign-In (ID-JAG) Server's own client, and Linear's.
-		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
+		// Sign-In (ID-JAG) Server's own client, Linear's and Notion's.
+		{byProj(s.q.PostflightIDServerClientAssociations), 5, "demo seed postflight: expected 5 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Per-User OAuth Server
 		// and Service Account Server sign-ins on their own server, the gateway
 		// sign-ins on both members.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion")},
+				OrgNoAuthServerIds: []uuid.UUID{},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
@@ -236,7 +241,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion")},
+				OrgNoAuthServerIds: []uuid.UUID{},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,

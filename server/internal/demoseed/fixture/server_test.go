@@ -1,9 +1,10 @@
-package mcpfixture_test
+package fixture_test
 
 import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -14,32 +15,78 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	mcpfixture "github.com/speakeasy-api/gram/mcp-fixture"
-	"github.com/speakeasy-api/gram/mcp-fixture/fixtureauth"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func startFixture(t *testing.T, ttl time.Duration) (*httptest.Server, string) {
 	t.Helper()
 	srv := httptest.NewUnstartedServer(nil)
 	base := "http://" + srv.Listener.Addr().String()
-	srv.Config.Handler = mcpfixture.New(mcpfixture.Config{BaseURL: base, AccessTokenTTL: ttl, SuggestedEmails: []string{"alex@fixture.test"}}).Handler()
+	srv.Config.Handler = fixture.New(fixture.Config{BaseURL: base, AccessTokenTTL: ttl, SuggestedEmails: []string{"alex@fixture.test"}}).Handler()
 	srv.Start()
 	t.Cleanup(srv.Close)
 	return srv, base
+}
+
+// fixtureHTTPClient is the client the fixture uses for outbound calls, built
+// the way the Speakeasy server builds it, without the SSRF block list so it
+// reaches test servers on loopback.
+func fixtureHTTPClient(t *testing.T) *guardian.HTTPClient {
+	t.Helper()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	return policy.Client()
 }
 
 func noRedirect() *http.Client {
 	return &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-func decode[T any](t *testing.T, resp *http.Response) T {
+// decodeBody decodes a JSON response body. The caller closes it.
+func decodeBody[T any](t *testing.T, resp *http.Response) T {
 	t.Helper()
-	defer func() { _ = resp.Body.Close() }()
 	var v T
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&v))
 	return v
+}
+
+// getJSON fetches u and decodes its JSON body.
+func getJSON[T any](t *testing.T, u string) T {
+	t.Helper()
+	resp := get(t, u)
+	defer func() { _ = resp.Body.Close() }()
+	return decodeBody[T](t, resp)
+}
+
+// postFormJSON posts form to u and decodes its JSON body.
+func postFormJSON[T any](t *testing.T, u string, form url.Values) T {
+	t.Helper()
+	resp := postForm(t, u, form)
+	defer func() { _ = resp.Body.Close() }()
+	return decodeBody[T](t, resp)
+}
+
+// register registers a client with the authorization server at issuer and
+// returns its client id.
+func register(t *testing.T, issuer, redirect string) string {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, issuer+"/oauth/register",
+		strings.NewReader(`{"redirect_uris":["`+redirect+`"],"client_name":"Test client","token_endpoint_auth_method":"none"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	clientID, ok := decodeBody[map[string]any](t, resp)["client_id"].(string)
+	require.True(t, ok, "client_id is a string")
+	return clientID
 }
 
 type tokenResponse struct {
@@ -57,17 +104,14 @@ func signIn(t *testing.T, base, email string) tokenResponse {
 	redirect := "https://client.example.test/callback"
 
 	// Discovery: the protected resource names the authorization server.
-	prm := decode[map[string]any](t, get(t, base+"/.well-known/oauth-protected-resource/mcp/oauth"))
+	prm := getJSON[map[string]any](t, base+"/.well-known/oauth-protected-resource/mcp/oauth")
 	require.Equal(t, []any{base}, prm["authorization_servers"])
-	asm := decode[map[string]any](t, get(t, base+"/.well-known/oauth-authorization-server"))
+	asm := getJSON[map[string]any](t, base+"/.well-known/oauth-authorization-server")
 	require.Equal(t, base, asm["issuer"])
 	require.Equal(t, true, asm["client_id_metadata_document_supported"])
 
 	// Dynamic client registration.
-	reg, err := http.Post(base+"/oauth/register", "application/json", strings.NewReader(`{"redirect_uris":["`+redirect+`"],"client_name":"Test client","token_endpoint_auth_method":"none"}`))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, reg.StatusCode)
-	clientID := decode[map[string]any](t, reg)["client_id"].(string)
+	clientID := register(t, base, redirect)
 
 	verifier := "a-long-enough-pkce-code-verifier-for-the-fixture-test-1234567890"
 	sum := sha256.Sum256([]byte(verifier))
@@ -101,8 +145,8 @@ func signIn(t *testing.T, base, email string) tokenResponse {
 	require.NotEmpty(t, code)
 
 	// A wrong verifier is rejected; the right one gets tokens, once.
-	bad := postForm(t, base+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {clientID}, "redirect_uri": {redirect}, "code_verifier": {"wrong"}})
-	require.Equal(t, "invalid_grant", decode[tokenResponse](t, bad).Error)
+	bad := postFormJSON[tokenResponse](t, base+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {clientID}, "redirect_uri": {redirect}, "code_verifier": {"wrong"}})
+	require.Equal(t, "invalid_grant", bad.Error)
 	// The failed attempt spent the code, so sign in again for a fresh one.
 	return exchangeFresh(t, base, clientID, redirect, email, verifier, q)
 }
@@ -122,12 +166,12 @@ func exchangeFresh(t *testing.T, base, clientID, redirect, email, verifier strin
 	require.NoError(t, err)
 	code := loc.Query().Get("code")
 
-	tok := decode[tokenResponse](t, postForm(t, base+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {clientID}, "redirect_uri": {redirect}, "code_verifier": {verifier}}))
+	tok := postFormJSON[tokenResponse](t, base+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {clientID}, "redirect_uri": {redirect}, "code_verifier": {verifier}})
 	require.Empty(t, tok.Error)
 	require.NotEmpty(t, tok.AccessToken)
 	require.NotEmpty(t, tok.RefreshToken)
 
-	again := decode[tokenResponse](t, postForm(t, base+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {clientID}, "redirect_uri": {redirect}, "code_verifier": {verifier}}))
+	again := postFormJSON[tokenResponse](t, base+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {clientID}, "redirect_uri": {redirect}, "code_verifier": {verifier}})
 	require.Equal(t, "invalid_grant", again.Error, "a code works once")
 	return tok
 }
@@ -156,7 +200,11 @@ type bearerTransport struct{ token string }
 func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	r = r.Clone(r.Context())
 	r.Header.Set("Authorization", "Bearer "+b.token)
-	return http.DefaultTransport.RoundTrip(r)
+	resp, err := http.DefaultTransport.RoundTrip(r)
+	if err != nil {
+		return nil, fmt.Errorf("round trip: %w", err)
+	}
+	return resp, nil
 }
 
 func callTool(t *testing.T, endpoint, token, tool string, args map[string]any) map[string]any {
@@ -187,10 +235,10 @@ func TestOAuthSignInAndRefresh(t *testing.T) {
 	require.Equal(t, []any{"hello"}, notes["notes"])
 
 	// Refresh rotates: the new refresh token works, the old one is spent.
-	fresh := decode[tokenResponse](t, postForm(t, base+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok.RefreshToken}}))
+	fresh := postFormJSON[tokenResponse](t, base+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok.RefreshToken}})
 	require.Empty(t, fresh.Error)
 	require.NotEqual(t, tok.RefreshToken, fresh.RefreshToken)
-	reused := decode[tokenResponse](t, postForm(t, base+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok.RefreshToken}}))
+	reused := postFormJSON[tokenResponse](t, base+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok.RefreshToken}})
 	require.Equal(t, "invalid_grant", reused.Error)
 
 	who = callTool(t, base+fixtureauth.PathOAuthMCP, fresh.AccessToken, "whoami", nil)
@@ -236,7 +284,7 @@ func TestExpiredAccessTokenIsRejected(t *testing.T) {
 
 	// Its refresh token still works: that is how an expired connection
 	// recovers without signing in again.
-	fresh := decode[tokenResponse](t, postForm(t, base+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {pair.RefreshToken}}))
+	fresh := postFormJSON[tokenResponse](t, base+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {pair.RefreshToken}})
 	require.Empty(t, fresh.Error)
 }
 
@@ -276,9 +324,9 @@ func TestSharedEndpoint(t *testing.T) {
 func TestAPIStub(t *testing.T) {
 	t.Parallel()
 	_, base := startFixture(t, time.Hour)
-	body := decode[map[string]any](t, get(t, base+fixtureauth.PathAPI+"/customers/get?id=cus_42"))
+	body := getJSON[map[string]any](t, base+fixtureauth.PathAPI+"/customers/get?id=cus_42")
 	require.Equal(t, "cus_42", body["id"])
-	health := decode[map[string]any](t, get(t, base+fixtureauth.PathAPI+"/health/check"))
+	health := getJSON[map[string]any](t, base+fixtureauth.PathAPI+"/health/check")
 	require.Equal(t, "ok", health["status"])
 }
 
@@ -331,17 +379,19 @@ func TestDCRServerTakesOnlyRegisteredClients(t *testing.T) {
 
 	// Discovery, from the well-known locations at the host root and from the
 	// 401's resource_metadata.
-	prm := decode[map[string]any](t, get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathDCR+fixtureauth.PathAutoMCP))
+	prm := getJSON[map[string]any](t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathDCR+fixtureauth.PathAutoMCP)
 	require.Equal(t, autoURL, prm["resource"])
 	require.Equal(t, []any{dcr}, prm["authorization_servers"])
-	prm = decode[map[string]any](t, get(t, dcr+"/.well-known/oauth-protected-resource"+fixtureauth.PathAutoMCP))
+	prm = getJSON[map[string]any](t, dcr+"/.well-known/oauth-protected-resource"+fixtureauth.PathAutoMCP)
 	require.Equal(t, autoURL, prm["resource"])
 	for _, metadataURL := range []string{base + "/.well-known/oauth-authorization-server" + fixtureauth.PathDCR, dcr + "/.well-known/oauth-authorization-server"} {
-		asm := decode[map[string]any](t, get(t, metadataURL))
+		asm := getJSON[map[string]any](t, metadataURL)
 		require.Equal(t, dcr, asm["issuer"], metadataURL)
 		require.Equal(t, false, asm["client_id_metadata_document_supported"], metadataURL)
 		require.Equal(t, dcr+"/oauth/register", asm["registration_endpoint"], metadataURL)
-		docs := get(t, asm["service_documentation"].(string))
+		docsURL, ok := asm["service_documentation"].(string)
+		require.True(t, ok, "service_documentation is a string")
+		docs := get(t, docsURL)
 		_ = docs.Body.Close()
 		require.Equal(t, http.StatusOK, docs.StatusCode, "service_documentation must resolve")
 	}
@@ -361,10 +411,7 @@ func TestDCRServerTakesOnlyRegisteredClients(t *testing.T) {
 	require.NotEqual(t, http.StatusOK, refused.StatusCode)
 
 	// A registered client signs in and calls a tool.
-	reg, err := http.Post(dcr+"/oauth/register", "application/json", strings.NewReader(`{"redirect_uris":["`+redirect+`"],"client_name":"Test client","token_endpoint_auth_method":"none"}`))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, reg.StatusCode)
-	clientID := decode[map[string]any](t, reg)["client_id"].(string)
+	clientID := register(t, dcr, redirect)
 	q := authorize(clientID)
 	page := get(t, dcr+"/oauth/authorize?"+q.Encode())
 	_ = page.Body.Close()
@@ -384,10 +431,10 @@ func TestDCRServerTakesOnlyRegisteredClients(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, dcr, loc.Query().Get("iss"))
 
-	tok := decode[tokenResponse](t, postForm(t, dcr+"/oauth/token", url.Values{
+	tok := postFormJSON[tokenResponse](t, dcr+"/oauth/token", url.Values{
 		"grant_type": {"authorization_code"}, "code": {loc.Query().Get("code")}, "client_id": {clientID},
 		"redirect_uri": {redirect}, "code_verifier": {verifier}, "resource": {autoURL},
-	}))
+	})
 	require.Empty(t, tok.Error)
 	who := callTool(t, autoURL, tok.AccessToken, "whoami", nil)
 	require.Equal(t, "sam@fixture.test", who["identity"])
@@ -424,7 +471,10 @@ func fakeResourceAS(t *testing.T, active map[string]map[string]any) string {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /resource-as/"+fixtureauth.EMAResourceSlug+"/introspect", func(w http.ResponseWriter, r *http.Request) {
-		require.NoError(t, r.ParseForm())
+		if !assert.NoError(t, r.ParseForm()) {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
 		body, ok := active[r.Form.Get("token")]
 		if !ok {
 			body = map[string]any{"active": false}
@@ -441,7 +491,7 @@ func startEMAFixture(t *testing.T, devIDPURL string) string {
 	t.Helper()
 	srv := httptest.NewUnstartedServer(nil)
 	base := "http://" + srv.Listener.Addr().String()
-	srv.Config.Handler = mcpfixture.New(mcpfixture.Config{BaseURL: base, AccessTokenTTL: time.Hour, DevIDPURL: devIDPURL}).Handler()
+	srv.Config.Handler = fixture.New(fixture.Config{BaseURL: base, AccessTokenTTL: time.Hour, DevIDPURL: devIDPURL, HTTPClient: fixtureHTTPClient(t)}).Handler()
 	srv.Start()
 	t.Cleanup(srv.Close)
 	return base
@@ -460,7 +510,7 @@ func TestEMAEndpoint(t *testing.T) {
 	tokens["other-issuer"] = map[string]any{"active": true, "scope": fixtureauth.EMAScope, "username": "dev@fixture.test", "exp": exp, "aud": resource, "iss": "https://elsewhere.test/as"}
 
 	// The protected resource names the dev-idp's resource authorization server.
-	meta := decode[map[string]any](t, get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP))
+	meta := getJSON[map[string]any](t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP)
 	require.Equal(t, resource, meta["resource"])
 	require.Equal(t, []any{authServer}, meta["authorization_servers"])
 
@@ -509,7 +559,11 @@ func (h headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if h.value != "" {
 		r.Header.Set(h.name, h.value)
 	}
-	return http.DefaultTransport.RoundTrip(r)
+	resp, err := http.DefaultTransport.RoundTrip(r)
+	if err != nil {
+		return nil, fmt.Errorf("round trip: %w", err)
+	}
+	return resp, nil
 }
 
 func TestOwnTokenEndpoint(t *testing.T) {
@@ -567,13 +621,3 @@ func TestOwnTokenEndpoint(t *testing.T) {
 
 // The DCR server sits on another host than a localhost fixture, so the
 // dashboard does not take it for the main authorization server.
-func TestDCRIssuerUsesAnotherHost(t *testing.T) {
-	t.Parallel()
-	require.Equal(t, "https://127.0.0.1:24973/dcr", fixtureauth.DCRIssuer("https://localhost:24973/"))
-	require.Equal(t, "https://127.0.0.1:24973/dcr/mcp/auto", fixtureauth.AutoResource("https://localhost:24973"))
-	require.Equal(t, "http://localhost:5000/dcr", fixtureauth.DCRIssuer("http://127.0.0.1:5000"))
-	require.False(t, fixtureauth.DCRSharesHost("https://localhost:24973"))
-	// A host with no known alternate name keeps the issuer on it, and says so.
-	require.Equal(t, "https://dev.example.ts.net:24973/dcr", fixtureauth.DCRIssuer("https://dev.example.ts.net:24973"))
-	require.True(t, fixtureauth.DCRSharesHost("https://dev.example.ts.net:24973"))
-}

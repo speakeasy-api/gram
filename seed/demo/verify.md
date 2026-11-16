@@ -141,8 +141,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     Authentication** (`/mcp/<org>-external-oauth/authentication`). The page
     shows the existing Speakeasy-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
-    starts with the fictional `https://auth.example.com` issuer; live discovery
-    does not need to succeed for this seeded-page check.
+    starts with the hosted MCP fixture's issuer (`GRAM_SERVER_URL/rpc/demoseed`);
+    live discovery does not need to succeed for this seeded-page check.
 
 12a. **Organization Gateway** — after seeding, open **MCP**
 (`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
@@ -282,12 +282,12 @@ open their effective assignments; the dropdown always offers compact member sear
     - **Agent OAuth consent:** select an agent, finish required third-party
       connections (or reuse an owned account), explicitly authorize its use,
       and only then complete consent. Missing connections must block approval.
-      Verify policy is unchanged. Use a locally executable provider for live
-      exchange; the inert shared seed cannot prove third-party authentication.
+      Verify policy is unchanged. Use a provider that completes a live
+      exchange, such as the Per-User OAuth Server's hosted MCP fixture.
     - Seed rationale: four identities cover active, suspended and revoked
       states; the two active release agents have exact project/server-scoped
-      Per-User OAuth Server grants and share one human-owned upstream session (inert in the
-      demo org; a live MCP fixture token locally). API keys
+      Per-User OAuth Server grants and share one human-owned upstream session (a
+      live MCP fixture token in every org). API keys
       remain empty and the agent credential session is expired. Confirm the
       release agents' policy views show their scoped grant; the other two
       identities retain an explicit empty direct-policy state.
@@ -368,8 +368,8 @@ open their effective assignments; the dropdown always offers compact member sear
     Remote MCP server. The Per-User OAuth Server shows the **User** identity pill, the MCP
     Fixture OAuth provider, and the Session length / Client access controls
     in Sessions. The Service Account Server shows **Shared credential** with its static
-    Authorization header (locally the MCP fixture's shared token). The Pass-Through Token
-    Server shows **Manual**; locally its Custom Headers list a required, secret
+    Authorization header (the MCP fixture's shared token). The Pass-Through Token
+    Server shows **Manual**; its Custom Headers list a required, secret
     `X-Upstream-Token` header forwarded from the caller's request, and neither
     a legacy pass-through nor an auth-challenge warning appears. All three use the Display,
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
@@ -382,9 +382,10 @@ open their effective assignments; the dropdown always offers compact member sear
     OAuth client, "Fixture OAuth sign-in". The legacy callback client
     (`attachment-client`) has no row in
     `remote_session_client_user_session_issuers` and no server association;
-    it shows only on the provider's pages. The demo org points both fixture
-    servers at the placeholder `mcp-fixture.example.com`; after `mise run seed`
-    the local org points them at `GRAM_MCP_FIXTURE_URL`.
+    it shows only on the provider's pages. Every org points the fixture
+    servers at the MCP fixture the Speakeasy server hosts,
+    `GRAM_SERVER_URL/rpc/demoseed`; none keeps the placeholder
+    `mcp-fixture.example.com`.
 
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
@@ -477,13 +478,12 @@ open their effective assignments; the dropdown always offers compact member sear
       connection. Remove a selected server here without returning to selection.
     - **Reauthenticate** and **Remove** belong on the connection subrow;
       expired connections use a warning treatment. Reauthenticate is available
-      only to the person whose connection expired. Locally, the MCP fixture is
+      only to the person whose connection expired. The hosted MCP fixture is
       the OAuth server: verify Reauthenticate opens a small popup on the
       fixture's sign-in page (pick an email), and the row refreshes
       automatically when the popup closes. The icon-only status refresh is a
       fallback, not a required second step. A successful explicit
-      reauthentication must restore gateway calls; the demo org's inert seed
-      cannot prove that exchange.
+      reauthentication must restore gateway calls.
     - On creation, missing or expired individual selections must be connected
       or removed before continuing. **All servers** keeps valid assignments
       and names missing connections without blocking progression. On edit,
@@ -496,9 +496,8 @@ open their effective assignments; the dropdown always offers compact member sear
     - Rerun `mise run seed` twice. Expect six managed agents, two attachment
       sessions on the Per-User OAuth Server's one OAuth client, two bindings and two exact
       project/server-scoped grants. The four Per-User OAuth Server validation sessions
-      (members 3 to 6) remain intact. In the demo org every upstream
-      credential is inert; locally, the unexpired sessions hold real MCP
-      fixture tokens and the expired one stays expired.
+      (members 3 to 6) remain intact. In every org the unexpired sessions
+      hold real MCP fixture tokens and the expired one stays expired.
 
 24. **Identity-chaining registration evidence**
     - Run `mise run seed` twice in an isolated local stack. In its `default`
@@ -711,20 +710,25 @@ open their effective assignments; the dropdown always offers compact member sear
     - As the local admin (who holds both scopes) the same rows appear among
       everyone else's, and no other member's sessions appear as the persona.
 
-36. **Seeded MCP servers** (names in both orgs; live checks local only)
+36. **Seeded MCP servers** (names in both orgs; live checks locally and in
+    the public demo org)
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (API Key),
       Server-Specific Sign-In, External OAuth Server
       (each toolset's canonical wrapper), Per-User OAuth Server, Service
-      Account Server, Pass-Through Token Server, Auto-Configured OAuth Server,
-      Tunnelled Private Server and Enterprise Sign-In (ID-JAG) Server, plus
-      Linear: ten in all. No server is named for a vendor it does not
-      reach.
-    - Locally, with the `mcp-fixture` daemon up (`pitchfork status
-      mcp-fixture`), connect an MCP client to each `GRAM_SERVER_URL/mcp/<org>-<slug>`
-      endpoint and call a tool:
+      Account Server, Pass-Through Token Server, Auto-Configured OAuth Server
+      and Enterprise Sign-In (ID-JAG) Server, plus Linear and Notion: ten in
+      all. No server is named for a vendor it does not reach.
+    - Locally, with the stack running and after `mise run seed`, connect an MCP
+      client to each `GRAM_SERVER_URL/mcp/<org>-<slug>` endpoint and call a
+      tool. The fixture-backed servers reach the MCP fixture every Speakeasy
+      server hosts at `GRAM_SERVER_URL/rpc/demoseed` (fake notes data only);
+      there is no fixture daemon to check. Its sign-in page,
+      `GRAM_SERVER_URL/rpc/demoseed/oauth/authorize`, reads "Sign in to the
+      Speakeasy demo MCP fixture"; pick any email.
       - `openapi-api-key` (`get_customer`) with the seeded `GRAM_API_KEY` as
-        a bearer token: the fixture's API stub answers.
+        a bearer token: the fixture's API stub (`/rpc/demoseed/acme-api`)
+        answers.
       - `server-specific-sign-in` (`get_customer`) after its own Speakeasy
         sign-in.
       - `external-oauth` (`search_logs`): the client signs in at the
@@ -737,35 +741,40 @@ open their effective assignments; the dropdown always offers compact member sear
       - `service-account` (`whoami`): returns `shared-service-account` with
         `auth: shared-token`.
       - `pass-through-token` (`whoami`): create a token at
-        `GRAM_MCP_FIXTURE_URL/tokens` and send it in the `X-Upstream-Token`
-        request header;
+        `GRAM_SERVER_URL/rpc/demoseed/tokens` and send it in the
+        `X-Upstream-Token` request header;
         `whoami` returns that email with `auth: own-token`.
-      - `auto-configured-oauth`: first, as an admin, open its **Settings →
-        Identity → User Identity → Auto-Configure → Save**; the provider then
-        reads **Connected**, with a client registered by DCR (the fixture's
-        `/dcr` authorization server refuses metadata document clients). A
-        client's sign-in then connects through the fixture and `whoami`
-        returns the picked email.
-      - `tunnelled-private` (`whoami`, with `GRAM_API_KEY`): the call reaches
-        the fixture through the tunnel; `pitchfork logs mcp-fixture` shows
-        `tunnel agent connected`.
+      - `auto-configured-oauth` (`whoami`): the seed has already set it up as
+        Auto-Configure would, so its server page reads **Connected** under
+        **Settings → Identity**, with the **MCP Fixture OAuth (DCR)** provider
+        and a client registered as DCR would (the fixture's `/dcr`
+        authorization server refuses metadata document clients). A client's
+        sign-in connects through the fixture and `whoami` returns the picked
+        email.
       - `enterprise-sign-in` (`whoami`): Speakeasy's sign-in goes to the
         dev-idp (the company identity provider); the consent page shows the
         service as handled by enterprise sign-in, with nothing to connect.
         After **Give access**, `whoami` returns the developer's email with
         `auth: ema`: Speakeasy got the upstream token through the ID-JAG
-        exchange.
-      - `linear` (needs your own Linear account and internet access): the
-        seed log says `registered the seeded Linear server's client with
-        Linear`. In the demo org the same server uses a client ID metadata
-        document client at `GRAM_SERVER_URL/.well-known/oauth-client/<id>`,
-        which that URL serves. The consent page lists **Linear**; **Connect** opens Linear's
-        own sign-in and consent page. After **Give access**, a Linear tool
-        (for example `list_teams`) returns your workspace's data. Its server
-        page reads **Connected** under **Settings → Identity**.
-    - The demo org keeps display-only upstreams: the Per-User OAuth Server's
-      **Connect account** goes to `mcp-fixture.example.com` and fails, by
-      design.
+        exchange. The fixture serves `/rpc/demoseed/mcp/ema` only when
+        `GRAM_DEVIDP_EXTERNAL_URL` is set.
+      - `linear` and `notion` (each needs your own vendor account and internet
+        access): the seed log says it registered the seeded server's client
+        with the vendor (cached in `local/cache/demoseed-linear-client.json`
+        and `demoseed-notion-client.json`). In the demo org the same servers
+        use a client ID metadata document client at
+        `GRAM_SERVER_URL/.well-known/oauth-client/<id>`, which that URL
+        serves. The consent page lists the vendor; **Connect** opens the
+        vendor's own sign-in and consent page. After **Give access**, a vendor
+        tool (for example Linear's `list_teams` or Notion's `notion-search`)
+        returns your workspace's data. Its server page reads **Connected**
+        under **Settings → Identity**.
+    - Repeat the fixture-backed checks (every server above except
+      `enterprise-sign-in`) in the public demo org at
+      https://app.getgram.ai/explore-demo: they reach the fixture hosted at
+      https://ai.speakeasy.com/rpc/demoseed. The Enterprise Sign-In (ID-JAG)
+      Server stays display-only there: its upstream is the placeholder
+      `mcp-fixture.example.com/mcp/ema`, so its sign-in fails by design.
 
 ## On failure
 
@@ -816,7 +825,3 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
    are display-only, not usable credentials. Leave the page marked `[~]` until
    the browser checks above are performed.
-
-## Tunnel observability
-
-Open MCP Servers → Tunnelled Private Server → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.

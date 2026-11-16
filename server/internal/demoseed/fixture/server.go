@@ -1,5 +1,8 @@
-// Package mcpfixture is a throwaway MCP server for local development. It
-// gives the local demo seed upstream servers that actually work:
+// Package fixture is the demo seed's MCP fixture: a self-contained OAuth and
+// MCP server with fake data, which every Speakeasy server hosts under
+// fixtureauth.PathPrefix (/rpc/demoseed). The seeded demo servers point at it,
+// so they work end to end locally, in preview and in the public demo org.
+// Nothing it serves is real data. Paths below are relative to the prefix:
 //
 //   - /mcp/oauth: an MCP endpoint protected by the fixture's own OAuth 2.1
 //     authorization server. Signing in means picking (or typing) an email.
@@ -11,7 +14,7 @@
 //   - /mcp/ema: an MCP endpoint whose protected-resource metadata names the
 //     dev-idp's resource authorization server, so Speakeasy reaches it
 //     through Enterprise Managed Authorization (an ID-JAG exchange). Served
-//     only when Config.DevIDPURL is set.
+//     only when Config.DevIDPURL is set, which is local development only.
 //   - /acme-api: a stub of the demo seed's "Acme Internal API" OpenAPI
 //     document, so the seeded generated servers' tool calls return data.
 //
@@ -23,7 +26,7 @@
 // checked into fixtureauth, so they survive restarts and the seed can mint
 // them. State that must not survive (used refresh tokens, revocations, notes)
 // lives in memory.
-package mcpfixture
+package fixture
 
 import (
 	"context"
@@ -46,7 +49,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/speakeasy-api/gram/mcp-fixture/fixtureauth"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 //go:embed templates/*.html
@@ -68,8 +73,9 @@ type Config struct {
 	// SuggestedEmails are offered on the sign-in page.
 	SuggestedEmails []string
 	// HTTPClient fetches client ID metadata documents and introspects
-	// dev-idp access tokens.
-	HTTPClient *http.Client
+	// dev-idp access tokens. Without one, metadata document clients and the
+	// Enterprise Managed Authorization endpoint are refused.
+	HTTPClient *guardian.HTTPClient
 	Logger     *slog.Logger
 	// DevIDPURL is the dev-idp's external URL (GRAM_DEVIDP_EXTERNAL_URL).
 	// Empty leaves the Enterprise Managed Authorization endpoint unserved.
@@ -93,20 +99,20 @@ func New(cfg Config) *Server {
 	if cfg.AccessTokenTTL <= 0 {
 		cfg.AccessTokenTTL = time.Hour
 	}
-	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	if cfg.HTTPClient != nil {
+		// A client metadata document is served at its client_id URL; never
+		// follow a redirect somewhere else.
+		noRedirect := *cfg.HTTPClient
+		noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		cfg.HTTPClient = &noRedirect
 	}
-	// A client metadata document is served at its client_id URL; never follow
-	// a redirect somewhere else.
-	noRedirect := *cfg.HTTPClient
-	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	cfg.HTTPClient = &noRedirect
 	if cfg.Logger == nil {
-		cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
 	return &Server{
 		cfg:     cfg,
 		issuer:  strings.TrimRight(cfg.BaseURL, "/"),
+		mu:      sync.Mutex{},
 		revoked: map[string]time.Time{},
 		notes:   map[string][]string{},
 	}
@@ -156,7 +162,10 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		s.cfg.Logger.InfoContext(r.Context(), "request", "method", r.Method, "path", r.URL.Path, "status", rec.status)
+		s.cfg.Logger.DebugContext(r.Context(), "request",
+			attr.SlogHTTPRequestMethod(r.Method),
+			attr.SlogURLOriginal(r.URL.Path),
+			attr.SlogHTTPResponseStatusCode(rec.status))
 	})
 }
 
@@ -282,20 +291,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	// The client id is a signed token describing the client, so registrations
-	// survive a fixture restart without storage.
-	clientID, err := fixtureauth.Sign(fixtureauth.Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    s.issuer,
-			Subject:   "client",
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(10 * 365 * 24 * time.Hour)),
-			ID:        fixtureauth.NewID(),
-		},
-		Kind:         fixtureauth.KindClient,
-		RedirectURIs: req.RedirectURIs,
-		ClientName:   req.ClientName,
-	})
+	clientID, err := fixtureauth.RegisterClient(s.issuer, req.ClientName, req.RedirectURIs, now)
 	if err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
@@ -334,7 +330,14 @@ func (s *Server) resolveClient(ctx context.Context, clientID string) (client, er
 	return client{ID: clientID, Name: c.ClientName, RedirectURIs: c.RedirectURIs}, nil
 }
 
+// errNoHTTPClient is returned when a request needs Config.HTTPClient and the
+// fixture has none.
+var errNoHTTPClient = errors.New("the fixture has no HTTP client")
+
 func (s *Server) fetchClientMetadataDocument(ctx context.Context, docURL string) (client, error) {
+	if s.cfg.HTTPClient == nil {
+		return client{}, fmt.Errorf("fetch client metadata document: %w", errNoHTTPClient)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, docURL, nil)
 	if err != nil {
 		return client{}, fmt.Errorf("client metadata document url: %w", err)
@@ -486,7 +489,9 @@ func (s *Server) authorizePost(w http.ResponseWriter, r *http.Request) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			Subject:   email,
+			Audience:  nil,
 			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: nil,
 			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
 			ID:        fixtureauth.NewID(),
 		},
@@ -494,6 +499,8 @@ func (s *Server) authorizePost(w http.ResponseWriter, r *http.Request) {
 		Scope:         scope,
 		ClientID:      ar.ClientID,
 		RedirectURI:   ar.RedirectURI,
+		RedirectURIs:  nil,
+		ClientName:    "",
 		CodeChallenge: ar.CodeChallenge,
 		Resource:      ar.Resource,
 	})
@@ -686,6 +693,9 @@ type identity struct {
 	ExpiresAt *time.Time
 }
 
+// noIdentity is the identity of a request that carries no credentials.
+var noIdentity = identity{Name: "", Auth: "", Scopes: nil, ExpiresAt: nil}
+
 type authenticator func(*http.Request) (identity, *authFailure)
 
 type authFailure struct {
@@ -707,16 +717,16 @@ func bearer(r *http.Request) string {
 func (s *Server) accessIdentity(tok string, resources ...string) (identity, error) {
 	c, err := fixtureauth.Parse(tok, fixtureauth.KindAccess)
 	if err != nil {
-		return identity{}, err
+		return noIdentity, fmt.Errorf("check access token: %w", err)
 	}
 	if c.Issuer != s.issuer {
-		return identity{}, errors.New("token was issued by another fixture")
+		return noIdentity, errors.New("token was issued by another fixture")
 	}
 	if !slices.ContainsFunc(resources, func(r string) bool { return slices.Contains(c.Audience, r) }) {
-		return identity{}, errors.New("token audience is not this server")
+		return noIdentity, errors.New("token audience is not this server")
 	}
 	if s.isRevoked(c.ID) {
-		return identity{}, errors.New("token was revoked")
+		return noIdentity, errors.New("token was revoked")
 	}
 	exp := c.ExpiresAt.Time
 	return identity{Name: c.Email(), Auth: "oauth", Scopes: c.Scopes(), ExpiresAt: &exp}, nil
@@ -731,16 +741,16 @@ func (s *Server) authenticateOAuth(path string) authenticator {
 	return func(r *http.Request) (identity, *authFailure) {
 		tok := bearer(r)
 		if tok == "" {
-			return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
+			return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
 		}
 		// Like many real servers, an OAuth endpoint also takes a service
 		// account key: the shared token.
 		if tok == fixtureauth.SharedToken {
-			return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes}, nil
+			return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes, ExpiresAt: nil}, nil
 		}
 		id, err := s.accessIdentity(tok, resource)
 		if err != nil {
-			return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: err.Error()}
+			return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: err.Error()}
 		}
 		return id, nil
 	}
@@ -766,26 +776,29 @@ func (s *Server) authenticateEMA(r *http.Request) (identity, *authFailure) {
 		s.issuer+"/.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP, fixtureauth.EMAScope)
 	tok := bearer(r)
 	if tok == "" {
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
+		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
 	}
 	got, err := s.introspect(r.Context(), authServer+"/introspect", tok)
 	if err != nil {
-		s.cfg.Logger.WarnContext(r.Context(), "introspect dev-idp token", "error", err)
-		return identity{}, &authFailure{status: http.StatusServiceUnavailable, challenge: challenge, message: "the dev-idp could not check the token"}
+		s.cfg.Logger.WarnContext(r.Context(), "introspect dev-idp token", attr.SlogError(err))
+		return noIdentity, &authFailure{status: http.StatusServiceUnavailable, challenge: challenge, message: "the dev-idp could not check the token"}
 	}
 	switch {
 	case !got.Active:
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token is not active"}
+		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token is not active"}
 	case got.Aud != resource:
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token audience is not this server"}
+		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token audience is not this server"}
 	case got.Iss != authServer:
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token was issued by another authorization server"}
+		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: "token was issued by another authorization server"}
 	}
 	exp := time.Unix(got.Exp, 0)
 	return identity{Name: got.Username, Auth: "ema", Scopes: strings.Fields(got.Scope), ExpiresAt: &exp}, nil
 }
 
 func (s *Server) introspect(ctx context.Context, endpoint, token string) (introspection, error) {
+	if s.cfg.HTTPClient == nil {
+		return introspection{}, fmt.Errorf("call introspection endpoint: %w", errNoHTTPClient)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(url.Values{"token": {token}}.Encode()))
 	if err != nil {
 		return introspection{}, fmt.Errorf("build introspection request: %w", err)
@@ -811,7 +824,7 @@ func (s *Server) introspect(ctx context.Context, endpoint, token string) (intros
 func (s *Server) authenticateShared(r *http.Request) (identity, *authFailure) {
 	tok := bearer(r)
 	if tok == fixtureauth.SharedToken {
-		return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes}, nil
+		return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes, ExpiresAt: nil}, nil
 	}
 	if tok != "" {
 		if id, err := s.accessIdentity(tok, fixtureauth.Resource(s.issuer, fixtureauth.PathSharedMCP), fixtureauth.OAuthResource(s.issuer)); err == nil {
@@ -819,7 +832,7 @@ func (s *Server) authenticateShared(r *http.Request) (identity, *authFailure) {
 			return id, nil
 		}
 	}
-	return identity{}, &authFailure{
+	return noIdentity, &authFailure{
 		status:    http.StatusUnauthorized,
 		challenge: `Bearer realm="mcp-fixture-shared"`,
 		message:   "send the shared token or your own fixture token (from /tokens) as a bearer token",
@@ -841,11 +854,11 @@ func (s *Server) authenticateOwnToken(r *http.Request) (identity, *authFailure) 
 		tok = strings.TrimSpace(r.Header.Get("Authorization"))
 	}
 	if tok == "" {
-		return identity{}, nil
+		return noIdentity, nil
 	}
 	id, err := s.accessIdentity(tok, fixtureauth.Resource(s.issuer, fixtureauth.PathSharedMCP), fixtureauth.OAuthResource(s.issuer))
 	if err != nil {
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: `Bearer realm="mcp-fixture-own-token"`, message: "the caller's token is not a valid fixture token"}
+		return noIdentity, &authFailure{status: http.StatusUnauthorized, challenge: `Bearer realm="mcp-fixture-own-token"`, message: "the caller's token is not a valid fixture token"}
 	}
 	id.Auth = "own-token"
 	return id, nil
@@ -856,7 +869,7 @@ var errNoIdentity = errors.New("send your own token in the " + fixtureauth.OwnTo
 
 // authenticateOpen lets every request in.
 func authenticateOpen(*http.Request) (identity, *authFailure) {
-	return identity{Name: "anonymous", Auth: "none", Scopes: fixtureauth.DefaultScopes}, nil
+	return identity{Name: "anonymous", Auth: "none", Scopes: fixtureauth.DefaultScopes, ExpiresAt: nil}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -896,7 +909,17 @@ func (s *Server) mcpHandler(auth authenticator) http.Handler {
 			return
 		}
 		h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.mcpServer(id) },
-			&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+			&mcp.StreamableHTTPOptions{
+				Stateless:                    true,
+				JSONResponse:                 true,
+				Logger:                       nil,
+				EventStore:                   nil,
+				SessionTimeout:               0,
+				DisableLocalhostProtection:   false,
+				CrossOriginProtection:        nil,
+				MaxRequestBodyBytes:          0,
+				PropagateRequestCancellation: false,
+			})
 		h.ServeHTTP(w, r)
 	})
 }
@@ -926,36 +949,31 @@ type notesOut struct {
 }
 
 func (s *Server) mcpServer(id identity) *mcp.Server {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "speakeasy-mcp-fixture", Title: "Speakeasy MCP fixture", Version: "1.0.0"}, nil)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "whoami",
-		Description: "Show who you are signed in as and how you authenticated.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, whoamiOut, error) {
+	srv := mcp.NewServer(&mcp.Implementation{
+		Name:        "speakeasy-mcp-fixture",
+		Title:       "Speakeasy MCP fixture",
+		Version:     "1.0.0",
+		Description: "",
+		WebsiteURL:  "",
+		Icons:       nil,
+	}, nil)
+	mcp.AddTool(srv, tool("whoami", "Show who you are signed in as and how you authenticated.", readOnly()), func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, whoamiOut, error) {
 		if id.Name == "" {
 			return nil, whoamiOut{}, errNoIdentity
 		}
-		out := whoamiOut{Identity: id.Name, Auth: id.Auth, Scopes: id.Scopes}
+		out := whoamiOut{Identity: id.Name, Auth: id.Auth, Scopes: id.Scopes, ExpiresAt: ""}
 		if id.ExpiresAt != nil {
 			out.ExpiresAt = id.ExpiresAt.UTC().Format(time.RFC3339)
 		}
 		return nil, out, nil
 	})
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "echo",
-		Description: "Send text back unchanged.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(_ context.Context, _ *mcp.CallToolRequest, in echoIn) (*mcp.CallToolResult, echoOut, error) {
+	mcp.AddTool(srv, tool("echo", "Send text back unchanged.", readOnly()), func(_ context.Context, _ *mcp.CallToolRequest, in echoIn) (*mcp.CallToolResult, echoOut, error) {
 		if id.Name == "" {
 			return nil, echoOut{}, errNoIdentity
 		}
-		return nil, echoOut{Text: in.Text}, nil
+		return nil, echoOut(in), nil
 	})
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "list_notes",
-		Description: "List the notes you saved. Each identity has its own notes.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, notesOut, error) {
+	mcp.AddTool(srv, tool("list_notes", "List the notes you saved. Each identity has its own notes.", readOnly()), func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, notesOut, error) {
 		if id.Name == "" {
 			return nil, notesOut{}, errNoIdentity
 		}
@@ -964,10 +982,7 @@ func (s *Server) mcpServer(id identity) *mcp.Server {
 		}
 		return nil, notesOut{Identity: id.Name, Notes: s.listNotes(id.Name)}, nil
 	})
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "add_note",
-		Description: "Save a note for the signed-in identity. Notes live in memory until the fixture restarts.",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, in noteIn) (*mcp.CallToolResult, notesOut, error) {
+	mcp.AddTool(srv, tool("add_note", "Save a note for the signed-in identity. Notes live in memory until the fixture restarts.", nil), func(_ context.Context, _ *mcp.CallToolRequest, in noteIn) (*mcp.CallToolResult, notesOut, error) {
 		if id.Name == "" {
 			return nil, notesOut{}, errNoIdentity
 		}
@@ -982,17 +997,62 @@ func (s *Server) mcpServer(id identity) *mcp.Server {
 	return srv
 }
 
+// tool describes a fixture tool. AddTool fills in the schemas from the
+// handler's input and output types.
+func tool(name, description string, annotations *mcp.ToolAnnotations) *mcp.Tool {
+	return &mcp.Tool{
+		Meta:         nil,
+		Annotations:  annotations,
+		Description:  description,
+		InputSchema:  nil,
+		Name:         name,
+		OutputSchema: nil,
+		Title:        "",
+		Icons:        nil,
+	}
+}
+
+// readOnly marks a tool that changes nothing.
+func readOnly() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{
+		DestructiveHint: nil,
+		IdempotentHint:  false,
+		OpenWorldHint:   nil,
+		ReadOnlyHint:    true,
+		Title:           "",
+	}
+}
+
 func (s *Server) listNotes(who string) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string{}, s.notes[who]...)
 }
 
+// Notes live in memory and anyone can sign in as any email, so they are
+// capped: a note's length, each identity's notes (oldest dropped first) and
+// the identities kept (a new one clears them all once the cap is reached).
+const (
+	maxNoteLength      = 500
+	maxNotesPerPerson  = 20
+	maxNotesIdentities = 1000
+)
+
 func (s *Server) addNote(who, text string) []string {
+	if len(text) > maxNoteLength {
+		text = text[:maxNoteLength]
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.notes[who] = append(s.notes[who], text)
-	return append([]string{}, s.notes[who]...)
+	if _, ok := s.notes[who]; !ok && len(s.notes) >= maxNotesIdentities {
+		clear(s.notes)
+	}
+	notes := append(slices.Clone(s.notes[who]), text)
+	if len(notes) > maxNotesPerPerson {
+		notes = notes[len(notes)-maxNotesPerPerson:]
+	}
+	s.notes[who] = notes
+	return append([]string{}, notes...)
 }
 
 // ---------------------------------------------------------------------------

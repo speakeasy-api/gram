@@ -67,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
@@ -457,6 +458,12 @@ func mcpRuntimeFlags() []cli.Flag {
 			Name:    "devidp-backend",
 			Usage:   "Local dev-idp backend",
 			EnvVars: []string{"GRAM_DEVIDP_BACKEND"},
+			Hidden:  true,
+		},
+		&cli.StringFlag{
+			Name:    "demoseed-fixture-devidp-url",
+			Usage:   "Local dev-idp URL whose tokens the demo seed MCP fixture's Enterprise Sign-In endpoint takes (empty: not served)",
+			EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
 			Hidden:  true,
 		},
 		&cli.BoolFlag{
@@ -1520,6 +1527,18 @@ func newStartCommand() *cli.Command {
 			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
+			// The demo seed's MCP fixture: a self-contained OAuth and MCP server
+			// with fake data that the seeded demo servers reach, so they work in
+			// every environment (internal/demoseed/fixture).
+			fixture.Attach(mux, fixture.New(fixture.Config{
+				BaseURL:             fixture.BaseURL(serverURL),
+				AccessTokenTTL:      time.Hour,
+				SuggestedEmails:     []string{"alex@fixture.test", "sam@fixture.test"},
+				HTTPClient:          guardianPolicy.PooledClient(),
+				Logger:              logger.With(attr.SlogComponent("demoseed-fixture")),
+				DevIDPURL:           c.String("demoseed-fixture-devidp-url"),
+				NoMetadataDocuments: false,
+			}))
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			distributionAdmission := admission.NewGuard()

@@ -7,47 +7,51 @@ import (
 	"encoding/base64"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/mcp-fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// The local seed points the OAuth, shared-token and generated servers at the
-// MCP fixture and stores tokens the fixture accepts, on every reseed.
-func TestLocalFixturesPointServersAtMCPFixture(t *testing.T) {
+// Every organization the seed writes points the OAuth, shared-token and
+// generated servers at the MCP fixture the Speakeasy server hosts, and stores
+// tokens the fixture accepts, on every reseed.
+func TestFixtureServersPointAtHostedFixture(t *testing.T) {
 	t.Parallel()
+	for _, spec := range []Spec{DefaultSpec(), LocalSpec()} {
+		t.Run(spec.OrgSlug, func(t *testing.T) {
+			t.Parallel()
+			testFixtureServersPointAtHostedFixture(t, spec)
+		})
+	}
+}
+
+func testFixtureServersPointAtHostedFixture(t *testing.T, spec Spec) {
+	t.Helper()
 	ctx := t.Context()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
-	blob := assetstest.NewTestBlobStore(t)
 
 	key := make([]byte, 32)
 	_, err = rand.Read(key)
 	require.NoError(t, err)
 	enc, err := encryption.New(base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
-	serverURL, err := url.Parse("https://speakeasy.example.test")
+	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
-	const base = "https://fixture.example.test:4443"
-	opts := LocalFixturesOptions{
-		DeveloperEmail: testDeveloperEmail,
-		Environment:    "local",
-		MCPFixture:     LocalMCPFixtureOptions{BaseURL: base, ServerURL: serverURL, AccessTokenTTL: time.Hour, Encryption: enc, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil},
-	}
+	base := fixtureauth.BaseURL(serverURL)
+	require.Equal(t, testServerURL+"/rpc/demoseed", base)
 
-	spec := LocalSpec()
 	s := &seeder{spec: spec}
 	q := testrepo.New(db)
 	for range 2 {
-		seedLocalPostgres(ctx, t, db, spec)
-		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, nil, opts))
+		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec)
+		require.NoError(t, err)
 
 		oauth, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-linear"))
 		require.NoError(t, err)

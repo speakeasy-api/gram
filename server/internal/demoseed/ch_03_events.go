@@ -49,7 +49,6 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("github", s.det("mcpserver-github").String()),
 		clickhouse.Named("orggateway", orggateway.GatewayID(s.orgID()).String()),
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
-		clickhouse.Named("tunnel_source", s.tunnelSourceID().String()),
 		clickhouse.Named("owner_agent", s.ownerAgentID().String()),
 		clickhouse.Named("owner_user", s.userID(demoAgentOwner.handle)),
 	}

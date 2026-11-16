@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in to the MCP fixture</title>
+<title>Sign in to the Speakeasy demo MCP fixture</title>
 <style>
   :root { --bg: #f6f7f9; --card: #fff; --fg: #1b1f27; --muted: #5d6573; --line: #dde1e8; --accent: #3a5bd9; color-scheme: light dark; }
   @media (prefers-color-scheme: dark) { :root { --bg: #12151b; --card: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d; --accent: #4968d8; } }
@@ -27,7 +27,7 @@
 </head>
 <body>
 <main>
-  <h1>Sign in to the MCP fixture</h1>
+  <h1>Sign in to the Speakeasy demo MCP fixture</h1>
   <p><strong>{{.ClientName}}</strong> wants to access the fixture as you, with:</p>
   <div class="scopes">{{range .Scopes}}<code>{{.}}</code>{{end}}</div>
   {{with .Request}}
@@ -54,7 +54,7 @@
     </div>
     <div style="margin-top:12px"><button class="deny" type="submit" name="action" value="deny" formnovalidate>Deny access</button></div>
   </form>
-  <p class="note">This is a throwaway local server. There is no password: you are whoever you pick.</p>
+  <p class="note">This is the Speakeasy demo MCP fixture. It holds no real data, and there is no password: you are whoever you pick.</p>
 </main>
 </body>
 </html>

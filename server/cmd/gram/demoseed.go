@@ -76,17 +76,6 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_DEV_SLACK_EMAIL"},
 			},
 			&cli.StringFlag{
-				Name:    "local-mcp-fixture-url",
-				Usage:   "URL of the local MCP fixture server; seeded servers point at it so they work end to end",
-				EnvVars: []string{"GRAM_MCP_FIXTURE_URL"},
-			},
-			&cli.DurationFlag{
-				Name:    "local-mcp-fixture-access-token-ttl",
-				Usage:   "Lifetime of the fixture access tokens the local seed mints",
-				EnvVars: []string{"GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL"},
-				Value:   time.Hour,
-			},
-			&cli.StringFlag{
 				Name:    "local-devidp-url",
 				Usage:   "External URL of the local dev-idp; the Enterprise Sign-In (ID-JAG) Server signs in and exchanges identities through it",
 				EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
@@ -98,12 +87,12 @@ func newDemoSeedCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:    "local-cache-dir",
-				Usage:   "Directory that keeps the Linear client the local seed registers, so reseeding reuses it",
+				Usage:   "Directory that keeps the Linear and Notion clients the local seed registers, so reseeding reuses them",
 				EnvVars: []string{"GRAM_DEMOSEED_CACHE_DIR"},
 			},
 			&cli.StringFlag{
 				Name:    "server-url",
-				Usage:   "Speakeasy's own URL: the seeded Linear client's metadata document is served there, and the local MCP fixture redirects sign-ins back to it",
+				Usage:   "Speakeasy's own URL: it hosts the MCP fixture the seeded servers reach, serves the seeded clients' metadata documents, and takes their sign-ins back",
 				EnvVars: []string{"GRAM_SERVER_URL"},
 			},
 			&cli.StringFlag{
@@ -121,7 +110,7 @@ func newDemoSeedCommand() *cli.Command {
 		}, append(clickHouseFlags(), redisFlags()...)...),
 		Action: func(c *cli.Context) error {
 			var siteURL *url.URL
-			var fixture demoseed.LocalMCPFixtureOptions
+			var upstreams demoseed.LocalUpstreamOptions
 			if c.Bool("local") {
 				var err error
 				siteURL, err = parseSiteURL(c.String("site-url"))
@@ -130,7 +119,7 @@ func newDemoSeedCommand() *cli.Command {
 				}
 				// Validate before the seed writes anything, so a bad setting
 				// cannot leave the org reseeded without its local fixtures.
-				fixture, err = localMCPFixtureOptions(c)
+				upstreams, err = localUpstreamOptions(c)
 				if err != nil {
 					return err
 				}
@@ -230,7 +219,7 @@ func newDemoSeedCommand() *cli.Command {
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
 				Slack:          slack,
-				MCPFixture:     fixture,
+				Upstreams:      upstreams,
 			}); err != nil {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
@@ -263,26 +252,23 @@ func newDemoSeedCommand() *cli.Command {
 	}
 }
 
-// localMCPFixtureOptions reads the local MCP fixture settings. Without a
-// fixture URL the seeded servers stay display-only.
-func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, error) {
-	opts := demoseed.LocalMCPFixtureOptions{BaseURL: "", ServerURL: nil, AccessTokenTTL: c.Duration("local-mcp-fixture-access-token-ttl"), Encryption: nil, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil, Policy: nil, CacheDir: ""}
-	base := c.String("local-mcp-fixture-url")
-	if base == "" || base == "unset" {
+// localUpstreamOptions reads the settings of the servers the local seed
+// wires through the developer's machine. Without a server URL they keep the
+// shared seed's setup.
+func localUpstreamOptions(c *cli.Context) (demoseed.LocalUpstreamOptions, error) {
+	opts := demoseed.LocalUpstreamOptions{ServerURL: nil, Encryption: nil, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil, Policy: nil, CacheDir: ""}
+	raw := c.String("server-url")
+	if raw == "" || raw == "unset" {
 		return opts, nil
 	}
-	if _, err := parseOrigin(base); err != nil {
-		return opts, fmt.Errorf("GRAM_MCP_FIXTURE_URL: %w", err)
-	}
-	serverURL, err := parseOrigin(c.String("server-url"))
+	serverURL, err := parseOrigin(raw)
 	if err != nil {
-		return opts, fmt.Errorf("the local MCP fixture needs GRAM_SERVER_URL: %w", err)
+		return opts, fmt.Errorf("GRAM_SERVER_URL: %w", err)
 	}
 	encryptionClient, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
-		return opts, fmt.Errorf("create encryption client for the local MCP fixture tokens: %w", err)
+		return opts, fmt.Errorf("create encryption client for the local upstreams: %w", err)
 	}
-	opts.BaseURL = base
 	opts.ServerURL = serverURL
 	opts.Encryption = encryptionClient
 	opts.DevIDPURL = c.String("local-devidp-url")

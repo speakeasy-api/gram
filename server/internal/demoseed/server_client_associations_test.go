@@ -25,11 +25,12 @@ func TestLocalServerClientAssociations(t *testing.T) {
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
 // The Pass-Through Token Server has its own issuer with no bound client, so
-// it uses none. The Enterprise Sign-In
-// (ID-JAG) Server has its own issuer and uses its authorization server's
-// client. The Linear vendor server (mcpserver-linear-app; mcpserver-linear is
-// the Per-User OAuth Server) uses its metadata document client. The
-// Auto-Configured OAuth Server has its own issuer and no seeded client.
+// it uses none. The Enterprise Sign-In (ID-JAG) Server uses its authorization
+// server's client. The Auto-Configured OAuth Server (mcpserver-notion) uses
+// the client registered with the MCP fixture's DCR-only authorization server.
+// The Linear and Notion vendor servers (mcpserver-<vendor>-app;
+// mcpserver-linear is the Per-User OAuth Server) use their metadata document
+// clients.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
@@ -38,9 +39,11 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	det := func(name string) uuid.UUID { return detUUID(spec.NameSeed + name) }
 	github := det("mcpserver-github")
 	want := map[uuid.UUID][]uuid.UUID{
-		det("mcpserver-linear"):             {det("remote-identity-client-linear")},
-		det("mcpserver-enterprise-sign-in"): {det("ema-client-enterprise-sign-in")},
-		det("mcpserver-linear-app"):         {det("remote-identity-client-linear-app")},
+		det("mcpserver-linear"):      {det("remote-identity-client-linear")},
+		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
+		det("mcpserver-linear-app"):  {det("remote-identity-client-linear-app")},
+		det("mcpserver-notion"):      {det("remote-identity-client-notion")},
+		det("mcpserver-notion-app"):  {det("remote-identity-client-notion-app")},
 	}
 
 	for range 2 {

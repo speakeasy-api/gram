@@ -1,4 +1,4 @@
-package mcpfixture
+package fixture
 
 import (
 	"encoding/json"

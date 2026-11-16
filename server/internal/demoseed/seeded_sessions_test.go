@@ -3,7 +3,6 @@
 package demoseed
 
 import (
-	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -11,14 +10,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// The inert demo sessions read as connected: status and the agent access read both use this rule.
-func TestInertDemoSessionsReadAsConnected(t *testing.T) {
+// The seeded Per-User OAuth Server sign-ins read as connected and hold MCP
+// fixture tokens that refresh: status and the agent access read both use this
+// rule.
+func TestSeededSessionsHoldFixtureTokens(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -40,19 +41,10 @@ func TestInertDemoSessionsReadAsConnected(t *testing.T) {
 		sess, err := remotesessionsrepo.New(db).GetRemoteSessionByIDIncludingDeleted(ctx, remotesessionsrepo.GetRemoteSessionByIDIncludingDeletedParams{ID: s.det(key), ProjectID: uuid.NullUUID{UUID: s.projectID(), Valid: true}})
 		require.NoError(t, err, key)
 		require.True(t, remotesessions.StoredSignInUsable(enc, sess, now), "%s reads as connected", key)
-		require.False(t, sess.RefreshTokenEncrypted.Valid, "%s stays inert: no refresh token", key)
-		require.False(t, sess.RefreshExpiresAt.Valid, "%s holds no refresh token, so it states no refresh deadline", key)
-	}
-
-	// The idle re-check never presents the dummy token to an upstream.
-	due, err := remotesessionsrepo.New(db).ClaimDueRemoteSessionRecheckCandidates(ctx, remotesessionsrepo.ClaimDueRemoteSessionRecheckCandidatesParams{
-		NowTs: conv.ToPGTimestamptz(now), RecheckCutoff: conv.ToPGTimestamptz(now.Add(time.Hour)),
-		AttemptCutoff: conv.ToPGTimestamptz(now.Add(time.Hour)), ExcludedHosts: nil, LimitValue: 1000,
-	})
-	require.NoError(t, err)
-	for _, key := range keys {
-		require.False(t, slices.ContainsFunc(due, func(row remotesessionsrepo.ClaimDueRemoteSessionRecheckCandidatesRow) bool {
-			return row.ID == s.det(key)
-		}), "%s is never re-checked", key)
+		require.True(t, sess.RefreshTokenEncrypted.Valid, "%s holds a refresh token", key)
+		access, err := enc.Decrypt(sess.AccessTokenEncrypted.String)
+		require.NoError(t, err, key)
+		_, err = fixtureauth.Parse(access, fixtureauth.KindAccess)
+		require.NoError(t, err, "%s holds a fixture access token", key)
 	}
 }

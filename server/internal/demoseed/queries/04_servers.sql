@@ -6,10 +6,10 @@
 -- Two backends so the gateway's member table shows both classes: the
 -- toolset-backed pair (the hosted toolsets' canonical wrappers below)
 -- executes in-process, the remotes are proxied. Each server is named for the
--- configuration it tests. The remotes' upstream is the MCP fixture
--- (mcp-fixture/), at a reserved example.com host here and at the real local
--- fixture after `mise run seed` (local_mcp_fixture.go). No credentials, and
--- nothing here connects on its own.
+-- configuration it tests. The remotes' upstream is the MCP fixture the
+-- Speakeasy server hosts (internal/demoseed/fixture): written here at a
+-- reserved example.com host, then pointed at the hosted fixture by the
+-- fixture servers phase (fixture_servers.go).
 -- name: ServersInsertRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
@@ -183,12 +183,11 @@ WHERE project_id = @project_id::uuid AND slug = 'pass-through-token';
 -- Remote MCP identity modes: the Per-User OAuth Server uses per-user OAuth through a
 -- project-scoped CIMD client, the Service Account Server carries one inert
 -- shared credential, and the Pass-Through Token Server has no upstream
--- identity of its own (callers forward theirs locally). The demo values are
--- display fixtures only and cannot authenticate to any service.
+-- identity of its own (callers forward theirs). The fixture servers phase
+-- (fixture_servers.go) replaces these values with the MCP fixture's.
 -- The Auto-Configured OAuth Server: each caller signs in to their own
--- account once an admin sets up its sign-in from the server's page (Speakeasy
--- discovers the authorization server and registers a client then; the seed
--- holds no credential).
+-- account through a client registered with the MCP fixture's DCR-only
+-- authorization server (seedFixtureAutoConfigured).
 -- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
@@ -215,31 +214,32 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@notion_endpoint_id::uuid, @project_id::uuid, NULL,
    @notion_server_id::uuid, @notion_slug::text);
 
--- Linear: the real vendor's MCP server, with its own endpoint and sign-in,
--- set up as Auto-Configure would: Linear's authorization server, a client ID
--- metadata document client Speakeasy serves at the deployment's own URL, and
--- the server's links to them. Linear fetches the document when someone signs
--- in, so nothing is registered ahead of time and each caller signs in to
--- their own Linear account. Locally, where Linear cannot reach the document,
--- the client becomes one registered by DCR (local_linear.go).
--- name: ServersInsertLinearAppServer :exec
+-- A well-known vendor's MCP server (Linear, Notion), with its own endpoint
+-- and sign-in, set up as Auto-Configure would: the vendor's authorization
+-- server, a client ID metadata document client Speakeasy serves at the
+-- deployment's own URL, and the server's links to them. The vendor fetches
+-- the document when someone signs in, so nothing is registered ahead of time
+-- and each caller signs in to their own account. Locally, where the vendor
+-- cannot reach the document, the client becomes one registered by DCR
+-- (vendor_apps.go).
+-- name: ServersInsertVendorAppServer :exec
 WITH remote AS (
   INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
-  VALUES (@remote_id::uuid, @project_id::uuid, 'Linear', 'linear',
-          'streamable-http', 'https://mcp.linear.app/mcp')
+  VALUES (@remote_id::uuid, @project_id::uuid, @name::text, @key::text,
+          'streamable-http', @url::text)
   RETURNING id
 ), issuer AS (
   INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                     authn_challenge_mode, session_duration,
                                     authorization_server_mode)
-  VALUES (@issuer_id::uuid, @project_id::uuid, @org_id::text, 'linear',
+  VALUES (@issuer_id::uuid, @project_id::uuid, @org_id::text, @key::text,
           'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
   RETURNING id
 ), server AS (
   INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                            remote_mcp_server_id, user_session_issuer_id,
                            visibility)
-  SELECT @server_id::uuid, @project_id::uuid, 'Linear', 'linear', NULL,
+  SELECT @server_id::uuid, @project_id::uuid, @name::text, @key::text, NULL,
          remote.id, issuer.id, 'private'
   FROM remote, issuer
   RETURNING id
@@ -248,9 +248,10 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
 SELECT @endpoint_id::uuid, @project_id::uuid, NULL, server.id, @slug::text
 FROM server;
 
--- Linear's authorization server, as its metadata document describes it
--- (https://mcp.linear.app/.well-known/oauth-authorization-server).
--- name: ServersInsertLinearAppIssuer :exec
+-- An authorization server, as its metadata document
+-- (<issuer>/.well-known/oauth-authorization-server) describes it: a vendor's,
+-- or the MCP fixture's DCR-only one.
+-- name: ServersInsertVendorAppIssuer :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, authorization_endpoint,
    token_endpoint, registration_endpoint, revocation_endpoint,
@@ -258,17 +259,17 @@ INSERT INTO remote_session_issuers
    token_endpoint_auth_methods_supported, code_challenge_methods_supported,
    client_id_metadata_document_supported, name, metadata_fetched_at)
 VALUES
-  (@id::uuid, @project_id::uuid, @organization_id::text, 'linear',
-   'https://mcp.linear.app', 'https://mcp.linear.app/authorize',
-   'https://mcp.linear.app/token', 'https://mcp.linear.app/register',
-   'https://mcp.linear.app/token',
-   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
-   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
-   ARRAY['S256'], TRUE, 'Linear', clock_timestamp());
+  (@id::uuid, @project_id::uuid, @organization_id::text, @key::text,
+   @issuer::text, @authorization_endpoint::text, @token_endpoint::text,
+   @registration_endpoint::text, @revocation_endpoint::text,
+   @scopes::text[], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], @token_endpoint_auth_methods::text[],
+   ARRAY['S256'], @client_id_metadata_document_supported::boolean, @name::text,
+   clock_timestamp());
 
 -- A client ID metadata document client: Speakeasy serves the document at
 -- client_id, on the callback origin it records.
--- name: ServersInsertLinearAppClient :exec
+-- name: ServersInsertVendorAppClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
    client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
@@ -278,15 +279,13 @@ VALUES
    @remote_session_issuer_id::uuid, @client_id::text, @client_id::text,
    clock_timestamp(), 'none', @callback_base_url::text);
 
--- name: ServersInsertLinearAppProtectedResource :exec
+-- name: ServersInsertVendorAppProtectedResource :exec
 INSERT INTO remote_protected_resources
   (id, project_id, organization_id, resource_identifier, metadata_url,
    authorization_servers, scopes_supported, metadata_fetched_at)
 VALUES
-  (@id::uuid, @project_id::uuid, @organization_id::text,
-   'https://mcp.linear.app/mcp',
-   'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://mcp.linear.app'], ARRAY['read', 'write'], clock_timestamp());
+  (@id::uuid, @project_id::uuid, @organization_id::text, @resource::text,
+   @metadata_url::text, ARRAY[@issuer::text], @scopes::text[], clock_timestamp());
 
 -- name: ServersInsertLinearRemoteSessionIssuer :exec
 INSERT INTO remote_session_issuers
@@ -454,27 +453,6 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
    @slack_server_id::uuid, @slack_slug::text),
   (@pass_through_endpoint_id::uuid, @project_id::uuid, NULL,
    @pass_through_server_id::uuid, @pass_through_slug::text);
-
--- Tunnel example, deliberately disconnected: its activity history must not
--- fabricate a live customer agent in the shared demo environment. The key
--- hash comes from the tenant's name seed, so it stays globally unique and
--- matches no issued key. ClickHouse metric rows reference these ids
--- (ch_05_tunnel_metrics.go).
--- name: ServersInsertPrivateInventoryTunnel :exec
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
-                                  status, agent_version, last_seen_at) VALUES
-  (@id::uuid, @project_id::uuid, 'Tunnelled Private Server tunnel',
-   md5(@key_seed::text), 'demo_inert', 'active', '0.2.0', NULL);
-
--- name: ServersInsertPrivateInventoryMCPServer :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
-                         visibility) VALUES
-  (@id::uuid, @project_id::uuid, 'Tunnelled Private Server', @slug::text,
-   @tunnel_id::uuid, 'private');
-
--- name: ServersInsertPrivateInventoryEndpoint :exec
-INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
-  (@id::uuid, @project_id::uuid, @mcp_server_id::uuid, @slug::text);
 
 -- Enterprise Managed Authorization (EMA). Acme Identity is a fictional
 -- company identity provider. The Enterprise Sign-In (ID-JAG) Server has a
@@ -684,11 +662,9 @@ VALUES (@id::uuid,
 
 -- Upstream sessions on the Per-User OAuth Server's CIMD client, one per last-validation outcome
 -- plus one never validated, so the admin server health page shows every
--- validation state. Inert like the session above: no refresh token, and a held
--- re-check lease, renewed by each reseed, keeps the idle re-check from
--- presenting the dummy token upstream and overwriting the seeded verdicts.
--- grant_generation above 1 records re-authorizations. The local seed swaps in
--- real fixture tokens and releases the lease (local_mcp_fixture.go).
+-- validation state. Written with a dummy token and a held re-check lease; the
+-- fixture servers phase (fixture_servers.go) swaps in MCP fixture tokens and
+-- releases the lease. grant_generation above 1 records re-authorizations.
 -- An empty status is the never-validated session (NULL status and
 -- last_validated_at).
 -- name: ServersInsertValidatedSession :exec

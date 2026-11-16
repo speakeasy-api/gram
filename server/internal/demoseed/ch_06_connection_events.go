@@ -76,7 +76,7 @@ var connectionEndings = []connectionEnding{
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCodeNotFoundOrExpired},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderOAuthInvalidClient},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRateLimited},
-	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeTunnelUnavailable},
+	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderUnreachable},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied},
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember},
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeProviderDenied},

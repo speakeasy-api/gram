@@ -37,8 +37,7 @@ WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
-  AND rs.access_token_encrypted <> ''
-  AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE;
+  AND rs.access_token_encrypted <> '';
 
 -- name: PostflightIDSessionBindings :one
 SELECT count(*) FROM principal_remote_session_bindings
@@ -49,11 +48,13 @@ SELECT count(*) FROM remote_sessions
 WHERE user_session_issuer_id IN
   (SELECT id FROM user_session_issuers WHERE project_id = @project_id::uuid);
 
--- name: PostflightIDInertUpstreamSessions :one
+-- The Per-User OAuth Server's sign-ins. The live ones hold MCP fixture
+-- tokens (fixture_servers.go); the expired ones keep the dummy token.
+-- name: PostflightIDPerUserUpstreamSessions :one
 SELECT count(*) FROM remote_sessions
 WHERE remote_session_client_id = @remote_session_client_id::uuid
   AND deleted IS FALSE
-  AND access_token_encrypted <> '' AND refresh_token_encrypted IS NULL
+  AND access_token_encrypted <> ''
   AND (validation_status IS NULL
        OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'));
 
@@ -210,11 +211,13 @@ SELECT count(*) FROM mcp_servers
 WHERE project_id = @project_id::uuid
   AND remote_session_issuer_id = @linear_remote_issuer::uuid;
 
+-- The fixture servers phase moves it to the hosted fixture and pins both
+-- of the fixture's scopes, so a new sign-in can read and write notes.
 -- name: PostflightIDLinearProtectedResource :one
 SELECT count(*) FROM remote_protected_resources
 WHERE project_id = @project_id::uuid AND deleted IS FALSE
-  AND resource_identifier = 'https://mcp-fixture.example.com/mcp/oauth'
-  AND scope_override = ARRAY['notes:read'];
+  AND resource_identifier = @resource::text
+  AND scope_override = ARRAY['notes:read', 'notes:write'];
 
 -- name: PostflightIDServerClientAssociations :one
 SELECT count(*) FROM mcp_server_remote_session_clients
@@ -276,7 +279,7 @@ WHERE (SELECT count(*) FROM live) = 29
 
 -- Count live choices outside the intended set: the Per-User OAuth Server through its main client,
 -- the Service Account Server with no upstream authentication, the organization gateway's Pass-Through Token Server
--- choice of the caller's own token and its tunneled inventory choice, each on a
+-- choice of the caller's own token and its Auto-Configured OAuth Server choice, each on a
 -- seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)

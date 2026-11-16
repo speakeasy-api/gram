@@ -136,62 +136,71 @@ needs and the shared demo org must never have:
   Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
-- **Working upstream servers.** The seed has ten MCP servers: nine named
-  for the configuration they test, plus Linear, a real vendor. In the local
-  org each one works right after `mise run seed`. The stack starts a throwaway MCP fixture server
-  (`mcp-fixture/`, pitchfork daemon `mcp-fixture`, `GRAM_MCP_FIXTURE_URL`): an
-  OAuth 2.1 server (sign in by picking an email; dynamic registration, client
-  ID metadata documents, PKCE, refresh rotation, tokens bound to the requested
-  resource; a second, DCR-only authorization server at `/dcr`), MCP endpoints
-  `/mcp/oauth`, `/dcr/mcp/auto`, `/mcp/shared`,
-  `/mcp/own-token`, `/mcp/open` and `/mcp/ema`, a personal token page at `/tokens`, a stub of
-  the demo API, and a tunnel agent on the local tunnel gateway. Its credentials live in
-  `fixtureauth` and are checked in on purpose. `local_mcp_fixture.go` points
-  the local org at it:
+- **Working upstream servers.** The seed has ten MCP servers: eight named
+  for the configuration they test, plus Linear and Notion, real vendors. Most
+  of the setup is shared, so the same servers work in the public demo org and
+  in the local org right after `mise run seed`; the local fixtures add only
+  what needs the developer's machine (below).
 
-  | Server                             | Tests                                                                         | Locally                                                                                                      |
-  | ---------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-  | OpenAPI Server (API Key)           | A server generated from an OpenAPI document, reached with a Speakeasy API key | Calls the fixture's API stub (`ACME_SERVER_URL` system environment)                                          |
-  | Server-Specific Sign-In            | A hosted server with its own Speakeasy sign-in                                | Same API stub                                                                                                |
-  | External OAuth Server              | Callers bring a token from the customer's own OAuth server                    | Its authorization server metadata is the fixture's                                                           |
-  | Per-User OAuth Server              | Each person signs in upstream: expiry, refresh, scope pins, agent connections | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold real fixture tokens         |
-  | Service Account Server             | One static shared credential for every caller                                 | `/mcp/shared` with the checked-in shared token                                                               |
-  | Pass-Through Token Server          | Each caller's own token, forwarded upstream                                   | `/mcp/own-token`; the caller's `X-Upstream-Token` header is forwarded (create one at `/tokens`)              |
-  | Auto-Configured OAuth Server       | An admin sets up sign-in through discovery and client registration            | `/dcr/mcp/auto`, whose authorization server takes only dynamic registration: Auto-Configure registers by DCR |
-  | Tunnelled Private Server           | A server on a private network, reached through a tunnel                       | The fixture's tunnel agent connects with `fixtureauth.TunnelKey` and serves `/mcp/open`                      |
-  | Enterprise Sign-In (ID-JAG) Server | Sign-in through the company identity provider, exchanged for an ID-JAG        | `/mcp/ema`, through the dev-idp (below)                                                                      |
-  | Linear                             | A real vendor's MCP server; each person signs in to their own Linear account  | `https://mcp.linear.app/mcp`, with a client the seed registers at Linear (below)                             |
+  Every Speakeasy server hosts the demo MCP fixture
+  (`server/internal/demoseed/fixture`) under `GRAM_SERVER_URL/rpc/demoseed`
+  (under `/rpc` because the deployed ingress sends `/rpc` to the API server).
+  It holds fake data only (notes) and offers: an OAuth 2.1 server (sign in by
+  picking an email; dynamic registration, client ID metadata documents, PKCE,
+  refresh rotation, tokens bound to the requested resource), a second,
+  DCR-only authorization server at `/dcr`, MCP endpoints `/mcp/oauth`,
+  `/dcr/mcp/auto`, `/mcp/shared`, `/mcp/own-token`, `/mcp/open` and (locally)
+  `/mcp/ema`, a personal token page at `/tokens`, and a stub of the demo API.
+  Its credentials live in `fixtureauth` and are checked in on purpose: they
+  guard nothing real. The shared seed's last phase before postflight
+  (`fixture_servers.go`) points the servers at it and gives every live seeded
+  sign-in real fixture tokens:
 
-  The Enterprise Sign-In (ID-JAG) Server is wired by `local_ema.go`. The
-  dev-idp plays the company identity provider: the seed creates its EMA app,
-  resource, trust rule and the developer's assignment over the dev-idp's
-  control RPC, and provisions the developer in the org's directory (federated
-  sign-in admits only directory-provisioned people). The server's own
-  organization sign-in federates through the dev-idp; Speakeasy then exchanges
-  the developer's ID token for an ID-JAG at the dev-idp and redeems it at the
-  dev-idp's `/resource-as/<slug>` authorization server, whose access token the
-  fixture's `/mcp/ema` checks by introspection. One client id
-  (`GRAM_IDP_CLIENT_ID`) serves all three legs, with a checked-in local
-  secret. A dev-idp that cannot be reached leaves the server display-only.
+  | Server                             | Tests                                                                         | Reaches                                                                                                              |
+  | ---------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+  | OpenAPI Server (API Key)           | A server generated from an OpenAPI document, reached with a Speakeasy API key | The fixture's API stub (`ACME_SERVER_URL` system environment)                                                        |
+  | Server-Specific Sign-In            | A hosted server with its own Speakeasy sign-in                                | Same API stub                                                                                                        |
+  | External OAuth Server              | Callers bring a token from the customer's own OAuth server                    | Its authorization server metadata is the fixture's                                                                   |
+  | Per-User OAuth Server              | Each person signs in upstream: expiry, refresh, scope pins, agent connections | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens                      |
+  | Service Account Server             | One static shared credential for every caller                                 | `/mcp/shared` with the checked-in shared token                                                                       |
+  | Pass-Through Token Server          | Each caller's own token, forwarded upstream                                   | `/mcp/own-token`; the caller's `X-Upstream-Token` header is forwarded (create one at `/rpc/demoseed/tokens`)         |
+  | Auto-Configured OAuth Server       | Sign-in set up through discovery and dynamic client registration              | `/dcr/mcp/auto`, through a client the seed registers with the DCR-only authorization server, as Auto-Configure would |
+  | Enterprise Sign-In (ID-JAG) Server | Sign-in through the company identity provider, exchanged for an ID-JAG        | Locally, `/mcp/ema` through the dev-idp (below); display-only in the public demo org                                 |
+  | Linear                             | A real vendor; each person signs in to their own Linear account               | `https://mcp.linear.app/mcp` (below)                                                                                 |
+  | Notion                             | A real vendor; each person signs in to their own Notion account               | `https://mcp.notion.com/mcp` (below)                                                                                 |
 
-  Linear (`local_linear.go`) is set up in every org as an admin's
-  Auto-Configure would: Linear's authorization server, a client ID metadata
-  document client served at the deployment's own URL (`GRAM_SERVER_URL`, which
-  the prod CronJob sets), and the server's links to both. Linear fetches the
-  document when someone signs in, so in the public demo org each visitor signs
-  in to their own Linear account. Locally Linear cannot reach the document on
-  localhost, so the seed registers a public client at Linear's `/register` and
-  puts it in that client's place. The client id is cached in
-  `GRAM_DEMOSEED_CACHE_DIR` (`local/cache/demoseed-linear-client.json`,
-  gitignored) per callback URL, so reseeding reuses it. Signing in needs your
-  own Linear account, and the tools return your real Linear data: mask it in
-  any recording. Offline, the local seed warns and keeps the metadata document
-  client, which cannot sign in locally.
+  The fixture's client ids are signed tokens, so the seed registers the
+  Auto-Configured OAuth Server's client exactly as the fixture's `/register`
+  endpoint would, without calling it.
 
-  The shared seed uses the placeholder host `mcp-fixture.example.com`; the
-  public demo org keeps those display-only values because prod cannot reach
-  localhost. A worktree created before the fixture existed picks up its port
-  and URLs with `mise run git:worksync`.
+  The Enterprise Sign-In (ID-JAG) Server is wired by `local_ema.go`, in the
+  local org only. The dev-idp plays the company identity provider: the seed
+  creates its EMA app, resource, trust rule and the developer's assignment
+  over the dev-idp's control RPC, and provisions the developer in the org's
+  directory (federated sign-in admits only directory-provisioned people). The
+  server's own organization sign-in federates through the dev-idp; Speakeasy
+  then exchanges the developer's ID token for an ID-JAG at the dev-idp and
+  redeems it at the dev-idp's `/resource-as/<slug>` authorization server,
+  whose access token the fixture's `/mcp/ema` checks by introspection. One
+  client id (`GRAM_IDP_CLIENT_ID`) serves all three legs, with a checked-in
+  local secret. A dev-idp that cannot be reached leaves the server
+  display-only, as it is in the public demo org, where no identity provider
+  issues ID-JAGs.
+
+  Linear and Notion (`vendor_apps.go`) are set up in every org as an admin's
+  Auto-Configure would: the vendor's authorization server, a client ID
+  metadata document client served at the deployment's own URL
+  (`GRAM_SERVER_URL`, which the prod CronJob sets), and the server's links to
+  both. The vendor fetches the document when someone signs in, so in the
+  public demo org each visitor signs in to their own account. Locally a vendor
+  cannot reach the document on localhost, so the seed registers a public
+  client at the vendor's `/register` and puts it in that client's place. The
+  client ids are cached in `GRAM_DEMOSEED_CACHE_DIR`
+  (`local/cache/demoseed-<vendor>-client.json`, gitignored) per callback URL,
+  so reseeding reuses them. Signing in needs your own account, and the tools
+  return your real data: mask it in any recording. Offline, the local seed
+  warns and keeps the metadata document clients, which cannot sign in
+  locally.
 
 The fixtures are idempotent, and everything they write is either upserted by a
 fixed id or cascades from the seeded deployment/project, so a reseed rolls

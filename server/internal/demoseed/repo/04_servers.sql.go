@@ -1309,149 +1309,6 @@ func (q *Queries) ServersInsertKillswitchVersionResources(ctx context.Context, a
 	return err
 }
 
-const serversInsertLinearAppClient = `-- name: ServersInsertLinearAppClient :exec
-INSERT INTO remote_session_clients
-  (id, project_id, organization_id, remote_session_issuer_id, client_id,
-   client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
-   callback_base_url)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   $4::uuid, $5::text, $5::text,
-   clock_timestamp(), 'none', $6::text)
-`
-
-type ServersInsertLinearAppClientParams struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	OrganizationID        string
-	RemoteSessionIssuerID uuid.UUID
-	ClientID              string
-	CallbackBaseUrl       string
-}
-
-// A client ID metadata document client: Speakeasy serves the document at
-// client_id, on the callback origin it records.
-func (q *Queries) ServersInsertLinearAppClient(ctx context.Context, arg ServersInsertLinearAppClientParams) error {
-	_, err := q.db.Exec(ctx, serversInsertLinearAppClient,
-		arg.ID,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.RemoteSessionIssuerID,
-		arg.ClientID,
-		arg.CallbackBaseUrl,
-	)
-	return err
-}
-
-const serversInsertLinearAppIssuer = `-- name: ServersInsertLinearAppIssuer :exec
-INSERT INTO remote_session_issuers
-  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
-   token_endpoint, registration_endpoint, revocation_endpoint,
-   scopes_supported, grant_types_supported, response_types_supported,
-   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
-   client_id_metadata_document_supported, name, metadata_fetched_at)
-VALUES
-  ($1::uuid, $2::uuid, $3::text, 'linear',
-   'https://mcp.linear.app', 'https://mcp.linear.app/authorize',
-   'https://mcp.linear.app/token', 'https://mcp.linear.app/register',
-   'https://mcp.linear.app/token',
-   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
-   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
-   ARRAY['S256'], TRUE, 'Linear', clock_timestamp())
-`
-
-type ServersInsertLinearAppIssuerParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-// Linear's authorization server, as its metadata document describes it
-// (https://mcp.linear.app/.well-known/oauth-authorization-server).
-func (q *Queries) ServersInsertLinearAppIssuer(ctx context.Context, arg ServersInsertLinearAppIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertLinearAppIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
-	return err
-}
-
-const serversInsertLinearAppProtectedResource = `-- name: ServersInsertLinearAppProtectedResource :exec
-INSERT INTO remote_protected_resources
-  (id, project_id, organization_id, resource_identifier, metadata_url,
-   authorization_servers, scopes_supported, metadata_fetched_at)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   'https://mcp.linear.app/mcp',
-   'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://mcp.linear.app'], ARRAY['read', 'write'], clock_timestamp())
-`
-
-type ServersInsertLinearAppProtectedResourceParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) ServersInsertLinearAppProtectedResource(ctx context.Context, arg ServersInsertLinearAppProtectedResourceParams) error {
-	_, err := q.db.Exec(ctx, serversInsertLinearAppProtectedResource, arg.ID, arg.ProjectID, arg.OrganizationID)
-	return err
-}
-
-const serversInsertLinearAppServer = `-- name: ServersInsertLinearAppServer :exec
-WITH remote AS (
-  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
-  VALUES ($4::uuid, $2::uuid, 'Linear', 'linear',
-          'streamable-http', 'https://mcp.linear.app/mcp')
-  RETURNING id
-), issuer AS (
-  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
-                                    authn_challenge_mode, session_duration,
-                                    authorization_server_mode)
-  VALUES ($5::uuid, $2::uuid, $6::text, 'linear',
-          'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
-  RETURNING id
-), server AS (
-  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                           remote_mcp_server_id, user_session_issuer_id,
-                           visibility)
-  SELECT $7::uuid, $2::uuid, 'Linear', 'linear', NULL,
-         remote.id, issuer.id, 'private'
-  FROM remote, issuer
-  RETURNING id
-)
-INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug)
-SELECT $1::uuid, $2::uuid, NULL, server.id, $3::text
-FROM server
-`
-
-type ServersInsertLinearAppServerParams struct {
-	EndpointID uuid.UUID
-	ProjectID  uuid.UUID
-	Slug       string
-	RemoteID   uuid.UUID
-	IssuerID   uuid.UUID
-	OrgID      string
-	ServerID   uuid.UUID
-}
-
-// Linear: the real vendor's MCP server, with its own endpoint and sign-in,
-// set up as Auto-Configure would: Linear's authorization server, a client ID
-// metadata document client Speakeasy serves at the deployment's own URL, and
-// the server's links to them. Linear fetches the document when someone signs
-// in, so nothing is registered ahead of time and each caller signs in to
-// their own Linear account. Locally, where Linear cannot reach the document,
-// the client becomes one registered by DCR (local_linear.go).
-func (q *Queries) ServersInsertLinearAppServer(ctx context.Context, arg ServersInsertLinearAppServerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertLinearAppServer,
-		arg.EndpointID,
-		arg.ProjectID,
-		arg.Slug,
-		arg.RemoteID,
-		arg.IssuerID,
-		arg.OrgID,
-		arg.ServerID,
-	)
-	return err
-}
-
 const serversInsertLinearRemoteSessionClient = `-- name: ServersInsertLinearRemoteSessionClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -1699,75 +1556,6 @@ func (q *Queries) ServersInsertOrganizationGatewaySession(ctx context.Context, a
 	return err
 }
 
-const serversInsertPrivateInventoryEndpoint = `-- name: ServersInsertPrivateInventoryEndpoint :exec
-INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
-  ($1::uuid, $2::uuid, $3::uuid, $4::text)
-`
-
-type ServersInsertPrivateInventoryEndpointParams struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	McpServerID uuid.UUID
-	Slug        string
-}
-
-func (q *Queries) ServersInsertPrivateInventoryEndpoint(ctx context.Context, arg ServersInsertPrivateInventoryEndpointParams) error {
-	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryEndpoint,
-		arg.ID,
-		arg.ProjectID,
-		arg.McpServerID,
-		arg.Slug,
-	)
-	return err
-}
-
-const serversInsertPrivateInventoryMCPServer = `-- name: ServersInsertPrivateInventoryMCPServer :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
-                         visibility) VALUES
-  ($1::uuid, $2::uuid, 'Tunnelled Private Server', $3::text,
-   $4::uuid, 'private')
-`
-
-type ServersInsertPrivateInventoryMCPServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Slug      string
-	TunnelID  uuid.UUID
-}
-
-func (q *Queries) ServersInsertPrivateInventoryMCPServer(ctx context.Context, arg ServersInsertPrivateInventoryMCPServerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryMCPServer,
-		arg.ID,
-		arg.ProjectID,
-		arg.Slug,
-		arg.TunnelID,
-	)
-	return err
-}
-
-const serversInsertPrivateInventoryTunnel = `-- name: ServersInsertPrivateInventoryTunnel :exec
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
-                                  status, agent_version, last_seen_at) VALUES
-  ($1::uuid, $2::uuid, 'Tunnelled Private Server tunnel',
-   md5($3::text), 'demo_inert', 'active', '0.2.0', NULL)
-`
-
-type ServersInsertPrivateInventoryTunnelParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	KeySeed   string
-}
-
-// Tunnel example, deliberately disconnected: its activity history must not
-// fabricate a live customer agent in the shared demo environment. The key
-// hash comes from the tenant's name seed, so it stays globally unique and
-// matches no issued key. ClickHouse metric rows reference these ids
-// (ch_05_tunnel_metrics.go).
-func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg ServersInsertPrivateInventoryTunnelParams) error {
-	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryTunnel, arg.ID, arg.ProjectID, arg.KeySeed)
-	return err
-}
-
 const serversInsertRegistryPromotionCandidate = `-- name: ServersInsertRegistryPromotionCandidate :exec
 INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
 VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, $5::uuid, 'unobserved', false, 'insufficient_evidence', $6::text, clock_timestamp() - make_interval(days => $7::integer))
@@ -1823,10 +1611,10 @@ type ServersInsertRemoteMCPServersParams struct {
 // Two backends so the gateway's member table shows both classes: the
 // toolset-backed pair (the hosted toolsets' canonical wrappers below)
 // executes in-process, the remotes are proxied. Each server is named for the
-// configuration it tests. The remotes' upstream is the MCP fixture
-// (mcp-fixture/), at a reserved example.com host here and at the real local
-// fixture after `mise run seed` (local_mcp_fixture.go). No credentials, and
-// nothing here connects on its own.
+// configuration it tests. The remotes' upstream is the MCP fixture the
+// Speakeasy server hosts (internal/demoseed/fixture): written here at a
+// reserved example.com host, then pointed at the hosted fixture by the
+// fixture servers phase (fixture_servers.go).
 func (q *Queries) ServersInsertRemoteMCPServers(ctx context.Context, arg ServersInsertRemoteMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertRemoteMCPServers,
 		arg.LinearID,
@@ -2051,12 +1839,11 @@ type ServersInsertSignInExampleRemoteMCPServersParams struct {
 // Remote MCP identity modes: the Per-User OAuth Server uses per-user OAuth through a
 // project-scoped CIMD client, the Service Account Server carries one inert
 // shared credential, and the Pass-Through Token Server has no upstream
-// identity of its own (callers forward theirs locally). The demo values are
-// display fixtures only and cannot authenticate to any service.
+// identity of its own (callers forward theirs). The fixture servers phase
+// (fixture_servers.go) replaces these values with the MCP fixture's.
 // The Auto-Configured OAuth Server: each caller signs in to their own
-// account once an admin sets up its sign-in from the server's page (Speakeasy
-// discovers the authorization server and registers a client then; the seed
-// holds no credential).
+// account through a client registered with the MCP fixture's DCR-only
+// authorization server (seedFixtureAutoConfigured).
 func (q *Queries) ServersInsertSignInExampleRemoteMCPServers(ctx context.Context, arg ServersInsertSignInExampleRemoteMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSignInExampleRemoteMCPServers, arg.NotionID, arg.ProjectID)
 	return err
@@ -2336,11 +2123,9 @@ type ServersInsertValidatedSessionParams struct {
 
 // Upstream sessions on the Per-User OAuth Server's CIMD client, one per last-validation outcome
 // plus one never validated, so the admin server health page shows every
-// validation state. Inert like the session above: no refresh token, and a held
-// re-check lease, renewed by each reseed, keeps the idle re-check from
-// presenting the dummy token upstream and overwriting the seeded verdicts.
-// grant_generation above 1 records re-authorizations. The local seed swaps in
-// real fixture tokens and releases the lease (local_mcp_fixture.go).
+// validation state. Written with a dummy token and a held re-check lease; the
+// fixture servers phase (fixture_servers.go) swaps in MCP fixture tokens and
+// releases the lease. grant_generation above 1 records re-authorizations.
 // An empty status is the never-validated session (NULL status and
 // last_validated_at).
 func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg ServersInsertValidatedSessionParams) error {
@@ -2354,6 +2139,191 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.Status,
 		arg.HoursAgo,
 		arg.DaysAgo,
+	)
+	return err
+}
+
+const serversInsertVendorAppClient = `-- name: ServersInsertVendorAppClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
+   callback_base_url)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::text, $5::text,
+   clock_timestamp(), 'none', $6::text)
+`
+
+type ServersInsertVendorAppClientParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+	CallbackBaseUrl       string
+}
+
+// A client ID metadata document client: Speakeasy serves the document at
+// client_id, on the callback origin it records.
+func (q *Queries) ServersInsertVendorAppClient(ctx context.Context, arg ServersInsertVendorAppClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
+	)
+	return err
+}
+
+const serversInsertVendorAppIssuer = `-- name: ServersInsertVendorAppIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::text, $6::text, $7::text,
+   $8::text, $9::text,
+   $10::text[], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], $11::text[],
+   ARRAY['S256'], $12::boolean, $13::text,
+   clock_timestamp())
+`
+
+type ServersInsertVendorAppIssuerParams struct {
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	OrganizationID                    string
+	Key                               string
+	Issuer                            string
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	RevocationEndpoint                string
+	Scopes                            []string
+	TokenEndpointAuthMethods          []string
+	ClientIDMetadataDocumentSupported bool
+	Name                              string
+}
+
+// An authorization server, as its metadata document
+// (<issuer>/.well-known/oauth-authorization-server) describes it: a vendor's,
+// or the MCP fixture's DCR-only one.
+func (q *Queries) ServersInsertVendorAppIssuer(ctx context.Context, arg ServersInsertVendorAppIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppIssuer,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Key,
+		arg.Issuer,
+		arg.AuthorizationEndpoint,
+		arg.TokenEndpoint,
+		arg.RegistrationEndpoint,
+		arg.RevocationEndpoint,
+		arg.Scopes,
+		arg.TokenEndpointAuthMethods,
+		arg.ClientIDMetadataDocumentSupported,
+		arg.Name,
+	)
+	return err
+}
+
+const serversInsertVendorAppProtectedResource = `-- name: ServersInsertVendorAppProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::text, ARRAY[$6::text], $7::text[], clock_timestamp())
+`
+
+type ServersInsertVendorAppProtectedResourceParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Resource       string
+	MetadataUrl    string
+	Issuer         string
+	Scopes         []string
+}
+
+func (q *Queries) ServersInsertVendorAppProtectedResource(ctx context.Context, arg ServersInsertVendorAppProtectedResourceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppProtectedResource,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+		arg.Scopes,
+	)
+	return err
+}
+
+const serversInsertVendorAppServer = `-- name: ServersInsertVendorAppServer :exec
+WITH remote AS (
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+  VALUES ($4::uuid, $2::uuid, $5::text, $6::text,
+          'streamable-http', $7::text)
+  RETURNING id
+), issuer AS (
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration,
+                                    authorization_server_mode)
+  VALUES ($8::uuid, $2::uuid, $9::text, $6::text,
+          'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+  RETURNING id
+), server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           remote_mcp_server_id, user_session_issuer_id,
+                           visibility)
+  SELECT $10::uuid, $2::uuid, $5::text, $6::text, NULL,
+         remote.id, issuer.id, 'private'
+  FROM remote, issuer
+  RETURNING id
+)
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug)
+SELECT $1::uuid, $2::uuid, NULL, server.id, $3::text
+FROM server
+`
+
+type ServersInsertVendorAppServerParams struct {
+	EndpointID uuid.UUID
+	ProjectID  uuid.UUID
+	Slug       string
+	RemoteID   uuid.UUID
+	Name       string
+	Key        string
+	Url        string
+	IssuerID   uuid.UUID
+	OrgID      string
+	ServerID   uuid.UUID
+}
+
+// A well-known vendor's MCP server (Linear, Notion), with its own endpoint
+// and sign-in, set up as Auto-Configure would: the vendor's authorization
+// server, a client ID metadata document client Speakeasy serves at the
+// deployment's own URL, and the server's links to them. The vendor fetches
+// the document when someone signs in, so nothing is registered ahead of time
+// and each caller signs in to their own account. Locally, where the vendor
+// cannot reach the document, the client becomes one registered by DCR
+// (vendor_apps.go).
+func (q *Queries) ServersInsertVendorAppServer(ctx context.Context, arg ServersInsertVendorAppServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppServer,
+		arg.EndpointID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.RemoteID,
+		arg.Name,
+		arg.Key,
+		arg.Url,
+		arg.IssuerID,
+		arg.OrgID,
+		arg.ServerID,
 	)
 	return err
 }

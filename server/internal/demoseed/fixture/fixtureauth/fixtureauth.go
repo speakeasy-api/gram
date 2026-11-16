@@ -1,11 +1,11 @@
-// Package fixtureauth holds the credentials and token format of the local MCP
-// fixture server (mcp-fixture). They are checked into the repository on
-// purpose: the fixture is a throwaway development server, and the local demo
-// seed imports this package to mint tokens the fixture accepts, so seeded
-// connections work right after `mise run seed`.
+// Package fixtureauth holds the credentials, paths and token format of the
+// demo seed's MCP fixture (internal/demoseed/fixture), which every Speakeasy
+// server hosts under PathPrefix. They are checked into the repository on
+// purpose: the fixture serves fake data only, and the demo seed imports this
+// package to mint tokens and clients the fixture accepts, so seeded
+// connections work right after seeding, locally and in the public demo org.
 //
-// Nothing here is a secret. Never reuse these values outside local
-// development.
+// Nothing here is a secret, and nothing here may guard real data.
 package fixtureauth
 
 import (
@@ -13,7 +13,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -26,11 +25,6 @@ import (
 // accepts as `Authorization: Bearer <SharedToken>`. It stands in for a service
 // account key that every caller of a server uses.
 const SharedToken = "fixture-shared-token-not-a-secret"
-
-// TunnelKey is the tunnel agent key the fixture daemon connects to the local
-// tunnel gateway with. The local seed stores its hash on the Tunnelled
-// Private Server, so the tunnel is live right after seeding.
-const TunnelKey = "gram_tunnel_05360ec0d82da35bbbe6ce936c7697e31b7c13d19d5be23effb52b7664440477"
 
 // SharedIdentity is the identity a request authenticated with SharedToken
 // acts as.
@@ -68,7 +62,7 @@ const (
 	// PathOAuthMCP's server is used through a metadata document client.
 	PathDCR = "/dcr"
 	// PathAutoMCP is the DCR authorization server's protected resource, for
-	// a server whose sign-in an admin sets up through discovery and client
+	// a server whose sign-in is set up through discovery and dynamic client
 	// registration. It is relative to PathDCR.
 	PathAutoMCP = "/mcp/auto"
 	// PathSharedMCP takes the shared token or a caller's own token.
@@ -76,7 +70,7 @@ const (
 	// PathOwnTokenMCP lets anyone connect and list tools, but every tool call
 	// needs the caller's own token in the OwnTokenHeader request header, like
 	// an API that takes a personal API key.
-	PathOwnTokenMCP = "/mcp/own-token"
+	PathOwnTokenMCP = "/mcp/own-token" //nolint:gosec // a URL path, not a credential
 	// PathOpenMCP needs no credentials at all.
 	PathOpenMCP = "/mcp/open"
 	// PathEMAMCP takes access tokens from the dev-idp's resource
@@ -102,7 +96,7 @@ func EMAAuthorizationServer(devIDPURL string) string {
 
 // OwnTokenHeader is the request header PathOwnTokenMCP reads the caller's own
 // token from.
-const OwnTokenHeader = "X-Upstream-Token"
+const OwnTokenHeader = "X-Upstream-Token" //nolint:gosec // a header name, not a credential
 
 // PersonalTokenTTL is how long a token from the personal token page lives.
 const PersonalTokenTTL = 30 * 24 * time.Hour
@@ -153,6 +147,32 @@ func Parse(token, kind string) (Claims, error) {
 	return c, nil
 }
 
+// RegisterClient registers a client with the authorization server at issuer,
+// as its dynamic client registration endpoint does. The client id is a signed
+// token describing the client, so registrations survive a restart without
+// storage, and the seed registers clients without calling the endpoint.
+func RegisterClient(issuer, name string, redirectURIs []string, now time.Time) (string, error) {
+	return Sign(Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    issuer,
+			Subject:   "client",
+			Audience:  nil,
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: nil,
+			ExpiresAt: jwt.NewNumericDate(now.Add(10 * 365 * 24 * time.Hour)),
+			ID:        NewID(),
+		},
+		Kind:          KindClient,
+		Scope:         "",
+		ClientID:      "",
+		RedirectURI:   "",
+		RedirectURIs:  redirectURIs,
+		ClientName:    name,
+		CodeChallenge: "",
+		Resource:      "",
+	})
+}
+
 // NewID returns a random token id.
 func NewID() string {
 	b := make([]byte, 16)
@@ -187,12 +207,17 @@ func IssueTokens(issuer, resource, clientID, email string, scopes []string, acce
 			Audience:  jwt.ClaimStrings{resource},
 			ExpiresAt: jwt.NewNumericDate(accessExp),
 			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: nil,
 			ID:        NewID(),
 		},
-		Kind:     KindAccess,
-		Scope:    scope,
-		ClientID: clientID,
-		Resource: resource,
+		Kind:          KindAccess,
+		Scope:         scope,
+		ClientID:      clientID,
+		RedirectURI:   "",
+		RedirectURIs:  nil,
+		ClientName:    "",
+		CodeChallenge: "",
+		Resource:      resource,
 	})
 	if err != nil {
 		return TokenPair{}, err
@@ -205,12 +230,17 @@ func IssueTokens(issuer, resource, clientID, email string, scopes []string, acce
 			Audience:  jwt.ClaimStrings{issuer},
 			ExpiresAt: jwt.NewNumericDate(refreshExp),
 			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: nil,
 			ID:        NewID(),
 		},
-		Kind:     KindRefresh,
-		Scope:    scope,
-		ClientID: clientID,
-		Resource: resource,
+		Kind:          KindRefresh,
+		Scope:         scope,
+		ClientID:      clientID,
+		RedirectURI:   "",
+		RedirectURIs:  nil,
+		ClientName:    "",
+		CodeChallenge: "",
+		Resource:      resource,
 	})
 	if err != nil {
 		return TokenPair{}, err
@@ -222,52 +252,20 @@ func IssueTokens(issuer, resource, clientID, email string, scopes []string, acce
 // MCP endpoint for a fixture served at baseURL.
 func OAuthResource(baseURL string) string { return Resource(baseURL, PathOAuthMCP) }
 
-// DCRIssuer is the DCR-only authorization server's issuer. It names the
-// fixture by another host than baseURL, the other loopback name for the same
-// listener (127.0.0.1 for localhost and back): Speakeasy's dashboard treats
-// every provider on one host as the same provider, so on baseURL's host
-// Auto-Configure would reuse the main authorization server and never see this
-// one. Any other host has no known alternate name, so the issuer stays on it
-// (see DCRSharesHost).
-func DCRIssuer(baseURL string) string {
-	base := strings.TrimRight(baseURL, "/")
-	u, err := url.Parse(base)
-	if err != nil {
-		return base + PathDCR
-	}
-	alternate, ok := loopbackAlternates[u.Hostname()]
-	if !ok {
-		return base + PathDCR
-	}
-	u.Host = alternate
-	if port := portOf(base); port != "" {
-		u.Host = net.JoinHostPort(alternate, port)
-	}
-	return u.String() + PathDCR
+// PathPrefix is where the Speakeasy server serves the fixture. It sits under
+// /rpc because the deployed ingress sends only some paths, /rpc among them,
+// to the API server; the rest reach the dashboard.
+const PathPrefix = "/rpc/demoseed"
+
+// BaseURL is the fixture's external URL, and its main authorization
+// server's issuer, on a Speakeasy server at serverURL.
+func BaseURL(serverURL *url.URL) string {
+	return strings.TrimRight(serverURL.String(), "/") + PathPrefix
 }
 
-// DCRSharesHost reports whether DCRIssuer had to keep baseURL's host, so the
-// dashboard sees one provider and Auto-Configure registers a client ID
-// metadata document client instead of using DCR.
-func DCRSharesHost(baseURL string) bool {
-	u, err := url.Parse(strings.TrimRight(baseURL, "/"))
-	if err != nil {
-		return true
-	}
-	_, ok := loopbackAlternates[u.Hostname()]
-	return !ok
-}
-
-// loopbackAlternates pairs the loopback names the local TLS certificate covers.
-var loopbackAlternates = map[string]string{"localhost": "127.0.0.1", "127.0.0.1": "localhost"}
-
-func portOf(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
-	}
-	return u.Port()
-}
+// DCRIssuer is the DCR-only authorization server's issuer, under the
+// fixture served at baseURL.
+func DCRIssuer(baseURL string) string { return strings.TrimRight(baseURL, "/") + PathDCR }
 
 // AutoResource is the resource identifier of the DCR server's MCP endpoint.
 func AutoResource(baseURL string) string { return Resource(DCRIssuer(baseURL), PathAutoMCP) }

@@ -166,7 +166,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(5, "expected 5 auth client associations, found %d"),
+			fail:  postflightMustEqual(7, "expected 7 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -484,11 +484,6 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			what:  "unservable gateway members",
 			count: byProject(s.q.PostflightCountUnservableGatewayMembers),
 			fail:  postflightMustBeZero("%d gateway members are not servable"),
-		},
-		{
-			what:  "tunnel endpoints",
-			count: byProject(s.q.PostflightCountTunnelEndpoints),
-			fail:  postflightMustEqual(1, "expected 1 private tunnel endpoint, found %d"),
 		},
 		{
 			what: "active session quarantines",
