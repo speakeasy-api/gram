@@ -133,6 +133,7 @@ func TestRefs_AbsentIDsAreRefused(t *testing.T) {
 		"zero project id":        Project(ProjectID{}).Read(),
 		"nil uuid":               Project(ProjectIDOf(uuid.Nil)).Read(),
 		"empty string":           Project(ProjectIDFrom("")).Read(),
+		"nil uuid string":        Skill(SkillIDFrom(uuid.Nil.String())).Read(),
 		"wildcard":               Project(ProjectIDFrom(WildcardResource)).Read(),
 		"reserved marker":        Project(ProjectIDFrom(SelectorValueRepresentedUser)).Read(),
 		"whitespace":             Project(ProjectIDFrom("project 1")).Read(),
