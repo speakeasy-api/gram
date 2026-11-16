@@ -145,7 +145,7 @@ func TestMemberAuthFailure_AgentServerCredentialIsTheServers(t *testing.T) {
 
 // The configured credential's message follows what the rejected request
 // carried, as the recorded row does: a credential that never reached the
-// server keeps the caller's earlier message.
+// server keeps a person's earlier message and tells an agent it was not sent.
 func TestMemberClientFailure_SavedCredentialRefused(t *testing.T) {
 	t.Parallel()
 
@@ -154,13 +154,14 @@ func TestMemberClientFailure_SavedCredentialRefused(t *testing.T) {
 	keySent := memberRejection{configuredSent: true}
 	invalidKey := memberRejection{configuredSent: true, challenges: []string{`Bearer error="invalid_token"`}}
 	stripped := memberRejection{}
-	static, none := mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.Code{}
+	static, notConnectedRow, none := mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.Code{}
 	const (
-		refused   = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`
-		forbidden = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. Connecting does not change that. Ask an admin to check the server's credential and what its account may do, then retry`
-		agentKey  = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`
-		agent403  = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. This agent cannot change that. Ask an admin to check the server's credential and what its account may do, then retry`
-		noKey     = `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`
+		refused        = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`
+		forbidden      = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. Connecting does not change that. Ask an admin to check the server's credential and what its account may do, then retry`
+		agentKey       = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`
+		agent403       = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. This agent cannot change that. Ask an admin to check the server's credential and what its account may do, then retry`
+		noKey          = `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`
+		agentNoKeySent = `server "weather" refused the request. The credential configured for it in Speakeasy was not sent, for example because the server redirected to another address. This agent cannot change that. Ask an admin to check the server's URL and credential, then retry`
 	)
 	connectFirst := `server "weather" refused the request. Ask the user to open ` + page + ` to connect it, then retry. If it still fails, ask an admin to check the credential configured for the server in Speakeasy`
 	notConnected := `server "weather" is not connected for this user. Ask the user to open ` + page + ` to connect it, then retry`
@@ -177,13 +178,15 @@ func TestMemberClientFailure_SavedCredentialRefused(t *testing.T) {
 		{name: "nothing to connect 403 invalid token", status: http.StatusForbidden, answer: invalidKey, want: refused, code: static},
 		{name: "nothing to connect plain 403", status: http.StatusForbidden, answer: keySent, want: forbidden, code: none},
 		{name: "nothing to connect, credential stripped", status: http.StatusUnauthorized, answer: stripped, want: noKey, code: none},
-		{name: "page 401", fix: personFix(page), status: http.StatusUnauthorized, answer: keySent, want: connectFirst, code: static},
+		{name: "page 401", fix: personFix(page), status: http.StatusUnauthorized, answer: keySent, want: connectFirst, code: notConnectedRow},
+		{name: "page 403 invalid token", fix: personFix(page), status: http.StatusForbidden, answer: invalidKey, want: connectFirst, code: notConnectedRow},
 		{name: "page plain 403", fix: personFix(page), status: http.StatusForbidden, answer: keySent, want: connectFirst, code: none},
 		{name: "page, credential stripped", fix: personFix(page), status: http.StatusUnauthorized, answer: stripped, want: notConnected, code: none},
 		{name: "agent 401", fix: testAgentFix, status: http.StatusUnauthorized, answer: keySent, want: agentKey, code: static},
 		{name: "agent 403 invalid token", fix: testAgentFix, status: http.StatusForbidden, answer: invalidKey, want: agentKey, code: static},
 		{name: "agent plain 403", fix: testAgentFix, status: http.StatusForbidden, answer: keySent, want: agent403, code: none},
-		{name: "agent, credential stripped", fix: testAgentFix, status: http.StatusUnauthorized, answer: stripped, want: agentKey, code: none},
+		{name: "agent, credential stripped", fix: testAgentFix, status: http.StatusUnauthorized, answer: stripped, want: agentNoKeySent, code: none},
+		{name: "agent, credential stripped 403", fix: testAgentFix, status: http.StatusForbidden, answer: stripped, want: agentNoKeySent, code: none},
 		{name: "agent's self client", fix: testAgentFix, self: true, status: http.StatusUnauthorized, answer: keySent, want: noKey, code: static},
 		{name: "person's self client", fix: personFix(page), self: true, status: http.StatusUnauthorized, answer: keySent, want: notConnected, code: static},
 	} {

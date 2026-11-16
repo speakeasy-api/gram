@@ -477,8 +477,12 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		answer := rt.rejectedBy()
 		credentialRejected, sent := remotemcp.CredentialRejected(status, answer.challenges), dial.sentCredential(answer)
 		code, ok := remotemcp.UpstreamFailureHappened(status, credentialRejected, sent, dial.tunneled, "", errors.Join(err, exchangeErr))
-		if !ok && dial.anonymous && !dial.configuredHeaders {
+		switch {
+		case !ok && dial.anonymous && !dial.configuredHeaders:
 			// Nothing could be sent, so the caller has no connection to it.
+			code = mcpconnectionattempts.CodeInvalidRemoteSession
+		case ok && dial.connectsFirst(sent.Configured):
+			// The message sends the person to connect first, so the row does too.
 			code = mcpconnectionattempts.CodeInvalidRemoteSession
 		}
 		return memberConnectionError{memberAuthFailure(member, dial, status, sent.Configured, credentialRejected), code}

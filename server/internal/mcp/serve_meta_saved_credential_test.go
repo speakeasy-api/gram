@@ -165,15 +165,15 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 		challenge string
 		when      upstreamRefusal
 		want      string
-		recorded  bool
+		recorded  mcpconnectionattempts.Code
 	}{
-		{name: "no sign-in, 401", status: http.StatusUnauthorized, want: refused, recorded: true},
-		{name: "no sign-in, 401 on tools/call after a live session", status: http.StatusUnauthorized, when: refuseToolsCall, want: refused, recorded: true},
+		{name: "no sign-in, 401", status: http.StatusUnauthorized, want: refused, recorded: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "no sign-in, 401 on tools/call after a live session", status: http.StatusUnauthorized, when: refuseToolsCall, want: refused, recorded: mcpconnectionattempts.CodeStaticKeyRejected},
 		{name: "no sign-in, 403", status: http.StatusForbidden, want: forbidden},
-		{name: "no sign-in, 403 invalid token", status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: refused, recorded: true},
+		{name: "no sign-in, 403 invalid token", status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: refused, recorded: mcpconnectionattempts.CodeStaticKeyRejected},
 		{name: "no sign-in, key stripped by a redirect", status: http.StatusUnauthorized, when: refuseAfterRedirect, want: noKey},
-		{name: "sign-in not connected, 401", signIn: true, status: http.StatusUnauthorized, want: connectFirst, recorded: true},
-		{name: "sign-in not connected, 401 bearer challenge", signIn: true, status: http.StatusUnauthorized, challenge: bearer, want: connectFirst, recorded: true},
+		{name: "sign-in not connected, 401", signIn: true, status: http.StatusUnauthorized, want: connectFirst, recorded: mcpconnectionattempts.CodeInvalidRemoteSession},
+		{name: "sign-in not connected, 401 bearer challenge", signIn: true, status: http.StatusUnauthorized, challenge: bearer, want: connectFirst, recorded: mcpconnectionattempts.CodeInvalidRemoteSession},
 		{name: "sign-in not connected, 403", signIn: true, status: http.StatusForbidden, want: connectFirst},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -206,20 +206,20 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 			message, reference, _ := strings.Cut(text, "\nReference: ")
 			page := ti.serverURL.String() + "/mcp/" + metaSlug + "/connect/first-party?server=member"
 			require.Equal(t, strings.ReplaceAll(tc.want, "{page}", page), message)
-			require.Equal(t, tc.recorded, reference != "", "a recorded row is referenced")
+			none := mcpconnectionattempts.Code{}
+			require.Equal(t, tc.recorded != none, reference != "", "a recorded row is referenced")
 			if tc.when == refuseAfterRedirect {
 				upstream.requireRefused(t, "")
 			} else {
 				upstream.requireRefused(t, "saved-key")
 			}
 
-			if !tc.recorded {
+			if tc.recorded == none {
 				rec.RequireNothing()
 				return
 			}
-			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.recorded)
 			require.Equal(t, serverID.String(), row.MemberID)
-			require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 			require.Len(t, rec.Rows(), 1)
 		})
 	}

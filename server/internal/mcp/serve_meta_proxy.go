@@ -225,15 +225,18 @@ func memberAuthFailure(member metaMember, dial memberDial, status int, keySent, 
 	// A self client's credential is the administrator's, even an agent's.
 	agent := fix.agent && !dial.clientCredential
 	page := fix.callerURL()
+	forbidden := status == http.StatusForbidden && !credentialRejected
 	switch {
+	case agent && dial.anonymous && dial.configuredHeaders && !keySent:
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q refused the request. The credential configured for it in Speakeasy was not sent, for example because the server redirected to another address. This agent cannot change that. Ask an admin to check the server's URL and credential, then retry", member.slug)}}
 	// Only the configured credential was sent; the agent's sign-in step does not set it.
 	case agent && dial.anonymous && dial.configuredHeaders:
-		return memberCredentialError{savedCredentialRefused(member.slug, true, keySent && !credentialRejected)}
+		return memberCredentialError{savedCredentialRefused(member.slug, true, forbidden)}
 	// The upstream may want the person's connection, the configured credential, or both.
-	case dial.anonymous && keySent && !dial.clientCredential && page != "":
+	case dial.connectsFirst(keySent):
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q refused the request. Ask the user to open %s to connect it, then retry. If it still fails, ask an admin to check the credential configured for the server in Speakeasy", member.slug, page)}}
 	case dial.anonymous && keySent && !dial.clientCredential:
-		return memberCredentialError{savedCredentialRefused(member.slug, false, !credentialRejected)}
+		return memberCredentialError{savedCredentialRefused(member.slug, false, forbidden)}
 	// An agent with a connection of its own never dials anonymously: routing
 	// refuses the member first (agentUnroutedError).
 	case agent && dial.anonymous && !dial.oauthSignIn:
@@ -254,6 +257,11 @@ func memberAuthFailure(member metaMember, dial memberDial, status int, keySent, 
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, page)}}
 	}
 	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential. Ask your administrator to reconnect it", member.slug)}}
+}
+
+// connectsFirst is a person refused on the configured credential alone while a sign-in they have not connected is available.
+func (d memberDial) connectsFirst(keySent bool) bool {
+	return d.anonymous && keySent && !d.clientCredential && d.memberFix().callerURL() != ""
 }
 
 // savedCredentialRefused is a refused configured credential; forbidden is a 403 that does not reject it.
