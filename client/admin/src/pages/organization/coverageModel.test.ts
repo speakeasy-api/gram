@@ -88,6 +88,77 @@ describe("coverage model", () => {
     expect(unranked[0]?.gaps.size).toBe(2);
   });
 
+  it("folds Unified Chat onto the column each method reports to", () => {
+    const supported = { status: "supported", note: "", verify: false } as const;
+    const unified: Snapshot = {
+      ...snapshot,
+      methods: [
+        {
+          id: "plugins",
+          name: "Plugins",
+          vendor: "Anthropic",
+          plans: "",
+          facts: {},
+        },
+        {
+          id: "anthropic-api",
+          name: "Compliance API",
+          vendor: "Anthropic",
+          plans: "",
+          facts: {},
+        },
+      ],
+      products: [
+        {
+          id: "claude-unified-chat-web",
+          name: "Claude · Unified Chat · Web",
+          vendor: "Anthropic",
+          family: "Claude · Unified Chat",
+          surface: "Web",
+        },
+        {
+          id: "cowork-web",
+          name: "Cowork (deprecated) · Web",
+          vendor: "Anthropic",
+          family: "Cowork (deprecated)",
+          surface: "Web",
+        },
+      ],
+      draft: {
+        mappings: {
+          "plugins/claude-unified-chat-web": {
+            applicability: "applicable",
+            conditions: "",
+            facts: { session: supported },
+          },
+          "plugins/cowork-web": {
+            applicability: "applicable",
+            conditions: "",
+            facts: { session: supported },
+          },
+          "anthropic-api/claude-unified-chat-web": {
+            applicability: "applicable",
+            conditions: "",
+            facts: { session: supported },
+          },
+        },
+        references: {},
+      },
+    };
+    const byId = new Map(
+      methodFootprints(unified, new Map(), false).map((m) => [m.id, m]),
+    );
+
+    // The plugin's hooks report from the Cowork VM, deprecated rows included.
+    expect([...(byId.get("plugins")?.footprint ?? [])]).toEqual([
+      cellKey("session", "cowork"),
+    ]);
+    // Compliance API imports land as Claude Chat.
+    expect([...(byId.get("anthropic-api")?.footprint ?? [])]).toEqual([
+      cellKey("session", "claude_chat"),
+    ]);
+  });
+
   it("omits methods that claim nothing", () => {
     const empty: Snapshot = {
       ...snapshot,
