@@ -256,7 +256,12 @@ export function StepAuthentication({
                         !shared &&
                         (connection?.status === "missing" ||
                           connection?.status === "ready" ||
-                          connection?.status === "ended")
+                          connection?.status === "ended" ||
+                          // A read that failed and is being retried keeps a
+                          // personal connection already picked, rather than
+                          // clearing it as no longer offered.
+                          (connection?.status === "error" &&
+                            choice === ACCOUNT_CHOICE))
                       }
                       pickSole
                       label={`Choose how the agent's keys sign in to ${server.name}`}
