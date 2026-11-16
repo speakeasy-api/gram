@@ -693,6 +693,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunMemoryEval)
 	temporalWorker.RegisterActivity(activities.MarkMemoryEvalInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
+	// Retired; registered until legacyTrialLifecycleEmailWorkflow runs drain.
 	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
 	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
 	temporalWorker.RegisterActivity(activities.SendAccessPausedEmail)

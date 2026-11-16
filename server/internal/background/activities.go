@@ -551,38 +551,18 @@ func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLif
 	}
 }
 
-func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizationID string) (billingnotifications.TrialReminderState, error) {
-	if a.trialFixtureHandler != nil {
-		handled, err := a.trialFixtureHandler(ctx, organizationID)
-		if err != nil || handled {
-			return billingnotifications.TrialReminderState{}, err
-		}
-	}
-	if a.billingNotifications == nil {
-		return billingnotifications.TrialReminderState{}, fmt.Errorf("billing notification service is not configured")
-	}
-	state, err := a.billingNotifications.ResolveTrialReminder(ctx, organizationID)
-	if err != nil {
-		return billingnotifications.TrialReminderState{}, fmt.Errorf("resolve trial reminder: %w", err)
-	}
-	return state, nil
+// ResolveTrialEndingReminder is retired. It stays registered for runs that
+// legacyTrialLifecycleEmailWorkflow replays and reports no active reminder, so
+// a run that reaches it ends without waiting for the reminder time.
+func (a *Activities) ResolveTrialEndingReminder(context.Context, string) (legacyTrialEndingReminderState, error) {
+	return legacyTrialEndingReminderState{Active: false, TrialCreatedAt: time.Time{}, TrialEndsAt: time.Time{}, SendAt: time.Time{}}, nil
 }
 
-func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
-	if a.trialFixtureHandler != nil {
-		handled, err := a.trialFixtureHandler(ctx, input.OrganizationID)
-		if err != nil || handled {
-			return billingnotifications.SendTrialEndingSoonResult{}, err
-		}
-	}
-	if a.billingNotifications == nil {
-		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("billing notification service is not configured")
-	}
-	result, err := a.billingNotifications.SendTrialEndingSoon(ctx, input)
-	if err != nil {
-		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("send trial ending soon notification: %w", err)
-	}
-	return result, nil
+// SendTrialEndingSoonEmail is retired. It stays registered for runs that
+// legacyTrialLifecycleEmailWorkflow replays after their reminder timer fires,
+// and sends nothing.
+func (a *Activities) SendTrialEndingSoonEmail(context.Context, legacyTrialEndingSoonInput) (legacyTrialEndingSoonResult, error) {
+	return legacyTrialEndingSoonResult{Reschedule: false}, nil
 }
 
 func (a *Activities) SendAccessPausedEmail(ctx context.Context, input billingnotifications.SendAccessPausedInput) error {

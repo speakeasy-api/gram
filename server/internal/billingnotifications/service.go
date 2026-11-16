@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,8 +19,6 @@ import (
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
-
-const trialEndingSoonLeadTime = 72 * time.Hour
 
 type Sender interface {
 	SendIdempotent(context.Context, string, string, email.Template) error
@@ -45,76 +42,6 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features f
 		orgHosts:          orgHosts,
 		resolveRecipients: ResolveRecipients,
 	}
-}
-
-type TrialReminderState struct {
-	Active         bool
-	TrialCreatedAt time.Time
-	TrialEndsAt    time.Time
-	SendAt         time.Time
-}
-
-func (s *Service) ResolveTrialReminder(ctx context.Context, organizationID string) (TrialReminderState, error) {
-	trial, err := trialsrepo.New(s.db).GetActiveTrial(ctx, organizationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return TrialReminderState{Active: false, TrialCreatedAt: time.Time{}, TrialEndsAt: time.Time{}, SendAt: time.Time{}}, nil
-	}
-	if err != nil {
-		return TrialReminderState{}, fmt.Errorf("get active trial: %w", err)
-	}
-
-	metadata, err := usagerepo.New(s.db).GetBillingMetadata(ctx, organizationID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return TrialReminderState{}, fmt.Errorf("get billing metadata: %w", err)
-	}
-	if err == nil && metadata.StripeSubscriptionID.Valid {
-		return TrialReminderState{Active: false, TrialCreatedAt: time.Time{}, TrialEndsAt: time.Time{}, SendAt: time.Time{}}, nil
-	}
-
-	return TrialReminderState{
-		Active:         true,
-		TrialCreatedAt: trial.CreatedAt.Time,
-		TrialEndsAt:    trial.EndsAt.Time,
-		SendAt:         trial.EndsAt.Time.Add(-trialEndingSoonLeadTime),
-	}, nil
-}
-
-type SendTrialEndingSoonInput struct {
-	OrganizationID string
-	TrialCreatedAt time.Time
-	TrialEndsAt    time.Time
-}
-
-type SendTrialEndingSoonResult struct {
-	Reschedule bool
-}
-
-func (s *Service) SendTrialEndingSoon(ctx context.Context, input SendTrialEndingSoonInput) (SendTrialEndingSoonResult, error) {
-	state, err := s.ResolveTrialReminder(ctx, input.OrganizationID)
-	if err != nil || !state.Active {
-		return SendTrialEndingSoonResult{}, err
-	}
-	if !state.TrialCreatedAt.Equal(input.TrialCreatedAt) || !state.TrialEndsAt.Equal(input.TrialEndsAt) {
-		return SendTrialEndingSoonResult{Reschedule: true}, nil
-	}
-
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, input.OrganizationID)
-	if err != nil {
-		return SendTrialEndingSoonResult{}, fmt.Errorf("get organization: %w", err)
-	}
-	configuredEmail, err := s.configuredEmail(ctx, input.OrganizationID)
-	if err != nil {
-		return SendTrialEndingSoonResult{}, err
-	}
-	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, string(billing.TierPayg), configuredEmail)
-
-	template := email.TrialEndingSoon{
-		OrganizationName: organization.Name,
-		TrialEndDate:     state.TrialEndsAt.UTC().Format("January 2, 2006"),
-		ActionURL:        s.actionURL(organization, "billing"),
-	}
-	return SendTrialEndingSoonResult{}, s.deliver(ctx, input.OrganizationID, "", recipients, resolutionErr, template,
-		"trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
 }
 
 type AccessPausedKind string
@@ -267,18 +194,4 @@ func (s *Service) deliver(ctx context.Context, organizationID, eventID string, r
 		}
 	}
 	return errors.Join(sendErrors...)
-}
-
-func (s *Service) configuredEmail(ctx context.Context, organizationID string) (*string, error) {
-	metadata, err := usagerepo.New(s.db).GetBillingMetadata(ctx, organizationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get billing metadata: %w", err)
-	}
-	if !metadata.AlertEmail.Valid {
-		return nil, nil
-	}
-	return &metadata.AlertEmail.String, nil
 }

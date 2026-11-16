@@ -19,11 +19,12 @@ Release CI creates the Loops emails from the manifest; the deployment injects th
 - Repository edits do not authorize manual Loops reads, mutations, previews, test-sends, or publishes. Resolve each external action separately.
 - Never use customer or private production names, IDs, domains, addresses, URLs, or figures in source, tests, temporary previews, screenshots, logs, or test sends. Use `Example Organization`, `person@example.com`, and `<ORG_ID>`.
 - Keep content operational. No marketing copy or unsubscribe UI.
+- Only send an email as transactional when it reports account state or completes something the recipient did: an invite, an access request, a paused account, a failing domain. A reminder that pushes an upgrade or renewal, or a scheduled digest, is marketing even when personalized. Send those as a Loops event into a Loops workflow (see `server/internal/trialemails`), not as a template here. Marketing-style mail on the transactional channel hurts inbox placement for every transactional email.
 - Recipient-visible copy names the product **Speakeasy**, never "Gram": subjects, preview text, body copy, CTA labels, image alt text, and footer reasons. Internal identifiers keep their existing names (logical keys such as `access_paused`, file names); only managed names carry the `gram.transactional.v2.<key>` prefix.
 
 ## Adding or changing a template
 
-First check the `TemplateKey` constants in `server/internal/email/templates.go` for an existing template covering the event (for example `trial_ending_soon`, `access_paused`). Also check the send sites (`git grep -n 'email\.[A-Z][A-Za-z]*{' server/internal`): one template may serve several events, for example `access_paused` is also sent on trial demotion (`billingnotifications.AccessPausedTrialDemotion`). Extend an existing template (copy change or a condition variable) instead of adding a near-duplicate. What a change touches:
+First check the `TemplateKey` constants in `server/internal/email/templates.go` for an existing template covering the event (for example `access_paused`, `payg_activated`). Also check the send sites (`git grep -n 'email\.[A-Z][A-Za-z]*{' server/internal`): one template may serve several events, for example `access_paused` is also sent on trial demotion (`billingnotifications.AccessPausedTrialDemotion`). Extend an existing template (copy change or a condition variable) instead of adding a near-duplicate. What a change touches:
 
 | Change                            | Update together                                                                                                 |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |

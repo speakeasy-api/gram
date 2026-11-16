@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	tenvironment "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"go.temporal.io/api/enums/v1"
@@ -132,12 +131,65 @@ func trialLifecycleEmailWorkflowID(input TrialLifecycleEmailInput) string {
 	return fmt.Sprintf("%s:%s:%s:%s", trialLifecycleEmailWorkflowIDPrefix, input.Kind, input.OrganizationID, input.UserID)
 }
 
+// trialEndingSoonRetiredChangeID versions the removal of the transactional
+// reminder this workflow used to send three days before a trial ended. Trial
+// reminders now come only from the Loops workflow that the trial_started event
+// enters, which sends them as marketing email.
+const (
+	trialEndingSoonRetiredChangeID = "trial-ending-soon-retired"
+	trialEndingSoonRetiredVersion  = 1
+)
+
 func TrialLifecycleEmailWorkflow(ctx workflow.Context, input TrialLifecycleEmailInput) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: trialLifecycleEmailActivityTimeout,
 		RetryPolicy:         trialLifecycleEmailRetryPolicy(),
 	})
 
+	if workflow.GetVersion(ctx, trialEndingSoonRetiredChangeID, workflow.DefaultVersion, trialEndingSoonRetiredVersion) == workflow.DefaultVersion {
+		return legacyTrialLifecycleEmailWorkflow(ctx, input)
+	}
+	// A reminder-only run is the continuation of a run that started before the
+	// reminder was retired. That run already sent the lifecycle event.
+	if input.ReminderOnly {
+		return nil
+	}
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(ctx, a.SendTrialLifecycleEmail, input).Get(ctx, nil); err != nil {
+		return fmt.Errorf("send trial lifecycle email: %w", err)
+	}
+	return nil
+}
+
+// legacyTrialEndingReminderState, legacyTrialEndingSoonInput, and
+// legacyTrialEndingSoonResult keep the payload shapes recorded in the history
+// of runs that legacyTrialLifecycleEmailWorkflow replays.
+type legacyTrialEndingReminderState struct {
+	Active         bool
+	TrialCreatedAt time.Time
+	TrialEndsAt    time.Time
+	SendAt         time.Time
+}
+
+type legacyTrialEndingSoonInput struct {
+	OrganizationID string
+	TrialCreatedAt time.Time
+	TrialEndsAt    time.Time
+}
+
+type legacyTrialEndingSoonResult struct {
+	Reschedule bool
+}
+
+// legacyTrialLifecycleEmailWorkflow replays runs that started before
+// trialEndingSoonRetiredVersion, some of which are still waiting on the
+// reminder timer. Its activity sequence must not change. The retired
+// activities it calls send nothing, and a ContinueAsNew from here starts a run
+// on the current version, which ends at once. Delete this function, the two
+// retired activities, and their worker registrations once no run from before
+// the change is open: at most trialReminderTimerChunk after it is deployed.
+func legacyTrialLifecycleEmailWorkflow(ctx workflow.Context, input TrialLifecycleEmailInput) error {
 	var a *Activities
 	if !input.ReminderOnly {
 		if err := workflow.ExecuteActivity(ctx, a.SendTrialLifecycleEmail, input).Get(ctx, nil); err != nil {
@@ -156,7 +208,7 @@ func TrialLifecycleEmailWorkflow(ctx workflow.Context, input TrialLifecycleEmail
 		RetryPolicy:         trialReminderRetryPolicy(),
 	})
 
-	var state billingnotifications.TrialReminderState
+	var state legacyTrialEndingReminderState
 	if err := workflow.ExecuteActivity(ctx, a.ResolveTrialEndingReminder, input.OrganizationID).Get(ctx, &state); err != nil {
 		return fmt.Errorf("resolve trial ending reminder: %w", err)
 	}
@@ -175,8 +227,8 @@ func TrialLifecycleEmailWorkflow(ctx workflow.Context, input TrialLifecycleEmail
 		}
 	}
 
-	var result billingnotifications.SendTrialEndingSoonResult
-	if err := workflow.ExecuteActivity(ctx, a.SendTrialEndingSoonEmail, billingnotifications.SendTrialEndingSoonInput{
+	var result legacyTrialEndingSoonResult
+	if err := workflow.ExecuteActivity(ctx, a.SendTrialEndingSoonEmail, legacyTrialEndingSoonInput{
 		OrganizationID: input.OrganizationID,
 		TrialCreatedAt: state.TrialCreatedAt,
 		TrialEndsAt:    state.TrialEndsAt,
