@@ -187,7 +187,7 @@ describe("the credential the agent's keys use", () => {
         credentialChoice={{
           show: () => true,
           value: () => value,
-          onChange: vi.fn(),
+          onChange: vi.fn<(serverId: string, authClientId: string) => void>(),
         }}
         connections={{
           byServer: new Map([[remote.id, { status: "missing" }]]),
