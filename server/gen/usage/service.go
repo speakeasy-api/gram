@@ -48,8 +48,6 @@ type Service interface {
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
 	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
-	// Create a checkout link for upgrading to the business plan
-	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
 	// Read the current status of a Stripe Checkout session owned by the active
 	// organization
 	GetStripeCheckoutStatus(context.Context, *GetStripeCheckoutStatusPayload) (res *GetStripeCheckoutStatusResult, err error)
@@ -93,7 +91,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"getPeriodUsage", "getMeterUsage", "getSpendBreakdown", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "getStripeCheckoutStatus", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+var MethodNames = [19]string{"getPeriodUsage", "getMeterUsage", "getSpendBreakdown", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "getStripeCheckoutStatus", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -105,12 +103,6 @@ type BillingEmail struct {
 // CancelStripeSubscriptionPayload is the payload type of the usage service
 // cancelStripeSubscription method.
 type CancelStripeSubscriptionPayload struct {
-	SessionToken *string
-}
-
-// CreateCheckoutPayload is the payload type of the usage service
-// createCheckout method.
-type CreateCheckoutPayload struct {
 	SessionToken *string
 }
 

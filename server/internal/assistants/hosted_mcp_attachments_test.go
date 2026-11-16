@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -54,13 +55,12 @@ func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixtu
 	require.NoError(t, err)
 	createCanonicalWrapper(t, db, hosted, "org-test-billing-x1", "private")
 
-	// No canonical wrapper, only a legacy alias: not hosted.
+	// No canonical wrapper: not hosted.
 	legacy, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "Legacy", Slug: "legacy",
 		DefaultEnvironmentSlug: pgtype.Text{String: "default-env", Valid: true},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, db, projectID, legacy.ID, "org-test-legacy-x1", uuid.NullUUID{})
 
 	backend, err := remotemcprepo.New(db).CreateServer(ctx, remotemcprepo.CreateServerParams{
 		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{String: "Remote", Valid: true},
@@ -372,12 +372,11 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 	})
 }
 
-// A hosted attachment follows its canonical wrapper's visibility; the legacy alias serves only an enabled wrapper.
+// A hosted attachment follows its canonical wrapper's visibility, and serves only through an endpoint.
 func TestHostedAttachmentFollowsWrapperOverToolset(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "hosted_drift")
 	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
-	testenv.SetLegacyAlias(t, t.Context(), f.db, f.projectID, f.hosted.ID, "org-test-billing-x1", uuid.NullUUID{})
 	want := []runtimeMCPServer{{
 		ID:      "billing",
 		URL:     "https://gram.test/mcp/org-test-billing-x1",
@@ -386,14 +385,18 @@ func TestHostedAttachmentFollowsWrapperOverToolset(t *testing.T) {
 
 	wrapper, err := mcpserversrepo.New(f.db).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.hosted.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
+	wrapper.Visibility = "public"
+	f.updateWrapper(t, wrapper)
+	require.Equal(t, want, f.runtime(t))
+
 	wrapper.Visibility = "disabled"
 	f.updateWrapper(t, wrapper)
-	f.deleteHostedEndpoints(t)
-	require.Empty(t, f.runtime(t), "disabled, endpointless wrapper; legacy alias still set")
+	require.Empty(t, f.runtime(t), "disabled wrapper")
 
 	wrapper.Visibility = "public"
 	f.updateWrapper(t, wrapper)
-	require.Equal(t, want, f.runtime(t), "endpointless public wrapper keeps the legacy alias")
+	f.deleteHostedEndpoints(t)
+	require.Empty(t, f.runtime(t), "endpointless public wrapper has no address")
 }
 
 func runtimeIDs(servers []runtimeMCPServer) []string {
@@ -458,22 +461,6 @@ func TestHostedAttachmentUndialableToolsetUsesWrapper(t *testing.T) {
 	require.EqualValues(t, 1, counts)
 }
 
-// A disabled, endpointless hosted server whose legacy alias still serves is enabled when attached.
-func TestHostedAttachmentEnablesAliasOnlyWrapper(t *testing.T) {
-	t.Parallel()
-	f := newHostedAttachmentFixture(t, "hosted_alias_only")
-	f.disableHosted(t)
-	f.deleteHostedEndpoints(t)
-	testenv.SetLegacyAlias(t, t.Context(), f.db, f.projectID, f.hosted.ID, "org-test-billing-x1", uuid.NullUUID{})
-
-	name := "updated"
-	_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil,
-		[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil, allowAllMCPEnable, nil)
-	require.NoError(t, err)
-	require.Equal(t, "private", f.wrapper(t).Visibility)
-	require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
-}
-
 // A toolset without a canonical wrapper has no MCP server to attach.
 func TestHostedAttachmentWithoutWrapperRejected(t *testing.T) {
 	t.Parallel()
@@ -484,4 +471,41 @@ func TestHostedAttachmentWithoutWrapperRejected(t *testing.T) {
 	require.ErrorIs(t, err, errToolsetNoMCPServer)
 	counts := f.counts(t)
 	require.Zero(t, counts)
+}
+
+// A hosted server with a live custom-domain endpoint is dialed there, as endpointaddr.PrimaryEndpoint picks.
+func TestHostedAttachmentPrefersLiveCustomDomainEndpoint(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_custom_domain_first")
+	ctx := t.Context()
+	domains := customdomainsrepo.New(f.db)
+	domain, err := domains.CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: "org-test", Domain: "assistants.example.com", IngressName: pgtype.Text{String: "ingress", Valid: true},
+		CertSecretName: pgtype.Text{String: "cert", Valid: true}, ProvisionerKind: "ingress", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	_, err = domains.UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{
+		ID: domain.ID, Verified: true, Activated: true, IngressName: pgtype.Text{String: "ingress", Valid: true}, CertSecretName: pgtype.Text{String: "cert", Valid: true},
+	})
+	require.NoError(t, err)
+	endpoints := mcpendpointsrepo.New(f.db)
+	endpoint, err := endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: f.projectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: f.hosted.ID, Valid: true}, Slug: "billing-domain",
+	})
+	require.NoError(t, err)
+	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
+
+	runtime := f.runtime(t)
+	require.Len(t, runtime, 1)
+	require.Equal(t, "https://assistants.example.com/mcp/billing-domain", runtime[0].URL)
+
+	_, err = endpoints.UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		ID: endpoint.ID, ProjectID: f.projectID, CustomDomainID: endpoint.CustomDomainID, Slug: endpoint.Slug,
+		IsDomainRoot: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	runtime = f.runtime(t)
+	require.Len(t, runtime, 1)
+	require.Equal(t, "https://assistants.example.com", runtime[0].URL)
 }

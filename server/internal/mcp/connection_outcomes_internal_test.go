@@ -513,6 +513,13 @@ func (c *addOnlyCache) Add(_ context.Context, key string, _ time.Duration) (bool
 	return true, nil
 }
 
+func (c *addOnlyCache) Delete(_ context.Context, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.seen, key)
+	return nil
+}
+
 // A stalled Redis can't hold up a sign-in: the claim runs off the request path.
 func TestEndAttemptOnce_StalledRedisDoesNotBlockTheRequest(t *testing.T) {
 	t.Parallel()
@@ -578,6 +585,94 @@ func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), directEndpoint(), state, nil, nil, nil)
 	require.NoError(t, service.attemptEndings.drain(t.Context()))
 	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+}
+
+// A refused provider callback is Speakeasy's check, so its export never names the provider.
+func TestRecordRemoteLoginRefusal_ExportOmitsProviderHost(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		err      error
+		severity otellog.Severity
+	}{
+		{name: "connection changed", err: errRecoveryUnavailable, severity: otellog.SeverityWarn},
+		{name: "expired", err: errRecoveryLoginExpired, severity: otellog.SeverityError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+			logsOn := func(context.Context, string) (bool, error) { return true, nil }
+			recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+			service := &Service{connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings(), logger: testenv.NewLogger(t)}
+			remote := remotesessions.RemoteLoginState{
+				Attempt:      mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR)),
+				ProviderHost: "login.example.com:8443",
+			}
+
+			service.recordRemoteLoginRefusal(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/callback", nil), remote, tc.err)
+			require.NoError(t, service.attemptEndings.drain(t.Context()))
+			require.NoError(t, recorder.Shutdown(t.Context()))
+
+			require.Len(t, sink.records, 1)
+			require.Equal(t, tc.severity, sink.records[0].Severity())
+			sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+				require.NotEqual(t, string(attr.ServerAddressKey), kv.Key)
+				require.NotEqual(t, string(attr.ServerPortKey), kv.Key)
+				return true
+			})
+		})
+	}
+}
+
+func TestRecordConsentPage_ExpiredCatalogReloadsExportOnce(t *testing.T) {
+	t.Parallel()
+
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	service := &Service{connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+
+	for range 4 {
+		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	}
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Len(t, sink.records, 2, "one per attempt, however often its page reloads")
+	for _, record := range sink.records {
+		require.Equal(t, otellog.SeverityWarn, record.Severity())
+	}
+}
+
+func TestRecordConsentPage_ExpiredCatalogRejectedRowIsOfferedAgain(t *testing.T) {
+	t.Parallel()
+
+	stopped := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, func(context.Context, string) (bool, error) { return true, nil })
+	require.NoError(t, stopped.Shutdown(t.Context()))
+	service := &Service{connections: stopped, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+
+	rec := mcpconnectionattemptstest.New(t)
+	service.connections = rec.Recorder
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	require.Len(t, rec.Rows(), 1, "the reload records the rejected row, then folds")
+}
+
+func TestRecordConsentPage_OtherProblemsRecordEachRender(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)
+	require.Len(t, rec.Rows(), 2)
 }
 
 func tokenRequest(t *testing.T) *http.Request {

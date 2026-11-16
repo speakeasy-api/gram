@@ -242,10 +242,39 @@ func (s *Service) recordConsentPage(
 		s.recordMemberStatuses(ctx, logger, attempt, statuses, subject, fromRequest)
 	}
 	if problem != nil {
-		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject, fromRequest)
+		s.recordConsentProblem(ctx, logger, attempt, problem, subject, fromRequest)
 	}
 	if challengeState.FirstParty && !challengeState.CodeReconnect.undecidedOrCanceled() && firstPartyConnected(gateway, cards) {
 		s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, subject, fromRequest)
+	}
+}
+
+// recordConsentProblem folds reloads of an expired-catalog page into one row per attempt; a cache failure records it.
+func (s *Service) recordConsentProblem(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
+	if problem != mcpconnectionattempts.CodeConnectionCatalogExpired || s.userSessionRefreshReplayCoordination == nil || attempt.IsZero() {
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
+		return
+	}
+	key := "connectionAttemptCatalogExpired:" + attempt.ID().String()
+	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
+	cancel()
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "claim expired catalog row", attr.SlogError(err))
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
+		return
+	case !won:
+		return
+	}
+	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...) {
+		return
+	}
+	// Not accepted, so the next render offers it again.
+	cacheCtx, cancel = context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	if err := s.userSessionRefreshReplayCoordination.Delete(cacheCtx, key); err != nil {
+		logger.WarnContext(ctx, "forget expired catalog row", attr.SlogError(err))
 	}
 }
 
@@ -646,7 +675,8 @@ func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, a
 // session mismatch: no browser can complete that expired connection anymore.
 func (s *Service) recordRemoteLoginRefusal(r *http.Request, remote remotesessions.RemoteLoginState, err error) {
 	ctx := r.Context()
-	opts := append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))
+	// Speakeasy's own checks refused it, not the provider.
+	opts := append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.FailedElsewhere())
 	if errors.Is(err, redisCache.ErrCacheMiss) || errors.Is(err, errRecoveryLoginExpired) {
 		s.endAttemptOnce(ctx, s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, opts...)
 		return

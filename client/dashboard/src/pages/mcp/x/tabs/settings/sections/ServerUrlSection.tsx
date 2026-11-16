@@ -151,11 +151,6 @@ export function ServerUrlSection({
     isError: privateUrlsError,
   } = usePrivateMcpServerUrls(mcpServer, endpoints);
 
-  // A custom-domain alias the Speakeasy domain still serves for existing clients.
-  const legacyPlatformSlug =
-    hostedServerId && mcpServer && "legacyPlatformSlug" in mcpServer
-      ? mcpServer.legacyPlatformSlug
-      : undefined;
   const platformEndpoints = useMemo(
     () => endpoints.filter((e) => !e.customDomainId),
     [endpoints],
@@ -292,9 +287,6 @@ export function ServerUrlSection({
               {/* Hosted (platform) addresses. */}
               <Field>
                 <FieldLabel>Hosted Address</FieldLabel>
-                {legacyPlatformSlug && (
-                  <LegacyAddressRow slug={legacyPlatformSlug} />
-                )}
                 {platformEndpoints.map((endpoint) => (
                   <AddressRow
                     key={endpoint.id}
@@ -307,7 +299,7 @@ export function ServerUrlSection({
                     onSaved={followHostedServer}
                   />
                 ))}
-                {platformEndpoints.length > 0 || legacyPlatformSlug ? (
+                {platformEndpoints.length > 0 ? (
                   addingPlatform ? (
                     <NewPlatformAddressRow
                       backend={backend}
@@ -507,25 +499,28 @@ function AddressRow({
   onSaved?: () => Promise<void>;
 }) {
   const { orgSlug } = useSlugs();
-  // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
-  // the read-only URL segment so the editable field holds just the suffix;
-  // custom-domain endpoints have no such prefix.
-  const slugPrefix = !endpoint.customDomainId && orgSlug ? `${orgSlug}-` : "";
+  // Platform endpoints carry the `${orgSlug}-` prefix, folded into the
+  // read-only URL segment so the field holds just the suffix. Older unprefixed
+  // platform slugs and custom-domain endpoints show the whole slug; renaming an
+  // unprefixed platform slug adds the prefix, which the API requires.
+  const orgPrefix = !endpoint.customDomainId && orgSlug ? `${orgSlug}-` : "";
+  const slugPrefix = endpoint.slug.startsWith(orgPrefix) ? orgPrefix : "";
+  const unprefixed = orgPrefix !== "" && slugPrefix === "";
 
   const [suffix, setSuffix] = useState(() =>
-    endpoint.slug.startsWith(slugPrefix)
-      ? endpoint.slug.slice(slugPrefix.length)
-      : endpoint.slug,
+    endpoint.slug.slice(slugPrefix.length),
   );
   useEffect(() => {
-    setSuffix(
-      endpoint.slug.startsWith(slugPrefix)
-        ? endpoint.slug.slice(slugPrefix.length)
-        : endpoint.slug,
-    );
+    setSuffix(endpoint.slug.slice(slugPrefix.length));
   }, [endpoint.slug, slugPrefix]);
 
-  const fullSlug = `${slugPrefix}${suffix.trim()}`;
+  const trimmedSuffix = suffix.trim();
+  const fullSlug =
+    unprefixed &&
+    trimmedSuffix !== endpoint.slug &&
+    !trimmedSuffix.startsWith(orgPrefix)
+      ? `${orgPrefix}${trimmedSuffix}`
+      : `${slugPrefix}${trimmedSuffix}`;
 
   const queryClient = useQueryClient();
   // Set while a rename or removal waits for the usage confirmation. Only MCP
@@ -570,7 +565,6 @@ function AddressRow({
     endpoint.customDomainId ?? null,
     endpoint.slug,
     hosted,
-    backendServerId(backend),
   );
 
   const dirty = fullSlug !== endpoint.slug;
@@ -616,7 +610,9 @@ function AddressRow({
           <Button
             size="md"
             variant="primary"
-            disabled={!dirty || !!slugError || update.isPending}
+            disabled={
+              !dirty || !trimmedSuffix || !!slugError || update.isPending
+            }
             onClick={() => {
               if (usageServerId) {
                 setPendingChange("rename");
@@ -658,6 +654,11 @@ function AddressRow({
           </Button>
         </RequireScope>
       </Stack>
+      {unprefixed && dirty && trimmedSuffix && (
+        <FieldDescription className="text-xs">
+          {`New addresses start with ${orgPrefix}. This saves as ${baseUrlPrefix}${fullSlug}.`}
+        </FieldDescription>
+      )}
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
       {endpoint.customDomainId && (
@@ -824,25 +825,6 @@ function AddressChangeDialog({
   );
 }
 
-function LegacyAddressRow({ slug }: { slug: string }): JSX.Element {
-  const url = `${getServerURL()}/mcp/${slug}`;
-  return (
-    <Field className="gap-2">
-      <div className="border-border flex items-center gap-2 border px-3 py-2">
-        <Text className="min-w-0 flex-1 break-all font-mono text-sm">
-          {url}
-        </Text>
-        <CopyButton text={url} size="xs" tooltip="Copy hosted address" />
-      </div>
-      <Text muted small>
-        An older Speakeasy address with the same name as your custom address.
-        Clients that already use it connect here while this server is enabled
-        and public access is on.
-      </Text>
-    </Field>
-  );
-}
-
 // Root mapping changes reroute live traffic on the custom domain, so both
 // setting (which replaces any existing root mapping) and clearing require
 // explicit confirmation, mirroring the last-address removal dialog.
@@ -981,7 +963,6 @@ function NewPlatformAddressRow({
     null,
     undefined,
     false,
-    backendServerId(backend),
   );
 
   const [submitting, setSubmitting] = useState(false);
@@ -1088,7 +1069,6 @@ function NewCustomAddressRow({
     domainId || null,
     undefined,
     hosted,
-    backendServerId(backend),
   );
 
   const [submitting, setSubmitting] = useState(false);

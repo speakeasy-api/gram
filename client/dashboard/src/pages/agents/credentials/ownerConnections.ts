@@ -20,8 +20,20 @@ export type ServerConnection =
   | { status: "error" }
   /** The server asks for no personal upstream sign-in, so a key alone works. */
   | { status: "not-required" }
-  /** At least one upstream sign-in has no usable assigned or personal connection. */
-  | { status: "missing" }
+  /**
+   * At least one upstream sign-in has no usable assigned or personal
+   * connection. `signIns` lists each one, and `connected` counts the ones that
+   * do have a connection, so the reader is told what is left to connect
+   * rather than only that something is. `connectedNames` names the connected
+   * ones, so a sentence never guesses what they are. All are absent where the
+   * cause is not a sign-in, such as an assignment whose session is gone.
+   */
+  | {
+      status: "missing";
+      signIns?: ServerSignIn[];
+      connected?: number;
+      connectedNames?: (string | undefined)[];
+    }
   /** Every sign-in is connected, but one of them no longer works. */
   | { status: "ended"; sessions: RemoteSession[] }
   | { status: "ready"; sessions: RemoteSession[] };
@@ -39,18 +51,31 @@ export function userSubject(userId: string): string {
  * is what the attachment endpoint will accept. A client whose credential is
  * its own (`credential_owner: self`) is shared by every caller and needs no
  * person.
+ *
+ * With `anyOne`, the server is ready once any of its personal sign-ins has a
+ * working connection: under upstream auth enforcement the gateway lets a
+ * caller choose among a server's own sign-ins, so one serves. Without it,
+ * every sign-in is required, as the runtime requires each of a server's own
+ * registrations when upstream auth is not enforced.
  */
 export function serverConnection(
   issuerId: string,
   clients: ServerSignIn[],
   sessions: RemoteSession[],
   now: number = Date.now(),
+  { anyOne = false }: { anyOne?: boolean } = {},
 ): ServerConnection {
   const personal = clients.filter(
     (client) => client.credentialOwner !== "self",
   );
   if (personal.length === 0) return { status: "not-required" };
   const found: RemoteSession[] = [];
+  const missing: ServerSignIn[] = [];
+  // The sign-ins whose only connection has ended. They still need a person,
+  // so a server that also misses another sign-in lists them as outstanding
+  // rather than counting them as connected.
+  const ended: ServerSignIn[] = [];
+  const connectedClients: ServerSignIn[] = [];
   for (const client of personal) {
     const matching = sessions.filter(
       (candidate) =>
@@ -62,9 +87,34 @@ export function serverConnection(
       matching.find(
         (candidate) => connectionLifetime(candidate, now).kind !== "ended",
       ) ?? matching[0];
-    if (!session) return { status: "missing" };
+    if (!session) {
+      missing.push(client);
+      continue;
+    }
     found.push(session);
+    if (connectionLifetime(session, now).kind === "ended") {
+      ended.push(client);
+      continue;
+    }
+    connectedClients.push(client);
   }
+  if (anyOne) {
+    const working = found.filter(
+      (session) => connectionLifetime(session, now).kind !== "ended",
+    );
+    if (working.length > 0) return { status: "ready", sessions: working };
+    if (found.length > 0) return { status: "ended", sessions: found };
+    return { status: "missing", signIns: missing, connected: 0 };
+  }
+  if (missing.length > 0)
+    return {
+      status: "missing",
+      signIns: [...missing, ...ended],
+      connected: connectedClients.length,
+      ...(connectedClients.length > 0 && {
+        connectedNames: connectedClients.map((client) => client.name),
+      }),
+    };
   if (
     found.some((session) => connectionLifetime(session, now).kind === "ended")
   )
@@ -91,8 +141,40 @@ export function offersPersonalSignIn(
   );
 }
 
-/** An upstream sign-in a server asks for: its OAuth registration and who owns it. */
-export type ServerSignIn = Pick<RemoteSessionClient, "id" | "credentialOwner">;
+/**
+ * An upstream sign-in a server asks for: its OAuth registration, who owns it,
+ * and, when known, the name a person recognizes it by, such as "Stripe".
+ */
+export type ServerSignIn = Pick<
+  RemoteSessionClient,
+  "id" | "credentialOwner"
+> & {
+  name?: string;
+};
+
+/**
+ * The names of the sign-ins a missing connection still needs, in the order the
+ * server asks for them, for a sentence such as "Still needs Stripe and Vercel".
+ * Two sign-ins that share a name read as "2 Linear sign-ins", and a sign-in
+ * with no known name counts as one more, so the total stays true.
+ */
+export function missingSignInNames(connection: ServerConnection | undefined): {
+  names: string[];
+  unnamed: number;
+} {
+  if (connection?.status !== "missing" || !connection.signIns)
+    return { names: [], unnamed: 0 };
+  const counts = new Map<string, number>();
+  for (const signIn of connection.signIns) {
+    if (signIn.name)
+      counts.set(signIn.name, (counts.get(signIn.name) ?? 0) + 1);
+  }
+  const names = [...counts].map(([name, count]) =>
+    count === 1 ? name : `${count} ${name} sign-ins`,
+  );
+  const unnamed = connection.signIns.filter((signIn) => !signIn.name).length;
+  return { names, unnamed };
+}
 
 /**
  * The upstream sign-ins a server asks each person for, read from its own auth
@@ -115,6 +197,7 @@ export function serverSignIns(
   return personal.map((client) => ({
     id: client.remoteSessionClientId!,
     credentialOwner: "subject",
+    name: client.name,
   }));
 }
 
@@ -131,7 +214,11 @@ export interface ConnectionApi {
   authClients: Pick<AuthClients, "getMcpServerAuthentication">;
   remoteSessions: Pick<
     RemoteSessions,
-    "list" | "listBindings" | "attachBinding" | "detachBinding"
+    | "list"
+    | "listBindings"
+    | "attachBinding"
+    | "detachBinding"
+    | "listServerClientAssociations"
   >;
   remoteSessionClients: Pick<RemoteSessionClients, "list">;
 }
@@ -175,6 +262,53 @@ async function personalServers(
     unreadable: servers.filter((_, index) => reads[index] === "unreadable"),
     signIns,
   };
+}
+
+/**
+ * The registrations on a server's user session issuer that the selected
+ * servers sharing that issuer require, by the rule the runtime enforces
+ * (`required_client_ids`): a server needs its own registrations, not the ones
+ * other servers on a shared issuer bring. Without enforcement this is what the
+ * issuer's sign-ins narrow to.
+ */
+async function issuerSignInsRequired(
+  api: ConnectionApi,
+  personal: InventoryServer[],
+  issuer: InventoryServer,
+  signal?: AbortSignal,
+): Promise<ServerSignIn[]> {
+  const gramProject = issuer.projectSlug;
+  const sharing = personal.filter(
+    (server) =>
+      server.projectId === issuer.projectId &&
+      server.issuerId === issuer.issuerId,
+  );
+  // A hosted server needs every registration its issuer binds; only proxied
+  // servers narrow to their own.
+  const hosted = sharing.some(
+    (server) => server.kind !== "Remote" && server.kind !== "Tunneled",
+  );
+  const [clients, ...required] = await Promise.all([
+    collectPageItems(
+      api.remoteSessionClients.list(
+        { gramProject, userSessionIssuerId: issuer.issuerId! },
+        undefined,
+        { signal },
+      ),
+    ),
+    ...sharing
+      .filter(() => !hosted)
+      .map((server) =>
+        api.remoteSessions.listServerClientAssociations(
+          { gramProject, mcpServerId: server.id },
+          undefined,
+          { signal },
+        ),
+      ),
+  ]);
+  if (hosted) return clients;
+  const ids = new Set(required.flatMap((read) => read.requiredClientIds));
+  return clients.filter((client) => ids.has(client.id));
 }
 
 /**
@@ -240,17 +374,14 @@ export async function attachOwnerConnections(
     const scope = { gramProject, principalId: agentId, userSessionIssuerId };
     const typed = typedSignIns(server);
     const [clients, candidates, bindings] = await Promise.all([
-      typed ??
-        collectPageItems(
-          api.remoteSessionClients.list(
-            { gramProject, userSessionIssuerId },
-            undefined,
-            { signal },
-          ),
-        ),
+      typed ?? issuerSignInsRequired(api, personal, server, signal),
       collectPageItems(api.remoteSessions.list(scope, undefined, { signal })),
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);
+    // Under enforcement one working sign-in serves a server, so the ones the
+    // caller never connected are skipped as long as another of that server's
+    // own serves. Servers sharing the issuer each need one of their own.
+    const served = new Set<string>();
     for (const client of clients) {
       if (client.credentialOwner === "self") continue;
       const current = bindings.items.filter(
@@ -264,13 +395,16 @@ export async function attachOwnerConnections(
             binding.remoteSession !== undefined &&
             connectionLifetime(binding.remoteSession).kind !== "ended",
         )
-      )
+      ) {
+        served.add(client.id);
         continue;
+      }
       const session = candidates.find(
         (candidate) =>
           candidate.remoteSessionClientId === client.id &&
           connectionLifetime(candidate).kind !== "ended",
       );
+      if (!session && typed) continue;
       if (!session && skipMissing) {
         missing.add(server.name);
         continue;
@@ -304,6 +438,25 @@ export async function attachOwnerConnections(
         undefined,
         { signal },
       );
+      served.add(client.id);
+    }
+    if (!typed) continue;
+    for (const sharing of personal) {
+      if (
+        sharing.projectId !== server.projectId ||
+        sharing.issuerId !== server.issuerId
+      )
+        continue;
+      const own = (signIns.get(sharing.id) ?? []).filter(
+        (client) => client.credentialOwner !== "self",
+      );
+      if (own.length === 0 || own.some((client) => served.has(client.id)))
+        continue;
+      if (!skipMissing)
+        throw new Error(
+          `Your connection to ${sharing.name} is no longer available. Sign in to it again, then retry.`,
+        );
+      missing.add(sharing.name);
     }
   }
   return [...missing];
