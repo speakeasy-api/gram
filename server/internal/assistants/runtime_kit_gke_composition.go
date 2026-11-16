@@ -240,7 +240,7 @@ var errKitMCPIneligible = errors.New("assistant has no supported persisted machi
 // All connections share the projected assertion audience. Other issuer domains
 // require a separate projected assertion and are deliberately not configured.
 func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) ([]kitMCPConnection, uuid.UUID, error) {
-	rows, err := loadAssistantMcpServers(ctx, db, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
+	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
 	if err != nil {
 		return nil, uuid.Nil, fmt.Errorf("load persisted assistant MCP servers: %w", err)
 	}

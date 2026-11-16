@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -139,13 +138,11 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 			return nil, nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
 		}
 		// The scope is the endpoint's own domain or the organization's verified one, so a
-		// soft-deleted domain must not block a move within it; the server's frozen toolset alias does not count.
+		// soft-deleted domain must not block a move within it.
 		available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
 			Slug:                     slug,
 			CustomDomainID:           customDomainID,
 			OrganizationID:           authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: server.ID, Valid: true},
 			SkipDomainOwnershipCheck: true,
 		})
 		if err != nil {
@@ -213,9 +210,6 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 		reconcileDomains = append(reconcileDomains, existing.CustomDomainID.UUID)
 	}
 
-	if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
-		return nil, nil, err //nolint:wrapcheck // oops errors pass through.
-	}
 	return afterView, reconcileDomains, nil
 }
 
@@ -264,24 +258,11 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
-// slugRules selects whether a new hosted address must meet the slug length limit and carry the organization slug
-// prefix.
-type slugRules string
-
-const (
-	// slugRulesRequired applies both, as every API create does.
-	slugRulesRequired slugRules = "required"
-
-	// slugRulesExemptLegacyAlias skips both for an address a legacy toolset alias already serves, so the backfill
-	// that makes the address explicit keeps the URL clients hold.
-	slugRulesExemptLegacyAlias slugRules = "exempt_legacy_alias"
-)
-
 // checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
-// slug length and the organization prefix on the platform and for free accounts unless rules exempts them, the
+// slug length and the organization prefix on the platform and for free accounts, the
 // organization's verified and activated custom domain only, and a private network mode's ingress namespace.
-func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID, rules slugRules) error {
-	if rules != slugRulesExemptLegacyAlias && len(slug) > maxHostedSlugLength {
+func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID) error {
+	if len(slug) > maxHostedSlugLength {
 		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if customDomainID.Valid {
@@ -289,10 +270,8 @@ func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, 
 			return err
 		}
 	}
-	if rules != slugRulesExemptLegacyAlias {
-		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
-			return err
-		}
+	if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
+		return err
 	}
 	// Endpoints left on a deleted domain cannot serve, so they do not hold back a new address.
 	live, err := repo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{

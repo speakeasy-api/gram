@@ -20,8 +20,8 @@ import { useMemo } from "react";
 /**
  * Abstracts the resource a user_session_issuer links to. The auth components
  * (section body, attach sheet, sessions list) only talk to this interface;
- * the implementations below know whether the link lives on
- * mcp_servers.user_session_issuer_id or toolsets.user_session_issuer_id.
+ * the implementations below know which MCP server's
+ * mcp_servers.user_session_issuer_id holds the link.
  */
 export type AuthTarget = {
   /** Seeds auto-derived issuer slugs on first add. */
