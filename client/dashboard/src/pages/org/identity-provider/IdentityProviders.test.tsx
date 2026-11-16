@@ -31,11 +31,14 @@ vi.mock("@gram/client/react-query/identityProviderConnection.js", () => ({
 vi.mock("./tabs/setup/OktaConnectionTab", () => ({
   OktaConnectionTab: () => <div>Okta content: setup</div>,
 }));
-vi.mock("./tabs/applications/ApplicationsTab", () => ({
-  ApplicationsTab: () => <div>Okta content: applications</div>,
-}));
 vi.mock("./tabs/cross-app-access/CrossAppAccessTab", () => ({
   CrossAppAccessTab: () => <div>Okta content: cross-app-access</div>,
+}));
+vi.mock("./OktaOverview", () => ({
+  OktaOverview: () => <div>Okta overview</div>,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "missing" }),
 }));
 vi.mock("@/components/api-error-alert", () => ({
   ApiErrorAlert: ({ error }: { error: Error | null }) =>
@@ -94,10 +97,12 @@ describe("Identity providers", () => {
     expect(screen.getByText(/live on the Single sign-on tab/)).toBeTruthy();
     expect(screen.getByText("Not connected")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Connect Okta" }).getAttribute("href"),
-    ).toBe("/example/identity?tab=identity-providers&provider=okta&view=setup");
+      screen.getByRole("link", { name: "Set up Okta" }).getAttribute("href"),
+    ).toBe(
+      "/example/identity?tab=identity-providers&provider=okta&view=overview",
+    );
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.queryByRole("tab", { name: "Applications" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Cross App Access" })).toBeNull();
   });
   it.each(["pending", "verified", "degraded"])(
     "offers management for a %s connection",
@@ -121,13 +126,13 @@ describe("Identity providers", () => {
       orgUrl: "https://example.okta.com",
     };
     show();
-    expect(screen.getByRole("link", { name: "Connect Okta" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Set up Okta" })).toBeTruthy();
   });
   it("does not show a disconnected status while loading", () => {
     mocks.query.isPending = true;
     show();
     expect(screen.queryByText("Not connected")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Connect Okta" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Set up Okta" })).toBeNull();
   });
   it("lets administrators retry failed provider loads", () => {
     mocks.query.data = undefined as never;
@@ -146,18 +151,18 @@ describe("Identity providers", () => {
     };
     show();
     fireEvent.click(screen.getByRole("link", { name: "Manage Okta" }));
-    expect(screen.getByText("Okta content: setup")).toBeTruthy();
+    expect(screen.getByText("Okta overview")).toBeTruthy();
     // Installed Radix Tabs activates pointer selection on mouseDown, not click.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Applications" }), {
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Cross App Access" }), {
       button: 0,
       ctrlKey: false,
     });
     expect(
       screen
-        .getByRole("tab", { name: "Applications" })
+        .getByRole("tab", { name: "Cross App Access" })
         .getAttribute("aria-selected"),
     ).toBe("true");
-    expect(screen.getByText("Okta content: applications")).toBeTruthy();
+    expect(screen.getByText("Okta content: cross-app-access")).toBeTruthy();
     fireEvent.click(
       screen.getByRole("link", { name: "All identity providers" }),
     );
@@ -204,7 +209,7 @@ describe("Identity providers", () => {
   });
   it("does not render an Okta workspace for nonadmins", () => {
     mocks.admin = false;
-    show("&provider=okta&view=applications");
+    show("&provider=okta&view=setup");
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });

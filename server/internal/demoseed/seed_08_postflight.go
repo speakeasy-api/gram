@@ -132,6 +132,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 
 	checks := []postflightCountCheck{
 		{
+			what:  "remote server tool metadata",
+			count: byProject(s.q.PostflightCountToolMetadata),
+			fail:  postflightMustEqual(inspectMetadataCount(), fmt.Sprintf("expected %d remote server tool metadata rows, found %%d", inspectMetadataCount())),
+		},
+		{
 			what: "paused Gemini connection without credentials",
 			count: func() (int64, error) {
 				return s.q.ActivityCountSafeGeminiComplianceConfig(ctx, repo.ActivityCountSafeGeminiComplianceConfigParams{OrganizationID: org, ProjectID: proj})
@@ -166,7 +171,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(7, "expected 7 auth client associations, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -451,7 +456,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(5, "expected 5 gateway members, found %d"),
+			fail:  postflightMustEqual(7, "expected 7 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -471,12 +476,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "canonical wrappers",
 			count: byProject(s.q.PostflightCountCanonicalWrappers),
-			fail:  postflightMustEqual(3, "expected 3 canonical hosted MCP servers (support, partner, discovery), found %d"),
+			fail:  postflightMustEqual(1, "expected 1 canonical hosted MCP server (the OpenAPI Server), found %d"),
 		},
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(2, "expected 2 gateway endpoints, found %d"),
+			fail:  postflightMustEqual(3, "expected 3 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.

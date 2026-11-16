@@ -246,7 +246,7 @@ export function serverImpactRemedy(
   // A hosted server uses every OAuth client its authorization server lists,
   // so only removing one from that list changes what it uses.
   if (impact.hosted) {
-    return "Remove the extra OAuth client from one of these authorization servers, then try again.";
+    return "Remove the extra OAuth client from one of these MCP Authentication Providers, then try again.";
   }
   if (impact.reasons.includes("multiple_clients_for_provider")) {
     return "Keep one OAuth client for that provider in its authentication settings, then try again.";

@@ -6,6 +6,7 @@
 package demoseed
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	_ "embed"
@@ -23,13 +24,17 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 //go:embed openapi.yaml
-var openapiDoc []byte
+var openapiDocTemplate []byte
+
+// openapiFixturePlaceholder stands for the hosted MCP fixture in openapi.yaml.
+const openapiFixturePlaceholder = "https://speakeasy.example.com/rpc/demoseed"
 
 const (
 	clickHouseDeleteVisibilityTimeout = 30 * time.Second
@@ -47,7 +52,7 @@ const (
 // summaries.
 //
 // Pass DefaultSpec() for the shared production demo org.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) (retErr error) {
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) error {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -60,6 +65,30 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
 	}
 
+	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec)
+		if err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "demo seed applied to postgres")
+
+		if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
+			return fmt.Errorf("migrate demo seed upstream auth: %w", err)
+		}
+		logger.InfoContext(ctx, "demo seed upstream auth migrated")
+
+		if err := s.runClickHouse(ctx, ch); err != nil {
+			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
+		}
+		logger.InfoContext(ctx, "demo seed applied to clickhouse")
+		return nil
+	})
+}
+
+// withSeedLock runs fn while this session holds the shared demo seed advisory
+// lock, on the connection that holds it. It refuses to run when another
+// session holds the lock.
+func withSeedLock(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, fn func(conn *pgxpool.Conn) error) (retErr error) {
 	conn, err := db.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)
@@ -101,22 +130,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec)
-	if err != nil {
-		return err
-	}
-	logger.InfoContext(ctx, "demo seed applied to postgres")
-
-	if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
-		return fmt.Errorf("migrate demo seed upstream auth: %w", err)
-	}
-	logger.InfoContext(ctx, "demo seed upstream auth migrated")
-
-	if err := s.runClickHouse(ctx, ch); err != nil {
-		return fmt.Errorf("apply demo seed to clickhouse: %w", err)
-	}
-	logger.InfoContext(ctx, "demo seed applied to clickhouse")
-	return nil
+	return fn(conn)
 }
 
 // txBeginner starts a transaction. Run passes the *pgxpool.Conn that holds the
@@ -158,6 +172,8 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 // which SQL alone cannot: it writes the embedded spec through the asset store
 // (fs locally, GCS in prod) and points the seeded assets row at it.
 func (s *seeder) uploadOpenAPIDoc(ctx context.Context, blob assets.BlobStore) error {
+	// The document's OAuth flow names the MCP fixture this deployment hosts.
+	openapiDoc := bytes.ReplaceAll(openapiDocTemplate, []byte(openapiFixturePlaceholder), []byte(fixtureauth.BaseURL(s.serverURL)))
 	docSHA := sha256.Sum256(openapiDoc)
 	w, objURL, err := blob.Write(ctx, "demoseed/"+s.spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
 	if err != nil {
@@ -212,9 +228,10 @@ func waitForClickHouseDelete(
 	}
 }
 
-// parseServerURL reads the deployment's own URL. Linear's seeded client is a
-// client ID metadata document served there, so the URL must be an absolute
-// HTTPS origin, or plain HTTP on a loopback host for local development.
+// parseServerURL reads the deployment's own URL. It hosts the MCP fixture the
+// seeded servers reach and serves the seeded clients' metadata documents, so
+// it must be an absolute HTTPS origin, or plain HTTP on a loopback host for
+// local development.
 func parseServerURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(strings.TrimRight(raw, "/"))
 	if err != nil || u.Hostname() == "" {

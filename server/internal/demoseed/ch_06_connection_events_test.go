@@ -19,7 +19,7 @@ func TestGenericConnectionEndingsMatchSeededApp(t *testing.T) {
 func TestStoppedConnectionAttemptRowsKeepBrowserIdentity(t *testing.T) {
 	t.Parallel()
 	s := &seeder{spec: DefaultSpec()}
-	scope := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR)
+	scope := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR)
 	attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), scope)
 	rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestStoppedConnectionAttemptMembersBelongToGateway(t *testing.T) {
 		rows   int
 		member bool
 	}{
-		"server":               {mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR), 2, false},
+		"server":               {mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR), 2, false},
 		"project gateway":      {mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR), 3, true},
 		"organization gateway": {mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR), 2, false},
 	} {

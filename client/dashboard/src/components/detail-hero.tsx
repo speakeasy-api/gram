@@ -12,7 +12,7 @@ interface DetailHeroProps {
  * Renders a flat muted band with a hairline bottom border, bottom-aligned
  * content, and optional top-right actions.
  *
- * Used on MCP detail, source detail, built-in MCP detail, and external MCP detail pages.
+ * Used on MCP detail, source detail, and built-in MCP detail pages.
  */
 export function DetailHero({
   children,

@@ -178,16 +178,12 @@ func (s *seeder) assetID() uuid.UUID  { return s.fixed("0000-4000-a000-00000000a
 func (s *seeder) deployID() uuid.UUID { return s.fixed("0000-4000-a000-00000000d001") }
 func (s *seeder) doaID() uuid.UUID    { return s.fixed("0000-4000-a000-00000000da01") }
 func (s *seeder) toolset1() uuid.UUID { return s.fixed("0000-4000-a000-000000005e01") }
-func (s *seeder) toolset3() uuid.UUID { return s.fixed("0000-4000-a000-000000005e03") }
-func (s *seeder) toolset4() uuid.UUID { return s.fixed("0000-4000-a000-000000005e04") }
 
-// supportServer and signInServer are the canonical MCP servers wrapping
-// toolsets 1 and 3 (a hosted toolset's wrapper shares the toolset's id).
-// They are the only servers over those toolsets: every grant, gateway
-// member, plugin, finding and telemetry row about OpenAPI Server (API Key) or
-// Server-Specific Sign-In points at them.
+// supportServer is the OpenAPI Server: the canonical MCP server wrapping
+// toolset 1 (a hosted toolset's wrapper shares the toolset's id). It is the
+// only server over that toolset: every grant, gateway member, plugin, finding
+// and telemetry row about the OpenAPI Server points at it.
 func (s *seeder) supportServer() uuid.UUID  { return s.toolset1() }
-func (s *seeder) signInServer() uuid.UUID   { return s.toolset3() }
 func (s *seeder) usIssuer() uuid.UUID       { return s.fixed("0000-4000-a000-000000005a01") }
 func (s *seeder) chainingIssuer() uuid.UUID { return s.fixed("0000-4000-a000-000000005a11") }
 func (s *seeder) chainingClient() uuid.UUID { return s.fixed("0000-4000-a000-000000005c11") }

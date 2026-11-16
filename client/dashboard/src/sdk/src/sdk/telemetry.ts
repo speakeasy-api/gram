@@ -9,9 +9,9 @@ import { telemetryGetMcpNetworkTraffic } from "../funcs/telemetryGetMcpNetworkTr
 import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
 import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServerUsage.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
-import { telemetryGetOrganizationGatewayOverview } from "../funcs/telemetryGetOrganizationGatewayOverview.js";
-import { telemetryGetOrganizationGatewayUsage } from "../funcs/telemetryGetOrganizationGatewayUsage.js";
 import { telemetryGetOrgMcpServerActivity } from "../funcs/telemetryGetOrgMcpServerActivity.js";
+import { telemetryGetProjectGatewayOverview } from "../funcs/telemetryGetProjectGatewayOverview.js";
+import { telemetryGetProjectGatewayUsage } from "../funcs/telemetryGetProjectGatewayUsage.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
 import { telemetryGetToolUsageClients } from "../funcs/telemetryGetToolUsageClients.js";
@@ -108,17 +108,17 @@ import {
   GetObservabilityOverviewSecurity,
 } from "../models/operations/getobservabilityoverview.js";
 import {
-  GetOrganizationGatewayOverviewRequest,
-  GetOrganizationGatewayOverviewSecurity,
-} from "../models/operations/getorganizationgatewayoverview.js";
-import {
-  GetOrganizationGatewayUsageRequest,
-  GetOrganizationGatewayUsageSecurity,
-} from "../models/operations/getorganizationgatewayusage.js";
-import {
   GetOrgMcpServerActivityRequest,
   GetOrgMcpServerActivitySecurity,
 } from "../models/operations/getorgmcpserveractivity.js";
+import {
+  GetProjectGatewayOverviewRequest,
+  GetProjectGatewayOverviewSecurity,
+} from "../models/operations/getprojectgatewayoverview.js";
+import {
+  GetProjectGatewayUsageRequest,
+  GetProjectGatewayUsageSecurity,
+} from "../models/operations/getprojectgatewayusage.js";
 import {
   GetProjectMetricsSummaryRequest,
   GetProjectMetricsSummarySecurity,
@@ -388,17 +388,17 @@ export class Telemetry extends ClientSDK {
   }
 
   /**
-   * getOrganizationGatewayOverview telemetry
+   * getProjectGatewayOverview telemetry
    *
    * @remarks
-   * Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
+   * Observability overview metrics for calls dispatched through the selected project's Project Gateway: the Organization Gateway limited to that project's servers.
    */
-  async getOrganizationGatewayOverview(
-    request: GetOrganizationGatewayOverviewRequest,
-    security?: GetOrganizationGatewayOverviewSecurity | undefined,
+  async getProjectGatewayOverview(
+    request: GetProjectGatewayOverviewRequest,
+    security?: GetProjectGatewayOverviewSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetObservabilityOverviewResult> {
-    return unwrapAsync(telemetryGetOrganizationGatewayOverview(
+    return unwrapAsync(telemetryGetProjectGatewayOverview(
       this,
       request,
       security,
@@ -407,17 +407,17 @@ export class Telemetry extends ClientSDK {
   }
 
   /**
-   * getOrganizationGatewayUsage telemetry
+   * getProjectGatewayUsage telemetry
    *
    * @remarks
-   * Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.
+   * Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.
    */
-  async getOrganizationGatewayUsage(
-    request: GetOrganizationGatewayUsageRequest,
-    security?: GetOrganizationGatewayUsageSecurity | undefined,
+  async getProjectGatewayUsage(
+    request: GetProjectGatewayUsageRequest,
+    security?: GetProjectGatewayUsageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetMetaMcpServerUsageResult> {
-    return unwrapAsync(telemetryGetOrganizationGatewayUsage(
+    return unwrapAsync(telemetryGetProjectGatewayUsage(
       this,
       request,
       security,

@@ -60,7 +60,9 @@ import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
 import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
 import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
-import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
+import OrganizationGatewayPage, {
+  ProjectGatewayPage,
+} from "./pages/mcp/OrganizationGateway";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { ToolsetSlugRedirectPage } from "./pages/mcp/ToolsetRedirect";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
@@ -127,6 +129,11 @@ import {
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
+import { SyncFromOkta } from "./pages/mcp/sync-from-okta/SyncFromOkta";
+import {
+  McpSessionsConfiguration,
+  McpSessionsProviderDetail,
+} from "./pages/user-session-issuers/McpSessionsConfiguration";
 import {
   UserSessionIssuersPage,
   UserSessionIssuersRoot,
@@ -321,6 +328,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           function: {
             component: FunctionsOnboarding,
           },
+          okta: {
+            component: SyncFromOkta,
+          },
         },
       },
       catalog: {
@@ -347,6 +357,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
       organizationGateway: {
         component: OrganizationGatewayPage,
+      },
+      projectGateway: {
+        component: ProjectGatewayPage,
       },
       gateway: {
         component: GatewayDetailPage,
@@ -414,7 +427,19 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     indexComponent: InsightsHooksPage,
   },
   mcpSessions: {
-    component: UserSessions,
+    component: Outlet,
+    indexComponent: UserSessions,
+    subPages: {
+      configuration: {
+        component: UserSessionIssuersRoot,
+        indexComponent: McpSessionsConfiguration,
+        subPages: {
+          issuerDetail: {
+            component: McpSessionsProviderDetail,
+          },
+        },
+      },
+    },
   },
   remoteIdentityProviders: {
     component: RemoteIdentityProvidersRoot,

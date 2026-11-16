@@ -1530,11 +1530,14 @@ func newStartCommand() *cli.Command {
 			// The demo seed's MCP fixture: a self-contained OAuth and MCP server
 			// with fake data that the seeded demo servers reach, so they work in
 			// every environment (internal/demoseed/fixture).
+			// Metadata document fetches must not hold a sign-in open.
+			fixtureHTTPClient := guardianPolicy.PooledClient()
+			fixtureHTTPClient.Timeout = 10 * time.Second
 			fixture.Attach(mux, fixture.New(fixture.Config{
 				BaseURL:             fixture.BaseURL(serverURL),
 				AccessTokenTTL:      time.Hour,
 				SuggestedEmails:     []string{"alex@fixture.test", "sam@fixture.test"},
-				HTTPClient:          guardianPolicy.PooledClient(),
+				HTTPClient:          fixtureHTTPClient,
 				Logger:              logger.With(attr.SlogComponent("demoseed-fixture")),
 				DevIDPURL:           c.String("demoseed-fixture-devidp-url"),
 				NoMetadataDocuments: false,

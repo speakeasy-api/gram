@@ -8,10 +8,6 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  DeploymentExternalMCP,
-  DeploymentExternalMCP$inboundSchema,
-} from "./deploymentexternalmcp.js";
-import {
   DeploymentFunctions,
   DeploymentFunctions$inboundSchema,
 } from "./deploymentfunctions.js";
@@ -38,13 +34,9 @@ export type GetDeploymentResult = {
    */
   externalId?: string | undefined;
   /**
-   * The number of tools in the deployment generated from external MCP servers.
+   * Always 0: deployments no longer include external MCP servers. Optional, and kept so older clients that required it keep working.
    */
-  externalMcpToolCount: number;
-  /**
-   * The external MCP servers that were deployed.
-   */
-  externalMcps?: Array<DeploymentExternalMCP> | undefined;
+  externalMcpToolCount?: number | undefined;
   /**
    * The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
    */
@@ -119,8 +111,7 @@ export const GetDeploymentResult$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     external_id: z.optional(z.string()),
-    external_mcp_tool_count: z.int(),
-    external_mcps: z.optional(z.array(DeploymentExternalMCP$inboundSchema)),
+    external_mcp_tool_count: z.optional(z.int()),
     external_url: z.optional(z.string()),
     functions_assets: z.optional(z.array(DeploymentFunctions$inboundSchema)),
     functions_tool_count: z.int(),
@@ -143,7 +134,6 @@ export const GetDeploymentResult$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "external_id": "externalId",
       "external_mcp_tool_count": "externalMcpToolCount",
-      "external_mcps": "externalMcps",
       "external_url": "externalUrl",
       "functions_assets": "functionsAssets",
       "functions_tool_count": "functionsToolCount",

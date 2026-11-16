@@ -18,36 +18,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthRow, RowSave } from "./AuthRow";
-
-type DurationUnit = "hour" | "day" | "week";
-
-const DURATION_UNIT_HOURS: Record<DurationUnit, number> = {
-  hour: 1,
-  day: 24,
-  week: 24 * 7,
-};
-
-const DURATION_UNIT_OPTIONS: ReadonlyArray<{
-  value: DurationUnit;
-  label: string;
-}> = [
-  { value: "hour", label: "Hours" },
-  { value: "day", label: "Days" },
-  { value: "week", label: "Weeks" },
-];
-
-function splitIntoUnit(hours: number): {
-  number: number;
-  unit: DurationUnit;
-} {
-  if (hours > 0 && hours % DURATION_UNIT_HOURS.week === 0) {
-    return { number: hours / DURATION_UNIT_HOURS.week, unit: "week" };
-  }
-  if (hours > 0 && hours % DURATION_UNIT_HOURS.day === 0) {
-    return { number: hours / DURATION_UNIT_HOURS.day, unit: "day" };
-  }
-  return { number: Math.max(0, hours), unit: "hour" };
-}
+import {
+  DURATION_UNIT_HOURS,
+  DURATION_UNIT_OPTIONS,
+  splitIntoUnit,
+  type DurationUnit,
+} from "./sessionSettings";
 
 export function UserSessionDurationField({
   userSessionIssuer,

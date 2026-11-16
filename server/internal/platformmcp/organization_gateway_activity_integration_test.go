@@ -115,6 +115,71 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	require.False(t, out.Envelope.NoObservations)
 }
 
+func TestOrganizationGatewayActivityReportsOneProjectGateway(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_project_gateway_activity")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Project gateway activity organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	projectIDs := make([]uuid.UUID, 0, 2)
+	for range 2 {
+		project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+			Name: "Project gateway activity project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: organizationID,
+		})
+		require.NoError(t, err)
+		projectIDs = append(projectIDs, project.ID)
+	}
+	inProject := seedGatewayActivityServer(t, ctx, conn, projectIDs[0], "Alpha")
+	elsewhere := seedGatewayActivityServer(t, ctx, conn, projectIDs[1], "Beta")
+
+	reader := &stubGatewayActivityReader{usageResult: telemetryrepo.MetaMCPUsage{
+		Funnel: telemetryrepo.MetaMCPFunnelCounts{ListServers: 1, DescribeServer: 0, DescribeTools: 1, ExecuteTool: 5},
+		Members: []telemetryrepo.MetaMCPMemberUsageRow{
+			{McpServerID: elsewhere.String(), ToolCalls: 3, ErrorCount: 2, LastCalledUnixNano: 1},
+			{McpServerID: inProject.String(), ToolCalls: 2, ErrorCount: 0, LastCalledUnixNano: 1},
+		},
+	}}
+	authorizer := &stubOrgReadAuthorizer{}
+	service := NewOrganizationGatewayActivityService(conn, reader, authorizer, allowingBudget())
+	require.NotNil(t, service)
+
+	principal := Principal{UserID: "user_1", OrganizationID: organizationID, ConnectionID: "conn_1", Generation: "g1", ClientID: "client_1", Surface: SurfacePlatformMCP}
+	out, err := service.Get(ctx, principal, GetOrganizationGatewayActivityInput{Window: "7d", ProjectID: projectIDs[0].String()})
+	require.NoError(t, err)
+
+	require.Equal(t, []authz.Check{{Scope: authz.ScopeProjectRead, ResourceID: projectIDs[0].String()}}, authorizer.checks)
+	gatewayID := orggateway.ProjectGatewayID(organizationID, projectIDs[0]).String()
+	require.Equal(t, gatewayID, reader.summary.MetaMCPServerID)
+	require.Equal(t, gatewayID, reader.usage.MetaMCPServerID)
+	wantProjects := []string{projectIDs[0].String(), uuid.Nil.String()}
+	require.ElementsMatch(t, wantProjects, reader.summary.GramProjectIDs)
+	require.ElementsMatch(t, wantProjects, reader.usage.GramProjectIDs)
+	require.Equal(t, []OrganizationGatewayServer{
+		{Name: "Alpha", MCPID: inProject.String(), ProjectID: projectIDs[0].String(), ToolCalls: 2, ErrorCount: 0},
+	}, out.TopServers, "only the project's servers are named")
+
+	// A real project of another organization reads as not found.
+	otherOrganizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: otherOrganizationID, Name: "Other organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	foreign, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other organization project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: otherOrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = service.Get(ctx, principal, GetOrganizationGatewayActivityInput{ProjectID: foreign.ID.String()})
+	require.ErrorIs(t, err, ErrProjectGatewayActivityProjectNotFound)
+	_, err = service.Get(ctx, principal, GetOrganizationGatewayActivityInput{ProjectID: "not-a-uuid"})
+	require.ErrorIs(t, err, ErrProjectGatewayActivityProjectInvalid)
+}
+
 // The dashboard tab requires org:read, so this surface must refuse the same
 // callers before reading anything.
 func TestOrganizationGatewayActivityRefusesWithoutLiveOrgRead(t *testing.T) {

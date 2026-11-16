@@ -256,7 +256,7 @@ func (s *seeder) connectionScopes() []mcpconnectionattempts.Scope {
 }
 
 func (s *seeder) connectionServerScope() mcpconnectionattempts.Scope {
-	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted))
+	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted))
 }
 
 func (s *seeder) setConnectionClient(row *mcpconnectionattempts.Row, key string) {
@@ -340,9 +340,9 @@ func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
 	stranger := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/sandbox:ref:refs/heads/experiment")
 	person := urn.NewUserSubject(s.userID("amara"))
 	workload := []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer), mcpconnectionattempts.UserSessionIssuer(s.usIssuer())}
-	server := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppWorkload)
+	server := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppWorkload)
 	sharedServer := mcpconnectionattempts.AuthorizationServerScope(s.orgID(), s.projectID(), s.usIssuer(), mcpconnectionattempts.AppWorkload)
-	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR)
+	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR)
 	seeded := []struct {
 		scope  mcpconnectionattempts.Scope
 		step   mcpconnectionattempts.Step

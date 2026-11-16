@@ -12,12 +12,10 @@
 -- fixture servers phase (fixture_servers.go).
 -- name: ServersInsertRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
+  (@linear_id::uuid, @project_id::uuid, 'Example OAuth', 'example-oauth',
    'streamable-http', 'https://mcp-fixture.example.com/mcp/oauth'),
-  (@slack_id::uuid, @project_id::uuid, 'Service Account Server', 'service-account',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared'),
-  (@github_id::uuid, @project_id::uuid, 'Pass-Through Token Server', 'pass-through-token',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/own-token');
+  (@slack_id::uuid, @project_id::uuid, 'Example Shared Credential', 'example-shared-credential',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared');
 
 -- Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
 -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
@@ -34,11 +32,9 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authorization_server_mode) VALUES
   (@workforce_id::uuid, NULL, @org_id::text, 'acme-workforce',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
-  (@linear_id::uuid, @project_id::uuid, @org_id::text, 'per-user-oauth',
+  (@linear_id::uuid, @project_id::uuid, @org_id::text, 'example-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
-  (@slack_id::uuid, @project_id::uuid, @org_id::text, 'service-account',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
-  (@pass_through_id::uuid, @project_id::uuid, @org_id::text, 'pass-through-token',
+  (@slack_id::uuid, @project_id::uuid, @org_id::text, 'example-shared-credential',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
@@ -49,15 +45,12 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
 INSERT INTO mcp_servers (id, project_id, name, slug,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
+  (@linear_id::uuid, @project_id::uuid, 'Example OAuth', 'example-oauth',
    @remote_linear_id::uuid,
    @issuer_linear_id::uuid, 'private'),
-  (@slack_id::uuid, @project_id::uuid, 'Service Account Server', 'service-account',
+  (@slack_id::uuid, @project_id::uuid, 'Example Shared Credential', 'example-shared-credential',
    @remote_slack_id::uuid,
-   @issuer_slack_id::uuid, 'private'),
-  (@github_id::uuid, @project_id::uuid, 'Pass-Through Token Server', 'pass-through-token',
-   @remote_github_id::uuid,
-   @issuer_github_id::uuid, 'private');
+   @issuer_slack_id::uuid, 'private');
 
 -- name: ServersInsertRegistryPromotionCandidate :exec
 -- Synthetic evidence stays ineligible and queues no public publication or messages.
@@ -74,9 +67,7 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          user_session_issuer_id, visibility)
 SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
 FROM (VALUES
-  (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'private'),
-  (@toolset_3::uuid, @partner_mcp_slug::text, @partner_issuer_id::uuid, 'private'),
-  (@toolset_4::uuid, @discovery_mcp_slug::text, NULL::uuid, 'public')
+  (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'public')
 ) AS v(toolset_id, slug, user_session_issuer_id, visibility)
 JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
 
@@ -90,24 +81,24 @@ FROM mcp_servers s
 JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
 WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
--- Check Access scenarios on the Pass-Through Token Server. Contractors blocks connecting, which
+-- Check Access scenarios on the Example Shared Credential server. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
 -- directory) is blocked even though Engineer reaches every server, and his
 -- own grant covering every server cannot outrank the block. Priya holds the
--- role too, but a grant made to her by name for the Pass-Through Token Server outranks it. The
+-- role too, but a grant made to her by name for that server outranks it. The
 -- user grants are cleared by id at the top of the seed.
--- name: ServersInsertGitHubContractorsBlock :exec
+-- name: ServersInsertContractorsBlock :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
 SELECT @id::uuid, @org_id::text,
        'role:organization:' || r.id, 'mcp:blocked_connect',
        jsonb_build_object('resource_kind', 'mcp',
-         'resource_id', (@github_server_id::uuid)::text)
+         'resource_id', (@shared_server_id::uuid)::text)
 FROM organization_roles r
 WHERE r.organization_id = @org_id::text AND r.workos_slug = 'contractors';
 
 -- Support Desk names its servers one by one, the MCP access tab's main
--- shape: the OpenAPI Server (API Key) with every tool (toolset-backed, so the
--- grant names the toolset), the Service Account Server only for tools
+-- shape: the OpenAPI Server with every tool (toolset-backed, so the
+-- grant names the toolset), the Example Shared Credential server only for tools
 -- annotated read-only.
 -- name: ServersInsertSupportDeskGrants :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
@@ -122,13 +113,13 @@ CROSS JOIN (VALUES
 ) AS v(sel)
 WHERE r.organization_id = @org_id::text AND r.workos_slug = 'support-desk';
 
--- name: ServersInsertGitHubUserGrants :exec
+-- name: ServersInsertCheckAccessUserGrants :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
 VALUES
   (@direct_id::uuid, @org_id::text,
    'user:' || @direct_user_id::text, 'mcp:connect',
    jsonb_build_object('resource_kind', 'mcp',
-     'resource_id', (@github_server_id::uuid)::text)),
+     'resource_id', (@shared_server_id::uuid)::text)),
   (@wildcard_id::uuid, @org_id::text,
    'user:' || @wildcard_user_id::text, 'mcp:connect',
    jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'));
@@ -160,7 +151,7 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
       AND g.selectors->>'resource_id' = '*');
 
 -- A hand-curated supplement gives Team Access a multiple-plugin example:
--- Engineer reaches the Pass-Through Token Server through both its role plugin and this one. Other
+-- Engineer reaches the Example Shared Credential server through both its role plugin and this one. Other
 -- servers/roles keep their single-match and no-match examples.
 -- name: ServersInsertEngineeringEssentialsPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
@@ -176,43 +167,7 @@ WHERE organization_id = @org_id::text AND workos_slug = 'engineer';
 -- name: ServersInsertEngineeringEssentialsServers :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
 SELECT @plugin_id::uuid, id, name FROM mcp_servers
-WHERE project_id = @project_id::uuid AND slug = 'pass-through-token';
-
--- Leave instructions NULL so Settings starts with the editable built-in
--- instructions, matching the gateway's initialize and server/discover text.
--- Remote MCP identity modes: the Per-User OAuth Server uses per-user OAuth through a
--- project-scoped CIMD client, the Service Account Server carries one inert
--- shared credential, and the Pass-Through Token Server has no upstream
--- identity of its own (callers forward theirs). The fixture servers phase
--- (fixture_servers.go) replaces these values with the MCP fixture's.
--- The Auto-Configured OAuth Server: each caller signs in to their own
--- account through a client registered with the MCP fixture's DCR-only
--- authorization server (seedFixtureAutoConfigured).
--- name: ServersInsertSignInExampleRemoteMCPServers :exec
-INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   'streamable-http', 'https://mcp-fixture.example.com/dcr/mcp/auto');
-
--- name: ServersInsertNotionUserSessionIssuer :exec
-INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
-                                  authn_challenge_mode, session_duration,
-                                  authorization_server_mode) VALUES
-  (@id::uuid, @project_id::uuid, @org_id::text, 'auto-configured-oauth',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
-
--- name: ServersInsertSignInExampleMCPServers :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         remote_mcp_server_id, user_session_issuer_id,
-                         visibility) VALUES
-  (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   NULL, @remote_notion_id::uuid, @issuer_notion_id::uuid, 'private');
-
--- It gets an endpoint of its own, as a server added in the dashboard does:
--- the endpoint is where its sign-in page lives.
--- name: ServersInsertSignInExampleEndpoints :exec
-INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
-  (@notion_endpoint_id::uuid, @project_id::uuid, NULL,
-   @notion_server_id::uuid, @notion_slug::text);
+WHERE project_id = @project_id::uuid AND slug = 'example-shared-credential';
 
 -- A well-known vendor's MCP server (Linear, Notion), with its own endpoint
 -- and sign-in, set up as Auto-Configure would: the vendor's authorization
@@ -365,7 +320,7 @@ FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid;
 
--- The Per-User OAuth Server's protected resource, read recently, with a scope
+-- The Example OAuth server's protected resource, read recently, with a scope
 -- pin for the server's scope panel.
 -- name: ServersUpsertLinearProtectedResource :exec
 INSERT INTO remote_protected_resources
@@ -424,21 +379,21 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order) VALUES
   (@support_member_id::uuid, @project_id::uuid,
    @meta_id::uuid, @support_server_id::uuid, 0),
-  (@sign_in_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @sign_in_server_id::uuid, 1);
+  (@oauth_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @oauth_server_id::uuid, 1);
 
 -- name: ServersInsertCodeGatewayEndpoint :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   (@id::uuid, @project_id::uuid, @meta_id::uuid, NULL, @slug::text);
 
--- The Pass-Through Token Server was a member until three days ago. Its dispatches are still in
+-- Linear was a member until three days ago. Its dispatches are still in
 -- ClickHouse (gwgone rows), so the Activity section can show that a removed
 -- member drops out of Calls by member while the gateway totals keep them.
--- name: ServersInsertRemovedGitHubMember :exec
+-- name: ServersInsertRemovedGatewayMember :exec
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order, deleted_at) VALUES
   (@id::uuid, @project_id::uuid,
-   @meta_id::uuid, @github_server_id::uuid, 3,
+   @meta_id::uuid, @server_id::uuid, 3,
    now() - interval '3 days');
 
 -- Endpoint slugs on the platform domain are globally unique and org-slug
@@ -450,9 +405,7 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@linear_endpoint_id::uuid, @project_id::uuid, NULL,
    @linear_server_id::uuid, @linear_slug::text),
   (@slack_endpoint_id::uuid, @project_id::uuid, NULL,
-   @slack_server_id::uuid, @slack_slug::text),
-  (@pass_through_endpoint_id::uuid, @project_id::uuid, NULL,
-   @pass_through_server_id::uuid, @pass_through_slug::text);
+   @slack_server_id::uuid, @slack_slug::text);
 
 -- Enterprise Managed Authorization (EMA). Acme Identity is a fictional
 -- company identity provider. The Enterprise Sign-In (ID-JAG) Server has a
@@ -628,10 +581,10 @@ VALUES
    now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
 
--- Inert upstream account, owned by the human on the Per-User OAuth Server session 6. Both
+-- Inert upstream account, owned by the human on the Example OAuth server session 6. Both
 -- active release agents share that human owner. The explicit client link
 -- makes this exact session reachable from the requesting session's issuer.
--- The client sits under the Per-User OAuth Server's own remote identity provider: every client
+-- The client sits under the Example OAuth server's own remote identity provider: every client
 -- bound to one user session issuer must share a remote issuer, or the
 -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
 -- Reserved example endpoints and no refresh token keep this display fixture
@@ -660,7 +613,7 @@ VALUES (@id::uuid,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes', now() + interval '10 years');
 
--- Upstream sessions on the Per-User OAuth Server's CIMD client, one per last-validation outcome
+-- Upstream sessions on the Example OAuth server's CIMD client, one per last-validation outcome
 -- plus one never validated, so the admin server health page shows every
 -- validation state. Written with a dummy token and a held re-check lease; the
 -- fixture servers phase (fixture_servers.go) swaps in MCP fixture tokens and
@@ -795,12 +748,12 @@ INSERT INTO killswitch_prescription_version_resources
 VALUES
   (@org_id::text, @active_selected_id::uuid, 1, (@support_server_id::uuid)::text),
   (@org_id::text, @changed_id::uuid, 1, (@support_server_id::uuid)::text),
-  (@org_id::text, @changed_id::uuid, 1, (@sign_in_server_id::uuid)::text),
+  (@org_id::text, @changed_id::uuid, 1, (@vendor_server_id::uuid)::text),
   (@org_id::text, @changed_id::uuid, 1, (@linear_server_id::uuid)::text),
   (@org_id::text, @changed_id::uuid, 2, (@support_server_id::uuid)::text),
   (@org_id::text, @lifted_id::uuid, 1, (@slack_server_id::uuid)::text),
   (@org_id::text, @lifted_id::uuid, 2, (@slack_server_id::uuid)::text),
-  (@org_id::text, @expired_id::uuid, 1, (@sign_in_server_id::uuid)::text);
+  (@org_id::text, @expired_id::uuid, 1, (@vendor_server_id::uuid)::text);
 
 -- name: ServersInsertKillswitchExpiryEvent :exec
 INSERT INTO killswitch_expiry_events
@@ -823,11 +776,11 @@ VALUES
    now() + (@expires_in::text)::interval, now() - (@created_ago::text)::interval,
    now() - (@created_ago::text)::interval);
 
--- Typed auth clients, as the upstream OAuth migration records them: the Per-User OAuth Server's
--- personal client over its OAuth registration, and one static credential
--- shared by the Pass-Through Token Server and the Per-User OAuth Server, so
--- the server settings show a shared client and a server offering two. The
--- Service Account Server offers none.
+-- Typed auth clients, as the upstream OAuth migration records them: the
+-- Example OAuth server's personal client over its OAuth registration, and one
+-- static credential it also offers, so the server settings show a server
+-- offering two. The Example Shared Credential server sends its own static
+-- header and offers none.
 -- The projects delete cascades the clients, their headers and associations.
 -- name: ServersInsertAuthClient :exec
 INSERT INTO mcp_auth_clients
@@ -847,13 +800,6 @@ VALUES
   (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
    @value::text);
 
--- name: ServersInsertAuthClientForwardedHeader :exec
-INSERT INTO mcp_auth_client_headers
-  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
-VALUES
-  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
-   @value_from_request_header::text);
-
 -- name: ServersInsertServerAuthClient :exec
 INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,
@@ -863,7 +809,7 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
 
--- Engineers may use the Pass-Through Token Server's shared token; Contractors are blocked from
+-- Engineers may use the shared token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.
 -- name: ServersInsertAuthClientRoleGrants :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
@@ -877,7 +823,7 @@ FROM (VALUES
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
 
--- An app that signs in to the Per-User OAuth Server without a browser, so it cannot pick a
+-- An app that signs in to the Example OAuth server without a browser, so it cannot pick a
 -- credential on the consent screen.
 -- name: ServersInsertHeadlessClient :exec
 INSERT INTO user_session_clients
@@ -908,24 +854,6 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
        NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
-
--- Sets the organization gateway's seeded Pass-Through Token Server choices
--- to the caller's own token. The server offers two credentials, so a choice that names
--- neither resolves to no credential under enforcement.
--- name: ServersPickGatewayGitHubCredential :execrows
-UPDATE upstream_client_selections AS sel
-SET auth_client_id = ac.id,
-    auth_client_attachment_scope = ac.attachment_scope,
-    no_auth = FALSE
-FROM mcp_auth_clients AS ac
-WHERE ac.id = @auth_client_id::uuid
-  AND ac.organization_id = @org_id::text
-  AND sel.project_id = @project_id::uuid
-  AND sel.organization_id = @org_id::text
-  AND sel.credential_kind = 'user_session'
-  AND sel.credential_id = ANY(@credential_ids::uuid[])
-  AND sel.mcp_server_id = @mcp_server_id::uuid
-  AND sel.deleted IS FALSE;
 
 -- name: ServersAttachAssistantServer :exec
 INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
@@ -973,3 +901,65 @@ VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' ||
  @jti::text, @refresh_token_hash::text,
  now() + (@refresh_expires_in::text)::interval,
  now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
+
+-- Inspect tab: the annotations an admin keeps for a remote server's tools.
+-- One call per server; the arrays are aligned by position. The upsert keeps
+-- a rerun of the local fixtures idempotent; the projects cascade clears the
+-- rows on every reseed.
+-- name: ServersUpsertToolMetadata :execrows
+INSERT INTO mcp_server_tool_metadata
+  (project_id, mcp_server_id, tool_name, title, read_only_hint,
+   destructive_hint, idempotent_hint, open_world_hint)
+SELECT @project_id::uuid, @mcp_server_id::uuid, unnest(@tool_names::text[]),
+       unnest(@titles::text[]), unnest(@read_only_hints::boolean[]),
+       unnest(@destructive_hints::boolean[]), unnest(@idempotent_hints::boolean[]),
+       unnest(@open_world_hints::boolean[])
+ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE
+DO UPDATE SET title = EXCLUDED.title, read_only_hint = EXCLUDED.read_only_hint,
+  destructive_hint = EXCLUDED.destructive_hint, idempotent_hint = EXCLUDED.idempotent_hint,
+  open_world_hint = EXCLUDED.open_world_hint, updated_at = clock_timestamp();
+
+-- A block on one tool of one server for a role: an organization role by
+-- slug, or else the global role of that slug (Admin). Tool-scoped exclusions
+-- match strictly, so the role still connects to the server and its other
+-- tools. Custom role grants are cleared with the roles on every reseed; a
+-- global role's block is cleared by id in the org phase. Inserts nothing when
+-- no role of that slug exists (global roles may be absent on a fresh stack).
+-- name: ServersInsertToolBlock :execrows
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT @id::uuid, @org_id::text, r.principal_urn, 'mcp:blocked_connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', (@mcp_server_id::uuid)::text, 'tool', @tool::text)
+FROM (
+  SELECT COALESCE(
+    (SELECT 'role:organization:' || o.id FROM organization_roles o
+     WHERE o.organization_id = @org_id::text AND o.workos_slug = @role_slug::text
+       AND o.deleted IS FALSE AND o.workos_deleted IS FALSE),
+    (SELECT 'role:global:' || g.id FROM global_roles g
+     WHERE g.workos_slug = @role_slug::text
+       AND g.deleted IS FALSE AND g.workos_deleted IS FALSE LIMIT 1)) AS principal_urn
+) r
+WHERE r.principal_urn IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+-- A third gateway, stored in Direct mode, so the gateway pages show all
+-- three discovery modes (Acme Agent Gateway is Progressive, Python Code
+-- Gateway Code Mode locally). Its own issuer, like every gateway.
+-- name: ServersInsertDirectGatewayIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, 'engineering-direct-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
+
+-- name: ServersInsertDirectGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id, discovery_mode) VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, 'Engineering Direct Gateway',
+   @user_session_issuer_id::uuid, 'direct');
+
+-- name: ServersInsertGatewayMember :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  (@id::uuid, @project_id::uuid, @meta_id::uuid, @mcp_server_id::uuid, @sort_order::integer)
+ON CONFLICT DO NOTHING;

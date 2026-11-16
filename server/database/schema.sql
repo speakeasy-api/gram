@@ -10427,6 +10427,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   -- Whether the upstream needs authentication: true needs it, false needs none,
   -- NULL is undecided.
   requires_upstream_auth boolean,
+  -- When an admin marked the upstream provider's manual setup guide as done.
+  -- NULL means not done yet.
+  setup_guide_completed_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -10465,6 +10468,7 @@ COMMENT ON COLUMN mcp_servers.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.updated_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.setup_guide_completed_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.requires_upstream_auth IS 'Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
 @access: confidential';
 

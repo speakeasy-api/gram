@@ -114,16 +114,15 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    Compare with Watchdog using the same detection-time window and severity.
    Optional finding breakdowns are not the dashboard's display sections.
 
-10. **MCP connections** — on the **Server-Specific Sign-In** server's _Clients and
-    Sessions_ tab, five registered agents and five connections. Grouped by
+10. **MCP connections**: on the organization **MCP Sessions** page, the
+    Connections issuer's five registered agents and five connections. Grouped by
     **Agent**: `Partner Reconciliation Agent` carries a green
     **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
     authenticate** one, and the remaining three carry none (a missing badge on
     the first two means the credential columns did not land). `Acme Legacy
     Connector` appears under **Inactive** with no connections. Its row menu's
     **View registration** opens the detail sheet with an **Authentication**
-    field. The organization **MCP Sessions** page shows the same five
-    connections and the same two badges.
+    field.
 
 11. **Workload sessions** — on the project **MCP Sessions** page, two rows show
     a workflow icon instead of an avatar and a blue **Workload** badge reading
@@ -137,8 +136,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     the workload reconnecting, and says the rest are not yet available in the
     dashboard.
 
-12. **External OAuth settings** — open **MCP → External OAuth Server →
-    Authentication** (`/mcp/<org>-external-oauth/authentication`). The page
+12. **External OAuth settings**: open **MCP → OpenAPI Server →
+    Authentication** (`/mcp/<org>-openapi-server/authentication`). The page
     shows the existing Speakeasy-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the hosted MCP fixture's issuer (`GRAM_SERVER_URL/rpc/demoseed`);
@@ -179,7 +178,7 @@ open their effective assignments; the dropdown always offers compact member sear
     selected servers and all current/future MCP servers. Amara's panel holds two
     simultaneously effective rows whose record overlap panels identify each
     other. Open Jonas's changed row and confirm history narrows **OpenAPI
-    Server (API Key) / Server-Specific Sign-In / Per-User OAuth Server** to **OpenAPI Server (API Key)** without losing the
+    Server / Linear / Example OAuth** to **OpenAPI Server** without losing the
     removed-server diff. Open the lifted and expired rows and confirm their
     complete history and terminal status. On the active selected row, the
     external message renders the newline, `<script>alert("demo")</script>`, and
@@ -212,8 +211,8 @@ open their effective assignments; the dropdown always offers compact member sear
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
     execute_tool counting the member calls, and a Calls-by-member
-    table listing OpenAPI Server (API Key), the Per-User OAuth Server, and the Service Account Server with the Per-User OAuth Server
-    carrying most of the errors — and no Pass-Through Token Server row, even though that server's
+    table listing the OpenAPI Server, Example OAuth, and Example Shared Credential with Example OAuth
+    carrying most of the errors, and no Linear row, even though that server's
     dispatches from before it left the gateway still count in the totals.
     The "Dispatched calls over time" title opens Tool Logs and the "Gateway
     tool usage" title opens MCP & Tools, both with the Multi-Server Gateway
@@ -264,7 +263,7 @@ open their effective assignments; the dropdown always offers compact member sear
       credentials.
       Never add usable keys to shared SQL.
     - Both active release agents have one direct `mcp:connect` grant scoped to
-      the demo project and Per-User OAuth Server. Release assistant also inherits
+      the demo project and Example OAuth. Release assistant also inherits
       a wildcard read-only `mcp:connect` grant from the Read-only Tools role.
       Confirm the wizard offers only the intersection with owner/caller access. If that intersection is empty,
       explain that no permissions can be delegated; never widen policy silently.
@@ -283,10 +282,10 @@ open their effective assignments; the dropdown always offers compact member sear
       connections (or reuse an owned account), explicitly authorize its use,
       and only then complete consent. Missing connections must block approval.
       Verify policy is unchanged. Use a provider that completes a live
-      exchange, such as the Per-User OAuth Server's hosted MCP fixture.
+      exchange, such as Example OAuth's hosted MCP fixture.
     - Seed rationale: four identities cover active, suspended and revoked
       states; the two active release agents have exact project/server-scoped
-      Per-User OAuth Server grants and share one human-owned upstream session (a
+      Example OAuth grants and share one human-owned upstream session (a
       live MCP fixture token in every org). API keys
       remain empty and the agent credential session is expired. Confirm the
       release agents' policy views show their scoped grant; the other two
@@ -364,22 +363,21 @@ open their effective assignments; the dropdown always offers compact member sear
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
-19. **Remote MCP identity settings** — open the settings page for each seeded
-    Remote MCP server. The Per-User OAuth Server shows the **User** identity pill, the MCP
+19. **Remote MCP identity settings**: open the settings page for each
+    fixture-backed Remote MCP server. Example OAuth shows the **User** identity pill, the MCP
     Fixture OAuth provider, and the Session length / Client access controls
-    in Sessions. The Service Account Server shows **Shared credential** with its static
-    Authorization header (the MCP fixture's shared token). The Pass-Through Token
-    Server shows **Manual**; its Custom Headers list a required, secret
-    `X-Upstream-Token` header forwarded from the caller's request, and neither
-    a legacy pass-through nor an auth-challenge warning appears. All three use the Display,
+    in Sessions. Example Shared Credential shows **Shared credential** with its static
+    Authorization header (the MCP fixture's checked-in example shared token).
+    Both use the Display,
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
-    Custom Headers directly after the Identity controls. In Postgres, only the
-    Per-User OAuth Server row in `mcp_servers` has `remote_session_issuer_id` set, to the
-    MCP Fixture OAuth provider, and the one client bound to the Per-User OAuth Server's
+    Custom Headers directly after the Identity controls. In Postgres, of the two
+    only the Example OAuth row in `mcp_servers` has `remote_session_issuer_id` set, to the
+    MCP Fixture OAuth provider, and the one client bound to Example OAuth's
     user session issuer (`remote-identity-client-linear`, the main CIMD
     client) sits under that same provider, so the stamp matches what
-    `ResyncMCPServerRemoteSessionIssuers` would derive. The Per-User OAuth Server offers one
-    OAuth client, "Fixture OAuth sign-in". The legacy callback client
+    `ResyncMCPServerRemoteSessionIssuers` would derive. Example OAuth offers one
+    OAuth client, "Fixture OAuth sign-in", plus the "Shared service token"
+    typed client. The legacy callback client
     (`attachment-client`) has no row in
     `remote_session_client_user_session_issuers` and no server association;
     it shows only on the provider's pages. Every org points the fixture
@@ -494,8 +492,8 @@ open their effective assignments; the dropdown always offers compact member sear
       per agent/issuer/client slot. Reauthorization changes the generation and
       must not silently authorize an old attachment.
     - Rerun `mise run seed` twice. Expect six managed agents, two attachment
-      sessions on the Per-User OAuth Server's one OAuth client, two bindings and two exact
-      project/server-scoped grants. The four Per-User OAuth Server validation sessions
+      sessions on Example OAuth's one OAuth client, two bindings and two exact
+      project/server-scoped grants. The four Example OAuth validation sessions
       (members 3 to 6) remain intact. In every org the unexpired sessions
       hold real MCP fixture tokens and the expired one stays expired.
 
@@ -561,19 +559,19 @@ open their effective assignments; the dropdown always offers compact member sear
     `skill`: the values picker offers those three names with counts and
     never an empty value. Then flip the Explore row in `PAGES.md` from
     `[~]` to `[x]`.
-27. **Check access** — open MCP → **Pass-Through Token Server** → Team Access and pick Mateo
+27. **Check access**: open MCP → **Example Shared Credential** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering
-    every server is blocked because it does not name the Pass-Through Token Server. Contractors
+    every server is blocked because it does not name Example Shared Credential. Contractors
     reads "Mapped from employee_type = contractor" for an organization
     admin. View and Manage stay allowed, since the block covers Connect
     only. Pick Priya Raman: Connect is **Allowed** because her grant naming
-    The Pass-Through Token Server overrides the Contractors block, which shows as overridden.
-28. **Role editor: MCP access** — open Team → Roles & Permissions and edit
+    Example Shared Credential overrides the Contractors block, which shows as overridden.
+28. **Role editor: MCP access**: open Team → Roles & Permissions and edit
     **Support Desk**. MCP access opens on Specific servers with the Default
-    project expanded: OpenAPI Server (API Key) is ticked with no badge, and the Service Account Server
+    project expanded: the OpenAPI Server is ticked with no badge, and Example Shared Credential
     is ticked with a **Read-Only Tools** badge that opens its tool access
-    sheet on By annotation. Edit **Contractors**: The Pass-Through Token Server sits in the
+    sheet on By annotation. Edit **Contractors**: Example Shared Credential sits in the
     Forbidden section with Remove. Edit **Engineer**: every server row is
     ticked and locked, and the lock's card links to Platform access, where
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
@@ -630,95 +628,11 @@ open their effective assignments; the dropdown always offers compact member sear
     - Locally, after the check 36 sign-in, the server's binding reads as
       accepted and `remote_session_ema_credentials` holds one row for the
       developer.
-
-31. **Gateway discovery modes**
-    - Open a gateway with tools.
-    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
-    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
-    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
-    - Connect a client to the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
-
-32. **Gateway tool picker**
-    - Confirm All tools (live), All tools (frozen), and Specific tools are offered. The server list and picker must agree on connected, reconnect, setup, no-access, and unavailable states, including row actions. A failed discovery never enables an unrestricted fallback.
-    - Check an identity-provider-managed server: consent performs its exchange and discovers its tools before marking it connected. A failed exchange must not produce a misleading reconnect action.
-    - With a custom-domain allowlist enabled, the platform-host consent page must refuse approval, link to the custom domain, and make no upstream discovery or identity-provider exchanges. Approval from the admitted custom domain may capture tools. The page must show usable connection status before JavaScript loads.
-    - Choose All tools (frozen), approve, then reconnect the MCP client without new browser consent: listing and schema discovery must work without contacting upstream servers. Calls still reach the upstream and enforce current access.
-    - Choose All tools (live), approve, then add a new gateway member or connect one that was unavailable. Neither may appear or execute until the person consents again. New tools on an already approved member may appear in live mode.
-    - Connect an MCP client to the Multi-Server Gateway. On the consent screen, choose Specific tools: tools are grouped under each member server and show their tool names without the server prefix.
-    - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
-    - Reconnect: the consent screen opens with the previous choice selected.
-    - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
-
-33. **Python Code Gateway** (local seed with the local code runner; the shared demo org stores it as Progressive)
-    - Open Inspect: confirm exactly one execute tool, Python helper documentation,
-      and the two permitted member prefixes. Execute `await tools.search("health")`.
-    - Describe a returned path, then call a local read-only fixture tool and inspect
-      its return value and completed nested-call outcome. Print a value and confirm
-      the submitted source remains visible after editing the next snippet.
-    - Select Progressive/Direct overrides and reconnect; return to the gateway
-      default and confirm execute returns. Reconnect through the consent screen
-      with Specific tools and a Code Mode override: search and calls only reach the
-      chosen tools.
-    - In Settings select Code Mode, save, and verify a new default connection. A missing
-      runtime must prevent new Code selections with a visible error or
-      unavailable option; stored Code defaults and connections are served in
-      Progressive mode until the runtime returns.
-    - Run the seed twice and the demoseed safety test: the third gateway, its two
-      members and endpoint must survive, with no rows changed in other tenants.
-    - Connect to the organization gateway (`/mcp/gateway/acme-demo` on the demo
-      org, or `/mcp/gateway/speakeasy` after `mise run seed`), choose
-      Code Mode on the consent page ("Gateway default (Progressive)" stays the
-      default), and confirm one execute tool whose search and calls reach
-      servers from every project you can reach.
-    - Command K: search "Python Code Gateway". It is listed under Gateways and
-      opens the gateway's overview.
-
-34. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
-    organization)
-    - Open **MCP → OpenAPI Server (API Key) → Skills**. It lists Support Refunds and
-      Triage Incident, each with a Latest badge and a "Last loaded over MCP"
-      value. As a writer, **Add skill** opens a picker without those two and
-      each row has a remove button.
-    - Open **MCP → Multi-Server Gateway → Skills**. It lists Triage Incident and
-      Runbook.
-    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Multi-Server
-      Gateway (opens the gateway's Skills tab) and Organization gateway, and
-      there is no **Add to organization gateway** button. Support Refunds
-      lists only OpenAPI Server (API Key) and offers the button to project writers.
-    - In the read-only demo org no add or remove control shows. With the flag
-      off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
-      returns to the server or gateway overview, and the skill page has no
-      "Served over MCP" section.
-35. **Owner-scoped inspection (local seed only)** — the shared demo visitor
-    holds every scope, so only a session as the persona shows the owner view.
-    The persona's user row and membership exist locally (`kwame@` the local
-    seed domain), and the dev-idp can sign in as them: call `users.create`
-    with that email and `display_name: Kwame Mensah`, pass the returned
-    `user_id` and the `speakeasy` organization's UUID to `memberships.create`,
-    then pass that `user_id` to `devIdp.setCurrentUser` (mode `oauth2-1`), or
-    pick the user in the dev-idp dashboard's Local mode pane. Login resolves
-    users by email, so the session lands on the seeded row.
-    - **Team → Members** lists Kwame Mensah with the Member role only.
-    - **Agents** lists **Deploy watcher** as Active, owned by Kwame Mensah.
-    - **Agent Sessions** as the persona shows exactly five sessions: the three
-      Deploy watcher sessions (actor is the agent, no user) and the two the
-      persona ran. Opening a Deploy watcher session shows the prompt, the
-      tool calls with their JSON results, and the answer.
-    - **Tool Logs** as the persona lists only the `tools:http:acme:*` calls of
-      those five sessions: the agent's rows name Deploy watcher as actor with
-      no person, the persona's rows name them.
-    - As the local admin (who holds both scopes) the same rows appear among
-      everyone else's, and no other member's sessions appear as the persona.
-
-36. **Seeded MCP servers** (names in both orgs; live checks locally and in
-    the public demo org)
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
-      server appears once, named for what it tests: OpenAPI Server (API Key),
-      Server-Specific Sign-In, External OAuth Server
-      (each toolset's canonical wrapper), Per-User OAuth Server, Service
-      Account Server, Pass-Through Token Server, Auto-Configured OAuth Server
-      and Enterprise Sign-In (ID-JAG) Server, plus Linear and Notion: ten in
-      all. No server is named for a vendor it does not reach.
+      server appears once, named for what it tests: OpenAPI Server (the
+      toolset's canonical wrapper), Example OAuth and Example Shared
+      Credential, the Enterprise Sign-In (ID-JAG) Server, plus Linear and
+      Notion: six in all. No server is named for a vendor it does not reach.
     - Locally, with the stack running and after `mise run seed`, connect an MCP
       client to each `GRAM_SERVER_URL/mcp/<org>-<slug>` endpoint and call a
       tool. The fixture-backed servers reach the MCP fixture every Speakeasy
@@ -726,31 +640,17 @@ open their effective assignments; the dropdown always offers compact member sear
       there is no fixture daemon to check. Its sign-in page,
       `GRAM_SERVER_URL/rpc/demoseed/oauth/authorize`, reads "Sign in to the
       Speakeasy demo MCP fixture"; pick any email.
-      - `openapi-api-key` (`get_customer`) with the seeded `GRAM_API_KEY` as
-        a bearer token: the fixture's API stub (`/rpc/demoseed/acme-api`)
-        answers.
-      - `server-specific-sign-in` (`get_customer`) after its own Speakeasy
-        sign-in.
-      - `external-oauth` (`search_logs`): the client signs in at the
-        fixture's authorization server (pick an email), not at Speakeasy.
-      - `per-user-oauth` (`whoami`), through a client ID metadata document
+      - `openapi-server` (`search_logs` or `get_customer`): the server is
+        public, so there is no Speakeasy sign-in. The client signs in at the
+        fixture's authorization server (pick an email), and the tool returns
+        the API stub's (`/rpc/demoseed/acme-api`) data, echoing the caller.
+      - `example-oauth` (`whoami`), through a client ID metadata document
         client: the consent page lists one service,
         **MCP Fixture OAuth**; **Connect** opens the fixture's sign-in page;
         pick an email, then **Give access**. `whoami` returns that email with
         `auth: oauth`.
-      - `service-account` (`whoami`): returns `shared-service-account` with
-        `auth: shared-token`.
-      - `pass-through-token` (`whoami`): create a token at
-        `GRAM_SERVER_URL/rpc/demoseed/tokens` and send it in the
-        `X-Upstream-Token` request header;
-        `whoami` returns that email with `auth: own-token`.
-      - `auto-configured-oauth` (`whoami`): the seed has already set it up as
-        Auto-Configure would, so its server page reads **Connected** under
-        **Settings → Identity**, with the **MCP Fixture OAuth (DCR)** provider
-        and a client registered as DCR would (the fixture's `/dcr`
-        authorization server refuses metadata document clients). A client's
-        sign-in connects through the fixture and `whoami` returns the picked
-        email.
+      - `example-shared-credential` (`whoami`): returns
+        `shared-service-account` with `auth: shared-token`.
       - `enterprise-sign-in` (`whoami`): Speakeasy's sign-in goes to the
         dev-idp (the company identity provider); the consent page shows the
         service as handled by enterprise sign-in, with nothing to connect.
@@ -769,12 +669,9 @@ open their effective assignments; the dropdown always offers compact member sear
         tool (for example Linear's `list_teams` or Notion's `notion-search`)
         returns your workspace's data. Its server page reads **Connected**
         under **Settings → Identity**.
-    - Repeat the fixture-backed checks (every server above except
-      `enterprise-sign-in`) in the public demo org at
+    - Repeat the fixture-backed checks in the public demo org at
       https://app.getgram.ai/explore-demo: they reach the fixture hosted at
-      https://ai.speakeasy.com/rpc/demoseed. The Enterprise Sign-In (ID-JAG)
-      Server stays display-only there: its upstream is the placeholder
-      `mcp-fixture.example.com/mcp/ema`, so its sign-in fails by design.
+      https://ai.speakeasy.com/rpc/demoseed.
 
 ## On failure
 
