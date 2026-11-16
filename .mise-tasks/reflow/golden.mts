@@ -28,7 +28,10 @@ import { $ } from "zx";
 
 $.verbose = false;
 
-type GoldenFlow = { slug: string };
+type SearchPage = {
+  flows: { slug: string; golden?: unknown }[];
+  next_offset?: number | null;
+};
 type CiRunResult = { ci_run_id?: string; error?: unknown };
 
 const collection = process.env["usage_collection"];
@@ -47,24 +50,42 @@ const publish = process.env["usage_publish"] === "true";
 const post = process.env["usage_post"] === "true";
 const baseArgs = baseBranch ? ["--base-branch", baseBranch] : [];
 
+// search_flows is the CLI's one flow listing. Its golden filter "golden" keeps
+// every golden flow (pristine or edited); pages follow next_offset.
 async function goldenSlugs(): Promise<string[]> {
-  const request = JSON.stringify({
-    action: "list",
-    collection_id: collection,
-    golden: true,
-  });
-  const out = await $`reflow mcp call manage_flows ${request}`;
-  const envelope = JSON.parse(out.stdout) as {
-    content?: { type: string; text: string }[];
-  };
-  const text = envelope.content?.find((c) => c.type === "text")?.text;
-  assert(text, "manage_flows list returned no text content");
-  const body = JSON.parse(text) as { golden?: GoldenFlow[] };
-  assert(
-    Array.isArray(body.golden),
-    "manage_flows list returned no golden flows",
-  );
-  return body.golden.map((f) => f.slug).sort();
+  const slugs: string[] = [];
+  let offset: number | null = 0;
+  while (offset !== null) {
+    const request = JSON.stringify({
+      collection_id: collection,
+      golden: "golden",
+      limit: 200,
+      offset,
+    });
+    const out = await $`reflow mcp call search_flows ${request}`.nothrow();
+    if (out.exitCode !== 0) {
+      throw new Error(
+        `search_flows failed (exit ${out.exitCode}): ${out.stdout || out.stderr}`,
+      );
+    }
+    const envelope = JSON.parse(out.stdout) as {
+      structuredContent?: SearchPage;
+      content?: { type: string; text: string }[];
+    };
+    const text = envelope.content?.find((c) => c.type === "text")?.text;
+    const page =
+      envelope.structuredContent ??
+      (text ? (JSON.parse(text) as SearchPage) : undefined);
+    assert(
+      page && Array.isArray(page.flows),
+      "search_flows returned no flows list",
+    );
+    slugs.push(
+      ...page.flows.filter((f) => f.golden != null).map((f) => f.slug),
+    );
+    offset = page.next_offset ?? null;
+  }
+  return slugs.sort();
 }
 
 function shards<T>(items: T[], size: number): T[][] {
