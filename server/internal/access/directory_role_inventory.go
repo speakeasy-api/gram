@@ -153,7 +153,7 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 	if !ok || !contextvalues.IsSupportSession(ctx) || ac.ActiveOrganizationID != inventory.OrganizationID || shadow && apply {
 		return report, errors.New("requires an exact-organization support session and one operation")
 	}
-	if err := engine.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := engine.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return report, err
 	}
 
