@@ -8,7 +8,7 @@ import (
 
 var AdminProjectRedeployPreview = Type("AdminProjectRedeployPreview", func() {
 	Description("What redeploying a project would act on.")
-	Required("organization_id", "project_id", "project_name", "active_deployment_id", "openapi_assets", "function_assets", "packages", "external_mcps")
+	Required("organization_id", "project_id", "project_name", "active_deployment_id", "openapi_assets", "function_assets", "packages")
 
 	Attribute("organization_id", String, "Organization that owns the project.")
 	Attribute("project_id", String, "Project ID.")
@@ -17,7 +17,6 @@ var AdminProjectRedeployPreview = Type("AdminProjectRedeployPreview", func() {
 	Attribute("openapi_assets", Int, "OpenAPI sources that would be processed again.")
 	Attribute("function_assets", Int, "Function sources whose runners would be deployed again.")
 	Attribute("packages", Int, "Packages carried into the new deployment.")
-	Attribute("external_mcps", Int, "External MCP sources the new deployment would drop.")
 })
 
 var AdminProjectRedeployResult = Type("AdminProjectRedeployResult", func() {

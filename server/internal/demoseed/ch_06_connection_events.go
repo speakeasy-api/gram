@@ -76,7 +76,7 @@ var connectionEndings = []connectionEnding{
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCodeNotFoundOrExpired},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderOAuthInvalidClient},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRateLimited},
-	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeTunnelUnavailable},
+	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderUnreachable},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied},
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember},
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeProviderDenied},
@@ -138,7 +138,7 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 			// On a gateway, these refusals come from a selected member, never the gateway itself.
 			if scope != s.connectionServerScope() && ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeUsageLimitReached || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused || ending.what == mcpconnectionattempts.CodeStoredSignInUnreadable || ending.what == mcpconnectionattempts.CodeAddressNotAllowed) {
 				scope = mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR)
-				opts = append(opts, mcpconnectionattempts.Member(s.det("mcpserver-support")))
+				opts = append(opts, mcpconnectionattempts.Member(s.supportServer()))
 			}
 			switch ending.step {
 			case mcpconnectionattempts.StepProviderRefresh:
@@ -258,7 +258,7 @@ func (s *seeder) connectionScopes() []mcpconnectionattempts.Scope {
 }
 
 func (s *seeder) connectionServerScope() mcpconnectionattempts.Scope {
-	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted))
+	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted))
 }
 
 func (s *seeder) setConnectionClient(row *mcpconnectionattempts.Row, key string) {
@@ -326,7 +326,7 @@ func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key s
 	if first.ServerID != s.det("metamcp-1").String() {
 		return rows, nil
 	}
-	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.det("mcpserver-support")))
+	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.supportServer()))
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
@@ -342,9 +342,9 @@ func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
 	stranger := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/sandbox:ref:refs/heads/experiment")
 	person := urn.NewUserSubject(s.userID("amara"))
 	workload := []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer), mcpconnectionattempts.UserSessionIssuer(s.usIssuer())}
-	server := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppWorkload)
+	server := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppWorkload)
 	sharedServer := mcpconnectionattempts.AuthorizationServerScope(s.orgID(), s.projectID(), s.usIssuer(), mcpconnectionattempts.AppWorkload)
-	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR)
+	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR)
 	seeded := []struct {
 		scope  mcpconnectionattempts.Scope
 		step   mcpconnectionattempts.Step

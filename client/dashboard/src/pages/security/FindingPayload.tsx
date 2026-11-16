@@ -24,6 +24,8 @@ import {
 import { RevealAllContext } from "./reveal-all-context";
 import type { ExecutionPayload } from "./use-execution-payload";
 import { MaskedMatch, RedactionChip, RevealedSpan } from "./risk-ui";
+import { ActiveTemporaryAccess } from "@/components/temporary-access";
+import { REVEAL_SCOPE } from "./unmask";
 
 // Mirrors mcpFindingEvidenceRetention on the server.
 const EVIDENCE_RETENTION_DAYS = 90;
@@ -308,6 +310,7 @@ export function FindingPayload({
         onSelect={onSelect}
       />
       {!canReveal && <NoRevealAccessNote />}
+      {canReveal && <ActiveTemporaryAccess scope={REVEAL_SCOPE} />}
       {canReveal && !notStored && (
         <span className={DRAWER_FOOTNOTE}>
           Reveals are audited · Evidence retained until{" "}

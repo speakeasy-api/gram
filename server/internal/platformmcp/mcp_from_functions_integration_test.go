@@ -404,13 +404,14 @@ func TestCreateMCPFromFunctionsNeverReturnsDatabaseErrorText(t *testing.T) {
 	broken.Close()
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-db-failure", Version: "0.0.1"}, nil))
+	registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 	registerCreateMCPFromFunctionsTool(registrar, service)
 	descriptor := registrar.Descriptors()[0]
 	ctx = ContextWithPrincipal(ctx, fixture.principal)
 
 	for _, confirmed := range []bool{true, false} {
 		arguments, err := json.Marshal(map[string]any{
-			"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+			"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
 			"idempotency_key": uuid.NewString(), "confirmed": confirmed,
 		})
 		require.NoError(t, err)
@@ -603,6 +604,7 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 
 	describe := func(service *MCPToolExposureService) Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-manifest", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerCreateMCPFromFunctionsTool(registrar, service)
 		descriptors := registrar.Descriptors()
 		require.Len(t, descriptors, 1)
@@ -622,8 +624,8 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 	require.Contains(t, unavailable.Description, "everyone holding that plugin receives it", "the first-server exception is named")
 	require.Contains(t, unavailable.Description, "requested, not confirmed delivered")
 
-	refusal := invokeUnavailable(t, unavailable, map[string]any{
-		"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+	refusal := invokeUnavailable(t, ContextWithPrincipal(t.Context(), fixture.principal), unavailable, map[string]any{
+		"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
 	require.Contains(t, refusal, "Creating an MCP server from a project's functions")

@@ -181,6 +181,27 @@ TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
 TUNNEL_GATEWAY_PUBLIC_ADDR = ":{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 TUNNEL_GATEWAY_FORWARD_PORT = "8091"
 TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
+## Health and readiness port of the opt-in local tailnet gateway daemon.
+GRAM_TAILNET_GATEWAY_CONTROL_PORT = "8093"
+## Opt-in local private network (`pitchfork start --group private-network`): the private
+## listener, the reconciler and the tailnet gateway, without Kubernetes. The
+## gateway presents an HMAC-signed token in place of a projected
+## service-account token, and the listener verifies it with the key file; both
+## files are created on first start. The API server accepts new connections
+## only for organizations with the network_ingress entitlement, and queues
+## their reconciliation for the dedicated reconciler in that group. Every
+## hostname, service and machine is named after GRAM_NETWORK_INGRESS_DEV_ID
+## in mise.local.toml (`mise run zero:network-ingress`), so a shared tailnet's
+## production artifacts are never touched.
+GRAM_NETWORK_INGRESS_ENABLED = "true"
+GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE = "network-ingress"
+GRAM_NETINGRESS_PORT = "8094"
+GRAM_NETINGRESS_CONTROL_PORT = "8095"
+GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT = "8096"
+GRAM_NETINGRESS_GATEWAY_NAMESPACE = "gram-local"
+GRAM_NETINGRESS_GATEWAY_SERVICE_ACCOUNT = "gram-tailnet-gateway"
+GRAM_NETINGRESS_LOCAL_TOKEN_KEY_FILE = "{{config_root}}/local/netingress/token.key"
+GRAM_TAILNET_GATEWAY_TOKEN_PATH = "{{config_root}}/local/netingress/gateway.token"
 ## Caller identity assertions. `mise run zero:tunnel-identity` writes the
 ## signing key pair (GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS) into
 ## mise.local.toml; the local tunnel gateway is the issuer.
@@ -241,6 +262,9 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ## name, renewed by `mise run tls:tailscale`). zero:tailscale sets it locally
 ## when the tailnet has HTTPS certificates enabled.
 GRAM_TLS_PROVIDER = { default = "mkcert" }
+## The local seed keeps the clients it registers with Linear and Notion here
+## (gitignored), so reseeding reuses them.
+GRAM_DEMOSEED_CACHE_DIR = "{{ config_root }}/local/cache"
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""
@@ -409,6 +433,12 @@ GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
 ## randomize the listen port and issuer out of sync with the admin client.
 MOCK_OIDC_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
 MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
+## Local mock MCP server (server/cmd/mock-mcp), the offline upstream the local
+## seed registers as the "Acme Tasks (local mock)" remote MCP server. Loopback
+## only: the local server's remote MCP proxy is its only client.
+GRAM_MOCK_MCP_PORT = "4100"
+GRAM_MOCK_MCP_ADDRESS = "127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}"
+GRAM_MOCK_MCP_URL = "http://127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}/mcp"
 
 ########################
 ## Svix configuration ##

@@ -143,7 +143,9 @@ type ToolCallAttributeFilter struct {
 // SearchToolCallsInput narrows one project's tool calls. Every filter is
 // optional; an empty search lists the newest calls in the window.
 type SearchToolCallsInput struct {
-	ProjectID        string                    `json:"project_id" jsonschema:"project ID to search"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID        string                    `json:"-"`
 	Window           string                    `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d. When a cursor is supplied the interval comes from the cursor and this must still name the window the cursor was minted for"`
 	ToolNameContains string                    `json:"tool_name_contains,omitempty" jsonschema:"case-sensitive text the tool name must contain"`
 	ErrorContains    string                    `json:"error_contains,omitempty" jsonschema:"case-sensitive text the recorded error message must contain; only calls that failed with an error message can match"`
@@ -397,7 +399,7 @@ func normalizeToolCallSearch(input SearchToolCallsInput) (toolCallSearch, error)
 		identity:   "",
 	}
 	if search.projectID == "" {
-		return toolCallSearch{}, fmt.Errorf("%w: project_id is required", ErrToolCallSearchInvalid)
+		return toolCallSearch{}, fmt.Errorf("%w: project_slug is required", ErrToolCallSearchInvalid)
 	}
 	if len(search.toolName) > maxToolCallSearchTextLength || len(search.errorText) > maxToolCallSearchTextLength {
 		return toolCallSearch{}, fmt.Errorf("%w: tool_name_contains and error_contains must be at most %d characters", ErrToolCallSearchInvalid, maxToolCallSearchTextLength)
@@ -882,7 +884,9 @@ func (s *DiagnosticsService) decodeToolCallCursor(cursor string, principal Princ
 // ListAttributeKeysInput asks which attribute keys one project's telemetry
 // carried in a window, so a caller can choose filters before searching.
 type ListAttributeKeysInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID to inspect"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h, 7d (default), or 30d"`
 }
 
@@ -913,7 +917,7 @@ func (s *DiagnosticsService) ListAttributeKeys(ctx context.Context, principal Pr
 	}
 	projectID := strings.TrimSpace(input.ProjectID)
 	if projectID == "" {
-		return ListAttributeKeysOutput{}, fmt.Errorf("%w: project_id is required", ErrToolCallSearchInvalid)
+		return ListAttributeKeysOutput{}, fmt.Errorf("%w: project_slug is required", ErrToolCallSearchInvalid)
 	}
 	// Metered on the summary allowance: a key inventory names no subject and
 	// reads a pre-aggregated view.

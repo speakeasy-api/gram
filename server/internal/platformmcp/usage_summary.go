@@ -69,7 +69,9 @@ func (s *DiagnosticsService) toolUsageValid() bool {
 // target type at once, and narrowing to one server is what the diagnostics
 // and drill-down tools are for.
 type GetToolUsageSummaryInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID to summarize"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h, 7d (default), or 30d"`
 }
 
@@ -134,7 +136,7 @@ func (s *DiagnosticsService) GetToolUsageSummary(ctx context.Context, principal 
 		return GetToolUsageSummaryOutput{}, ErrUnavailable
 	}
 	if input.ProjectID == "" {
-		return GetToolUsageSummaryOutput{}, fmt.Errorf("project_id is required")
+		return GetToolUsageSummaryOutput{}, fmt.Errorf("project_slug is required")
 	}
 	now := s.now()
 	window, err := resolveWindow(input.Window, now, usageSummaryWindowSpec)

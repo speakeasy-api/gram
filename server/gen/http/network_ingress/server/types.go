@@ -16,7 +16,7 @@ import (
 // "createIngress" endpoint HTTP request body.
 type CreateIngressRequestBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
-	// Lowercase DNS label
+	// Lowercase DNS label; defaults to speakeasy
 	Hostname          *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
 	OauthClientID     *string `form:"oauth_client_id,omitempty" json:"oauth_client_id,omitempty" xml:"oauth_client_id,omitempty"`
 	OauthClientSecret *string `form:"oauth_client_secret,omitempty" json:"oauth_client_secret,omitempty" xml:"oauth_client_secret,omitempty"`
@@ -55,6 +55,10 @@ type CreateIngressResponseBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Private DNS label advertised by the provider
 	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind string `form:"endpoint_namespace_kind" json:"endpoint_namespace_kind" xml:"endpoint_namespace_kind"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -88,6 +92,10 @@ type UpdateIngressResponseBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Private DNS label advertised by the provider
 	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind string `form:"endpoint_namespace_kind" json:"endpoint_namespace_kind" xml:"endpoint_namespace_kind"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -121,6 +129,10 @@ type RotateCredentialsResponseBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Private DNS label advertised by the provider
 	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind string `form:"endpoint_namespace_kind" json:"endpoint_namespace_kind" xml:"endpoint_namespace_kind"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -163,6 +175,10 @@ type CheckHealthResponseBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Private DNS label advertised by the provider
 	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind string `form:"endpoint_namespace_kind" json:"endpoint_namespace_kind" xml:"endpoint_namespace_kind"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -1527,6 +1543,10 @@ type NetworkIngressResponseBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Private DNS label advertised by the provider
 	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind string `form:"endpoint_namespace_kind" json:"endpoint_namespace_kind" xml:"endpoint_namespace_kind"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -1567,6 +1587,7 @@ func NewCreateIngressResponseBody(res *networkingress.NetworkIngress) *CreateIng
 		OrganizationID:        res.OrganizationID,
 		Provider:              res.Provider,
 		Hostname:              res.Hostname,
+		Runtime:               res.Runtime,
 		EndpointNamespaceKind: res.EndpointNamespaceKind,
 		CustomDomainID:        res.CustomDomainID,
 		Enabled:               res.Enabled,
@@ -1591,6 +1612,7 @@ func NewUpdateIngressResponseBody(res *networkingress.NetworkIngress) *UpdateIng
 		OrganizationID:        res.OrganizationID,
 		Provider:              res.Provider,
 		Hostname:              res.Hostname,
+		Runtime:               res.Runtime,
 		EndpointNamespaceKind: res.EndpointNamespaceKind,
 		CustomDomainID:        res.CustomDomainID,
 		Enabled:               res.Enabled,
@@ -1615,6 +1637,7 @@ func NewRotateCredentialsResponseBody(res *networkingress.NetworkIngress) *Rotat
 		OrganizationID:        res.OrganizationID,
 		Provider:              res.Provider,
 		Hostname:              res.Hostname,
+		Runtime:               res.Runtime,
 		EndpointNamespaceKind: res.EndpointNamespaceKind,
 		CustomDomainID:        res.CustomDomainID,
 		Enabled:               res.Enabled,
@@ -1651,6 +1674,7 @@ func NewCheckHealthResponseBody(res *networkingress.NetworkIngress) *CheckHealth
 		OrganizationID:        res.OrganizationID,
 		Provider:              res.Provider,
 		Hostname:              res.Hostname,
+		Runtime:               res.Runtime,
 		EndpointNamespaceKind: res.EndpointNamespaceKind,
 		CustomDomainID:        res.CustomDomainID,
 		Enabled:               res.Enabled,
@@ -2697,7 +2721,7 @@ func NewGetIngressPayload(sessionToken *string) *networkingress.GetIngressPayloa
 func NewCreateIngressPayload(body *CreateIngressRequestBody, sessionToken *string) *networkingress.CreateIngressPayload {
 	v := &networkingress.CreateIngressPayload{
 		Provider:          *body.Provider,
-		Hostname:          *body.Hostname,
+		Hostname:          body.Hostname,
 		OauthClientID:     *body.OauthClientID,
 		OauthClientSecret: *body.OauthClientSecret,
 		IdentityRequired:  body.IdentityRequired,
@@ -2764,9 +2788,6 @@ func NewCheckHealthPayload(sessionToken *string) *networkingress.CheckHealthPayl
 func ValidateCreateIngressRequestBody(body *CreateIngressRequestBody) (err error) {
 	if body.Provider == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
-	}
-	if body.Hostname == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
 	if body.OauthClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_client_id", "body"))

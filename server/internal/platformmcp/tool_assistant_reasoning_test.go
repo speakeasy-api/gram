@@ -148,7 +148,7 @@ func TestAssistantReasoningToolContract(t *testing.T) {
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
 	require.Equal(t, externalOnly, a.Meta.Audiences)
 	require.Empty(t, live.For(AudienceAssistant))
-	for _, field := range []string{"project_id", "assistant_id", "reasoning_effort", "confirmed"} {
+	for _, field := range []string{"project_slug", "assistant_id", "reasoning_effort", "confirmed"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, string(a.InputSchema), `"enum":["none","low","medium","high"]`)

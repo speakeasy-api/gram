@@ -193,7 +193,7 @@ func (s *Service) requireStoredLinkTargetWrite(ctx context.Context, projectID uu
 
 // requireProjectMCPWrite matches the check the gateway write APIs make.
 func (s *Service) requireProjectMCPWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil})
+	return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, projectID.String(), projectID.String()))
 }
 
 func (s *Service) requireProjectWrite(ctx context.Context, projectID uuid.UUID) error {
@@ -538,7 +538,7 @@ func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, 
 			checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(link.McpServerID.UUID, row.McpServerToolsetID), projectID.String()))
 			checkRows = append(checkRows, i)
 		case link.TargetKind == string(skilllink.TargetMetaMCPServer) && link.MetaMcpServerID.Valid:
-			checks = append(checks, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil})
+			checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, projectID.String(), projectID.String()))
 			checkRows = append(checkRows, i)
 		default:
 			readable[i] = true

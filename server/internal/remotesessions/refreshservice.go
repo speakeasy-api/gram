@@ -1222,7 +1222,7 @@ func (s *RefreshService) refresh(
 	if !accessTokenLive(latest, time.Now()) {
 		return zero, &client, nil, refreshErr
 	}
-	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
+	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted.String)
 	if err != nil {
 		return zero, &client, nil, refreshErr
 	}
@@ -1299,7 +1299,7 @@ func (s *RefreshService) rereadActiveSession(ctx context.Context, q *remotesessi
 		return none, nil, fmt.Errorf("re-read active remote_session: %w", err)
 	}
 	if current.UpdatedAt.Time.After(snapshotAt) && accessTokenLive(current, time.Now()) {
-		if plain, derr := s.enc.Decrypt(current.AccessTokenEncrypted); derr == nil {
+		if plain, derr := s.enc.Decrypt(current.AccessTokenEncrypted.String); derr == nil {
 			return none, &RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
 		}
 	}
@@ -1355,7 +1355,7 @@ func (s *RefreshService) awaitRefreshedSession(
 			return zero, false, 0
 		}
 
-		plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
+		plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted.String)
 		if err != nil {
 			return zero, false, 0
 		}

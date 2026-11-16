@@ -654,7 +654,6 @@ func buildTestMCPService(
 		sessionCaptureEnabled,
 		posthog,
 		authzEngine,
-		nil,
 	)
 
 	var temporalEnv *temporal.Environment

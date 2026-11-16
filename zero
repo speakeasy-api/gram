@@ -153,6 +153,7 @@ interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tunnel-identity
+mise run zero:network-ingress
 interactive_only mise run zero:tailscale
 mise run zero:tls
 # Env only here: the image build needs Docker, which infra:start confirms.
@@ -197,6 +198,9 @@ echo -e "\n⏳ Running migrations"
 mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
+
+echo -e "\n⏳ Configuring local organization encryption"
+mise run zero:org-encryption
 
 echo -e "\n✅ All set up!"
 

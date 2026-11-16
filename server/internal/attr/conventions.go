@@ -12,6 +12,25 @@ import (
 type Key = attribute.Key
 
 const (
+	// CommandSearchKindKey identifies one resource kind searched by Command K.
+	CommandSearchKindKey = attribute.Key("gram.command_search.kind")
+	// CommandSearchDurationMSKey records one adapter's elapsed milliseconds.
+	CommandSearchDurationMSKey = attribute.Key("gram.command_search.duration_ms")
+	// CommandSearchItemCountKey counts returned search items.
+	CommandSearchItemCountKey = attribute.Key("gram.command_search.item_count")
+	// CommandSearchFailedKey reports whether one search adapter failed.
+	CommandSearchFailedKey = attribute.Key("gram.command_search.failed")
+	// CommandSearchPayloadEstimateBytesKey estimates the compact response size.
+	CommandSearchPayloadEstimateBytesKey = attribute.Key("gram.command_search.payload_estimate_bytes")
+	// CommandSearchAdapterCountKey counts adapters started for one search.
+	CommandSearchAdapterCountKey = attribute.Key("gram.command_search.adapter_count")
+	// CommandSearchPartialKey reports whether the response omitted unfinished kinds.
+	CommandSearchPartialKey = attribute.Key("gram.command_search.partial")
+	// CommandSearchTimedOutKey reports whether the shared deadline elapsed.
+	CommandSearchTimedOutKey = attribute.Key("gram.command_search.timed_out")
+	// CommandSearchFailedKindCountKey counts resource kinds unfinished at the deadline.
+	CommandSearchFailedKindCountKey = attribute.Key("gram.command_search.failed_kind_count")
+
 	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
 	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
 
@@ -175,6 +194,10 @@ const (
 	HTTPRequestHeadersKey            = attribute.Key("http.request.headers")
 	HTTPResponseHeadersKey           = attribute.Key("http.response.headers")
 	HTTPResponseHeaderContentTypeKey = attribute.Key("http.response.header.content_type")
+	// HTTPResponseHeaderContentEncodingKey records the content coding a
+	// response body left the server with (br, gzip), so the split between
+	// codings can be read from access logs.
+	HTTPResponseHeaderContentEncodingKey = attribute.Key("http.response.header.content_encoding")
 	// HTTPResponseHeaderWWWAuthenticateKey carries the RFC 6750 challenge an
 	// upstream returned on 401/403 — the machine-readable rejection reason
 	// (error, error_description) for a refused bearer token.
@@ -476,6 +499,11 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
+	TailnetGatewaySlotKey               = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayNodeStatusKey         = attribute.Key("gram.tailnet_gateway.node_status")
+	TailnetGatewayOperationKey          = attribute.Key("gram.tailnet_gateway.operation")
+	TailnetGatewayResultKey             = attribute.Key("gram.tailnet_gateway.result")
+	TailnetGatewayIdentityKindKey       = attribute.Key("gram.tailnet_gateway.identity_kind")
 	NetworkIngressDurationKey           = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
@@ -1074,13 +1102,6 @@ const (
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
 	HookBlockReasonKey                   = attribute.Key("gram.hook.block_reason")
-	IdentityFoldCanonicalGroupsKey       = attribute.Key("gram.identity_fold.canonical_groups")
-	IdentityFoldCostDeltaKey             = attribute.Key("gram.identity_fold.cost_delta")
-	IdentityFoldLiteralGroupsKey         = attribute.Key("gram.identity_fold.literal_groups")
-	IdentityFoldNewKeysKey               = attribute.Key("gram.identity_fold.new_keys")
-	IdentityFoldOrderChangedKey          = attribute.Key("gram.identity_fold.order_changed")
-	IdentityFoldTruncatedKey             = attribute.Key("gram.identity_fold.truncated")
-	IdentityFoldTokenDeltaKey            = attribute.Key("gram.identity_fold.token_delta")
 	IdentityMapEntryCountKey             = attribute.Key("gram.identity_map.entry_count")
 	TenantDimensionOrganizationCountKey  = attribute.Key("gram.tenant_dimensions.organization_count")
 	TenantDimensionProjectCountKey       = attribute.Key("gram.tenant_dimensions.project_count")
@@ -1613,6 +1634,14 @@ func SlogHTTPResponseHeaderContentType(v string) slog.Attr {
 	return slog.String(string(HTTPResponseHeaderContentTypeKey), v)
 }
 
+func HTTPResponseHeaderContentEncoding(v string) attribute.KeyValue {
+	return HTTPResponseHeaderContentEncodingKey.String(v)
+}
+
+func SlogHTTPResponseHeaderContentEncoding(v string) slog.Attr {
+	return slog.String(string(HTTPResponseHeaderContentEncodingKey), v)
+}
+
 func HTTPResponseHeaderWWWAuthenticate(v string) attribute.KeyValue {
 	return HTTPResponseHeaderWWWAuthenticateKey.String(v)
 }
@@ -1701,44 +1730,6 @@ func SlogHookSource(v string) slog.Attr      { return slog.String(string(HookSou
 
 func HookBlockReason(v string) attribute.KeyValue { return HookBlockReasonKey.String(v) }
 func SlogHookBlockReason(v string) slog.Attr      { return slog.String(string(HookBlockReasonKey), v) }
-
-func IdentityFoldCanonicalGroups(v int) attribute.KeyValue {
-	return IdentityFoldCanonicalGroupsKey.Int(v)
-}
-
-func SlogIdentityFoldCanonicalGroups(v int) slog.Attr {
-	return slog.Int(string(IdentityFoldCanonicalGroupsKey), v)
-}
-
-func IdentityFoldCostDelta(v float64) attribute.KeyValue { return IdentityFoldCostDeltaKey.Float64(v) }
-func SlogIdentityFoldCostDelta(v float64) slog.Attr {
-	return slog.Float64(string(IdentityFoldCostDeltaKey), v)
-}
-
-func IdentityFoldLiteralGroups(v int) attribute.KeyValue { return IdentityFoldLiteralGroupsKey.Int(v) }
-func SlogIdentityFoldLiteralGroups(v int) slog.Attr {
-	return slog.Int(string(IdentityFoldLiteralGroupsKey), v)
-}
-
-func IdentityFoldNewKeys(v int) attribute.KeyValue { return IdentityFoldNewKeysKey.Int(v) }
-func SlogIdentityFoldNewKeys(v int) slog.Attr {
-	return slog.Int(string(IdentityFoldNewKeysKey), v)
-}
-
-func IdentityFoldOrderChanged(v bool) attribute.KeyValue { return IdentityFoldOrderChangedKey.Bool(v) }
-func SlogIdentityFoldOrderChanged(v bool) slog.Attr {
-	return slog.Bool(string(IdentityFoldOrderChangedKey), v)
-}
-
-func IdentityFoldTruncated(v bool) attribute.KeyValue { return IdentityFoldTruncatedKey.Bool(v) }
-func SlogIdentityFoldTruncated(v bool) slog.Attr {
-	return slog.Bool(string(IdentityFoldTruncatedKey), v)
-}
-
-func IdentityFoldTokenDelta(v int64) attribute.KeyValue { return IdentityFoldTokenDeltaKey.Int64(v) }
-func SlogIdentityFoldTokenDelta(v int64) slog.Attr {
-	return slog.Int64(string(IdentityFoldTokenDeltaKey), v)
-}
 
 func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
 func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
@@ -2110,6 +2101,47 @@ func SlogFlyOrgSlug(v string) slog.Attr      { return slog.String(string(FlyOrgS
 
 func FlyMachineIDs(v []string) attribute.KeyValue { return FlyMachineIDsKey.StringSlice(v) }
 func SlogFlyMachineIDs(v []string) slog.Attr      { return slog.Any(string(FlyMachineIDsKey), v) }
+
+func CommandSearchKind(v string) attribute.KeyValue { return CommandSearchKindKey.String(v) }
+func SlogCommandSearchKind(v string) slog.Attr {
+	return slog.String(string(CommandSearchKindKey), v)
+}
+func CommandSearchDurationMS(v int64) attribute.KeyValue { return CommandSearchDurationMSKey.Int64(v) }
+func SlogCommandSearchDurationMS(v int64) slog.Attr {
+	return slog.Int64(string(CommandSearchDurationMSKey), v)
+}
+func CommandSearchItemCount(v int) attribute.KeyValue { return CommandSearchItemCountKey.Int(v) }
+func SlogCommandSearchItemCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchItemCountKey), v)
+}
+func CommandSearchFailed(v bool) attribute.KeyValue { return CommandSearchFailedKey.Bool(v) }
+func SlogCommandSearchFailed(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchFailedKey), v)
+}
+func CommandSearchPayloadEstimateBytes(v int) attribute.KeyValue {
+	return CommandSearchPayloadEstimateBytesKey.Int(v)
+}
+func SlogCommandSearchPayloadEstimateBytes(v int) slog.Attr {
+	return slog.Int(string(CommandSearchPayloadEstimateBytesKey), v)
+}
+func CommandSearchAdapterCount(v int) attribute.KeyValue { return CommandSearchAdapterCountKey.Int(v) }
+func SlogCommandSearchAdapterCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchAdapterCountKey), v)
+}
+func CommandSearchPartial(v bool) attribute.KeyValue { return CommandSearchPartialKey.Bool(v) }
+func SlogCommandSearchPartial(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchPartialKey), v)
+}
+func CommandSearchTimedOut(v bool) attribute.KeyValue { return CommandSearchTimedOutKey.Bool(v) }
+func SlogCommandSearchTimedOut(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchTimedOutKey), v)
+}
+func CommandSearchFailedKindCount(v int) attribute.KeyValue {
+	return CommandSearchFailedKindCountKey.Int(v)
+}
+func SlogCommandSearchFailedKindCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchFailedKindCountKey), v)
+}
 
 func ValueAny(v any) attribute.KeyValue       { return ValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogValueAny(v any) slog.Attr            { return slog.Any(string(ValueKey), v) }
@@ -2517,6 +2549,38 @@ func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
 
 func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
+func SlogTailnetGatewaySlot(v int32) slog.Attr {
+	return slog.Int(string(TailnetGatewaySlotKey), int(v))
+}
+
+// TailnetGatewayCertificateExpiresAtKey is when a gateway node's TLS
+// certificate expires.
+const TailnetGatewayCertificateExpiresAtKey = attribute.Key("gram.tailnet_gateway.certificate_expires_at")
+
+func SlogTailnetGatewayCertificateExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(TailnetGatewayCertificateExpiresAtKey), v)
+}
+
+func TailnetGatewayNodeStatus[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayNodeStatusKey.String(string(v))
+}
+func SlogTailnetGatewayNodeStatus[V ~string](v V) slog.Attr {
+	return slog.String(string(TailnetGatewayNodeStatusKey), string(v))
+}
+
+func TailnetGatewayOperation[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayOperationKey.String(string(v))
+}
+
+func TailnetGatewayResult[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayResultKey.String(string(v))
+}
+
+func TailnetGatewayIdentityKind[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayIdentityKindKey.String(string(v))
 }
 
 func SlogNetworkIngressDuration(v time.Duration) slog.Attr {
