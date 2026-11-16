@@ -91,11 +91,14 @@ func (r Registry) Validate() error {
 			dimKeys[d.Key] = true
 		}
 
-		actions := map[Action]Permission{}
+		actions := make(map[Action]Permission)
 		for _, p := range t.Permissions {
 			if p.Action == "" {
 				fail("%s: a permission has no action", t.Kind)
 				continue
+			}
+			if !slices.Contains(Actions, p.Action) && !slices.Contains(LegacyActions[t.Kind], p.Action) {
+				fail("%s: action %q is not in registry.Actions; add it to scopes.go", t.Kind, p.Action)
 			}
 			if _, dup := actions[p.Action]; dup {
 				fail("%s: action %q is declared twice", t.Kind, p.Action)
@@ -238,8 +241,8 @@ func impliesCycle(t ResourceType) string {
 		visiting
 		done
 	)
-	state := map[Action]int{}
-	edges := map[Action][]Action{}
+	state := make(map[Action]int)
+	edges := make(map[Action][]Action)
 	for _, p := range t.Permissions {
 		edges[p.Action] = p.Implies
 	}

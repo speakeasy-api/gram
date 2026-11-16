@@ -66,6 +66,16 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			want:  `thing: action "read" is declared twice`,
 		},
 		{
+			name:  "action outside the closed list",
+			model: validTestRegistry(validTestType("thing", validTestPermission("delete"))),
+			want:  `thing: action "delete" is not in registry.Actions; add it to scopes.go`,
+		},
+		{
+			name:  "legacy action on a type that never had it",
+			model: validTestRegistry(validTestType("thing", validTestPermission(ActionPluginWrite))),
+			want:  `thing: action "plugin_write" is not in registry.Actions; add it to scopes.go`,
+		},
+		{
 			name: "duplicate scope across types",
 			model: validTestRegistry(
 				validTestType("a", withScope(validTestPermission("read"), "shared:read")),
