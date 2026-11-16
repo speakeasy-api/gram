@@ -31,6 +31,7 @@ func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T
 	bindExternalTestPrincipal(server)
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	reg.withProjects(slugProjects{"settings-project": uuid.New()})
 	registerUnavailableMCPConnectionSettingsTool(reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
@@ -41,7 +42,7 @@ func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T
 	require.NoError(t, err)
 	defer func() { _ = session.Close() }()
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: getMCPConnectionSettingsToolName, Arguments: map[string]any{
-		"project_id": uuid.NewString(), "target_kind": "mcp_server", "target_id": uuid.NewString(),
+		"project_slug": "settings-project", "target_kind": "mcp_server", "target_id": uuid.NewString(),
 	}})
 	require.NoError(t, err)
 	require.True(t, result.IsError)

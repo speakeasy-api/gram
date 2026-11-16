@@ -729,6 +729,18 @@ func (s *recordingRegistrationStore) ResolveRegistrationDashboardSetup(_ context
 	return RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server"}, s.err
 }
 
+func (s *recordingRegistrationStore) ResolveRegistrationMCPID(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (uuid.UUID, error) {
+	return recordingRegistrationStoreMCPID, s.err
+}
+
+func (s *recordingRegistrationStore) RegistrationIDForMCP(_ context.Context, _ Principal, _, _, _ string) (string, error) {
+	return s.completed.RegistrationID.UUID.String(), s.err
+}
+
+// recordingRegistrationStoreMCPID is the MCP server every registration in
+// recordingRegistrationStore created.
+var recordingRegistrationStoreMCPID = uuid.MustParse("019a0000-0000-7000-8000-00000000aaaa")
+
 func (s *recordingRegistrationStore) IssueSetupHandoff(_ context.Context, _ Principal, binding SetupHandoffBinding, _ time.Time) (IssuedSetupHandoff, error) {
 	s.handoffCalls++
 	return IssuedSetupHandoff{SetupHandoff: SetupHandoff{ProjectID: binding.ProjectID, RegistrationID: binding.RegistrationID, ProviderKey: binding.ProviderKey, Intent: binding.Intent}}, s.err

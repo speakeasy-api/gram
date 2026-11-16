@@ -32,9 +32,10 @@ var errTeamMemoryTimeout = errors.New("team memory search timed out")
 
 // SearchTeamMemoryInput searches one project's team memory.
 type SearchTeamMemoryInput struct {
-	ProjectID string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 
-	ProjectSlug string `json:"project_slug,omitempty"`
+	ProjectSlug string `json:"project_slug"`
 
 	// Query is web-search style full-text: words, "quoted phrases", OR and
 	// -excluded words.

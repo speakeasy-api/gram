@@ -98,14 +98,13 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 }
 
 // requiredCheckDimensions lists, per resource kind, the dimensions every check
-// of that kind must carry. Selector matching skips grant keys a check omits, so
-// a check without a dimension that grants of its kind can be bounded by would
-// pass such a grant whatever value the grant names. MCP grants can be bounded
-// to a project ({"resource_id":"*","project_id":P}), so every MCP check must
-// name the project of the resource it targets.
-var requiredCheckDimensions = map[string][]string{
-	ResourceKindMCP: {SelectorKeyProjectID},
-}
+// of that kind must carry: the Required dimensions in Model. Selector matching
+// skips grant keys a check omits, so a check without a dimension that grants
+// of its kind can be bounded by would pass such a grant whatever value the
+// grant names. MCP grants can be bounded to a project
+// ({"resource_id":"*","project_id":P}), so every MCP check must name the
+// project of the resource it targets.
+var requiredCheckDimensions = Model.deriveRequiredCheckDimensions()
 
 // RequiredCheckDimensions returns the dimensions a check of resourceKind must
 // carry, or nil when the kind requires none.

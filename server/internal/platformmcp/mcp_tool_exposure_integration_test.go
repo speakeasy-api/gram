@@ -829,6 +829,7 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 	reader := NewPostgresReader(testenv.NewLogger(t), fixture.conn)
 	describe := func(service *MCPToolExposureService) map[string]Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "tool-exposure-manifest", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerToolExposureTools(registrar, service, reader)
 		byName := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {
@@ -869,11 +870,12 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 
 	// The refusals themselves must differ: a caller that only asked to list a
 	// project's tools must not be told it cannot change a server.
-	listRefusal := invokeUnavailable(t, unavailable[listProjectToolsToolName], map[string]any{
-		"project_id": fixture.project.ID.String(),
+	caller := ContextWithPrincipal(t.Context(), fixture.principal)
+	listRefusal := invokeUnavailable(t, caller, unavailable[listProjectToolsToolName], map[string]any{
+		"project_slug": fixture.project.Slug,
 	})
-	addRefusal := invokeUnavailable(t, unavailable[addToolsToMCPToolName], map[string]any{
-		"project_id": fixture.project.ID.String(), "mcp_id": fixture.toolsetID.String(),
+	addRefusal := invokeUnavailable(t, caller, unavailable[addToolsToMCPToolName], map[string]any{
+		"project_slug": fixture.project.Slug, "mcp_id": fixture.toolsetID.String(),
 		"tool_urns": []string{fixture.tools[0]}, "expected_version": strings.Repeat("a", 64),
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
@@ -882,13 +884,13 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 	require.NotEqual(t, listRefusal, addRefusal)
 }
 
-func invokeUnavailable(t *testing.T, descriptor Descriptor, arguments map[string]any) string {
+func invokeUnavailable(t *testing.T, ctx context.Context, descriptor Descriptor, arguments map[string]any) string {
 	t.Helper()
 	encoded, err := json.Marshal(arguments)
 	require.NoError(t, err)
 	// Through the exported accessor, so the nil guard it exists for is part of
 	// what this exercises rather than bypassed.
-	_, err = descriptor.Invoke(t.Context(), encoded)
+	_, err = descriptor.Invoke(ctx, encoded)
 	require.Error(t, err)
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)

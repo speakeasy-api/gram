@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,7 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 	service := gatewaySessionManagementFunc(func(_ context.Context, payload *gatewaygen.ListGatewaySessionsPayload) (*gatewaygen.GatewaySessionsResult, error) {
 		calls++
 		require.Equal(t, input.GatewayID, payload.GatewayID)
-		require.Equal(t, input.ProjectID, payload.ProjectID)
+		require.Equal(t, conv.PtrEmpty(input.ProjectID), payload.ProjectID)
 		require.Equal(t, input.Search, payload.Search)
 		require.Equal(t, input.Status, payload.Status)
 		require.Equal(t, input.Sort, payload.Sort)
@@ -55,7 +56,7 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 			input.GatewayID = nil
 		case "project":
 			input.GatewayID = nil
-			input.ProjectID = &project
+			input.ProjectID = project
 		}
 		output, err := listGatewaySessions(ctx, service, principal, input)
 		require.NoError(t, err)
@@ -75,7 +76,7 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 	mismatched.OrganizationID = "other-org"
 	_, err := listGatewaySessions(ctx, service, mismatched, input)
 	require.ErrorIs(t, err, ErrForbidden)
-	for _, invalid := range []ListGatewaySessionsInput{{}, {Scope: "gateway"}, {Scope: "organization", GatewayID: &gateway}, {Scope: "organization", Limit: 101}, {Scope: "project"}, {Scope: "organization", ProjectID: &project}, {Scope: "gateway", GatewayID: &gateway, ProjectID: &project}} {
+	for _, invalid := range []ListGatewaySessionsInput{{}, {Scope: "gateway"}, {Scope: "organization", GatewayID: &gateway}, {Scope: "organization", Limit: 101}, {Scope: "project"}, {Scope: "organization", ProjectID: project}, {Scope: "gateway", GatewayID: &gateway, ProjectID: project}} {
 		_, err := listGatewaySessions(ctx, service, principal, invalid)
 		require.Error(t, err)
 	}
@@ -99,7 +100,7 @@ func TestGatewaySessionToolContract(t *testing.T) {
 	require.Equal(t, ExternalAuthorizationOrgAdmin, a.Meta.Authorization)
 	require.Equal(t, ProjectScopeNone, a.Meta.ProjectScope)
 	require.Empty(t, live.For(AudienceAssistant))
-	for _, field := range []string{"scope", "gateway_id", "project_id", "search", "server_id", "provider_id", "status", "created_after", "created_before", "sort", "cursor", "limit"} {
+	for _, field := range []string{"scope", "gateway_id", "project_slug", "search", "server_id", "provider_id", "status", "created_after", "created_before", "sort", "cursor", "limit"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	principal := Principal{OrganizationID: "test-org", UserID: "test-user"}

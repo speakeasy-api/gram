@@ -131,7 +131,7 @@ func TestAssistantRuntimeToolContract(t *testing.T) {
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
 	require.Equal(t, externalOnly, a.Meta.Audiences)
 	require.Empty(t, live.For(AudienceAssistant))
-	for _, field := range []string{"project_id", "assistant_id", "runtime_version", "expected_runtime_version", "confirmed"} {
+	for _, field := range []string{"project_slug", "assistant_id", "runtime_version", "expected_runtime_version", "confirmed"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, a.Description, "assistant:write")
