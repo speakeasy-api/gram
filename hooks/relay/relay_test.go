@@ -2165,7 +2165,7 @@ func TestWritePluginAntigravityMergesUserHooks(t *testing.T) {
 	ours := doc[pluginName]
 	require.NotNil(t, ours)
 	events := slices.Collect(maps.Keys(ours))
-	require.ElementsMatch(t, []string{"enabled", "PostToolUse", "PreToolUse", "SessionStart", "Stop"}, events)
+	require.ElementsMatch(t, []string{"enabled", "PostInvocation", "PostToolUse", "PreToolUse", "SessionStart", "Stop"}, events)
 	require.Contains(t, string(ours["PreToolUse"]), "--provider=antigravity")
 	require.Contains(t, string(ours["PreToolUse"]), "--event=PreToolUse")
 	require.Contains(t, string(ours["PreToolUse"]), "--config="+filepath.Join(dir, configFileName))
