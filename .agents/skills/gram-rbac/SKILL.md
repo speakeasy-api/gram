@@ -82,6 +82,8 @@ For a list endpoint, load the candidate rows, build one ref per row, call `Filte
 
 In the handler's test, add one case without the grant that asserts `oops.CodeForbidden`, and one case with it through `authztest.WithExactGrants(t, ctx, authz.NewGrant(scope, resourceID))`.
 
+A typed id proves an id is well formed, not that the resource is the caller's. That rests on the handler loading the row inside the caller's project, so keep a handler test in which a caller from another project and organization names the resource (`environments/tenant_binding_test.go`). The engine itself only compares org checks: one about an organization other than the caller's is logged for now, and will be refused after the logging window.
+
 ## Adding or changing a permission
 
 1. Edit `registry.Definitions` in `authz/internal/registry/definitions.go`: a `Permission` on the right type (with `Label`, `Description`, `Implies`, `Exclusions`, `Agent`, `Source`), or a new `ResourceType`. Add it to `SystemRoles[authz.SystemRoleAdmin]` too, and to member only if every user should have it. Its `Action` is one of the constants in `registry/scopes.go` (`ActionRead`, `ActionWrite`, ...); a verb that is not there is added to `Actions` first, and the compound names in `LegacyActions` are not to be extended. The generator refuses an invalid registry, and `TestDefinitions_IsValid` fails on one. A new permission's scope is `<kind>:<action>`, so leave `LegacyScope` empty. Only the three permissions that predate the registry (`plugin:write`, `log:read`, `mcp:auth`) set it, and they keep it until those scopes are deliberately renamed; validation rejects it anywhere else.

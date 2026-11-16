@@ -228,6 +228,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	if err := validateShape(checks, false); err != nil {
 		return e.mapError(ctx, err)
 	}
+	e.reportOtherOrganization(ctx, checks)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -356,6 +357,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 }
 
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
+	e.reportOtherOrganization(ctx, checks)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -535,6 +537,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	if err := validateShape(checks, true); err != nil {
 		return false, e.mapError(ctx, err)
 	}
+	e.reportOtherOrganization(ctx, checks)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -585,6 +588,7 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 	if err := validateShape(alternatives, true); err != nil {
 		return false, e.mapError(ctx, err)
 	}
+	e.reportOtherOrganization(ctx, alternatives)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -660,6 +664,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	if err := validateShape(checks, true); err != nil {
 		return nil, e.mapError(ctx, err)
 	}
+	e.reportOtherOrganization(ctx, checks)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -771,6 +776,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	if err := validateShape(checks, true); err != nil {
 		return nil, e.mapError(ctx, err)
 	}
+	e.reportOtherOrganization(ctx, checks)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -972,6 +978,42 @@ func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 			"invalid authz check on a path that skips enforcement",
 			attr.SlogResourceID(check.ResourceID),
 			attr.SlogError(err),
+		)
+	}
+}
+
+// reportOtherOrganization logs every org check about an organization other
+// than the one the caller is acting in. Grants are loaded for the caller's
+// organization, so such a check asks one organization's grants about another
+// organization. The request still goes through as before: this is the
+// logging window before such a check is refused. Nothing at the call site
+// turns it on: the organization is the check's own resource.
+func (e *Engine) reportOtherOrganization(ctx context.Context, checks []Check) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return
+	}
+	caller := OrgIDFrom(authCtx.ActiveOrganizationID)
+	for _, c := range checks {
+		if c.resourceKind() != ResourceKindOrg {
+			continue
+		}
+		// An id that cannot be compared is reported like a different one: it
+		// is never read as the caller's organization.
+		same, err := OrgIDFrom(c.ResourceID).Equals(caller)
+		if err == nil && same {
+			continue
+		}
+		reason := "organization is not the caller's"
+		if err != nil {
+			reason = "organization cannot be compared with the caller's"
+		}
+		e.logger.ErrorContext(
+			ctx,
+			"authz check names another organization than the caller's",
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogResourceID(c.ResourceID),
+			attr.SlogError(invalidCheckReason(c.Scope, c.ResourceID, reason)),
 		)
 	}
 }
