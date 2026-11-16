@@ -33,6 +33,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { AuthenticationHostDialog } from "./AuthenticationHostDialog";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
+import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
 import { ProviderSettingsForm } from "./ProviderSettingsForm";
 import {
   authorizationServerModeLabel,
@@ -40,7 +41,6 @@ import {
   settingValue,
   unavailableReason,
 } from "./issuerDisplay";
-import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 
@@ -126,6 +126,11 @@ export function IssuerDetailContent({
                     />
                   </div>
                 ),
+              },
+              {
+                id: "enterprise-managed-auth",
+                label: "Enterprise Managed Auth",
+                content: <EnterpriseManagedAuthSection issuer={issuer} />,
               },
               {
                 id: "mcp-servers",
@@ -350,7 +355,6 @@ function ActionsSection({
   detailHref: (issuerId: string) => string;
 }): JSX.Element {
   const navigate = useNavigate();
-  const [promoting, setPromoting] = useState(false);
   const [movingHost, setMovingHost] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
 
@@ -358,15 +362,6 @@ function ActionsSection({
     <RequireScope scope="org:admin" level="section">
       <InfoSection title="Actions">
         <Stack direction="horizontal" gap={2}>
-          {issuer.projectId !== "" && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPromoting(true)}
-            >
-              <Button.Text>Make organization-wide</Button.Text>
-            </Button>
-          )}
           <Button
             variant="secondary"
             size="sm"
@@ -392,12 +387,6 @@ function ActionsSection({
           <AuthenticationHostDialog
             issuer={issuer}
             onClose={() => setMovingHost(false)}
-          />
-        )}
-        {promoting && (
-          <MakeOrganizationWideDialog
-            issuer={issuer}
-            onClose={() => setPromoting(false)}
           />
         )}
         {consolidating && (
