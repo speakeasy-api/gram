@@ -426,6 +426,8 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		var (
 			capabilityKey *string
 			userID        *string
+			agentID       *string
+			principalKind *string
 			status        *string
 			limit         *int32
 			cursor        *string
@@ -445,6 +447,22 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		userIDRaw := qp.Get("user_id")
 		if userIDRaw != "" {
 			userID = &userIDRaw
+		}
+		agentIDRaw := qp.Get("agent_id")
+		if agentIDRaw != "" {
+			agentID = &agentIDRaw
+		}
+		if agentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+		}
+		principalKindRaw := qp.Get("principal_kind")
+		if principalKindRaw != "" {
+			principalKind = &principalKindRaw
+		}
+		if principalKind != nil {
+			if !(*principalKind == "user" || *principalKind == "agent") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("principal_kind", *principalKind, []any{"user", "agent"}))
+			}
 		}
 		statusRaw := qp.Get("status")
 		if statusRaw != "" {
@@ -487,7 +505,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListPayload(capabilityKey, userID, status, limit, cursor, sessionToken)
+		payload = NewListPayload(capabilityKey, userID, agentID, principalKind, status, limit, cursor, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1994,6 +2012,219 @@ func EncodeBatchUserBadgesError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// EncodeBatchAgentBadgesResponse returns an encoder for responses returned by
+// the killswitches batchAgentBadges endpoint.
+func EncodeBatchAgentBadgesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*killswitches.KillswitchBatchAgentBadgesResult)
+		enc := encoder(ctx, w)
+		body := NewBatchAgentBadgesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeBatchAgentBadgesRequest returns a decoder for requests sent to the
+// killswitches batchAgentBadges endpoint.
+func DecodeBatchAgentBadgesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*killswitches.BatchAgentBadgesPayload, error) {
+	return func(r *http.Request) (*killswitches.BatchAgentBadgesPayload, error) {
+		var payload *killswitches.BatchAgentBadgesPayload
+		var (
+			body BatchAgentBadgesRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateBatchAgentBadgesRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewBatchAgentBadgesPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeBatchAgentBadgesError returns an encoder for errors returned by the
+// batchAgentBadges killswitches endpoint.
+func EncodeBatchAgentBadgesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAgentBadgesUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalKillswitchesKillswitchCapabilityToKillswitchCapabilityResponseBody
 // builds a value of type *KillswitchCapabilityResponseBody from a value of
 // type *killswitches.KillswitchCapability.
@@ -2040,6 +2271,8 @@ func marshalKillswitchesKillswitchSummaryToKillswitchSummaryResponseBody(v *kill
 		CapabilityKey:   string(v.CapabilityKey),
 		CapabilityLabel: v.CapabilityLabel,
 		UserID:          v.UserID,
+		AgentID:         v.AgentID,
+		PrincipalKind:   string(v.PrincipalKind),
 		Version:         v.Version,
 		Status:          string(v.Status),
 	}
@@ -2177,6 +2410,20 @@ func marshalKillswitchesKillswitchOverlapToKillswitchOverlapResponseBody(v *kill
 func marshalKillswitchesKillswitchUserBadgeToKillswitchUserBadgeResponseBody(v *killswitches.KillswitchUserBadge) *KillswitchUserBadgeResponseBody {
 	res := &KillswitchUserBadgeResponseBody{
 		UserID:      v.UserID,
+		Affected:    v.Affected,
+		AffectedNow: v.AffectedNow,
+		Scheduled:   v.Scheduled,
+	}
+
+	return res
+}
+
+// marshalKillswitchesKillswitchAgentBadgeToKillswitchAgentBadgeResponseBody
+// builds a value of type *KillswitchAgentBadgeResponseBody from a value of
+// type *killswitches.KillswitchAgentBadge.
+func marshalKillswitchesKillswitchAgentBadgeToKillswitchAgentBadgeResponseBody(v *killswitches.KillswitchAgentBadge) *KillswitchAgentBadgeResponseBody {
+	res := &KillswitchAgentBadgeResponseBody{
+		AgentID:     v.AgentID,
 		Affected:    v.Affected,
 		AffectedNow: v.AffectedNow,
 		Scheduled:   v.Scheduled,

@@ -439,6 +439,7 @@ func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfi
 	result := &gen.ManagedAgent{
 		OwnerProfile:                ownerProfile,
 		ConnectionNeedsRefresh:      nil,
+		LastCredentialUsedAt:        nil,
 		ID:                          agent.ID.String(),
 		OwnerUserID:                 agent.OwnerUserID,
 		OwnerReassignmentRequiredAt: nil,

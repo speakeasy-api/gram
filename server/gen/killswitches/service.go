@@ -14,8 +14,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage MCP tool-call killswitches for users in the active organization.
-// Requires an ordinary live organization-administrator session.
+// Manage MCP tool-call killswitches for users and registered agents in the
+// active organization. Requires an ordinary live organization-administrator
+// session.
 type Service interface {
 	// ListCapabilities implements listCapabilities.
 	ListCapabilities(context.Context, *ListCapabilitiesPayload) (res *KillswitchListCapabilitiesResult, err error)
@@ -35,6 +36,8 @@ type Service interface {
 	PreviewOverlaps(context.Context, *PreviewOverlapsPayload) (res *KillswitchPreviewOverlapsResult, err error)
 	// BatchUserBadges implements batchUserBadges.
 	BatchUserBadges(context.Context, *BatchUserBadgesPayload) (res *KillswitchBatchUserBadgesResult, err error)
+	// BatchAgentBadges implements batchAgentBadges.
+	BatchAgentBadges(context.Context, *BatchAgentBadgesPayload) (res *KillswitchBatchAgentBadgesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -57,7 +60,14 @@ const ServiceName = "killswitches"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"listCapabilities", "listMCPServers", "list", "get", "create", "edit", "lift", "previewOverlaps", "batchUserBadges"}
+var MethodNames = [10]string{"listCapabilities", "listMCPServers", "list", "get", "create", "edit", "lift", "previewOverlaps", "batchUserBadges", "batchAgentBadges"}
+
+// BatchAgentBadgesPayload is the payload type of the killswitches service
+// batchAgentBadges method.
+type BatchAgentBadgesPayload struct {
+	SessionToken *string
+	AgentIds     []string
+}
 
 // BatchUserBadgesPayload is the payload type of the killswitches service
 // batchUserBadges method.
@@ -71,11 +81,15 @@ type CreatePayload struct {
 	SessionToken  *string
 	OperationID   string
 	CapabilityKey KillswitchCapabilityKey
-	UserID        string
-	Scope         *KillswitchScope
-	Schedule      *KillswitchSchedule
-	ExternalNote  string
-	InternalNote  string
+	// Target user. Supply exactly one of user_id or agent_id.
+	UserID *string
+	// Target registered agent, independent of its owner. Applies across all
+	// credential sessions in the organization.
+	AgentID      *string
+	Scope        *KillswitchScope
+	Schedule     *KillswitchSchedule
+	ExternalNote string
+	InternalNote string
 }
 
 // EditPayload is the payload type of the killswitches service edit method.
@@ -94,6 +108,19 @@ type EditPayload struct {
 type GetPayload struct {
 	SessionToken *string
 	ID           string
+}
+
+type KillswitchAgentBadge struct {
+	AgentID     string
+	Affected    bool
+	AffectedNow bool
+	Scheduled   bool
+}
+
+// KillswitchBatchAgentBadgesResult is the result type of the killswitches
+// service batchAgentBadges method.
+type KillswitchBatchAgentBadgesResult struct {
+	Badges []*KillswitchAgentBadge
 }
 
 // KillswitchBatchUserBadgesResult is the result type of the killswitches
@@ -127,11 +154,15 @@ type KillswitchDetail struct {
 	ID               string
 	CapabilityKey    KillswitchCapabilityKey
 	CapabilityLabel  string
-	UserID           string
-	Version          int64
-	Status           KillswitchStatus
-	Scope            *KillswitchScope
-	Schedule         *KillswitchSchedule
+	// Present only for user restrictions
+	UserID *string
+	// Present only for registered-agent restrictions
+	AgentID       *string
+	PrincipalKind KillswitchPrincipalKind
+	Version       int64
+	Status        KillswitchStatus
+	Scope         *KillswitchScope
+	Schedule      *KillswitchSchedule
 }
 
 type KillswitchHistoryAction string
@@ -210,6 +241,8 @@ type KillswitchPreviewOverlapsResult struct {
 	Truncated bool
 }
 
+type KillswitchPrincipalKind string
+
 type KillswitchSchedule struct {
 	Start    KillswitchScheduleStart
 	StartsAt *string
@@ -234,11 +267,15 @@ type KillswitchSummary struct {
 	ID              string
 	CapabilityKey   KillswitchCapabilityKey
 	CapabilityLabel string
-	UserID          string
-	Version         int64
-	Status          KillswitchStatus
-	Scope           *KillswitchScope
-	Schedule        *KillswitchSchedule
+	// Present only for user restrictions
+	UserID *string
+	// Present only for registered-agent restrictions
+	AgentID       *string
+	PrincipalKind KillswitchPrincipalKind
+	Version       int64
+	Status        KillswitchStatus
+	Scope         *KillswitchScope
+	Schedule      *KillswitchSchedule
 }
 
 type KillswitchUserBadge struct {
@@ -272,7 +309,13 @@ type ListMCPServersPayload struct {
 type ListPayload struct {
 	SessionToken  *string
 	CapabilityKey *KillswitchCapabilityKey
-	UserID        *string
+	// Target user. Supply exactly one of user_id or agent_id.
+	UserID *string
+	// Target registered agent, independent of its owner. Applies across all
+	// credential sessions in the organization.
+	AgentID *string
+	// Defaults to user; agent_id selects agent when omitted
+	PrincipalKind *KillswitchPrincipalKind
 	Status        *KillswitchStatus
 	Limit         *int32
 	Cursor        *string
@@ -284,9 +327,13 @@ type PreviewOverlapsPayload struct {
 	SessionToken  *string
 	ID            *string
 	CapabilityKey KillswitchCapabilityKey
-	UserID        string
-	Scope         *KillswitchScope
-	Schedule      *KillswitchSchedule
+	// Target user. Supply exactly one of user_id or agent_id.
+	UserID *string
+	// Target registered agent, independent of its owner. Applies across all
+	// credential sessions in the organization.
+	AgentID  *string
+	Scope    *KillswitchScope
+	Schedule *KillswitchSchedule
 }
 
 // Error returns an error description.

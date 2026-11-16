@@ -48,6 +48,10 @@ type Client struct {
 	// batchUserBadges endpoint.
 	BatchUserBadgesDoer goahttp.Doer
 
+	// BatchAgentBadges Doer is the HTTP client used to make requests to the
+	// batchAgentBadges endpoint.
+	BatchAgentBadgesDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -77,6 +81,7 @@ func NewClient(
 		LiftDoer:             doer,
 		PreviewOverlapsDoer:  doer,
 		BatchUserBadgesDoer:  doer,
+		BatchAgentBadgesDoer: doer,
 		RestoreResponseBody:  restoreBody,
 		scheme:               scheme,
 		host:                 host,
@@ -296,6 +301,30 @@ func (c *Client) BatchUserBadges() goa.Endpoint {
 		resp, err := c.BatchUserBadgesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("killswitches", "batchUserBadges", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BatchAgentBadges returns an endpoint that makes HTTP requests to the
+// killswitches service batchAgentBadges server.
+func (c *Client) BatchAgentBadges() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBatchAgentBadgesRequest(c.encoder)
+		decodeResponse = DecodeBatchAgentBadgesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBatchAgentBadgesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BatchAgentBadgesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("killswitches", "batchAgentBadges", err)
 		}
 		return decodeResponse(resp)
 	}
