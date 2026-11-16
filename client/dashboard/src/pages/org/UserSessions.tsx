@@ -8,7 +8,8 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
-import { ResourceListPage } from "@/components/page-templates";
+import { ResourceListPage, TabbedPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import {
   CONNECTION_GROUPING_LABELS,
@@ -18,11 +19,18 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import {
+  MCP_SESSIONS_DESCRIPTION,
+  MCP_SESSIONS_TITLE,
+  useMcpSessionsTabs,
+} from "./mcpSessionsTabs";
 import { RemoteSessionRefreshPolicySetting } from "./RemoteSessionRefreshPolicySetting";
 
 const USER_SESSION_FILTERS = defineFilters([
@@ -60,13 +68,60 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
   { value: "client", label: CONNECTION_GROUPING_LABELS.client },
 ];
 
+const CONNECTIONS_DESCRIPTION =
+  "Connections Speakeasy brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one.";
+
 export default function UserSessions(): JSX.Element {
   const project = useProject();
+  const tabbed =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+    "enabled";
+  const tabs = useMcpSessionsTabs();
 
-  return <UserSessionsInner key={project.id} />;
+  if (!tabbed) {
+    return (
+      <ResourceListPage
+        scope="project:read"
+        resourceId={project.id}
+        title={MCP_SESSIONS_TITLE}
+        description={CONNECTIONS_DESCRIPTION}
+      >
+        <div className="space-y-8">
+          {/* `Page.Section` stacks two `mb-6`s under the description, which reads
+              as a dropped card when what follows is a surface rather than a
+              toolbar. Pulled back locally rather than changing the shared header,
+              which every list page is spaced against. */}
+          <div className="-mt-6 space-y-4">
+            <RemoteSessionRefreshPolicySetting />
+          </div>
+          <Connections key={project.id} />
+        </div>
+      </ResourceListPage>
+    );
+  }
+
+  // Behind gram-user-session-issuer-dashboard: the connections are the
+  // Overview tab, and the refresh policy moves to Authorization Servers.
+  return (
+    <TabbedPage
+      title={MCP_SESSIONS_TITLE}
+      description={MCP_SESSIONS_DESCRIPTION}
+      tabs={tabs}
+      activeTab="overview"
+    >
+      <RequireScope scope="project:read" resourceId={project.id} level="page">
+        <div className="space-y-6">
+          <p className="text-muted-foreground max-w-3xl text-sm">
+            {CONNECTIONS_DESCRIPTION}
+          </p>
+          <Connections key={project.id} />
+        </div>
+      </RequireScope>
+    </TabbedPage>
+  );
 }
 
-function UserSessionsInner(): JSX.Element {
+function Connections(): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
   const filters = useFilterState(USER_SESSION_FILTERS);
@@ -189,74 +244,55 @@ function UserSessionsInner(): JSX.Element {
   }
 
   return (
-    <ResourceListPage
-      scope="project:read"
-      resourceId={project.id}
-      title="MCP Sessions"
-      description="Connections Speakeasy brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
-    >
-      <div className="space-y-8">
-        {/* `Page.Section` stacks two `mb-6`s under the description, which reads
-            as a dropped card when what follows is a surface rather than a
-            toolbar. Pulled back locally rather than changing the shared header,
-            which every list page is spaced against. */}
-        <div className="-mt-6 space-y-4">
-          <RemoteSessionRefreshPolicySetting />
-        </div>
+    <div className="space-y-4">
+      <Page.Toolbar>
+        <Page.Toolbar.Search
+          value={searchQuery}
+          onChange={setSearchQuery}
+          debounceMs={150}
+          placeholder="Search connections"
+        />
+        <Page.Toolbar.Filters
+          schema={USER_SESSION_FILTERS}
+          values={filters.values}
+          optionsById={optionsById}
+          onChange={handleFilterChange}
+          onClear={filters.clearValue as (id: string) => void}
+          onClearAll={filters.clearAll}
+        />
+        <Page.Toolbar.Refresh
+          onRefresh={() => void refetch()}
+          isRefreshing={isFetching}
+        />
+      </Page.Toolbar>
 
-        <div className="space-y-4">
-          <Page.Toolbar>
-            <Page.Toolbar.Search
-              value={searchQuery}
-              onChange={setSearchQuery}
-              debounceMs={150}
-              placeholder="Search connections"
-            />
-            <Page.Toolbar.Filters
-              schema={USER_SESSION_FILTERS}
-              values={filters.values}
-              optionsById={optionsById}
-              onChange={handleFilterChange}
-              onClear={filters.clearValue as (id: string) => void}
-              onClearAll={filters.clearAll}
-            />
-            <Page.Toolbar.Refresh
-              onRefresh={() => void refetch()}
-              isRefreshing={isFetching}
-            />
-          </Page.Toolbar>
-
-          {/* Outside the bar: the toolbar narrows which connections are listed,
-            while grouping re-cuts the ones that survived into a different
-            shape. Sitting it directly above the table it restructures — and
-            matching where the MCP server tab puts the same control — keeps the
-            two surfaces reading alike. */}
-          <div className="flex justify-end">
-            <SegmentedControl
-              value={grouping}
-              onChange={(value: string) =>
-                setGrouping(value as ConnectionGrouping)
-              }
-              options={GROUPING_OPTIONS}
-            />
-          </div>
-
-          {listBody}
-
-          {hasNextPage && (
-            <div className="flex justify-center">
-              <Button
-                variant="tertiary"
-                size="sm"
-                disabled={isFetchingNextPage}
-                onClick={() => void fetchNextPage()}
-              >
-                {isFetchingNextPage ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          )}
-        </div>
+      {/* Outside the bar: the toolbar narrows which connections are listed,
+        while grouping re-cuts the ones that survived into a different
+        shape. Sitting it directly above the table it restructures — and
+        matching where the MCP server tab puts the same control — keeps the
+        two surfaces reading alike. */}
+      <div className="flex justify-end">
+        <SegmentedControl
+          value={grouping}
+          onChange={(value: string) => setGrouping(value as ConnectionGrouping)}
+          options={GROUPING_OPTIONS}
+        />
       </div>
-    </ResourceListPage>
+
+      {listBody}
+
+      {hasNextPage && (
+        <div className="flex justify-center">
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={isFetchingNextPage}
+            onClick={() => void fetchNextPage()}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

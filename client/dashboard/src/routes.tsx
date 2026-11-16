@@ -449,8 +449,21 @@ const ROUTE_STRUCTURE = {
     title: "MCP Sessions",
     url: "mcp-sessions",
     icon: "users",
+    subPages: {
+      // Rolled out behind gram-user-session-issuer-dashboard, which the root
+      // checks; without it MCP Sessions shows no tabs.
+      configuration: {
+        title: "Configuration",
+        url: "configuration",
+        subPages: {
+          issuerDetail: {
+            title: "MCP Authentication Provider",
+            url: ":issuerId",
+          },
+        },
+      },
+    },
   },
-
   remoteIdentityProviders: {
     title: "Authorization Servers",
     url: "remote-identity-providers",
@@ -1160,12 +1173,12 @@ const ORG_ROUTE_STRUCTURE = {
   // Rolled out behind gram-user-session-issuer-dashboard, which the root
   // checks; the sidebar hides the entry while it is off.
   userSessionIssuers: {
-    title: "Speakeasy Authorization Servers",
+    title: "MCP Authentication",
     url: "user-session-issuers",
     icon: "key-round",
     subPages: {
       issuerDetail: {
-        title: "Speakeasy Authorization Server",
+        title: "MCP Authentication Provider",
         url: ":issuerId",
       },
     },

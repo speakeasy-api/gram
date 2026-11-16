@@ -11,12 +11,19 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { LabeledValue } from "@/components/setup-steps/StepBlocks";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import { Heading } from "@/components/ui/Heading";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { ScopeBadge } from "@/lib/remote-identity";
+import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 import { useOrgRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -26,6 +33,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { AuthenticationHostDialog } from "./AuthenticationHostDialog";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
+import { ProviderSettingsForm } from "./ProviderSettingsForm";
 import {
   authorizationServerModeLabel,
   consolidationTargets,
@@ -37,17 +45,39 @@ import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 
 export default function UserSessionIssuerDetail(): JSX.Element {
+  const orgRoutes = useOrgRoutes();
   // Gate the reads too, not only what renders.
   return (
     <RequireScope scope={["org:read", "org:admin"]} level="page">
-      <UserSessionIssuerDetailContent />
+      <IssuerDetailContent
+        listHref={orgRoutes.userSessionIssuers.href()}
+        detailHref={orgRoutes.userSessionIssuers.issuerDetail.href}
+      />
     </RequireScope>
   );
 }
 
-function UserSessionIssuerDetailContent(): JSX.Element {
+export type IssuerDetailLinks = {
+  /** Where "not found" sends people back to. */
+  listHref: string;
+  /** Another MCP Authentication Provider's page, after consolidating into it. */
+  detailHref: (issuerId: string) => string;
+};
+
+/**
+ * One MCP Authentication Provider, shared by the organization page and a
+ * project's MCP Sessions configuration. `editableProjectId` names the project
+ * whose own providers this page may change; organization-wide ones are always
+ * changed through the organization.
+ */
+export function IssuerDetailContent({
+  listHref,
+  detailHref,
+  editableProjectId,
+}: IssuerDetailLinks & {
+  editableProjectId?: string;
+}): JSX.Element {
   const { issuerId = "" } = useParams<{ issuerId: string }>();
-  const orgRoutes = useOrgRoutes();
   const query = useOrganizationUserSessionIssuer({ id: issuerId }, undefined, {
     throwOnError: false,
     retry: false,
@@ -66,16 +96,16 @@ function UserSessionIssuerDetailContent(): JSX.Element {
       notFound={
         missing
           ? {
-              title: "Authorization server not found",
+              title: "MCP Authentication Provider not found",
               description:
                 "It may have been consolidated into another one or removed.",
-              backTo: orgRoutes.userSessionIssuers.href(),
+              backTo: listHref,
             }
           : query.isError && !issuer
             ? {
-                title: "Couldn't load this authorization server",
+                title: "Couldn't load this MCP Authentication Provider",
                 description: "Reload the page to try again.",
-                backTo: orgRoutes.userSessionIssuers.href(),
+                backTo: listHref,
               }
             : undefined
       }
@@ -84,9 +114,18 @@ function UserSessionIssuerDetailContent(): JSX.Element {
         issuer
           ? [
               {
-                id: "sign-in",
-                label: "Sign-in",
-                content: <SignInSection issuer={issuer} />,
+                id: "settings",
+                label: "Settings",
+                content: (
+                  // The first section: the scroll layout leaves no room
+                  // under the hero.
+                  <div className="pt-8">
+                    <ProviderSettingsForm
+                      issuer={issuer}
+                      editableProjectId={editableProjectId}
+                    />
+                  </div>
+                ),
               },
               {
                 id: "mcp-servers",
@@ -94,14 +133,16 @@ function UserSessionIssuerDetailContent(): JSX.Element {
                 content: <McpServersSection issuer={issuer} />,
               },
               {
-                id: "settings",
-                label: "Settings",
-                content: <SettingsSection issuer={issuer} />,
+                id: "advanced",
+                label: "Advanced",
+                content: <AdvancedSection issuer={issuer} />,
               },
               {
                 id: "actions",
                 label: "Actions",
-                content: <ActionsSection issuer={issuer} />,
+                content: (
+                  <ActionsSection issuer={issuer} detailHref={detailHref} />
+                ),
               },
             ]
           : []
@@ -116,7 +157,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
       <Page.Eyebrow />
       <div className="flex items-center gap-3">
         <Text small muted>
-          Speakeasy authorization server
+          MCP Authentication Provider
         </Text>
         <ScopeBadge
           projectId={issuer.projectId}
@@ -130,48 +171,85 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
   );
 }
 
-function SignInSection({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
-  // The first section: the scroll layout leaves no room under the hero.
+/**
+ * How clients reach this provider to sign in. Rarely needed, so it stays
+ * closed; only a broken sign-in address shows without opening it.
+ */
+function AdvancedSection({
+  issuer,
+}: {
+  issuer: UserSessionIssuer;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const shared = issuer.authorizationServerMode === "shared";
+  const broken = shared && !issuer.issuerUrl;
   return (
-    <div className="pt-8">
-      <InfoSection title="Sign-in">
-        <InfoFieldGrid>
-          <InfoField label="Mode">
-            <InfoText>{authorizationServerModeLabel(issuer)}</InfoText>
-          </InfoField>
-          <InfoField label="Authentication host">
-            <InfoText>
-              {issuer.useAuthenticationHost ? "Opted in" : "Not opted in"}
-            </InfoText>
-          </InfoField>
-          {issuer.projectName ? (
-            <InfoField label="Project">
-              <InfoText>{issuer.projectName}</InfoText>
-            </InfoField>
-          ) : null}
-        </InfoFieldGrid>
-        {issuer.authorizationServerMode === "shared" ? (
-          issuer.issuerUrl ? (
-            <Stack gap={4}>
-              <LabeledValue label="Issuer URL" value={issuer.issuerUrl} />
-              <LabeledValue
-                label="Token endpoint"
-                value={issuer.tokenEndpoint}
+    <Stack gap={4}>
+      {broken ? (
+        <Text small className="text-destructive">
+          {unavailableReason(issuer)}, so its MCP servers sign clients in
+          through their own. Contact Speakeasy support to fix it.
+        </Text>
+      ) : null}
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="tertiary" size="sm">
+            <Button.LeftIcon>
+              <ChevronRight
+                aria-hidden="true"
+                className={cn(
+                  "size-4 transition-transform",
+                  open && "rotate-90",
+                )}
               />
-            </Stack>
-          ) : (
-            <Text small className="text-destructive">
-              {unavailableReason(issuer)}, so its MCP servers sign clients in
-              through their own. Contact Speakeasy support to fix it.
-            </Text>
-          )
-        ) : (
-          <Text small muted>
-            Each MCP server signs clients in at its own URL.
-          </Text>
-        )}
-      </InfoSection>
-    </div>
+            </Button.LeftIcon>
+            <Button.Text>Advanced</Button.Text>
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-4">
+          <InfoSection title="Sign-in">
+            <InfoFieldGrid>
+              <InfoField label="Mode">
+                <InfoText>{authorizationServerModeLabel(issuer)}</InfoText>
+              </InfoField>
+              <InfoField label="Authentication host">
+                <InfoText>
+                  {issuer.useAuthenticationHost ? "Opted in" : "Not opted in"}
+                </InfoText>
+              </InfoField>
+              <InfoField label="Sign-in flow">
+                <InfoText>
+                  {settingValue(
+                    "authn_challenge_mode",
+                    issuer.authnChallengeMode,
+                  )}
+                </InfoText>
+              </InfoField>
+              {issuer.projectName ? (
+                <InfoField label="Project">
+                  <InfoText>{issuer.projectName}</InfoText>
+                </InfoField>
+              ) : null}
+            </InfoFieldGrid>
+            {shared ? (
+              issuer.issuerUrl ? (
+                <Stack gap={4}>
+                  <LabeledValue label="Issuer URL" value={issuer.issuerUrl} />
+                  <LabeledValue
+                    label="Token endpoint"
+                    value={issuer.tokenEndpoint}
+                  />
+                </Stack>
+              ) : null
+            ) : (
+              <Text small muted>
+                Each MCP server signs clients in at its own URL.
+              </Text>
+            )}
+          </InfoSection>
+        </CollapsibleContent>
+      </Collapsible>
+    </Stack>
   );
 }
 
@@ -213,7 +291,7 @@ function McpServersSection({
     body = (
       <InlineEmptyState
         icon="server"
-        heading="No MCP servers use this authorization server"
+        heading="No MCP servers use this MCP Authentication Provider"
         description="Choose it in an MCP server's settings to have clients sign in here."
       />
     );
@@ -264,52 +342,13 @@ function McpServersSection({
   return <InfoSection title="MCP servers">{body}</InfoSection>;
 }
 
-function SettingsSection({
-  issuer,
-}: {
-  issuer: UserSessionIssuer;
-}): JSX.Element {
-  // Worded as the consolidation warnings word them, so the page and the
-  // dialog describe a setting the same way.
-  return (
-    <InfoSection title="Settings">
-      <InfoFieldGrid>
-        <InfoField label="Session length">
-          <InfoText>
-            {settingValue(
-              "session_duration_hours",
-              String(issuer.sessionDurationHours),
-            )}
-          </InfoText>
-        </InfoField>
-        <InfoField label="Sign-in flow">
-          <InfoText>
-            {settingValue("authn_challenge_mode", issuer.authnChallengeMode)}
-          </InfoText>
-        </InfoField>
-        <InfoField label="Client admission">
-          <InfoText>
-            {settingValue(
-              "client_id_metadata_admission_mode",
-              issuer.clientIdMetadataAdmissionMode,
-            )}
-          </InfoText>
-        </InfoField>
-      </InfoFieldGrid>
-      <Text small muted>
-        Change these in the settings of an MCP server that uses this
-        authorization server.
-      </Text>
-    </InfoSection>
-  );
-}
-
 function ActionsSection({
   issuer,
+  detailHref,
 }: {
   issuer: UserSessionIssuer;
+  detailHref: (issuerId: string) => string;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
   const [promoting, setPromoting] = useState(false);
   const [movingHost, setMovingHost] = useState(false);
@@ -367,9 +406,7 @@ function ActionsSection({
             onClose={() => setConsolidating(false)}
             // The source is gone afterwards; show the one that took its place.
             onConsolidated={(target) => {
-              void navigate(
-                orgRoutes.userSessionIssuers.issuerDetail.href(target.id),
-              );
+              void navigate(detailHref(target.id));
             }}
           />
         )}
