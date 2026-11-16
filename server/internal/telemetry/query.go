@@ -160,27 +160,9 @@ func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, wi
 	}
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	// Fold mode: canonical serves folded identities from the identity_map;
-	// shadow serves literal results and logs how the folded variant would
-	// differ; off keeps the Postgres-side per-request identity expansion.
-	var foldIdentities, shadowFold bool
-	if queryTouchesEmail(groupBy, filters) {
-		foldIdentities, shadowFold = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
-	}
-	// Shadow must replay the exact query fold mode would run: the original
-	// request filters, folded in-query. Cloned before the Postgres expansion
-	// below mutates the elements — feeding already-expanded aliases into the
-	// fold would mask Postgres-ahead/map-lag divergence.
-	var shadowFilters []repo.AttributeMetricsFilter
-	if shadowFold {
-		shadowFilters = slices.Clone(filters)
-	}
-	if !foldIdentities {
-		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
-	}
-
+	// Email filters and group-bys serve folded identities from the identity_map.
 	canonicalOrg := ""
-	if foldIdentities {
+	if queryTouchesEmail(groupBy, filters) {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	// IncludeDimensionValues defaults to true only via HTTP decoding; in-process
@@ -247,14 +229,6 @@ func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, wi
 		return nil, oops.E(oops.CodeUnexpected, err, "error running analytics query")
 	}
 
-	// The skill-version path reads raw telemetry through its own builders;
-	// shadow only validates the aggregate fold it will actually replace.
-	if shadowFold && !useSkillVersions {
-		shadowParams := params
-		shadowParams.Filters = shadowFilters
-		s.shadowCompareCanonicalFold(ctx, authCtx.ActiveOrganizationID, shadowParams, tableRows)
-	}
-
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
@@ -319,11 +293,11 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		dayRows []repo.TumBreakdownDayBucket
 		dimRows = make([][]repo.TumBreakdownDimDayBucket, len(tumBreakdownDims))
 	)
-	// The email breakdown folds to canonical identities when the org is on
-	// the fold; every other dimension and all totals are unaffected.
+	// The email breakdown folds to canonical identities; every other
+	// dimension and all totals are unaffected.
 	canonicalOrg := ""
 	if authCtx, _ := contextvalues.GetAuthContext(ctx); authCtx != nil {
-		canonicalOrg = s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -534,16 +508,8 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
-	var foldIdentities bool
-	if queryTouchesEmail("", filters) {
-		foldIdentities, _ = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
-	}
-	if !foldIdentities {
-		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
-	}
-
 	canonicalOrg := ""
-	if foldIdentities {
+	if queryTouchesEmail("", filters) {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	params := repo.ListSessionsParams{

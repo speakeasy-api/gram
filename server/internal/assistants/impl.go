@@ -198,6 +198,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		true,
 		canEnableMCP,
 		canBindEnvironment,
+		normalizeReasoningEffort(payload.ReasoningEffort),
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
@@ -245,7 +246,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.Status,
 		canEnableMCP,
 		canBindEnvironment,
-		runtimeSelectionChange{Version: payload.RuntimeVersion, ExpectedVersion: payload.ExpectedRuntimeVersion},
+		runtimeSelectionChange{Version: payload.RuntimeVersion, ExpectedVersion: payload.ExpectedRuntimeVersion, ReasoningEffort: payload.ReasoningEffort},
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "update assistant")

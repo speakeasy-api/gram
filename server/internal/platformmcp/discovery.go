@@ -287,12 +287,8 @@ func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) i
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
-	instructions := "Speakeasy's AI Control Plane puts MCP servers and skills in front of an organization's people. " +
-		"The listed tools only find or add an MCP server, check it is ready, install it, or answer setup how-to; use one only when its description fits. " +
-		"For any other request, first find the tool with search_platform_tools in plain words, then describe_platform_tool, then call_platform_tool. " +
-		"search_speakeasy_docs answers how-to questions only, never finds tools; cite its pages. " +
-		"Writes with a confirmed field: call first with confirmed:false, even if the user agreed, and show the preview; never ask before it. Send confirmed:true only after the user approves that preview. " +
-		"Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
+	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization, and manage access, logs, analytics, risk signals, exports, dashboards and Organizational Memory (team decisions). Call the listed tools directly. Before saying something can't be done, find the tool with search_platform_tools in plain words, then describe_platform_tool and call_platform_tool. Answer how-to questions with search_speakeasy_docs and cite its pages. " +
+		"Writes: call with confirmed:false first, even if the user agreed, and show the preview; send confirmed:true only after the user approves it. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."
 	}

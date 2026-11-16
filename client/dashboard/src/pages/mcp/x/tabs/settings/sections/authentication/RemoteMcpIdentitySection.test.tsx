@@ -2401,7 +2401,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     await waitFor(() =>
       expect(mocks.detachAssociation).toHaveBeenCalledWith({
         request: {
-          detachServerClientAssociationRequestBody: {
+          serverClientAssociationForm: {
             mcpServerId: "mcp-server-1",
             remoteSessionClientId: "client-1",
           },
@@ -2455,7 +2455,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     await waitFor(() =>
       expect(mocks.detachAssociation).toHaveBeenCalledWith({
         request: {
-          detachServerClientAssociationRequestBody: {
+          serverClientAssociationForm: {
             mcpServerId: "mcp-server-1",
             remoteSessionClientId: "unclaimed-client",
           },

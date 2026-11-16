@@ -2170,30 +2170,33 @@ func DecodeGetIssuerMigratePreflightRequest(mux goahttp.Muxer, decoder func(*htt
 	return func(r *http.Request) (*organizationusersessionissuers.GetIssuerMigratePreflightPayload, error) {
 		var payload *organizationusersessionissuers.GetIssuerMigratePreflightPayload
 		var (
-			sourceID     string
-			targetID     string
-			sessionToken *string
-			err          error
+			body GetIssuerMigratePreflightRequestBody
+			err  error
 		)
-		qp := r.URL.Query()
-		sourceID = qp.Get("source_id")
-		if sourceID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("source_id", "query string"))
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
-		targetID = qp.Get("target_id")
-		if targetID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("target_id", "query string"))
+		err = ValidateGetIssuerMigratePreflightRequestBody(&body)
+		if err != nil {
+			return payload, err
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+
+		var (
+			sessionToken *string
+		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewGetIssuerMigratePreflightPayload(sourceID, targetID, sessionToken)
+		payload = NewGetIssuerMigratePreflightPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3483,6 +3486,78 @@ func marshalOrganizationusersessionissuersUserSessionIssuerFieldMismatchToUserSe
 		Field:       v.Field,
 		SourceValue: v.SourceValue,
 		TargetValue: v.TargetValue,
+	}
+
+	return res
+}
+
+// marshalOrganizationusersessionissuersUserSessionIssuerMigrationServerImpactToUserSessionIssuerMigrationServerImpactResponseBody
+// builds a value of type *UserSessionIssuerMigrationServerImpactResponseBody
+// from a value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact.
+func marshalOrganizationusersessionissuersUserSessionIssuerMigrationServerImpactToUserSessionIssuerMigrationServerImpactResponseBody(v *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact) *UserSessionIssuerMigrationServerImpactResponseBody {
+	res := &UserSessionIssuerMigrationServerImpactResponseBody{
+		McpServerID:    v.McpServerID,
+		McpServerName:  v.McpServerName,
+		McpServerSlug:  v.McpServerSlug,
+		ProjectID:      v.ProjectID,
+		ProjectName:    v.ProjectName,
+		ImpactSeverity: string(v.ImpactSeverity),
+		Hosted:         v.Hosted,
+	}
+	if v.Reasons != nil {
+		res.Reasons = make([]string, len(v.Reasons))
+		for i, val := range v.Reasons {
+			res.Reasons[i] = string(val)
+		}
+	} else {
+		res.Reasons = []string{}
+	}
+	if v.ClientsBefore != nil {
+		res.ClientsBefore = make([]*UserSessionIssuerMigrationClientResponseBody, len(v.ClientsBefore))
+		for i, val := range v.ClientsBefore {
+			if val == nil {
+				res.ClientsBefore[i] = nil
+				continue
+			}
+			res.ClientsBefore[i] = marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody(val)
+		}
+	} else {
+		res.ClientsBefore = []*UserSessionIssuerMigrationClientResponseBody{}
+	}
+	if v.ClientsAfter != nil {
+		res.ClientsAfter = make([]*UserSessionIssuerMigrationClientResponseBody, len(v.ClientsAfter))
+		for i, val := range v.ClientsAfter {
+			if val == nil {
+				res.ClientsAfter[i] = nil
+				continue
+			}
+			res.ClientsAfter[i] = marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody(val)
+		}
+	} else {
+		res.ClientsAfter = []*UserSessionIssuerMigrationClientResponseBody{}
+	}
+	if v.PinnedClientIds != nil {
+		res.PinnedClientIds = make([]string, len(v.PinnedClientIds))
+		for i, val := range v.PinnedClientIds {
+			res.PinnedClientIds[i] = val
+		}
+	} else {
+		res.PinnedClientIds = []string{}
+	}
+
+	return res
+}
+
+// marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody
+// builds a value of type *UserSessionIssuerMigrationClientResponseBody from a
+// value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationClient.
+func marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody(v *organizationusersessionissuers.UserSessionIssuerMigrationClient) *UserSessionIssuerMigrationClientResponseBody {
+	res := &UserSessionIssuerMigrationClientResponseBody{
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		ClientID:              v.ClientID,
+		ProviderIssuer:        v.ProviderIssuer,
 	}
 
 	return res

@@ -483,8 +483,8 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 	return r
 }
 
-// WithCanonicalIdentityGate folds a member's own-scope email through the same
-// rollout switch the telemetry APIs use, so their hook rows match either way.
+// WithCanonicalIdentityGate folds a member's own-scope email the same way the
+// telemetry APIs do, so their hook rows match either way.
 func (r *PostgresReader) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *PostgresReader {
 	if r != nil {
 		r.identityGate = gate

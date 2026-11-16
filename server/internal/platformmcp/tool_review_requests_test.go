@@ -14,7 +14,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type stubMCPReviewRequests struct {
@@ -98,18 +97,6 @@ func TestMCPReviewRequestToolsRemainDiscoverableWithoutProjectGrant(t *testing.T
 	require.Len(t, visible, 2)
 	require.Equal(t, "request_mcp_review", visible[0].Name)
 	require.Equal(t, "get_my_mcp_review_request", visible[1].Name)
-}
-
-func TestMCPReviewRequestRolloutDenialIsFeatureUnavailable(t *testing.T) {
-	t.Parallel()
-
-	result, ok := reviewRequestToolResult(oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization"))
-	require.True(t, ok)
-	require.NotNil(t, result)
-	require.True(t, result.IsError)
-	text, ok := result.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.JSONEq(t, `{"code":"feature_unavailable","message":"MCP review requests are not available for this organization."}`, text.Text)
 }
 
 func TestMCPReviewRequestBudgetStopsBeforeEvidenceGathering(t *testing.T) {

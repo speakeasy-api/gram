@@ -8,14 +8,18 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 const operationGetOrganizationGatewayActivity = "get_organization_gateway_activity"
 
-const organizationGatewayActivityDescription = "Summarize calls dispatched through this organization's Organization Gateway across every project over a recent window: dispatched and failed calls, the discovery steps agents took (list_servers, describe_server, describe_tools), and the busiest MCP servers with their errors. Each server carries its mcp_id and project_slug for use with get_mcp and the diagnostics tools; project_slug is empty when you cannot read that server's project, so do not follow up on that server with a project-scoped tool. Constraints: aggregated server-side; carries the window it covers, how fresh the observations are, and whether there were any. No users, clients, or tokens are returned."
+const organizationGatewayActivityDescription = "Summarize calls dispatched through this organization's Organization Gateway across every project, or through one project's Project Gateway when project_slug is set, over a recent window: dispatched and failed calls, the discovery steps agents took (list_servers, describe_server, describe_tools), and the busiest MCP servers with their errors. Each server carries its mcp_id and project_slug for use with get_mcp and the diagnostics tools; project_slug is empty when you cannot read that server's project, so do not follow up on that server with a project-scoped tool. Constraints: aggregated server-side; carries the window it covers, how fresh the observations are, and whether there were any. No users, clients, or tokens are returned."
 
-// Organization-scoped like the dashboard tab, which requires org:read.
-var organizationGatewayActivityMeta = ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone, DiscoveryScopes: discoveryOrgRead}
+// The whole Organization Gateway needs org:read, like its dashboard page; one
+// project's gateway needs project:read, like the Project Gateway page. Either
+// scope makes the tool discoverable, and the call checks the one it needs.
+var organizationGatewayActivityMeta = ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone, DiscoveryScopes: []authz.Scope{authz.ScopeOrgRead, authz.ScopeProjectRead}}
 
 func registerOrganizationGatewayActivityTool(reg *Registrar, service *OrganizationGatewayActivityService) {
 	if !service.valid() {
@@ -57,6 +61,10 @@ func organizationGatewayActivityToolResult(err error) (*mcp.CallToolResult, bool
 	switch {
 	case errors.Is(err, ErrDiagnosticWindowInvalid), errors.Is(err, ErrDiagnosticWindowTooLong):
 		result.Code, result.Message = "invalid_request", "That window is not supported. Use 1h, 24h, 7d, or 30d."
+	case errors.Is(err, ErrProjectGatewayActivityProjectInvalid):
+		result.Code, result.Message = "invalid_request", "project_slug must name a project, as list_projects returns it."
+	case errors.Is(err, ErrProjectGatewayActivityProjectNotFound):
+		result.Code, result.Message = "not_found", "That project is not available to you. Pass a project_slug from list_projects."
 	case errors.Is(err, ErrOrganizationGatewayActivityUnavailable):
 		result.Code, result.Message = unavailableCode, "Organization Gateway activity is temporarily unavailable."
 	default:

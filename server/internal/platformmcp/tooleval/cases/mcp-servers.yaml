@@ -115,6 +115,18 @@
   expect: [get_organization_gateway_activity]
   args:
     window: 7d
+- id: mcp-project-gateway-activity
+  prompt: How many calls went through the Default project's gateway in the last day, and which servers failed?
+  expect: [get_organization_gateway_activity]
+  args:
+    window: 24h
+    project_slug: default
+- id: mcp-project-gateway-sessions
+  prompt: How many active authorizations does the Default project's gateway have right now, and are they people or agents?
+  expect: [list_gateway_sessions]
+  args:
+    scope: project
+    project_slug: default
 
 # Adding servers from the reviewed catalogue or from a URL.
 - id: mcp-catalog-search-notion

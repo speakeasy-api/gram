@@ -27,6 +27,10 @@ type Service interface {
 	// IP allowlist, not while an organization admin has turned it off, and not for
 	// a disabled organization. Requires org:read.
 	GetGateway(context.Context, *GetGatewayPayload) (res *OrganizationGateway, err error)
+	// Get the selected project's Project Gateway: the organization's gateway
+	// limited to that project's MCP servers. It is served under the same
+	// conditions as the organization's gateway. Requires project:read.
+	GetProjectGateway(context.Context, *GetProjectGatewayPayload) (res *ProjectGateway, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
@@ -97,7 +101,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"get", "getGateway", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
+var MethodNames = [20]string{"get", "getGateway", "getProjectGateway", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -166,6 +170,13 @@ type GetOnboardingStatusPayload struct {
 // GetPayload is the payload type of the organizations service get method.
 type GetPayload struct {
 	SessionToken *string
+}
+
+// GetProjectGatewayPayload is the payload type of the organizations service
+// getProjectGateway method.
+type GetProjectGatewayPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // ListInvitesPayload is the payload type of the organizations service
@@ -319,6 +330,17 @@ type OrganizationUser struct {
 	UpdatedAt          string
 	// Timestamp of the user's most recent login.
 	LastLogin *string
+}
+
+// ProjectGateway is the result type of the organizations service
+// getProjectGateway method.
+type ProjectGateway struct {
+	// Whether the project is served a gateway.
+	Available bool
+	// The gateway's MCP URL. Set only when available.
+	URL *string
+	// Why the gateway is not served. Set only when not available.
+	UnavailableReason *string
 }
 
 // RemoveUserPayload is the payload type of the organizations service

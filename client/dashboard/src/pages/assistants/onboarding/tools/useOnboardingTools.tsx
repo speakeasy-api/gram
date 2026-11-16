@@ -235,6 +235,7 @@ async function ensureAssistant(
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
       model: payload.model ?? DEFAULT_ASSISTANT_MODEL,
+      reasoningEffort: draft.getReasoningEffort(),
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined
@@ -1358,20 +1359,13 @@ function buildAssistantTools(deps: ToolDeps) {
           const res = await sdk.tools.list({
             urnPrefix: urn_prefix,
             limit,
-            toolTypes: [
-              "http",
-              "function",
-              "prompt",
-              "platform",
-              "externalmcp",
-            ],
+            toolTypes: ["http", "function", "prompt", "platform"],
           });
           return okResult({
             tools: res.tools.map((t) => {
               const def =
                 t.httpToolDefinition ??
                 t.functionToolDefinition ??
-                t.externalMcpToolDefinition ??
                 t.platformToolDefinition;
               const prompt = t.promptTemplate;
               return {
@@ -1380,7 +1374,6 @@ function buildAssistantTools(deps: ToolDeps) {
                 tool_urn:
                   t.httpToolDefinition?.toolUrn ??
                   t.functionToolDefinition?.toolUrn ??
-                  t.externalMcpToolDefinition?.toolUrn ??
                   t.platformToolDefinition?.toolUrn,
               };
             }),
@@ -1415,7 +1408,7 @@ function buildAssistantTools(deps: ToolDeps) {
               description: e.description,
               entry_names: e.entries.map((entry) => entry.name),
               populated_entry_names: e.entries
-                .filter((entry) => entry.value !== "<EMPTY>")
+                .filter((entry) => entry.hasValue)
                 .map((entry) => entry.name),
             })),
           });

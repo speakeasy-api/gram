@@ -5,76 +5,47 @@ description: Use when adding, integrating, changing, or reviewing a provider's M
 
 # Implementing MCP provider setup
 
-Extend approved setup from first entry through connection completion. Reuse existing components and actions; verify progression end to end.
+Extend the approved Catalog Add → server Setup → verified connection flow. Slack, GitHub, Salesforce, Snowflake and Okta are implemented; choose the relevant existing implementation before adding another.
 
-## Establish scope before editing
+## Read the owning reference
 
-1. Read the full provider issue, acceptance criteria and reviewed decisions through connected Linear. Search Linear before asking for identifiers. Separate provider work from shared-backend and validation issues. Identify unavailable requirements rather than inventing them.
-2. Inspect Git status, branch/base and worktrees. Locate the established working flow (such as Slack/GitHub) and requested provider implementation, including dirty reference files.
-3. Briefly state provider/issue, base, reuse files and unresolved requirements. Keep the new diff provider-scoped; preserve inherited providers and fixes.
+| Task                                                                 | Reference                                                                                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Locate components, installers, state and focused tests               | [Developer code map and extension checklist](../../../client/dashboard/src/pages/catalog/provider-setup/README.md) |
+| Resolve provider endpoint, app, scopes or authentication differences | [Provider contracts](references/provider-contracts.md), relevant provider section                                  |
+| Change credential saving, authorization or connection testing        | [Backend contract](../../../server/internal/remotesessions/SETUP.md)                                               |
+| Change shared components or styling                                  | `frontend` skill                                                                                                   |
 
-**Ready to implement:** scope, base, first-time sequence and provider contracts are established. Keep unresolved branches pending; continue authorized work.
+## 1. Establish scope and evidence
 
-## Source precedence and UI approval
+Read the provider issue, acceptance criteria and reviewed decisions. Inspect Git status, branch/base and existing implementation; treat dirty reference checkouts as read-only. State the exact catalog integration, reuse files, supported branches and missing contracts. Keep provider work separate from backend, catalog publication and rollout work.
 
-Use this order:
+Use current user instructions and approvals, then reviewed decisions to establish intended behavior. Use owning APIs and merged code for implemented behavior, current provider documentation for upstream requirements, and approved design lineage for appearance. Published product guides may describe an older manual flow: identify conflicts rather than replacing merged behavior or silently dropping approved choices. Read linked sources directly before asserting support or absence. Documented settings, controlled checks and live verification are distinct evidence.
 
-1. The user's current instructions and explicit approvals.
-2. The provider issue and its reviewed decisions.
-3. Current published product/provider setup documentation and verified owning API/backend contracts for behavior.
-4. Existing provider React implementation and shared components for reuse; approved design lineage for presentation.
+**Approval gate:** changes to approved layout, navigation, sequence, interactions, controls or provider behavior require a concrete proposal and explicit approval. Silence is not approval. Wiring verified actions and fixing defects within approved behavior need no renewed approval. Continue independent work when one path is blocked. This gate overrides generic frontend guidance to choose a design without the user.
 
-Read the current linked source before asserting support or absence. Cached summaries and excerpts can lag; their omissions do not justify removing approved choices. Compare current sources and ask on unresolved conflicts.
+Use the merged React implementation located by the code map as the presentation baseline. Historical design files may exist only in reference worktrees; when supplied, follow their reviewed lineage and keep rejected research excluded unless explicitly authorized. Missing artifacts do not authorize substitute UI. Designs establish presentation, not provisioning or activation capabilities.
 
-Establish every offered branch against those behavioral sources before wiring it. Demo/prototype branches remain proposed UI until their contracts are verified. Approval to reuse a demo does not establish provisioning, support, authentication or activation capabilities. Keep distinct registry integrations separate; a shared provider name does not make them interchangeable. Resolve conflicts with the user using the exact sources rather than combining them into an invented flow.
+## 2. Preserve the installed-server journey
 
-Record each branch's authoritative sources and distinguish documented candidate settings, implemented contracts, controlled checks and live provider verification.
+Trace actual Catalog Add through name, identity and optional guardrails to the installed server's Setup page. Provider configuration belongs there; preserve external app-registration and support handoffs. Guided setup applies to User Identity. Preserve other identity modes and bulk/headless callers; an unconfigured guided server may initially derive identity mode `none`.
 
-Find previous work through `git worktree list`, repository search and linked branches/PRs. Read reference files without editing that checkout. Adapt provider-specific pieces so inherited fixes survive.
+Treat creation, configuration, verification and serving as separate transitions: create guided catalog servers disabled, open their Setup page, then configure them. Account-specific endpoints additionally use the existing temporary-endpoint installation path. Before declaring a missing final URL a creation blocker, inspect create/update APIs and disabled-state guards. An approved temporary endpoint must skip probing, automatic identity configuration and icon discovery. Replace it before OAuth or testing; backend guards must reject enabled creation and enablement while it remains. Cover direct routes, reload, Settings and gateway entry. Preserve installer guardrails, rollback and catalog authentication metadata.
 
-When design evidence is needed, follow `setup-design-lineage.json`. Approved appearance does not establish provider outcomes. `designs/research/` is excluded without explicit authorization; missing files do not authorize substitute UI.
+If the contract cannot safely preserve this sequence, identify the exact missing behavior and ask for guidance. A pre-creation wizard or extra Add-modal fields require approval.
 
-**Approval gate:** before changing approved layout, navigation, sequence, interactions, controls or provider behavior, show the concrete difference and obtain explicit approval. Silence is not approval. Continue independent work while waiting; keep dependent UI unchanged. This overrides generic frontend guidance to choose a design when the user is unavailable. Reusing approved UI, wiring verified actions and fixing defects within that behavior do not require renewed approval.
+## 3. Reuse connection actions and write usable instructions
 
-## First-time entry and progression
+Extend shared behavior when another provider needs it; keep provider contracts isolated. Use the backend contract for save/read/sign-in/test semantics. Preserve dedicated-issuer safeguards, exact-server/user checks, API-provided callbacks and the generated `testServerConnectionRequestBody` binding. Keep `providerSetupEnabled` fail-closed at catalog, sidebar and direct route; the backend independently gates testing.
 
-Trace first-time entry through every intermediate screen and decision to completion. Catalog onboarding includes the actual **Add** action; other entries matter when affected. Compare handlers and user actions against the established working flow and approved React implementation.
+Persist only non-secret choices and navigation. Configuration/source changes invalidate authorization and test results; stale operations cannot restore readiness. Returning from OAuth is not authorization evidence. Reopening requires fresh verification. Complete only after `ready` with a tool count, to the approved Overview, gateway or policy destination. Salesforce's support branch terminates at its documented handoff.
 
-Keep each provider choice at its approved step. Preserve approved identity choices and unaffected installation paths. An existing generic component does not authorize extra steps or relocating fields; restore the approved sequence or obtain approval under the gate above.
+Use numbered actions beside the relevant fields or SQL, after prerequisites. Explain who supplies each value. Show instructions and headings before inputs are filled; incomplete SQL can withhold copying with a reason while instructions remain visible. Preserve inline correction, cancellation and retry. Distinguish save failure, partial configuration and post-save handoff failure. Follow the [current recovery boundaries](../../../client/dashboard/src/pages/catalog/provider-setup/README.md#recovery-boundaries): gateway retry can repeat credential commit, so do not promise handoff-only recovery.
 
-## Reuse map
+## 4. Verify and hand off
 
-Inspect referenced paths on the active branch.
+Use the code map's verification matrix for affected behavior and shared-provider regressions. Cover empty, invalid, loading, failure, retry and completed states, plus supported new/existing app branches. Test actual entry paths, changed configuration, interrupted progress, correction destinations and retained values, not just standalone task rendering. Use `gram-playwright-cli` for browser checks, including narrow layouts. Report controlled API/OAuth checks separately from live provider authorization and authenticated discovery; never execute upstream tools to verify setup.
 
-| Existing surface                                                                                                    | Reuse for                                                                     |
-| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `client/dashboard/src/pages/mcp/x/setup/ProviderSetupPage.tsx`                                                      | Page shell, header, step rail, footer, completion to Overview                 |
-| `client/dashboard/src/pages/catalog/provider-setup/ProviderTasks.tsx`, `shared.tsx`, `state.ts`, `provider-data.ts` | Provider tasks, shared controls, branching and invalidation                   |
-| `client/dashboard/src/pages/catalog/provider-setup/ConnectionTask.tsx`                                              | Dependent action rows, inline failures and correction links                   |
-| `client/dashboard/src/pages/catalog/provider-setup/setup-context.ts`                                                | Shared setup state and live status types                                      |
-| `client/dashboard/src/pages/mcp/x/setup/useProviderConnection.ts`                                                   | Real credential save, OAuth, verification and stale-operation protection      |
-| `client/dashboard/src/pages/mcp/x/setup/provider-setup.ts`                                                          | Exact endpoint matching, installation handoff and non-secret browser progress |
-| `server/internal/remotesessions/SETUP.md`                                                                           | Backend contract and identity boundaries                                      |
+Assess Platform MCP, Command K and demo seed through their skills. Registration or stored authorization is not a live connection test. Existing inspect/register tools can provide secure dashboard continuation; owner-run SQL and browser secret entry do not imply agent provisioning. Command K indexes canonical Overview; reassess exclusions when navigation changes. Seed new stored data when needed, never secrets or grants.
 
-Preserve provider-specific requirements while sharing layout and actions. Follow `frontend` for components, tokens and implementation standards.
-
-## Integrate real behavior
-
-Read the backend contract before adapting actions. Reuse supported shared operations and generated bindings. Obtain actual callbacks, selected endpoints and provider scopes from their authoritative sources. Persist the selected endpoint as the actual upstream URL. Verify provider-specific OAuth requirements; another provider's settings are not evidence.
-
-Preserve secret-free reads/progress, invalidation when app, environment, server or setup path changes, permission-change authorization invalidation, inline recovery, and rejection of stale asynchronous results. Returning from an OAuth popup is not verified sign-in. Completion requires the real connection result and opens Overview.
-
-Surface unresolved product decisions and missing capabilities as separate scope decisions. Continue independent work whose contracts are established, without implying end-to-end verification or simulating success.
-
-## Verify the extension
-
-Check every issue criterion against code and observed behavior. In the signed-in dashboard, exercise the intended first-time entry and follow the approved sequence to completion, including intermediate controls and handoffs. A direct Setup URL or an already-installed server does not establish that initial experience; report partial coverage explicitly. Cover supported new/existing app paths, callback/scopes and completion gating. Test loading, failure, retry, interrupted progress, invalidation and other identity modes where the change affects them. Spot-check affected providers after shared changes. Use focused tests, dashboard type-check/lint/knip and `gram-playwright-cli`, including a narrow viewport.
-
-Report the exact click path observed and any unverified entry points; claim similarity only for the interactions actually compared. Report controlled-response tests separately from live provider authorization. Assess Platform MCP, Command K and demo-seed implications using their repository skills. Before handoff, compare the diff to the intended base and account for every changed surface. Commit, publish, change Linear, or attach a demo only within the user's authorization.
-
-## Observed mistakes to avoid
-
-- Rebuilding approved HTML while existing provider React code sits in a previous worktree: locate and reuse that code first.
-- Carrying all providers into one provider issue: transfer only the requested provider and necessary shared integration.
-- Reporting simulated or controlled success as a live connection: label the evidence accurately.
-- Claiming equivalent onboarding from shared components or a later screen: compare the user’s first-time progression end to end.
+Compare the diff to its intended base. Account for each changed surface, criterion, verification result, blocker and catalog publication requirement. Commit, push, change Linear or attach demos within user authorization. Customer guides and FDE enablement remain rollout work under GRW-331.

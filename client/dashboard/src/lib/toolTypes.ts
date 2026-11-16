@@ -1,5 +1,4 @@
 import { useLatestDeployment } from "@/hooks/toolTypes";
-import type { ExternalMCPToolDefinition } from "@gram/client/models/components/externalmcptooldefinition.js";
 import type { FunctionResourceDefinition } from "@gram/client/models/components/functionresourcedefinition.js";
 import type { FunctionToolDefinition } from "@gram/client/models/components/functiontooldefinition.js";
 import type { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition.js";
@@ -24,10 +23,7 @@ export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
   | ({ type: "prompt" } & PromptTemplate)
   | ({ type: "function" } & FunctionToolDefinition)
-  | ({ type: "platform" } & PlatformToolDefinition)
-  | ({ type: "external-mcp" } & ExternalMCPToolDefinition & {
-        isProxy: boolean;
-      });
+  | ({ type: "platform" } & PlatformToolDefinition);
 export type ToolWithAnnotations = Extract<
   Tool,
   { type: "http" | "function" | "platform" }
@@ -48,7 +44,7 @@ const PLATFORM_SOURCE_LABELS: Record<string, string> = {
   logs: "MCP Logs",
 };
 
-const asTool = (tool: GeneratedTool): Tool | undefined => {
+const asTool = (tool: GeneratedTool): Tool => {
   if (tool.httpToolDefinition) {
     return { type: "http", ...tool.httpToolDefinition };
   } else if (tool.promptTemplate) {
@@ -57,23 +53,13 @@ const asTool = (tool: GeneratedTool): Tool | undefined => {
     return { type: "function", ...tool.functionToolDefinition };
   } else if (tool.platformToolDefinition) {
     return { type: "platform", ...tool.platformToolDefinition };
-  } else if (tool.externalMcpToolDefinition) {
-    if (tool.externalMcpToolDefinition.type !== "proxy") {
-      return {
-        ...tool.externalMcpToolDefinition, // Has to be done in this order because externalMcpToolDefinition also has a type field
-        type: "external-mcp",
-        isProxy: tool.externalMcpToolDefinition.type === "proxy",
-      };
-    } else {
-      return undefined; // Omit external MCP proxy tools, as they require special handling
-    }
   } else {
     throw new Error("Unexpected tool type");
   }
 };
 
 export const asTools = (tools: GeneratedTool[]): Tool[] => {
-  return tools.map(asTool).filter((t) => t !== undefined);
+  return tools.map(asTool);
 };
 
 export type Resource = { type: "function" } & FunctionResourceDefinition;
@@ -176,8 +162,6 @@ export const getToolSourceLabel = (
       return "Functions";
     case "platform":
       return PLATFORM_SOURCE_LABELS[tool.sourceSlug] ?? "Platform";
-    case "external-mcp":
-      return tool.registryServerName || "External MCP";
     case "prompt":
       return "Prompts";
   }
@@ -193,7 +177,6 @@ const getToolSourcePrefix = (tool: Tool, context: ToolDisplayContext = {}) => {
         return documentIdToSlug[tool.openapiv3DocumentId];
       }
       return null;
-    case "external-mcp":
     case "function":
     case "platform":
     case "prompt":
@@ -211,8 +194,6 @@ export const getToolTypeLabel = (tool: Tool): string => {
       return "Function";
     case "platform":
       return "Platform";
-    case "external-mcp":
-      return "External MCP";
     case "prompt":
       return "Prompt";
   }

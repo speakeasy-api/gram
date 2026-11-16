@@ -15,8 +15,8 @@ import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetMetaMcpServerUsage } from "@gram/client/funcs/telemetryGetMetaMcpServerUsage";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import { telemetryGetOrganizationGatewayOverview } from "@gram/client/funcs/telemetryGetOrganizationGatewayOverview";
-import { telemetryGetOrganizationGatewayUsage } from "@gram/client/funcs/telemetryGetOrganizationGatewayUsage";
+import { telemetryGetProjectGatewayOverview } from "@gram/client/funcs/telemetryGetProjectGatewayOverview";
+import { telemetryGetProjectGatewayUsage } from "@gram/client/funcs/telemetryGetProjectGatewayUsage";
 import type { GetMetaMcpServerUsageResult } from "@gram/client/models/components/getmetamcpserverusageresult.js";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
@@ -107,8 +107,9 @@ function LoadError({ what }: { what: string }): JSX.Element {
   );
 }
 
-// A stored gateway, read in its project, or the caller's Organization
-// Gateway, read across every project in the organization.
+// A stored gateway, or the selected project's Project Gateway: the
+// Organization Gateway limited to that project's servers. Both are read in
+// the selected project.
 export type GatewayActivityScope =
   | {
       kind: "gateway";
@@ -116,7 +117,7 @@ export type GatewayActivityScope =
       memberRows: MemberRow[];
       isLoadingMembers?: boolean;
     }
-  | { kind: "organization"; organizationId: string };
+  | { kind: "project"; projectId: string };
 
 // Gateway-attributed usage for the selected range: the shared overview
 // metrics scoped to calls dispatched through this gateway, the discovery
@@ -127,7 +128,7 @@ export function GatewayActivitySection({
 }: {
   scope: GatewayActivityScope;
 }): JSX.Element {
-  const isOrganization = scope.kind === "organization";
+  const isProjectGateway = scope.kind === "project";
   const metaMcpServerId =
     scope.kind === "gateway" ? scope.metaMcpServerId : undefined;
   const memberRows = scope.kind === "gateway" ? scope.memberRows : noMembers;
@@ -150,12 +151,13 @@ export function GatewayActivitySection({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
   const rangeKey = [
-    scope.kind === "gateway" ? scope.metaMcpServerId : scope.organizationId,
+    scope.kind === "gateway" ? scope.metaMcpServerId : scope.projectId,
     from.toISOString(),
     to.toISOString(),
   ];
   // Logs and insights read the same range params, so links carry the range
-  // shown here. Both are project pages, so the Organization Gateway has none.
+  // shown here. They filter by a stored gateway, so the Project Gateway, which
+  // has none, gets no links.
   const gatewayScopedSearch = useMemo(() => {
     if (!metaMcpServerId) return undefined;
     const params = new URLSearchParams();
@@ -200,8 +202,8 @@ export function GatewayActivitySection({
                   includeTimeSeries: true,
                 },
               })
-            : telemetryGetOrganizationGatewayOverview(client, {
-                getOrganizationGatewayActivityPayload: { from, to },
+            : telemetryGetProjectGatewayOverview(client, {
+                getProjectGatewayActivityPayload: { from, to },
               }),
         ),
       placeholderData: keepPreviousData,
@@ -217,8 +219,8 @@ export function GatewayActivitySection({
             ? telemetryGetMetaMcpServerUsage(client, {
                 getMetaMcpServerUsagePayload: { metaMcpServerId, from, to },
               })
-            : telemetryGetOrganizationGatewayUsage(client, {
-                getOrganizationGatewayActivityPayload: { from, to },
+            : telemetryGetProjectGatewayUsage(client, {
+                getProjectGatewayActivityPayload: { from, to },
               }),
         ),
       placeholderData: keepPreviousData,
@@ -260,7 +262,7 @@ export function GatewayActivitySection({
     : "No dispatched calls for the selected time range";
   const noMemberCallsMessage = stoppedAtDiscovery
     ? "No execute_tool calls were observed in the selected range; agents only used the discovery tools."
-    : isOrganization
+    : isProjectGateway
       ? "No server calls in the selected range."
       : "No member calls in the selected range.";
 
@@ -272,7 +274,7 @@ export function GatewayActivitySection({
         Activity
       </Page.Section.Title>
       <Page.Section.Description>
-        {isOrganization
+        {isProjectGateway
           ? "Calls dispatched to MCP servers through execute_tool, the discovery steps agents took to reach them, and how the load spread across servers."
           : "Calls dispatched to members through execute_tool, the discovery steps agents took to reach them, and how the load spread across members."}
       </Page.Section.Description>
@@ -386,14 +388,14 @@ export function GatewayActivitySection({
                 />
                 <div className="border p-5">
                   <h3 className="text-eyebrow mb-3">
-                    {isOrganization ? "Calls by server" : "Calls by member"}
+                    {isProjectGateway ? "Calls by server" : "Calls by member"}
                   </h3>
                   {(usage.isLoading && !usage.data) || isLoadingMembers ? (
                     <SkeletonTable />
                   ) : (
                     <Table
                       columns={memberColumns(
-                        isOrganization ? "Server" : "Member",
+                        isProjectGateway ? "Server" : "Member",
                       )}
                       data={members}
                       rowKey={(row) => row.mcpServerId}

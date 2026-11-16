@@ -68,7 +68,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 	require.NoError(t, err)
 	routeToggle, err := NewDataExportRouteToggleService(logger, pool, dataexports.NewRouteEnabledCore(auditLogger, encryption), authorizer, budget)
 	require.NoError(t, err)
-	shadowInventory, err := NewShadowInventoryService(stubShadowInventory{}, stubShadowReview{}, flags, slugs, platformrepo.New(pool), budget, key)
+	shadowInventory, err := NewShadowInventoryService(stubShadowInventory{}, stubShadowReview{}, platformrepo.New(pool), budget, key)
 	require.NoError(t, err)
 	reader := NewPostgresReader(logger, pool).
 		WithAuthorization(engine).

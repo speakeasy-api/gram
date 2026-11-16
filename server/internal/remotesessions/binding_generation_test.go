@@ -62,7 +62,7 @@ func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	// Token refresh updates tokens without changing the attached authorization.
 	refreshed, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
 		SubjectUrn: source.SubjectUrn, RemoteSessionClientID: source.RemoteSessionClientID,
-		ExpectedUpdatedAt: source.UpdatedAt, AccessTokenEncrypted: source.AccessTokenEncrypted,
+		ExpectedUpdatedAt: source.UpdatedAt, AccessTokenEncrypted: source.AccessTokenEncrypted.String,
 		AccessExpiresAt: source.AccessExpiresAt, RefreshTokenEncrypted: source.RefreshTokenEncrypted,
 		Scopes: source.Scopes,
 	})
@@ -71,7 +71,7 @@ func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
 	require.NoError(t, err)
 	// The OAuth callback upsert replaces the grant on the SAME active row.
-	replacement, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: config, RemoteSessionClientID: source.RemoteSessionClientID, AccessTokenEncrypted: source.AccessTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(2 * time.Hour)), Scopes: []string{"tools:read", "tools:write"}, UpstreamDisplayName: conv.ToPGText("New upstream account"), UpstreamEmail: conv.ToPGText("new@example.test")})
+	replacement, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: config, RemoteSessionClientID: source.RemoteSessionClientID, AccessTokenEncrypted: source.AccessTokenEncrypted.String, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(2 * time.Hour)), Scopes: []string{"tools:read", "tools:write"}, UpstreamDisplayName: conv.ToPGText("New upstream account"), UpstreamEmail: conv.ToPGText("new@example.test")})
 	require.NoError(t, err)
 	require.Equal(t, source.ID, replacement.ID)
 	require.Equal(t, source.GrantGeneration+1, replacement.GrantGeneration)

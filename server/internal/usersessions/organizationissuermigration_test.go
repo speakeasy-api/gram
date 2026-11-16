@@ -573,7 +573,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.True(t, preflight.CanMigrate)
 	require.Equal(t, 1, preflight.RemoteSessionCount)
 
-	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	require.Equal(t, 1, result.RemoteSessionsMigrated)
 
@@ -594,6 +594,18 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
 	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "two distinct target upstream issuers must fail closed")
+
+	// The server was its source issuer's only consumer, so consolidation
+	// pinned the client it used. As the target's only consumer it also takes
+	// the client the target bound, which the preview reports before it does.
+	require.Len(t, preflight.ServerImpacts, 1)
+	impact := preflight.ServerImpacts[0]
+	require.Equal(t, mcpServerID.String(), impact.McpServerID)
+	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("warning"), impact.ImpactSeverity)
+	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"changes_provider", "pinned"}, impact.Reasons)
+	require.Equal(t, []string{remoteClient.ID.String()}, impact.PinnedClientIds)
+	require.Len(t, impact.ClientsAfter, 2)
+	require.Len(t, result.ServerImpacts, 1, "the migrate result reports the same change")
 }
 
 func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
@@ -611,9 +623,11 @@ func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
 
 	organizationTarget, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "rbac-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
 	require.NoError(t, err)
+	// The preflight runs the consolidation and rolls it back, taking its
+	// locks, so it needs the same scope as the consolidation.
 	readCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
 	_, err = ti.service.GetIssuerMigratePreflight(readCtx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.ID, TargetID: organizationTarget.ID})
-	require.NoError(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.MigrateIssuer(readCtx, &orggen.MigrateIssuerPayload{SourceID: source.ID, TargetID: organizationTarget.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.MoveIssuer(readCtx, &orggen.MoveIssuerPayload{ID: source.ID})

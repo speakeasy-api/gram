@@ -73,10 +73,10 @@ ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 -- name: LocalGrantToolLogVisibility :exec
 -- log:read is likewise held by no system role, so without it the Tool Logs page
 -- and the session Tool calls view would be closed to the local admin.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id::text, 'user:' || @user_id::text, 'log:read', NULL,
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id::text, 'user:' || @user_id::text, 'log:read',
         jsonb_build_object('resource_kind', 'project', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING;
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 
 -- name: LocalEnablePlatformMCPFeature :exec
 -- platform_mcp is the default-on organization entitlement locally; the shared
