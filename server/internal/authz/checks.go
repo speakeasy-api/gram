@@ -3,7 +3,11 @@ package authz
 import "slices"
 
 // MCPToolCallDimensions carries the typed attributes of an MCP tool call.
-// Zero-value fields are omitted from the check dimensions.
+// Zero-value fields are omitted from the check dimensions. Disposition is the
+// tool's classification from DispositionFromHints, unannotated for a tool with
+// no true hint; leave it empty only when the tool's annotations are unknown,
+// such as a tool missing from the catalog, so a grant limited to any
+// disposition refuses the call.
 type MCPToolCallDimensions struct {
 	Tool        string
 	Disposition string
@@ -11,11 +15,12 @@ type MCPToolCallDimensions struct {
 }
 
 // MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
-// dims.ProjectID is required: evaluation rejects an MCP check without one. An
-// empty dims.Disposition is a tool with no annotations and is carried as
-// DispositionUnannotated; classify with DispositionFromHints.
+// dims.ProjectID is required: evaluation rejects an MCP check without one.
 func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
-	dimensions := map[string]string{SelectorKeyDisposition: toolCallDisposition(dims.Disposition)}
+	dimensions := map[string]string{}
+	if dims.Disposition != "" {
+		dimensions[SelectorKeyDisposition] = dims.Disposition
+	}
 	if dims.Tool != "" {
 		dimensions[SelectorKeyTool] = dims.Tool
 	}
@@ -28,8 +33,9 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 // validateCheckOperation holds a check to the operation it was built as.
 // Only a tool call carries a tool or a disposition: a check that names a tool
 // without being built as a tool call is refused, so it can never be read as a
-// connection or the reverse. A tool call may still leave either out, as a
-// tool with no annotations has no disposition to carry.
+// connection or the reverse. A tool call may still leave either out: a tool
+// whose annotations are unknown has no disposition to carry, and a grant
+// limited to a disposition refuses it.
 func validateCheckOperation(c Check) error {
 	_, hasTool := c.Dimensions[SelectorKeyTool]
 	_, hasDisposition := c.Dimensions[SelectorKeyDisposition]

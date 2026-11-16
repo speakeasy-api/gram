@@ -38,8 +38,8 @@ func TestToolDispositionResolver_DerivesFromMetadata(t *testing.T) {
 		Tools: []*gen.ToolMetadataForm{
 			{ToolName: "list_items", Title: nil, ReadOnlyHint: new(true), DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
 			{ToolName: "delete_item", Title: nil, ReadOnlyHint: new(false), DestructiveHint: new(true), IdempotentHint: nil, OpenWorldHint: nil},
-			// Reviewed with no behavior class (every hint unset): omitted from the
-			// map, since an absent key reads as the empty disposition anyway.
+			// Reviewed with no behavior class (every hint unset): recorded as
+			// unannotated, so only a tool missing from the map is unknown.
 			{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
 		},
 		SessionToken:     nil,

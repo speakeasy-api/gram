@@ -30,12 +30,3 @@ func DispositionFromHints(readOnly, destructive, idempotent, openWorld *bool) (d
 		return DispositionUnannotated, false
 	}
 }
-
-// toolCallDisposition is the disposition a tool call carries: the one given,
-// or unannotated when the caller had none, so a call never leaves it out.
-func toolCallDisposition(disposition string) string {
-	if disposition == "" {
-		return DispositionUnannotated
-	}
-	return disposition
-}
