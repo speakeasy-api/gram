@@ -88,75 +88,70 @@ describe("coverage model", () => {
     expect(unranked[0]?.gaps.size).toBe(2);
   });
 
-  it("folds Unified Chat onto the column each method reports to", () => {
+  describe("Claude families", () => {
     const supported = { status: "supported", note: "", verify: false } as const;
-    const unified: Snapshot = {
+    const product = (id: string, family: string) => ({
+      id,
+      name: `${family} · Web`,
+      vendor: "Anthropic",
+      family,
+      surface: "Web",
+    });
+    // Each method maps to exactly one product, so each footprint isolates one
+    // family's routing.
+    const routes: Record<string, string> = {
+      plugins: "claude-unified-chat-web",
+      "anthropic-api": "claude-unified-chat-web",
+      inference: "claude-unified-chat-web",
+      "legacy-chat": "claude-chat-web",
+      "legacy-cowork": "cowork-web",
+    };
+    const families: Snapshot = {
       ...snapshot,
-      methods: [
-        {
-          id: "plugins",
-          name: "Plugins",
-          vendor: "Anthropic",
-          plans: "",
-          facts: {},
-        },
-        {
-          id: "anthropic-api",
-          name: "Compliance API",
-          vendor: "Anthropic",
-          plans: "",
-          facts: {},
-        },
-      ],
+      methods: Object.keys(routes).map((id) => ({
+        id,
+        name: id,
+        vendor: "Anthropic",
+        plans: "",
+        facts: {},
+      })),
       products: [
-        {
-          id: "claude-unified-chat-web",
-          name: "Claude · Unified Chat · Web",
-          vendor: "Anthropic",
-          family: "Claude · Unified Chat",
-          surface: "Web",
-        },
-        {
-          id: "cowork-web",
-          name: "Cowork (deprecated) · Web",
-          vendor: "Anthropic",
-          family: "Cowork (deprecated)",
-          surface: "Web",
-        },
+        product("claude-unified-chat-web", "Claude · Unified Chat"),
+        product("claude-chat-web", "Claude Chat (deprecated)"),
+        product("cowork-web", "Cowork (deprecated)"),
       ],
       draft: {
-        mappings: {
-          "plugins/claude-unified-chat-web": {
-            applicability: "applicable",
-            conditions: "",
-            facts: { session: supported },
-          },
-          "plugins/cowork-web": {
-            applicability: "applicable",
-            conditions: "",
-            facts: { session: supported },
-          },
-          "anthropic-api/claude-unified-chat-web": {
-            applicability: "applicable",
-            conditions: "",
-            facts: { session: supported },
-          },
-        },
+        mappings: Object.fromEntries(
+          Object.entries(routes).map(([method, productId]) => [
+            `${method}/${productId}`,
+            {
+              applicability: "applicable" as const,
+              conditions: "",
+              facts: { session: supported },
+            },
+          ]),
+        ),
         references: {},
       },
     };
-    const byId = new Map(
-      methodFootprints(unified, new Map(), false).map((m) => [m.id, m]),
-    );
+    const footprintOf = (methodId: string) => [
+      ...(methodFootprints(families, new Map(), false).find(
+        (m) => m.id === methodId,
+      )?.footprint ?? []),
+    ];
 
-    // The plugin's hooks report from the Cowork VM, deprecated rows included.
-    expect([...(byId.get("plugins")?.footprint ?? [])]).toEqual([
-      cellKey("session", "cowork"),
-    ]);
-    // Compliance API imports land as Claude Chat.
-    expect([...(byId.get("anthropic-api")?.footprint ?? [])]).toEqual([
-      cellKey("session", "claude_chat"),
-    ]);
+    it.each([
+      // The plugin's hooks report from the Cowork VM.
+      ["plugins", "cowork"],
+      // The Compliance API and inference hooks import conversations as chat.
+      ["anthropic-api", "claude_chat"],
+      ["inference", "claude_chat"],
+      // Deprecated families keep the columns they had before the rename.
+      ["legacy-chat", "claude_chat"],
+      ["legacy-cowork", "cowork"],
+    ] as const)("folds %s onto %s", (methodId, surface) => {
+      expect(footprintOf(methodId)).toEqual([cellKey("session", surface)]);
+    });
   });
 
   it("omits methods that claim nothing", () => {
