@@ -275,6 +275,7 @@ var KeyModel = Type("Key", func() {
 	Attribute("delegated_grants", AgentDelegatedPolicy, "Immutable delegated policy approved for this credential")
 	Attribute("delegated_grants_version", Int, "Delegated policy format version")
 	Attribute("policy_grants", ArrayOf(APIKeyPolicyGrant), "An ordinary key's own policy")
+	Attribute("auth_client_choices", ArrayOf(AgentKeyAuthClientChoice), "For an agent key, as listed for its agent: the upstream credential the key was set up to use on each MCP server it names. Where typed upstream authentication is enforced, the key signs in to that server with it.")
 	Attribute("expires_at", String, func() {
 		Description("Required expiry for an agent key; legacy keys may not expire.")
 		Format(FormatDateTime)

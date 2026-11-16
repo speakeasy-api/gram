@@ -21,8 +21,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens/upstreamtokenstest"
@@ -435,6 +440,91 @@ func TestAgentMCPAccessListsNothingForAnAgentThatCannotSignIn(t *testing.T) {
 	require.False(t, output.Agent.OwnerReassignmentRequired)
 	require.Empty(t, output.Servers, "a suspended agent's keys are refused, so it reaches no server")
 	require.Zero(t, output.MissingServerGrants)
+}
+
+// seedPersonalServerWithSharedCredential adds a server that asks each person
+// to sign in and also offers a shared service account, which agent keys can
+// be set up to use.
+func seedPersonalServerWithSharedCredential(t *testing.T, f agentIdentityFixture, name string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+
+	ctx := t.Context()
+	server := seedAgentAccessServer(t, f.conn, f.project.ID, name)
+	fixtures := testrepo.New(f.conn)
+	personal, err := fixtures.CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{OrganizationID: f.principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.project.ID, Valid: true}, ClientType: authz.AuthClientTypeRemoteSession, Name: name + " personal"})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.AssociateAuthClientFixture(ctx, testrepo.AssociateAuthClientFixtureParams{ProjectID: f.project.ID, OrganizationID: f.principal.OrganizationID, McpServerID: server, AuthClientID: personal}))
+	shared, err := fixtures.CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{OrganizationID: f.principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.project.ID, Valid: true}, ClientType: authz.AuthClientTypeServiceAccount, Name: name + " service account"})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.AssociateAuthClientFixture(ctx, testrepo.AssociateAuthClientFixtureParams{ProjectID: f.project.ID, OrganizationID: f.principal.OrganizationID, McpServerID: server, AuthClientID: shared}))
+	return server, shared
+}
+
+// agentKey issues the fixture's agent a key and records the shared credential
+// it uses on each server in choices.
+func (f agentIdentityFixture) agentKey(t *testing.T, choices map[uuid.UUID]uuid.UUID) keysrepo.ApiKey {
+	t.Helper()
+
+	ctx := t.Context()
+	key, err := keysrepo.New(f.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
+		OrganizationID:         f.principal.OrganizationID,
+		CreatedByUserID:        f.principal.UserID,
+		Name:                   "Agent key " + uuid.NewString()[:8],
+		KeyPrefix:              "gram_test_",
+		KeyHash:                uuid.NewString(),
+		SubjectUrn:             conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()).String()),
+		DelegatedGrants:        []byte(`{"requested":[],"effective":[]}`),
+		DelegatedGrantsVersion: pgtype.Int4{Int32: 1, Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	require.NoError(t, err)
+	for server, client := range choices {
+		recorded, err := upstreamclientsrepo.New(f.conn).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
+			CredentialKind: upstreamclients.CredentialKindAPIKey,
+			CredentialID:   key.ID,
+			Source:         upstreamclients.SelectionSourceIssuance,
+			OrganizationID: f.principal.OrganizationID,
+			AuthClientID:   uuid.NullUUID{UUID: client, Valid: true},
+			McpServerID:    server,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, recorded)
+	}
+	return key
+}
+
+func TestAgentMCPAccessReportsASharedCredentialChosenForTheAgentKeys(t *testing.T) {
+	t.Parallel()
+
+	f := newAgentIdentityFixture(t, "platform_mcp_agent_access_key_choice")
+	ctx := t.Context()
+	chosen, chosenClient := seedPersonalServerWithSharedCredential(t, f, "Agent chosen server")
+	revoked, revokedClient := seedPersonalServerWithSharedCredential(t, f, "Agent revoked-key server")
+	unchosen, _ := seedPersonalServerWithSharedCredential(t, f, "Agent unchosen server")
+	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(authz.WildcardResource, f.project.ID.String()))
+
+	f.agentKey(t, map[uuid.UUID]uuid.UUID{chosen: chosenClient})
+	gone := f.agentKey(t, map[uuid.UUID]uuid.UUID{revoked: revokedClient})
+	_, err := keysrepo.New(f.conn).DeleteAgentAPIKey(ctx, keysrepo.DeleteAgentAPIKeyParams{ID: gone.ID, OrganizationID: f.principal.OrganizationID, SubjectUrn: gone.SubjectUrn})
+	require.NoError(t, err)
+
+	service := f.service(t, agentChecksFunc(nil))
+	callerCtx, principal := f.callerContext(t, f.principal.UserID)
+
+	output, err := service.MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
+	require.NoError(t, err)
+	byID := agentServersByID(output)
+	require.Equal(t, agentCredentialNotAssigned, byID[chosen.String()].CredentialMode, "without enforcement the runtime ignores a key's choice")
+
+	_, err = productfeaturesrepo.New(f.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	output, err = service.MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
+	require.NoError(t, err)
+	byID = agentServersByID(output)
+	require.Equal(t, agentCredentialShared, byID[chosen.String()].CredentialMode, "a live key's shared credential signs the agent in")
+	require.Empty(t, byID[chosen.String()].OnBehalfOf)
+	require.Equal(t, agentCredentialNotAssigned, byID[revoked.String()].CredentialMode, "a revoked key's choice signs nothing in")
+	require.Equal(t, agentCredentialNotAssigned, byID[unchosen.String()].CredentialMode, "a server no key chose a credential for still needs a connection")
 }
 
 func TestAgentMCPAccessHonorsBlocks(t *testing.T) {

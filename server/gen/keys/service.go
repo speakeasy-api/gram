@@ -220,6 +220,10 @@ type Key struct {
 	DelegatedGrantsVersion *int
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrant
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoice
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string
 	// The creation date of the key.

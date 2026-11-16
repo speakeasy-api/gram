@@ -858,6 +858,50 @@ func (q *Queries) ListAgentAPIKeys(ctx context.Context, arg ListAgentAPIKeysPara
 	return items, nil
 }
 
+const listAgentKeyAuthClientChoices = `-- name: ListAgentKeyAuthClientChoices :many
+SELECT credential_id AS key_id, mcp_server_id, auth_client_id
+FROM upstream_client_selections
+WHERE organization_id = $1
+  AND credential_kind = 'api_key'
+  AND credential_id = ANY($2::uuid[])
+  AND deleted IS FALSE
+ORDER BY credential_id, mcp_server_id
+`
+
+type ListAgentKeyAuthClientChoicesParams struct {
+	OrganizationID string
+	KeyIds         []uuid.UUID
+}
+
+type ListAgentKeyAuthClientChoicesRow struct {
+	KeyID        uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.NullUUID
+}
+
+// The upstream credential each of the given agent keys was set up to use on
+// the MCP servers it names. A NULL auth_client_id is a server whose upstream
+// needs no authentication.
+func (q *Queries) ListAgentKeyAuthClientChoices(ctx context.Context, arg ListAgentKeyAuthClientChoicesParams) ([]ListAgentKeyAuthClientChoicesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentKeyAuthClientChoices, arg.OrganizationID, arg.KeyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentKeyAuthClientChoicesRow
+	for rows.Next() {
+		var i ListAgentKeyAuthClientChoicesRow
+		if err := rows.Scan(&i.KeyID, &i.McpServerID, &i.AuthClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMemberClaudeWebHooksAPIKeys = `-- name: LockMemberClaudeWebHooksAPIKeys :exec
 SELECT pg_advisory_xact_lock(hashtextextended('claude-web-hooks:' || $1::text || ':' || $2::text, 0))
 `

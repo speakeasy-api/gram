@@ -121,11 +121,34 @@ func (s *Service) listAgentKeys(ctx context.Context, agentIDRaw string) (*gen.Li
 		return nil, oops.E(oops.CodeUnexpected, err, "finish listing agent API keys").LogError(ctx, s.logger)
 	}
 
+	keyIDs := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		keyIDs = append(keyIDs, row.ID)
+	}
+	choices, err := repo.New(s.db).ListAgentKeyAuthClientChoices(ctx, repo.ListAgentKeyAuthClientChoicesParams{
+		OrganizationID: human.Auth.ActiveOrganizationID,
+		KeyIds:         keyIDs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent API key credential choices").LogError(ctx, s.logger)
+	}
+	choicesByKey := make(map[uuid.UUID][]*gen.AgentKeyAuthClientChoice, len(rows))
+	for _, choice := range choices {
+		choicesByKey[choice.KeyID] = append(choicesByKey[choice.KeyID], &gen.AgentKeyAuthClientChoice{
+			McpServerID:  choice.McpServerID.String(),
+			AuthClientID: conv.FromNullableUUID(choice.AuthClientID),
+		})
+	}
+
 	keys := make([]*gen.Key, 0, len(rows))
 	for _, row := range rows {
 		key, err := agentKeyModel(row, nil)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decode agent API key").LogError(ctx, s.logger)
+		}
+		key.AuthClientChoices = choicesByKey[row.ID]
+		if key.AuthClientChoices == nil {
+			key.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{}
 		}
 		keys = append(keys, key)
 	}
@@ -442,7 +465,7 @@ func agentKeyModel(key repo.ApiKey, secret *string) (*gen.Key, error) {
 	}
 	return &gen.Key{
 		ID: key.ID.String(), OrganizationID: key.OrganizationID, ProjectID: nil, CreatedByUserID: key.CreatedByUserID, Name: key.Name, KeyPrefix: key.KeyPrefix, Key: secret, Scopes: []string{},
-		SubjectUrn: &subjectURN, DelegatedGrants: delegatedPolicyModel(policy), DelegatedGrantsVersion: &versionValue, ExpiresAt: &expiresAt, PolicyGrants: nil,
+		SubjectUrn: &subjectURN, DelegatedGrants: delegatedPolicyModel(policy), DelegatedGrantsVersion: &versionValue, ExpiresAt: &expiresAt, PolicyGrants: nil, AuthClientChoices: nil,
 		CreatedAt: key.CreatedAt.Time.Format(time.RFC3339Nano), UpdatedAt: key.UpdatedAt.Time.Format(time.RFC3339Nano), LastAccessedAt: lastAccessedAt,
 	}, nil
 }

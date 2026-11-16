@@ -1,15 +1,44 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Key } from "@gram/client/models/components/key.js";
+import type { McpServerAuthentication } from "@gram/client/models/components/mcpserverauthentication.js";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { ServerConnection } from "@/pages/agents/credentials/ownerConnections";
 import { GrantOnBehalfOf, ServerOnBehalfOfLine } from "./GrantOnBehalfOf";
-import { onBehalfOfPeople, serverOnBehalfOf } from "./onBehalfOf";
+import {
+  keysUseSharedCredential,
+  onBehalfOfPeople,
+  serverOnBehalfOf,
+} from "./onBehalfOf";
 
 const mocks = vi.hoisted(() => ({
   connection: undefined as ServerConnection | undefined,
   issuerId: undefined as string | undefined,
   inventoryFailed: false,
+  enforcement: "legacy" as "loading" | "enforced" | "legacy" | "error",
+  keys: [] as Pick<Key, "expiresAt" | "authClientChoices">[],
+  authClients: [] as McpServerAuthentication["clients"],
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-1" }),
+}));
+vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
+  useUpstreamAuthEnforcement: () => mocks.enforcement,
+}));
+vi.mock("@gram/client/react-query/listAPIKeys.js", () => ({
+  useListAPIKeys: () => ({
+    data: { keys: mocks.keys },
+    isPending: false,
+    isError: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: () => ({
+    data: { clients: mocks.authClients },
+    isPending: false,
+    isError: false,
+  }),
 }));
 vi.mock("@/pages/agents/credentials/useServerInventory", () => ({
   useServerInventory: () => ({
@@ -47,7 +76,30 @@ afterEach(() => {
   mocks.connection = undefined;
   mocks.issuerId = undefined;
   mocks.inventoryFailed = false;
+  mocks.enforcement = "legacy";
+  mocks.keys = [];
+  mocks.authClients = [];
 });
+
+/** A server's shared service account, which agent keys can be set up to use. */
+const SERVICE_ACCOUNT = {
+  id: "client-service",
+  clientType: "service_account",
+  enabled: true,
+} as McpServerAuthentication["clients"][number];
+
+/** An agent key, live for another hour, set up to use the service account on server-1. */
+function chosenKey(
+  fields: Partial<Pick<Key, "expiresAt" | "authClientChoices">> = {},
+): Pick<Key, "expiresAt" | "authClientChoices"> {
+  return {
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    authClientChoices: [
+      { mcpServerId: "server-1", authClientId: SERVICE_ACCOUNT.id },
+    ],
+    ...fields,
+  };
+}
 
 /** A sign-in whose access token ran out, and nothing renews it. */
 const LAPSED = { accessExpiresAt: new Date("2020-01-01T00:00:00Z") };
@@ -272,7 +324,106 @@ describe("serverOnBehalfOf", () => {
   });
 });
 
+describe("keysUseSharedCredential", () => {
+  const auth = { clients: [SERVICE_ACCOUNT] };
+
+  it("is true for a live key set up to use the server's shared credential", () => {
+    expect(keysUseSharedCredential([chosenKey()], "server-1", auth)).toBe(true);
+  });
+
+  it.each([
+    {
+      case: "an expired key",
+      keys: [chosenKey({ expiresAt: new Date("2020-01-01T00:00:00Z") })],
+      clients: [SERVICE_ACCOUNT],
+    },
+    {
+      case: "a choice for another server",
+      keys: [
+        chosenKey({
+          authClientChoices: [
+            { mcpServerId: "server-2", authClientId: SERVICE_ACCOUNT.id },
+          ],
+        }),
+      ],
+      clients: [SERVICE_ACCOUNT],
+    },
+    {
+      case: "a no-auth choice",
+      keys: [chosenKey({ authClientChoices: [{ mcpServerId: "server-1" }] })],
+      clients: [SERVICE_ACCOUNT],
+    },
+    {
+      case: "a credential the server has disabled",
+      keys: [chosenKey()],
+      clients: [{ ...SERVICE_ACCOUNT, enabled: false }],
+    },
+    {
+      case: "a credential the server no longer offers",
+      keys: [chosenKey()],
+      clients: [],
+    },
+    { case: "keys with no choice", keys: [{}], clients: [SERVICE_ACCOUNT] },
+  ])("is false for $case", ({ keys, clients }) => {
+    expect(keysUseSharedCredential(keys, "server-1", { clients })).toBe(false);
+  });
+});
+
+describe("serverOnBehalfOf with key credential choices", () => {
+  it("says shared when the keys use a shared credential, even with people assigned", () => {
+    expect(
+      serverOnBehalfOf(
+        { issuerId: "i" },
+        {
+          status: "ready",
+          sessions: [session({ subjectDisplayName: "Ada Lovelace" })],
+        },
+        false,
+        Date.now(),
+        true,
+      ).kind,
+    ).toBe("shared");
+  });
+
+  it("waits while the keys' choices are read for a personal server", () => {
+    expect(
+      serverOnBehalfOf(
+        { issuerId: "i" },
+        { status: "missing" },
+        false,
+        Date.now(),
+        "checking",
+      ).kind,
+    ).toBe("checking");
+  });
+});
+
 describe("ServerOnBehalfOfLine", () => {
+  it("says a shared credential chosen for the agent's keys acts for no one", () => {
+    mocks.issuerId = "issuer-1";
+    mocks.connection = { status: "missing" };
+    mocks.enforcement = "enforced";
+    mocks.keys = [chosenKey()];
+    mocks.authClients = [SERVICE_ACCOUNT];
+    const { container } = render(
+      <ServerOnBehalfOfLine agentId="agent-1" resourceId="toolset-1" />,
+    );
+    expect(container.textContent).toBe("Shared credential, acts for no one");
+  });
+
+  it("keeps the assigned connections where upstream auth is not enforced", () => {
+    mocks.issuerId = "issuer-1";
+    mocks.connection = { status: "missing" };
+    mocks.keys = [chosenKey()];
+    mocks.authClients = [SERVICE_ACCOUNT];
+    const { container } = render(
+      <ServerOnBehalfOfLine agentId="agent-1" resourceId="toolset-1" />,
+    );
+    expect(container.textContent).toBe(
+      "Needs a person's connection, none assigned",
+    );
+  });
+
   it("names the person, as the Permissions tab does", () => {
     mocks.issuerId = "issuer-1";
     mocks.connection = {
