@@ -600,6 +600,20 @@ describe("PrivateNetworkSection", () => {
     expect(screen.getByRole("link", { name: "Contact support" })).toBeTruthy();
   });
 
+  it.each([
+    { code: "encryption_key_unavailable", interval: 30_000 },
+    { code: "provider_configuration_unavailable", interval: false },
+  ])("polls $code every $interval", ({ code, interval }) => {
+    state.ingress = configuredIngress({ status: "error", lastError: code });
+    render(<PrivateNetworkSection />);
+
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: { data: { ingress: { status: "error", lastError: code } } },
+      }),
+    ).toBe(interval);
+  });
+
   it("closes a setup draft when an unsupported provider arrives", () => {
     const { rerender } = render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));

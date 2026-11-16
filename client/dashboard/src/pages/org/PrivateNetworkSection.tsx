@@ -507,6 +507,9 @@ export function PrivateNetworkSection(): JSX.Element | null {
       if (current?.lastError === SERVICE_NOT_APPROVED) return 10_000;
       // The gateway retries the certificate on its own; show it once issued.
       if (current?.lastError === CERTIFICATE_UNAVAILABLE) return 30_000;
+      // The reconciler retries on its own once the encryption key is usable
+      // again; show the recovery without a reload.
+      if (current?.lastError === ENCRYPTION_KEY_UNAVAILABLE) return 30_000;
       return false;
     },
   });
