@@ -154,6 +154,7 @@ func TestCipher_RefusesADecisionHeldTooLong(t *testing.T) {
 	now = now.Add(orgencryption.MaxDecisionHold + time.Second)
 	_, err := ti.cipher.Seal(t.Context(), d, fakeColumns, []byte("secret"))
 	require.ErrorIs(t, err, orgencryption.ErrDecisionExpired)
+	require.ErrorIs(t, ti.cipher.RequireUsable(t.Context(), d), orgencryption.ErrDecisionExpired, "the preflight refuses what Seal would refuse")
 
 	fresh, err := ti.cipher.Redecide(t.Context(), d)
 	require.NoError(t, err)
@@ -170,4 +171,19 @@ func TestCipher_RefusesAColumnOfAnotherUseCase(t *testing.T) {
 	other := orgencryption.CopyColumns{UseCase: "other-use-case", PlatformColumn: fakeColumns.PlatformColumn, OrgColumn: fakeColumns.OrgColumn}
 	_, err := ti.cipher.Seal(t.Context(), d, other, []byte("secret"))
 	require.Error(t, err)
+}
+
+func TestCipher_FailsClosedOnADecisionWithAnUnknownState(t *testing.T) {
+	t.Parallel()
+
+	ti := newTransitionInstance(t)
+	d := orgencryption.Decision{OrganizationID: ti.orgID, UseCase: useCase, State: "", Generation: 0}
+
+	_, err := ti.cipher.Seal(t.Context(), d, fakeColumns, []byte("secret"))
+	require.ErrorIs(t, err, orgencryption.ErrInvalidState)
+
+	require.ErrorIs(t, ti.cipher.RequireUsable(t.Context(), d), orgencryption.ErrInvalidState)
+
+	_, err = ti.cipher.Open(t.Context(), d, fakeColumns, orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "old")), Org: orgencryption.ErasedCopies().Org})
+	require.ErrorIs(t, err, orgencryption.ErrInvalidState)
 }

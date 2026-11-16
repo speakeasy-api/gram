@@ -1438,7 +1438,7 @@ func (q *Queries) RecordEncryptionTransitionBackfillStarted(ctx context.Context,
 	return err
 }
 
-const recordEncryptionTransitionVerified = `-- name: RecordEncryptionTransitionVerified :exec
+const recordEncryptionTransitionVerified = `-- name: RecordEncryptionTransitionVerified :execrows
 UPDATE organization_encryption_transitions
 SET last_verified_at = $1::timestamptz,
     updated_at = clock_timestamp()
@@ -1456,14 +1456,17 @@ type RecordEncryptionTransitionVerifiedParams struct {
 
 // Records a clean verification pass that started at verified_at. It lands only
 // while the state is still the generation the pass verified under.
-func (q *Queries) RecordEncryptionTransitionVerified(ctx context.Context, arg RecordEncryptionTransitionVerifiedParams) error {
-	_, err := q.db.Exec(ctx, recordEncryptionTransitionVerified,
+func (q *Queries) RecordEncryptionTransitionVerified(ctx context.Context, arg RecordEncryptionTransitionVerifiedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordEncryptionTransitionVerified,
 		arg.VerifiedAt,
 		arg.OrganizationID,
 		arg.UseCase,
 		arg.Generation,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const replaceDataEncryptionKeyWrap = `-- name: ReplaceDataEncryptionKeyWrap :one

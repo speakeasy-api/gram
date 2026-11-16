@@ -119,10 +119,15 @@ func (c *Cipher) decision(transition Transition) (Decision, error) {
 	}, nil
 }
 
-// RequireUsable proves the organization key can seal values for the decision
-// now. Callers run it before an irreversible call to a provider whose result
-// must then be sealed, and skip the call when it fails.
+// RequireUsable checks that the decision can still seal and that the
+// organization key can seal values for it. Callers run it before an
+// irreversible call to a provider whose result must then be sealed, and skip
+// the call when it fails. Like Encryptor.RequireUsable it reads cached state,
+// so a key revoked within the cache periods can still pass.
 func (c *Cipher) RequireUsable(ctx context.Context, d Decision) error {
+	if err := c.checkFresh(d); err != nil {
+		return err
+	}
 	if d.State == TransitionStatePlatformKey {
 		return nil
 	}
@@ -140,7 +145,8 @@ func (c *Cipher) RequireUsable(ctx context.Context, d Decision) error {
 }
 
 // Seal encrypts plaintext into the copies the decision writes to columns. It
-// refuses a decision held longer than MaxDecisionHold with ErrDecisionExpired.
+// refuses a decision held longer than MaxDecisionHold with ErrDecisionExpired,
+// and a decision with an unknown state with ErrInvalidState.
 func (c *Cipher) Seal(ctx context.Context, d Decision, columns CopyColumns, plaintext []byte) (Copies, error) {
 	if err := c.checkDecision(d, columns); err != nil {
 		return Copies{}, err
@@ -201,6 +207,17 @@ func (c *Cipher) Open(ctx context.Context, d Decision, columns CopyColumns, stor
 func (c *Cipher) checkDecision(d Decision, columns CopyColumns) error {
 	if d.UseCase != columns.UseCase {
 		return fmt.Errorf("orgencryption: column %s belongs to use case %q, not %q", columns.OrgColumn, columns.UseCase, d.UseCase)
+	}
+
+	return c.checkFresh(d)
+}
+
+// checkFresh refuses a decision with an unknown state, so nothing writes
+// copies for a state it does not understand, and a decision held longer than
+// MaxDecisionHold.
+func (c *Cipher) checkFresh(d Decision) error {
+	if _, err := parseTransitionState(string(d.State)); err != nil {
+		return err
 	}
 	if c.now().Sub(d.decidedAt) > MaxDecisionHold {
 		return ErrDecisionExpired

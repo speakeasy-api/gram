@@ -35,6 +35,28 @@ WHERE id = @id
   AND (SELECT t.generation FROM organization_encryption_transitions AS t
        WHERE t.organization_id = widgets.organization_id AND t.use_case = 'widget-secrets') = @generation;
 
+-- name: SetSecretAliasWithoutAs :exec
+UPDATE widgets w SET secret_encrypted = @platform WHERE w.id = @id;
+
+-- name: SetSecretFencedOnAnotherOrganization :exec
+UPDATE widgets SET secret_org_encrypted = @org
+WHERE id = @id
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = @organization_id AND t.use_case = 'widget-secrets'
+  ), 0) = @generation;
+
+-- name: SetSecretFencedOnALiteral :exec
+UPDATE widgets SET secret_org_encrypted = @org
+WHERE id = @id
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = widgets.organization_id AND t.use_case = 'widget-secrets'
+  ), 0) = 0;
+
+-- name: SetSecretWithMarkerInAString :exec
+UPDATE widgets SET secret_encrypted = @platform, note = '-- orgencryption:unfenced not really' WHERE id = @id;
+
 -- name: InsertWidget :one
 INSERT INTO widgets (id, secret_org_encrypted) VALUES (@id, @org) RETURNING id;
 
@@ -55,7 +77,16 @@ func TestUnfencedWrites_ReportsWritesWithoutTheFence(t *testing.T) {
 
 	got := orgencryptiontest.UnfencedWrites(fenceQueries, "secret_encrypted", "secret_org_encrypted")
 
-	require.Equal(t, []string{"SetSecretUnfenced", "SetSecretWithoutCoalesce", "InsertWidget", "UpsertWidget"}, got)
+	require.Equal(t, []string{
+		"SetSecretUnfenced",
+		"SetSecretWithoutCoalesce",
+		"SetSecretAliasWithoutAs",
+		"SetSecretFencedOnAnotherOrganization",
+		"SetSecretFencedOnALiteral",
+		"SetSecretWithMarkerInAString",
+		"InsertWidget",
+		"UpsertWidget",
+	}, got)
 }
 
 func TestUnfencedWrites_MatchesWholeColumnNames(t *testing.T) {

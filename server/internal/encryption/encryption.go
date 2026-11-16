@@ -18,6 +18,10 @@ const (
 	errCodeNonceRead    = "ENC-3"
 	errCodeGCMOpen      = "ENC-4"
 	errCodeBase64Decode = "ENC-5"
+
+	// errCodeCiphertextShort means the decoded value is shorter than a GCM
+	// nonce, so it cannot be a ciphertext.
+	errCodeCiphertextShort = "ENC-6"
 )
 
 type encryptionError struct {
@@ -149,7 +153,7 @@ func (e *Client) Decrypt(ciphertextStr string) (string, error) {
 
 	nonceSize := gcm.NonceSize()
 	if len(ciphertext) < nonceSize {
-		return "", fmt.Errorf("ciphertext too short")
+		return "", newDecryptionError(errCodeCiphertextShort, errors.New("ciphertext too short"))
 	}
 
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]

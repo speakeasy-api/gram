@@ -515,7 +515,7 @@ SELECT clock_timestamp()::timestamptz AS now;
 
 -- Records a clean verification pass that started at verified_at. It lands only
 -- while the state is still the generation the pass verified under.
--- name: RecordEncryptionTransitionVerified :exec
+-- name: RecordEncryptionTransitionVerified :execrows
 UPDATE organization_encryption_transitions
 SET last_verified_at = @verified_at::timestamptz,
     updated_at = clock_timestamp()

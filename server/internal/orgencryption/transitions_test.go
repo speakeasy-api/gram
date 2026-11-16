@@ -175,7 +175,7 @@ func TestTransitions_FinalizeRefusesWhileValuesWait(t *testing.T) {
 	ti.backdate(t, time.Hour)
 
 	// Written by a stale platform_key writer after the run.
-	ti.store.put("late", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "late")), Org: orgencryption.ErasedCopies().Org})
+	ti.store.put(ti.orgID, "late", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "late")), Org: orgencryption.ErasedCopies().Org})
 
 	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: 0, Stores: []orgencryption.CopyStore{ti.store}}, orgencryption.SystemActor())
 	require.ErrorIs(t, err, orgencryption.ErrFinalizeBlocked)
@@ -185,8 +185,8 @@ func TestTransitions_FinalizeThenClearDestroysPlatformCopies(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
-	ti.store.put("a", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "alpha")), Org: orgencryption.ErasedCopies().Org})
-	ti.store.put("broken", orgencryption.Copies{Platform: conv.ToPGText("not a ciphertext"), Org: orgencryption.ErasedCopies().Org})
+	ti.store.put(ti.orgID, "a", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "alpha")), Org: orgencryption.ErasedCopies().Org})
+	ti.store.put(ti.orgID, "broken", orgencryption.Copies{Platform: conv.ToPGText("not a ciphertext"), Org: orgencryption.ErasedCopies().Org})
 	ti.enroll(t)
 
 	result, err := ti.runner.Run(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{ti.store})

@@ -51,10 +51,12 @@ type CopyCounts struct {
 	// recorded hash still matches the stored platform-key ciphertext.
 	Waiting int64
 
-	// Unreadable counts values recorded as unreadable whose recorded hash
+	// Unreadable counts values with a platform-key copy and no
+	// organization-key copy that are recorded as unreadable with a hash that
 	// still matches the stored platform-key ciphertext: for a text column,
 	// sha256(convert_to(<platform column>, 'UTF8')); for a bytea column,
-	// sha256(<platform column>).
+	// sha256(<platform column>). A record left behind for a value that has
+	// since gained an organization-key copy therefore no longer counts.
 	Unreadable int64
 
 	// Unattributed counts values that may belong to the organization but are
@@ -72,16 +74,20 @@ type CopyCounts struct {
 // CopyStore is how the helper reaches the two stored copies of one value, a
 // pair of columns in a feature's table. A feature implements it with its own
 // sqlc queries, one per method. Every query covers every row that holds
-// ciphertext, including soft-deleted rows. None of them may change the row's
-// updated_at or any other column.
+// ciphertext, including soft-deleted rows. A write changes only the copy
+// column it names, never updated_at or any other column of the row.
+//
+// The list methods page by the source row's own primary key, not by the text
+// of RowID: they order by the key and return rows whose key is greater than
+// after, parsed back into the key's type. after is "" for the first page and
+// otherwise the RowID of the last value of the previous page.
 type CopyStore interface {
 	// Columns names the value's pair of columns.
 	Columns() CopyColumns
 
-	// ListWaiting returns up to limit waiting values of the organization,
-	// including values recorded as unreadable so they are tried again,
-	// ordered by row id and starting after the row id after ("" starts at
-	// the beginning).
+	// ListWaiting returns the next page of up to limit waiting values of the
+	// organization, including values recorded as unreadable so they are
+	// tried again.
 	ListWaiting(ctx context.Context, organizationID string, after string, limit int32) ([]WaitingValue, error)
 
 	// SealWaiting stores orgCiphertext as the value's organization-key copy.
@@ -90,8 +96,8 @@ type CopyStore interface {
 	// is still at generation. It reports whether it landed.
 	SealWaiting(ctx context.Context, organizationID string, generation int64, value WaitingValue, orgCiphertext string) (bool, error)
 
-	// ListSealed returns up to limit values of the organization that hold
-	// both copies, ordered by row id and starting after the row id after.
+	// ListSealed returns the next page of up to limit values of the
+	// organization that hold both copies.
 	ListSealed(ctx context.Context, organizationID string, after string, limit int32) ([]SealedValue, error)
 
 	// Count returns the column's counts for the organization.

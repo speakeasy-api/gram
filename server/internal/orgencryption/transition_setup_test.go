@@ -87,12 +87,15 @@ func (ti *transitionInstance) platformCopy(t *testing.T, plaintext string) strin
 }
 
 type fakeRow struct {
-	platform pgtype.Text
-	org      pgtype.Text
+	organizationID string
+	platform       pgtype.Text
+	org            pgtype.Text
 }
 
-// fakeCopyStore is an in-memory CopyStore. Its writes fence on the transition
-// generation read from the database, as a feature's SQL would.
+// fakeCopyStore is an in-memory CopyStore. Each write checks the transition
+// generation from the database and changes the row while holding the store's
+// lock, so the check and the write are atomic as in a feature's fenced SQL
+// statement.
 type fakeCopyStore struct {
 	platform    *encryption.Client
 	transitions *orgencryption.Transitions
@@ -115,11 +118,11 @@ func (c *fakeCopyStore) withPlatformKey(platform *encryption.Client) *fakeCopySt
 	return &fakeCopyStore{platform: platform, transitions: c.transitions, store: c.store}
 }
 
-func (c *fakeCopyStore) put(rowID string, copies orgencryption.Copies) {
+func (c *fakeCopyStore) put(organizationID string, rowID string, copies orgencryption.Copies) {
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 
-	c.store.rows[rowID] = fakeRow{platform: copies.Platform, org: copies.Org}
+	c.store.rows[rowID] = fakeRow{organizationID: organizationID, platform: copies.Platform, org: copies.Org}
 }
 
 func (c *fakeCopyStore) get(rowID string) orgencryption.Copies {
@@ -133,10 +136,12 @@ func (c *fakeCopyStore) get(rowID string) orgencryption.Copies {
 
 func (c *fakeCopyStore) Columns() orgencryption.CopyColumns { return fakeColumns }
 
-func (c *fakeCopyStore) sortedIDs(after string, keep func(fakeRow) bool) []string {
+// sortedIDs returns the organization's row ids after after, in order, whose
+// rows pass keep. Callers hold the store's lock.
+func (c *fakeCopyStore) sortedIDs(organizationID string, after string, keep func(fakeRow) bool) []string {
 	ids := make([]string, 0, len(c.store.rows))
 	for id, row := range c.store.rows {
-		if id > after && keep(row) {
+		if row.organizationID == organizationID && id > after && keep(row) {
 			ids = append(ids, id)
 		}
 	}
@@ -145,11 +150,11 @@ func (c *fakeCopyStore) sortedIDs(after string, keep func(fakeRow) bool) []strin
 	return ids
 }
 
-func (c *fakeCopyStore) ListWaiting(_ context.Context, _ string, after string, limit int32) ([]orgencryption.WaitingValue, error) {
+func (c *fakeCopyStore) ListWaiting(_ context.Context, organizationID string, after string, limit int32) ([]orgencryption.WaitingValue, error) {
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 
-	ids := c.sortedIDs(after, func(row fakeRow) bool { return row.platform.Valid && !row.org.Valid })
+	ids := c.sortedIDs(organizationID, after, func(row fakeRow) bool { return row.platform.Valid && !row.org.Valid })
 	values := make([]orgencryption.WaitingValue, 0, limit)
 	for _, id := range ids[:min(len(ids), int(limit))] {
 		values = append(values, orgencryption.WaitingValue{RowID: id, Platform: c.store.rows[id].platform.String})
@@ -158,6 +163,8 @@ func (c *fakeCopyStore) ListWaiting(_ context.Context, _ string, after string, l
 	return values, nil
 }
 
+// fenced reports whether the transition moved past generation. Callers hold
+// the store's lock, so no write can land between this check and theirs.
 func (c *fakeCopyStore) fenced(ctx context.Context, organizationID string, generation int64) (bool, error) {
 	transition, err := c.transitions.GetFresh(ctx, organizationID, useCase)
 	if err != nil {
@@ -168,16 +175,16 @@ func (c *fakeCopyStore) fenced(ctx context.Context, organizationID string, gener
 }
 
 func (c *fakeCopyStore) SealWaiting(ctx context.Context, organizationID string, generation int64, value orgencryption.WaitingValue, orgCiphertext string) (bool, error) {
+	c.store.mu.Lock()
+	defer c.store.mu.Unlock()
+
 	fenced, err := c.fenced(ctx, organizationID, generation)
 	if err != nil || fenced {
 		return false, err
 	}
 
-	c.store.mu.Lock()
-	defer c.store.mu.Unlock()
-
 	row, ok := c.store.rows[value.RowID]
-	if !ok || row.platform.String != value.Platform || row.org.Valid {
+	if !ok || row.organizationID != organizationID || row.platform.String != value.Platform || row.org.Valid {
 		return false, nil
 	}
 	row.org = conv.ToPGText(orgCiphertext)
@@ -186,11 +193,11 @@ func (c *fakeCopyStore) SealWaiting(ctx context.Context, organizationID string, 
 	return true, nil
 }
 
-func (c *fakeCopyStore) ListSealed(_ context.Context, _ string, after string, limit int32) ([]orgencryption.SealedValue, error) {
+func (c *fakeCopyStore) ListSealed(_ context.Context, organizationID string, after string, limit int32) ([]orgencryption.SealedValue, error) {
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 
-	ids := c.sortedIDs(after, func(row fakeRow) bool { return row.platform.Valid && row.org.Valid })
+	ids := c.sortedIDs(organizationID, after, func(row fakeRow) bool { return row.platform.Valid && row.org.Valid })
 	values := make([]orgencryption.SealedValue, 0, limit)
 	for _, id := range ids[:min(len(ids), int(limit))] {
 		values = append(values, orgencryption.SealedValue{RowID: id, Platform: c.store.rows[id].platform.String, Org: c.store.rows[id].org.String})
@@ -199,15 +206,19 @@ func (c *fakeCopyStore) ListSealed(_ context.Context, _ string, after string, li
 	return values, nil
 }
 
-// Count treats a waiting value whose platform-key copy does not decrypt as
-// recorded unreadable, which is what the runner records.
-func (c *fakeCopyStore) Count(_ context.Context, _ string) (orgencryption.CopyCounts, error) {
+// Count differs from a feature's count query in one way: it treats every
+// waiting value whose platform-key copy does not decrypt as recorded
+// unreadable, without reading organization_encryption_unreadable_values. That
+// matches production only after a run has recorded every such value, so tests
+// that check finalize must run the runner first. Before that run, production
+// counts such a value as waiting and finalize refuses.
+func (c *fakeCopyStore) Count(_ context.Context, organizationID string) (orgencryption.CopyCounts, error) {
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 
 	counts := orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}
 	for _, row := range c.store.rows {
-		if !row.platform.Valid {
+		if row.organizationID != organizationID || !row.platform.Valid {
 			continue
 		}
 		counts.PlatformCopies++
@@ -225,16 +236,16 @@ func (c *fakeCopyStore) Count(_ context.Context, _ string) (orgencryption.CopyCo
 }
 
 func (c *fakeCopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error) {
+	c.store.mu.Lock()
+	defer c.store.mu.Unlock()
+
 	fenced, err := c.fenced(ctx, organizationID, generation)
 	if err != nil || fenced {
 		return 0, err
 	}
 
-	c.store.mu.Lock()
-	defer c.store.mu.Unlock()
-
 	var cleared int64
-	for _, id := range c.sortedIDs("", func(row fakeRow) bool { return row.platform.Valid }) {
+	for _, id := range c.sortedIDs(organizationID, "", func(row fakeRow) bool { return row.platform.Valid }) {
 		if cleared == int64(limit) {
 			break
 		}

@@ -285,13 +285,19 @@ func (r *Runner) verify(ctx context.Context, logger *slog.Logger, q *repo.Querie
 		return nil
 	}
 
-	if err := q.RecordEncryptionTransitionVerified(ctx, repo.RecordEncryptionTransitionVerifiedParams{
+	recorded, err := q.RecordEncryptionTransitionVerified(ctx, repo.RecordEncryptionTransitionVerifiedParams{
 		VerifiedAt:     startedAt,
 		OrganizationID: d.OrganizationID,
 		UseCase:        string(d.UseCase),
 		Generation:     d.Generation,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("record verification: %w", err)
+	}
+	if recorded == 0 {
+		// The state moved on while verification ran, so the pass verified a
+		// generation that no longer exists.
+		return ErrFenced
 	}
 	result.VerificationPassed = true
 

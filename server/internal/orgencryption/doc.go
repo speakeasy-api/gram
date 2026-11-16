@@ -23,7 +23,8 @@
 // next writes them, so a use case whose rows are rarely rewritten keeps its
 // decrypt-only DEKs indefinitely.
 //
-// The package fails closed, and nothing falls back to the application key. An
+// The package fails closed: a failing organization key never falls back to the
+// application key, including during the staged transitions below. An
 // organization with no configuration cannot encrypt or decrypt at all. A
 // suspension stops a process within configCacheTTL of it being recorded. An
 // unreachable or revoked KEK stops a process once its cached DEK expires,
@@ -32,12 +33,13 @@
 // Values that already exist under the application (platform) key move to
 // organization keys one use case at a time, through a recorded transition
 // state per organization: platform_key, then dual_write, then org_kms. Cipher
-// decides which copies to write and read from that state, and is the only
-// place a platform-key copy is read; once an organization reaches org_kms it
-// never is. In dual_write a failing organization key still fails the
-// operation rather than falling back. Runner backfills and verifies the
-// organization-key copies through a CopyStore each feature implements, and
-// Transitions finalizes and then clears the platform-key copies.
+// decides from that state which copies application code writes and reads; in
+// dual_write a failing organization key fails the operation rather than
+// falling back. Runner backfills and verifies the organization-key copies
+// through a CopyStore each feature implements, reading platform-key copies
+// only in dual_write. Transitions finalizes and then clears the platform-key
+// copies, and once a use case reaches org_kms nothing reads a platform-key
+// copy.
 //
 // # Fencing
 //

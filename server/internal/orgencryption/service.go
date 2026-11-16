@@ -167,10 +167,12 @@ func (e *Encryptor) Decrypt(ctx context.Context, column string, ciphertext strin
 	return plaintext, nil
 }
 
-// RequireUsable proves the organization can seal values for the use case now:
-// its configuration is usable, the use case has an active DEK, and that DEK
-// unwraps. Callers run it before an irreversible call, such as a token refresh
-// that rotates the refresh token, whose result must then be sealed.
+// RequireUsable checks that the organization can seal values for the use
+// case: its configuration is usable, the use case has an active DEK, and that
+// DEK unwraps. Callers run it before an irreversible call, such as a token
+// refresh that rotates the refresh token, whose result must then be sealed. It
+// reads the same caches as Encrypt, so a suspension can take up to
+// configCacheTTL to show and a revoked KEK up to DataKeyCacheTTL.
 func (e *Encryptor) RequireUsable(ctx context.Context) error {
 	cfg, err := e.service.config(ctx, e.organizationID, e.useCase)
 	if err != nil {
