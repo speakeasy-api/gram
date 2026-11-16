@@ -254,20 +254,25 @@ func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotation
 // dispositionFromAnnotations derives a disposition string from tool annotations.
 func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
 	if a == nil {
-		return ""
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
 	}
-	switch {
-	case a.ReadOnlyHint != nil && *a.ReadOnlyHint:
-		return "read_only"
-	case a.DestructiveHint != nil && *a.DestructiveHint:
-		return "destructive"
-	case a.IdempotentHint != nil && *a.IdempotentHint:
-		return "idempotent"
-	case a.OpenWorldHint != nil && *a.OpenWorldHint:
-		return "open_world"
-	default:
-		return ""
+	disposition, _ := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	return disposition
+}
+
+// toolDisposition classifies a tool about to be called and logs a tool that
+// says it is both read-only and destructive.
+func toolDisposition(ctx context.Context, logger *slog.Logger, toolName string, a *types.ToolAnnotations) string {
+	if a == nil {
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
 	}
+	disposition, conflicting := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	if conflicting {
+		logger.WarnContext(ctx, "tool says it is both read-only and destructive; treating it as destructive", attr.SlogToolName(toolName))
+	}
+	return disposition
 }
 
 // filterToolsByMCPConnect keeps the tools the caller may connect to and stops

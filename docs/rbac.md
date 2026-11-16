@@ -929,14 +929,17 @@ That check becomes a selector like:
 }
 ```
 
-MCP disposition values come from tool annotations and are normalized to:
+MCP disposition values come from tool annotations (`authz.DispositionFromHints`, used for both calling and listing tools) and are normalized to:
 
 ```text
 read_only
 destructive
 idempotent
 open_world
+unannotated
 ```
+
+A tool with no annotations, or with every hint false, is `unannotated`, a value of its own: a grant with no disposition limit covers it, a grant limited to `read_only` does not, and a rule can allow or block it by name. A tool that says it is both read-only and destructive is `destructive` and is logged. A tool call always carries a disposition.
 
 Only add a dimension when the resource family needs finer-grained grants without creating a new scope for every variation. New dimensions must be explicitly allowed in `authz.ValidateSelector`; otherwise role grants using them will be rejected.
 

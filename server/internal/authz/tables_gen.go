@@ -305,7 +305,13 @@ var validAuthClientTypes = map[string]bool{
 }
 
 // validDispositions is the closed value set of disposition.
-var validDispositions = map[string]bool{"destructive": true, "idempotent": true, "open_world": true, "read_only": true}
+var validDispositions = map[string]bool{
+	"destructive": true,
+	"idempotent":  true,
+	"open_world":  true,
+	"read_only":   true,
+	"unannotated": true,
+}
 
 // systemRoleScopes lists the scopes each built-in role is seeded with.
 var systemRoleScopes = map[string][]Scope{

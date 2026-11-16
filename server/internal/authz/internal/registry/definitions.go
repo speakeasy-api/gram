@@ -328,7 +328,7 @@ var Definitions = Registry{
 					// server has no tool, so read and write carry neither.
 					Dimensions: []Dimension{
 						{Key: SelectorKeyTool, Values: nil, Required: false},
-						{Key: SelectorKeyDisposition, Values: []string{DispositionReadOnly, DispositionDestructive, DispositionIdempotent, DispositionOpenWorld}, Required: false},
+						{Key: SelectorKeyDisposition, Values: []string{DispositionReadOnly, DispositionDestructive, DispositionIdempotent, DispositionOpenWorld, DispositionUnannotated}, Required: false},
 					},
 					Source: GrantSourceRoles,
 					// ToolCall carries the tool and its disposition; plain

@@ -45,4 +45,8 @@ const (
 	DispositionDestructive = "destructive"
 	DispositionIdempotent  = "idempotent"
 	DispositionOpenWorld   = "open_world"
+	// DispositionUnannotated is a tool that sets none of the hints above to
+	// true. It is a value of its own, so a grant limited to read-only tools
+	// never reaches it and an admin can allow or block it by name.
+	DispositionUnannotated = "unannotated"
 )
