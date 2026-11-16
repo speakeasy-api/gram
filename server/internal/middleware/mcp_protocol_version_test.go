@@ -321,3 +321,34 @@ func TestMCPProtocolVersionTelemetry_TrailingSlashScope(t *testing.T) {
 		})
 	}
 }
+
+func TestChannelsMCPProtocolVersionTelemetry(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		got := recordSpanForRequest(t, method, "/channels/example-org/example-project/mcp", mcpversions.Version20260728)
+		require.Equal(t, mcpversions.Version20260728, got[string(attr.McpNegotiatedProtocolVersionKey)])
+	}
+}
+
+func TestChannelsMCPProtocolVersionTelemetryRejectsAliases(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/channels/mcp",
+		"/channels/example-org/example-project/api",
+		"/channels/example-org/example-project/mcp/",
+		"/channels/example-org/example-project/mcp/extra",
+		"/channels//example-project/mcp",
+		"/channels/example-org//mcp",
+		"/channels/example-org/example-project/%6dcp",
+		"/channels/example%2Forg/example-project/mcp",
+		"/channels/example%252Forg/example-project/mcp",
+		"/%63hannels/example-org/example-project/mcp",
+		"/.well-known/oauth-protected-resource/channels/example-org/example-project/mcp",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20260728)
+			require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey))
+		})
+	}
+}

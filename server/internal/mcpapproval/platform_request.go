@@ -53,9 +53,6 @@ func (s *Service) ReadPlatformRequesterReview(ctx context.Context, input Platfor
 	if strings.TrimSpace(input.OrganizationID) == "" || input.ProjectID == uuid.Nil || strings.TrimSpace(input.UserID) == "" || input.RequestID == uuid.Nil {
 		return PlatformRequesterReview{}, oops.E(oops.CodeBadRequest, nil, "organization, project, user, and request are required")
 	}
-	if err := s.requireFeature(ctx, input.OrganizationID); err != nil {
-		return PlatformRequesterReview{}, err
-	}
 	if _, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: input.ProjectID, OrganizationID: input.OrganizationID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PlatformRequesterReview{}, oops.E(oops.CodeNotFound, err, "approval request not found")

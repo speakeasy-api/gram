@@ -67,7 +67,11 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import {
+  isOwnScopeSession,
+  useOwnedAgentIds,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatActor, chatOwnerLabel } from "@/lib/chat-owner";
@@ -77,7 +81,8 @@ import {
   ExclusionEditor,
   type ExclusionSheetState,
 } from "@/pages/security/exclusion-sheet";
-import { TRANSCRIPT_DENIED_REASON } from "@/pages/security/unmask";
+import { TRANSCRIPT_DENIED_NOTE } from "@/pages/security/unmask";
+import { ChatReadAccess } from "@/pages/security/finding-drawer-parts";
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
@@ -1224,15 +1229,9 @@ function ChatDetailPanel({
   // Risk findings are an org-admin resource (risk.results.list is org-admin
   // gated). Only admins get the risk-windowed "Risky only" view + its data.
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
-  // A session's tool calls come from the project's raw tool logs, which need
-  // log:read on the project on top of access to the transcript.
-  const canViewToolLogs = useCanViewToolLogs();
+  const toolLogsAccess = useToolLogsAccess();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedView, setView] = useState<ViewMode>("chat");
-  // The Tool calls view reads the project's raw tool logs, so without log:read
-  // (including after a grants refetch takes it away) the transcript shows.
-  const view: ViewMode =
-    selectedView === "tools" && !canViewToolLogs ? "chat" : selectedView;
   const [rawView, setRawView] = useState(false);
   useEffect(() => setRawView(false), [chatId]);
   const [riskyOnly, setRiskyOnly] = useState(false);
@@ -1343,6 +1342,19 @@ function ChatDetailPanel({
       title: title || "Claude Tag session",
     };
   }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);
+  // A session's tool calls come from the project's raw tool logs. Without
+  // log:read the server returns them only for the viewer's own sessions and
+  // their agents', so the Tool calls view is offered on exactly those.
+  const ownedAgents = useOwnedAgentIds(
+    !toolLogsAccess.projectWide && Boolean(capturedChat?.agentId),
+  );
+  const canViewToolLogs =
+    toolLogsAccess.projectWide ||
+    isOwnScopeSession(capturedChat, user.id, ownedAgents);
+  // Once access goes away (a grants refetch, a new session) the transcript
+  // shows instead of a Tool calls view with nothing behind it.
+  const view: ViewMode =
+    selectedView === "tools" && !canViewToolLogs ? "chat" : selectedView;
   const validFocusedMessageTurn =
     focusedMessageTurn !== undefined &&
     Number.isInteger(focusedMessageTurn) &&
@@ -1442,7 +1454,7 @@ function ChatDetailPanel({
     setActiveOccurrenceKey(null);
   }, [chatId]);
 
-  // Logs fetched before log:read went away are ignored everywhere: the Tool
+  // Logs fetched before access went away are ignored everywhere: the Tool
   // calls view, its count, and the session export.
   const logs = useMemo(
     () =>
@@ -1810,8 +1822,9 @@ function ChatDetailPanel({
         <SheetTitle>Permission denied</SheetTitle>
         <SheetDescription className="text-warning mt-2 flex items-start gap-2">
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
-          <span>{TRANSCRIPT_DENIED_REASON}</span>
+          <span>{TRANSCRIPT_DENIED_NOTE}</span>
         </SheetDescription>
+        <ChatReadAccess chatId={chatId} className="mt-4" />
       </div>
     ) : (
       <div className="p-8">

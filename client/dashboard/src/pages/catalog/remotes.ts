@@ -207,9 +207,19 @@ export function getRemoteDisplayInfo(url: string): {
     const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
     const endpoint = pathParts[pathParts.length - 1] || "";
 
-    // Check for known endpoints
+    // Salesforce publishes production and sandbox variants of the same server.
+    // Keep the environment visible when selecting among those catalog remotes.
+    const salesforce =
+      parsedUrl.origin === "https://api.salesforce.com" &&
+      parsedUrl.pathname.startsWith("/platform/mcp/v1/");
+    const environment = pathParts.includes("sandbox")
+      ? "Sandbox"
+      : "Production";
     const info = REMOTE_DISPLAY_INFO[endpoint.toLowerCase()];
-    if (info) return info;
+    if (info)
+      return salesforce
+        ? { ...info, name: `${info.name} · ${environment}` }
+        : info;
 
     // Fallback: format the endpoint name nicely
     const formattedName = endpoint
@@ -218,7 +228,9 @@ export function getRemoteDisplayInfo(url: string): {
       .join(" ");
 
     return {
-      name: formattedName || endpoint,
+      name: salesforce
+        ? `${formattedName || endpoint} · ${environment}`
+        : formattedName || endpoint,
       description: parsedUrl.host,
     };
   } catch {

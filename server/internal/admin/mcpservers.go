@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -60,12 +61,13 @@ func (s *Service) ListProjectMcpServers(ctx context.Context, payload *gen.ListPr
 		row := serverRows[start]
 		servers = append(servers, adminMCPServer{
 			server: &gen.AdminMcpServer{
-				ID:         row.ID.String(),
-				Name:       cmp.Or(row.Name.String, row.ToolsetName.String, row.Slug.String, row.ID.String()),
-				URL:        s.primaryEndpointURL(serverRows[start:end]),
-				Visibility: row.Visibility,
-				Source:     mcpServerSource(row),
-				CreatedAt:  row.CreatedAt.Time.Format(time.RFC3339),
+				ID:          row.ID.String(),
+				Name:        cmp.Or(row.Name.String, row.ToolsetName.String, row.Slug.String, row.ID.String()),
+				URL:         s.primaryEndpointURL(serverRows[start:end]),
+				UpstreamURL: conv.FromPGText[string](row.UpstreamUrl),
+				Visibility:  row.Visibility,
+				Source:      mcpServerSource(row),
+				CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
 			},
 			createdAt: row.CreatedAt.Time,
 		})

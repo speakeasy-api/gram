@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -327,7 +327,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		}
 	}
 
-	org, err := mv.DescribeOrganization(ctx, logger, k.orgRepo, k.billingRepo, apiKey.OrganizationID)
+	org, err := orgaccount.Describe(ctx, logger, k.orgRepo, k.billingRepo, apiKey.OrganizationID)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization")
 	}

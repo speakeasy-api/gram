@@ -336,59 +336,60 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetaMcpServerUsage", "type": "query"}`)
 	})
 
-	Method("getOrganizationGatewayOverview", func() {
-		Description("Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.")
+	Method("getProjectGatewayOverview", func() {
+		Description("Observability overview metrics for calls dispatched through the selected project's Project Gateway: the Organization Gateway limited to that project's servers.")
 
-		// Org-scoped: the Organization Gateway spans every project in the
-		// caller's organization, so it is read without a project scope.
-		Security(security.Session)
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Extend(GetOrganizationGatewayActivityPayload)
+			Extend(GetProjectGatewayActivityPayload)
 			security.SessionPayload()
+			security.ProjectPayload()
 			// Named explicitly: structurally it matches other time-range
 			// payloads and would otherwise be hoisted under one of their names.
-			Meta("openapi:typename", "GetOrganizationGatewayActivityPayload")
+			Meta("openapi:typename", "GetProjectGatewayActivityPayload")
 		})
 
 		Result(GetObservabilityOverviewResult)
 
 		HTTP(func() {
-			POST("/rpc/telemetry.getOrganizationGatewayOverview")
+			POST("/rpc/telemetry.getProjectGatewayOverview")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getOrganizationGatewayOverview")
-		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationGatewayOverview")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrganizationGatewayOverview", "type": "query"}`)
+		Meta("openapi:operationId", "getProjectGatewayOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectGatewayOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectGatewayOverview", "type": "query"}`)
 	})
 
-	Method("getOrganizationGatewayUsage", func() {
-		Description("Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.")
+	Method("getProjectGatewayUsage", func() {
+		Description("Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.")
 
-		// Org-scoped, like getOrganizationGatewayOverview.
-		Security(security.Session)
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Extend(GetOrganizationGatewayActivityPayload)
+			Extend(GetProjectGatewayActivityPayload)
 			security.SessionPayload()
+			security.ProjectPayload()
 			// Named explicitly: structurally it matches other time-range
 			// payloads and would otherwise be hoisted under one of their names.
-			Meta("openapi:typename", "GetOrganizationGatewayActivityPayload")
+			Meta("openapi:typename", "GetProjectGatewayActivityPayload")
 		})
 
 		Result(GetMetaMcpServerUsageResult)
 
 		HTTP(func() {
-			POST("/rpc/telemetry.getOrganizationGatewayUsage")
+			POST("/rpc/telemetry.getProjectGatewayUsage")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getOrganizationGatewayUsage")
-		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationGatewayUsage")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrganizationGatewayUsage", "type": "query"}`)
+		Meta("openapi:operationId", "getProjectGatewayUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectGatewayUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectGatewayUsage", "type": "query"}`)
 	})
 
 	Method("getProjectOverview", func() {
@@ -1441,10 +1442,34 @@ var ListSessionsPayload = Type("ListSessionsPayload", func() {
 var ListSessionsResult = Type("ListSessionsResult", func() {
 	Description("Result of listing org-scoped chat sessions")
 
-	Attribute("sessions", ArrayOf(SessionSummaryType), "List of chat session summaries")
+	Attribute("sessions", ArrayOf(SessionSummaryType), "List of chat session summaries. Only sessions from projects the caller holds chat:read on are listed.")
 	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("scoped", Boolean, "True when sessions were withheld because the caller lacks chat:read on one or more projects. The totals still cover every matching session.")
+	Attribute("totals", SessionTotalsType, "Aggregates over every matching session in the organization. Present only when scoped is true.")
 
-	Required("sessions")
+	Required("sessions", "scoped")
+})
+
+var SessionTotalsType = Type("SessionTotals", func() {
+	Description("Aggregate usage over a set of chat sessions")
+
+	Attribute("session_count", Int64, "Number of matching chat sessions")
+	Attribute("message_count", Int64, "Number of LLM completion messages across the sessions")
+	Attribute("tool_call_count", Int64, "Number of tool calls across the sessions")
+	Attribute("total_input_tokens", Int64, "Total input tokens used")
+	Attribute("total_output_tokens", Int64, "Total output tokens used")
+	Attribute("total_tokens", Int64, "Total tokens used")
+	Attribute("total_cost", Float64, "Total cost in USD")
+
+	Required(
+		"session_count",
+		"message_count",
+		"tool_call_count",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"total_cost",
+	)
 })
 
 var SessionSummaryType = Type("SessionSummary", func() {
@@ -3191,8 +3216,8 @@ var GetMetaMcpServerUsagePayload = Type("GetMetaMcpServerUsagePayload", func() {
 	Required("meta_mcp_server_id", "from", "to")
 })
 
-var GetOrganizationGatewayActivityPayload = Type("GetOrganizationGatewayActivityPayload", func() {
-	Description("Time range for the caller's Organization Gateway activity")
+var GetProjectGatewayActivityPayload = Type("GetProjectGatewayActivityPayload", func() {
+	Description("Time range for the selected project's Project Gateway activity")
 
 	Attribute("from", String, "Start time in ISO 8601 format", func() {
 		Format(FormatDateTime)

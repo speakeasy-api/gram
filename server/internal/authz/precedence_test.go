@@ -69,13 +69,14 @@ func principalPrecedenceCases() []principalPrecedenceCase {
 			allowed: false,
 		},
 		{
-			name: "direct grant through scope expansion outranks role block",
+			name: "direct write grant does not imply connect past a role block",
 			grants: []Grant{
+				heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
 				heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
 				heldBy(precedenceUser, NewGrant(ScopeMCPWrite, "server-1")),
 			},
 			check:   serverCheck,
-			allowed: true,
+			allowed: false,
 		},
 		{
 			name: "direct wildcard grant does not outrank role block",
@@ -291,9 +292,9 @@ func TestEngineFilterPrincipalPrecedence(t *testing.T) {
 	})
 
 	allowed, err := engine.Filter(ctx, []Check{
-		MCPCheck(ScopeMCPConnect, "server-1", ""),
-		MCPCheck(ScopeMCPConnect, "server-2", ""),
-		MCPCheck(ScopeMCPConnect, "server-3", ""),
+		MCPCheck(ScopeMCPConnect, "server-1", testProjectID),
+		MCPCheck(ScopeMCPConnect, "server-2", testProjectID),
+		MCPCheck(ScopeMCPConnect, "server-3", testProjectID),
 	})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"server-1", "server-3"}, allowed)

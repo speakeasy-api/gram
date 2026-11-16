@@ -24,6 +24,7 @@ type DataExportRouteSnapshot struct {
 	DataSource        string  `json:"data_source"`
 	Enabled           bool    `json:"enabled"`
 	OtelDestinationID *string `json:"otel_destination_id,omitempty"`
+	MinSeverity       *string `json:"min_severity,omitempty"`
 }
 
 type LogDataExportRouteCreateEvent struct {
@@ -34,12 +35,17 @@ type LogDataExportRouteCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RouteURN   urn.DataExportRoute
-	DataSource string
+	RouteURN      urn.DataExportRoute
+	DataSource    string
+	RouteSnapshot *DataExportRouteSnapshot
 }
 
 func (l *Logger) LogDataExportRouteCreate(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteCreateEvent) error {
 	action := ActionDataExportRouteCreate
+	afterSnapshot, err := marshalAuditPayload(event.RouteSnapshot)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
 	entry := repo.InsertAuditLogParams{
 		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
@@ -58,7 +64,7 @@ func (l *Logger) LogDataExportRouteCreate(ctx context.Context, dbtx repo.DBTX, e
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

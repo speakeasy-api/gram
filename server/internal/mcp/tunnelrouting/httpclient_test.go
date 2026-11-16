@@ -3,6 +3,7 @@ package tunnelrouting
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -470,4 +471,49 @@ func TestHTTPClientExhaustedGatewayStatusPreserved(t *testing.T) {
 			require.Equal(t, tc.want, code)
 		})
 	}
+}
+
+func TestHTTPClientDelayedPublicationForwardsOnce(t *testing.T) {
+	t.Parallel()
+	var requests atomic.Int64
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gateway.Close()
+
+	routes := route.NewRouteTable()
+	calls := 0
+	store := lookupStore{Store: routes, candidates: func(ctx context.Context, id string) ([]string, error) {
+		calls++
+		if calls == 2 {
+			if err := routes.Publish(ctx, id, gateway.URL, time.Minute); err != nil {
+				return nil, fmt.Errorf("publish test tunnel route: %w", err)
+			}
+		}
+		return routes.Candidates(ctx, id)
+	}}
+	req := tokenRequest(t, "https://auth.example.internal/oauth/token")
+	resp, err := newTestHTTPClient(t, store).Do(req, "tunnel-1")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, 2, calls)
+	require.Equal(t, int64(1), requests.Load())
+	require.NoError(t, req.Context().Err(), "lookup cancellation must not cancel the upstream request")
+}
+
+func TestHTTPClientRouteWaitCancellationIsNotStoreFailure(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	store := lookupStore{candidates: func(context.Context, string) ([]string, error) {
+		cancel()
+		return nil, nil
+	}}
+	req := tokenRequest(t, "https://auth.example.internal/oauth/token").WithContext(ctx)
+	resp, err := newTestHTTPClient(t, store).Do(req, "tunnel-1") //nolint:bodyclose // error path returns a nil response
+	require.Nil(t, resp)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, ErrRouteStoreUnavailable)
 }

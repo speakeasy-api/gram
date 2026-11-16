@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -220,8 +221,55 @@ func TestEnvironmentsService_UpdateEnvironment_NonSecretToSecretPreservesValue(t
 	require.NoError(t, err)
 	require.Len(t, updatedEnv.Entries, 1)
 	require.True(t, updatedEnv.Entries[0].IsSecret)
-	// The redaction prefix proves the original plaintext survived the flip.
-	require.Equal(t, "htt*****", updatedEnv.Entries[0].Value)
+	require.Equal(t, "***", updatedEnv.Entries[0].Value)
+	// The original plaintext survived the flip.
+	require.Equal(t, "https://api.example.com", ti.plaintextValues(t, ctx, updatedEnv)["BASE_URL"])
+}
+
+func TestEnvironmentsService_UpdateEnvironment_ReportsWhetherSecretHasValue(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	env, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "has-value-env",
+		Description:      nil,
+		Entries: []*gen.EnvironmentEntryInput{
+			{Name: "PLACEHOLDER", Value: new(""), IsSecret: new(true)},
+			{Name: "API_KEY", Value: new("set-secret"), IsSecret: new(true)},
+		},
+	})
+	require.NoError(t, err)
+
+	// Filling the placeholder gives it a value; clearing the other secret
+	// leaves it as an empty placeholder.
+	updatedEnv, err := ti.service.UpdateEnvironment(ctx, &gen.UpdateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             env.Slug,
+		Description:      nil,
+		Name:             nil,
+		EntriesToUpdate: []*gen.EnvironmentEntryInput{
+			{Name: "PLACEHOLDER", Value: new("filled-secret"), IsSecret: new(true)},
+			{Name: "API_KEY", Value: new(""), IsSecret: new(true)},
+		},
+		EntriesToRemove: []string{},
+	})
+	require.NoError(t, err)
+	require.Len(t, updatedEnv.Entries, 2)
+
+	entriesByName := make(map[string]*types.EnvironmentEntry, len(updatedEnv.Entries))
+	for _, entry := range updatedEnv.Entries {
+		entriesByName[entry.Name] = entry
+	}
+
+	require.True(t, entriesByName["PLACEHOLDER"].HasValue)
+	require.Equal(t, "***", entriesByName["PLACEHOLDER"].Value)
+	require.False(t, entriesByName["API_KEY"].HasValue)
+	require.Equal(t, "<EMPTY>", entriesByName["API_KEY"].Value)
 }
 
 func TestEnvironmentsService_UpdateEnvironment_OmittedValuePreservesSecret(t *testing.T) {
@@ -255,7 +303,8 @@ func TestEnvironmentsService_UpdateEnvironment_OmittedValuePreservesSecret(t *te
 	require.NoError(t, err)
 	require.Len(t, updatedEnv.Entries, 1)
 	require.True(t, updatedEnv.Entries[0].IsSecret)
-	require.Equal(t, "ori*****", updatedEnv.Entries[0].Value)
+	require.Equal(t, "***", updatedEnv.Entries[0].Value)
+	require.Equal(t, "original-secret", ti.plaintextValues(t, ctx, updatedEnv)["API_KEY"])
 }
 
 func TestEnvironmentsService_UpdateEnvironment_OmittedFlagPreservesSecrecy(t *testing.T) {
@@ -305,12 +354,16 @@ func TestEnvironmentsService_UpdateEnvironment_OmittedFlagPreservesSecrecy(t *te
 	}
 
 	require.True(t, entriesByName["API_KEY"].isSecret)
-	require.Equal(t, "rot*****", entriesByName["API_KEY"].value)
+	require.Equal(t, "***", entriesByName["API_KEY"].value)
 	require.False(t, entriesByName["BASE_URL"].isSecret)
 	require.Equal(t, "https://api2.example.com", entriesByName["BASE_URL"].value)
 	// New entries with no flag default to secret.
 	require.True(t, entriesByName["BRAND_NEW"].isSecret)
-	require.Equal(t, "imp*****", entriesByName["BRAND_NEW"].value)
+	require.Equal(t, "***", entriesByName["BRAND_NEW"].value)
+
+	plaintext := ti.plaintextValues(t, ctx, updatedEnv)
+	require.Equal(t, "rotated-secret", plaintext["API_KEY"])
+	require.Equal(t, "implicitly-secret", plaintext["BRAND_NEW"])
 }
 
 func TestEnvironmentsService_UpdateEnvironment_NewEntryRequiresValue(t *testing.T) {
@@ -415,7 +468,8 @@ func TestEnvironmentsService_UpdateEnvironment_AuditLogRedactsValues(t *testing.
 		require.True(t, ok)
 		value, ok := entryMap["Value"].(string)
 		require.True(t, ok)
-		require.Contains(t, value, "*")
+		require.Equal(t, "***", value)
+		require.Equal(t, true, entryMap["HasValue"])
 	}
 
 	afterEntries, ok := afterSnapshot["Entries"].([]any)
@@ -428,7 +482,8 @@ func TestEnvironmentsService_UpdateEnvironment_AuditLogRedactsValues(t *testing.
 		require.True(t, ok)
 		value, ok := entryMap["Value"].(string)
 		require.True(t, ok)
-		require.Contains(t, value, "*")
+		require.Equal(t, "***", value)
+		require.Equal(t, true, entryMap["HasValue"])
 		entryName, ok := entryMap["Name"].(string)
 		require.True(t, ok)
 		entryNames[entryName] = true

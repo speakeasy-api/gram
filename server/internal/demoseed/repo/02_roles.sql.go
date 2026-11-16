@@ -316,9 +316,9 @@ INSERT INTO principal_grants
   (organization_id, principal_urn, scope, selectors)
 SELECT $1::text, $2::text, scope,
        jsonb_build_object(
-         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
+         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN 'project'
                                ELSE split_part(scope, ':', 1) END,
-         'resource_id', CASE WHEN scope = 'log:read' THEN $3::text ELSE '*' END)
+         'resource_id', CASE WHEN scope IN ('log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN $3::text ELSE '*' END)
 FROM unnest($4::text[]) AS scope
 `
 

@@ -14,8 +14,6 @@ import { allMemberRoleIds } from "@/lib/member-roles";
  * Directory members only: the identities index also lists unattributed
  * addresses and agent ids, but reaching those needs an all-time telemetry
  * crawl, far too heavy for a surface that answers on every keystroke.
- *
- * People are fuzzy-only: the ranker never sends `person` candidates to Jev.
  */
 export function usePersonCandidates({
   enabled,

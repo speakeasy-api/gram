@@ -234,6 +234,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 	}, true)
 	if err != nil {
+		if errors.Is(err, errProviderSetupPending) {
+			return nil, oops.E(oops.CodeInvalid, err, "%s", err).LogError(ctx, logger)
+		}
 		if errors.Is(err, ErrServerReferenceOutsideProject) {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 		}
@@ -360,6 +363,11 @@ func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger,
 		}
 		sourceURL = source.Url
 	default:
+		return
+	}
+
+	if isPendingProviderSetupURL(sourceURL) {
+		// Setup replaces this temporary URL; skip outbound favicon discovery for it.
 		return
 	}
 
@@ -715,7 +723,11 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
 			readable = append(readable, server)
 			readableViews = append(readableViews, views[i])
+			continue
 		}
+		// Setup readiness is a server detail, so organization readers without
+		// mcp:read don't see it.
+		views[i].SetupGuideCompletedAt = nil
 	}
 	EnrichViews(ctx, logger, s.db, s.serverURL, authCtx.ActiveOrganizationID, readable, readableViews)
 
@@ -893,6 +905,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 				return nil, oops.E(oops.CodeUnexpected, remoteErr, "resolve proposed remote MCP target").LogError(ctx, logger)
 			}
 			proposedURL = remote.Url
+			if isPendingProviderSetupURL(proposedURL) {
+				return nil, oops.E(oops.CodeInvalid, errProviderSetupPending, "%s", errProviderSetupPending).LogError(ctx, logger)
+			}
 		}
 		if err := s.checkDistributionAdmission(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, proposedURL, backendChanged); err != nil {
 			return nil, err

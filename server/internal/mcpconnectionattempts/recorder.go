@@ -16,6 +16,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/simplelru"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/singleflight"
@@ -141,6 +142,35 @@ func Grant(grantType string) Option {
 	}}
 }
 
+// RequestMethod labels the request a row is about. It is the sub-reason, and
+// Once folds repeats per method. The label must come from a fixed set.
+func RequestMethod(label string) Option {
+	return Option{apply: func(row *Row) {
+		if shortLabel.MatchString(label) {
+			row.SubReason = label
+			row.foldMethod = label
+		}
+	}}
+}
+
+// FoldRefusedSubjects folds a refused Once row's repeats across every subject that shares key,
+// for subjects anyone can mint, such as a public workload issuer's. A row that also stands for
+// held-back rows stores no subject, since theirs may differ. Successes still fold per subject.
+func FoldRefusedSubjects(key string) Option {
+	return Option{apply: func(row *Row) {
+		if row.Reason != "" && shortLabel.MatchString(key) {
+			row.foldSubjects = key
+		}
+	}}
+}
+
+// dropFoldedSubject clears the subject of a row folded across subjects that stands for others too.
+func (row *Row) dropFoldedSubject() {
+	if row.foldSubjects != "" {
+		row.SubjectURN = ""
+	}
+}
+
 // Detail is a finer label within the reason, such as org_lookup_failed. A value
 // that is not a short identifier is left out and the row is kept.
 func Detail(subReason string) Option {
@@ -244,6 +274,12 @@ type Row struct {
 	// client waits here for the writer to read it. It is never stored or logged.
 	client requestClient
 
+	// foldMethod separates Once repeats by request method. It is never stored.
+	foldMethod string
+
+	// foldSubjects replaces the subject when folding Once repeats. It is never stored.
+	foldSubjects string
+
 	// failedElsewhere is for the export only and is never stored.
 	failedElsewhere bool
 }
@@ -321,7 +357,9 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		ClientVersion:         "",
 		Repeats:               0,
 		DeviceKey:             "",
-		client:                requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: attempt.scope.appFamily, reported: nil},
+		client:                requestClient{present: false, userAgent: "", ipAddress: "", appFamily: attempt.scope.appFamily, reported: nil},
+		foldMethod:            "",
+		foldSubjects:          "",
 		failedElsewhere:       false,
 	}
 	for _, opt := range opts {
@@ -479,7 +517,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	meter := meterProvider.Meter(meterScope)
 
 	steps, err := meter.Int64Counter(meterSteps,
-		metric.WithDescription("MCP connection attempt steps by outcome, step, reason and who fixes it."),
+		metric.WithDescription("MCP connection attempt steps stored in ClickHouse, by outcome, step, reason, who fixes it and known provider. Rows not stored, including those of organizations with logs off, are not counted."),
 		metric.WithUnit("{step}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSteps), attr.SlogError(err))
@@ -668,6 +706,9 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 			return false
 		}
 		r.dropLostRepeats(ctx, decision.lost)
+		if decision.repeats > 0 {
+			row.dropFoldedSubject()
+		}
 		if !decision.allowed {
 			// Callers with no known subject fold together, so the shared id isn't this caller's.
 			if onceKeyOf(row).subject != "" {
@@ -681,7 +722,6 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 			row.AttemptID = decision.foldID
 		}
 	}
-	r.countStep(ctx, row)
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
 			r.stampClient(&row)
@@ -989,9 +1029,11 @@ func (r *Recorder) run() {
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
 			r.surviving(events(rows...), func() {
-				if r.insert(rows) {
+				switch {
+				case r.insert(rows):
+					r.countSteps(rows)
 					r.exportRows(rows)
-				} else if stopping() {
+				case stopping():
 					drainFailed = true
 				}
 			})
@@ -1034,8 +1076,10 @@ func (r *Recorder) run() {
 	}
 	addPending := func(rows []Row) {
 		for _, row := range rows {
+			if row.Repeats > 0 {
+				row.dropFoldedSubject()
+			}
 			r.unfinished.Add(1)
-			r.countStep(context.Background(), row)
 			add(row)
 		}
 	}
@@ -1115,16 +1159,24 @@ func (r *Recorder) insert(rows []Row) bool {
 	return false
 }
 
-func (r *Recorder) countStep(ctx context.Context, row Row) {
+// countSteps counts stored rows only, so dropped rows, including every row of an
+// organization with logs off, never reach the metric.
+func (r *Recorder) countSteps(rows []Row) {
 	if r.steps == nil {
 		return
 	}
-	r.steps.Add(ctx, 1, metric.WithAttributes(
-		attr.ConnectionOutcome(row.Outcome),
-		attr.ConnectionStep(row.Step),
-		attr.ConnectionReason(row.Reason),
-		attr.ConnectionWhoFixes(row.WhoFixes),
-	))
+	for _, row := range rows {
+		tags := []attribute.KeyValue{
+			attr.ConnectionOutcome(row.Outcome),
+			attr.ConnectionStep(row.Step),
+			attr.ConnectionReason(row.Reason),
+			attr.ConnectionWhoFixes(row.WhoFixes),
+		}
+		if provider := ProviderLabel(row.ProviderHost); provider != "" {
+			tags = append(tags, attr.ConnectionProvider(provider))
+		}
+		r.steps.Add(context.Background(), 1, metric.WithAttributes(tags...))
+	}
 }
 
 func (r *Recorder) drop(ctx context.Context, reason dropReason, n int, cause error) {
