@@ -37,6 +37,11 @@ type Service interface {
 	// List the remote session clients a user_session_issuer in the caller's
 	// organization binds, and the remote session clients each of its live MCP
 	// servers is associated with, so the two can be compared. Requires org:read.
+
+	// Deprecated: the remote session clients bound to a user_session_issuer are no
+	// longer authoritative, and readers are being migrated to the remote session
+	// clients associated with each MCP server. This endpoint exists only to
+	// surface drift between the two during that migration.
 	ListRemoteSessionClientBindings(context.Context, *ListRemoteSessionClientBindingsPayload) (res *UserSessionIssuerRemoteSessionClientBindings, err error)
 	// Preview moving a user_session_issuer in the caller's organization onto or
 	// off the deployment's authentication host: where clients sign in before and
@@ -601,7 +606,9 @@ type UserSessionIssuerRemoteSessionClient struct {
 // organizationUserSessionIssuers service listRemoteSessionClientBindings
 // method.
 type UserSessionIssuerRemoteSessionClientBindings struct {
-	// Remote session clients the user_session_issuer binds.
+	// Remote session clients the user_session_issuer binds. Deprecated: these
+	// bindings are no longer authoritative; read the remote session clients
+	// associated with each MCP server instead.
 	BoundClients []*UserSessionIssuerRemoteSessionClient
 	// One entry per live MCP server and associated remote session client.
 	ServerClients []*UserSessionIssuerServerRemoteSessionClient

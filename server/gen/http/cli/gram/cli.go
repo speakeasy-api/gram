@@ -36175,7 +36175,9 @@ func organizationUserSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    get-issuer: Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update an organization-owned user_session_issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    list-remote-session-client-bindings: List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-session-client-bindings: List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+	
+	Deprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.`)
 	fmt.Fprintln(os.Stderr, `    get-authentication-host-impact: Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-authentication-host: Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.`)
@@ -36308,7 +36310,9 @@ func organizationUserSessionIssuersListRemoteSessionClientBindingsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+	
+	Deprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)

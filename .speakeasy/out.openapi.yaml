@@ -46930,7 +46930,11 @@ paths:
         name: OrganizationUserSessionIssuerMcpServers
   /rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings:
     get:
-      description: List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+      deprecated: true
+      description: |-
+        List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+
+        Deprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.
       operationId: listOrganizationUserSessionIssuerRemoteSessionClientBindings
       parameters:
         - allowEmptyValue: true
@@ -125358,7 +125362,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserSessionIssuerRemoteSessionClient'
-          description: Remote session clients the user_session_issuer binds.
+          description: 'Remote session clients the user_session_issuer binds. Deprecated: these bindings are no longer authoritative; read the remote session clients associated with each MCP server instead.'
         server_clients:
           type: array
           items:

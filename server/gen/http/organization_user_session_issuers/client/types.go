@@ -352,7 +352,9 @@ type ListMcpServersResponseBody struct {
 // "organizationUserSessionIssuers" service "listRemoteSessionClientBindings"
 // endpoint HTTP response body.
 type ListRemoteSessionClientBindingsResponseBody struct {
-	// Remote session clients the user_session_issuer binds.
+	// Remote session clients the user_session_issuer binds. Deprecated: these
+	// bindings are no longer authoritative; read the remote session clients
+	// associated with each MCP server instead.
 	BoundClients []*UserSessionIssuerRemoteSessionClientResponseBody `form:"bound_clients,omitempty" json:"bound_clients,omitempty" xml:"bound_clients,omitempty"`
 	// One entry per live MCP server and associated remote session client.
 	ServerClients []*UserSessionIssuerServerRemoteSessionClientResponseBody `form:"server_clients,omitempty" json:"server_clients,omitempty" xml:"server_clients,omitempty"`

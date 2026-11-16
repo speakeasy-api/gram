@@ -307,7 +307,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 	})
 
 	Method("listRemoteSessionClientBindings", func() {
-		Description("List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.")
+		Description("List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.\n\nDeprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.")
 		Payload(func() {
 			Attribute("user_session_issuer_id", String, "The user_session_issuer whose client bindings are listed.", func() { Format(FormatUUID) })
 			Required("user_session_issuer_id")
@@ -316,6 +316,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Result(UserSessionIssuerRemoteSessionClientBindings)
 		HTTP(func() {
 			GET("/rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings")
+			Deprecated()
 			Param("user_session_issuer_id")
 			security.SessionHeader()
 			Response(StatusOK)
@@ -726,7 +727,7 @@ var UserSessionIssuerServerRemoteSessionClient = Type("UserSessionIssuerServerRe
 
 var UserSessionIssuerRemoteSessionClientBindings = Type("UserSessionIssuerRemoteSessionClientBindings", func() {
 	Description("The remote session clients a user_session_issuer binds, and those its live MCP servers are associated with.")
-	Attribute("bound_clients", ArrayOf(UserSessionIssuerRemoteSessionClient), "Remote session clients the user_session_issuer binds.")
+	Attribute("bound_clients", ArrayOf(UserSessionIssuerRemoteSessionClient), "Remote session clients the user_session_issuer binds. Deprecated: these bindings are no longer authoritative; read the remote session clients associated with each MCP server instead.")
 	Attribute("server_clients", ArrayOf(UserSessionIssuerServerRemoteSessionClient), "One entry per live MCP server and associated remote session client.")
 	Required("bound_clients", "server_clients")
 })

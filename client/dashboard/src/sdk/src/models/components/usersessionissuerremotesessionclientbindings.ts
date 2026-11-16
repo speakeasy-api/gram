@@ -21,7 +21,7 @@ import {
  */
 export type UserSessionIssuerRemoteSessionClientBindings = {
   /**
-   * Remote session clients the user_session_issuer binds.
+   * Remote session clients the user_session_issuer binds. Deprecated: these bindings are no longer authoritative; read the remote session clients associated with each MCP server instead.
    */
   boundClients: Array<UserSessionIssuerRemoteSessionClient>;
   /**

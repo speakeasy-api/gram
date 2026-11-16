@@ -43,6 +43,10 @@ import { Result } from "../types/fp.js";
  *
  * @remarks
  * List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+ *
+ * Deprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.
+ *
+ * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
  */
 export function organizationUserSessionIssuersListRemoteSessionClientBindings(
   client: GramCore,
