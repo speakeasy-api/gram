@@ -1,4 +1,5 @@
 import { useOrganization } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useProjectGateway } from "@gram/client/react-query/projectGateway.js";
 
@@ -16,8 +17,10 @@ export function useProjectGatewayEntry(): {
 } {
   const organization = useOrganization();
   const { hasScope } = useRBAC();
+  const gramProject = useProjectSlugForRequests();
   // Discoverability only: a failed read hides the entry rather than the page.
-  const { data } = useProjectGateway(undefined, undefined, {
+  // Keyed by project so switching projects never shows the last one's URL.
+  const { data } = useProjectGateway({ gramProject }, undefined, {
     throwOnError: false,
   });
   const isOff = data?.unavailableReason === "turned_off";

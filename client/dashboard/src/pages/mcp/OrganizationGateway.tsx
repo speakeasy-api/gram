@@ -30,6 +30,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useProjectGateway } from "@gram/client/react-query/projectGateway.js";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -145,7 +146,9 @@ function ProjectGatewayContent({
     isCurrentOrganization,
     enabled: canReadOrganization,
   });
-  const gateway = useProjectGateway(undefined, undefined, {
+  const gramProject = useProjectSlugForRequests();
+  // Keyed by project so switching projects never shows the last one's URL.
+  const gateway = useProjectGateway({ gramProject }, undefined, {
     throwOnError: false,
   });
   // The stored setting decides when it can be read; otherwise the project

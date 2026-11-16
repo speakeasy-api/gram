@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   error: false,
   admin: true,
   orgRead: true,
+  projectRead: true,
   permissionsLoading: false,
   gatewayLoading: false,
   available: true,
@@ -84,6 +85,7 @@ vi.mock("@/components/require-scope", () => ({
     scope: string;
     level: string;
   }) => {
+    if (scope === "project:read") return state.projectRead ? children : null;
     if (scope !== "org:admin" || (state.admin && !state.permissionsLoading))
       return <>{children}</>;
     if (level === "component")
@@ -106,13 +108,19 @@ vi.mock("@/hooks/useRBAC", () => ({
     hasScope: (scope: string, resourceId: string) =>
       (scope === "org:admin" && resourceId === "test-org" && state.admin) ||
       (scope === "org:read" && resourceId === "test-org" && state.orgRead) ||
-      scope === "project:read",
+      (scope === "project:read" &&
+        resourceId === "test-project" &&
+        state.projectRead),
     isLoading: state.permissionsLoading,
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "test-org", slug: "test" }),
   useProject: () => ({ id: "test-project", slug: "sales", name: "Sales" }),
+}));
+vi.mock("@/contexts/Sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Sdk")>()),
+  useProjectSlugForRequests: () => "sales",
 }));
 vi.mock("@/hooks/useIsCurrentOrganization", () => ({
   useIsCurrentOrganization: () => () => true,
@@ -176,6 +184,7 @@ beforeEach(() => {
   state.error = false;
   state.admin = true;
   state.orgRead = true;
+  state.projectRead = true;
   state.permissionsLoading = false;
   state.gatewayLoading = false;
   state.available = true;
@@ -414,4 +423,16 @@ it("serves a project member without organization access their project's gateway"
   ).toBeNull();
   await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
   expect(screen.getByText("Project gateway activity")).toBeTruthy();
+});
+
+it("keeps a project's gateway from people without access to the project", () => {
+  state.on = true;
+  state.projectRead = false;
+  render(<ProjectGatewayPage />);
+  expect(
+    screen.queryByText(
+      "https://api.example.test/mcp/gateway/test/projects/sales",
+    ),
+  ).toBeNull();
+  expect(screen.queryByRole("tab")).toBeNull();
 });

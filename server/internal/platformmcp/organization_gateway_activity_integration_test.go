@@ -164,8 +164,17 @@ func TestOrganizationGatewayActivityReportsOneProjectGateway(t *testing.T) {
 		{Name: "Alpha", MCPID: inProject.String(), ProjectID: projectIDs[0].String(), ToolCalls: 2, ErrorCount: 0},
 	}, out.TopServers, "only the project's servers are named")
 
-	// A project of another organization reads as not found.
-	_, err = service.Get(ctx, principal, GetOrganizationGatewayActivityInput{ProjectID: uuid.NewString()})
+	// A real project of another organization reads as not found.
+	otherOrganizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: otherOrganizationID, Name: "Other organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	foreign, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other organization project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: otherOrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = service.Get(ctx, principal, GetOrganizationGatewayActivityInput{ProjectID: foreign.ID.String()})
 	require.ErrorIs(t, err, ErrProjectGatewayActivityProjectNotFound)
 	_, err = service.Get(ctx, principal, GetOrganizationGatewayActivityInput{ProjectID: "not-a-uuid"})
 	require.ErrorIs(t, err, ErrProjectGatewayActivityProjectInvalid)
