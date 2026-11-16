@@ -163,7 +163,8 @@ func (r MCPServerRef) Connect() Check {
 }
 
 // ToolCall requests ScopeMCPConnect with tool and disposition. An empty value is left out of the
-// check, except an empty disposition, which is carried as unannotated.
+// check: a tool with no true hint is unannotated, and an empty disposition
+// means the tool's annotations are unknown.
 func (r MCPServerRef) ToolCall(tool, disposition string) Check {
 	dimensions := r.dimensions()
 	if dimensions == nil {
@@ -175,7 +176,6 @@ func (r MCPServerRef) ToolCall(tool, disposition string) Check {
 	if disposition != "" {
 		dimensions["disposition"] = disposition
 	}
-	dimensions["disposition"] = toolCallDisposition(dimensions["disposition"])
 	return newRefCheck(ScopeMCPConnect, r.id.String(), dimensions, MatchStandard).asToolCall()
 }
 

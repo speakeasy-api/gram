@@ -35,43 +35,50 @@ func TestDispositionFromHints(t *testing.T) {
 
 // A tool with no annotations is a value of its own. A grant with no
 // disposition limit covers it, a grant limited to read-only does not, and an
-// admin can allow or block it by name.
+// admin can allow or block it by name. A tool whose annotations are unknown
+// carries no disposition, so only a grant with no disposition limit covers it.
 func TestUnannotatedToolCall(t *testing.T) {
 	t.Parallel()
 
 	server := uuid.New()
-	ref := MCPServer(MCPServerIDOf(server), ProjectIDOf(uuid.New()))
+	project := uuid.New()
+	ref := MCPServer(MCPServerIDOf(server), ProjectIDOf(project))
 	limited := func(scope Scope, disposition string) Grant {
 		selector := NewSelector(scope, server.String())
 		selector[SelectorKeyDisposition] = disposition
 		return NewGrantWithSelector(scope, selector)
 	}
-	unannotated := map[string]Check{
-		"generated ref":         ref.ToolCall("mystery", ""),
-		"constructed tool call": MCPToolCallCheck(server.String(), MCPToolCallDimensions{Tool: "mystery", Disposition: "", ProjectID: uuid.NewString()}),
+	grantSets := map[string][]Grant{
+		"unlimited":           {NewGrant(ScopeMCPConnect, server.String())},
+		"read-only":           {limited(ScopeMCPConnect, DispositionReadOnly)},
+		"unannotated by name": {limited(ScopeMCPConnect, DispositionUnannotated)},
+		"unannotated blocked": {NewGrant(ScopeMCPConnect, WildcardResource), limited(ScopeMCPBlockedConnect, DispositionUnannotated)},
+	}
+	cases := map[string]struct {
+		call Check
+		want map[string]bool
+	}{
+		"unannotated, generated ref": {
+			call: ref.ToolCall("mystery", DispositionUnannotated),
+			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": true, "unannotated blocked": false},
+		},
+		"unannotated, constructed": {
+			call: MCPToolCallCheck(server.String(), MCPToolCallDimensions{Tool: "mystery", Disposition: DispositionUnannotated, ProjectID: project.String()}),
+			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": true, "unannotated blocked": false},
+		},
+		"unknown, generated ref": {
+			call: ref.ToolCall("uncatalogued", ""),
+			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": true},
+		},
+		"unknown, constructed": {
+			call: MCPToolCallCheck(server.String(), MCPToolCallDimensions{Tool: "uncatalogued", Disposition: "", ProjectID: project.String()}),
+			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": true},
+		},
 	}
 
-	for name, call := range unannotated {
-		require.Equal(t, DispositionUnannotated, call.Dimensions[SelectorKeyDisposition], name)
-
-		for grants, want := range map[string]bool{
-			"unlimited":           true,
-			"read-only":           false,
-			"unannotated by name": true,
-			"unannotated blocked": false,
-		} {
-			var set []Grant
-			switch grants {
-			case "unlimited":
-				set = []Grant{NewGrant(ScopeMCPConnect, server.String())}
-			case "read-only":
-				set = []Grant{limited(ScopeMCPConnect, DispositionReadOnly)}
-			case "unannotated by name":
-				set = []Grant{limited(ScopeMCPConnect, DispositionUnannotated)}
-			case "unannotated blocked":
-				set = []Grant{NewGrant(ScopeMCPConnect, WildcardResource), limited(ScopeMCPBlockedConnect, DispositionUnannotated)}
-			}
-			allowed, err := GrantsAuthorize(set, call)
+	for name, tc := range cases {
+		for grants, want := range tc.want {
+			allowed, err := GrantsAuthorize(grantSets[grants], tc.call)
 			require.NoError(t, err, name+", "+grants)
 			require.Equal(t, want, allowed, name+", "+grants)
 		}
