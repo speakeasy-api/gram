@@ -391,7 +391,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 // implying organization scopes. An existing organization reader retains read
 // access even if plugin writes are explicitly excluded.
 func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthContext) error {
-	reader, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	reader, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read())
 	if err != nil {
 		return fmt.Errorf("evaluate plugin read access: %w", err)
 	}
@@ -407,7 +407,7 @@ func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthC
 // filterPluginAudience keeps recipient identities and counts on the same
 // admin-only boundary as the assignment management API, including mutations.
 func (s *Service) filterPluginAudience(ctx context.Context, ac *contextvalues.AuthContext, plugin *gen.Plugin) (*gen.Plugin, error) {
-	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
@@ -1366,7 +1366,7 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1393,7 +1393,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1543,7 +1543,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, nil, err
 	}
 
@@ -1623,7 +1623,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, nil, err
 	}
 
@@ -1776,7 +1776,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		return nil, err
 	}
 
-	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
@@ -2973,7 +2973,7 @@ func (s *Service) GetMarketplaceSettings(ctx context.Context, payload *gen.GetMa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -3010,7 +3010,7 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
