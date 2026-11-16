@@ -1431,7 +1431,7 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "label", "description", "resource_type", "category", "visibility", "agent_eligible", "sensitive", "sub_scopes")
+	Required("slug", "label", "description", "resource_type", "category", "visibility", "agent_eligible", "temporary_grantable", "sensitive", "sub_scopes")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
@@ -1458,6 +1458,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 		Enum("user_visible", "internal")
 	})
 	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
+	Attribute("temporary_grantable", Boolean, "Whether an administrator can give this scope for a limited time with createTemporaryGrant.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
 		Enum(conv.AnySlice(authz.ExclusionScopeNames())...)
@@ -2095,10 +2096,25 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	})
 	Attribute("resolution_type", String, func() {
 		Description("How the challenge was resolved.")
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("resolved_by", String, "URN of the admin who resolved.")
 	Attribute("resolution_role_slug", String, "Role slug assigned (when resolution_type=role_assigned).")
+	Attribute("resolution_temporary_grant", ChallengeTemporaryGrantModel, "The temporary grant given (when resolution_type=temporary_grant).")
+})
+
+var ChallengeTemporaryGrantModel = Type("ChallengeTemporaryGrant", func() {
+	Required("id", "status")
+
+	Attribute("id", String, "Temporary grant ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, "active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.", func() {
+		Enum("active", "expired", "revoked")
+	})
+	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests. Absent once revoked, and once the same access was given again later.", func() {
+		Format(FormatDateTime)
+	})
 })
 
 var ListChallengesResult = Type("ListChallengesResult", func() {
@@ -2157,10 +2173,11 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	})
 	Attribute("resolution_type", String, func() {
 		Description("How the bucket was resolved.")
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("resolved_by", String, "URN of the admin who resolved.")
 	Attribute("resolution_role_slug", String, "Role slug assigned (when resolution_type=role_assigned).")
+	Attribute("resolution_temporary_grant", ChallengeTemporaryGrantModel, "The temporary grant given (when resolution_type=temporary_grant).")
 })
 
 var ListChallengeBucketsResult = Type("ListChallengeBucketsResult", func() {
@@ -2199,7 +2216,7 @@ var ChallengeResolutionModel = Type("ChallengeResolution", func() {
 	Attribute("resource_kind", String, "Resource kind.")
 	Attribute("resource_id", String, "Resource ID.")
 	Attribute("resolution_type", String, func() {
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("role_slug", String, "Assigned role slug.")
 	Attribute("resolved_by", String, "Admin who resolved.")
@@ -2566,6 +2583,9 @@ var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
 	})
 	Attribute("reason", String, "Why the access is needed, recorded in the audit log.", func() {
 		MaxLength(1000)
+	})
+	Attribute("challenge_ids", ArrayOf(String), "Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).", func() {
+		MaxLength(200)
 	})
 })
 

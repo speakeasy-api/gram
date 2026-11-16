@@ -244,6 +244,12 @@ type CreateTemporaryGrantRequestBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// Why the access is needed, recorded in the audit log.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Denied authorization challenges this grant answers. Each must be an
+	// unresolved deny of this scope by this principal that the grant's selector
+	// covers and that no exclusion still blocks; they are resolved as
+	// temporary_grant in the same transaction. Only accepted with a grant to one
+	// member (user:<id>).
+	ChallengeIds []string `form:"challenge_ids,omitempty" json:"challenge_ids,omitempty" xml:"challenge_ids,omitempty"`
 }
 
 // RenewTemporaryGrantRequestBody is the type of the "access" service
@@ -9710,6 +9716,9 @@ type ScopeDefinitionResponseBody struct {
 	// agents cannot hold; those are ignored for the role's agent members rather
 	// than granted.
 	AgentEligible bool `form:"agent_eligible" json:"agent_eligible" xml:"agent_eligible"`
+	// Whether an administrator can give this scope for a limited time with
+	// createTemporaryGrant.
+	TemporaryGrantable bool `form:"temporary_grantable" json:"temporary_grantable" xml:"temporary_grantable"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -10192,6 +10201,22 @@ type AuthzChallengeResponseBody struct {
 	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrantResponseBody `form:"resolution_temporary_grant,omitempty" json:"resolution_temporary_grant,omitempty" xml:"resolution_temporary_grant,omitempty"`
+}
+
+// ChallengeTemporaryGrantResponseBody is used to define fields on response
+// body types.
+type ChallengeTemporaryGrantResponseBody struct {
+	// Temporary grant ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// active: authorizing requests. expired: its deadline passed, or the same
+	// access was given again later as a new grant. revoked: ended early, so the
+	// grant no longer exists.
+	Status string `form:"status" json:"status" xml:"status"`
+	// When the grant stops, or stopped, authorizing new requests. Absent once
+	// revoked, and once the same access was given again later.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // ChallengeBucketResponseBody is used to define fields on response body types.
@@ -10241,6 +10266,8 @@ type ChallengeBucketResponseBody struct {
 	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrantResponseBody `form:"resolution_temporary_grant,omitempty" json:"resolution_temporary_grant,omitempty" xml:"resolution_temporary_grant,omitempty"`
 }
 
 // ChallengeResolutionResponseBody is used to define fields on response body
@@ -18889,6 +18916,12 @@ func NewCreateTemporaryGrantPayload(body *CreateTemporaryGrantRequestBody, sessi
 	if body.Selector != nil {
 		v.Selector = unmarshalSelectorRequestBodyToAccessSelector(body.Selector)
 	}
+	if body.ChallengeIds != nil {
+		v.ChallengeIds = make([]string, len(body.ChallengeIds))
+		for i, val := range body.ChallengeIds {
+			v.ChallengeIds[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -19323,6 +19356,9 @@ func ValidateCreateTemporaryGrantRequestBody(body *CreateTemporaryGrantRequestBo
 		if utf8.RuneCountInString(*body.Reason) > 1000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1000, false))
 		}
+	}
+	if len(body.ChallengeIds) > 200 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.challenge_ids", body.ChallengeIds, len(body.ChallengeIds), 200, false))
 	}
 	return
 }

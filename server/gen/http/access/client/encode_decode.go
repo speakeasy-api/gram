@@ -11386,16 +11386,17 @@ func unmarshalDirectoryReviewItemResponseBodyToAccessDirectoryReviewItem(v *Dire
 // *ScopeDefinitionResponseBody.
 func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
 	res := &access.ScopeDefinition{
-		Slug:           *v.Slug,
-		Label:          *v.Label,
-		Description:    *v.Description,
-		ResourceType:   *v.ResourceType,
-		Category:       *v.Category,
-		Sensitive:      *v.Sensitive,
-		Sensitivity:    v.Sensitivity,
-		Visibility:     *v.Visibility,
-		AgentEligible:  *v.AgentEligible,
-		ExclusionScope: v.ExclusionScope,
+		Slug:               *v.Slug,
+		Label:              *v.Label,
+		Description:        *v.Description,
+		ResourceType:       *v.ResourceType,
+		Category:           *v.Category,
+		Sensitive:          *v.Sensitive,
+		Sensitivity:        v.Sensitivity,
+		Visibility:         *v.Visibility,
+		AgentEligible:      *v.AgentEligible,
+		TemporaryGrantable: *v.TemporaryGrantable,
+		ExclusionScope:     v.ExclusionScope,
 	}
 	res.SubScopes = make([]string, len(v.SubScopes))
 	for i, val := range v.SubScopes {
@@ -12019,6 +12020,25 @@ func unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(v *AuthzChallenge
 	for i, val := range v.RoleSlugs {
 		res.RoleSlugs[i] = val
 	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v.ResolutionTemporaryGrant)
+	}
+
+	return res
+}
+
+// unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant
+// builds a value of type *access.ChallengeTemporaryGrant from a value of type
+// *ChallengeTemporaryGrantResponseBody.
+func unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v *ChallengeTemporaryGrantResponseBody) *access.ChallengeTemporaryGrant {
+	if v == nil {
+		return nil
+	}
+	res := &access.ChallengeTemporaryGrant{
+		ID:        *v.ID,
+		Status:    *v.Status,
+		ExpiresAt: v.ExpiresAt,
+	}
 
 	return res
 }
@@ -12058,6 +12078,9 @@ func unmarshalChallengeBucketResponseBodyToAccessChallengeBucket(v *ChallengeBuc
 	res.ChallengeIds = make([]string, len(v.ChallengeIds))
 	for i, val := range v.ChallengeIds {
 		res.ChallengeIds[i] = val
+	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v.ResolutionTemporaryGrant)
 	}
 
 	return res

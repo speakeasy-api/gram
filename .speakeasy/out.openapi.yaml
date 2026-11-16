@@ -92194,11 +92194,14 @@ components:
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
+        resolution_temporary_grant:
+          $ref: '#/components/schemas/ChallengeTemporaryGrant'
         resolution_type:
           type: string
           description: How the challenge was resolved.
           enum:
             - role_assigned
+            - temporary_grant
             - dismissed
         resolved_at:
           type: string
@@ -92745,11 +92748,14 @@ components:
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
+        resolution_temporary_grant:
+          $ref: '#/components/schemas/ChallengeTemporaryGrant'
         resolution_type:
           type: string
           description: How the bucket was resolved.
           enum:
             - role_assigned
+            - temporary_grant
             - dismissed
         resolved_at:
           type: string
@@ -92814,6 +92820,7 @@ components:
           type: string
           enum:
             - role_assigned
+            - temporary_grant
             - dismissed
         resolved_by:
           type: string
@@ -92839,6 +92846,27 @@ components:
         - resolution_type
         - resolved_by
         - created_at
+    ChallengeTemporaryGrant:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: When the grant stops, or stopped, authorizing new requests. Absent once revoked, and once the same access was given again later.
+          format: date-time
+        id:
+          type: string
+          description: Temporary grant ID.
+          format: uuid
+        status:
+          type: string
+          description: 'active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.'
+          enum:
+            - active
+            - expired
+            - revoked
+      required:
+        - id
+        - status
     ChangePrescriptionRequestBody:
       type: object
       properties:
@@ -95822,6 +95850,12 @@ components:
     CreateTemporaryGrantForm:
       type: object
       properties:
+        challenge_ids:
+          type: array
+          items:
+            type: string
+          description: Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).
+          maxItems: 200
         expires_at:
           type: string
           description: When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.
@@ -115149,6 +115183,9 @@ components:
           items:
             type: string
           description: 'User-visible scopes a grant of this scope also satisfies, one step down: org:admin also satisfies org:read. Empty when the scope implies nothing else.'
+        temporary_grantable:
+          type: boolean
+          description: Whether an administrator can give this scope for a limited time with createTemporaryGrant.
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -115163,6 +115200,7 @@ components:
         - category
         - visibility
         - agent_eligible
+        - temporary_grantable
         - sensitive
         - sub_scopes
     ScopeTask:

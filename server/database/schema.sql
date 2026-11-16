@@ -12381,6 +12381,7 @@ CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
 
   resolution_type TEXT NOT NULL,
   role_slug TEXT,
+  temporary_grant_id uuid,
 
   resolved_by TEXT NOT NULL,
 
@@ -12402,9 +12403,11 @@ COMMENT ON COLUMN authz_challenge_resolutions.challenge_id IS 'UUID of the denie
 @access: opaque-confidential';
 COMMENT ON COLUMN authz_challenge_resolutions.principal_urn IS 'The principal that was denied, copied from the challenge for query convenience.
 @access: opaque-restricted';
-COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, dismissed.
+COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, temporary_grant, dismissed.
 @access: confidential';
 COMMENT ON COLUMN authz_challenge_resolutions.role_slug IS 'When resolution_type=role_assigned, the role slug that was assigned to the principal.
+@access: confidential';
+COMMENT ON COLUMN authz_challenge_resolutions.temporary_grant_id IS 'When resolution_type=temporary_grant, the principal_grants row that was granted with an expiry. Soft reference: the grant row may be revoked (deleted) later.
 @access: confidential';
 COMMENT ON COLUMN authz_challenge_resolutions.resolved_by IS 'URN of the admin who resolved the challenge.
 @access: confidential';

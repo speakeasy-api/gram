@@ -10,6 +10,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": false,
+      "temporary_grantable": true,
       "exclusion_scope": "org:blocked_read"
     },
     {
@@ -21,7 +22,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "org:admin",
@@ -34,6 +36,7 @@
       "sub_scopes": ["org:device_agent_sync", "org:hooks_ingest", "org:read"],
       "visibility": "user_visible",
       "agent_eligible": false,
+      "temporary_grantable": false,
       "exclusion_scope": "org:blocked_admin"
     },
     {
@@ -45,7 +48,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "org:device_agent_sync",
@@ -56,7 +60,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "org:hooks_ingest",
@@ -67,7 +72,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "channels:connect",
@@ -78,7 +84,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "channels:admin",
@@ -89,7 +96,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "channels:read_all",
@@ -101,7 +109,8 @@
       "sensitivity": "conversations",
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "project:read",
@@ -113,6 +122,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "project:blocked_read"
     },
     {
@@ -124,7 +134,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "project:write",
@@ -136,6 +147,7 @@
       "sub_scopes": ["project:read"],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "project:blocked_write"
     },
     {
@@ -147,7 +159,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "mcp:read",
@@ -159,6 +172,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "mcp:blocked_read"
     },
     {
@@ -170,7 +184,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "mcp:write",
@@ -182,6 +197,7 @@
       "sub_scopes": ["mcp:read"],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "mcp:blocked_write"
     },
     {
@@ -193,7 +209,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "mcp:connect",
@@ -205,6 +222,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "mcp:blocked_connect"
     },
     {
@@ -216,7 +234,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "mcp:auth",
@@ -228,6 +247,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": false,
       "exclusion_scope": "mcp:blocked_auth"
     },
     {
@@ -239,7 +259,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "environment:read",
@@ -251,6 +272,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "environment:blocked_read"
     },
     {
@@ -262,7 +284,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "environment:write",
@@ -274,6 +297,7 @@
       "sub_scopes": ["environment:read"],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "environment:blocked_write"
     },
     {
@@ -285,7 +309,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "skill:read",
@@ -297,6 +322,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "skill:blocked_read"
     },
     {
@@ -308,7 +334,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "skill:write",
@@ -320,6 +347,7 @@
       "sub_scopes": ["skill:read"],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "skill:blocked_write"
     },
     {
@@ -331,7 +359,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "plugin:write",
@@ -343,6 +372,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": false,
+      "temporary_grantable": false,
       "exclusion_scope": "plugin:blocked_write"
     },
     {
@@ -354,7 +384,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "assistant:read",
@@ -366,6 +397,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "assistant:blocked_read"
     },
     {
@@ -377,7 +409,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "assistant:write",
@@ -389,6 +422,7 @@
       "sub_scopes": ["assistant:read"],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": true,
       "exclusion_scope": "assistant:blocked_write"
     },
     {
@@ -400,7 +434,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "risk_policy:evaluate",
@@ -412,6 +447,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
+      "temporary_grantable": false,
       "exclusion_scope": "risk_policy:bypass"
     },
     {
@@ -423,7 +459,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "risk_policy:block",
@@ -434,7 +471,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "chat:read",
@@ -446,7 +484,8 @@
       "sensitivity": "conversations",
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": true
     },
     {
       "slug": "chat:write",
@@ -458,7 +497,8 @@
       "sensitivity": "conversations",
       "sub_scopes": ["chat:read"],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": true
     },
     {
       "slug": "memory:read",
@@ -469,7 +509,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "memory:write",
@@ -480,7 +521,8 @@
       "sensitive": false,
       "sub_scopes": ["memory:read"],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "inference:execute",
@@ -491,7 +533,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": true
+      "agent_eligible": true,
+      "temporary_grantable": false
     },
     {
       "slug": "log:read",
@@ -503,7 +546,8 @@
       "sensitivity": "tool_logs",
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": true
     },
     {
       "slug": "agent:read",
@@ -514,7 +558,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": true
     },
     {
       "slug": "agent:write",
@@ -525,7 +570,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "agent:authorize",
@@ -536,7 +582,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "agent:transfer",
@@ -547,7 +594,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "user_visible",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "workload:read",
@@ -559,6 +607,7 @@
       "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": false,
+      "temporary_grantable": true,
       "exclusion_scope": "workload:blocked_read"
     },
     {
@@ -570,7 +619,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     },
     {
       "slug": "workload:write",
@@ -582,6 +632,7 @@
       "sub_scopes": ["workload:read"],
       "visibility": "user_visible",
       "agent_eligible": false,
+      "temporary_grantable": false,
       "exclusion_scope": "workload:blocked_write"
     },
     {
@@ -593,7 +644,8 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": false
+      "agent_eligible": false,
+      "temporary_grantable": false
     }
   ],
   "tasks": [
