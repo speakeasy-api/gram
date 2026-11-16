@@ -162,7 +162,7 @@ func TestMemberClientFailure_SavedCredentialRefused(t *testing.T) {
 		noKey          = `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`
 		agentNoKeySent = `server "weather" was refused by the service it uses: the sign-in details saved for this server were not sent with the request. This agent can't fix this. Ask your administrator to check the sign-in details and address saved for server "weather".`
 	)
-	connectFirst := `server "weather" was refused by the service it uses. Ask the user to open ` + page + ` to connect it, then try again. If it still fails, ask your administrator to check the sign-in details saved for server "weather".`
+	connectFirst := `server "weather" was refused by the service it uses. You may need to connect it first: ` + page + `. If it still fails after you connect, ask your administrator to check the sign-in details saved for server "weather".`
 	notConnected := `server "weather" is not connected for this user. Ask the user to open ` + page + ` to connect it, then retry`
 	for _, tc := range []struct {
 		name   string

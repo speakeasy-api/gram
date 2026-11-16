@@ -237,7 +237,7 @@ func memberAuthFailure(member metaMember, dial memberDial, status int, keySent, 
 		return memberCredentialError{savedCredentialRefused(member.slug, true, forbidden)}
 	// The upstream may want the person's connection, the configured credential, or both.
 	case dial.connectsFirst(keySent):
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q was refused by the service it uses. Ask the user to open %s to connect it, then try again. If it still fails, ask your administrator to check the sign-in details saved for server %q.", member.slug, page, member.slug)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q was refused by the service it uses. You may need to connect it first: %s. If it still fails after you connect, ask your administrator to check the sign-in details saved for server %q.", member.slug, page, member.slug)}}
 	case dial.anonymous && keySent && !dial.clientCredential:
 		return memberCredentialError{savedCredentialRefused(member.slug, false, forbidden)}
 	// An agent with a connection of its own never dials anonymously: routing
