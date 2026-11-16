@@ -535,7 +535,10 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {
+	// The caller acts in speakeasy-team and changes another organization, so
+	// the permission checked is admin of the caller's own organization: grants
+	// are loaded for it, and the engine refuses an org check about any other.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
 

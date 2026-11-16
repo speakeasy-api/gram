@@ -224,7 +224,9 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	if err := validateShape(checks, false); err != nil {
 		return e.mapError(ctx, err)
 	}
-	e.reportOtherOrganization(ctx, checks)
+	if _, refused := e.withoutOtherOrganization(ctx, checks); len(refused) > 0 {
+		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -353,7 +355,10 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 }
 
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
-	e.reportOtherOrganization(ctx, checks)
+	checks, refused := e.withoutOtherOrganization(ctx, checks)
+	if len(checks) == 0 && len(refused) > 0 {
+		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -533,7 +538,9 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	if err := validateShape(checks, true); err != nil {
 		return false, e.mapError(ctx, err)
 	}
-	e.reportOtherOrganization(ctx, checks)
+	if _, refused := e.withoutOtherOrganization(ctx, checks); len(refused) > 0 {
+		return false, nil
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -584,7 +591,10 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 	if err := validateShape(alternatives, true); err != nil {
 		return false, e.mapError(ctx, err)
 	}
-	e.reportOtherOrganization(ctx, alternatives)
+	alternatives, refused := e.withoutOtherOrganization(ctx, alternatives)
+	if len(alternatives) == 0 && len(refused) > 0 {
+		return false, nil
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -660,7 +670,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	if err := validateShape(checks, true); err != nil {
 		return nil, e.mapError(ctx, err)
 	}
-	e.reportOtherOrganization(ctx, checks)
+	checks, _ = e.withoutOtherOrganization(ctx, checks)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -772,7 +782,24 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	if err := validateShape(checks, true); err != nil {
 		return nil, e.mapError(ctx, err)
 	}
-	e.reportOtherOrganization(ctx, checks)
+	if kept, refused := e.withoutOtherOrganization(ctx, checks); len(refused) > 0 {
+		// Decide the rest, then put a false in the place of every refused check.
+		rest, err := e.FindMatched(ctx, kept)
+		if err != nil {
+			return nil, err
+		}
+		other := e.aboutOtherOrganization(ctx)
+		out := make([]bool, 0, len(checks))
+		for _, c := range checks {
+			if other(c) {
+				out = append(out, false)
+				continue
+			}
+			out = append(out, rest[0])
+			rest = rest[1:]
+		}
+		return out, nil
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -978,40 +1005,52 @@ func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 	}
 }
 
-// reportOtherOrganization logs every org check about an organization other
-// than the one the caller is acting in. Grants are loaded for the caller's
-// organization, so such a check asks one organization's grants about another
-// organization. The request still goes through as before: this is the
-// logging window before such a check is refused. Nothing at the call site
-// turns it on: the organization is the check's own resource.
-func (e *Engine) reportOtherOrganization(ctx context.Context, checks []Check) {
+// aboutOtherOrganization reports whether a check is an org check about an
+// organization other than the one the caller is acting in. Grants are loaded
+// for the caller's organization, so such a check would ask one organization's
+// grants about another organization. An id that cannot be compared is never
+// read as the caller's organization. Nothing at the call site turns this on:
+// the organization is the check's own resource.
+func (e *Engine) aboutOtherOrganization(ctx context.Context) func(Check) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return
+	if !ok || authCtx == nil {
+		// No caller: the entry points refuse the request on their own.
+		return func(Check) bool { return false }
 	}
 	caller := OrgIDFrom(authCtx.ActiveOrganizationID)
-	for _, c := range checks {
+	return func(c Check) bool {
 		if c.resourceKind() != ResourceKindOrg {
-			continue
+			return false
 		}
-		// An id that cannot be compared is reported like a different one: it
-		// is never read as the caller's organization.
 		same, err := OrgIDFrom(c.ResourceID).Equals(caller)
-		if err == nil && same {
+		return err != nil || !same
+	}
+}
+
+// withoutOtherOrganization splits checks into the ones the engine goes on to
+// decide and the org checks about another organization, which no caller
+// satisfies, whether or not enforcement is skipped for them. Each refused
+// check is logged.
+func (e *Engine) withoutOtherOrganization(ctx context.Context, checks []Check) (kept []Check, refused []Check) {
+	other := e.aboutOtherOrganization(ctx)
+	if !slices.ContainsFunc(checks, other) {
+		return checks, nil
+	}
+	kept = make([]Check, 0, len(checks))
+	for _, c := range checks {
+		if !other(c) {
+			kept = append(kept, c)
 			continue
 		}
-		reason := "organization is not the caller's"
-		if err != nil {
-			reason = "organization cannot be compared with the caller's"
-		}
+		refused = append(refused, c)
 		e.logger.ErrorContext(
 			ctx,
-			"authz check names another organization than the caller's",
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			"authz check refused: it is about another organization than the caller's",
 			attr.SlogResourceID(c.ResourceID),
-			attr.SlogError(invalidCheckReason(c.Scope, c.ResourceID, reason)),
+			attr.SlogError(Denied(c.Scope, c.selector())),
 		)
 	}
+	return kept, refused
 }
 
 // validateCheckIdentity rejects a check whose scope the registry does not
