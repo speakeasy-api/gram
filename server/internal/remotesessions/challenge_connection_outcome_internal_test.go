@@ -2,9 +2,9 @@ package remotesessions
 
 import (
 	"context"
-	"html"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/http/httptest"
