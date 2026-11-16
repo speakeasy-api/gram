@@ -136,7 +136,7 @@ In a cluster the gateway attests with its projected service-account token and
 the listener checks it with Kubernetes TokenReview. Locally the gateway
 presents an HMAC-signed token with the same claims (subject
 `system:serviceaccount:gram-local:gram-tailnet-gateway`, audience
-`gram-netingress`, 24-hour expiry), and the listener verifies it with
+`gram-netingress`, 30-day expiry), and the listener verifies it with
 `netingress.LocalTokenReviewer`. Everything after the token review is the
 production code path. The key and token live in `local/netingress/`, are
 created on first start, and the token is re-minted on every gateway start.
@@ -184,6 +184,12 @@ recorded, so they need no ownership check. Local machines still carry
 3. Start the group: `pitchfork start --group private-network`.
 4. On the dashboard's Domains page, connect Tailscale with an OAuth client
    from a test tailnet and the `tag:speakeasy` policy the setup sheet shows.
+   Type the full `local-<id>-<name>` hostname into the sheet (`<id>` is
+   `GRAM_NETWORK_INGRESS_DEV_ID`). The sheet builds the policy snippet from
+   the name you type, and the API keeps an already-prefixed name unchanged,
+   so the snippet then names the real `svc:local-<id>-<name>` service. A bare
+   name is still prefixed, but the snippet would name `svc:<name>`, which
+   does not exist.
 
 Readiness is served on `http://127.0.0.1:$GRAM_NETINGRESS_CONTROL_PORT/healthz`
 (which also reviews the gateway's token),

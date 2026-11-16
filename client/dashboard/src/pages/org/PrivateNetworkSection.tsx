@@ -68,6 +68,17 @@ const SERVICE_NOT_APPROVED = "provider_service_not_approved";
 // certificate from Let's Encrypt yet; the gateway retries on its own.
 const CERTIFICATE_UNAVAILABLE = "provider_certificate_unavailable";
 
+// Speakeasy can't use the organization's encryption key, so it can't store the
+// connection's secrets. The fix is access to the key, not the connection.
+const ENCRYPTION_KEY_UNAVAILABLE = "encryption_key_unavailable";
+
+// The service that hosts the connection isn't available in this Speakeasy
+// environment. Only Speakeasy can fix that.
+const PROVIDER_CONFIGURATION_UNAVAILABLE = "provider_configuration_unavailable";
+
+const SUPPORT_URL =
+  "mailto:support@speakeasy.com?subject=Tailscale%20setup%20help";
+
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
@@ -165,16 +176,28 @@ function ConfiguredPrivateNetwork({
   ingress,
   entitled,
   enterprise,
+  onShowSetup,
 }: {
   ingress: NetworkIngress;
   entitled: boolean;
   enterprise: boolean;
+  onShowSetup: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [rotateOpen, setRotateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const serviceNotApproved = ingress.lastError === SERVICE_NOT_APPROVED;
   const certificateUnavailable = ingress.lastError === CERTIFICATE_UNAVAILABLE;
+  const encryptionKeyUnavailable =
+    ingress.lastError === ENCRYPTION_KEY_UNAVAILABLE;
+  const configurationUnavailable =
+    ingress.lastError === PROVIDER_CONFIGURATION_UNAVAILABLE;
+  // These errors have their own explanation, and retrying cannot fix them.
+  const explainedError =
+    serviceNotApproved ||
+    certificateUnavailable ||
+    encryptionKeyUnavailable ||
+    configurationUnavailable;
   const update = useUpdateNetworkIngressMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
@@ -306,6 +329,35 @@ function ConfiguredPrivateNetwork({
               the certificate is issued; there&apos;s nothing to change.
             </Text>
           </Alert>
+        ) : encryptionKeyUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy can&apos;t use your organization&apos;s encryption
+                key, so it can&apos;t store the secrets this connection needs.
+                If your organization manages its own key, restore
+                Speakeasy&apos;s access to it in your cloud key management
+                service. Otherwise, contact support. Speakeasy retries on its
+                own once the key can be used again.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a href={SUPPORT_URL}>Contact support</a>
+              </Button>
+            </div>
+          </Alert>
+        ) : configurationUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy can&apos;t connect Tailscale because of a problem on
+                our side. Nothing in your tailnet or this connection needs to
+                change. Contact support and we&apos;ll fix it.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a href={SUPPORT_URL}>Contact support</a>
+              </Button>
+            </div>
+          </Alert>
         ) : (
           ingress.lastError && (
             <Alert variant="error" dismissible={false}>
@@ -313,38 +365,34 @@ function ConfiguredPrivateNetwork({
             </Alert>
           )
         )}
-        {ingress.status === "error" &&
-          !serviceNotApproved &&
-          !certificateUnavailable && (
-            <Alert variant="warning" dismissible={false}>
-              <div className="space-y-3">
-                <Text small>
-                  Tailscale could not be connected. Check your OAuth client and
-                  tailnet policy, then retry provisioning. If it still fails,
-                  our team can help.
-                </Text>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={!entitled || health.isPending}
-                    onClick={() =>
-                      health.mutate({
-                        security: { sessionHeaderGramSession: "" },
-                      })
-                    }
-                  >
-                    {health.isPending ? "Retrying..." : "Retry provisioning"}
-                  </Button>
-                  <Button asChild variant="tertiary" size="sm">
-                    <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
-                      Contact support
-                    </a>
-                  </Button>
-                </div>
+        {ingress.status === "error" && !explainedError && (
+          <Alert variant="warning" dismissible={false}>
+            <div className="space-y-3">
+              <Text small>
+                Tailscale could not be connected. Check your OAuth client and
+                tailnet policy, then retry provisioning. If it still fails, our
+                team can help.
+              </Text>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!entitled || health.isPending}
+                  onClick={() =>
+                    health.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                >
+                  {health.isPending ? "Retrying..." : "Retry provisioning"}
+                </Button>
+                <Button asChild variant="tertiary" size="sm">
+                  <a href={SUPPORT_URL}>Contact support</a>
+                </Button>
               </div>
-            </Alert>
-          )}
+            </div>
+          </Alert>
+        )}
         <div className="flex items-start justify-between gap-6 border-t pt-4">
           <div className="space-y-1">
             <Text variant="subheading">Require user identity</Text>
@@ -403,6 +451,9 @@ function ConfiguredPrivateNetwork({
               {health.isPending ? "Checking..." : "Check health"}
             </Button>
           )}
+          <Button variant="secondary" size="sm" onClick={onShowSetup}>
+            Setup steps
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -456,6 +507,9 @@ export function PrivateNetworkSection(): JSX.Element | null {
       if (current?.lastError === SERVICE_NOT_APPROVED) return 10_000;
       // The gateway retries the certificate on its own; show it once issued.
       if (current?.lastError === CERTIFICATE_UNAVAILABLE) return 30_000;
+      // The reconciler retries on its own once the encryption key is usable
+      // again; show the recovery without a reload.
+      if (current?.lastError === ENCRYPTION_KEY_UNAVAILABLE) return 30_000;
       return false;
     },
   });
@@ -511,6 +565,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
           ingress={ingress}
           entitled={entitled}
           enterprise={enterprise}
+          onShowSetup={() => setSetupOpen(true)}
         />
       ) : entitled ? (
         <InlineEmptyState
@@ -546,12 +601,18 @@ export function PrivateNetworkSection(): JSX.Element | null {
           }
         />
       )}
-      {entitled && !ingress && (
-        <PrivateNetworkSetupSheet
-          open={setupOpen}
-          onOpenChange={setSetupOpen}
-        />
-      )}
+      {/* Before a connection exists the sheet creates one; afterwards it
+          shows the steps for the connection, including the one it just
+          created. */}
+      {!unsupportedProvider &&
+        ingress?.status !== "deleting" &&
+        (ingress ? setupOpen : entitled) && (
+          <PrivateNetworkSetupSheet
+            open={setupOpen}
+            onOpenChange={setSetupOpen}
+            ingress={ingress}
+          />
+        )}
     </SettingsSection>
   );
 }

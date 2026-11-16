@@ -130,6 +130,9 @@ func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 		{"organization key unusable", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
 			i.Status, i.LastError, i.DNSName = "error", "encryption_key_unavailable", ""
 		})}, networkIngressNextRestoreKey},
+		{"provider not configured in this environment", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "provider_configuration_unavailable", ""
+		})}, networkIngressNextConfigurationIssue},
 		{"Tailscale rate limiting", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
 			i.Status, i.LastError = "error", "provider_rate_limited"
 		})}, networkIngressNextWait},

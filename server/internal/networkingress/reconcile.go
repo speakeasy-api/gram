@@ -187,6 +187,12 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 		observation, operationErr = provider.Observe(callCtx, resources)
 		callCancel()
+		// A retryable Observe failure that reports no name says nothing about
+		// the hosts serving the recorded one, so the private listener keeps
+		// routing to it until an observation succeeds.
+		if operationErr != nil && observation.DNSName == "" && row.DnsName.Valid && providerFailure(operationErr, observation.ErrorCode).Retryable {
+			observation.DNSName = row.DnsName.String
+		}
 	}
 
 	// Even a failed or partially successful Apply can have created resources.

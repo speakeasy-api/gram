@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -707,6 +709,93 @@ func TestProvisionerRenameDeletesThePreviousServiceOnce(t *testing.T) {
 	_, err = f.provisioner.Apply(ctx, renamed)
 	require.NoError(t, err)
 	require.Contains(t, f.api.Services(), "svc:private", "a completed rename deletes the old service only once")
+}
+
+func TestProvisionerRenamesWhileDeletesFailLeaveNoService(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovrenametwice")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	// Two renames while Tailscale refuses to delete services: each pass
+	// defines the new service and fails to delete the old ones.
+	f.api.RejectServiceDeletes = tailscaleapi.ErrForbidden
+	for _, hostname := range []string{"middle", "speakeasy"} {
+		renamed := f.desired(t)
+		renamed.Hostname = hostname
+		_, err = f.provisioner.Apply(ctx, renamed)
+		require.Error(t, err)
+	}
+	require.Contains(t, f.api.Services(), "svc:middle")
+
+	// Once deletes work, the next pass removes every service but the current one.
+	f.api.RejectServiceDeletes = nil
+	renamed := f.desired(t)
+	renamed.Hostname = "speakeasy"
+	_, err = f.provisioner.Apply(ctx, renamed)
+	require.NoError(t, err)
+	require.Equal(t, []string{"svc:speakeasy"}, slices.Collect(maps.Keys(f.api.Services())),
+		"the middle name's service is deleted although the hostname moved past it")
+}
+
+func TestProvisionerRetriesAReportedLabelsServiceUntilItIsDeleted(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovreportedlabel")
+	creds := tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "csecret"}
+	report := func(dnsName string) {
+		t.Helper()
+		_, err := repo.New(f.db).HeartbeatNetworkIngressNode(ctx, repo.HeartbeatNetworkIngressNodeParams{
+			PodName: conv.ToPGText("gram-tailnet-gateway-0"), Status: string(tailnetgateway.NodeStatusOnline), NodeID: conv.ToPGText("nONE"),
+			DnsName: conv.ToPGText(dnsName), LastError: conv.ToPGTextEmpty(""),
+			NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0,
+		})
+		require.NoError(t, err)
+	}
+
+	// An ingress the gateway served as "old" before it recorded any label:
+	// only a host's reported FQDN names the old service.
+	require.NoError(t, f.api.UpsertService(ctx, creds, tailscaleapi.Service{Name: "svc:old", Ports: []string{"tcp:443"}, Tags: nil, Comment: ""}))
+	require.NoError(t, repo.New(f.db).EnsureNetworkIngressNodeSlot(ctx, repo.EnsureNetworkIngressNodeSlotParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0}))
+	report("old.example.ts.net")
+
+	f.api.RejectServiceDeletes = tailscaleapi.ErrForbidden
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.Error(t, err)
+	require.Contains(t, f.api.Services(), "svc:old")
+
+	// The host now reports the new name, but the failed delete is retried.
+	report("private.example.ts.net")
+	f.api.RejectServiceDeletes = nil
+	_, err = f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.NotContains(t, f.api.Services(), "svc:old", "a reported label is recorded, so its failed delete is retried")
+	require.Contains(t, f.api.Services(), "svc:private")
+}
+
+func TestProvisionerApplyRefusesAnIngressOfAnotherOrganization(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovotherorg")
+	desired := f.desired(t)
+	desired.OrganizationID = "org_other"
+
+	observation, err := f.provisioner.Apply(t.Context(), desired)
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressInvalidDesiredState)
+	require.Equal(t, k8s.NetworkIngressErrorInvalidDesiredState, observation.ErrorCode)
+	require.Empty(t, f.api.Services())
+}
+
+func TestProvisionerObserveOwnerReadFailureIsRetryable(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovobserveowner")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, k8s.ErrNetworkIngressInvalidDesiredState)
+	require.NotEqual(t, k8s.NetworkIngressErrorInvalidDesiredState, observation.ErrorCode, "a database error is not a permanent desired-state error")
 }
 
 func TestProvisionerTeardownDeletesTheRecordedServiceOfAPendingRename(t *testing.T) {
