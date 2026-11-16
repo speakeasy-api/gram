@@ -132,8 +132,7 @@ func TestMemberAuthFailure_AgentServerCredentialIsTheServers(t *testing.T) {
 	fix := testAgentFix
 	oauth := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
 	rejected := memberAuthFailure(oauth, memberDial{anonymous: true, oauthSignIn: true, configuredHeaders: true, fix: fix}, http.StatusUnauthorized, true, true)
-	require.ErrorContains(t, rejected, `server "linear" refused the credential configured for it in Speakeasy, such as an API key`)
-	require.ErrorContains(t, rejected, "Ask an admin to update the server's credential")
+	require.ErrorContains(t, rejected, `server "linear" couldn't sign in to the service it uses because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`)
 	require.NotContains(t, rejected.Error(), testAgentSignIn)
 
 	apiKey := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
@@ -156,14 +155,14 @@ func TestMemberClientFailure_SavedCredentialRefused(t *testing.T) {
 	stripped := memberRejection{}
 	static, notConnectedRow, none := mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.Code{}
 	const (
-		refused        = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`
-		forbidden      = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. Connecting does not change that. Ask an admin to check the server's credential and what its account may do, then retry`
-		agentKey       = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`
-		agent403       = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. This agent cannot change that. Ask an admin to check the server's credential and what its account may do, then retry`
+		refused        = `server "weather" couldn't sign in to the service it uses because of how it is set up. Connecting again won't fix this. Ask your administrator to fix it.`
+		forbidden      = `server "weather" turned down this request. The account it is set up to use may not be allowed to do this. Connecting again won't fix this. Ask your administrator.`
+		agentKey       = `server "weather" couldn't sign in to the service it uses because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`
+		agent403       = `server "weather" turned down this request. The account it is set up to use may not be allowed to do this. This agent can't fix this. Ask your administrator.`
 		noKey          = `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`
-		agentNoKeySent = `server "weather" refused the request. The credential configured for it in Speakeasy was not sent, for example because the server redirected to another address. This agent cannot change that. Ask an admin to check the server's URL and credential, then retry`
+		agentNoKeySent = `server "weather" turned down this agent's request because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`
 	)
-	connectFirst := `server "weather" refused the request. Ask the user to open ` + page + ` to connect it, then retry. If it still fails, ask an admin to check the credential configured for the server in Speakeasy`
+	connectFirst := `server "weather" turned down this request. Ask the user to open ` + page + ` to connect it, then try again. If it still fails, ask your administrator.`
 	notConnected := `server "weather" is not connected for this user. Ask the user to open ` + page + ` to connect it, then retry`
 	for _, tc := range []struct {
 		name   string

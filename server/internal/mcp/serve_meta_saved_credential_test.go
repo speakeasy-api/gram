@@ -152,9 +152,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 	t.Parallel()
 
 	const (
-		refused      = `server "member" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`
-		forbidden    = `server "member" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. Connecting does not change that. Ask an admin to check the server's credential and what its account may do, then retry`
-		connectFirst = `server "member" refused the request. Ask the user to open {page} to connect it, then retry. If it still fails, ask an admin to check the credential configured for the server in Speakeasy`
+		refused      = `server "member" couldn't sign in to the service it uses because of how it is set up. Connecting again won't fix this. Ask your administrator to fix it.`
+		forbidden    = `server "member" turned down this request. The account it is set up to use may not be allowed to do this. Connecting again won't fix this. Ask your administrator.`
+		connectFirst = `server "member" turned down this request. Ask the user to open {page} to connect it, then try again. If it still fails, ask your administrator.`
 		noKey        = `server "member" requires authentication and has no credential for this caller. Ask your administrator to connect it`
 		bearer       = `Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource"`
 	)
@@ -253,7 +253,7 @@ func TestAgentGateway_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.True(t, isError)
 	message, _, _ := strings.Cut(text, "\nReference: ")
-	require.Equal(t, `server "`+fx.granted+`" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`, message)
+	require.Equal(t, `server "`+fx.granted+`" couldn't sign in to the service it uses because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`, message)
 	upstream.requireRefused(t, "saved-key")
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 	require.Equal(t, serverID.String(), row.MemberID)
