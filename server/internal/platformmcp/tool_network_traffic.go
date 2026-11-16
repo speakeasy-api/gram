@@ -64,7 +64,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 		return MCPNetworkTrafficOutput{}, err
 	}
 	targetID, err := uuid.Parse(input.TargetID)
-	if err != nil || (input.TargetKind != "mcp" && input.TargetKind != "gateway") {
+	if err != nil || targetID == uuid.Nil || (input.TargetKind != "mcp" && input.TargetKind != "gateway") {
 		return MCPNetworkTrafficOutput{}, fmt.Errorf("target_kind must be mcp or gateway and target_id must be a UUID")
 	}
 	window := input.Window
