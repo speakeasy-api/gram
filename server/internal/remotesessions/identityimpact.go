@@ -263,7 +263,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 			ProjectName: row.ProjectName,
 			Impact:      impact,
 		})
-		checks = append(checks, authz.MCPServer(authz.MCPServerIDFrom(mcpGrantResourceID(row.ID, row.ToolsetID)), authz.ProjectIDOf(row.ProjectID)).Read())
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(row.ID, row.ToolsetID)), authz.ProjectIDOf(row.ProjectID)).Read())
 	}
 	for _, row := range gateways {
 		impact := change.gatewayImpactOf(row.ProjectID)
@@ -323,7 +323,7 @@ func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slo
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(mcpGrantResourceID(target.ID, target.ToolsetID)), authz.ProjectIDOf(projectID)).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(target.ID, target.ToolsetID)), authz.ProjectIDOf(projectID)).Write()); err != nil {
 		return err
 	}
 	if !target.UserSessionIssuerID.Valid || target.UserSessionIssuerID.UUID != userIssuerID {
@@ -461,9 +461,9 @@ func uuidStrings(ids []uuid.UUID) []string {
 	return out
 }
 
-func mcpGrantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
+func mcpGrantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) uuid.UUID {
 	if toolsetID.Valid {
-		return toolsetID.UUID.String()
+		return toolsetID.UUID
 	}
-	return id.String()
+	return id
 }
