@@ -128,7 +128,7 @@ func (f AddressFailure) CardStatus(owner AddressOwner) string {
 	subject := cardSubjects[owner]
 	problem := subject + " doesn't exist."
 	if f == AddressNotAllowed {
-		problem = subject + " is private or internal, so Speakeasy can't reach it."
+		problem = subject + " is private or internal."
 	}
 	return "Can't connect · " + problem + " Ask your administrator to fix it."
 }
