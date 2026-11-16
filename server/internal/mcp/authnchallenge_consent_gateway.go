@@ -176,9 +176,21 @@ func unavailableLabel(cause mcpconnectionattempts.Code) string {
 	return unavailableGenericLabel
 }
 
+// adminFixesCause reports a named cause whose card asks the administrator.
+func adminFixesCause(cause mcpconnectionattempts.Code) bool {
+	_, named := unavailableCauses[cause]
+	meaning, known := mcpconnectionattempts.MeaningOf(cause.String())
+	return named && known && meaning.WhoFixes == mcpconnectionattempts.WhoAdmin
+}
+
 // NeedsAttention reports whether the status line should warn.
 func (g gatewayServer) NeedsAttention() bool {
 	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage() || g.AddressNotice() != ""
+}
+
+// StatusWarns styles the status line as a warning; it changes no controls.
+func (g gatewayServer) StatusWarns() bool {
+	return g.NeedsAttention() || (g.Status == gatewayServerUnavailable && g.address == guardian.AddressFine && adminFixesCause(g.cause))
 }
 
 // addressOwner is whose address stopped this server.

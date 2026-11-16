@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 func gatewayTestMember(slug, name string, issuer uuid.UUID, projectID uuid.UUID) metaMember {
@@ -445,4 +446,25 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `aria-label="Sign in to Source as"`)
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
+}
+
+// A card an administrator must fix warns like an address card; a card that waiting fixes stays muted.
+func TestConsentTemplate_AdminFixedCardWarns(t *testing.T) {
+	t.Parallel()
+
+	view := gatewayServersView([]metaMember{
+		gatewayTestMember("tunnel", "Tunnel", uuid.New(), uuid.New()),
+		gatewayTestMember("busy", "Busy", uuid.New(), uuid.New()),
+	}, nil)
+	view.applyOutcomes([]consentMemberOutcome{
+		{Slug: "tunnel", Name: "Tunnel", Status: gatewayServerUnavailable, cause: mcpconnectionattempts.CodeTunnelUnavailable},
+		{Slug: "busy", Name: "Busy", Status: gatewayServerUnavailable, cause: mcpconnectionattempts.CodeProviderServerError},
+	})
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+
+	require.Contains(t, page, `class="text-xs text-default-warning" data-gateway-server-status="unavailable" >Can&#39;t connect · its tunnel is down · ask your administrator`)
+	require.Contains(t, page, `class="text-xs text-muted-foreground" data-gateway-server-status="unavailable" >Unavailable · it had an error · try again in a few minutes`)
+	for _, server := range view.Servers {
+		require.False(t, server.NeedsAttention(), "%s: styling changes no controls", server.Slug)
+	}
 }
