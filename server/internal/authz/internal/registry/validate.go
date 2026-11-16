@@ -5,23 +5,21 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // ScopeFor returns the stored scope of permission p on resource type t.
-func (t ResourceType) ScopeFor(p Permission) authz.Scope {
+func (t ResourceType) ScopeFor(p Permission) Scope {
 	if p.LegacyScope != "" {
 		return p.LegacyScope
 	}
-	return authz.Scope(string(t.Kind) + ":" + string(p.Action))
+	return Scope(string(t.Kind) + ":" + string(p.Action))
 }
 
 // BlockScopeFor returns the generated block scope paired with permission p on
 // resource type t: the stored scope's prefix, then blocked_ and its action.
-func (t ResourceType) BlockScopeFor(p Permission) authz.Scope {
-	parts := t.ScopeFor(p).Parts()
-	return authz.Scope(parts.Resource + ":blocked_" + parts.Action)
+func (t ResourceType) BlockScopeFor(p Permission) Scope {
+	prefix, action := t.ScopeFor(p).split()
+	return Scope(prefix + ":blocked_" + action)
 }
 
 // Permission returns the permission for action, if declared.
@@ -36,7 +34,7 @@ func (t ResourceType) Permission(action Action) (Permission, bool) {
 }
 
 // CategoryFor is the dashboard grouping of permission p on t.
-func (t ResourceType) CategoryFor(p Permission) authz.ScopeCategory {
+func (t ResourceType) CategoryFor(p Permission) ScopeCategory {
 	if p.Category != "" {
 		return p.Category
 	}
@@ -53,9 +51,9 @@ func (r Registry) Validate() error {
 	if r.Root.Scope == "" {
 		fail("root scope is empty")
 	}
-	scopes := make(map[authz.Scope]string)
+	scopes := make(map[Scope]string)
 	scopes[r.Root.Scope] = "root"
-	claim := func(scope authz.Scope, owner string) {
+	claim := func(scope Scope, owner string) {
 		if previous, ok := scopes[scope]; ok {
 			fail("scope %q is declared by both %s and %s", scope, previous, owner)
 			return
@@ -81,7 +79,7 @@ func (r Registry) Validate() error {
 		}
 		if t.Category == "" {
 			fail("%s: no category", t.Kind)
-		} else if !slices.Contains(authz.ScopeCategories, t.Category) {
+		} else if !slices.Contains(ScopeCategories, t.Category) {
 			fail("%s: unknown category %q", t.Kind, t.Category)
 		}
 		dimKeys := map[string]bool{}
@@ -111,20 +109,21 @@ func (r Registry) Validate() error {
 		for _, p := range t.Permissions {
 			owner := fmt.Sprintf("%s.%s", t.Kind, p.Action)
 			scope := t.ScopeFor(p)
-			if parts := scope.Parts(); parts.Resource == "" || parts.Action == "" || strings.Count(string(scope), ":") != 1 {
+			prefix, action := scope.split()
+			if prefix == "" || action == "" || strings.Count(string(scope), ":") != 1 {
 				fail("%s: scope %q is not resource:action", owner, scope)
 			}
-			if strings.HasPrefix(scope.Parts().Action, "blocked_") {
+			if strings.HasPrefix(action, "blocked_") {
 				fail("%s: blocked_ actions are generated, not declared", owner)
 			}
 			claim(scope, owner)
 			if p.Label == "" || p.Description == "" {
 				fail("%s: label and description are required", owner)
 			}
-			if p.Source != authz.GrantSourceRoles && p.Source != authz.GrantSourceRiskPolicy {
+			if p.Source != GrantSourceRoles && p.Source != GrantSourceRiskPolicy {
 				fail("%s: Source must be GrantSourceRoles or GrantSourceRiskPolicy, got %q", owner, p.Source)
 			}
-			if c := t.CategoryFor(p); !slices.Contains(authz.ScopeCategories, c) {
+			if c := t.CategoryFor(p); !slices.Contains(ScopeCategories, c) {
 				fail("%s: unknown category %q", owner, c)
 			}
 			permissionDimKeys := map[string]bool{}
@@ -201,7 +200,7 @@ func (r Registry) Validate() error {
 	}
 
 	for role, roleScopes := range r.SystemRoles {
-		seen := make(map[authz.Scope]bool)
+		seen := make(map[Scope]bool)
 		for _, scope := range roleScopes {
 			owner, ok := scopes[scope]
 			switch {
@@ -221,11 +220,11 @@ func (r Registry) Validate() error {
 }
 
 func validateDimension(fail func(string, ...any), owner string, d Dimension) {
-	if d.Key == "" || d.Key == authz.SelectorKeyResourceKind || d.Key == authz.SelectorKeyResourceID {
+	if d.Key == "" || d.Key == SelectorKeyResourceKind || d.Key == SelectorKeyResourceID {
 		fail("%s: dimension key %q is reserved or empty", owner, d.Key)
 	}
 	for _, v := range d.Values {
-		if v == "" || v == authz.WildcardResource {
+		if v == "" || v == WildcardResource {
 			fail("%s: dimension %q lists %q as a value", owner, d.Key, v)
 		}
 	}

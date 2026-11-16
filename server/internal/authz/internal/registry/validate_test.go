@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 func TestDefinitions_IsValid(t *testing.T) {
@@ -20,11 +18,11 @@ func validTestPermission(action Action) Permission {
 		Implies:     nil,
 		Exclusions:  nil,
 		Dimensions:  nil,
-		Source:      authz.GrantSourceRoles,
+		Source:      GrantSourceRoles,
 		Category:    "",
 		Label:       "Label",
 		Description: "Description.",
-		Sensitivity: authz.SensitivityNone,
+		Sensitivity: SensitivityNone,
 		Agent:       AgentUnsafe(),
 	}
 }
@@ -33,8 +31,8 @@ func validTestType(kind Kind, permissions ...Permission) ResourceType {
 	return ResourceType{
 		Kind:        kind,
 		Parent:      "",
-		Category:    authz.ScopeCategoryProject,
-		Match:       authz.MatchLoose,
+		Category:    ScopeCategoryProject,
+		Match:       MatchLoose,
 		Dimensions:  nil,
 		Permissions: permissions,
 	}
@@ -42,7 +40,7 @@ func validTestType(kind Kind, permissions ...Permission) ResourceType {
 
 func validTestRegistry(types ...ResourceType) Registry {
 	return Registry{
-		Root:        RootPermission{Scope: authz.ScopeRoot, Agent: AgentUnsafe()},
+		Root:        RootPermission{Scope: Scope("root"), Agent: AgentUnsafe()},
 		Types:       types,
 		SystemRoles: nil,
 		Retired:     nil,
@@ -54,7 +52,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 
 	withImplies := func(p Permission, implies ...Action) Permission { p.Implies = implies; return p }
 	withAgent := func(p Permission, a AgentEligibility) Permission { p.Agent = a; return p }
-	withScope := func(p Permission, s authz.Scope) Permission { p.LegacyScope = s; return p }
+	withScope := func(p Permission, s Scope) Permission { p.LegacyScope = s; return p }
 	withExclusions := func(p Permission, x ...Exclusion) Permission { p.Exclusions = x; return p }
 
 	cases := []struct {
@@ -130,7 +128,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			name: "system role names an unknown scope",
 			model: func() Registry {
 				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
-				r.SystemRoles = map[string][]authz.Scope{"admin": {"thing:read", "thing:write"}}
+				r.SystemRoles = map[string][]Scope{"admin": {"thing:read", "thing:write"}}
 				return r
 			}(),
 			want: `system role "admin" names unknown scope "thing:write"`,
@@ -139,7 +137,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			name: "system role names a block",
 			model: func() Registry {
 				r := validTestRegistry(validTestType("thing", withExclusions(validTestPermission("read"), Blocked(AgentUnsafe(), "thing read access")...)))
-				r.SystemRoles = map[string][]authz.Scope{"admin": {"thing:blocked_read"}}
+				r.SystemRoles = map[string][]Scope{"admin": {"thing:blocked_read"}}
 				return r
 			}(),
 			want: `system role "admin" names "thing:blocked_read", which is not a grantable permission`,
@@ -148,7 +146,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			name: "retired scope reused",
 			model: func() Registry {
 				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
-				r.Retired = []authz.Scope{"thing:read"}
+				r.Retired = []Scope{"thing:read"}
 				return r
 			}(),
 			want: `retired scope "thing:read" is reused by thing.read`,
@@ -166,7 +164,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			name: "wildcard listed as a dimension value",
 			model: func() Registry {
 				typ := validTestType("thing", validTestPermission("read"))
-				typ.Dimensions = []Dimension{{Key: "mode", Values: []string{"a", authz.WildcardResource}, Required: false}}
+				typ.Dimensions = []Dimension{{Key: "mode", Values: []string{"a", WildcardResource}, Required: false}}
 				return validTestRegistry(typ)
 			}(),
 			want: `thing: dimension "mode" lists "*" as a value`,
@@ -210,7 +208,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			name: "exemption with another grant source",
 			model: func() Registry {
 				bypass := validTestPermission("bypass")
-				bypass.Source = authz.GrantSourceRiskPolicy
+				bypass.Source = GrantSourceRiskPolicy
 				return validTestRegistry(validTestType("thing",
 					withExclusions(validTestPermission("evaluate"), Exclusion{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}),
 					bypass,
@@ -237,7 +235,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			name: "system role names a scope twice",
 			model: func() Registry {
 				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
-				r.SystemRoles = map[string][]authz.Scope{"admin": {"thing:read", "thing:read"}}
+				r.SystemRoles = map[string][]Scope{"admin": {"thing:read", "thing:read"}}
 				return r
 			}(),
 			want: `system role "admin" names "thing:read" twice`,
@@ -275,16 +273,26 @@ func TestResourceType_Scopes(t *testing.T) {
 	t.Parallel()
 
 	project := validTestType("project")
-	require.Equal(t, authz.Scope("project:write"), project.ScopeFor(validTestPermission("write")))
-	require.Equal(t, authz.Scope("project:blocked_write"), project.BlockScopeFor(validTestPermission("write")))
+	require.Equal(t, Scope("project:write"), project.ScopeFor(validTestPermission("write")))
+	require.Equal(t, Scope("project:blocked_write"), project.BlockScopeFor(validTestPermission("write")))
 
 	// A historical scope keeps its own prefix for the block too.
-	plugin := withTestScope(validTestPermission("plugin_write"), authz.ScopePluginWrite)
-	require.Equal(t, authz.ScopePluginWrite, project.ScopeFor(plugin))
-	require.Equal(t, authz.ScopePluginBlockedWrite, project.BlockScopeFor(plugin))
+	plugin := withTestScope(validTestPermission("plugin_write"), Scope("plugin:write"))
+	require.Equal(t, Scope("plugin:write"), project.ScopeFor(plugin))
+	require.Equal(t, Scope("plugin:blocked_write"), project.BlockScopeFor(plugin))
 }
 
-func withTestScope(p Permission, s authz.Scope) Permission {
+func withTestScope(p Permission, s Scope) Permission {
 	p.LegacyScope = s
 	return p
+}
+
+// The member role is seeded with a subset of the admin role.
+func TestDefinitions_MemberIsASubsetOfAdmin(t *testing.T) {
+	t.Parallel()
+
+	admin := Definitions.SystemRoles[SystemRoleAdmin]
+	for _, scope := range Definitions.SystemRoles[SystemRoleMember] {
+		require.Contains(t, admin, scope, "member is seeded with %s, which admin is not", scope)
+	}
 }

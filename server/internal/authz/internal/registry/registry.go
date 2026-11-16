@@ -2,11 +2,21 @@
 // permissions, blocks and dimensions, and the built-in roles. It is build-time
 // input only. authzgen reads Definitions and writes the scope constants, the
 // typed refs and every derived table into package authz, which never imports
-// this package. Being internal to authz, it cannot be imported from anywhere
-// else.
+// this package, and this package imports nothing from authz: the generated Go
+// is the only thing that passes between them. The names both sides use are
+// declared once, in vocabulary.go.
 package registry
 
-import "github.com/speakeasy-api/gram/server/internal/authz"
+import (
+	_ "embed"
+	"strings"
+)
+
+// VocabularySource is vocabulary.go as written. authzgen copies its
+// declarations into package authz.
+//
+//go:embed vocabulary.go
+var VocabularySource string
 
 // This file holds the types of the authorization model. The model itself, one
 // Go literal describing every resource type and its permissions, is
@@ -26,6 +36,17 @@ import "github.com/speakeasy-api/gram/server/internal/authz"
 //     (mcp:blocked_write) takes access away and is generated from the
 //     permission; an Exemption (risk_policy:bypass) exempts its holder from a
 //     policy and names another declared permission.
+
+// Scope is the stored string a grant carries, as the model writes it. Package
+// authz has its own Scope type for the evaluator; the generator writes one
+// from the other.
+type Scope string
+
+// split cuts a scope into its prefix and action at the first colon.
+func (s Scope) split() (prefix, action string) {
+	prefix, action, _ = strings.Cut(string(s), ":")
+	return prefix, action
+}
 
 // Kind names a resource type, for example "mcp".
 type Kind string
@@ -58,7 +79,7 @@ type AgentEligibility struct {
 // Policies stored at an older version keep reading it as unsafe.
 func SafeSince(version int) AgentEligibility {
 	if version < 1 {
-		panic("authz.SafeSince: version must be at least 1; use AgentUnsafe for a scope that is never agent-safe")
+		panic("SafeSince: version must be at least 1; use AgentUnsafe for a scope that is never agent-safe")
 	}
 	return AgentEligibility{safeSince: version}
 }
@@ -112,7 +133,7 @@ type Dimension struct {
 // and agent policies, and the public scope enum. They go, with the field,
 // when R1 renames the scopes. The memory and channels scopes were added
 // alongside the registry and are checked against a project in the same way.
-var legacyScopes = []authz.Scope{
+var legacyScopes = []Scope{
 	"plugin:write", "log:read", "mcp:auth",
 	"memory:read", "memory:write",
 	"channels:connect", "channels:admin", "channels:read_all",
@@ -123,7 +144,7 @@ type Permission struct {
 	Action Action
 	// LegacyScope keeps a stored string that is not kind:action. Only the
 	// scopes in legacyScopes may use it; new permissions take the default.
-	LegacyScope authz.Scope
+	LegacyScope Scope
 	// Implies lists actions on the same resource type a grant of this one
 	// also satisfies. The closure is computed; list direct implications only.
 	Implies []Action
@@ -135,14 +156,14 @@ type Permission struct {
 	Dimensions []Dimension
 	// Source says where grants of this permission's scopes are set: through
 	// roles or through risk policies. Every permission sets it explicitly.
-	Source authz.GrantSource
+	Source GrantSource
 	// Category overrides the resource type's dashboard grouping.
-	Category authz.ScopeCategory
+	Category ScopeCategory
 	Label    string
 	// Description says what a holder can do and, where it matters, what the
 	// permission does not include.
 	Description string
-	Sensitivity authz.Sensitivity
+	Sensitivity Sensitivity
 	Agent       AgentEligibility
 }
 
@@ -153,8 +174,8 @@ type ResourceType struct {
 	// project in an org. It is documentation today; typed request refs take
 	// the parent's id as a required argument.
 	Parent      Kind
-	Category    authz.ScopeCategory
-	Match       authz.MatchMode
+	Category    ScopeCategory
+	Match       MatchMode
 	Dimensions  []Dimension
 	Permissions []Permission
 }
@@ -169,14 +190,14 @@ type Registry struct {
 	// SystemRoles lists the scopes each built-in role is seeded with, in
 	// order. Seeding only applies to new orgs: role grants an org has edited
 	// are never rewritten.
-	SystemRoles map[string][]authz.Scope
+	SystemRoles map[string][]Scope
 	// Retired lists scope names that no longer exist. They stay reserved so
 	// stored policies holding them still parse, and must never be reused.
-	Retired []authz.Scope
+	Retired []Scope
 }
 
 // RootPermission describes the root scope.
 type RootPermission struct {
-	Scope authz.Scope
+	Scope Scope
 	Agent AgentEligibility
 }

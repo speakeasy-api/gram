@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
 
@@ -27,10 +26,10 @@ func TestGeneratedFilesAreCurrent(t *testing.T) {
 
 func TestScopeConstantName(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "ScopeMCPBlockedRead", ScopeConstantName(authz.ScopeMCPBlockedRead))
-	require.Equal(t, "ScopeOrgDeviceAgentSync", ScopeConstantName(authz.ScopeOrgDeviceAgentSync))
-	require.Equal(t, "ScopeRiskPolicyBypass", ScopeConstantName(authz.ScopeRiskPolicyBypass))
-	require.Equal(t, "ScopeRoot", ScopeConstantName(authz.ScopeRoot))
+	require.Equal(t, "ScopeMCPBlockedRead", ScopeConstantName("mcp:blocked_read"))
+	require.Equal(t, "ScopeOrgDeviceAgentSync", ScopeConstantName("org:device_agent_sync"))
+	require.Equal(t, "ScopeRiskPolicyBypass", ScopeConstantName("risk_policy:bypass"))
+	require.Equal(t, "ScopeRoot", ScopeConstantName("root"))
 }
 
 func TestRender_RejectsNameCollisions(t *testing.T) {
@@ -41,19 +40,19 @@ func TestRender_RejectsNameCollisions(t *testing.T) {
 	model.Types = append(model.Types, registry.ResourceType{
 		Kind:       "org_read",
 		Parent:     "",
-		Category:   authz.ScopeCategoryOrg,
-		Match:      authz.MatchLoose,
+		Category:   registry.ScopeCategoryOrg,
+		Match:      registry.MatchLoose,
 		Dimensions: nil,
 		Permissions: []registry.Permission{{
-			Action: "x", LegacyScope: "org_read:x", Implies: nil, Exclusions: nil, Dimensions: nil, Source: authz.GrantSourceRoles,
-			Category: "", Label: "L", Description: "D.", Sensitivity: authz.SensitivityNone, Agent: registry.AgentUnsafe(),
+			Action: "x", LegacyScope: "org_read:x", Implies: nil, Exclusions: nil, Dimensions: nil, Source: registry.GrantSourceRoles,
+			Category: "", Label: "L", Description: "D.", Sensitivity: registry.SensitivityNone, Agent: registry.AgentUnsafe(),
 		}},
 	})
 	// "org:read:x" is not a scope, but org_read:x and an org:read_x would
 	// both render ScopeOrgReadX; check the guard on a real collision.
 	model.Types[len(model.Types)-1].Permissions = append(model.Types[len(model.Types)-1].Permissions, registry.Permission{
-		Action: "y", LegacyScope: "org:read_x", Implies: nil, Exclusions: nil, Dimensions: nil, Source: authz.GrantSourceRoles,
-		Category: "", Label: "L", Description: "D.", Sensitivity: authz.SensitivityNone, Agent: registry.AgentUnsafe(),
+		Action: "y", LegacyScope: "org:read_x", Implies: nil, Exclusions: nil, Dimensions: nil, Source: registry.GrantSourceRoles,
+		Category: "", Label: "L", Description: "D.", Sensitivity: registry.SensitivityNone, Agent: registry.AgentUnsafe(),
 	})
 	_, err := Render(model)
 	require.ErrorContains(t, err, "both render as ScopeOrgReadX")
@@ -67,12 +66,12 @@ func TestRender_RejectsScopesThatAreNotIdentifiers(t *testing.T) {
 	model.Types = append(model.Types, registry.ResourceType{
 		Kind:       "thing",
 		Parent:     "",
-		Category:   authz.ScopeCategoryOrg,
-		Match:      authz.MatchLoose,
+		Category:   registry.ScopeCategoryOrg,
+		Match:      registry.MatchLoose,
 		Dimensions: nil,
 		Permissions: []registry.Permission{{
-			Action: "read-only", LegacyScope: "", Implies: nil, Exclusions: nil, Dimensions: nil, Source: authz.GrantSourceRoles,
-			Category: "", Label: "L", Description: "D.", Sensitivity: authz.SensitivityNone, Agent: registry.AgentUnsafe(),
+			Action: "read-only", LegacyScope: "", Implies: nil, Exclusions: nil, Dimensions: nil, Source: registry.GrantSourceRoles,
+			Category: "", Label: "L", Description: "D.", Sensitivity: registry.SensitivityNone, Agent: registry.AgentUnsafe(),
 		}},
 	})
 	_, err := Render(model)

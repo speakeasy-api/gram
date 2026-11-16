@@ -9,15 +9,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
 
-// table is one variable written into tables_gen.go.
+// table is one variable written into tables_gen.go. goType is its type as
+// package authz spells it: the generator names authz's types, it never reads
+// them.
 type table struct {
-	name  string
-	doc   string
-	value any
+	name   string
+	doc    string
+	goType string
+	value  any
 }
 
 // tables lists, in file order, every table package authz reads from the
@@ -35,45 +37,45 @@ scopes, these are broader blocklist scopes. Expansion is non-transitive: the
 table lists every satisfying scope directly, since Check.expand only walks
 scopeExpansions[c.Scope] one step. Built from Implies and Exclusions; the
 comments on each resource type in the registry say why its permissions
-relate the way they do.`, r.DeriveScopeExpansions()},
+relate the way they do.`, "map[Scope][]Scope", r.DeriveScopeExpansions()},
 		{"scopeExclusions", `scopeExclusions maps a checked base scope to the direct blocklist scope that
 stores exception grants for it, or "" when it has none. Broader blocklist
-scopes are handled by scopeExpansions on the blocklist scope itself.`, r.DeriveScopeExclusions()},
+scopes are handled by scopeExpansions on the blocklist scope itself.`, "map[Scope]Scope", r.DeriveScopeExclusions()},
 		{"scopeGrantSource", `scopeGrantSource maps every scope to where its grants are set. A block
-is set where its permission is.`, r.DeriveGrantSource()},
+is set where its permission is.`, "map[Scope]GrantSource", r.DeriveGrantSource()},
 		{"scopeResourceKinds", `scopeResourceKinds maps every scope the registry declares to the resource
-kind its checks and grant selectors name.`, r.DeriveResourceKinds()},
-		{"declaredResourceKinds", `declaredResourceKinds is the set of resource kinds the registry declares.`, declaredKinds},
+kind its checks and grant selectors name.`, "map[Scope]string", r.DeriveResourceKinds()},
+		{"declaredResourceKinds", `declaredResourceKinds is the set of resource kinds the registry declares.`, "map[string]bool", declaredKinds},
 		{"requiredCheckDimensions", `requiredCheckDimensions lists, per resource kind, the dimensions every check
 of that kind must carry: the Required dimensions in the registry. Selector
 matching skips grant keys a check omits, so a check without a dimension that
 grants of its kind can be bounded by would pass such a grant whatever value
 the grant names. MCP grants can be bounded to a project
 ({"resource_id":"*","project_id":P}), so every MCP check must name the
-project of the resource it targets.`, r.DeriveRequiredCheckDimensions()},
+project of the resource it targets.`, "map[string][]string", r.DeriveRequiredCheckDimensions()},
 		{"allowedSelectorKeys", `allowedSelectorKeys defines which extra keys (beyond resource_kind and
 resource_id) are valid for each resource kind: the Dimensions each type
 declares. Kinds not listed here allow no extra keys, except where
-scopeAllowsSelectorKey admits one for a single scope.`, r.DeriveAllowedSelectorKeys()},
+scopeAllowsSelectorKey admits one for a single scope.`, "map[string]map[string]bool", r.DeriveAllowedSelectorKeys()},
 		{"scopeSelectorKeys", `scopeSelectorKeys holds the keys single permissions declare beyond their
-type's.`, r.DeriveScopeSelectorKeys()},
-		{"validAuthClientTypes", `validAuthClientTypes is the closed value set of client_type.`, r.DeriveDimensionValues(authz.ResourceKindMCPAuthClient, authz.SelectorKeyClientType)},
-		{"validDispositions", `validDispositions is the closed value set of disposition.`, r.DeriveDimensionValues(authz.ResourceKindMCP, authz.SelectorKeyDisposition)},
-		{"systemRoleScopes", `systemRoleScopes lists the scopes each built-in role is seeded with.`, r.SystemRoles},
+type's.`, "map[Scope]map[string]bool", r.DeriveScopeSelectorKeys()},
+		{"validAuthClientTypes", `validAuthClientTypes is the closed value set of client_type.`, "map[string]bool", r.DeriveDimensionValues("mcp_auth_client", registry.SelectorKeyClientType)},
+		{"validDispositions", `validDispositions is the closed value set of disposition.`, "map[string]bool", r.DeriveDimensionValues("mcp", registry.SelectorKeyDisposition)},
+		{"systemRoleScopes", `systemRoleScopes lists the scopes each built-in role is seeded with.`, "map[string][]Scope", r.SystemRoles},
 		{"agentEligibilityByScope", `agentEligibilityByScope is the agent eligibility of every scope the registry
-knows, retired tombstones included.`, r.DeriveAgentEligibility()},
+knows, retired tombstones included.`, "map[Scope]DerivedAgentEligibility", r.DeriveAgentEligibility()},
 		{"scopeCatalog", `scopeCatalog lists every scope a role can hold, in the order the catalogue
 presents them: by category, then as declared, each block after its
 permission. ScopeRoot is deliberately absent: it is the engine's own bypass,
-never a grant a person reads about.`, r.DeriveCatalog()},
+never a grant a person reads about.`, "[]ScopeEntry", r.DeriveCatalog()},
 	}
 }
 
 // visibilityIdentifiers names the unexported constants scopeVisibilityByScope
 // holds.
-var visibilityIdentifiers = map[string]string{
-	authz.ScopeVisibilityUserVisible: "scopeVisibilityUserVisible",
-	authz.ScopeVisibilityInternal:    "scopeVisibilityInternal",
+var visibilityIdentifiers = map[registry.Visibility]string{
+	registry.VisibilityUserVisible: "scopeVisibilityUserVisible",
+	registry.VisibilityInternal:    "scopeVisibilityInternal",
 }
 
 func renderTables(r registry.Registry) ([]byte, error) {
@@ -84,7 +86,7 @@ func renderTables(r registry.Registry) ([]byte, error) {
 	for _, t := range tables(r) {
 		writeDoc(&b, t.doc)
 		fmt.Fprintf(&b, "var %s = ", t.name)
-		if err := writeLiteral(&b, reflect.ValueOf(t.value), "", true); err != nil {
+		if err := writeLiteral(&b, reflect.ValueOf(t.value), "", t.goType); err != nil {
 			return nil, fmt.Errorf("%s: %w", t.name, err)
 		}
 		b.WriteString("\n\n")
@@ -98,7 +100,7 @@ declared permissions are user-visible, generated blocks and root are internal.`)
 	for _, scope := range sortedKeys(visibility) {
 		ident, ok := visibilityIdentifiers[visibility[scope]]
 		if !ok {
-			return nil, fmt.Errorf("scope %q has unknown visibility %q", scope, visibility[scope])
+			return nil, fmt.Errorf("scope %q has unknown visibility %d", scope, visibility[scope])
 		}
 		fmt.Fprintf(&b, "\t%s: %s,\n", strconv.Quote(string(scope)), ident)
 	}
@@ -126,11 +128,6 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 	return keys
 }
 
-// typeName spells a type as package authz writes it.
-func typeName(t reflect.Type) string {
-	return strings.ReplaceAll(t.String(), "authz.", "")
-}
-
 // basic reports whether values of t print on one line.
 func basic(t reflect.Type) bool {
 	switch t.Kind() {
@@ -142,14 +139,12 @@ func basic(t reflect.Type) bool {
 }
 
 // writeLiteral writes v as a Go literal. Collections of basic values print on
-// one line; others put each element on its own line. typed writes the type
-// before a composite literal, which nested literals elide.
-func writeLiteral(b *strings.Builder, v reflect.Value, indent string, typed bool) error {
+// one line; others put each element on its own line. goType is written before
+// the outermost composite literal; nested literals elide their type, so the
+// value's own Go types never reach the output.
+func writeLiteral(b *strings.Builder, v reflect.Value, indent string, goType string) error {
 	t := v.Type()
-	prefix := ""
-	if typed {
-		prefix = typeName(t)
-	}
+	prefix := goType
 	switch t.Kind() {
 	case reflect.String:
 		b.WriteString(strconv.Quote(v.String()))
@@ -178,7 +173,7 @@ func writeLiteral(b *strings.Builder, v reflect.Value, indent string, typed bool
 				b.WriteString("\n" + indent + "\t")
 			}
 			b.WriteString(strconv.Quote(k.String()) + ": ")
-			if err := writeLiteral(b, v.MapIndex(k), indent+"\t", false); err != nil {
+			if err := writeLiteral(b, v.MapIndex(k), indent+"\t", ""); err != nil {
 				return err
 			}
 			if !oneLine || len(keys) > 4 {
@@ -200,14 +195,14 @@ func writeLiteral(b *strings.Builder, v reflect.Value, indent string, typed bool
 				if i > 0 {
 					b.WriteString(", ")
 				}
-				if err := writeLiteral(b, v.Index(i), indent, false); err != nil {
+				if err := writeLiteral(b, v.Index(i), indent, ""); err != nil {
 					return err
 				}
 			}
 		} else {
 			for i := range v.Len() {
 				b.WriteString("\n" + indent + "\t")
-				if err := writeLiteral(b, v.Index(i), indent+"\t", false); err != nil {
+				if err := writeLiteral(b, v.Index(i), indent+"\t", ""); err != nil {
 					return err
 				}
 				b.WriteString(",")
@@ -228,7 +223,7 @@ func writeLiteral(b *strings.Builder, v reflect.Value, indent string, typed bool
 				b.WriteString(", ")
 			}
 			b.WriteString(f.Name + ": ")
-			if err := writeLiteral(b, v.Field(i), indent, false); err != nil {
+			if err := writeLiteral(b, v.Field(i), indent, ""); err != nil {
 				return err
 			}
 		}

@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
 
@@ -186,7 +185,7 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 		}
 
 		match := "MatchLoose"
-		if t.Match == authz.MatchStrict {
+		if t.Match == registry.MatchStrict {
 			match = "MatchStrict"
 		}
 		for _, p := range t.Permissions {

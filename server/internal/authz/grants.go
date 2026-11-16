@@ -17,12 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-const (
-	SystemRoleAdmin  = "admin"
-	SystemRoleMember = "member"
-	WildcardResource = "*"
-)
-
 type RoleGrant struct {
 	Scope     string
 	Selectors []Selector
