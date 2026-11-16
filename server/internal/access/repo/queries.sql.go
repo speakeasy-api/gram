@@ -1064,7 +1064,7 @@ SELECT
   $1, unnest($2::text[]), $3, $4,
   $5, $6, $7, $8, $9
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
-RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at
+RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by, created_at
 `
 
 type InsertChallengeResolutionsParams struct {
@@ -1110,6 +1110,7 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 			&i.ResourceID,
 			&i.ResolutionType,
 			&i.RoleSlug,
+			&i.TemporaryGrantID,
 			&i.ResolvedBy,
 			&i.CreatedAt,
 		); err != nil {
@@ -2268,7 +2269,7 @@ func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID strin
 
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
-SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
+SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by, created_at FROM authz_challenge_resolutions
 WHERE organization_id = $1
   AND challenge_id = ANY($2::text[])
 `
@@ -2300,6 +2301,7 @@ func (q *Queries) ListChallengeResolutions(ctx context.Context, arg ListChalleng
 			&i.ResourceID,
 			&i.ResolutionType,
 			&i.RoleSlug,
+			&i.TemporaryGrantID,
 			&i.ResolvedBy,
 			&i.CreatedAt,
 		); err != nil {
