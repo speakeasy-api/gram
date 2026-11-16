@@ -452,8 +452,7 @@ func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testi
 	require.NoError(t, err)
 	registered, ok := output.(RegisterCatalogMCPToolOutput)
 	require.True(t, ok)
-	registrationID, err := uuid.Parse(registered.RegistrationID)
-	require.NoError(t, err)
+	registrationID := registrationOfMCP(t, ctx, conn, principal, project, registered.MCPID).ID
 
 	_, err = pluginsrepo.New(conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
 		OrganizationID: principal.OrganizationID,
