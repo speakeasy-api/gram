@@ -99,7 +99,9 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 			}
 		}
 
-		withoutDisposition := c
+		// Asked as a probe, so a grant limited to another disposition still
+		// matches the call with its disposition left out.
+		withoutDisposition := c.Probe()
 		withoutDisposition.Dimensions = maps.Clone(c.Dimensions)
 		delete(withoutDisposition.Dimensions, SelectorKeyDisposition)
 		evaluation, err = authorization.evaluate(withoutDisposition)

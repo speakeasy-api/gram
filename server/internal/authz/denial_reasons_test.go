@@ -27,3 +27,20 @@ func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
 	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
 	require.Equal(t, []DenialReason{DenialReasonNone, DenialReasonNone, DenialReasonNotGranted}, reasons)
 }
+
+// A call refused only because the caller's grant names another disposition
+// than read_only is reported as a disposition refusal, even though a missing
+// key never matches on a decision.
+func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeMCPConnect, "toolset_1")
+	selector[SelectorKeyDisposition] = DispositionIdempotent
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
+
+	call := MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "delete_all", Disposition: DispositionDestructive, ProjectID: authProjectP})
+	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	require.NoError(t, err)
+	require.Equal(t, []DenialReason{DenialReasonDisposition}, reasons)
+}
