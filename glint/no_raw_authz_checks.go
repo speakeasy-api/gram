@@ -79,7 +79,9 @@ func newNoRawAuthzChecksAnalyzer(rule noRawAuthzChecksSettings) *analysis.Analyz
 				}
 				switch n := node.(type) {
 				case *ast.CompositeLit:
-					if isAuthzCheckType(pass.TypesInfo.TypeOf(n)) {
+					// The zero value, returned beside an error, names
+					// nothing and is refused if evaluated.
+					if len(n.Elts) > 0 && isAuthzCheckType(pass.TypesInfo.TypeOf(n)) {
 						pass.ReportRangef(n, "replace the authz.Check literal: %s", noRawAuthzChecksDefaultMessage)
 					}
 				case *ast.CallExpr:

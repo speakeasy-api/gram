@@ -315,9 +315,28 @@ func (r WorkloadRef) Write() Check {
 	return newRefCheck(ScopeWorkloadWrite, r.id.String(), r.dimensions(), MatchStandard)
 }
 
-// Collections name every resource of one kind inside a project, for requests
-// with no single resource: listing, creating, or a lookup that found nothing.
-// Each is the kind's permission with the project id as the resource.
+// Collections name every resource of one kind inside a project or an
+// organization, for requests with no single resource: listing, creating, or a
+// lookup that found nothing. Each is the kind's permission with the parent's
+// id as the resource.
+
+// ChatCollection names every chat resource of one project.
+type ChatCollection struct{ project ProjectID }
+
+// Chats names every chat resource of project.
+func Chats(project ProjectID) ChatCollection {
+	return ChatCollection{project: project}
+}
+
+// Read requests ScopeChatRead on every chat resource of the project.
+func (c ChatCollection) Read() Check {
+	return Chat(ChatID{id: c.project.id}).Read()
+}
+
+// Write requests ScopeChatWrite on every chat resource of the project.
+func (c ChatCollection) Write() Check {
+	return Chat(ChatID{id: c.project.id}).Write()
+}
 
 // MCPServerCollection names every mcp resource of one project.
 type MCPServerCollection struct{ project ProjectID }
@@ -360,6 +379,24 @@ func (c EnvironmentCollection) Write() Check {
 	return Environment(EnvironmentID{id: c.project.id}, c.project).Write()
 }
 
+// SkillCollection names every skill resource of one project.
+type SkillCollection struct{ project ProjectID }
+
+// Skills names every skill resource of project.
+func Skills(project ProjectID) SkillCollection {
+	return SkillCollection{project: project}
+}
+
+// Read requests ScopeSkillRead on every skill resource of the project.
+func (c SkillCollection) Read() Check {
+	return Skill(SkillID{id: c.project.id}).Read()
+}
+
+// Write requests ScopeSkillWrite on every skill resource of the project.
+func (c SkillCollection) Write() Check {
+	return Skill(SkillID{id: c.project.id}).Write()
+}
+
 // AssistantCollection names every assistant resource of one project.
 type AssistantCollection struct{ project ProjectID }
 
@@ -376,6 +413,52 @@ func (c AssistantCollection) Read() Check {
 // Write requests ScopeAssistantWrite on every assistant resource of the project.
 func (c AssistantCollection) Write() Check {
 	return Assistant(AssistantID{id: c.project.id}, c.project).Write()
+}
+
+// AgentCollection names every agent resource of one organization.
+type AgentCollection struct{ org OrgID }
+
+// Agents names every agent resource of org.
+func Agents(org OrgID) AgentCollection {
+	return AgentCollection{org: org}
+}
+
+// Read requests ScopeAgentRead on every agent resource of the organization.
+func (c AgentCollection) Read() Check {
+	return Agent(AgentID{id: c.org.id}).Read()
+}
+
+// Write requests ScopeAgentWrite on every agent resource of the organization.
+func (c AgentCollection) Write() Check {
+	return Agent(AgentID{id: c.org.id}).Write()
+}
+
+// Authorize requests ScopeAgentAuthorize on every agent resource of the organization.
+func (c AgentCollection) Authorize() Check {
+	return Agent(AgentID{id: c.org.id}).Authorize()
+}
+
+// Transfer requests ScopeAgentTransfer on every agent resource of the organization.
+func (c AgentCollection) Transfer() Check {
+	return Agent(AgentID{id: c.org.id}).Transfer()
+}
+
+// WorkloadCollection names every workload resource of one organization.
+type WorkloadCollection struct{ org OrgID }
+
+// Workloads names every workload resource of org.
+func Workloads(org OrgID) WorkloadCollection {
+	return WorkloadCollection{org: org}
+}
+
+// Read requests ScopeWorkloadRead on every workload resource of the organization.
+func (c WorkloadCollection) Read() Check {
+	return Workload(WorkloadID{id: c.org.id}).Read()
+}
+
+// Write requests ScopeWorkloadWrite on every workload resource of the organization.
+func (c WorkloadCollection) Write() Check {
+	return Workload(WorkloadID{id: c.org.id}).Write()
 }
 
 // Kinds without a generated ref, and the hand-written constructor each uses:
