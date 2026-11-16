@@ -109,6 +109,60 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	require.EqualValues(t, 1, created)
 }
 
+func TestAssistantAgentNamesAcrossProjects(t *testing.T) {
+	t.Parallel()
+	for _, secondName := range []string{"Shared assistant", "SHARED ASSISTANT"} {
+		t.Run(secondName, func(t *testing.T) {
+			t.Parallel()
+			db, err := assistantsInfra.CloneTestDatabase(t, "identity_name_projects")
+			require.NoError(t, err)
+			firstProject := newProvisioningProject(t, db, "identity-name-first")
+			secondProject := newProvisioningProject(t, db, "identity-name-second")
+			core := newProvisioningCore(t, db)
+			var agentIDs []string
+			for i, name := range []string{"Shared assistant", secondName} {
+				project := []uuid.UUID{firstProject, secondProject}[i]
+				record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", name, "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+				require.NoError(t, err)
+				require.Equal(t, name, record.Name)
+				require.Equal(t, string(assistantidentity.Active), record.IdentityState)
+				require.NotNil(t, record.AgentID)
+				agentIDs = append(agentIDs, *record.AgentID)
+				agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: uuid.MustParse(*record.AgentID)})
+				require.NoError(t, err)
+				require.Equal(t, project, agent.ProjectID.UUID)
+				if i == 0 {
+					require.Equal(t, name, agent.Name)
+				} else {
+					require.Regexp(t, "^"+name+` \(assistant [0-9a-f-]{36}\)$`, agent.Name)
+				}
+			}
+			require.NotEqual(t, agentIDs[0], agentIDs[1])
+		})
+	}
+}
+
+func TestAssistantAgentNameCollidesWithUserAgent(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_name_user_agent")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "identity-name-user-agent")
+	existing, err := agentrepo.New(db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: "org-test", OwnerUserID: "user-1", ProjectID: uuid.NullUUID{UUID: project, Valid: true}, Name: "Research assistant"})
+	require.NoError(t, err)
+	core := newProvisioningCore(t, db)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Research assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, string(assistantidentity.Active), record.IdentityState)
+	require.NotNil(t, record.AgentID)
+	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: uuid.MustParse(*record.AgentID)})
+	require.NoError(t, err)
+	require.NotEqual(t, existing.ID, agent.ID)
+	require.Regexp(t, `^Research assistant \(assistant [0-9a-f-]{36}\)$`, agent.Name)
+	unchanged, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: existing.ID})
+	require.NoError(t, err)
+	require.Equal(t, existing, unchanged)
+}
+
 func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "identity_dashboard")

@@ -7,7 +7,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -144,12 +146,33 @@ func provisionActor(p ProvisionParams) (auditActor, error) {
 
 // createAgent creates the assistant's agent, owned by owner.
 func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, name, owner string, actor auditActor) (agentrepo.Agent, error) {
-	agent, err := agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
-		OrganizationID: p.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
-		OwnerUserID:    owner,
-		Name:           name,
-	})
+	var agent agentrepo.Agent
+	var err error
+	for attempt := range 3 {
+		candidate := name
+		if attempt > 0 {
+			candidate = fmt.Sprintf("%s (assistant %s)", name, uuid.NewString())
+		}
+		// Names are unique across the organization, not the project. Use a
+		// savepoint so a name collision does not abort the caller's transaction.
+		err = pgx.BeginFunc(ctx, tx, func(savepoint pgx.Tx) error {
+			var insertErr error
+			agent, insertErr = agentrepo.New(savepoint).CreateAgent(ctx, agentrepo.CreateAgentParams{
+				OrganizationID: p.OrganizationID,
+				ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
+				OwnerUserID:    owner,
+				Name:           candidate,
+			})
+			if insertErr != nil {
+				return fmt.Errorf("insert assistant agent: %w", insertErr)
+			}
+			return nil
+		})
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation || pgErr.ConstraintName != "agents_organization_name_key" {
+			break
+		}
+	}
 	if err != nil {
 		return agentrepo.Agent{}, fmt.Errorf("create assistant agent: %w", err)
 	}
