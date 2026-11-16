@@ -48,10 +48,10 @@ var machineSecurity = &HTTPToolSecurity{
 // clientGrantMessages pins each failure's exact text; both address failures read the same.
 var clientGrantMessages = map[toolconfig.ClientGrantFailure]string{
 	toolconfig.ClientGrantUnavailable:     "This tool couldn't sign in: its sign-in service didn't answer or had an error. Try again in a few minutes. If it keeps happening, ask your administrator.",
-	toolconfig.ClientGrantRejected:        "This tool couldn't sign in: the service rejected the sign-in details saved for it. Ask your administrator to update the tool's sign-in details.",
-	toolconfig.ClientGrantBlocked:         "This tool couldn't sign in: the sign-in address saved for it can't be used. Ask your administrator to check the tool's sign-in address.",
-	toolconfig.ClientGrantAddressNotFound: "This tool couldn't sign in: the sign-in address saved for it can't be used. Ask your administrator to check the tool's sign-in address.",
-	toolconfig.ClientGrantMisconfigured:   "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. Ask your administrator to check the tool's sign-in address.",
+	toolconfig.ClientGrantRejected:        "This tool couldn't sign in: the service rejected its sign-in details. If you didn't set them yourself, ask your administrator to update them.",
+	toolconfig.ClientGrantBlocked:         "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",
+	toolconfig.ClientGrantAddressNotFound: "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",
+	toolconfig.ClientGrantMisconfigured:   "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. If you didn't set this tool up yourself, ask your administrator to check its sign-in address.",
 }
 
 // A failed token request reports why and which secret it used, and adds nothing to the response headers.

@@ -181,9 +181,9 @@ func TestClientGrantFailureMessage(t *testing.T) {
 
 	const (
 		unavailable   = "This tool couldn't sign in: its sign-in service didn't answer or had an error. Try again in a few minutes. If it keeps happening, ask your administrator."
-		rejected      = "This tool couldn't sign in: the service rejected the sign-in details saved for it. Ask your administrator to update the tool's sign-in details."
-		address       = "This tool couldn't sign in: the sign-in address saved for it can't be used. Ask your administrator to check the tool's sign-in address."
-		misconfigured = "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. Ask your administrator to check the tool's sign-in address."
+		rejected      = "This tool couldn't sign in: the service rejected its sign-in details. If you didn't set them yourself, ask your administrator to update them."
+		address       = "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it."
+		misconfigured = "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. If you didn't set this tool up yourself, ask your administrator to check its sign-in address."
 	)
 	callerClient := map[string]string{"Mcp-Machine-Client-Id": "caller-client", "Mcp-Machine-Client-Secret": "caller-secret"}
 
