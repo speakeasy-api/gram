@@ -240,27 +240,41 @@ func (s *Service) recordConsentPage(
 		}
 		s.recordMemberStatuses(ctx, logger, attempt, statuses, subject, fromRequest)
 	}
-	if problem != nil && s.firstConsentProblem(ctx, logger, attempt, problem) {
-		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject, fromRequest)
+	if problem != nil {
+		s.recordConsentProblem(ctx, logger, attempt, problem, subject, fromRequest)
 	}
 	if challengeState.FirstParty && !challengeState.CodeReconnect.undecidedOrCanceled() && firstPartyConnected(gateway, cards) {
 		s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, subject, fromRequest)
 	}
 }
 
-// firstConsentProblem folds reloads of an expired-catalog page into one row per attempt; a cache failure records it.
-func (s *Service) firstConsentProblem(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened) bool {
+// recordConsentProblem folds reloads of an expired-catalog page into one row per attempt; a cache failure records it.
+func (s *Service) recordConsentProblem(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
 	if problem != mcpconnectionattempts.CodeConnectionCatalogExpired || s.userSessionRefreshReplayCoordination == nil || attempt.IsZero() {
-		return true
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
+		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
-	defer cancel()
-	first, err := s.userSessionRefreshReplayCoordination.Add(ctx, "connectionAttemptCatalogExpired:"+attempt.ID().String(), connectionAttemptEndTTL)
-	if err != nil {
+	key := "connectionAttemptCatalogExpired:" + attempt.ID().String()
+	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
+	cancel()
+	switch {
+	case err != nil:
 		logger.WarnContext(ctx, "claim expired catalog row", attr.SlogError(err))
-		return true
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
+		return
+	case !won:
+		return
 	}
-	return first
+	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...) {
+		return
+	}
+	// Not accepted, so the next render offers it again.
+	cacheCtx, cancel = context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	if err := s.userSessionRefreshReplayCoordination.Delete(cacheCtx, key); err != nil {
+		logger.WarnContext(ctx, "forget expired catalog row", attr.SlogError(err))
+	}
 }
 
 // memberStatus is one gateway member's discovery row; status is its result and reason.

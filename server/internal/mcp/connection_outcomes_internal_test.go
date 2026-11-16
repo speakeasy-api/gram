@@ -509,6 +509,13 @@ func (c *addOnlyCache) Add(_ context.Context, key string, _ time.Duration) (bool
 	return true, nil
 }
 
+func (c *addOnlyCache) Delete(_ context.Context, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.seen, key)
+	return nil
+}
+
 // A stalled Redis can't hold up a sign-in: the claim runs off the request path.
 func TestEndAttemptOnce_StalledRedisDoesNotBlockTheRequest(t *testing.T) {
 	t.Parallel()
@@ -634,6 +641,22 @@ func TestRecordConsentPage_ExpiredCatalogReloadsExportOnce(t *testing.T) {
 	for _, record := range sink.records {
 		require.Equal(t, otellog.SeverityWarn, record.Severity())
 	}
+}
+
+func TestRecordConsentPage_ExpiredCatalogRejectedRowIsOfferedAgain(t *testing.T) {
+	t.Parallel()
+
+	stopped := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, func(context.Context, string) (bool, error) { return true, nil })
+	require.NoError(t, stopped.Shutdown(t.Context()))
+	service := &Service{connections: stopped, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+
+	rec := mcpconnectionattemptstest.New(t)
+	service.connections = rec.Recorder
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	require.Len(t, rec.Rows(), 1, "the reload records the rejected row, then folds")
 }
 
 func TestRecordConsentPage_OtherProblemsRecordEachRender(t *testing.T) {
