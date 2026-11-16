@@ -739,6 +739,18 @@ func TestProvisionerRenamesWhileDeletesFailLeaveNoService(t *testing.T) {
 		"the middle name's service is deleted although the hostname moved past it")
 }
 
+func TestProvisionerObserveOwnerReadFailureIsRetryable(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovobserveowner")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, k8s.ErrNetworkIngressInvalidDesiredState)
+	require.NotEqual(t, k8s.NetworkIngressErrorInvalidDesiredState, observation.ErrorCode, "a database error is not a permanent desired-state error")
+}
+
 func TestProvisionerTeardownDeletesTheRecordedServiceOfAPendingRename(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

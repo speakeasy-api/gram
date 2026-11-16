@@ -459,7 +459,7 @@ func (p *Provisioner) Observe(ctx context.Context, resources k8s.NetworkIngressR
 	own, err := p.owner(ctx, resources.OwnerID)
 	if err != nil {
 		p.logFailure(ctx, "observe", resources.OwnerID, "", operationErrorCode(err), err)
-		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
+		return errorObservation(operationErrorCode(err)), err
 	}
 	observation, err := p.observe(ctx, resources.OwnerID, own.organizationID)
 	if err != nil {
