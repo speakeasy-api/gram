@@ -95,7 +95,13 @@ type NetworkIngressResourceNames struct {
 	AttestorService        string    `json:"attestor_service"`
 	AttestorNetworkPolicy  string    `json:"attestor_network_policy"`
 	ProxyNetworkPolicy     string    `json:"proxy_network_policy"`
-	Ingress                string    `json:"ingress"`
+
+	// Runtime is the ingress's network_ingresses.runtime, which the executor
+	// sets from the row it reconciles; it is not stored with the names. A
+	// routing provider reads it here rather than querying for it while the
+	// executor holds its reconcile connection.
+	Runtime string `json:"-"`
+	Ingress string `json:"ingress"`
 }
 
 func NewNetworkIngressResourceNames(id uuid.UUID) (NetworkIngressResourceNames, error) {
@@ -117,7 +123,9 @@ func NewNetworkIngressResourceNames(id uuid.UUID) (NetworkIngressResourceNames, 
 		AttestorService:        prefix + "-attestor",
 		AttestorNetworkPolicy:  prefix + "-attestor",
 		ProxyNetworkPolicy:     prefix + "-proxy",
-		Ingress:                prefix,
+		// The runtime is the row's, set by whoever reads the row.
+		Runtime: "",
+		Ingress: prefix,
 	}, nil
 }
 
@@ -195,6 +203,9 @@ type NetworkIngressDesired struct {
 	AttestorImage  string                      `json:"attestor_image"`
 	BackendService string                      `json:"backend_service"`
 	BackendPort    int32                       `json:"backend_port"`
+
+	// Runtime is the ingress's network_ingresses.runtime, as Resources.Runtime.
+	Runtime string `json:"-"`
 }
 
 func (d NetworkIngressDesired) Validate() error {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/network_ingress"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -557,4 +558,58 @@ func TestNetworkIngressExecutorRecordsMissingCertificate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "error", row.Status)
 	require.Equal(t, k8s.NetworkIngressErrorProviderCertificateUnavailable, row.LastError.String)
+}
+
+// The composite provider routes by the runtime the executor passes. It must
+// not read it itself: the executor holds a pooled connection for the whole
+// reconcile, and a second one per reconcile can exhaust the pool.
+func TestNetworkIngressExecutorPassesTheStoredRuntimeToTheProvider(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		gateway bool
+		want    string
+	}{
+		{name: "gateway connection", gateway: true, want: networkingress.RuntimeGateway},
+		{name: "operator connection", gateway: false, want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			flags := &feature.InMemory{}
+			flags.SetFlag(feature.FlagPrivateNetworkGateway, ti.orgID, tc.gateway)
+			ti.service.WithFeatures(flags)
+			id := uuid.MustParse(ti.create(t, ctx).ID)
+
+			var applied k8s.NetworkIngressDesired
+			var observed k8s.NetworkIngressResourceNames
+			provider := lifecycleProvider{
+				apply: func(_ context.Context, d k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+					applied = d
+					return k8s.NetworkIngressObservation{Status: "pending", DNSName: "", ErrorCode: "", ConnectedAt: nil}, nil
+				},
+				observe: func(_ context.Context, r k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
+					observed = r
+					return k8s.NetworkIngressObservation{Status: "pending", DNSName: "", ErrorCode: "", ConnectedAt: nil}, nil
+				},
+				delete: nil,
+			}
+			registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
+			require.NoError(t, err)
+
+			applying := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{
+				Queue: "test-network-ingress", AttestorRequired: false, CanApply: func(context.Context) error { return nil },
+			})
+			_, err = applying.Reconcile(ctx, ti.orgID, id)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, applied.Runtime)
+			require.Equal(t, tc.want, applied.Resources.Runtime)
+
+			// A closed gate observes instead of applying.
+			observing := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{})
+			_, err = observing.Reconcile(ctx, ti.orgID, id)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, observed.Runtime)
+		})
+	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
@@ -48,6 +49,7 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 	ingressID, orgID := seedIngress(t, db, name)
 	resources, err := k8s.NewNetworkIngressResourceNames(ingressID)
 	require.NoError(t, err)
+	resources.Runtime = networkingress.RuntimeGateway
 	provisioner, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), db, orgEncryption(t, db).Service, orgEncryption(t, db).Provisioner, api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
@@ -65,6 +67,8 @@ func (f *provisionerFixture) setRuntime(t *testing.T, runtime string) {
 		Runtime: pgtype.Text{String: runtime, Valid: runtime != ""}, ID: f.ingressID, OrganizationID: f.orgID,
 	})
 	require.NoError(t, err)
+	// The executor passes the row's runtime with the resource names, as here.
+	f.resources.Runtime = runtime
 }
 
 func credentialsJSON(t *testing.T, id, secret string) []byte {
@@ -79,6 +83,7 @@ func (f *provisionerFixture) desired(t *testing.T) k8s.NetworkIngressDesired {
 	return k8s.NetworkIngressDesired{
 		ID: f.ingressID, OrganizationID: f.orgID, Provider: k8s.NetworkIngressProviderTailscale, Hostname: "private",
 		Credentials: credentialsJSON(t, "cid", "csecret"), Resources: f.resources, AttestorImage: "", BackendService: "", BackendPort: 0,
+		Runtime: f.resources.Runtime,
 	}
 }
 

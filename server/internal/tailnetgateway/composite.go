@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 )
@@ -49,11 +47,7 @@ func NewCompositeProvisioner(operator OperatorProvisioner, gateway *Provisioner,
 
 //nolint:exhaustruct // observations populate only the state they know.
 func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
-	onGateway, err := c.onGateway(ctx, desired.ID)
-	if err != nil {
-		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
-	}
-	if !onGateway {
+	if !onGateway(desired.Runtime) {
 		if c.operator == nil {
 			return errorObservation(k8s.NetworkIngressErrorUnsupportedProvider), errOperatorDisabled
 		}
@@ -71,11 +65,7 @@ func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIng
 }
 
 func (c *CompositeProvisioner) Observe(ctx context.Context, resources k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
-	onGateway, err := c.onGateway(ctx, resources.OwnerID)
-	if err != nil {
-		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
-	}
-	if onGateway || c.operator == nil {
+	if onGateway(resources.Runtime) || c.operator == nil {
 		return c.gateway.Observe(ctx, resources)
 	}
 	observation, err := c.operator.Observe(ctx, resources)
@@ -85,13 +75,13 @@ func (c *CompositeProvisioner) Observe(ctx context.Context, resources k8s.Networ
 	return observation, nil
 }
 
-// onGateway reports whether the ingress is hosted by the tailnet gateway.
-func (c *CompositeProvisioner) onGateway(ctx context.Context, id uuid.UUID) (bool, error) {
-	own, err := c.gateway.owner(ctx, id)
-	if err != nil {
-		return false, err
-	}
-	return own.runtime == networkingress.RuntimeGateway, nil
+// onGateway reports whether the ingress is hosted by the tailnet gateway. The
+// executor passes the runtime from the row it already holds: reading it here
+// would take a second pooled connection while the executor holds one for its
+// reconcile lock, and with as many reconciles in flight as the pool has
+// connections every one of them would wait for a connection none releases.
+func onGateway(runtime string) bool {
+	return runtime == networkingress.RuntimeGateway
 }
 
 func (c *CompositeProvisioner) Delete(ctx context.Context, resources k8s.NetworkIngressResourceNames) error {
@@ -101,11 +91,7 @@ func (c *CompositeProvisioner) Delete(ctx context.Context, resources k8s.Network
 // DeleteWithCredentials tears down whichever provider hosts the ingress. The
 // operator's teardown needs no credentials; the gateway's does.
 func (c *CompositeProvisioner) DeleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
-	onGateway, err := c.onGateway(ctx, resources.OwnerID)
-	if err != nil {
-		return err
-	}
-	if onGateway {
+	if onGateway(resources.Runtime) {
 		return c.gateway.DeleteWithCredentials(ctx, resources, credentials)
 	}
 	if c.operator == nil {

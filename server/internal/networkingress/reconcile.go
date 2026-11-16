@@ -137,6 +137,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		return e.cleanup(ctx, conn, row)
 	}
 	resources, err := k8s.ParseNetworkIngressResourceNames(row.ProviderResources)
+	resources.Runtime = row.Runtime.String
 	if err != nil || resources.OwnerID != row.ID || resources.Namespace != row.AttestorNamespace || resources.AttestorServiceAccount != row.AttestorServiceAccount {
 		return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_desired_state"), "")
 	}
@@ -177,6 +178,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 			observation, operationErr = provider.Apply(callCtx, k8s.NetworkIngressDesired{
 				ID: row.ID, OrganizationID: row.OrganizationID, Provider: row.Provider, Hostname: row.Hostname, Credentials: []byte(credentials), Resources: resources,
 				AttestorImage: e.options.Image, BackendService: e.options.BackendService, BackendPort: e.options.BackendPort,
+				Runtime: row.Runtime.String,
 			})
 			callCancel()
 		}
@@ -227,6 +229,7 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	if err != nil || resources.OwnerID != row.ID {
 		return ReconcileResult{Requeue: false}, reconcileFailure("invalid_desired_state")
 	}
+	resources.Runtime = row.Runtime.String
 	provider, err := e.registry.Provisioner(row.Provider)
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("provider_configuration_unavailable")

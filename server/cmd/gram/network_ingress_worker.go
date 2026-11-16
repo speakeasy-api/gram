@@ -207,7 +207,12 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
+			lockDB, err := newNetworkIngressLockDB(ctx, logger, meterProvider, c)
+			if err != nil {
+				return err
+			}
+			defer lockDB.Close()
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err
 			}
