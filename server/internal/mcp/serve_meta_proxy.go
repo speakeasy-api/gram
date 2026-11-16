@@ -231,13 +231,13 @@ func memberAuthFailure(member metaMember, dial memberDial, status int, keySent, 
 	forbidden := status == http.StatusForbidden && !credentialRejected
 	switch {
 	case agent && dial.anonymous && dial.configuredHeaders && !keySent:
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q turned down this agent's request because of how it is set up. This agent can't fix this. Ask your administrator to fix it.", member.slug)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q was refused by the service it uses: the sign-in details saved for this server were not sent with the request. This agent can't fix this. Ask your administrator to check the sign-in details and address saved for server %q.", member.slug, member.slug)}}
 	// Only the configured credential was sent; the agent's sign-in step does not set it.
 	case agent && dial.anonymous && dial.configuredHeaders:
 		return memberCredentialError{savedCredentialRefused(member.slug, true, forbidden)}
 	// The upstream may want the person's connection, the configured credential, or both.
 	case dial.connectsFirst(keySent):
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q turned down this request. Ask the user to open %s to connect it, then try again. If it still fails, ask your administrator.", member.slug, page)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q was refused by the service it uses. Ask the user to open %s to connect it, then try again. If it still fails, ask your administrator to check the sign-in details saved for server %q.", member.slug, page, member.slug)}}
 	case dial.anonymous && keySent && !dial.clientCredential:
 		return memberCredentialError{savedCredentialRefused(member.slug, false, forbidden)}
 	// An agent with a connection of its own never dials anonymously: routing
@@ -269,11 +269,11 @@ func (d memberDial) connectsFirst(keySent bool) bool {
 
 // savedCredentialRefused is a refused configured credential; forbidden is a 403 that does not reject it.
 func savedCredentialRefused(slug string, agent bool, forbidden bool) *metaMemberError {
-	message := fmt.Sprintf("server %q couldn't sign in to the service it uses because of how it is set up.", slug)
-	ask := "Ask your administrator to fix it."
+	message := fmt.Sprintf("server %q couldn't sign in: the service rejected the sign-in details saved for this server.", slug)
+	ask := fmt.Sprintf("Ask your administrator to update the sign-in details saved for server %q.", slug)
 	if forbidden {
-		message = fmt.Sprintf("server %q turned down this request. The account it is set up to use may not be allowed to do this.", slug)
-		ask = "Ask your administrator."
+		message = fmt.Sprintf("server %q was refused by the service it uses. The account saved for this server may not be allowed to do this.", slug)
+		ask = "Ask your administrator to check what that account is allowed to do."
 	}
 	who := "Connecting again won't fix this."
 	if agent {

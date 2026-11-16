@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-When a gateway server can't use the sign-in it is set up with, people and agents are now told in plain words that connecting won't fix it and to ask their administrator, and people who can connect the server are asked to connect it first.
+When a gateway server's service refuses the sign-in details saved for it, people and agents are now told what failed in plain words, whether connecting helps, and what to ask their administrator to fix.

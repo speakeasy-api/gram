@@ -152,9 +152,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 	t.Parallel()
 
 	const (
-		refused      = `server "member" couldn't sign in to the service it uses because of how it is set up. Connecting again won't fix this. Ask your administrator to fix it.`
-		forbidden    = `server "member" turned down this request. The account it is set up to use may not be allowed to do this. Connecting again won't fix this. Ask your administrator.`
-		connectFirst = `server "member" turned down this request. Ask the user to open {page} to connect it, then try again. If it still fails, ask your administrator.`
+		refused      = `server "member" couldn't sign in: the service rejected the sign-in details saved for this server. Connecting again won't fix this. Ask your administrator to update the sign-in details saved for server "member".`
+		forbidden    = `server "member" was refused by the service it uses. The account saved for this server may not be allowed to do this. Connecting again won't fix this. Ask your administrator to check what that account is allowed to do.`
+		connectFirst = `server "member" was refused by the service it uses. Ask the user to open {page} to connect it, then try again. If it still fails, ask your administrator to check the sign-in details saved for server "member".`
 		noKey        = `server "member" requires authentication and has no credential for this caller. Ask your administrator to connect it`
 		bearer       = `Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource"`
 	)
@@ -253,7 +253,7 @@ func TestAgentGateway_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.True(t, isError)
 	message, _, _ := strings.Cut(text, "\nReference: ")
-	require.Equal(t, `server "`+fx.granted+`" couldn't sign in to the service it uses because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`, message)
+	require.Equal(t, `server "`+fx.granted+`" couldn't sign in: the service rejected the sign-in details saved for this server. This agent can't fix this. Ask your administrator to update the sign-in details saved for server "`+fx.granted+`".`, message)
 	upstream.requireRefused(t, "saved-key")
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 	require.Equal(t, serverID.String(), row.MemberID)

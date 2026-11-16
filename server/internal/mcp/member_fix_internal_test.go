@@ -132,7 +132,7 @@ func TestMemberAuthFailure_AgentServerCredentialIsTheServers(t *testing.T) {
 	fix := testAgentFix
 	oauth := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
 	rejected := memberAuthFailure(oauth, memberDial{anonymous: true, oauthSignIn: true, configuredHeaders: true, fix: fix}, http.StatusUnauthorized, true, true)
-	require.ErrorContains(t, rejected, `server "linear" couldn't sign in to the service it uses because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`)
+	require.ErrorContains(t, rejected, `server "linear" couldn't sign in: the service rejected the sign-in details saved for this server. This agent can't fix this. Ask your administrator to update the sign-in details saved for server "linear".`)
 	require.NotContains(t, rejected.Error(), testAgentSignIn)
 
 	apiKey := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
@@ -155,14 +155,14 @@ func TestMemberClientFailure_SavedCredentialRefused(t *testing.T) {
 	stripped := memberRejection{}
 	static, notConnectedRow, none := mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.Code{}
 	const (
-		refused        = `server "weather" couldn't sign in to the service it uses because of how it is set up. Connecting again won't fix this. Ask your administrator to fix it.`
-		forbidden      = `server "weather" turned down this request. The account it is set up to use may not be allowed to do this. Connecting again won't fix this. Ask your administrator.`
-		agentKey       = `server "weather" couldn't sign in to the service it uses because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`
-		agent403       = `server "weather" turned down this request. The account it is set up to use may not be allowed to do this. This agent can't fix this. Ask your administrator.`
+		refused        = `server "weather" couldn't sign in: the service rejected the sign-in details saved for this server. Connecting again won't fix this. Ask your administrator to update the sign-in details saved for server "weather".`
+		forbidden      = `server "weather" was refused by the service it uses. The account saved for this server may not be allowed to do this. Connecting again won't fix this. Ask your administrator to check what that account is allowed to do.`
+		agentKey       = `server "weather" couldn't sign in: the service rejected the sign-in details saved for this server. This agent can't fix this. Ask your administrator to update the sign-in details saved for server "weather".`
+		agent403       = `server "weather" was refused by the service it uses. The account saved for this server may not be allowed to do this. This agent can't fix this. Ask your administrator to check what that account is allowed to do.`
 		noKey          = `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`
-		agentNoKeySent = `server "weather" turned down this agent's request because of how it is set up. This agent can't fix this. Ask your administrator to fix it.`
+		agentNoKeySent = `server "weather" was refused by the service it uses: the sign-in details saved for this server were not sent with the request. This agent can't fix this. Ask your administrator to check the sign-in details and address saved for server "weather".`
 	)
-	connectFirst := `server "weather" turned down this request. Ask the user to open ` + page + ` to connect it, then try again. If it still fails, ask your administrator.`
+	connectFirst := `server "weather" was refused by the service it uses. Ask the user to open ` + page + ` to connect it, then try again. If it still fails, ask your administrator to check the sign-in details saved for server "weather".`
 	notConnected := `server "weather" is not connected for this user. Ask the user to open ` + page + ` to connect it, then retry`
 	for _, tc := range []struct {
 		name   string
