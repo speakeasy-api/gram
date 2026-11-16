@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -29,12 +30,17 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 			db, err := infra.CloneTestDatabase(t, "testdb")
 			require.NoError(t, err)
 
+			// The second run starts with upstream auth already enforced, which
+			// is the state a daily reseed of the demo org runs in.
 			seedLocalPostgres(ctx, t, db, spec)
+			enforced, err := authenforcement.ReadEnforced(ctx, db, spec.OrgID)
+			require.NoError(t, err)
+			require.True(t, enforced, "the seed must enforce upstream auth")
 			seedLocalPostgres(ctx, t, db, spec)
 
 			require.NoError(t, upstreamAuthReadiness(ctx, testenv.NewLogger(t), db, spec.OrgID))
 
-			clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
+			clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0, TypedOnly: true})
 			require.NoError(t, err)
 			require.NotEmpty(t, clients.Results, "the seed records no typed auth clients; readiness is vacuous")
 			for _, result := range clients.Results {
