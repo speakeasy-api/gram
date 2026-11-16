@@ -40,8 +40,6 @@ const toolset = {
   slug: "hosted-tools",
   toolCount: 12,
   toolSelectionMode: "static",
-  externalMcpSlugs: [],
-  externalMcpProxyOnly: false,
 };
 
 const HOSTED = server({
