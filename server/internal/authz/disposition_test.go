@@ -63,7 +63,7 @@ func TestUnannotatedToolCall(t *testing.T) {
 			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": true, "unannotated blocked": false},
 		},
 		"unannotated, constructed": {
-			call: MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("mystery", DispositionUnannotated),
+			call: mcpToolCallCheck(server.String(), mcpToolCallDimensions{Tool: "mystery", Disposition: DispositionUnannotated, ProjectID: project.String()}),
 			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": true, "unannotated blocked": false},
 		},
 		"unknown, generated ref": {
@@ -71,7 +71,7 @@ func TestUnannotatedToolCall(t *testing.T) {
 			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": true},
 		},
 		"unknown, constructed": {
-			call: MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("uncatalogued", ""),
+			call: mcpToolCallCheck(server.String(), mcpToolCallDimensions{Tool: "uncatalogued", Disposition: "", ProjectID: project.String()}),
 			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": true},
 		},
 	}
