@@ -1211,7 +1211,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "organization_encryption_transition:finalize":
       return "finalized";
     case "organization_encryption_transition:start_org_kms":
-      return "started on organization keys";
+      return "started using organization keys for";
     case "organization_encryption_transition:clear_platform_copies":
       return "cleared platform-key copies for";
 
