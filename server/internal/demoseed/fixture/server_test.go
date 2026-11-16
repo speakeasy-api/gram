@@ -621,3 +621,45 @@ func TestOwnTokenEndpoint(t *testing.T) {
 
 // The DCR server sits on another host than a localhost fixture, so the
 // dashboard does not take it for the main authorization server.
+
+// With RedirectOrigins set, the fixture sends sign-ins back only to those
+// origins: registration refuses another origin, and so does the authorization
+// page for a client minted offline with the public signing key.
+func TestRedirectsStayOnAllowedOrigins(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewUnstartedServer(nil)
+	base := "http://" + srv.Listener.Addr().String()
+	srv.Config.Handler = fixture.New(fixture.Config{
+		BaseURL: base, AccessTokenTTL: time.Hour, SuggestedEmails: nil, HTTPClient: nil, Logger: nil,
+		NoMetadataDocuments: false, RedirectOrigins: []string{"https://speakeasy.example.test"},
+	}).Handler()
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	allowed := "https://speakeasy.example.test/mcp/remote_login_callback"
+	require.NotEmpty(t, register(t, base, allowed))
+	require.NotEmpty(t, register(t, base, "http://127.0.0.1:53682/callback"), "a native client's loopback callback")
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/oauth/register",
+		strings.NewReader(`{"redirect_uris":["https://elsewhere.example.test/cb"],"token_endpoint_auth_method":"none"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	minted, err := fixtureauth.RegisterClient(base, "Minted", []string{"https://elsewhere.example.test/cb"}, time.Now())
+	require.NoError(t, err)
+	q := url.Values{
+		"response_type": {"code"}, "client_id": {minted}, "redirect_uri": {"https://elsewhere.example.test/cb"},
+		"state": {"x"}, "code_challenge": {"abc"}, "code_challenge_method": {"S256"},
+	}
+	areq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/oauth/authorize?"+q.Encode(), nil)
+	require.NoError(t, err)
+	authz, err := noRedirect().Do(areq)
+	require.NoError(t, err)
+	defer func() { _ = authz.Body.Close() }()
+	require.Equal(t, http.StatusBadRequest, authz.StatusCode, "no redirect to another origin")
+	require.Empty(t, authz.Header.Get("Location"))
+}

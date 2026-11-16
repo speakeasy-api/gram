@@ -39,6 +39,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -83,6 +84,14 @@ type Config struct {
 	// NoMetadataDocuments makes the authorization server take only
 	// dynamically registered clients, as fixtureauth.PathDCR's does.
 	NoMetadataDocuments bool
+	// RedirectOrigins, when set, are the only origins (scheme and host, e.g.
+	// https://ai.speakeasy.com) the authorization servers send a sign-in back
+	// to, besides loopback: Speakeasy's own callbacks, and native MCP
+	// clients signing in directly (the External OAuth Server), which listen
+	// on the person's own machine. Hosted on a public domain, the fixture
+	// would otherwise redirect a visitor anywhere a registered client names.
+	// Empty accepts any absolute redirect URI.
+	RedirectOrigins []string
 }
 
 // Server is the fixture. Build it with New and serve Handler.
@@ -281,7 +290,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, u := range req.RedirectURIs {
-		if err := checkRedirectURI(u); err != nil {
+		if err := s.checkRedirectURI(u); err != nil {
 			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", err.Error())
 			return
 		}
@@ -363,7 +372,7 @@ func (s *Server) fetchClientMetadataDocument(ctx context.Context, docURL string)
 		return client{}, errors.New("client metadata document client_id does not match its URL")
 	}
 	for _, u := range doc.RedirectURIs {
-		if err := checkRedirectURI(u); err != nil {
+		if err := s.checkRedirectURI(u); err != nil {
 			return client{}, fmt.Errorf("client metadata document: %w", err)
 		}
 	}
@@ -404,6 +413,11 @@ func (s *Server) validate(ctx context.Context, ar authorizeRequest) (client, str
 	}
 	if !slices.Contains(c.RedirectURIs, ar.RedirectURI) {
 		return client{}, "", fmt.Errorf("redirect_uri %q is not registered for this client", ar.RedirectURI)
+	}
+	// Client ids are signed with a public key, so anyone can mint one naming
+	// any redirect URI: check the origin again where the redirect happens.
+	if err := s.checkRedirectURI(ar.RedirectURI); err != nil {
+		return client{}, "", err
 	}
 	if ar.CodeChallenge == "" || ar.CodeChallengeMethod != "S256" {
 		return c, "PKCE with code_challenge_method=S256 is required", nil
@@ -1064,8 +1078,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// checkRedirectURI accepts an absolute URL without a fragment.
-func checkRedirectURI(raw string) error {
+// checkRedirectURI accepts an absolute URL without a fragment, on
+// Config.RedirectOrigin when it is set.
+func (s *Server) checkRedirectURI(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || !u.IsAbs() || u.Host == "" {
 		return fmt.Errorf("redirect_uri %q must be an absolute URL", raw)
@@ -1073,7 +1088,16 @@ func checkRedirectURI(raw string) error {
 	if u.Fragment != "" {
 		return fmt.Errorf("redirect_uri %q must not have a fragment", raw)
 	}
-	return nil
+	if len(s.cfg.RedirectOrigins) == 0 || isLoopback(u.Hostname()) {
+		return nil
+	}
+	origin := u.Scheme + "://" + u.Host
+	for _, allowed := range s.cfg.RedirectOrigins {
+		if strings.EqualFold(origin, strings.TrimRight(allowed, "/")) {
+			return nil
+		}
+	}
+	return fmt.Errorf("redirect_uri %q must be on one of %s", raw, strings.Join(s.cfg.RedirectOrigins, ", "))
 }
 
 // checkMetadataDocumentURL accepts https anywhere, and plain http only for an
@@ -1102,4 +1126,14 @@ func decodeSegment(seg string) ([]byte, error) {
 
 func oauthError(w http.ResponseWriter, status int, code, desc string) {
 	writeJSON(w, status, map[string]string{"error": code, "error_description": desc})
+}
+
+// isLoopback reports whether host is localhost or a loopback address: a
+// redirect there reaches the person's own machine, never another site.
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

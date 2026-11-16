@@ -1538,6 +1538,8 @@ func newStartCommand() *cli.Command {
 				Logger:              logger.With(attr.SlogComponent("demoseed-fixture")),
 				DevIDPURL:           c.String("demoseed-fixture-devidp-url"),
 				NoMetadataDocuments: false,
+				// Sign-ins only ever go back to Speakeasy's own callbacks.
+				RedirectOrigins: fixtureRedirectOrigins(serverURL, callbackOrigins),
 			}))
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
@@ -2494,4 +2496,17 @@ func parsePlatformHosts(c *cli.Context, authenticationHost *mcp.AuthenticationHo
 // platformOrigins lists the browser origins of the platform hosts.
 func platformOrigins(hosts map[string]string) []string {
 	return slices.Sorted(maps.Values(hosts))
+}
+
+// fixtureRedirectOrigins are the origins Speakeasy's remote sign-in callbacks
+// use: the server's own, and the configured outbound and registration
+// callback origins.
+func fixtureRedirectOrigins(serverURL *url.URL, origins remotesessions.CallbackOrigins) []string {
+	out := []string{serverURL.Scheme + "://" + serverURL.Host}
+	for _, u := range []*url.URL{origins.Outbound, origins.Registration} {
+		if u != nil && u.Host != "" {
+			out = append(out, u.Scheme+"://"+u.Host)
+		}
+	}
+	return out
 }
