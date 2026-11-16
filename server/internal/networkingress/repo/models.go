@@ -48,7 +48,7 @@ type NetworkIngress struct {
 	Runtime pgtype.Text
 	// @access: confidential
 	GatewayShard string
-	// Unused; superseded by gateway_service_hostnames.
+	// Superseded by gateway_service_hostnames and no longer written; read only as the recorded label of a row whose gateway_service_hostnames is empty.
 	// @access: restricted
 	GatewayServiceHostname pgtype.Text
 	// Labels of the Tailscale Services the gateway may have defined for this ingress; copies of current and former hostnames.
