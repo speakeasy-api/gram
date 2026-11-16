@@ -224,6 +224,17 @@ describe("ServerUrlSection", () => {
     expect(updateEndpoint).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps an unprefixed platform address as it is until edited", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    const input = screen.getByPlaceholderText("endpoint") as HTMLInputElement;
+    expect(input.value).toBe("example");
+    const save = screen.getByLabelText("Save address") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(updateEndpoint).not.toHaveBeenCalled();
+  });
+
   it("confirms before removing the last address that can serve", () => {
     const dead = {
       id: "endpoint-4",

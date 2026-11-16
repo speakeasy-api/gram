@@ -267,6 +267,25 @@ func TestAliasBackfillUnprefixedEndpointSavesWithoutSlugChange(t *testing.T) {
 	require.NoError(t, f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: endpointID}))
 }
 
+func TestAliasBackfillKeepsLegacySlugOverHostedLimit(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	slug := "unprefixed-long-alias-kept-past-the-limit-" + uuid.NewString()[:8]
+	require.Greater(t, len(slug), 40)
+	toolset := f.aliasedServer(t, ctx, slug, platformHost)
+
+	rows := f.run(t, ctx, toolset, true)
+	requireOutcomes(t, rows, aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillCreate, reason: "", platform: false})
+	endpointID := rows[0].EndpointID.UUID.String()
+
+	view, err := f.ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{ID: endpointID, McpServerID: new(toolset.ID.String()), Slug: types.McpEndpointSlug(slug)})
+	require.NoError(t, err)
+	require.Equal(t, slug, string(view.Slug))
+
+	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(toolset.ID.String()), Slug: types.McpEndpointSlug(f.slug("long-alias-create-past-the-hosted-limit"))})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestAliasBackfillLockdownSkipsPlatformAddress(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAliasBackfillFixture(t)

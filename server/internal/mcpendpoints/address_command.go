@@ -91,7 +91,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, hostedServer.ID.String(), authCtx.ProjectID.String())); err != nil {
 			return nil, err
 		}
-		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID, slugPrefixRequired); err != nil {
+		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID, slugRulesRequired); err != nil {
 			return nil, err
 		}
 	}

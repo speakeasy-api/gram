@@ -264,23 +264,24 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
-// slugPrefixRule selects whether a new hosted address must carry the organization slug prefix.
-type slugPrefixRule string
+// slugRules selects whether a new hosted address must meet the slug length limit and carry the organization slug
+// prefix.
+type slugRules string
 
 const (
-	// slugPrefixRequired applies the prefix rule, as every API create does.
-	slugPrefixRequired slugPrefixRule = "required"
+	// slugRulesRequired applies both, as every API create does.
+	slugRulesRequired slugRules = "required"
 
-	// slugPrefixExemptLegacyAlias skips it for an address a legacy toolset alias already serves, so the backfill
+	// slugRulesExemptLegacyAlias skips both for an address a legacy toolset alias already serves, so the backfill
 	// that makes the address explicit keeps the URL clients hold.
-	slugPrefixExemptLegacyAlias slugPrefixRule = "exempt_legacy_alias"
+	slugRulesExemptLegacyAlias slugRules = "exempt_legacy_alias"
 )
 
 // checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
-// slug length, the organization's verified and activated custom domain only, the organization prefix on the
-// platform and for free accounts unless prefixRule exempts it, and a private network mode's ingress namespace.
-func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID, prefixRule slugPrefixRule) error {
-	if len(slug) > maxHostedSlugLength {
+// slug length and the organization prefix on the platform and for free accounts unless rules exempts them, the
+// organization's verified and activated custom domain only, and a private network mode's ingress namespace.
+func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID, rules slugRules) error {
+	if rules != slugRulesExemptLegacyAlias && len(slug) > maxHostedSlugLength {
 		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if customDomainID.Valid {
@@ -288,7 +289,7 @@ func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, 
 			return err
 		}
 	}
-	if prefixRule != slugPrefixExemptLegacyAlias {
+	if rules != slugRulesExemptLegacyAlias {
 		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
 			return err
 		}

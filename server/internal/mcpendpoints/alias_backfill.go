@@ -342,7 +342,7 @@ func backfillAliasAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, a
 		return fmt.Errorf("load endpoint at address: %w", err)
 	}
 
-	if err := checkHostedNewAddress(ctx, tx, logger, authCtx, server, row.Slug, row.CustomDomainID, slugPrefixExemptLegacyAlias); err != nil {
+	if err := checkHostedNewAddress(ctx, tx, logger, authCtx, server, row.Slug, row.CustomDomainID, slugRulesExemptLegacyAlias); err != nil {
 		var shareable *oops.ShareableError
 		if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
 			row.Reason = shareable.Error()

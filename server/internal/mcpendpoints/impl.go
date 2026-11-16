@@ -201,7 +201,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeConflict, nil, "mcp server changed while creating its endpoint").LogWarn(ctx, logger)
 	}
 	if hosted {
-		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID, slugPrefixRequired); err != nil {
+		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID, slugRulesRequired); err != nil {
 			return nil, err
 		}
 	}

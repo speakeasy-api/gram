@@ -507,22 +507,17 @@ function AddressRow({
   onSaved?: () => Promise<void>;
 }) {
   const { orgSlug } = useSlugs();
-  // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
-  // the read-only URL segment so the editable field holds just the suffix;
-  // custom-domain endpoints have no such prefix.
-  const slugPrefix = !endpoint.customDomainId && orgSlug ? `${orgSlug}-` : "";
+  // Platform endpoints carry the `${orgSlug}-` prefix, folded into the
+  // read-only URL segment so the field holds just the suffix. Older unprefixed
+  // platform slugs and custom-domain endpoints show the whole slug.
+  const orgPrefix = !endpoint.customDomainId && orgSlug ? `${orgSlug}-` : "";
+  const slugPrefix = endpoint.slug.startsWith(orgPrefix) ? orgPrefix : "";
 
   const [suffix, setSuffix] = useState(() =>
-    endpoint.slug.startsWith(slugPrefix)
-      ? endpoint.slug.slice(slugPrefix.length)
-      : endpoint.slug,
+    endpoint.slug.slice(slugPrefix.length),
   );
   useEffect(() => {
-    setSuffix(
-      endpoint.slug.startsWith(slugPrefix)
-        ? endpoint.slug.slice(slugPrefix.length)
-        : endpoint.slug,
-    );
+    setSuffix(endpoint.slug.slice(slugPrefix.length));
   }, [endpoint.slug, slugPrefix]);
 
   const fullSlug = `${slugPrefix}${suffix.trim()}`;
