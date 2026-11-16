@@ -177,7 +177,12 @@ func processSecurity(
 					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
-							if failure, ok := errors.AsType[*clientCredentialsError](err); ok && env.Credentials != nil {
+							failure, ok := errors.AsType[*clientCredentialsError](err)
+							message := clientGrantFailureMessage(toolconfig.ClientGrantMisconfigured)
+							if ok {
+								message = clientGrantFailureMessage(failure.failure)
+							}
+							if ok && env.Credentials != nil {
 								applied[http.CanonicalHeaderKey("Authorization")] = credentialFrom(variable, grant)
 								env.Credentials.GrantFailure = failure.failure
 							}
@@ -187,7 +192,7 @@ func processSecurity(
 								*responseStatusCodeCapture = http.StatusUnauthorized
 							}
 							if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
-								Error: err.Error(),
+								Error: message,
 							}); err != nil {
 								logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
 							}
@@ -457,6 +462,26 @@ func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure 
 		return toolconfig.ClientGrantMisconfigured
 	}
 	return toolconfig.ClientGrantUnavailable
+}
+
+// clientGrantFailureMessage tells the caller what to check when a tool could not get its access token.
+func clientGrantFailureMessage(failure toolconfig.ClientGrantFailure) string {
+	const prefix = "The tool could not get its access token: "
+	const askAdmin = ". Ask your administrator to check the tool's token URL."
+	switch failure {
+	case toolconfig.ClientGrantBlocked:
+		return prefix + "its token URL " + guardian.AddressNotAllowed.Problem() + askAdmin
+	case toolconfig.ClientGrantAddressNotFound:
+		return prefix + "its token URL " + guardian.AddressNotFound.Problem() + askAdmin
+	case toolconfig.ClientGrantRejected:
+		return prefix + "its token service refused the request. Ask your administrator to check the tool's client ID, client secret and scopes."
+	case toolconfig.ClientGrantUnavailable:
+		return prefix + "its token service could not be reached or answered with an error. Try again in a few minutes. If it keeps happening, ask your administrator to check the tool's token URL."
+	case toolconfig.ClientGrantMisconfigured:
+		return prefix + "its token service gave an answer Speakeasy could not use" + askAdmin
+	default:
+		return prefix + "its token service gave an answer Speakeasy could not use" + askAdmin
+	}
 }
 
 func clientCredentialsStatusFailure(status int) toolconfig.ClientGrantFailure {

@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -96,6 +98,11 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 			require.Equal(t, tc.want, report.GrantFailure)
 			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true, Carrier: "Authorization"}}, report.Sent)
 			require.Equal(t, []string{"Content-Type"}, keys(w.Header()))
+			require.JSONEq(t, `{"error":`+strconv.Quote(clientGrantFailureMessage(tc.want))+`}`, w.Body.String())
+			parsed, err := url.Parse(tc.tokenURL)
+			require.NoError(t, err)
+			require.NotContains(t, w.Body.String(), parsed.Hostname())
+			require.NotContains(t, w.Body.String(), "192.0.2.10")
 		})
 	}
 }

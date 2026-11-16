@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -79,6 +80,11 @@ func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mc
 // SetEnvironmentLoader replaces the environment loader.
 func (s *Service) SetEnvironmentLoader(loader toolconfig.EnvironmentLoader) {
 	s.env = loader
+}
+
+// SetTelemetryLogger replaces the logger that writes tool call log rows.
+func (s *Service) SetTelemetryLogger(logger *tm.Logger) {
+	s.telemLogger = logger
 }
 
 // SetCIMDResolver replaces the client metadata document resolver.
