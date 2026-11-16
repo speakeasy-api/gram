@@ -75,13 +75,13 @@ func timedOut(err error) bool {
 	return false
 }
 
-// Problem completes a sentence about the thing at the address, empty for AddressFine.
-func (f AddressFailure) Problem() string {
+// Problem says what is wrong with subject's address, for an administrator; empty for AddressFine.
+func (f AddressFailure) Problem(subject string) string {
 	switch f {
 	case AddressNotAllowed:
-		return "uses a private or internal address Speakeasy can't reach"
+		return subject + " uses a private or internal address Speakeasy can't reach"
 	case AddressNotFound:
-		return "uses an address that does not point anywhere"
+		return subject + "'s address doesn't exist"
 	case AddressFine:
 		return ""
 	default:

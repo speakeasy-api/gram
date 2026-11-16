@@ -2589,7 +2589,7 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
 		if address := guardian.AddressFailureOf(err, tunneled); address != guardian.AddressFine {
-			return oops.E(oops.CodeGatewayError, err, "token exchange failed: the sign-in provider %s. Ask your administrator to check the sign-in provider's address", address.Problem()).LogError(ctx, logger)
+			return oops.E(oops.CodeGatewayError, err, "token exchange failed: %s. Ask your administrator to check the sign-in provider's address", address.Problem("the sign-in provider")).LogError(ctx, logger)
 		}
 		reason := "the identity provider could not be reached"
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
