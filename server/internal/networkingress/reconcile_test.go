@@ -92,6 +92,45 @@ func TestNetworkIngressExecutorDisabledGatePreservesObserveFailure(t *testing.T)
 	require.Equal(t, "kubernetes_api", loadRow(t, ctx, ti).LastError.String)
 }
 
+func TestNetworkIngressExecutorRetryableObserveFailureKeepsTheRecordedName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	id := uuid.MustParse(ti.create(t, ctx).ID)
+	failing := false
+	provider := lifecycleProvider{
+		apply: func(context.Context, k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+			t.Fatal("Apply called while gated")
+			return k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, nil
+		},
+		observe: func(context.Context, k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
+			if failing {
+				// The tailnet gateway's answer when it cannot read the ingress owner.
+				return k8s.NetworkIngressObservation{Status: "error", DNSName: "", ErrorCode: "", ConnectedAt: nil}, errors.New("load ingress owner: connection reset")
+			}
+			return k8s.NetworkIngressObservation{Status: "online", DNSName: "private.example.ts.net", ErrorCode: "", ConnectedAt: nil}, nil
+		},
+		delete: func(context.Context, k8s.NetworkIngressResourceNames) error {
+			t.Fatal("unexpected teardown")
+			return nil
+		},
+	}
+	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{Queue: "test", Image: "image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return fmt.Errorf("off") }})
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.NoError(t, err)
+	require.Equal(t, "private.example.ts.net", loadRow(t, ctx, ti).DnsName.String)
+
+	failing = true
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	var failure *networkingress.ReconcileError
+	require.ErrorAs(t, err, &failure)
+	require.True(t, failure.Retryable, "a failed owner read is retried")
+	row := loadRow(t, ctx, ti)
+	require.NotEqual(t, k8s.NetworkIngressErrorInvalidDesiredState, row.LastError.String)
+	require.Equal(t, "private.example.ts.net", row.DnsName.String, "a transient failure must not stop routing to the recorded name")
+}
+
 func TestNetworkIngressExecutorDisabledGateObservesOnly(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

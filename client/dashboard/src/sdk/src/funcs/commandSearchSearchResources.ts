@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  Toolset,
-  Toolset$inboundSchema,
-} from "../models/components/toolset.js";
+  Commandresourceindex,
+  Commandresourceindex$inboundSchema,
+} from "../models/components/commandresourceindex.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,31 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SetToolsetUserSessionIssuerRequest,
-  SetToolsetUserSessionIssuerRequest$outboundSchema,
-  SetToolsetUserSessionIssuerSecurity,
-} from "../models/operations/settoolsetusersessionissuer.js";
+  SearchCommandResourcesRequest,
+  SearchCommandResourcesRequest$outboundSchema,
+  SearchCommandResourcesSecurity,
+} from "../models/operations/searchcommandresources.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setUserSessionIssuer toolsets
+ * search commandSearch
  *
  * @remarks
- * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
- *
- * Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.
- *
- * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
+ * Returns compact openable resources matching a bounded server-side query.
  */
-export function toolsetsSetUserSessionIssuer(
+export function commandSearchSearchResources(
   client: GramCore,
-  request: SetToolsetUserSessionIssuerRequest,
-  security?: SetToolsetUserSessionIssuerSecurity | undefined,
+  request: SearchCommandResourcesRequest,
+  security?: SearchCommandResourcesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    Toolset,
+    Commandresourceindex,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -77,13 +73,13 @@ export function toolsetsSetUserSessionIssuer(
 
 async function $do(
   client: GramCore,
-  request: SetToolsetUserSessionIssuerRequest,
-  security?: SetToolsetUserSessionIssuerSecurity | undefined,
+  request: SearchCommandResourcesRequest,
+  security?: SearchCommandResourcesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      Toolset,
+      Commandresourceindex,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -99,26 +95,22 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(SetToolsetUserSessionIssuerRequest$outboundSchema, value),
+    (value) => z.parse(SearchCommandResourcesRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SetUserSessionIssuerRequestBody, {
-    explode: true,
-  });
+  const body = null;
 
-  const path = pathToFunc("/rpc/toolsets.setUserSessionIssuer")();
+  const path = pathToFunc("/rpc/commandSearch.search")();
 
   const query = encodeFormQuery({
-    "slug": payload.slug,
+    "q": payload.q,
   });
 
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
@@ -164,7 +156,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setToolsetUserSessionIssuer",
+    operationID: "searchCommandResources",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -178,7 +170,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -209,7 +201,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    Toolset,
+    Commandresourceindex,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -220,7 +212,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, Toolset$inboundSchema),
+    M.json(200, Commandresourceindex$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

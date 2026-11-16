@@ -30,6 +30,8 @@ export interface LauncherCandidate {
   detail: string;
   /** Slug, id, and aliases used for fuzzy matching. */
   keywords: string[];
+  /** Structured server-index identity; never inferred from fuzzy aliases. */
+  resourceIdentity?: { id: string; routeSelector: string };
   /** "open" always first; others attached by state + RBAC. */
   verbs: Verb[];
   icon?: IconName;
