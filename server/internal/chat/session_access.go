@@ -80,11 +80,11 @@ const (
 	chatAccessWrite
 )
 
-func (a chatAccess) check(chatID string) authz.Check {
+func (a chatAccess) check(chatID uuid.UUID) authz.Check {
 	if a == chatAccessWrite {
-		return authz.Chat(authz.ChatIDFrom(chatID)).Write()
+		return authz.Chat(authz.ChatIDOf(chatID)).Write()
 	}
-	return authz.Chat(authz.ChatIDFrom(chatID)).Read()
+	return authz.Chat(authz.ChatIDOf(chatID)).Read()
 }
 
 // authorizeChatRead decides whether the caller may read a chat's content.
@@ -177,7 +177,7 @@ func (a *SessionAccess) authorizeChatAccess(ctx context.Context, authCtx *contex
 			}
 			return nil
 		}
-		if err := a.authz.Require(ctx, access.check(chat.ID.String())); err != nil {
+		if err := a.authz.Require(ctx, access.check(chat.ID)); err != nil {
 			return err
 		}
 	}

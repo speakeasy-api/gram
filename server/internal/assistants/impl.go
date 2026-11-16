@@ -144,7 +144,7 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	assistantID, err := uuid.Parse(payload.ID)
+	assistantID, err := parseAssistantID(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
@@ -219,7 +219,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	assistantID, err := uuid.Parse(payload.ID)
+	assistantID, err := parseAssistantID(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
@@ -274,7 +274,7 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	assistantID, err := uuid.Parse(payload.ID)
+	assistantID, err := parseAssistantID(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
@@ -295,7 +295,7 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	assistantID, err := uuid.Parse(payload.AssistantID)
+	assistantID, err := parseAssistantID(payload.AssistantID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
@@ -412,7 +412,7 @@ func (s *Service) InterruptTurn(ctx context.Context, payload *gen.InterruptTurnP
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	assistantID, err := uuid.Parse(payload.AssistantID)
+	assistantID, err := parseAssistantID(payload.AssistantID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
@@ -640,4 +640,18 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 	default:
 		return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
 	}
+}
+
+// parseAssistantID parses an assistant id from a request. The nil uuid names
+// no assistant, so it is refused here as a bad id rather than reaching an
+// authorization check that cannot name a resource.
+func parseAssistantID(raw string) (uuid.UUID, error) {
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if id == uuid.Nil {
+		return uuid.Nil, errors.New("assistant id is the nil uuid")
+	}
+	return id, nil
 }

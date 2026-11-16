@@ -23,7 +23,7 @@ func (s *Service) ListExecutionProfiles(ctx context.Context, payload *gen.ListEx
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	assistantID, err := uuid.Parse(payload.AssistantID)
+	assistantID, err := parseAssistantID(payload.AssistantID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogWarn(ctx, s.logger)
 	}
@@ -64,7 +64,7 @@ func (s *Service) SetExecutionProfileChoice(ctx context.Context, payload *gen.Se
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "changing an assistant's credentials requires a user identity")
 	}
-	assistantID, err := uuid.Parse(payload.AssistantID)
+	assistantID, err := parseAssistantID(payload.AssistantID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogWarn(ctx, s.logger)
 	}
