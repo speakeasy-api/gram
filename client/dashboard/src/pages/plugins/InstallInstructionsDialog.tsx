@@ -1137,9 +1137,9 @@ function VibeInstallContent({
             <p className="text-muted-foreground mt-2 text-xs">
               Then extract:{" "}
               <code className="bg-muted px-1 py-0.5">
-                mkdir -p ~/.vibe/plugins/{observabilityName} &amp;&amp; unzip
-                observability-vibe.zip -d ~/.vibe/plugins/
-                {observabilityName}
+                mkdir -p ~/.vibe/plugins/&quot;{observabilityName}&quot;
+                &amp;&amp; unzip observability-vibe.zip -d
+                ~/.vibe/plugins/&quot;{observabilityName}&quot;
               </code>
             </p>
             <p className="text-muted-foreground mt-2 text-xs">

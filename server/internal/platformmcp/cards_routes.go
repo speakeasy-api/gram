@@ -257,6 +257,7 @@ var textOnlyTools = map[string]string{
 	"select_assistant_runtime":             textOnlyAssistant,
 	"choose_assistant_upstream_credential": textOnlyAssistant,
 	"get_my_install_instructions":          textOnlyMember,
+	"get_my_vibe_observability_install":    "reports Vibe observability install availability and guidance; the plugins page covers it for people",
 	"get_my_mcp_access":                    textOnlyMember,
 	"get_my_mcp_connection_status":         textOnlyMember,
 	"list_my_mcp_access":                   textOnlyMember,

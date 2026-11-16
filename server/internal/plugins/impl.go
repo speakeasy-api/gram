@@ -1829,10 +1829,10 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				// a first publish skips the rollout gate and writes the
 				// current hooks subtree, so rollout eligibility is the wrong
 				// signal here.
-				available := VibeObservabilityPluginAvailable(slugCfg)
-				result.VibeObservabilityAvailable = &available
-				if available && conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion {
-					result.VibeObservabilityPlugin = conv.PtrEmpty(naming.ObservabilitySlug(conv.Default(slugCfg.HooksOrgName, slugCfg.OrgName)))
+				vibeStatus := VibeObservabilityStatusFor(slugCfg, conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion))
+				result.VibeObservabilityAvailable = &vibeStatus.Available
+				if vibeStatus.Published {
+					result.VibeObservabilityPlugin = conv.PtrEmpty(vibeStatus.Plugin)
 				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.

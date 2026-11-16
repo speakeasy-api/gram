@@ -87,6 +87,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	})
 
 	registerRepublishPluginTool(reg, plugins)
+	registerVibeObservabilityTool(reg, plugins)
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_install_instructions",
@@ -123,6 +124,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 }
 
 func registerUnavailablePluginTools(reg *Registrar) {
+	registerVibeObservabilityTool(reg, nil)
 	for _, tool := range []struct {
 		name        string
 		title       string

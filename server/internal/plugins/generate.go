@@ -2679,8 +2679,37 @@ var releasedHooksProviders = hooksReleaseProviders
 // hook — under strict that denies every tool call — so the Vibe observability
 // package and the platform=vibe download are gated on this list, which
 // pin-hooks-release derives from the release itself.
+// VibeProviderReleased reports whether the pinned hooks release's relay
+// carries the vibe provider (exported for Platform MCP guidance).
+func VibeProviderReleased() bool { return vibeProviderReleased() }
+
 func vibeProviderReleased() bool {
 	return slices.Contains(releasedHooksProviders, string(relay.ProviderVibe))
+}
+
+// VibeObservabilityStatus is the shared view of the per-org Vibe observability
+// package used by publish status and the Platform MCP: Available reports
+// whether the ZIP can be downloaded right now, Published whether the published
+// marketplace repo carries the package (stored published hooks version equals
+// the current generator version), and Plugin is the install name under
+// ~/.vibe/plugins/, set only when Published.
+type VibeObservabilityStatus struct {
+	Available bool
+	Published bool
+	Plugin    string
+}
+
+// VibeObservabilityStatusFor computes the status for cfg given the stored
+// published hooks version of the project's GitHub connection ("" when the
+// project has never published).
+func VibeObservabilityStatusFor(cfg GenerateConfig, publishedHooksVersion string) VibeObservabilityStatus {
+	available := VibeObservabilityPluginAvailable(cfg)
+	st := VibeObservabilityStatus{Available: available}
+	if available && publishedHooksVersion == hooksGeneratorVersion {
+		st.Published = true
+		st.Plugin = naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
+	}
+	return st
 }
 
 // VibeObservabilityPluginAvailable reports whether the per-org Vibe

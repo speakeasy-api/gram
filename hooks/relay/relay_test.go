@@ -2146,3 +2146,13 @@ func TestRedactCommandMasksSecretsInsideMultiWordFields(t *testing.T) {
 	require.NotContains(t, got, "sk-live-zzz9")
 	require.Contains(t, got, "API_KEY=***")
 }
+
+// TestRedactCommandMasksNewlineSeparatedSecrets: CR/LF are command
+// whitespace, so a newline-separated sh -c wrapper argument is word-level
+// redacted rather than passing as one field.
+func TestRedactCommandMasksNewlineSeparatedSecrets(t *testing.T) {
+	got := redactCommand("sh -c 'true\nAPI_KEY=sk-live-nl99 node server.js'")
+	require.NotContains(t, got, "sk-live-nl99")
+	require.Contains(t, got, "API_KEY=***")
+	require.Contains(t, got, "node server.js")
+}

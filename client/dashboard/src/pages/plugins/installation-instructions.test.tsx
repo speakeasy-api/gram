@@ -226,8 +226,10 @@ describe("installation instructions", () => {
     // straight into the user-scope plugin directory under the real install
     // name from the publish status.
     expect(text).toContain("Download Plugin");
+    // The extract path is quoted so the <org>-observability placeholder can
+    // never be read as a shell redirect.
     expect(text).toContain(
-      "unzip observability-vibe.zip -d ~/.vibe/plugins/example-observability",
+      'unzip observability-vibe.zip -d ~/.vibe/plugins/"example-observability"',
     );
     // Manual install from the marketplace repository's <slug>-vibe/ directory:
     // clone into a fresh temp dir chained with &&, clear the destination, copy.
