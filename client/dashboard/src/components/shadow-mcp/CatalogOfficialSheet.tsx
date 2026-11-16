@@ -245,7 +245,7 @@ export function CatalogOfficialSheet({
     >
       <SheetContent
         side="right"
-        className="flex w-[560px] flex-col sm:max-w-[560px]"
+        className="flex w-[680px] flex-col sm:max-w-[680px]"
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
