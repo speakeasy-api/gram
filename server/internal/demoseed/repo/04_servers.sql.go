@@ -125,10 +125,10 @@ type ServersInsertAttachmentClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 }
 
-// Inert upstream account, owned by the human on Linear session 6. Both
+// Inert upstream account, owned by the human on the Example OAuth server session 6. Both
 // active release agents share that human owner. The explicit client link
 // makes this exact session reachable from the requesting session's issuer.
-// The client sits under Linear's own remote identity provider: every client
+// The client sits under the Example OAuth server's own remote identity provider: every client
 // bound to one user session issuer must share a remote issuer, or the
 // mcp_servers.remote_session_issuer_id derivation above would come out NULL.
 // Reserved example endpoints and no refresh token keep this display fixture
@@ -200,10 +200,11 @@ type ServersInsertAuthClientParams struct {
 	RemoteSessionClientID uuid.NullUUID
 }
 
-// Typed auth clients, as the upstream OAuth migration records them: Linear's
-// personal client over its OAuth registration, and one static credential
-// shared by GitHub and Linear, so the server settings show a shared client
-// and a server offering two. Slack offers none.
+// Typed auth clients, as the upstream OAuth migration records them: the
+// Example OAuth server's personal client over its OAuth registration, and one
+// static credential it also offers, so the server settings show a server
+// offering two. The Example Shared Credential server sends its own static
+// header and offers none.
 // The projects delete cascades the clients, their headers and associations.
 func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClient,
@@ -214,33 +215,6 @@ func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsert
 		arg.Source,
 		arg.Name,
 		arg.RemoteSessionClientID,
-	)
-	return err
-}
-
-const serversInsertAuthClientForwardedHeader = `-- name: ServersInsertAuthClientForwardedHeader :exec
-INSERT INTO mcp_auth_client_headers
-  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
-VALUES
-  ($1::uuid, $2::uuid, $3::text, $4::text, TRUE,
-   $5::text)
-`
-
-type ServersInsertAuthClientForwardedHeaderParams struct {
-	ID                     uuid.UUID
-	AuthClientID           uuid.UUID
-	OrgID                  string
-	Name                   string
-	ValueFromRequestHeader string
-}
-
-func (q *Queries) ServersInsertAuthClientForwardedHeader(ctx context.Context, arg ServersInsertAuthClientForwardedHeaderParams) error {
-	_, err := q.db.Exec(ctx, serversInsertAuthClientForwardedHeader,
-		arg.ID,
-		arg.AuthClientID,
-		arg.OrgID,
-		arg.Name,
-		arg.ValueFromRequestHeader,
 	)
 	return err
 }
@@ -293,7 +267,7 @@ type ServersInsertAuthClientRoleGrantsParams struct {
 	BlockID      uuid.UUID
 }
 
-// Engineers may use the shared GitHub token; Contractors are blocked from
+// Engineers may use the shared token; Contractors are blocked from
 // it on every server that offers it. Cleared by id at the top of the seed.
 func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg ServersInsertAuthClientRoleGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClientRoleGrants,
@@ -301,6 +275,39 @@ func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg Ser
 		arg.AuthClientID,
 		arg.UseID,
 		arg.BlockID,
+	)
+	return err
+}
+
+const serversInsertCheckAccessUserGrants = `-- name: ServersInsertCheckAccessUserGrants :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+VALUES
+  ($1::uuid, $2::text,
+   'user:' || $3::text, 'mcp:connect',
+   jsonb_build_object('resource_kind', 'mcp',
+     'resource_id', ($4::uuid)::text)),
+  ($5::uuid, $2::text,
+   'user:' || $6::text, 'mcp:connect',
+   jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'))
+`
+
+type ServersInsertCheckAccessUserGrantsParams struct {
+	DirectID       uuid.UUID
+	OrgID          string
+	DirectUserID   string
+	SharedServerID uuid.UUID
+	WildcardID     uuid.UUID
+	WildcardUserID string
+}
+
+func (q *Queries) ServersInsertCheckAccessUserGrants(ctx context.Context, arg ServersInsertCheckAccessUserGrantsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCheckAccessUserGrants,
+		arg.DirectID,
+		arg.OrgID,
+		arg.DirectUserID,
+		arg.SharedServerID,
+		arg.WildcardID,
+		arg.WildcardUserID,
 	)
 	return err
 }
@@ -367,8 +374,8 @@ type ServersInsertCodeGatewayMembersParams struct {
 	ProjectID       uuid.UUID
 	MetaID          uuid.UUID
 	SupportServerID uuid.UUID
-	OpsMemberID     uuid.UUID
-	OpsServerID     uuid.UUID
+	OauthMemberID   uuid.UUID
+	OauthServerID   uuid.UUID
 }
 
 func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg ServersInsertCodeGatewayMembersParams) error {
@@ -377,9 +384,36 @@ func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg Serve
 		arg.ProjectID,
 		arg.MetaID,
 		arg.SupportServerID,
-		arg.OpsMemberID,
-		arg.OpsServerID,
+		arg.OauthMemberID,
+		arg.OauthServerID,
 	)
+	return err
+}
+
+const serversInsertContractorsBlock = `-- name: ServersInsertContractorsBlock :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT $1::uuid, $2::text,
+       'role:organization:' || r.id, 'mcp:blocked_connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', ($3::uuid)::text)
+FROM organization_roles r
+WHERE r.organization_id = $2::text AND r.workos_slug = 'contractors'
+`
+
+type ServersInsertContractorsBlockParams struct {
+	ID             uuid.UUID
+	OrgID          string
+	SharedServerID uuid.UUID
+}
+
+// Check Access scenarios on the Example Shared Credential server. Contractors blocks connecting, which
+// wins over every other role's grant: Mateo (a contractor through the
+// directory) is blocked even though Engineer reaches every server, and his
+// own grant covering every server cannot outrank the block. Priya holds the
+// role too, but a grant made to her by name for that server outranks it. The
+// user grants are cleared by id at the top of the seed.
+func (q *Queries) ServersInsertContractorsBlock(ctx context.Context, arg ServersInsertContractorsBlockParams) error {
+	_, err := q.db.Exec(ctx, serversInsertContractorsBlock, arg.ID, arg.OrgID, arg.SharedServerID)
 	return err
 }
 
@@ -746,7 +780,7 @@ type ServersInsertEngineeringEssentialsPluginParams struct {
 }
 
 // A hand-curated supplement gives Team Access a multiple-plugin example:
-// Engineer reaches GitHub through both its role plugin and this one. Other
+// Engineer reaches the Example Shared Credential server through both its role plugin and this one. Other
 // servers/roles keep their single-match and no-match examples.
 func (q *Queries) ServersInsertEngineeringEssentialsPlugin(ctx context.Context, arg ServersInsertEngineeringEssentialsPluginParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, serversInsertEngineeringEssentialsPlugin, arg.OrgID, arg.ProjectID)
@@ -758,7 +792,7 @@ func (q *Queries) ServersInsertEngineeringEssentialsPlugin(ctx context.Context, 
 const serversInsertEngineeringEssentialsServers = `-- name: ServersInsertEngineeringEssentialsServers :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
 SELECT $1::uuid, id, name FROM mcp_servers
-WHERE project_id = $2::uuid AND slug = 'github'
+WHERE project_id = $2::uuid AND slug = 'example-shared-credential'
 `
 
 type ServersInsertEngineeringEssentialsServersParams struct {
@@ -928,66 +962,6 @@ func (q *Queries) ServersInsertGatewayMember(ctx context.Context, arg ServersIns
 	return err
 }
 
-const serversInsertGitHubContractorsBlock = `-- name: ServersInsertGitHubContractorsBlock :exec
-INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
-SELECT $1::uuid, $2::text,
-       'role:organization:' || r.id, 'mcp:blocked_connect',
-       jsonb_build_object('resource_kind', 'mcp',
-         'resource_id', ($3::uuid)::text)
-FROM organization_roles r
-WHERE r.organization_id = $2::text AND r.workos_slug = 'contractors'
-`
-
-type ServersInsertGitHubContractorsBlockParams struct {
-	ID             uuid.UUID
-	OrgID          string
-	GithubServerID uuid.UUID
-}
-
-// Check Access scenarios on GitHub. Contractors blocks connecting, which
-// wins over every other role's grant: Mateo (a contractor through the
-// directory) is blocked even though Engineer reaches every server, and his
-// own grant covering every server cannot outrank the block. Priya holds the
-// role too, but a grant made to her by name for GitHub outranks it. The
-// user grants are cleared by id at the top of the seed.
-func (q *Queries) ServersInsertGitHubContractorsBlock(ctx context.Context, arg ServersInsertGitHubContractorsBlockParams) error {
-	_, err := q.db.Exec(ctx, serversInsertGitHubContractorsBlock, arg.ID, arg.OrgID, arg.GithubServerID)
-	return err
-}
-
-const serversInsertGitHubUserGrants = `-- name: ServersInsertGitHubUserGrants :exec
-INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
-VALUES
-  ($1::uuid, $2::text,
-   'user:' || $3::text, 'mcp:connect',
-   jsonb_build_object('resource_kind', 'mcp',
-     'resource_id', ($4::uuid)::text)),
-  ($5::uuid, $2::text,
-   'user:' || $6::text, 'mcp:connect',
-   jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'))
-`
-
-type ServersInsertGitHubUserGrantsParams struct {
-	DirectID       uuid.UUID
-	OrgID          string
-	DirectUserID   string
-	GithubServerID uuid.UUID
-	WildcardID     uuid.UUID
-	WildcardUserID string
-}
-
-func (q *Queries) ServersInsertGitHubUserGrants(ctx context.Context, arg ServersInsertGitHubUserGrantsParams) error {
-	_, err := q.db.Exec(ctx, serversInsertGitHubUserGrants,
-		arg.DirectID,
-		arg.OrgID,
-		arg.DirectUserID,
-		arg.GithubServerID,
-		arg.WildcardID,
-		arg.WildcardUserID,
-	)
-	return err
-}
-
 const serversInsertHeadlessClient = `-- name: ServersInsertHeadlessClient :exec
 INSERT INTO user_session_clients
   (id, project_id, organization_id, user_session_issuer_id, client_id,
@@ -1006,7 +980,7 @@ type ServersInsertHeadlessClientParams struct {
 	IssuerID  uuid.UUID
 }
 
-// An app that signs in to Linear without a browser, so it cannot pick a
+// An app that signs in to the Example OAuth server without a browser, so it cannot pick a
 // credential on the consent screen.
 func (q *Queries) ServersInsertHeadlessClient(ctx context.Context, arg ServersInsertHeadlessClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertHeadlessClient,
@@ -1044,43 +1018,23 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          user_session_issuer_id, visibility)
 SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
 FROM (VALUES
-  ($1::uuid, $2::text, NULL::uuid, 'private'),
-  ($3::uuid, $4::text, NULL::uuid, 'private'),
-  ($5::uuid, $6::text, $7::uuid, 'private'),
-  ($8::uuid, $9::text, NULL::uuid, 'public')
+  ($1::uuid, $2::text, NULL::uuid, 'public')
 ) AS v(toolset_id, slug, user_session_issuer_id, visibility)
-JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = $10::uuid AND t.deleted IS FALSE
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = $3::uuid AND t.deleted IS FALSE
 `
 
 type ServersInsertHostedToolsetMCPServersParams struct {
-	Toolset1         uuid.UUID
-	SupportMcpSlug   string
-	Toolset2         uuid.UUID
-	OpsMcpSlug       string
-	Toolset3         uuid.UUID
-	PartnerMcpSlug   string
-	PartnerIssuerID  uuid.UUID
-	Toolset4         uuid.UUID
-	DiscoveryMcpSlug string
-	ProjectID        uuid.UUID
+	Toolset1       uuid.UUID
+	SupportMcpSlug string
+	ProjectID      uuid.UUID
 }
 
 // Each hosted toolset owns a canonical wrapper (id = the toolset id) that
 // holds its hosting state, and one platform endpoint at the wrapper's slug.
-// The fresh-id servers above stay separate servers over the same toolsets.
+// The wrapper is the toolset's only MCP server: a second server over the
+// same toolset shows up as a duplicate in every server picker.
 func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, arg ServersInsertHostedToolsetMCPServersParams) error {
-	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers,
-		arg.Toolset1,
-		arg.SupportMcpSlug,
-		arg.Toolset2,
-		arg.OpsMcpSlug,
-		arg.Toolset3,
-		arg.PartnerMcpSlug,
-		arg.PartnerIssuerID,
-		arg.Toolset4,
-		arg.DiscoveryMcpSlug,
-		arg.ProjectID,
-	)
+	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers, arg.Toolset1, arg.SupportMcpSlug, arg.ProjectID)
 	return err
 }
 
@@ -1367,7 +1321,7 @@ type ServersInsertKillswitchVersionResourcesParams struct {
 	ActiveSelectedID uuid.UUID
 	SupportServerID  uuid.UUID
 	ChangedID        uuid.UUID
-	OpsServerID      uuid.UUID
+	VendorServerID   uuid.UUID
 	LinearServerID   uuid.UUID
 	LiftedID         uuid.UUID
 	SlackServerID    uuid.UUID
@@ -1380,7 +1334,7 @@ func (q *Queries) ServersInsertKillswitchVersionResources(ctx context.Context, a
 		arg.ActiveSelectedID,
 		arg.SupportServerID,
 		arg.ChangedID,
-		arg.OpsServerID,
+		arg.VendorServerID,
 		arg.LinearServerID,
 		arg.LiftedID,
 		arg.SlackServerID,
@@ -1431,16 +1385,14 @@ INSERT INTO remote_session_issuers
    name, scope_override)
 VALUES
   ($1::uuid, $2::uuid, $3::text,
-   -- Linear's real authorization server, as its MCP server advertises it, so
-   -- the demo reads like production.
-   'linear', 'https://mcp.linear.app',
-   'https://mcp.linear.app/authorize',
-   'https://mcp.linear.app/token',
+   'mcp-fixture-oauth', 'https://mcp-fixture.example.com',
+   'https://mcp-fixture.example.com/oauth/authorize',
+   'https://mcp-fixture.example.com/oauth/token',
    NULL,
-   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['notes:read', 'notes:write'], ARRAY['authorization_code', 'refresh_token'],
    ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
    -- An issuer-wide scope override, shown on the provider's page.
-   'Linear', ARRAY['read'])
+   'MCP Fixture OAuth', ARRAY['notes:read'])
 `
 
 type ServersInsertLinearRemoteSessionIssuerParams struct {
@@ -1455,57 +1407,36 @@ func (q *Queries) ServersInsertLinearRemoteSessionIssuer(ctx context.Context, ar
 }
 
 const serversInsertMCPServers = `-- name: ServersInsertMCPServers :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+INSERT INTO mcp_servers (id, project_id, name, slug,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  ($1::uuid, $2::uuid, 'Acme Support Tools',
-   'acme-support-tools', $3::uuid, NULL, NULL, 'private'),
-  ($4::uuid, $2::uuid, 'Acme Ops', 'acme-ops',
-   $5::uuid, NULL, NULL, 'private'),
-  ($6::uuid, $2::uuid, 'Linear', 'linear',
-   NULL, $7::uuid,
-   $8::uuid, 'private'),
-  ($9::uuid, $2::uuid, 'Slack', 'slack',
-   NULL, $10::uuid,
-   $11::uuid, 'private'),
-  ($12::uuid, $2::uuid, 'GitHub', 'github',
-   NULL, $13::uuid,
-   $14::uuid, 'private')
+  ($1::uuid, $2::uuid, 'Example OAuth', 'example-oauth',
+   $3::uuid,
+   $4::uuid, 'private'),
+  ($5::uuid, $2::uuid, 'Example Shared Credential', 'example-shared-credential',
+   $6::uuid,
+   $7::uuid, 'private')
 `
 
 type ServersInsertMCPServersParams struct {
-	SupportID         uuid.UUID
-	ProjectID         uuid.UUID
-	Toolset1          uuid.UUID
-	OpsID             uuid.UUID
-	Toolset2          uuid.UUID
-	LinearID          uuid.UUID
-	RemoteLinearID    uuid.UUID
-	IssuerLinearID    uuid.UUID
-	SlackID           uuid.UUID
-	RemoteSlackID     uuid.UUID
-	IssuerSlackID     uuid.UUID
-	GithubID          uuid.UUID
-	RemoteGithubID    uuid.UUID
-	IssuerWorkforceID uuid.UUID
+	LinearID       uuid.UUID
+	ProjectID      uuid.UUID
+	RemoteLinearID uuid.UUID
+	IssuerLinearID uuid.UUID
+	SlackID        uuid.UUID
+	RemoteSlackID  uuid.UUID
+	IssuerSlackID  uuid.UUID
 }
 
 func (q *Queries) ServersInsertMCPServers(ctx context.Context, arg ServersInsertMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertMCPServers,
-		arg.SupportID,
-		arg.ProjectID,
-		arg.Toolset1,
-		arg.OpsID,
-		arg.Toolset2,
 		arg.LinearID,
+		arg.ProjectID,
 		arg.RemoteLinearID,
 		arg.IssuerLinearID,
 		arg.SlackID,
 		arg.RemoteSlackID,
 		arg.IssuerSlackID,
-		arg.GithubID,
-		arg.RemoteGithubID,
-		arg.IssuerWorkforceID,
 	)
 	return err
 }
@@ -1513,7 +1444,7 @@ func (q *Queries) ServersInsertMCPServers(ctx context.Context, arg ServersInsert
 const serversInsertMetaMCPServer = `-- name: ServersInsertMetaMCPServer :exec
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                               user_session_issuer_id) VALUES
-  ($1::uuid, $2::text, $3::uuid, 'Acme Agent Gateway',
+  ($1::uuid, $2::text, $3::uuid, 'Multi-Server Gateway',
    $4::uuid)
 `
 
@@ -1542,9 +1473,7 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
   ($5::uuid, $2::uuid,
    $3::uuid, $6::uuid, 1),
   ($7::uuid, $2::uuid,
-   $3::uuid, $8::uuid, 2),
-  ($9::uuid, $2::uuid,
-   $3::uuid, $10::uuid, 3)
+   $3::uuid, $8::uuid, 2)
 `
 
 type ServersInsertMetaMCPServerMembersParams struct {
@@ -1552,8 +1481,6 @@ type ServersInsertMetaMCPServerMembersParams struct {
 	ProjectID       uuid.UUID
 	MetaID          uuid.UUID
 	SupportServerID uuid.UUID
-	OpsMemberID     uuid.UUID
-	OpsServerID     uuid.UUID
 	LinearMemberID  uuid.UUID
 	LinearServerID  uuid.UUID
 	SlackMemberID   uuid.UUID
@@ -1567,32 +1494,11 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 		arg.ProjectID,
 		arg.MetaID,
 		arg.SupportServerID,
-		arg.OpsMemberID,
-		arg.OpsServerID,
 		arg.LinearMemberID,
 		arg.LinearServerID,
 		arg.SlackMemberID,
 		arg.SlackServerID,
 	)
-	return err
-}
-
-const serversInsertNotionUserSessionIssuer = `-- name: ServersInsertNotionUserSessionIssuer :exec
-INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
-                                  authn_challenge_mode, session_duration,
-                                  authorization_server_mode) VALUES
-  ($1::uuid, $2::uuid, $3::text, 'notion',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
-`
-
-type ServersInsertNotionUserSessionIssuerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	OrgID     string
-}
-
-func (q *Queries) ServersInsertNotionUserSessionIssuer(ctx context.Context, arg ServersInsertNotionUserSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertNotionUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
 }
 
@@ -1656,75 +1562,6 @@ func (q *Queries) ServersInsertOrganizationGatewaySession(ctx context.Context, a
 	return err
 }
 
-const serversInsertPrivateInventoryEndpoint = `-- name: ServersInsertPrivateInventoryEndpoint :exec
-INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
-  ($1::uuid, $2::uuid, $3::uuid, $4::text)
-`
-
-type ServersInsertPrivateInventoryEndpointParams struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	McpServerID uuid.UUID
-	Slug        string
-}
-
-func (q *Queries) ServersInsertPrivateInventoryEndpoint(ctx context.Context, arg ServersInsertPrivateInventoryEndpointParams) error {
-	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryEndpoint,
-		arg.ID,
-		arg.ProjectID,
-		arg.McpServerID,
-		arg.Slug,
-	)
-	return err
-}
-
-const serversInsertPrivateInventoryMCPServer = `-- name: ServersInsertPrivateInventoryMCPServer :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
-                         visibility) VALUES
-  ($1::uuid, $2::uuid, 'Private inventory', $3::text,
-   $4::uuid, 'private')
-`
-
-type ServersInsertPrivateInventoryMCPServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Slug      string
-	TunnelID  uuid.UUID
-}
-
-func (q *Queries) ServersInsertPrivateInventoryMCPServer(ctx context.Context, arg ServersInsertPrivateInventoryMCPServerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryMCPServer,
-		arg.ID,
-		arg.ProjectID,
-		arg.Slug,
-		arg.TunnelID,
-	)
-	return err
-}
-
-const serversInsertPrivateInventoryTunnel = `-- name: ServersInsertPrivateInventoryTunnel :exec
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
-                                  status, agent_version, last_seen_at) VALUES
-  ($1::uuid, $2::uuid, 'Private inventory tunnel',
-   md5($3::text), 'demo_inert', 'active', '0.2.0', NULL)
-`
-
-type ServersInsertPrivateInventoryTunnelParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	KeySeed   string
-}
-
-// Tunnel example, deliberately disconnected: its activity history must not
-// fabricate a live customer agent in the shared demo environment. The key
-// hash comes from the tenant's name seed, so it stays globally unique and
-// matches no issued key. ClickHouse metric rows reference these ids
-// (ch_05_tunnel_metrics.go).
-func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg ServersInsertPrivateInventoryTunnelParams) error {
-	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryTunnel, arg.ID, arg.ProjectID, arg.KeySeed)
-	return err
-}
-
 const serversInsertRegistryPromotionCandidate = `-- name: ServersInsertRegistryPromotionCandidate :exec
 INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
 VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, $5::uuid, 'unobserved', false, 'insufficient_evidence', $6::text, clock_timestamp() - make_interval(days => $7::integer))
@@ -1758,19 +1595,16 @@ func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, a
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  ($1::uuid, $2::uuid, 'Linear', 'linear',
-   'streamable-http', 'https://mcp.linear.app/mcp'),
-  ($3::uuid, $2::uuid, 'Slack', 'slack',
-   'streamable-http', 'https://mcp.slack.com/mcp'),
-  ($4::uuid, $2::uuid, 'GitHub', 'github',
-   'streamable-http', 'https://api.githubcopilot.com/mcp/')
+  ($1::uuid, $2::uuid, 'Example OAuth', 'example-oauth',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/oauth'),
+  ($3::uuid, $2::uuid, 'Example Shared Credential', 'example-shared-credential',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared')
 `
 
 type ServersInsertRemoteMCPServersParams struct {
 	LinearID  uuid.UUID
 	ProjectID uuid.UUID
 	SlackID   uuid.UUID
-	GithubID  uuid.UUID
 }
 
 // MCP servers, gateway endpoints, plugins, meta MCP servers, remote sessions,
@@ -1778,16 +1612,14 @@ type ServersInsertRemoteMCPServersParams struct {
 // old demo.ensure_demo_org(); tenant identifiers arrive as parameters.
 // MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 // Two backends so the gateway's member table shows both classes: the
-// toolset-backed pair executes in-process, the third-party remotes are
-// proxied. URLs are the vendors' public MCP endpoints: no credentials,
-// and nothing here connects on its own.
+// toolset-backed pair (the hosted toolsets' canonical wrappers below)
+// executes in-process, the remotes are proxied. Each server is named for the
+// configuration it tests. The remotes' upstream is the MCP fixture the
+// Speakeasy server hosts (internal/demoseed/fixture): written here at a
+// reserved example.com host, then pointed at the hosted fixture by the
+// fixture servers phase (fixture_servers.go).
 func (q *Queries) ServersInsertRemoteMCPServers(ctx context.Context, arg ServersInsertRemoteMCPServersParams) error {
-	_, err := q.db.Exec(ctx, serversInsertRemoteMCPServers,
-		arg.LinearID,
-		arg.ProjectID,
-		arg.SlackID,
-		arg.GithubID,
-	)
+	_, err := q.db.Exec(ctx, serversInsertRemoteMCPServers, arg.LinearID, arg.ProjectID, arg.SlackID)
 	return err
 }
 
@@ -1809,30 +1641,30 @@ func (q *Queries) ServersInsertRemoteSessionClientIssuerBinding(ctx context.Cont
 	return err
 }
 
-const serversInsertRemovedGitHubMember = `-- name: ServersInsertRemovedGitHubMember :exec
+const serversInsertRemovedGatewayMember = `-- name: ServersInsertRemovedGatewayMember :exec
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order, deleted_at) VALUES
   ($1::uuid, $2::uuid,
-   $3::uuid, $4::uuid, 4,
+   $3::uuid, $4::uuid, 3,
    now() - interval '3 days')
 `
 
-type ServersInsertRemovedGitHubMemberParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	MetaID         uuid.UUID
-	GithubServerID uuid.UUID
+type ServersInsertRemovedGatewayMemberParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	MetaID    uuid.UUID
+	ServerID  uuid.UUID
 }
 
-// GitHub was a member until three days ago. Its dispatches are still in
+// Linear was a member until three days ago. Its dispatches are still in
 // ClickHouse (gwgone rows), so the Activity section can show that a removed
 // member drops out of Calls by member while the gateway totals keep them.
-func (q *Queries) ServersInsertRemovedGitHubMember(ctx context.Context, arg ServersInsertRemovedGitHubMemberParams) error {
-	_, err := q.db.Exec(ctx, serversInsertRemovedGitHubMember,
+func (q *Queries) ServersInsertRemovedGatewayMember(ctx context.Context, arg ServersInsertRemovedGatewayMemberParams) error {
+	_, err := q.db.Exec(ctx, serversInsertRemovedGatewayMember,
 		arg.ID,
 		arg.ProjectID,
 		arg.MetaID,
-		arg.GithubServerID,
+		arg.ServerID,
 	)
 	return err
 }
@@ -1847,9 +1679,11 @@ JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
 CROSS JOIN mcp_servers s
 WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
   AND s.project_id = $2::uuid
-  -- Canonical hosted wrappers share their toolset's name with the
-  -- fresh-id servers above; distribute those servers only.
-  AND s.id IS DISTINCT FROM s.toolset_id
+  -- Of the hosted toolsets' wrappers, distribute only the OpenAPI Server
+  -- (API Key); the server-specific sign-in and external OAuth toolsets stay
+  -- out of plugins.
+  AND (s.id IS DISTINCT FROM s.toolset_id
+       OR s.id = $3::uuid)
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = $1::text AND g.principal_urn = a.principal_urn
@@ -1859,8 +1693,9 @@ WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
 `
 
 type ServersInsertRoleServerMembershipsParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
+	OrgID           string
+	ProjectID       uuid.UUID
+	SupportServerID uuid.UUID
 }
 
 // Distribute these servers to the seeded organization roles holding
@@ -1868,7 +1703,7 @@ type ServersInsertRoleServerMembershipsParams struct {
 // mcp:write neither allow connecting nor deliver servers. Store server identities, not legacy toolset memberships. Content
 // has no manual/automatic distinction and never widens a plugin's audience.
 func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg ServersInsertRoleServerMembershipsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships, arg.OrgID, arg.ProjectID)
+	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships, arg.OrgID, arg.ProjectID, arg.SupportServerID)
 	if err != nil {
 		return 0, err
 	}
@@ -1936,104 +1771,6 @@ func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg 
 	return err
 }
 
-const serversInsertSignInExampleEndpoints = `-- name: ServersInsertSignInExampleEndpoints :exec
-INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
-  ($1::uuid, $2::uuid, NULL,
-   $3::uuid, $4::text),
-  ($5::uuid, $2::uuid, NULL,
-   $6::uuid, $7::text)
-`
-
-type ServersInsertSignInExampleEndpointsParams struct {
-	NotionEndpointID   uuid.UUID
-	ProjectID          uuid.UUID
-	NotionServerID     uuid.UUID
-	NotionSlug         string
-	DeepwikiEndpointID uuid.UUID
-	DeepwikiServerID   uuid.UUID
-	DeepwikiSlug       string
-}
-
-// Each gets an endpoint of its own, as a server added in the dashboard does:
-// the endpoint is where its sign-in page lives.
-func (q *Queries) ServersInsertSignInExampleEndpoints(ctx context.Context, arg ServersInsertSignInExampleEndpointsParams) error {
-	_, err := q.db.Exec(ctx, serversInsertSignInExampleEndpoints,
-		arg.NotionEndpointID,
-		arg.ProjectID,
-		arg.NotionServerID,
-		arg.NotionSlug,
-		arg.DeepwikiEndpointID,
-		arg.DeepwikiServerID,
-		arg.DeepwikiSlug,
-	)
-	return err
-}
-
-const serversInsertSignInExampleMCPServers = `-- name: ServersInsertSignInExampleMCPServers :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         remote_mcp_server_id, user_session_issuer_id,
-                         visibility) VALUES
-  ($1::uuid, $2::uuid, 'Notion', 'notion',
-   NULL, $3::uuid, $4::uuid, 'private'),
-  ($5::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
-   NULL, $6::uuid, $7::uuid, 'private')
-`
-
-type ServersInsertSignInExampleMCPServersParams struct {
-	NotionID          uuid.UUID
-	ProjectID         uuid.UUID
-	RemoteNotionID    uuid.UUID
-	IssuerNotionID    uuid.UUID
-	DeepwikiID        uuid.UUID
-	RemoteDeepwikiID  uuid.UUID
-	IssuerWorkforceID uuid.UUID
-}
-
-// DeepWiki takes no credential, so it sits under the shared workforce issuer
-// like GitHub, with no upstream client to sign in through.
-func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg ServersInsertSignInExampleMCPServersParams) error {
-	_, err := q.db.Exec(ctx, serversInsertSignInExampleMCPServers,
-		arg.NotionID,
-		arg.ProjectID,
-		arg.RemoteNotionID,
-		arg.IssuerNotionID,
-		arg.DeepwikiID,
-		arg.RemoteDeepwikiID,
-		arg.IssuerWorkforceID,
-	)
-	return err
-}
-
-const serversInsertSignInExampleRemoteMCPServers = `-- name: ServersInsertSignInExampleRemoteMCPServers :exec
-INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  ($1::uuid, $2::uuid, 'Notion', 'notion',
-   'streamable-http', 'https://mcp.notion.com/mcp'),
-  ($3::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
-   'streamable-http', 'https://mcp.deepwiki.com/mcp')
-`
-
-type ServersInsertSignInExampleRemoteMCPServersParams struct {
-	NotionID   uuid.UUID
-	ProjectID  uuid.UUID
-	DeepwikiID uuid.UUID
-}
-
-// Leave instructions NULL so Settings starts with the editable built-in
-// instructions, matching the gateway's initialize and server/discover text.
-// Remote MCP identity modes: Linear uses per-user OAuth through a
-// project-scoped CIMD client, Slack carries one inert shared Service Account
-// credential, and GitHub intentionally has no upstream identity. The demo
-// values are display fixtures only and cannot authenticate to any service.
-// Two more vendor remotes for the agent MCP sign-in tab, both real and
-// connectable: Notion signs each caller in to their own account once an
-// admin sets up its sign-in from the server's page (Speakeasy registers a
-// client with Notion then; the seed holds no credential), and DeepWiki is a
-// public server that needs no sign-in at all.
-func (q *Queries) ServersInsertSignInExampleRemoteMCPServers(ctx context.Context, arg ServersInsertSignInExampleRemoteMCPServersParams) error {
-	_, err := q.db.Exec(ctx, serversInsertSignInExampleRemoteMCPServers, arg.NotionID, arg.ProjectID, arg.DeepwikiID)
-	return err
-}
-
 const serversInsertSlackIdentityHeader = `-- name: ServersInsertSlackIdentityHeader :exec
 INSERT INTO remote_mcp_server_headers
   (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
@@ -2075,8 +1812,9 @@ type ServersInsertSupportDeskGrantsParams struct {
 }
 
 // Support Desk names its servers one by one, the MCP access tab's main
-// shape: Acme Support Tools with every tool (toolset-backed, so the grant
-// names the toolset), Slack only for tools annotated read-only.
+// shape: the OpenAPI Server with every tool (toolset-backed, so the
+// grant names the toolset), the Example Shared Credential server only for tools
+// annotated read-only.
 func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg ServersInsertSupportDeskGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSupportDeskGrants, arg.OrgID, arg.Toolset1, arg.SlackServerID)
 	return err
@@ -2231,7 +1969,7 @@ VALUES
    'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
    now() - interval '10 days', 'none'),
   ($5::uuid, $2::uuid, $3::text,
-   $6::uuid, 'gram_demo_client_slack', NULL,
+   $6::uuid, 'gram_demo_client_service_account', NULL,
    'Cursor', ARRAY['http://127.0.0.1:41294/callback'],
    now() - interval '8 days', 'none'),
   ($7::uuid, $2::uuid, $3::text,
@@ -2277,9 +2015,9 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authorization_server_mode) VALUES
   ($1::uuid, NULL, $2::text, 'acme-workforce',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
-  ($3::uuid, $4::uuid, $2::text, 'linear',
+  ($3::uuid, $4::uuid, $2::text, 'example-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
-  ($5::uuid, $4::uuid, $2::text, 'slack',
+  ($5::uuid, $4::uuid, $2::text, 'example-shared-credential',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   ($6::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
@@ -2329,7 +2067,7 @@ VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
         $5::text, now() + interval '7 days', false,
-        ARRAY['read'], $6::bigint,
+        ARRAY['notes:read'], $6::bigint,
         CASE WHEN $7::text <> '' THEN now() - make_interval(hours => $8::int) END,
         NULLIF($7::text, ''), now() - make_interval(days => $9::int),
         now() - make_interval(hours => $8::int), now() + interval '10 years')
@@ -2347,11 +2085,11 @@ type ServersInsertValidatedSessionParams struct {
 	DaysAgo               int32
 }
 
-// Upstream sessions on Linear's CIMD client, one per last-validation outcome
+// Upstream sessions on the Example OAuth server's CIMD client, one per last-validation outcome
 // plus one never validated, so the admin server health page shows every
-// validation state. Inert like the session above: no refresh token, and a held
-// re-check lease, renewed by each reseed, keeps the idle re-check from
-// presenting the dummy token to Linear and overwriting the seeded verdicts. grant_generation above 1 records re-authorizations.
+// validation state. Written with a dummy token and a held re-check lease; the
+// fixture servers phase (fixture_servers.go) swaps in MCP fixture tokens and
+// releases the lease. grant_generation above 1 records re-authorizations.
 // An empty status is the never-validated session (NULL status and
 // last_validated_at).
 func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg ServersInsertValidatedSessionParams) error {
@@ -2369,45 +2107,189 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 	return err
 }
 
-const serversPickGatewayGitHubCredential = `-- name: ServersPickGatewayGitHubCredential :execrows
-UPDATE upstream_client_selections AS sel
-SET auth_client_id = ac.id,
-    auth_client_attachment_scope = ac.attachment_scope,
-    no_auth = FALSE
-FROM mcp_auth_clients AS ac
-WHERE ac.id = $1::uuid
-  AND ac.organization_id = $2::text
-  AND sel.project_id = $3::uuid
-  AND sel.organization_id = $2::text
-  AND sel.credential_kind = 'user_session'
-  AND sel.credential_id = ANY($4::uuid[])
-  AND sel.mcp_server_id = $5::uuid
-  AND sel.deleted IS FALSE
+const serversInsertVendorAppClient = `-- name: ServersInsertVendorAppClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
+   callback_base_url)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::text, $5::text,
+   clock_timestamp(), 'none', $6::text)
 `
 
-type ServersPickGatewayGitHubCredentialParams struct {
-	AuthClientID  uuid.UUID
-	OrgID         string
-	ProjectID     uuid.UUID
-	CredentialIds []uuid.UUID
-	McpServerID   uuid.UUID
+type ServersInsertVendorAppClientParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+	CallbackBaseUrl       string
 }
 
-// Sets the organization gateway's seeded GitHub choices to the caller's own
-// GitHub token. The server offers two credentials, so a choice that names
-// neither resolves to no credential under enforcement.
-func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
-	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,
-		arg.AuthClientID,
-		arg.OrgID,
+// A client ID metadata document client: Speakeasy serves the document at
+// client_id, on the callback origin it records.
+func (q *Queries) ServersInsertVendorAppClient(ctx context.Context, arg ServersInsertVendorAppClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppClient,
+		arg.ID,
 		arg.ProjectID,
-		arg.CredentialIds,
-		arg.McpServerID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	return err
+}
+
+const serversInsertVendorAppIssuer = `-- name: ServersInsertVendorAppIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::text, $6::text, $7::text,
+   $8::text, $9::text,
+   $10::text[], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], $11::text[],
+   ARRAY['S256'], $12::boolean, $13::text,
+   clock_timestamp())
+`
+
+type ServersInsertVendorAppIssuerParams struct {
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	OrganizationID                    string
+	Key                               string
+	Issuer                            string
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	RevocationEndpoint                string
+	Scopes                            []string
+	TokenEndpointAuthMethods          []string
+	ClientIDMetadataDocumentSupported bool
+	Name                              string
+}
+
+// An authorization server, as its metadata document
+// (<issuer>/.well-known/oauth-authorization-server) describes it: a vendor's,
+// or the MCP fixture's DCR-only one.
+func (q *Queries) ServersInsertVendorAppIssuer(ctx context.Context, arg ServersInsertVendorAppIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppIssuer,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Key,
+		arg.Issuer,
+		arg.AuthorizationEndpoint,
+		arg.TokenEndpoint,
+		arg.RegistrationEndpoint,
+		arg.RevocationEndpoint,
+		arg.Scopes,
+		arg.TokenEndpointAuthMethods,
+		arg.ClientIDMetadataDocumentSupported,
+		arg.Name,
+	)
+	return err
+}
+
+const serversInsertVendorAppProtectedResource = `-- name: ServersInsertVendorAppProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::text, ARRAY[$6::text], $7::text[], clock_timestamp())
+`
+
+type ServersInsertVendorAppProtectedResourceParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Resource       string
+	MetadataUrl    string
+	Issuer         string
+	Scopes         []string
+}
+
+func (q *Queries) ServersInsertVendorAppProtectedResource(ctx context.Context, arg ServersInsertVendorAppProtectedResourceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppProtectedResource,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+		arg.Scopes,
+	)
+	return err
+}
+
+const serversInsertVendorAppServer = `-- name: ServersInsertVendorAppServer :exec
+WITH remote AS (
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+  VALUES ($4::uuid, $2::uuid, $5::text, $6::text,
+          'streamable-http', $7::text)
+  RETURNING id
+), issuer AS (
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration,
+                                    authorization_server_mode)
+  VALUES ($8::uuid, $2::uuid, $9::text, $6::text,
+          'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+  RETURNING id
+), server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           remote_mcp_server_id, user_session_issuer_id,
+                           visibility)
+  SELECT $10::uuid, $2::uuid, $5::text, $6::text, NULL,
+         remote.id, issuer.id, 'private'
+  FROM remote, issuer
+  RETURNING id
+)
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug)
+SELECT $1::uuid, $2::uuid, NULL, server.id, $3::text
+FROM server
+`
+
+type ServersInsertVendorAppServerParams struct {
+	EndpointID uuid.UUID
+	ProjectID  uuid.UUID
+	Slug       string
+	RemoteID   uuid.UUID
+	Name       string
+	Key        string
+	Url        string
+	IssuerID   uuid.UUID
+	OrgID      string
+	ServerID   uuid.UUID
+}
+
+// A well-known vendor's MCP server (Linear, Notion), with its own endpoint
+// and sign-in, set up as Auto-Configure would: the vendor's authorization
+// server, a client ID metadata document client Speakeasy serves at the
+// deployment's own URL, and the server's links to them. The vendor fetches
+// the document when someone signs in, so nothing is registered ahead of time
+// and each caller signs in to their own account. Locally, where the vendor
+// cannot reach the document, the client becomes one registered by DCR
+// (vendor_apps.go).
+func (q *Queries) ServersInsertVendorAppServer(ctx context.Context, arg ServersInsertVendorAppServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertVendorAppServer,
+		arg.EndpointID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.RemoteID,
+		arg.Name,
+		arg.Key,
+		arg.Url,
+		arg.IssuerID,
+		arg.OrgID,
+		arg.ServerID,
+	)
+	return err
 }
 
 const serversStampRemoteSessionIssuer = `-- name: ServersStampRemoteSessionIssuer :exec
@@ -2465,10 +2347,10 @@ INSERT INTO remote_protected_resources
    authorization_servers, scopes_supported, scope_override, metadata_fetched_at)
 VALUES
   ($1::uuid, $2::uuid, $3::text,
-   'https://mcp.linear.app/mcp',
-   'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://mcp.linear.app'], ARRAY['read', 'write'],
-   ARRAY['read'], now() - interval '2 hours')
+   'https://mcp-fixture.example.com/mcp/oauth',
+   'https://mcp-fixture.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+   ARRAY['https://mcp-fixture.example.com'], ARRAY['notes:read', 'notes:write'],
+   ARRAY['notes:read'], now() - interval '2 hours')
 ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
 SET metadata_url = EXCLUDED.metadata_url,
     authorization_servers = EXCLUDED.authorization_servers,
@@ -2484,7 +2366,8 @@ type ServersUpsertLinearProtectedResourceParams struct {
 	OrgID     string
 }
 
-// Linear's protected resource, read recently, with a scope pin for the server's scope panel.
+// The Example OAuth server's protected resource, read recently, with a scope
+// pin for the server's scope panel.
 func (q *Queries) ServersUpsertLinearProtectedResource(ctx context.Context, arg ServersUpsertLinearProtectedResourceParams) error {
 	_, err := q.db.Exec(ctx, serversUpsertLinearProtectedResource, arg.ID, arg.ProjectID, arg.OrgID)
 	return err

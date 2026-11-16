@@ -229,13 +229,11 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
-func TestGrantExpressionEvaluate_mcpReadBlocklistLeavesMCPWrite(t *testing.T) {
+func TestGrantExpressionEvaluate_mcpReadBlocklistAlsoBlocksMCPWrite(t *testing.T) {
 	t.Parallel()
 
-	// The mcp:blocked_* scopes are independent of one another: seeing a
-	// server and administering it are separate capabilities, so a block on
-	// one says nothing about the other. Only mcp:blocked_write subtracts
-	// mcp:write.
+	// Blocks follow Implies in reverse: mcp:write implies mcp:read, so a
+	// block on read takes write away too, as it does for every other kind.
 	const projectID = "project_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
@@ -248,14 +246,18 @@ func TestGrantExpressionEvaluate_mcpReadBlocklistLeavesMCPWrite(t *testing.T) {
 
 	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
 	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
-	// The read it does name is subtracted.
 	result, err = expressionForCheck(MCPCheck(ScopeMCPRead, "server_in_project", projectID)).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
+
+	// A block bounded to the project leaves servers elsewhere alone.
+	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_elsewhere", "project_456")).Evaluate(grants)
+	require.NoError(t, err)
+	require.True(t, result.Satisfied)
 }
 
 func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T) {
