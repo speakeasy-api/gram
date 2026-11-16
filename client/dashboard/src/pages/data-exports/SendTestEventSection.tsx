@@ -7,6 +7,7 @@ import { Text } from "@/components/ui/Text";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useTestDataExportRouteMutation } from "@gram/client/react-query/testDataExportRoute.js";
+import { useEffect, useRef } from "react";
 
 const alertVariantForOutcome: Record<string, "success" | "error" | "warning"> =
   {
@@ -102,10 +103,29 @@ export function SendTestEventSection({
   // The section shows its own error, so skip the app-wide error toast.
   const sendTest = useTestDataExportRouteMutation({ onError: () => {} });
   const result = sendTest.data;
+  const showError = sendTest.isError && !unsavedChanges;
+  const showResult =
+    !!result && !unsavedChanges && !sendTest.isPending && !sendTest.isError;
+  const outcome = showError ? sendTest.error : showResult ? result : undefined;
+
+  // Scroll only to a new answer, not one already there on mount or shown again after a save.
+  const outcomeRef = useRef<HTMLDivElement>(null);
+  const lastScrolled = useRef(outcome);
+  useEffect(() => {
+    if (outcome === undefined || outcome === lastScrolled.current) return;
+    lastScrolled.current = outcome;
+    const reduceMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    outcomeRef.current?.scrollIntoView?.({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [outcome]);
 
   return (
     <RequireScope scope="org:admin" level="section">
-      <div className="space-y-3 border-t py-5">
+      <div className="border-t py-5">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 space-y-1">
             <Label>Test event</Label>
@@ -140,72 +160,75 @@ export function SendTestEventSection({
             {sendTest.isPending ? "Sending" : "Send test event"}
           </Button>
         </div>
-        {sendTest.isError && !unsavedChanges ? (
-          <Alert variant="error" title={failure(sendTest.error).title}>
-            {failure(sendTest.error).message}
-          </Alert>
-        ) : null}
-        {result &&
-        !unsavedChanges &&
-        !sendTest.isPending &&
-        !sendTest.isError ? (
-          <Alert
-            variant={alertVariantForOutcome[result.outcome] ?? "warning"}
-            title={
-              result.signals.some((signal) => signal.outcome !== result.outcome)
-                ? "Not every test event was accepted"
-                : outcomeTitle(
-                    result.outcome,
-                    result.signals.length === 1
-                      ? result.signals[0]?.signal
-                      : undefined,
-                  )
-            }
-          >
-            {result.message}
-            {result.signals.length > 1 ? (
-              <ul className="mt-2 space-y-1">
-                {result.signals.map((signal) => (
-                  <li key={signal.signal}>
-                    {signal.outcome === "accepted" ? (
-                      <span className="font-medium">
-                        {signalLabel[signal.signal] ?? signal.signal}: accepted
-                      </span>
-                    ) : (
-                      <>
+        <div
+          ref={outcomeRef}
+          aria-live="polite"
+          className="space-y-3 not-empty:mt-3"
+        >
+          {showError ? (
+            <Alert variant="error" title={failure(sendTest.error).title}>
+              {failure(sendTest.error).message}
+            </Alert>
+          ) : null}
+          {showResult ? (
+            <Alert
+              variant={alertVariantForOutcome[result.outcome] ?? "warning"}
+              title={
+                result.signals.some(
+                  (signal) => signal.outcome !== result.outcome,
+                )
+                  ? "Not every test event was accepted"
+                  : outcomeTitle(
+                      result.outcome,
+                      result.signals.length === 1
+                        ? result.signals[0]?.signal
+                        : undefined,
+                    )
+              }
+            >
+              {result.message}
+              {result.signals.length > 1 ? (
+                <ul className="mt-2 space-y-1">
+                  {result.signals.map((signal) => (
+                    <li key={signal.signal}>
+                      {signal.outcome === "accepted" ? (
                         <span className="font-medium">
-                          {signalLabel[signal.signal] ?? signal.signal}:{" "}
-                          {outcomeTitle(signal.outcome)}.
-                        </span>{" "}
-                        {signal.message}
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </Alert>
-        ) : null}
-        {result &&
-        !unsavedChanges &&
-        !sendTest.isPending &&
-        !sendTest.isError ? (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Text muted className="text-sm">
-              {findLabel(result.signals)}
-            </Text>
-            <code className="min-w-0 font-mono text-xs">
-              speakeasy.test_event.id=
-              <wbr />
-              <span className="whitespace-nowrap">{result.testEventId}</span>
-            </code>
-            <CopyButton
-              size="xs"
-              text={`speakeasy.test_event.id=${result.testEventId}`}
-              tooltip="Copy test event ID"
-            />
-          </div>
-        ) : null}
+                          {signalLabel[signal.signal] ?? signal.signal}:
+                          accepted
+                        </span>
+                      ) : (
+                        <>
+                          <span className="font-medium">
+                            {signalLabel[signal.signal] ?? signal.signal}:{" "}
+                            {outcomeTitle(signal.outcome)}.
+                          </span>{" "}
+                          {signal.message}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </Alert>
+          ) : null}
+          {showResult ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Text muted className="text-sm">
+                {findLabel(result.signals)}
+              </Text>
+              <code className="min-w-0 font-mono text-xs">
+                speakeasy.test_event.id=
+                <wbr />
+                <span className="whitespace-nowrap">{result.testEventId}</span>
+              </code>
+              <CopyButton
+                size="xs"
+                text={`speakeasy.test_event.id=${result.testEventId}`}
+                tooltip="Copy test event ID"
+              />
+            </div>
+          ) : null}
+        </div>
       </div>
     </RequireScope>
   );

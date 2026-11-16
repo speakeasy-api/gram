@@ -404,6 +404,90 @@ describe("SendTestEventSection", () => {
     },
   );
 
+  describe("bringing the answer into view", () => {
+    const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
+    const original = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollIntoView",
+    );
+
+    beforeEach(() => {
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        value: scrollIntoView,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    afterEach(() => {
+      if (original) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "scrollIntoView",
+          original,
+        );
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown })
+          .scrollIntoView;
+      }
+    });
+
+    function section(unsavedChanges = false) {
+      return (
+        <TooltipProvider>
+          <SendTestEventSection
+            projectSlug="default"
+            routeId="route-1"
+            sendsEverySignal={false}
+            unsavedChanges={unsavedChanges}
+          />
+        </TooltipProvider>
+      );
+    }
+
+    it("scrolls to each new answer, not before one arrives", () => {
+      const { rerender } = render(section());
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      mutation.data = logsResult("accepted", "Accepted.");
+      rerender(section());
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "nearest",
+      });
+      const region = screen
+        .getByText("Test event accepted")
+        .closest("[aria-live]");
+      expect(region?.getAttribute("aria-live")).toBe("polite");
+      expect(scrollIntoView.mock.contexts[0]).toBe(region);
+
+      mutation.data = logsResult("refused", "Refused.");
+      rerender(section());
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not scroll to an answer already shown when it opens or reappears", () => {
+      mutation.data = logsResult("accepted", "Accepted.");
+      const { rerender } = render(section());
+      rerender(section(true));
+      rerender(section(false));
+
+      expect(screen.getByText("Test event accepted")).toBeTruthy();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it("scrolls to a failure too", () => {
+      const { rerender } = render(section());
+      mutation.isError = true;
+      mutation.error = new Error("boom");
+      rerender(section());
+
+      expect(screen.getByText("Test result unknown")).toBeTruthy();
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("is hidden from people who are not org admins", () => {
     hasScope.value = false;
     renderSection();
