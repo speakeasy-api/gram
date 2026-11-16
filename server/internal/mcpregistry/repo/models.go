@@ -29,7 +29,7 @@ type McpRegistryEntry struct {
 type McpRegistryServer struct {
 	// @access: confidential
 	ID uuid.UUID
-	// @access: confidential
+	// @access: opaque-confidential
 	Name string
 	// @access: confidential
 	Visible bool
