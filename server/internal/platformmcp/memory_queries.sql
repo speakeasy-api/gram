@@ -28,8 +28,62 @@ RETURNING id, created_at;
 -- Stale digests are left out like in the memorydigest reads: one that
 -- folded a chat or memo no longer eligible, or a child digest that is gone,
 -- and every parent above it, so an exclusion or deletion hides them before
--- the nightly job deletes them.
-WITH q AS (SELECT websearch_to_tsquery('english', @query::text) AS query)
+-- the nightly job deletes them. The stale check runs once for each matching
+-- digest, child and grandchild, not once for each pair of digests.
+WITH q AS (SELECT websearch_to_tsquery('english', @query::text) AS query),
+cand AS (
+  SELECT d.id, d.level, d.period_start, d.content, d.child_digest_ids,
+         ts_rank(d.search_vector, q.query, 1) AS rank
+  FROM memory_digests d
+  CROSS JOIN q
+  JOIN projects p ON p.id = d.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+  WHERE @include_digests::boolean
+    AND d.project_id = @project_id AND d.organization_id = @organization_id
+    AND octet_length(d.content) <= 65536
+    AND d.period_end::timestamp AT TIME ZONE 'UTC' > @from_time AND d.period_start::timestamp AT TIME ZONE 'UTC' < @to_time
+    AND d.search_vector @@ q.query
+),
+reach AS (
+  SELECT cand.id FROM cand
+  UNION
+  SELECT unnest(cand.child_digest_ids) FROM cand
+  UNION
+  SELECT unnest(w.child_digest_ids)
+  FROM memory_digests w
+  WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+    AND w.project_id = @project_id
+),
+stale AS MATERIALIZED (
+  SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
+  FROM memory_digests s
+  WHERE s.id IN (SELECT reach.id FROM reach)
+    AND s.project_id = @project_id
+    AND (
+      cardinality(s.chat_ids) > (
+        SELECT count(*)
+        FROM chats c
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE c.id = ANY(s.chat_ids)
+          AND c.summary_redacted IS TRUE
+          AND c.summary IS NOT NULL
+          AND c.memory_excluded_at IS NULL
+          AND c.deleted IS FALSE
+          AND (ua.id IS NULL OR ua.account_type <> 'personal')
+      )
+      OR cardinality(s.memo_ids) > (
+        SELECT count(*)
+        FROM memory_memos m
+        LEFT JOIN chats c ON c.id = m.chat_id
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE m.id = ANY(s.memo_ids)
+          AND m.deleted IS FALSE
+          AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+      )
+      OR cardinality(s.child_digest_ids) > (
+        SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+      )
+    )
+)
 SELECT hits.kind::text AS kind, hits.id, hits.chat_id, hits.body::text AS body,
        hits.author_user_id::text AS author_user_id, hits.level::text AS level, hits.period_start,
        hits.at::timestamptz AS at, hits.rank::real AS rank
@@ -64,53 +118,20 @@ FROM (
     AND (m.chat_id IS NULL OR (mc.project_id = m.project_id AND mc.deleted IS FALSE AND mc.memory_excluded_at IS NULL
          AND (mua.id IS NULL OR mua.account_type <> 'personal')))
   UNION ALL
-  SELECT 'digest', d.id, NULL::uuid, d.content, '', d.level, d.period_start,
-         d.period_start::timestamp AT TIME ZONE 'UTC', ts_rank(d.search_vector, q.query, 1)
-  FROM memory_digests d
-  CROSS JOIN q
-  JOIN projects p ON p.id = d.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
-  WHERE @include_digests::boolean
-    AND d.project_id = @project_id AND d.organization_id = @organization_id
-    AND octet_length(d.content) <= 65536
-    AND d.period_end::timestamp AT TIME ZONE 'UTC' > @from_time AND d.period_start::timestamp AT TIME ZONE 'UTC' < @to_time
-    AND d.search_vector @@ q.query
-    AND NOT EXISTS (
-      SELECT 1
-      FROM memory_digests s
-      WHERE s.project_id = d.project_id
-        AND (
-          s.id = d.id
-          OR s.id = ANY(d.child_digest_ids)
-          OR EXISTS (
-            SELECT 1 FROM memory_digests w
-            WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
-          )
-        )
-        AND (
-          cardinality(s.chat_ids) > (
-            SELECT count(*)
-            FROM chats c
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE c.id = ANY(s.chat_ids)
-              AND c.summary_redacted IS TRUE
-              AND c.summary IS NOT NULL
-              AND c.memory_excluded_at IS NULL
-              AND c.deleted IS FALSE
-              AND (ua.id IS NULL OR ua.account_type <> 'personal')
-          )
-          OR cardinality(s.memo_ids) > (
-            SELECT count(*)
-            FROM memory_memos m
-            LEFT JOIN chats c ON c.id = m.chat_id
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE m.id = ANY(s.memo_ids)
-              AND m.deleted IS FALSE
-              AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
-          )
-          OR cardinality(s.child_digest_ids) > (
-            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
-          )
-        )
+  SELECT 'digest', cand.id, NULL::uuid, cand.content, '', cand.level, cand.period_start,
+         cand.period_start::timestamp AT TIME ZONE 'UTC', cand.rank
+  FROM cand
+  CROSS JOIN stale
+  WHERE cardinality(stale.ids) = 0
+    OR NOT (
+      cand.id = ANY(stale.ids)
+      OR cand.child_digest_ids && stale.ids
+      OR EXISTS (
+        SELECT 1 FROM memory_digests cw
+        WHERE cw.id = ANY(cand.child_digest_ids)
+          AND cw.project_id = @project_id
+          AND cw.child_digest_ids && stale.ids
+      )
     )
 ) hits
 ORDER BY hits.rank DESC, hits.at DESC, hits.id
