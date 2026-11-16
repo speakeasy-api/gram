@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -707,6 +709,34 @@ func TestProvisionerRenameDeletesThePreviousServiceOnce(t *testing.T) {
 	_, err = f.provisioner.Apply(ctx, renamed)
 	require.NoError(t, err)
 	require.Contains(t, f.api.Services(), "svc:private", "a completed rename deletes the old service only once")
+}
+
+func TestProvisionerRenamesWhileDeletesFailLeaveNoService(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovrenametwice")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	// Two renames while Tailscale refuses to delete services: each pass
+	// defines the new service and fails to delete the old ones.
+	f.api.RejectServiceDeletes = tailscaleapi.ErrForbidden
+	for _, hostname := range []string{"middle", "speakeasy"} {
+		renamed := f.desired(t)
+		renamed.Hostname = hostname
+		_, err = f.provisioner.Apply(ctx, renamed)
+		require.Error(t, err)
+	}
+	require.Contains(t, f.api.Services(), "svc:middle")
+
+	// Once deletes work, the next pass removes every service but the current one.
+	f.api.RejectServiceDeletes = nil
+	renamed := f.desired(t)
+	renamed.Hostname = "speakeasy"
+	_, err = f.provisioner.Apply(ctx, renamed)
+	require.NoError(t, err)
+	require.Equal(t, []string{"svc:speakeasy"}, slices.Collect(maps.Keys(f.api.Services())),
+		"the middle name's service is deleted although the hostname moved past it")
 }
 
 func TestProvisionerTeardownDeletesTheRecordedServiceOfAPendingRename(t *testing.T) {

@@ -120,9 +120,9 @@ type owner struct {
 	hostname       string
 	runtime        string
 
-	// serviceHostname is the label of the service the gateway last defined,
-	// "" until it first defines one.
-	serviceHostname string
+	// serviceHostnames are the labels whose services the gateway may have
+	// defined and not yet deleted, empty until it first defines one.
+	serviceHostnames []string
 }
 
 func (p *Provisioner) owner(ctx context.Context, id uuid.UUID) (owner, error) {
@@ -133,7 +133,13 @@ func (p *Provisioner) owner(ctx context.Context, id uuid.UUID) (owner, error) {
 	if err != nil {
 		return owner{}, fmt.Errorf("load ingress owner: %w", err)
 	}
-	return owner{organizationID: row.OrganizationID, hostname: row.Hostname, runtime: row.Runtime.String, serviceHostname: row.GatewayServiceHostname.String}, nil
+	labels := row.GatewayServiceHostnames
+	// A row the gateway last touched before it tracked a label set records
+	// only the single label it last defined.
+	if len(labels) == 0 && row.GatewayServiceHostname.String != "" {
+		labels = []string{row.GatewayServiceHostname.String}
+	}
+	return owner{organizationID: row.OrganizationID, hostname: row.Hostname, runtime: row.Runtime.String, serviceHostnames: labels}, nil
 }
 
 func credentialsFrom(encoded []byte) (tailscaleapi.Credentials, error) {
@@ -223,22 +229,33 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	if err != nil {
 		return errorObservation(""), fmt.Errorf("describe gateway service: %w", err)
 	}
+	// The labels recorded before this pass: replacePreviousServices forgets
+	// each one whose service it deletes.
+	previous, err := p.owner(ctx, desired.ID)
+	if err != nil {
+		return errorObservation(operationErrorCode(err)), err
+	}
+	// Record every label before defining a service under it, so a service the
+	// gateway defined is never left unrecorded. A single recorded label from
+	// before the label set existed is carried into the set first.
+	queries := repo.New(p.db)
+	for _, label := range append(slices.Clone(previous.serviceHostnames), desired.Hostname) {
+		if err := queries.AddNetworkIngressGatewayServiceHostname(ctx, repo.AddNetworkIngressGatewayServiceHostnameParams{
+			Hostname: label, ID: desired.ID, OrganizationID: desired.OrganizationID,
+		}); err != nil {
+			return errorObservation(""), fmt.Errorf("record gateway service label: %w", err)
+		}
+	}
 	err = p.api.UpsertService(ctx, creds, tailscaleapi.Service{
 		Name: serviceName, Ports: []string{servicePortSpec}, Tags: []string{p.cfg.Tag}, Comment: serviceComment,
 	})
 	if err != nil {
 		return apiFailure(err)
 	}
-	// The label recorded before this pass: replacePreviousService updates it.
-	previous, err := p.owner(ctx, desired.ID)
-	if err != nil {
-		return errorObservation(""), err
-	}
-	if err := p.replacePreviousService(ctx, creds, desired, previous.serviceHostname); err != nil {
+	if err := p.replacePreviousServices(ctx, creds, desired, previous.serviceHostnames); err != nil {
 		return apiFailure(err)
 	}
 
-	queries := repo.New(p.db)
 	for slot := range p.cfg.Slots {
 		if err := queries.EnsureNetworkIngressNodeSlot(ctx, repo.EnsureNetworkIngressNodeSlotParams{
 			NetworkIngressID: desired.ID, OrganizationID: desired.OrganizationID, Slot: slot,
@@ -258,7 +275,7 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	}
 	// Ingresses defined before the gateway recorded its service label learn a
 	// previous label only from the hosts' reported FQDNs.
-	if previous.serviceHostname == "" {
+	if len(previous.serviceHostnames) == 0 {
 		if err := p.deleteRenamedServices(ctx, creds, desired.Hostname, nodes); err != nil {
 			return apiFailure(err)
 		}
@@ -366,35 +383,39 @@ func (p *Provisioner) purgeRetiredSlot(ctx context.Context, creds tailscaleapi.C
 	return nil
 }
 
-// replacePreviousService deletes the service the gateway defined under a
-// previous label, once the service under the current one exists, and records
-// the current label. It runs after the current service is defined, so a
-// rename never leaves the ingress without one; a failure after the delete
-// retries the idempotent delete on the next pass.
-func (p *Provisioner) replacePreviousService(ctx context.Context, creds tailscaleapi.Credentials, desired k8s.NetworkIngressDesired, previous string) error {
-	if previous == desired.Hostname {
-		return nil
-	}
-	if previous != "" {
-		// A stack deletes only services it owns, whatever the row records.
-		owned, err := p.cfg.Namer.OwnsHostname(ctx, previous)
+// replacePreviousServices deletes the services the gateway defined under
+// previous labels, once the service under the current one exists, and forgets
+// each label once its service is gone. It runs after the current service is
+// defined, so a rename never leaves the ingress without one. A label is
+// forgotten only after its delete succeeds, so a failed delete is retried on a
+// later pass even if the hostname changes again first. A stack deletes only
+// services it owns, whatever the row records, and keeps the labels of the
+// others.
+func (p *Provisioner) replacePreviousServices(ctx context.Context, creds tailscaleapi.Credentials, desired k8s.NetworkIngressDesired, previous []string) error {
+	queries := repo.New(p.db)
+	for _, label := range previous {
+		if label == desired.Hostname {
+			continue
+		}
+		owned, err := p.cfg.Namer.OwnsHostname(ctx, label)
 		if err != nil {
 			return fmt.Errorf("check renamed service ownership: %w", err)
 		}
-		if owned {
-			serviceName, err := p.cfg.Namer.ServiceName(ctx, previous)
-			if err != nil {
-				return fmt.Errorf("name renamed service: %w", err)
-			}
-			if err := p.api.DeleteService(ctx, creds, serviceName); err != nil {
-				return fmt.Errorf("delete renamed service: %w", err)
-			}
+		if !owned {
+			continue
 		}
-	}
-	if err := repo.New(p.db).SetNetworkIngressGatewayServiceHostname(ctx, repo.SetNetworkIngressGatewayServiceHostnameParams{
-		Hostname: conv.ToPGText(desired.Hostname), ID: desired.ID, OrganizationID: desired.OrganizationID,
-	}); err != nil {
-		return fmt.Errorf("record gateway service label: %w", err)
+		serviceName, err := p.cfg.Namer.ServiceName(ctx, label)
+		if err != nil {
+			return fmt.Errorf("name renamed service: %w", err)
+		}
+		if err := p.api.DeleteService(ctx, creds, serviceName); err != nil {
+			return fmt.Errorf("delete renamed service: %w", err)
+		}
+		if err := queries.RemoveNetworkIngressGatewayServiceHostname(ctx, repo.RemoveNetworkIngressGatewayServiceHostnameParams{
+			Hostname: label, ID: desired.ID, OrganizationID: desired.OrganizationID,
+		}); err != nil {
+			return fmt.Errorf("forget renamed service label: %w", err)
+		}
 	}
 	return nil
 }
@@ -584,9 +605,8 @@ func (p *Provisioner) deleteWithCredentials(ctx context.Context, own owner, reso
 			return mapAPIError(err)
 		}
 	}
-	// A rename whose old service a pass has not yet deleted leaves it under
-	// the recorded label, so teardown deletes both, each only if this stack
-	// owns it.
+	// A rename whose old service a pass has not yet deleted leaves it under a
+	// recorded label, so teardown deletes every recorded one this stack owns.
 	for _, label := range teardownLabels(own) {
 		owned, err := p.cfg.Namer.OwnsHostname(ctx, label)
 		if err != nil {
@@ -732,10 +752,10 @@ func encryptionFailure(err error) (k8s.NetworkIngressObservation, error) {
 }
 
 // teardownLabels are the labels whose services teardown deletes: the current
-// hostname and, when different, the label the gateway last defined.
+// hostname and every label the gateway recorded.
 func teardownLabels(own owner) []string {
-	labels := make([]string, 0, 2)
-	for _, label := range []string{own.hostname, own.serviceHostname} {
+	labels := make([]string, 0, 1+len(own.serviceHostnames))
+	for _, label := range append([]string{own.hostname}, own.serviceHostnames...) {
 		if label != "" && !slices.Contains(labels, label) {
 			labels = append(labels, label)
 		}
