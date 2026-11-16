@@ -3387,25 +3387,6 @@ func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableRespons
 	return res
 }
 
-// marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody
-// builds a value of type *ExternalMCPHeaderDefinitionResponseBody from a value
-// of type *types.ExternalMCPHeaderDefinition.
-func marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(v *types.ExternalMCPHeaderDefinition) *ExternalMCPHeaderDefinitionResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &ExternalMCPHeaderDefinitionResponseBody{
-		Name:        v.Name,
-		HeaderName:  v.HeaderName,
-		Description: v.Description,
-		Placeholder: v.Placeholder,
-		Required:    v.Required,
-		Secret:      v.Secret,
-	}
-
-	return res
-}
-
 // marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody
 // builds a value of type *OAuthEnablementMetadataResponseBody from a value of
 // type *types.OAuthEnablementMetadata.
@@ -3432,9 +3413,6 @@ func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	}
 	if v.PlatformToolDefinition != nil {
 		res.PlatformToolDefinition = marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody(v.PlatformToolDefinition)
-	}
-	if v.ExternalMcpToolDefinition != nil {
-		res.ExternalMcpToolDefinition = marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v.ExternalMcpToolDefinition)
 	}
 
 	return res
@@ -3743,61 +3721,6 @@ func marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody(v *t
 	return res
 }
 
-// marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody
-// builds a value of type *ExternalMCPToolDefinitionResponseBody from a value
-// of type *types.ExternalMCPToolDefinition.
-func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v *types.ExternalMCPToolDefinition) *ExternalMCPToolDefinitionResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &ExternalMCPToolDefinitionResponseBody{
-		Type:                       v.Type,
-		DeploymentExternalMcpID:    v.DeploymentExternalMcpID,
-		DeploymentID:               v.DeploymentID,
-		RegistryID:                 v.RegistryID,
-		RegistrySpecifier:          v.RegistrySpecifier,
-		RegistryServerName:         v.RegistryServerName,
-		Slug:                       v.Slug,
-		RemoteURL:                  v.RemoteURL,
-		TransportType:              v.TransportType,
-		RequiresOauth:              v.RequiresOauth,
-		OauthVersion:               v.OauthVersion,
-		OauthAuthorizationEndpoint: v.OauthAuthorizationEndpoint,
-		OauthTokenEndpoint:         v.OauthTokenEndpoint,
-		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
-		CreatedAt:                  v.CreatedAt,
-		UpdatedAt:                  v.UpdatedAt,
-		ID:                         v.ID,
-		ToolUrn:                    v.ToolUrn,
-		ProjectID:                  v.ProjectID,
-		Name:                       v.Name,
-		CanonicalName:              v.CanonicalName,
-		Description:                v.Description,
-		SchemaVersion:              v.SchemaVersion,
-		Schema:                     v.Schema,
-		Confirm:                    v.Confirm,
-		ConfirmPrompt:              v.ConfirmPrompt,
-		Summarizer:                 v.Summarizer,
-	}
-	if v.OauthScopesSupported != nil {
-		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
-		for i, val := range v.OauthScopesSupported {
-			res.OauthScopesSupported[i] = val
-		}
-	}
-	if v.Canonical != nil {
-		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
-	}
-	if v.Variation != nil {
-		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
-	}
-	if v.Annotations != nil {
-		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
-	}
-
-	return res
-}
-
 // marshalTypesResourceToResourceResponseBody builds a value of type
 // *ResourceResponseBody from a value of type *types.Resource.
 func marshalTypesResourceToResourceResponseBody(v *types.Resource) *ResourceResponseBody {
@@ -3930,16 +3853,6 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 				continue
 			}
 			res.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if v.ExternalMcpHeaderDefinitions != nil {
-		res.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(v.ExternalMcpHeaderDefinitions))
-		for i, val := range v.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				res.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			res.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if v.Tools != nil {

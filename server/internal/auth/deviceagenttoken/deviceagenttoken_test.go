@@ -79,7 +79,7 @@ func TestEncodeCeiling_CarriesTheOrganizationsDeviceAgentGrants(t *testing.T) {
 	require.False(t, authz.GrantsSatisfy(grants, authz.HooksIngestCheck("org-other", uuid.NewString())), "hooks must be scoped to its organization")
 
 	require.True(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}))
-	require.False(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}), "the ceiling must not reach MCP")
+	require.False(t, authz.GrantsSatisfy(grants, authz.MCPCheck(authz.ScopeMCPConnect, uuid.NewString(), uuid.NewString())), "the ceiling must not reach MCP")
 }
 
 func TestCeiling_LeavesTheHooksProjectToTheAgentsGrant(t *testing.T) {

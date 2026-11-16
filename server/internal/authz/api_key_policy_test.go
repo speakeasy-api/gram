@@ -119,13 +119,18 @@ func TestAPIKeyGrantsMatchStrictly(t *testing.T) {
 		allowed bool
 	}{
 		"key grant, check names the project":   {keyGrant, withProject, true},
-		"key grant, check omits the project":   {keyGrant, withoutProject, false},
-		"user grant, check omits the project":  {userGrant, withoutProject, true},
+		"user grant, check names the project":  {userGrant, withProject, true},
 		"key grant, check names other project": {keyGrant, MCPCheck(ScopeMCPConnect, "toolset_1", "q"), false},
 	} {
 		allowed, err := GrantsAuthorize([]Grant{tc.grant}, tc.check)
 		require.NoError(t, err, name)
 		require.Equal(t, tc.allowed, allowed, name)
+	}
+	// An MCP check that omits the project is invalid for every grant holder.
+	for _, grant := range []Grant{keyGrant, userGrant} {
+		allowed, err := GrantsAuthorize([]Grant{grant}, withoutProject)
+		require.ErrorIs(t, err, ErrInvalidCheck)
+		require.False(t, allowed)
 	}
 }
 
@@ -150,7 +155,8 @@ func TestAuthorizeMandatoryForLegacyAPIKeys(t *testing.T) {
 	f.grant(t, ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNone}, connect, clientA)
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, clientB)
-	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonMissingProject}, MCPCheck(ScopeMCPConnect, "toolset_1", ""))
+	_, err = f.engine.AuthorizeMandatory(ctx, MCPCheck(ScopeMCPConnect, "toolset_1", ""))
+	require.ErrorIs(t, err, ErrInvalidCheck, "an MCP check must name its project")
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, MCPCheck(ScopeMCPConnect, "toolset_1", "other-project"))
 
 	f.grant(t, ScopeMCPBlockedAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
@@ -205,8 +211,17 @@ func requireMandatory(t *testing.T, engine *Engine, ctx context.Context, want Ma
 	require.Equal(t, want, got)
 }
 
+// checkForTest builds a check for scope on resourceID, naming testProjectID
+// when the scope's resource kind requires a project.
 func checkForTest(scope Scope, resourceID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	var dimensions map[string]string
+	for _, key := range RequiredCheckDimensions(ResourceKindForScope(scope)) {
+		if dimensions == nil {
+			dimensions = map[string]string{}
+		}
+		dimensions[key] = testProjectID
+	}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
 }
 
 func TestAuthorizeMandatoryKeepsAgentKeyAdmission(t *testing.T) {
@@ -236,14 +251,20 @@ func TestAPIKeyBlockCannotBeSkippedByOmittingTheProject(t *testing.T) {
 		check   Check
 		allowed bool
 	}{
-		"blocked project":  {MCPCheck(ScopeMCPConnect, "toolset_1", "p"), false},
-		"other project":    {MCPCheck(ScopeMCPConnect, "toolset_1", "q"), true},
-		"project omitted":  {MCPCheck(ScopeMCPConnect, "toolset_1", ""), false},
-		"tool call no prj": {MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""}), false},
+		"blocked project": {MCPCheck(ScopeMCPConnect, "toolset_1", "p"), false},
+		"other project":   {MCPCheck(ScopeMCPConnect, "toolset_1", "q"), true},
 	} {
 		allowed, err := GrantsAuthorize(grants, tc.check)
 		require.NoError(t, err, name)
 		require.Equal(t, tc.allowed, allowed, name)
+	}
+	for name, check := range map[string]Check{
+		"project omitted":  MCPCheck(ScopeMCPConnect, "toolset_1", ""),
+		"tool call no prj": MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""}),
+	} {
+		allowed, err := GrantsAuthorize(grants, check)
+		require.ErrorIs(t, err, ErrInvalidCheck, name)
+		require.False(t, allowed, name)
 	}
 }
 

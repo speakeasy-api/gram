@@ -49,6 +49,19 @@ function LiveConnectionError() {
           </details>
         </>
       )}
+      {s.provider === "okta" && (
+        <>
+          <Correction step="organization">Review organization</Correction>
+          {" · "}
+          <Correction step="app">Review app settings</Correction>
+          {" · "}
+          <Correction step="permissions">
+            Review scopes and assignments
+          </Correction>
+          {" · "}
+          <Correction step="credentials">Review credentials</Correction>
+        </>
+      )}
       {s.provider === "salesforce" && (
         <>
           <Correction step="choices">Review connection</Correction>

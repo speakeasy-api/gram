@@ -6,16 +6,21 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -45,8 +50,14 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service        *environments.Service
+	entries        *environments.EnvironmentEntries
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+
+	// newService builds another service over the same database and auth
+	// setup with a different encryption client, so tests can read stored
+	// entries through a key that cannot decrypt them.
+	newService func(enc *encryption.Client) (*environments.Service, *environments.EnvironmentEntries)
 }
 
 func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
@@ -68,16 +79,44 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	enc := testenv.NewEncryptionClient(t)
-
 	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, auditLogger)
+
+	newService := func(enc *encryption.Client) (*environments.Service, *environments.EnvironmentEntries) {
+		svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, auditLogger)
+		entries := environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadata_repo.New(conn))
+		return svc, entries
+	}
+
+	svc, entries := newService(testenv.NewEncryptionClient(t))
 
 	return ctx, &testInstance{
 		service:        svc,
+		entries:        entries,
 		conn:           conn,
 		sessionManager: sessionManager,
+		newService:     newService,
 	}
+}
+
+// plaintextValues returns the decrypted value of each entry in env, keyed by
+// entry name. Management reads mask secrets, so tests that must prove which
+// plaintext was stored read it through here.
+func (ti *testInstance) plaintextValues(t *testing.T, ctx context.Context, env *types.Environment) map[string]string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	entries, err := ti.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, uuid.MustParse(env.ID))
+	require.NoError(t, err)
+
+	values := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		values[entry.Name] = entry.Value
+	}
+
+	return values
 }

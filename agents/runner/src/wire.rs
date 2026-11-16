@@ -169,6 +169,8 @@ pub struct ThreadBootstrap {
     pub assistant_id: String,
     pub project_id: String,
     pub model: String,
+    #[serde(default = "default_reasoning_effort")]
+    pub reasoning_effort: String,
     #[serde(default)]
     pub instructions: String,
     pub completions_url: String,
@@ -181,6 +183,10 @@ pub struct ThreadBootstrap {
     pub context_window: Option<u64>,
     #[serde(default)]
     pub compaction: CompactionPolicy,
+}
+
+fn default_reasoning_effort() -> String {
+    "medium".into()
 }
 
 #[cfg(test)]

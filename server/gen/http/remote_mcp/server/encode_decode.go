@@ -3799,18 +3799,9 @@ func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v 
 		Description:           v.Description,
 		ToolCount:             v.ToolCount,
 		ToolSelectionMode:     v.ToolSelectionMode,
-		ExternalMcpProxyOnly:  v.ExternalMcpProxyOnly,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		RegistrySpecifier:     v.RegistrySpecifier,
 		HostingMcpServerID:    v.HostingMcpServerID,
-	}
-	if v.ExternalMcpSlugs != nil {
-		res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
-		for i, val := range v.ExternalMcpSlugs {
-			res.ExternalMcpSlugs[i] = val
-		}
-	} else {
-		res.ExternalMcpSlugs = []string{}
 	}
 
 	return res

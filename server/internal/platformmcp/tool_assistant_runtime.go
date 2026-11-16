@@ -94,7 +94,7 @@ func (s *AssistantIdentityService) selectRuntime(ctx context.Context, principal 
 	// persisted change. No frontend flag grants access.
 	assistant, err := management.UpdateAssistant(ctx, &genassistants.UpdateAssistantPayload{
 		ID: assistantID.String(), RuntimeVersion: &input.RuntimeVersion, ExpectedRuntimeVersion: &input.ExpectedRuntimeVersion,
-		SessionToken: nil, ProjectSlugInput: nil, Name: nil, Model: nil, Instructions: nil, Toolsets: nil, McpServers: nil,
+		SessionToken: nil, ProjectSlugInput: nil, Name: nil, Model: nil, ReasoningEffort: nil, Instructions: nil, Toolsets: nil, McpServers: nil,
 		WarmTTLSeconds: nil, MaxConcurrency: nil, Status: nil,
 	})
 	if err != nil {
@@ -111,7 +111,7 @@ func registerAssistantRuntimeTool(reg *Registrar, service *AssistantIdentityServ
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        selectAssistantRuntimeToolName,
 		Title:       "Choose an Assistant's Runtime",
-		Description: "Select the persisted runtime for one assistant in an exact project. Select 2 for the legacy runtime or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and assistant:write authorization on the selected assistant; a frontend feature flag is not authorization. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
+		Description: "Select the persisted runtime for one assistant in an exact project. Select 2 for the legacy runtime or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and assistant:write authorization on the selected assistant; a frontend feature flag is not authorization. Kit requires reasoning effort low, medium, or high; none is incompatible. If reasoning is none, use set_assistant_reasoning_effort to choose low, medium, or high before retrying the Kit switch. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: new(false), Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input SelectAssistantRuntimeInput) (*mcp.CallToolResult, SelectAssistantRuntimeOutput, error) {
 		return principalToolCall(ctx, assistantRuntimeToolResult, func(principal Principal) (SelectAssistantRuntimeOutput, error) {
@@ -130,7 +130,7 @@ func assistantRuntimeToolResult(err error) (*mcp.CallToolResult, bool) {
 	} else if shared, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shared.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported runtime, its freshly read expected version and explicit confirmation."
+			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported runtime, its freshly read expected version and explicit confirmation. Kit requires reasoning effort low, medium, or high: if the assistant is set to none, change its effort first, then preview and reconfirm the Kit switch."
 		case oops.CodeForbidden, oops.CodeUnauthorized:
 			result.Code, result.Message = "permission_denied", "Runtime selection requires organization administrator access, assistant:write on the selected assistant and a user identity."
 		case oops.CodeNotFound:
