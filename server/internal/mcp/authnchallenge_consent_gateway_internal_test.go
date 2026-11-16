@@ -2,7 +2,10 @@ package mcp
 
 import (
 	"bytes"
+	"html"
 	"net/http"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -462,8 +465,17 @@ func TestConsentTemplate_AdminFixedCardWarns(t *testing.T) {
 	})
 	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
 
-	require.Contains(t, page, `class="text-xs text-default-warning" data-gateway-server-status="unavailable" >Can&#39;t connect · This server&#39;s private network tunnel is down. Ask your administrator to check it.`)
-	require.Contains(t, page, `class="text-xs text-muted-foreground" data-gateway-server-status="unavailable" >Unavailable · This server ran into an error. Try again in a few minutes.`)
+	statusOf := func(slug string) (class, label string) {
+		row := regexp.MustCompile(`(?s)data-gateway-server="` + regexp.QuoteMeta(slug) + `".*?<span\s+class="([^"]*)"\s+data-gateway-server-status="[^"]*"\s*>([^<]*)</span`).FindStringSubmatch(page)
+		require.NotNil(t, row, slug)
+		return row[1], strings.TrimSpace(html.UnescapeString(row[2]))
+	}
+	class, label := statusOf("tunnel")
+	require.Equal(t, "text-xs text-default-warning", class)
+	require.Equal(t, "Can't connect · This server's private network tunnel is down. Ask your administrator to check it.", label)
+	class, label = statusOf("busy")
+	require.Equal(t, "text-xs text-muted-foreground", class)
+	require.Equal(t, "Unavailable · This server ran into an error. Try again in a few minutes.", label)
 	for _, server := range view.Servers {
 		require.False(t, server.NeedsAttention(), "%s: styling changes no controls", server.Slug)
 	}
