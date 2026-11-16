@@ -36,7 +36,7 @@ type SetDataExportMinSeverityInput struct {
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID      string `json:"-"`
 	RouteID        string `json:"route_id" jsonschema:"exact mcp_connection_logs route ID from list_data_exports"`
-	MinSeverity    string `json:"min_severity" jsonschema:"lowest level the route sends: error (failed connections), warn (adds blocked connections), or info (adds declined connections)"`
+	MinSeverity    string `json:"min_severity" jsonschema:"lowest level the route sends: error (failed connections), warn (adds blocked connections and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts; only those steps are sent with speakeasy.mcp_connection.final=false), or info (adds declined connections)"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms this exact project, route, and new level"`
 }
