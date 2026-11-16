@@ -79,7 +79,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) benchConfig() bench.Config {
-	return bench.Config{AnswerModels: c.AnswerModels, JudgeModel: c.JudgeModel, Runs: c.Runs, Concurrency: concurrency}
+	return bench.Config{AnswerModels: c.AnswerModels, JudgeModel: c.JudgeModel, Runs: c.Runs, Concurrency: concurrency, Billing: bench.Billing{OrganizationID: "", ProjectID: ""}}
 }
 
 // Runner executes stored runs.
@@ -168,7 +168,25 @@ func (r *Runner) execute(ctx context.Context, client openrouter.CompletionClient
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
-	target, err := r.target(ctx, run.OrganizationID)
+	costCap := cfg.benchConfig().CostCapUSD()
+	ctx, client, stop := bench.WithSpendCap(ctx, client, costCap)
+	defer stop()
+	report, err := r.score(ctx, client, run.OrganizationID, cfg)
+	// A run stopped by its cap fails with the cap as the reason, not the
+	// cancellation it caused wherever the run was.
+	if capErr, ok := errors.AsType[*bench.SpendCapError](context.Cause(ctx)); ok {
+		return nil, capErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	report.CostCapUSD = costCap
+	return report, nil
+}
+
+// score writes team memory with the run's models and scores every arm.
+func (r *Runner) score(ctx context.Context, client openrouter.CompletionClient, organizationID string, cfg Config) (*bench.Report, error) {
+	target, err := r.target(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +203,12 @@ func (r *Runner) execute(ctx context.Context, client openrouter.CompletionClient
 	if err != nil {
 		return nil, fmt.Errorf("build search_team_memory arm: %w", err)
 	}
-	report, err := bench.Run(ctx, client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg.benchConfig())
+	benchCfg := cfg.benchConfig()
+	// The deployed key resolver provisions a platform key per stored
+	// organization, so answers and grading bill the seeded org that holds the
+	// corpus, as memory writing already does.
+	benchCfg.Billing = bench.Billing{OrganizationID: target.OrganizationID, ProjectID: target.Projects[memoryeval.ProjectMain].ID.String()}
+	report, err := bench.Run(ctx, client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, benchCfg)
 	if err != nil {
 		return nil, fmt.Errorf("score arms: %w", err)
 	}
