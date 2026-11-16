@@ -86,6 +86,7 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 		authz.ScopeRiskPolicyBypass, authz.ScopeRiskPolicyBlock,
 		authz.ScopeChatRead, authz.ScopeChatWrite,
 		authz.ScopeLogRead,
+		authz.ScopeMemoryRead, authz.ScopeMemoryWrite,
 		authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer,
 		scopeMCPApprovalReadTombstone, scopeMCPApprovalDecideTombstone,
 	}
@@ -98,7 +99,8 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 func TestRuntimeScopeImplicationClosure(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite}, authz.ScopeImplicationClosure(authz.ScopeMCPWrite))
+	require.Equal(t, []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite}, authz.ScopeImplicationClosure(authz.ScopeMCPWrite))
+	require.Equal(t, []authz.Scope{authz.ScopeMCPConnect}, authz.ScopeImplicationClosure(authz.ScopeMCPConnect))
 	require.Equal(t, []authz.Scope{authz.ScopeProjectRead, authz.ScopeProjectWrite}, authz.ScopeImplicationClosure(authz.ScopeProjectWrite))
 	require.Equal(t, []authz.Scope{authz.ScopeSkillRead}, authz.ScopeImplicationClosure(authz.ScopeSkillRead))
 }

@@ -155,7 +155,7 @@ describe("OrganizationGatewayConnectorSection", () => {
 
     expect(
       screen
-        .getByRole("link", { name: "Speakeasy Authorization Servers" })
+        .getByRole("link", { name: "MCP Authentication" })
         .getAttribute("href"),
     ).toBe("/acme/user-session-issuers");
     expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();

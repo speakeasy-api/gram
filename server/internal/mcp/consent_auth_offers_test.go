@@ -255,7 +255,9 @@ func TestGatewayOfferMetadataBatchesMembersAndClients(t *testing.T) {
 		require.True(t, gatewayOfferCapability(member, offers[member.serverID], metadata))
 		for _, client := range offers[member.serverID].clients {
 			single, err := upstreamclientsrepo.New(pool).GetAuthClientSelection(t.Context(), upstreamclientsrepo.GetAuthClientSelectionParams{
-				Proposed: true, ProposedAuthClientID: client.AuthClientID, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: f.orgID,
+				// Discovery only runs under enforcement, so the serving
+				// resolver it must agree with reads typed state.
+				Proposed: true, ProposedAuthClientID: client.AuthClientID, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: f.orgID, TypedOnly: true,
 			})
 			require.NoError(t, err)
 			require.Len(t, single, 1)

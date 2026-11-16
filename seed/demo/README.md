@@ -31,7 +31,7 @@ This directory holds the authoring docs:
 
 The shared seed writes two active release agents with one fictional human owner.
 Both reference the same exact upstream session through
-`principal_remote_session_bindings`; the requesting Linear session's issuer is
+`principal_remote_session_bindings`; the requesting Example OAuth server session's issuer is
 linked to its upstream client. This is intentionally inert: `.invalid` issuer,
 invalid ciphertext, no refresh token, and auto-refresh off. No real credentials
 or external account IDs are included. Deterministic `gram-demo-attachment-*`
@@ -136,6 +136,60 @@ needs and the shared demo org must never have:
   Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
+- **Working upstream servers.** The seed has five working MCP servers: three
+  named for the configuration they test, plus Linear and Notion, real
+  vendors. (Acme Tracker and Acme Wiki, the Enterprise Managed Authorization
+  examples, are seeded disabled.) Most
+  of the setup is shared, so the same servers work in the public demo org and
+  in the local org right after `mise run seed`; the local fixtures add only
+  what needs the developer's machine (below).
+
+  Every Speakeasy server hosts the demo MCP fixture
+  (`server/internal/demoseed/fixture`) under `GRAM_SERVER_URL/rpc/demoseed`
+  (under `/rpc` because the deployed ingress sends `/rpc` to the API server).
+  It holds fake data only (notes) and offers: an OAuth 2.1 server (sign in by
+  picking an email; dynamic registration, client ID metadata documents, PKCE,
+  refresh rotation, tokens bound to the requested resource), MCP endpoints
+  `/mcp/oauth` and `/mcp/shared`, and a stub of the demo API at `/acme-api`.
+  It also serves endpoints the seed does not use: a DCR-only authorization
+  server at `/dcr`, `/mcp/own-token`, `/mcp/open` and a token page at
+  `/tokens`.
+  Its credentials live in `fixtureauth` and are checked in on purpose: they
+  guard nothing real. The shared seed's last phase before postflight
+  (`fixture_servers.go`) points the servers at it and gives every live seeded
+  sign-in real fixture tokens:
+
+  | Server                    | Slug                        | Tests                                                                                                                    | Reaches                                                                                                                                        |
+  | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+  | OpenAPI Server            | `openapi-server`            | A public server generated from an OpenAPI document; callers bring an OAuth token from the API's own authorization server | The fixture's API stub (`ACME_SERVER_URL` system environment); its external OAuth server (slug `openapi-server`) is the fixture's              |
+  | Example OAuth             | `example-oauth`             | Each person signs in upstream: expiry, refresh, scope pins, agent connections                                            | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens; also offers the "Shared service token" client |
+  | Example Shared Credential | `example-shared-credential` | One static shared credential for every caller                                                                            | `/mcp/shared` with the checked-in example shared token as a static Authorization header (not sensitive)                                        |
+  | Linear                    | `linear`                    | A real vendor; each person signs in to their own Linear account                                                          | `https://mcp.linear.app/mcp` (below)                                                                                                           |
+  | Notion                    | `notion`                    | A real vendor; each person signs in to their own Notion account                                                          | `https://mcp.notion.com/mcp` (below)                                                                                                           |
+
+  Each server's endpoint is `<org>-<slug>`. The OpenAPI document
+  (`server/internal/demoseed/openapi.yaml`) declares two security schemes,
+  `oauth` (authorization code at the fixture) and `apiKey` (an Authorization
+  header), as alternatives (`security: [{oauth: []}, {apiKey: []}]`); the seed fills in the
+  deployment's fixture URL when it uploads it. Speakeasy lets a hosted server
+  use one auth method, and the OpenAPI Server uses the upstream OAuth one: it
+  needs no Speakeasy sign-in, and its tools forward the caller's fixture
+  token to the API stub.
+
+  Linear and Notion (`vendor_apps.go`) are set up in every org as an admin's
+  Auto-Configure would: the vendor's authorization server, a client ID
+  metadata document client served at the deployment's own URL
+  (`GRAM_SERVER_URL`, which the prod CronJob sets), and the server's links to
+  both. The vendor fetches the document when someone signs in, so in the
+  public demo org each visitor signs in to their own account. Locally a vendor
+  cannot reach the document on localhost, so the seed registers a public
+  client at the vendor's `/register` and puts it in that client's place. The
+  client ids are cached in `GRAM_DEMOSEED_CACHE_DIR`
+  (`local/cache/demoseed-<vendor>-client.json`, gitignored) per callback URL,
+  so reseeding reuses them. Signing in needs your own account, and the tools
+  return your real data: mask it in any recording. Offline, the local seed
+  warns and keeps the metadata document clients, which cannot sign in
+  locally.
 
 The fixtures are idempotent, and everything they write is either upserted by a
 fixed id or cascades from the seeded deployment/project, so a reseed rolls

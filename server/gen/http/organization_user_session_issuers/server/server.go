@@ -75,7 +75,7 @@ func New(
 			{"GetIssuerDeletePreflight", "GET", "/rpc/organizationUserSessionIssuers.getDeletePreflight"},
 			{"DeleteIssuer", "DELETE", "/rpc/organizationUserSessionIssuers.delete"},
 			{"MoveIssuer", "POST", "/rpc/organizationUserSessionIssuers.move"},
-			{"GetIssuerMigratePreflight", "GET", "/rpc/organizationUserSessionIssuers.getMigratePreflight"},
+			{"GetIssuerMigratePreflight", "POST", "/rpc/organizationUserSessionIssuers.getMigratePreflight"},
 			{"MigrateIssuer", "POST", "/rpc/organizationUserSessionIssuers.migrate"},
 			{"CreateCimdClient", "POST", "/rpc/organizationUserSessionIssuers.createCimdClient"},
 			{"ListCimdClients", "GET", "/rpc/organizationUserSessionIssuers.listCimdClients"},
@@ -703,7 +703,7 @@ func MountGetIssuerMigratePreflightHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/organizationUserSessionIssuers.getMigratePreflight", f)
+	mux.Handle("POST", "/rpc/organizationUserSessionIssuers.getMigratePreflight", f)
 }
 
 // NewGetIssuerMigratePreflightHandler creates a HTTP handler which loads the

@@ -39,11 +39,8 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	require.Equal(t, string(authz.ScopeMCPRead), grants[0].Scope)
 	delegable, err := service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: created.ID})
 	require.NoError(t, err)
-	// mcp:read implies mcp:connect.
-	require.ElementsMatch(t, []*gen.AgentPolicyGrantForm{
-		initialMCPGrant(),
-		{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}},
-	}, delegable)
+	// mcp:read does not imply mcp:connect.
+	require.ElementsMatch(t, []*gen.AgentPolicyGrantForm{initialMCPGrant()}, delegable)
 
 	require.Equal(t, []string{"agent:create", "agent:policy_grant_create"}, agentWebhookOutboxActions(t, conn, "org-create-policy"))
 	_, err = service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{AgentID: created.ID, Scope: grants[0].Scope, Effect: "allow", Selector: grants[0].Selector})

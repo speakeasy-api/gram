@@ -35,7 +35,7 @@ export type ToolSource =
   | { status: "dynamic" }
   | { status: "none" };
 
-/** The tools of one server in the role editor's tool access sheet. */
+/** The tools of one server, for the role editor's tool rows. */
 export function useServerTools(
   entry: ServerWithProject | undefined,
 ): ToolSource {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var _ = Service("dataExports", func() {
@@ -205,6 +206,43 @@ var _ = Service("dataExports", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteRoute")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDataExportRoute"}`)
 	})
+
+	Method("testRoute", func() {
+		Description("Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.")
+
+		// Declared here, not in the shared set, so only this method gets a typed 429 and 503.
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
+
+		Payload(func() {
+			Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Required("id")
+		})
+		Result(TestDataExportRouteResult)
+		HTTP(func() {
+			POST("/rpc/dataExports.testRoute")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
+		})
+		Meta("openapi:operationId", "testDataExportRoute")
+		Meta("openapi:extension:x-speakeasy-name-override", "testRoute")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TestDataExportRoute"}`)
+	})
 })
 
 var OtelDestinationHeader = Type("OtelDestinationHeader", func() {
@@ -295,6 +333,9 @@ var DataExportRoute = Type("DataExportRoute", func() {
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Omitted when no OTEL destination is selected.", func() { Format(FormatUUID) })
+	Attribute("min_severity", String, "Lowest level this route sends. Set only on mcp_connection_logs routes, where it defaults to error.", func() {
+		Enum("info", "warn", "error")
+	})
 	Attribute("created_at", String, "Creation timestamp.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last update timestamp.", func() { Format(FormatDateTime) })
 	Required("id", "project_id", "data_source", "enabled", "created_at", "updated_at")
@@ -302,18 +343,30 @@ var DataExportRoute = Type("DataExportRoute", func() {
 
 var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 	Description("Form for creating the selected data source's export route.")
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() {
+		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs")
+		Example("mcp_connection_logs")
+	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.", func() { Default(true) })
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
+	Attribute("min_severity", String, "Lowest level this route sends. Only for mcp_connection_logs; defaults to error.", func() {
+		Enum("info", "warn", "error")
+	})
 	Required("data_source")
 })
 
 var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 	Description("Full replacement form for the selected data source's export route. Omit otel_destination_id to clear its OTEL destination.")
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() {
+		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs")
+		Example("mcp_connection_logs")
+	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
+	Attribute("min_severity", String, "Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.", func() {
+		Enum("info", "warn", "error")
+	})
 	Required("id", "data_source", "enabled")
 })
 
@@ -331,4 +384,29 @@ var ListDataExportsForOrgResult = Type("ListDataExportsForOrgResult", func() {
 var ListDataExportRoutesResult = Type("ListDataExportRoutesResult", func() {
 	Attribute("routes", ArrayOf(DataExportRoute), "Active data export routes in the selected project.")
 	Required("routes")
+})
+
+var TestDataExportRouteResult = Type("TestDataExportRouteResult", func() {
+	Description("What the destination answered to a route's test events. Header values and the response body are never returned.")
+	Attribute("outcome", String, "accepted when every signal was accepted. Otherwise the worst signal's outcome, in this order: unreachable, refused, not_found, error.", func() {
+		Enum("accepted", "refused", "not_found", "unreachable", "error")
+	})
+	Attribute("status_code", Int, "HTTP status of the signal that set the outcome. Omitted when it did not answer.")
+	Attribute("message", String, "What happened, in plain language.")
+	Attribute("signals", ArrayOf(TestDataExportRouteSignalResult), "One result for each signal the route's data source exports.")
+	Attribute("test_event_id", String, "The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.")
+	Required("outcome", "message", "signals", "test_event_id")
+})
+
+var TestDataExportRouteSignalResult = Type("TestDataExportRouteSignalResult", func() {
+	Description("What the destination answered to one signal's test event.")
+	Attribute("signal", String, "The OTLP signal.", func() {
+		Enum("logs", "traces", "metrics")
+	})
+	Attribute("outcome", String, "accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.", func() {
+		Enum("accepted", "refused", "not_found", "unreachable", "error")
+	})
+	Attribute("status_code", Int, "HTTP status the destination answered with. Omitted when it did not answer.")
+	Attribute("message", String, "What happened, in plain language.")
+	Required("signal", "outcome", "message")
 })

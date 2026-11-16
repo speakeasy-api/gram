@@ -238,6 +238,7 @@ func TestRemoteSessionRejections(t *testing.T) {
 			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Equal(t, tc.detail, row.SubReason)
 			require.Equal(t, subject.String(), row.SubjectURN)
+			require.Empty(t, row.ProviderHost, "the request row names no sign-in issuer")
 		})
 	}
 }
@@ -275,6 +276,7 @@ func TestProxiedUpstreamFailureRecords(t *testing.T) {
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, mcpServer.ID.String(), row.ServerID)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.URL), row.ProviderHost)
 	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
 	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
 }
@@ -375,11 +377,52 @@ func TestGatewayMemberRows(t *testing.T) {
 	require.Equal(t, meta.ID.String(), row.ServerID)
 	require.NotEmpty(t, row.MemberID)
 	require.Equal(t, subject.String(), row.SubjectURN)
+	require.Empty(t, row.ProviderHost, "a member that was never reached names no upstream")
 
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-refused", deny.URL)
 	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	row = rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(deny.URL), row.ProviderHost)
+}
+
+// A member refresh outage counts once per provider, on its provider_refresh row, not again here.
+func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-refresh-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refresh", "", []uuid.UUID{issuerID})
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	remoteIssuer, err := remotesessions_repo.New(ti.conn).GetRemoteSessionIssuerByID(ctx, remotesessions_repo.GetRemoteSessionIssuerByIDParams{
+		ID: remoteIssuerID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, IncludeOrganizational: true, OrganizationID: conv.ToPGText(orgID), IncludeGlobal: true,
+	})
+	require.NoError(t, err)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	subject := createTestUser(t, ctx, ti, "meta-refresh-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, clientID, subject)
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, clientID, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) })
+
+	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+	require.NotEmpty(t, row.MemberID)
+	require.Empty(t, row.ProviderHost, "the request row names no issuer")
+	refresh := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(remoteIssuer.Issuer), refresh.ProviderHost)
+	require.Len(t, rec.Rows(), 2, "one outage, named once")
 }
 
 // A busy or broken member must write its row and read true, through the real request path.
@@ -424,6 +467,7 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 			require.Equal(t, `server "member" `+tc.text+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 			require.NotEmpty(t, row.MemberID)
 			require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+			require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.URL), row.ProviderHost, "a member's provider failure names its upstream")
 		})
 	}
 }
@@ -595,8 +639,9 @@ func TestGatewayLocalUsageRefusalRecordsOnce(t *testing.T) {
 	auth = &caller
 	ctx = contextvalues.SetAuthContext(ctx, auth)
 	require.NoError(t, orgrepo.New(ti.conn).SetAccountType(ctx, orgrepo.SetAccountTypeParams{ID: auth.ActiveOrganizationID, GramAccountType: string(billing.TierBase)}))
-	require.NoError(t, os.MkdirAll("scratch", 0750))
-	usageFile := filepath.Join("scratch", "billingusage-"+auth.ActiveOrganizationID+".local.json")
+	usageDir, err := billing.StubDataDir()
+	require.NoError(t, err)
+	usageFile := filepath.Join(usageDir, "billingusage-"+auth.ActiveOrganizationID+".local.json")
 	require.NoError(t, os.WriteFile(usageFile, []byte(`{"ToolCalls":2000,"IncludedToolCalls":1,"HasActiveSubscription":false}`), 0600))
 	t.Cleanup(func() { require.NoError(t, os.Remove(usageFile)) })
 	rec := mcpconnectionattemptstest.New(t)
@@ -879,6 +924,181 @@ func TestGatewayHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 	require.Equal(t, member.serverID.String(), row.MemberID)
 	require.Len(t, rec.Rows(), 1)
+}
+
+// A hosted HTTP tool whose provider rejects the saved key writes one row naming the admin; the caller still gets the tool's error.
+func TestHostedToolProviderRejectionRecords(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		status    int
+		challenge string
+		want      mcpconnectionattempts.Code
+	}{
+		{name: "unauthorized", status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "forbidden without a challenge", status: http.StatusForbidden},
+		{name: "forbidden insufficient scope", status: http.StatusForbidden, challenge: `Bearer error="insufficient_scope"`},
+		{name: "forbidden invalid token", status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "served", status: http.StatusOK},
+		{name: "not found", status: http.StatusNotFound},
+		{name: "server error", status: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			ts := createPublicMCPToolset(t, ctx, ti, auth, "hosted-reject-"+uuid.NewString()[:8])
+			ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+			upstream := challengingUpstream(t, tc.status, tc.challenge)
+			ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+
+			resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
+			require.NoError(t, err)
+			text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+			require.Equal(t, tc.status != http.StatusOK, isError)
+			require.Contains(t, text, "upstream says "+http.StatusText(tc.status))
+
+			if tc.want == (mcpconnectionattempts.Code{}) {
+				rec.RequireNothing()
+				return
+			}
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
+
+// A provider's rejection is recorded even when its response cannot be formatted for the client.
+func TestHostedToolRejectionWithUnreadableResponseRecords(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "hosted-unreadable-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; =")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	}))
+	t.Cleanup(upstream.Close)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, decodeRPCResponse(t, resp)["error"])
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// A key the caller sent in a request header is the caller's own, so its rejection writes nothing.
+func TestHostedToolCallerKeyRejectionRecordsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "hosted-caller-key-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := statusUpstream(t, http.StatusUnauthorized)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", map[string]string{"Mcp-Test-Api-Key": "caller-key"})
+	require.NoError(t, err)
+	_, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+	require.True(t, isError)
+	rec.RequireNothing()
+}
+
+// A hosted gateway member whose provider rejects the saved key writes one row for that member.
+func TestGatewayHostedToolProviderRejectionRecords(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "rejecting", 0, mcpservers.VisibilityPublic)
+	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := challengingUpstream(t, http.StatusForbidden, `Bearer error="invalid_token"`)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, slug, "", member.slug+"--test_tool"))
+	require.True(t, isError)
+	require.Contains(t, text, "upstream says Forbidden")
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Equal(t, member.serverID.String(), row.MemberID)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// A gateway member's rejection is recorded even when its response cannot be formatted, as on a hosted server.
+func TestGatewayHostedToolRejectionWithUnreadableResponseRecords(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unreadable", 0, mcpservers.VisibilityPublic)
+	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; =")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	}))
+	t.Cleanup(upstream.Close)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	_ = executeMetaTool(t, ti, slug, "", member.slug+"--test_tool")
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Equal(t, member.serverID.String(), row.MemberID)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// statusUpstream answers every request with status and a short text body.
+func statusUpstream(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+	return challengingUpstream(t, status, "")
+}
+
+// challengingUpstream answers like statusUpstream, with challenge as its WWW-Authenticate when set.
+func challengingUpstream(t *testing.T, status int, challenge string) *httptest.Server {
+	t.Helper()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if challenge != "" {
+			w.Header().Set("WWW-Authenticate", challenge)
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte("upstream says " + http.StatusText(status)))
+	}))
+	t.Cleanup(upstream.Close)
+	return upstream
+}
+
+// savedKeyEnv serves vars as the admin-set system environment.
+type savedKeyEnv struct {
+	toolconfig.EnvironmentLoader
+
+	vars map[string]string
+}
+
+func (e savedKeyEnv) LoadSystemEnv(context.Context, uuid.UUID, uuid.UUID, string, string) (*toolconfig.CaseInsensitiveEnv, error) {
+	env := toolconfig.NewCaseInsensitiveEnv()
+	for k, v := range e.vars {
+		env.Set(k, v)
+	}
+	return env, nil
 }
 
 // failingSystemEnv fails the security check's system environment read.
@@ -1234,7 +1454,7 @@ func TestUnreadableUpstreamTokenGatewayMemberHeals(t *testing.T) {
 
 	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
 	require.NoError(t, err)
-	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted)
+	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err, "the renewed access token is stored under the current key")
 	require.Equal(t, "refreshed-token", access)
 	refresh, err := ti.enc.Decrypt(stored.RefreshTokenEncrypted.String)

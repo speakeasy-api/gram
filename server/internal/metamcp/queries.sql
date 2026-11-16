@@ -1,11 +1,14 @@
 -- name: LockUserSessionIssuerForMetaMCP :one
--- Lock a live user session issuer in the caller's project. Meta MCP
--- create/update hold this lock while validating the reference so a concurrent
--- issuer delete cannot race the attach.
+-- Lock a live issuer owned by the caller's project or shared by its organization.
+-- Gateway create/update hold this lock while validating the reference so a
+-- concurrent issuer delete cannot race the attach.
 SELECT id
 FROM user_session_issuers
 WHERE id = @user_session_issuer_id
-  AND project_id = @project_id::uuid
+  AND (
+    project_id = @project_id::uuid
+    OR (project_id IS NULL AND organization_id = @organization_id::text)
+  )
   AND deleted IS FALSE
 FOR UPDATE;
 

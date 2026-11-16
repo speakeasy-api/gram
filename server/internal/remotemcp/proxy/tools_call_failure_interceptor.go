@@ -22,6 +22,10 @@ type ToolsCallFailure struct {
 	// response arrived.
 	Header http.Header
 
+	// SentHeader is the request header that reached the server, after any
+	// redirect or retry, or nil when no response arrived.
+	SentHeader http.Header
+
 	// Err is the error the proxy returned to its caller, or nil when the
 	// proxy answered the user itself.
 	Err error

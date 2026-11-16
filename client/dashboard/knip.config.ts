@@ -10,6 +10,8 @@ const config: KnipConfig = {
   entry: [
     // Invoked by the Go registry HTTP integration test, outside Knip's import graph.
     "scripts/registry-discovery-wire.ts",
+    // Spawned as a child process by src/test/chatTestServerProcess.ts.
+    "src/test/chatTestServerMain.ts",
     "src/theme-init.ts",
     "src/consent-tools/main.tsx",
     "src/consent-page/consent-page.css",

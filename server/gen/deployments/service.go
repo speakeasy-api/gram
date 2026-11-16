@@ -174,10 +174,12 @@ type DeploymentSummary struct {
 	FunctionsAssetCount int64
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64
-	// The number of external MCP server assets.
-	ExternalMcpAssetCount int64
-	// The number of tools in the deployment generated from external MCP servers.
-	ExternalMcpToolCount int64
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpAssetCount *int64
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpToolCount *int64
 }
 
 // EvaluateOpenAPIv3Payload is the payload type of the deployments service
@@ -222,9 +224,6 @@ type EvolvePayload struct {
 	// The functions, identified by slug, to exclude from the new deployment when
 	// cloning a previous deployment.
 	ExcludeFunctions []string
-	// Has no effect: new deployments never include external MCP servers. Accepted
-	// so existing callers keep working.
-	ExcludeExternalMcps []string
 }
 
 // EvolveResult is the result type of the deployments service evolve method.
@@ -341,15 +340,14 @@ type GetDeploymentResult struct {
 	Openapiv3Assets []*types.OpenAPIv3DeploymentAsset
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64
-	// The number of tools in the deployment generated from external MCP servers.
-	ExternalMcpToolCount int64
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpToolCount *int64
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*types.DeploymentFunctions
 	// The packages that were deployed.
 	Packages []*types.DeploymentPackage
-	// The external MCP servers that were deployed.
-	ExternalMcps []*types.DeploymentExternalMCP
 }
 
 // GetLatestDeploymentPayload is the payload type of the deployments service

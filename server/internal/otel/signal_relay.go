@@ -18,6 +18,8 @@ import (
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/proto"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -28,6 +30,8 @@ const (
 	relayNonSensitiveDestinationCacheTTL = 60 * time.Second
 	relayDestinationCacheMaxEntries      = 1024
 	maxRelayErrorBodyBytes               = 4 * 1024
+	relayMaxRetries                      = 1
+	relayRequestTimeout                  = 10 * time.Second
 )
 
 type relayReason string
@@ -57,6 +61,8 @@ type signalRelay struct {
 	endpointPath     string
 	signalName       string
 	now              func() time.Time
+	maxRetries       int
+	timeout          time.Duration
 
 	cacheMu          sync.RWMutex
 	destinationCache map[relayRouteKey]cachedRelayDestination
@@ -83,6 +89,8 @@ type relayDestination struct {
 	httpClient           *guardian.HTTPClient
 	signalName           string
 	includeSensitiveData bool
+	// minSeverity drops log records below it. Unspecified keeps every record.
+	minSeverity otelv1.LogRecord_SeverityNumber
 }
 
 type relayExportError struct {
@@ -115,6 +123,8 @@ func newSignalRelay(
 		endpointPath:     endpointPath,
 		signalName:       signalName,
 		now:              time.Now,
+		maxRetries:       relayMaxRetries,
+		timeout:          relayRequestTimeout,
 		cacheMu:          sync.RWMutex{},
 		destinationCache: make(map[relayRouteKey]cachedRelayDestination),
 		destinationLoads: singleflight.Group{},
@@ -168,9 +178,10 @@ func relayRouteLoadKey(key relayRouteKey) string {
 
 func (r *signalRelay) loadDestination(ctx context.Context, key relayRouteKey) (*relayDestination, error) {
 	config, err := dataexportsrepo.New(r.db).GetActiveOtelRouteDestination(ctx, dataexportsrepo.GetActiveOtelRouteDestinationParams{
-		OrganizationID: key.organizationID,
-		ProjectID:      key.projectID,
-		DataSource:     r.dataSource,
+		DefaultMinSeverity: dataexports.DefaultMCPConnectionLogMinSeverity,
+		OrganizationID:     key.organizationID,
+		ProjectID:          key.projectID,
+		DataSource:         r.dataSource,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -190,7 +201,27 @@ func (r *signalRelay) loadDestination(ctx context.Context, key relayRouteKey) (*
 		}
 	}
 
-	return r.newDestination(key, config.EndpointUrl, headers, config.IncludeSensitiveData)
+	destination, err := r.newDestination(key, config.EndpointUrl, headers, config.IncludeSensitiveData)
+	if err != nil {
+		return nil, err
+	}
+	if r.dataSource == dataexports.DataSourceMCPConnectionLogs {
+		destination.minSeverity = connectionLogMinSeverity(config.MinSeverity)
+	}
+	return destination, nil
+}
+
+// connectionLogMinSeverity maps a route's level to the lowest severity it receives.
+// An unknown level gets the most restrictive one.
+func connectionLogMinSeverity(level string) otelv1.LogRecord_SeverityNumber {
+	switch level {
+	case dataexports.MinSeverityInfo:
+		return otelv1.LogRecord_SEVERITY_NUMBER_INFO
+	case dataexports.MinSeverityWarn:
+		return otelv1.LogRecord_SEVERITY_NUMBER_WARN
+	default:
+		return otelv1.LogRecord_SEVERITY_NUMBER_ERROR
+	}
 }
 
 func (r *signalRelay) newDestination(
@@ -212,7 +243,7 @@ func (r *signalRelay) newDestination(
 	defaultCheckRetry := retryConfig.CheckRetry
 	retryConfig.WaitMin = 100 * time.Millisecond
 	retryConfig.WaitMax = time.Second
-	retryConfig.MaxAttempts = 1
+	retryConfig.MaxAttempts = r.maxRetries
 	retryConfig.CheckRetry = func(ctx context.Context, response *http.Response, err error) (bool, error) {
 		retry, retryErr := defaultCheckRetry(ctx, response, err)
 		if retry || retryErr != nil {
@@ -233,7 +264,7 @@ func (r *signalRelay) newDestination(
 	} else {
 		httpClient = r.policy.PooledClient(guardian.WithRetryConfig(retryConfig))
 	}
-	httpClient.Timeout = 10 * time.Second
+	httpClient.Timeout = r.timeout
 
 	return &relayDestination{
 		organizationID:       key.organizationID,
@@ -243,6 +274,7 @@ func (r *signalRelay) newDestination(
 		httpClient:           httpClient,
 		signalName:           r.signalName,
 		includeSensitiveData: includeSensitiveData,
+		minSeverity:          otelv1.LogRecord_SEVERITY_NUMBER_UNSPECIFIED,
 	}, nil
 }
 
@@ -337,30 +369,41 @@ func (r *signalRelay) cachedDestination(key relayRouteKey, now time.Time) (*rela
 	return nil, false
 }
 
-func (d *relayDestination) export(ctx context.Context, message proto.Message) error {
-	return d.exportWithLimit(ctx, message, 0)
+// export marshals and sends one OTLP export, returning the destination's HTTP
+// status, zero when no response arrived. maxBytes of zero means no limit.
+func (d *relayDestination) export(ctx context.Context, message proto.Message, maxBytes int) (int, error) {
+	body, err := d.marshalExport(message, maxBytes)
+	if err != nil {
+		return 0, err
+	}
+	return d.sendExport(ctx, body)
 }
 
-func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Message, maxBytes int) error {
+// marshalExport encodes an export and checks it against maxBytes, zero meaning no limit.
+func (d *relayDestination) marshalExport(message proto.Message, maxBytes int) ([]byte, error) {
 	body, err := proto.Marshal(message)
 	if err != nil {
-		return &relayExportError{
+		return nil, &relayExportError{
 			reason:    relayReasonInvalid,
 			retryable: false,
 			err:       fmt.Errorf("marshal OTLP %s export: %w", d.signalName, err),
 		}
 	}
 	if maxBytes > 0 && len(body) > maxBytes {
-		return &relayExportError{
+		return nil, &relayExportError{
 			reason:    relayReasonInvalid,
 			retryable: false,
 			err:       fmt.Errorf("OTLP %s export is %d bytes, limit is %d", d.signalName, len(body), maxBytes),
 		}
 	}
+	return body, nil
+}
 
+// sendExport posts an encoded export and returns the destination's HTTP status, zero when no response arrived.
+func (d *relayDestination) sendExport(ctx context.Context, body []byte) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonPermanentHTTPError,
 			retryable: false,
 			err:       fmt.Errorf("create OTLP %s export request: %w", d.signalName, err),
@@ -375,7 +418,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 
 	response, err := d.httpClient.Do(req)
 	if err != nil {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonNetworkError,
 			retryable: true,
 			err:       fmt.Errorf("send OTLP %s export: %w", d.signalName, err),
@@ -385,7 +428,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 		_, _ = io.Copy(io.Discard, response.Body)
-		return nil
+		return response.StatusCode, nil
 	}
 
 	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxRelayErrorBodyBytes))
@@ -396,7 +439,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 	if !retryable && responseSnippet != "" {
 		responseErr = fmt.Errorf("OTLP %s export returned %s: %s", d.signalName, response.Status, responseSnippet)
 	}
-	return &relayExportError{
+	return response.StatusCode, &relayExportError{
 		reason:    reason,
 		retryable: retryable,
 		err:       responseErr,

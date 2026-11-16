@@ -1944,8 +1944,9 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 	return template.URL(u.String()), nil // #nosec G203 // This has been checked and escaped
 }
 
-// resolveMCPURL builds a toolset's MCP URL from its canonical server's address: its platform endpoint first, else
-// its oldest endpoint on a live custom domain. ok is false when the server has neither.
+// resolveMCPURL builds a toolset's MCP URL from its canonical server's primary endpoint, a live custom domain
+// before the platform as endpointaddr.PrimaryEndpoint picks. A domain-root endpoint is the bare domain, as
+// endpointaddr.EndpointURL renders it. ok is false when the server has no addressable endpoint.
 func (s *Service) resolveMCPURL(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, bool, error) {
 	hosting, err := hostingstate.Load(ctx, s.db, toolset.OrganizationID, []uuid.UUID{toolset.ID})
 	if err != nil {

@@ -599,6 +599,22 @@ func (q *Queries) ClearAssistantMcpServersForServers(ctx context.Context, arg Cl
 	return err
 }
 
+const clearAssistantReasoningEffortForTest = `-- name: ClearAssistantReasoningEffortForTest :exec
+UPDATE assistants SET reasoning_effort = NULL
+WHERE id = $1 AND project_id = $2
+`
+
+type ClearAssistantReasoningEffortForTestParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Test fixture only: simulate a legacy row during nullable column expansion.
+func (q *Queries) ClearAssistantReasoningEffortForTest(ctx context.Context, arg ClearAssistantReasoningEffortForTestParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantReasoningEffortForTest, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
 const completeAssistantMCPOAuthClientRegistration = `-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
 UPDATE assistant_mcp_oauth_clients AS clients
 SET
@@ -865,6 +881,7 @@ INSERT INTO assistants (
   created_by_user_id,
   name,
   model,
+  reasoning_effort,
   instructions,
   warm_ttl_seconds,
   max_concurrency,
@@ -875,12 +892,13 @@ INSERT INTO assistants (
   $3,
   $4,
   $5,
-  $6,
+  COALESCE(NULLIF($6::TEXT, ''), 'medium'),
   $7,
   $8,
-  $9
+  $9,
+  $10
 )
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 `
 
 type CreateAssistantParams struct {
@@ -889,6 +907,7 @@ type CreateAssistantParams struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort string
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -902,6 +921,7 @@ type CreateAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -919,6 +939,7 @@ func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams
 		arg.CreatedByUserID,
 		arg.Name,
 		arg.Model,
+		arg.ReasoningEffort,
 		arg.Instructions,
 		arg.WarmTtlSeconds,
 		arg.MaxConcurrency,
@@ -932,6 +953,7 @@ func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1159,7 +1181,7 @@ func (q *Queries) GetActiveAssistantRuntimeByThreadID(ctx context.Context, arg G
 }
 
 const getAssistant = `-- name: GetAssistant :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND project_id = $2
@@ -1178,6 +1200,7 @@ type GetAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1198,6 +1221,7 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1252,7 +1276,7 @@ func (q *Queries) GetAssistantForClientMetadataDocument(ctx context.Context, ass
 }
 
 const getAssistantForDispatch = `-- name: GetAssistantForDispatch :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND deleted IS FALSE
@@ -1265,6 +1289,7 @@ type GetAssistantForDispatchRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1285,6 +1310,7 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1298,7 +1324,7 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 }
 
 const getAssistantIgnoringDeleted = `-- name: GetAssistantIgnoringDeleted :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND project_id = $2
@@ -1316,6 +1342,7 @@ type GetAssistantIgnoringDeletedRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1336,6 +1363,7 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1867,7 +1895,7 @@ func (q *Queries) GetLiveKitRuntimeAuthority(ctx context.Context, arg GetLiveKit
 }
 
 const getManagedAssistantByProject = `-- name: GetManagedAssistantByProject :one
-SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.reasoning_effort, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
 FROM project_managed_assistants pma
 JOIN assistants a ON a.id = pma.assistant_id
 WHERE pma.project_id = $1
@@ -1881,6 +1909,7 @@ type GetManagedAssistantByProjectRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1904,6 +1933,7 @@ func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uu
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -2428,7 +2458,7 @@ func (q *Queries) ListAssistantRuntimesForSwitch(ctx context.Context, arg ListAs
 }
 
 const listAssistants = `-- name: ListAssistants :many
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -2442,6 +2472,7 @@ type ListAssistantsRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -2468,6 +2499,7 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 			&i.CreatedByUserID,
 			&i.Name,
 			&i.Model,
+			&i.ReasoningEffort,
 			&i.Instructions,
 			&i.WarmTtlSeconds,
 			&i.MaxConcurrency,
@@ -3176,6 +3208,7 @@ SELECT
   ms.visibility::text AS visibility,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
+  (ep.domain IS NOT NULL AND ep.is_domain_root IS TRUE)::bool AS endpoint_is_domain_root,
   t.default_environment_slug,
   ams.environment_id,
   e.slug AS environment_slug
@@ -3191,7 +3224,7 @@ LEFT JOIN toolsets t
   AND t.project_id = $1
   AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT me.slug, cd.domain
+  SELECT me.slug, cd.domain, me.is_domain_root
   FROM mcp_endpoints me
   LEFT JOIN custom_domains cd
     ON cd.id = me.custom_domain_id
@@ -3203,7 +3236,15 @@ LEFT JOIN LATERAL (
     AND me.project_id = ms.project_id
     AND me.deleted IS FALSE
     AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (me.custom_domain_id IS NOT NULL), me.created_at, me.id
+  ORDER BY
+    CASE
+      WHEN t.id IS NULL THEN (me.custom_domain_id IS NOT NULL)::int
+      WHEN me.custom_domain_id IS NOT NULL AND me.is_domain_root IS TRUE THEN 0
+      WHEN me.custom_domain_id IS NOT NULL THEN 1
+      ELSE 2
+    END,
+    me.created_at,
+    me.id
   LIMIT 1
 ) ep ON TRUE
 LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = $1
@@ -3225,6 +3266,7 @@ type LoadAssistantMcpServersRow struct {
 	Visibility             string
 	EndpointSlug           string
 	EndpointDomain         string
+	EndpointIsDomainRoot   bool
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -3232,8 +3274,10 @@ type LoadAssistantMcpServersRow struct {
 
 // Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
 // default environment, and sort first so they win runtime id
-// collisions. The address is the server's own endpoint: platform first, else
-// one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
+// collisions. The address is the server's own endpoint on the platform or a verified, activated custom domain
+// (ListAddressableMCPEndpointsByMCPServerIDs): for a hosted row in endpointaddr.PrimaryEndpoint's order (domain
+// root, then another custom-domain endpoint, then platform), as its toolset view and plugins advertise, a domain
+// root at the bare domain; for any other row platform first, whose slug the assistant view reports.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
@@ -3251,6 +3295,7 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 			&i.Visibility,
 			&i.EndpointSlug,
 			&i.EndpointDomain,
+			&i.EndpointIsDomainRoot,
 			&i.DefaultEnvironmentSlug,
 			&i.EnvironmentID,
 			&i.EnvironmentSlug,
@@ -3362,6 +3407,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -3395,6 +3441,7 @@ type LoadAssistantThreadForBootstrapRow struct {
 	CreatedByUserID         pgtype.Text
 	Name                    string
 	Model                   string
+	ReasoningEffort         pgtype.Text
 	Instructions            string
 	WarmTtlSeconds          int64
 	MaxConcurrency          int64
@@ -3420,6 +3467,7 @@ func (q *Queries) LoadAssistantThreadForBootstrap(ctx context.Context, arg LoadA
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -3539,6 +3587,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -3592,6 +3641,7 @@ type LoadThreadContextRow struct {
 	CreatedByUserID          pgtype.Text
 	Name                     string
 	Model                    string
+	ReasoningEffort          pgtype.Text
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
@@ -3634,6 +3684,7 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -3671,6 +3722,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -3723,6 +3775,7 @@ type LoadThreadContextV2Row struct {
 	CreatedByUserID          pgtype.Text
 	Name                     string
 	Model                    string
+	ReasoningEffort          pgtype.Text
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
@@ -3768,6 +3821,7 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -5232,26 +5286,28 @@ UPDATE assistants
 SET
   name = COALESCE($1::TEXT, name),
   model = COALESCE($2::TEXT, model),
-  instructions = COALESCE($3::TEXT, instructions),
-  warm_ttl_seconds = COALESCE($4::BIGINT, warm_ttl_seconds),
-  max_concurrency = COALESCE($5::BIGINT, max_concurrency),
-  status = COALESCE($6::TEXT, status),
+  reasoning_effort = COALESCE($3::TEXT, reasoning_effort),
+  instructions = COALESCE($4::TEXT, instructions),
+  warm_ttl_seconds = COALESCE($5::BIGINT, warm_ttl_seconds),
+  max_concurrency = COALESCE($6::BIGINT, max_concurrency),
+  status = COALESCE($7::TEXT, status),
   updated_at = clock_timestamp()
-WHERE id = $7
-  AND project_id = $8
+WHERE id = $8
+  AND project_id = $9
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 `
 
 type UpdateAssistantParams struct {
-	Name           pgtype.Text
-	Model          pgtype.Text
-	Instructions   pgtype.Text
-	WarmTtlSeconds pgtype.Int8
-	MaxConcurrency pgtype.Int8
-	Status         pgtype.Text
-	AssistantID    uuid.UUID
-	ProjectID      uuid.UUID
+	Name            pgtype.Text
+	Model           pgtype.Text
+	ReasoningEffort pgtype.Text
+	Instructions    pgtype.Text
+	WarmTtlSeconds  pgtype.Int8
+	MaxConcurrency  pgtype.Int8
+	Status          pgtype.Text
+	AssistantID     uuid.UUID
+	ProjectID       uuid.UUID
 }
 
 type UpdateAssistantRow struct {
@@ -5261,6 +5317,7 @@ type UpdateAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -5275,6 +5332,7 @@ func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams
 	row := q.db.QueryRow(ctx, updateAssistant,
 		arg.Name,
 		arg.Model,
+		arg.ReasoningEffort,
 		arg.Instructions,
 		arg.WarmTtlSeconds,
 		arg.MaxConcurrency,
@@ -5290,6 +5348,7 @@ func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,

@@ -201,6 +201,7 @@ type assistantRecord struct {
 	OrganizationID  string
 	CreatedByUserID string
 	Name            string
+	ReasoningEffort string
 	Model           string
 	Instructions    string
 	MCPServers      []assistantMCPServerRow
@@ -272,6 +273,7 @@ type assistantMCPServerRow struct {
 	Visibility             string
 	EndpointSlug           string
 	EndpointDomain         string // custom-domain host; "" for platform endpoints
+	EndpointIsDomainRoot   bool   // the endpoint serves at its custom domain's root
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -295,6 +297,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -318,6 +321,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -341,6 +345,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -364,6 +369,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -387,6 +393,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -1307,6 +1314,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			Visibility:             row.Visibility,
 			EndpointSlug:           row.EndpointSlug,
 			EndpointDomain:         row.EndpointDomain,
+			EndpointIsDomainRoot:   row.EndpointIsDomainRoot,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
@@ -1664,6 +1672,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
 		Name:            record.Name,
 		Model:           record.Model,
+		ReasoningEffort: record.ReasoningEffort,
 		Instructions:    record.Instructions,
 		Toolsets:        toolsets,
 		McpServers:      mcpServers,
@@ -1693,7 +1702,21 @@ func (s *ServiceCore) CreateAssistant(
 	provisionIdentity bool,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
 	canBindEnvironment func(environmentID uuid.UUID) bool,
+	reasoningEffort ...string,
 ) (assistantRecord, error) {
+	effort := "medium"
+	if len(reasoningEffort) > 1 {
+		return assistantRecord{}, assistantValidationError("one reasoning effort is required")
+	}
+	if len(reasoningEffort) == 1 {
+		effort = reasoningEffort[0]
+	}
+	if err := validateReasoningEffort(effort); err != nil {
+		return assistantRecord{}, err
+	}
+	if err := validateRuntimeReasoningEffort(s.newAssistantRuntimeVersion, effort); err != nil {
+		return assistantRecord{}, err
+	}
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
@@ -1715,6 +1738,7 @@ func (s *ServiceCore) CreateAssistant(
 		CreatedByUserID: conv.ToPGText(createdByUserID),
 		Name:            name,
 		Model:           model,
+		ReasoningEffort: effort,
 		Instructions:    instructions,
 		WarmTtlSeconds:  int64(warmTTLSeconds),
 		MaxConcurrency:  int64(maxConcurrency),
@@ -1754,7 +1778,7 @@ func (s *ServiceCore) CreateAssistant(
 	}
 
 	if provisionIdentity {
-		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
 			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
 		}
 	}
@@ -1763,7 +1787,11 @@ func (s *ServiceCore) CreateAssistant(
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)
 		}
-		if eligible {
+		// Automatic eligibility must not override an explicit default-runtime Off preference.
+		if eligible && record.ReasoningEffort != "none" {
+			if err := validateRuntimeReasoningEffort(3, record.ReasoningEffort); err != nil {
+				return assistantRecord{}, err
+			}
 			changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{RuntimeVersion: 3, AssistantID: record.ID, ProjectID: projectID, ExpectedRuntimeVersion: record.RuntimeVersion})
 			if err != nil {
 				return assistantRecord{}, fmt.Errorf("select eligible assistant Kit runtime: %w", err)
@@ -1773,6 +1801,9 @@ func (s *ServiceCore) CreateAssistant(
 			}
 			record.RuntimeVersion = 3
 		}
+	}
+	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
+		return assistantRecord{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
@@ -1868,12 +1899,17 @@ func (s *ServiceCore) UpdateAssistant(
 	canBindEnvironment func(environmentID uuid.UUID) bool,
 	selection ...runtimeSelectionChange,
 ) (assistantRecord, error) {
-	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil}
+	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil, ReasoningEffort: nil}
 	if len(selection) > 1 {
 		return assistantRecord{}, fmt.Errorf("%w: one runtime selection is required", errAssistantValidation)
 	}
 	if len(selection) == 1 {
 		change = selection[0]
+	}
+	if change.ReasoningEffort != nil {
+		if err := validateReasoningEffort(*change.ReasoningEffort); err != nil {
+			return assistantRecord{}, err
+		}
 	}
 	if err := validateRuntimeSelection(change); err != nil {
 		return assistantRecord{}, err
@@ -1892,6 +1928,15 @@ func (s *ServiceCore) UpdateAssistant(
 	queries := assistantrepo.New(tx)
 	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistantID.String()); err != nil {
 		return assistantRecord{}, fmt.Errorf("lock assistant update: %w", err)
+	}
+
+	var reasoningBefore *audit.AssistantReasoningSnapshot
+	if change.ReasoningEffort != nil && s.audit != nil {
+		before, err := queries.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: assistantID})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("read assistant reasoning snapshot: %w", err)
+		}
+		reasoningBefore = &audit.AssistantReasoningSnapshot{ReasoningEffort: reasoningEffortFromPGText(before.ReasoningEffort)}
 	}
 
 	// Compare canonical persisted attachments inside this transaction, after
@@ -1924,14 +1969,15 @@ func (s *ServiceCore) UpdateAssistant(
 		return assistantRecord{}, err
 	}
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
-		Name:           conv.PtrToPGText(name),
-		Model:          conv.PtrToPGText(model),
-		Instructions:   conv.PtrToPGText(instructions),
-		WarmTtlSeconds: conv.PtrToPGInt8(warmTTLSeconds),
-		MaxConcurrency: conv.PtrToPGInt8(maxConcurrency),
-		Status:         conv.PtrToPGText(status),
-		AssistantID:    assistantID,
-		ProjectID:      projectID,
+		Name:            conv.PtrToPGText(name),
+		Model:           conv.PtrToPGText(model),
+		ReasoningEffort: conv.PtrToPGText(change.ReasoningEffort),
+		Instructions:    conv.PtrToPGText(instructions),
+		WarmTtlSeconds:  conv.PtrToPGInt8(warmTTLSeconds),
+		MaxConcurrency:  conv.PtrToPGInt8(maxConcurrency),
+		Status:          conv.PtrToPGText(status),
+		AssistantID:     assistantID,
+		ProjectID:       projectID,
 	})
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("update assistant: %w", err)
@@ -1986,6 +2032,11 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 
+	if reasoningBefore != nil && reasoningBefore.ReasoningEffort != record.ReasoningEffort {
+		if err := s.auditAssistantReasoning(ctx, tx, record, reasoningBefore); err != nil {
+			return assistantRecord{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
@@ -3594,6 +3645,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		CanonicalUserMessageID: canonicalUserMessageID,
 		SourceInstructions:     sourceInstructions,
 		Model:                  assistant.Model,
+		ReasoningEffort:        assistant.ReasoningEffort,
 		ThreadID:               thread.ID,
 		IdempotencyKey:         event.ID.String(),
 		AuthToken:              turnToken,
@@ -3812,6 +3864,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -3900,17 +3953,18 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 
 	return threadBootstrap{
-		AssistantID:    assistant.ID.String(),
-		ProjectID:      assistant.ProjectID.String(),
-		Model:          assistant.Model,
-		Instructions:   instructions,
-		CompletionsURL: completionsEndpoint.String(),
-		ChatID:         thread.ChatID.String(),
-		MCPServers:     mcpServers,
-		History:        history,
-		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
-		Compaction:     compaction,
-		SourceRefJSON:  thread.SourceRefJSON,
+		AssistantID:     assistant.ID.String(),
+		ProjectID:       assistant.ProjectID.String(),
+		Model:           assistant.Model,
+		ReasoningEffort: assistant.ReasoningEffort,
+		Instructions:    instructions,
+		CompletionsURL:  completionsEndpoint.String(),
+		ChatID:          thread.ChatID.String(),
+		MCPServers:      mcpServers,
+		History:         history,
+		ContextWindow:   s.resolveAssistantContextWindow(ctx, assistant.Model),
+		Compaction:      compaction,
+		SourceRefJSON:   thread.SourceRefJSON,
 	}, nil
 }
 
@@ -4001,9 +4055,12 @@ func unreachableReason(m assistantMCPServerRow) string {
 	return "disabled"
 }
 
-// endpointURL is the server's own MCP address; platform endpoints live under base.
-// Platform-first selection (not endpointaddr.PrimaryEndpoint) keeps existing URLs stable.
+// endpointURL is the server's own MCP address; platform endpoints live under base. A hosted row's domain root is the
+// bare domain, as endpointaddr.EndpointURL renders it; other rows keep /mcp/{slug} so configured Kit resources match.
 func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
+	if m.EndpointDomain != "" && m.EndpointIsDomainRoot && m.ToolsetSlug.Valid {
+		return &url.URL{Scheme: "https", Host: m.EndpointDomain}
+	}
 	if m.EndpointDomain != "" {
 		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)
 	}
@@ -4230,6 +4287,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -4693,4 +4751,59 @@ func assistantActor(ctx context.Context, fallbackUserID string) hostedmcp.Actor 
 		actor.UserID = ""
 	}
 	return actor
+}
+
+func validateReasoningEffort(effort string) error {
+	switch effort {
+	case "none", "low", "medium", "high":
+		return nil
+	default:
+		return assistantValidationError("reasoning_effort must be none, low, medium, or high")
+	}
+}
+
+// reasoningEffortFromPGText preserves the effective default for legacy NULL rows.
+func reasoningEffortFromPGText(effort pgtype.Text) string {
+	return normalizeReasoningEffort(conv.FromPGTextOrEmpty[string](effort))
+}
+
+func normalizeReasoningEffort(effort string) string {
+	if effort == "" {
+		return "medium"
+	}
+	return effort
+}
+
+func (s *ServiceCore) auditAssistantReasoning(ctx context.Context, tx pgx.Tx, record assistantRecord, before *audit.AssistantReasoningSnapshot) error {
+	if s.audit == nil {
+		return nil
+	}
+
+	actor, authenticated := contextvalues.AuthenticatedActor(ctx)
+	var displayName *string
+	switch {
+	case authenticated:
+		if actor.Type == urn.PrincipalTypeUser {
+			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+				displayName = authCtx.Email
+			}
+		}
+	case record.CreatedByUserID != "":
+		// Provisioning can carry the initiating user explicitly without a request context.
+		actor = urn.NewPrincipal(urn.PrincipalTypeUser, record.CreatedByUserID)
+	default:
+		actor = urn.NewSystemPrincipal("assistant-configuration")
+		displayName = new("Assistant configuration")
+		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
+	}
+	if err := s.audit.LogAssistantReasoningUpdate(ctx, tx, audit.LogAssistantReasoningUpdateEvent{
+		OrganizationID: record.OrganizationID, ProjectID: record.ProjectID,
+		Actor: actor, ActorDisplayName: displayName,
+		AssistantURN: urn.NewAssistant(record.ID), AssistantName: record.Name,
+		AssistantReasoningSnapshotBefore: before,
+		AssistantReasoningSnapshotAfter:  &audit.AssistantReasoningSnapshot{ReasoningEffort: record.ReasoningEffort},
+	}); err != nil {
+		return fmt.Errorf("audit assistant reasoning preference: %w", err)
+	}
+	return nil
 }

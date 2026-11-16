@@ -367,7 +367,7 @@ func TestRiskFindingRelayMapsMessageAndContentPartAnchors(t *testing.T) {
 			tt.mutate(finding)
 			message, _, ok := newRiskFindingRelayMessage(finding, nil)
 			require.True(t, ok)
-			record := requireOne(t, requireOne(t, buildRiskFindingRelayExport([]riskFindingRelayMessage{message}, riskFindingRelayObservedAt).GetResourceLogs()).GetScopeLogs()).GetLogRecords()[0]
+			record := requireOne(t, requireOne(t, buildRiskFindingRelayExport([]*logsv1.LogRecord{riskFindingLogRecord(message, riskFindingRelayObservedAt)}).GetResourceLogs()).GetScopeLogs()).GetLogRecords()[0]
 			require.Equal(t, tt.wantMessageAnchor, hasOTLPAttribute(record.GetAttributes(), string(attr.MessageIDKey)))
 			require.Equal(t, tt.wantContentPartAnchor, hasOTLPAttribute(record.GetAttributes(), string(attr.ChatContentPartIDKey)))
 		})
@@ -389,7 +389,11 @@ func TestRiskFindingRelayRightSizesExports(t *testing.T) {
 	}
 
 	batches, err := rightSizeProtoBatches(messages, maxLogRelayExportBytes, func(batch []riskFindingRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
-		return buildRiskFindingRelayExport(batch, riskFindingRelayObservedAt), nil
+		records := make([]*logsv1.LogRecord, len(batch))
+		for i, message := range batch {
+			records[i] = riskFindingLogRecord(message, riskFindingRelayObservedAt)
+		}
+		return buildRiskFindingRelayExport(records), nil
 	})
 	require.NoError(t, err)
 	require.Greater(t, len(batches), 1)
@@ -427,7 +431,7 @@ func TestRiskFindingRelayUsesGenericBody(t *testing.T) {
 	message, _, ok := newRiskFindingRelayMessage(finding, nil)
 	require.True(t, ok)
 
-	request := buildRiskFindingRelayExport([]riskFindingRelayMessage{message}, riskFindingRelayObservedAt)
+	request := buildRiskFindingRelayExport([]*logsv1.LogRecord{riskFindingLogRecord(message, riskFindingRelayObservedAt)})
 	record := requireOne(t, requireOne(t, request.GetResourceLogs()).GetScopeLogs()).GetLogRecords()[0]
 	require.Equal(t, riskFindingBody, record.GetBody().GetStringValue())
 }
@@ -556,7 +560,7 @@ func TestRiskFindingRelayPayloadContainsNoMatchAttribute(t *testing.T) {
 	finding := riskFindingRelayTestFinding(uuid.MustParse("0198cb4f-4840-70e6-9e1d-5558dc2d7ce1"))
 	message, _, ok := newRiskFindingRelayMessage(finding, nil)
 	require.True(t, ok)
-	request := buildRiskFindingRelayExport([]riskFindingRelayMessage{message}, riskFindingRelayObservedAt)
+	request := buildRiskFindingRelayExport([]*logsv1.LogRecord{riskFindingLogRecord(message, riskFindingRelayObservedAt)})
 	record := requireOne(t, requireOne(t, request.GetResourceLogs()).GetScopeLogs()).GetLogRecords()[0]
 	for _, attribute := range record.GetAttributes() {
 		require.NotContains(t, attribute.GetKey(), "match")

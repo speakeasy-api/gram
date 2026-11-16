@@ -909,9 +909,10 @@ func NewListGatewaySessionFacetsGatewayErrorResponseBody(res *goa.ServiceError) 
 
 // NewListGatewaySessionsPayload builds a gatewaySessions service
 // listGatewaySessions endpoint payload.
-func NewListGatewaySessionsPayload(gatewayID *string, search *string, serverID *string, providerID *string, status string, createdAfter *string, createdBefore *string, sort string, cursor *string, limit int, sessionToken *string, apikeyToken *string) *gatewaysessions.ListGatewaySessionsPayload {
+func NewListGatewaySessionsPayload(gatewayID *string, projectID *string, search *string, serverID *string, providerID *string, status string, createdAfter *string, createdBefore *string, sort string, cursor *string, limit int, sessionToken *string, apikeyToken *string) *gatewaysessions.ListGatewaySessionsPayload {
 	v := &gatewaysessions.ListGatewaySessionsPayload{}
 	v.GatewayID = gatewayID
+	v.ProjectID = projectID
 	v.Search = search
 	v.ServerID = serverID
 	v.ProviderID = providerID
@@ -929,9 +930,10 @@ func NewListGatewaySessionsPayload(gatewayID *string, search *string, serverID *
 
 // NewListGatewaySessionFacetsPayload builds a gatewaySessions service
 // listGatewaySessionFacets endpoint payload.
-func NewListGatewaySessionFacetsPayload(gatewayID *string, sessionToken *string, apikeyToken *string) *gatewaysessions.ListGatewaySessionFacetsPayload {
+func NewListGatewaySessionFacetsPayload(gatewayID *string, projectID *string, sessionToken *string, apikeyToken *string) *gatewaysessions.ListGatewaySessionFacetsPayload {
 	v := &gatewaysessions.ListGatewaySessionFacetsPayload{}
 	v.GatewayID = gatewayID
+	v.ProjectID = projectID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 
