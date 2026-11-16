@@ -92,6 +92,8 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 		"mcp_request/invalid_remote_session",
 		"mcp_request/stored_sign_in_unreadable",
 		"mcp_request/remote_session_unavailable",
+		"mcp_request/address_not_allowed",
+		"provider_refresh/address_not_found",
 		"provider_refresh/refreshed",
 		"provider_refresh/invalid_grant",
 		"provider_refresh/provider_server_error",

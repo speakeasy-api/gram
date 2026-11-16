@@ -3,6 +3,8 @@ package mcp_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -177,7 +179,8 @@ func TestServeConsent_SignInProviderAddressCard(t *testing.T) {
 	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotAllowed, time.Minute))
 
 	_, page, _ := render(t, fx)
-	require.Contains(t, page, "Sign-in provider address can't be used · ask your administrator")
+	require.Contains(t, html.UnescapeString(page), "Sign-in provider uses a private or internal address Speakeasy can't reach · ask your administrator")
+	require.Contains(t, page, "0 of 1 connected", "a down connection is not counted")
 	require.NotContains(t, page, "Unavailable · try again shortly")
 	require.NotContains(t, page, "> Reconnect </button>")
 	require.NotContains(t, page, "Service connected")
@@ -227,6 +230,12 @@ func TestServeConsent_GatewayListSaysTheSignInProviderAddress(t *testing.T) {
 	require.Equal(t, "unavailable", outcomes[0].Status)
 	require.Equal(t, "Can't connect · its sign-in provider uses an address that does not point anywhere · ask your administrator", outcomes[0].Label)
 	require.Equal(t, []string{mcpconnectionattempts.CodeAddressNotFound.String()}, discoveryReasons(rec), "the row agrees with the card")
+	require.Contains(t, normalizeSpaces(page), `class="text-xs text-default-warning" data-gateway-server-status="unavailable"`, "styled as needing attention")
+
+	_, focus, _ := render(t, fx)
+	require.Contains(t, html.UnescapeString(normalizeSpaces(focus)), "can't connect because its sign-in provider uses an address that does not point anywhere. Ask your administrator to check the sign-in provider's address.")
+	require.NotContains(t, focus, "Try again shortly")
+	require.NotContains(t, focus, "needs no sign-in")
 	require.NotContains(t, page, "try again shortly")
 }
 
@@ -298,6 +307,39 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 			require.Equal(t, "unavailable", outcomes[0].Status)
 			require.Equal(t, tc.label, outcomes[0].Label)
 			require.Equal(t, []string{tc.reason.String()}, discoveryReasons(rec), "the row agrees with the card")
+		})
+	}
+}
+
+// A connection stopped by its sign-in provider's address is down, like an outage: approval waits, as it does for an outage.
+func TestConsentPost_SignInProviderAddressIsNotApprovable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		key        func(remotesessions_repo.RemoteSession) string
+		value      any
+		approvable bool
+	}{
+		{name: "address", key: remotesessions.RefreshAddressKey, value: guardian.AddressNotFound, approvable: false},
+		{name: "outage", key: remotesessions.RefreshOutageKey, value: remotesessions.RefreshOutageProvider, approvable: false},
+		{name: "nothing recorded", key: nil, value: nil, approvable: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, fx := seedTwoClientConsentEndpoint(t, "address-approve-"+uuid.NewString()[:8])
+			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, "token-a", consentChainedUpstream)
+			refreshableConnection(t, ctx, fx, fx.clientA, time.Now().Add(-time.Minute), serviceUnavailable)
+			if tc.key != nil {
+				session, err := remotesessions_repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientA})
+				require.NoError(t, err)
+				redisClient, err := infra.NewRedisClient(t, 0)
+				require.NoError(t, err)
+				require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Set(ctx, tc.key(session), tc.value, time.Minute))
+			}
+
+			_, page, _ := render(t, fx)
+			require.Contains(t, page, fmt.Sprintf(`data-consent-enabled="%t"`, tc.approvable))
 		})
 	}
 }
