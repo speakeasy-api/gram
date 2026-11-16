@@ -210,13 +210,15 @@ func TestTemporaryGrant_RejectsChallengesItDoesNotAnswer(t *testing.T) {
 	}
 	for name, challengeID := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := createChatReadGrantForChallenges(ctx, ti, recipient.String(), chatSelector(chatID), []string{challengeID})
 			requireOopsCode(t, err, oops.CodeBadRequest)
 			requireNoResolutions(t, ctx, ti, orgID, []string{challengeID})
+			// Every case is refused, so no case may leave a grant behind.
+			require.Empty(t, listPrincipalGrants(t, ctx, ti.conn, orgID, recipient), "a rejected request gives no access")
 		})
 	}
-
-	require.Empty(t, listPrincipalGrants(t, ctx, ti.conn, orgID, recipient), "a rejected request gives no access")
 }
 
 func TestTemporaryGrant_AlreadyResolvedChallengeRollsBackGrant(t *testing.T) {

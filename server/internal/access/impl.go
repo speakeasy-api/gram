@@ -1471,7 +1471,9 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		ResourceID:     resourceID,
 		ResolutionType: payload.ResolutionType,
 		RoleSlug:       conv.PtrToPGText(roleSlug),
-		ResolvedBy:     resolvedBy,
+		// Only createTemporaryGrant resolves a challenge with a grant.
+		TemporaryGrantID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ResolvedBy:       resolvedBy,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").LogError(ctx, s.logger)
