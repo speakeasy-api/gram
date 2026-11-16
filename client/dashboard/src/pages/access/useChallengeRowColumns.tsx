@@ -20,9 +20,12 @@ import { ResourceLink } from "./ResourceLink";
 import { useResourceLinkMaps } from "./useResourceLinkMaps";
 import {
   getInitials,
+  hasActiveTemporaryGrant,
   principalDisplayName,
   reasonLabel,
+  resolutionSummary,
 } from "./challengeHelpers";
+import { formatDeadline } from "@/components/temporary-access-helpers";
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
@@ -174,15 +177,29 @@ export function useChallengeRowColumns(
       {
         key: "outcome",
         header: "Outcome",
-        width: "80px",
+        width: "100px",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const resolved =
             !!row.resolvedAt || (recentlyResolvedIds?.has(row.id) ?? false);
-          return (
+          const badge = (
             <div className={cn(rowFade(row))}>
-              <OutcomeBadge outcome={row.outcome} resolved={resolved} />
+              <OutcomeBadge
+                outcome={row.outcome}
+                resolved={resolved}
+                temporary={hasActiveTemporaryGrant(row)}
+              />
             </div>
+          );
+          const summary = resolutionSummary(row, (deadline) =>
+            formatDeadline(deadline, new Date()),
+          );
+          if (!summary) return badge;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>{badge}</TooltipTrigger>
+              <TooltipContent>{summary}</TooltipContent>
+            </Tooltip>
           );
         },
       },

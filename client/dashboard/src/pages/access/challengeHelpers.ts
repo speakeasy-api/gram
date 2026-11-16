@@ -8,6 +8,55 @@ export function isDisplayableBucket(b: ChallengeBucket): boolean {
   return !!b.scope && !!b.resourceKind && !!b.resourceId;
 }
 
+/**
+ * How a resolved challenge was resolved, in the admin's words, or null when
+ * it is unresolved. A temporary grant says whether it still applies.
+ */
+export function resolutionSummary(
+  row: Pick<
+    ChallengeBucket,
+    | "resolvedAt"
+    | "resolutionType"
+    | "resolutionRoleSlug"
+    | "resolutionTemporaryGrant"
+  >,
+  formatDeadline: (deadline: Date) => string,
+): string | null {
+  if (!row.resolvedAt) return null;
+  switch (row.resolutionType) {
+    case "role_assigned":
+      return row.resolutionRoleSlug
+        ? `Role assigned: ${row.resolutionRoleSlug}`
+        : "Role assigned";
+    case "dismissed":
+      return "Dismissed";
+    case "temporary_grant": {
+      const grant = row.resolutionTemporaryGrant;
+      if (!grant || grant.status === "revoked") {
+        return "Temporary access, revoked";
+      }
+      if (grant.status === "expired" || !grant.expiresAt) {
+        return "Temporary access, expired";
+      }
+      return `Temporary access · ends ${formatDeadline(grant.expiresAt)}`;
+    }
+    case undefined:
+      return "Resolved";
+    default:
+      return "Resolved";
+  }
+}
+
+/** Whether the challenge was answered by a temporary grant that still applies. */
+export function hasActiveTemporaryGrant(
+  row: Pick<ChallengeBucket, "resolutionType" | "resolutionTemporaryGrant">,
+): boolean {
+  return (
+    row.resolutionType === "temporary_grant" &&
+    row.resolutionTemporaryGrant?.status === "active"
+  );
+}
+
 export function getInitials(identifier: string): string {
   const name = identifier.split("@")[0] ?? identifier;
   return name.slice(0, 2).toUpperCase();

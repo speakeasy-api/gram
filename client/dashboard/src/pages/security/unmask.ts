@@ -2,6 +2,8 @@ import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useRBAC } from "@/hooks/useRBAC";
+import { invalidateAllLoadChat } from "@gram/client/react-query/loadChat.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
 // Revealing a flagged secret exposes the raw value captured from agent/chat
@@ -15,6 +17,29 @@ export const REVEAL_DENIED_REASON =
 // is missing, so the missing link or the sheet's 403 doesn't pass silently.
 export const TRANSCRIPT_DENIED_REASON =
   "You don't have access to view session transcripts. Contact your admin to request the chat:read scope.";
+// The same refusal where the way in sits right below it (ChatReadAccess), so
+// it does not tell an admin who can grant themselves access to ask an admin.
+export const TRANSCRIPT_DENIED_NOTE =
+  "You need the chat:read scope to view this session's transcript.";
+
+// The "covers" choice when an admin gives themselves chat:read from a finding.
+export const CHAT_READ_COVERAGE = {
+  one: "This session",
+  all: "All sessions",
+} as const;
+
+/**
+ * Re-reads transcripts once access was granted, so a transcript that answered
+ * 403 loads without reopening the finding. Both the SDK chat load and the
+ * transcript sheet's own paged query are refreshed.
+ */
+export function useRetryChatReads(): () => void {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void invalidateAllLoadChat(queryClient);
+    void queryClient.invalidateQueries({ queryKey: ["chat"] });
+  }, [queryClient]);
+}
 
 /**
  * Whether the viewer may read a finding's chat: its transcript, links and

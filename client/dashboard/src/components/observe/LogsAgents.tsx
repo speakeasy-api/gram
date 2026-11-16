@@ -20,6 +20,7 @@ import {
   useListChats,
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { ChatReadAccess } from "@/pages/security/finding-drawer-parts";
 import { Badge } from "@/components/ui/Badge";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Alert } from "@/components/ui/Alert";
@@ -210,6 +211,7 @@ const AGENT_SESSIONS_DESCRIPTION = (
 // point at the roles page where chat:read is granted.
 function OwnSessionsNotice(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
+  const queryClient = useQueryClient();
   const { hasScope, isLoading } = useRBAC();
 
   if (isLoading || hasScope("chat:read")) return null;
@@ -230,6 +232,12 @@ function OwnSessionsNotice(): JSX.Element | null {
           </Link>
         </>
       )}
+      {/* An admin gives themselves chat:read on every session for a while;
+          anyone else asks an admin. The list then reloads unfiltered. */}
+      <ChatReadAccess
+        className="mt-2"
+        onGranted={() => void invalidateAllListChats(queryClient)}
+      />
     </Alert>
   );
 }

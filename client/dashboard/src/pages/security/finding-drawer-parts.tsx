@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import type { ReactNode } from "react";
-import { REVEAL_DENIED_REASON } from "./unmask";
+import { RequestScopeAccess } from "@/components/require-scope";
+import {
+  CHAT_READ_COVERAGE,
+  REVEAL_DENIED_REASON,
+  REVEAL_SCOPE,
+  useRetryChatReads,
+} from "./unmask";
 
 /** Mono 11px muted fine print under a drawer block. */
 export const DRAWER_FOOTNOTE = "text-muted-foreground font-mono text-[11px]";
@@ -57,16 +63,62 @@ export function RevealToggleButton({
   );
 }
 
-export function NoRevealAccessNote(): JSX.Element {
+/**
+ * Says why flagged values stay masked and offers the way in: an admin gives
+ * themselves chat:read for a while, anyone else asks an admin. `chatId` scopes
+ * the access to one session; without it (MCP payloads) it covers every chat.
+ */
+export function NoRevealAccessNote({
+  chatId,
+}: {
+  chatId?: string;
+}): JSX.Element {
   const restricted = useRiskContentRestricted();
   if (restricted) return <RiskContentNotice />;
   return (
-    <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
-      <Lock className="size-3 shrink-0" />
-      <span>
-        {REVEAL_DENIED_REASON} Structure and surrounding context stay visible.
-      </span>
+    <div className="flex flex-col items-start gap-2">
+      <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
+        <Lock className="size-3 shrink-0" />
+        <span>
+          {REVEAL_DENIED_REASON} Structure and surrounding context stay visible.
+        </span>
+      </div>
+      <ChatReadAccess chatId={chatId} />
     </div>
+  );
+}
+
+/**
+ * The way into chat:read where a finding refused it: an admin gives
+ * themselves access for a while, anyone else asks an admin. Once granted, the
+ * refused transcript loads are retried. `chatId` scopes the access to one
+ * session; without it the access covers every chat.
+ */
+export function ChatReadAccess({
+  chatId,
+  className,
+  onGranted,
+}: {
+  chatId?: string;
+  className?: string;
+  /** Refreshes what the page itself read without chat:read. */
+  onGranted?: () => void;
+}): JSX.Element | null {
+  const retryChatReads = useRetryChatReads();
+  return (
+    <RequestScopeAccess
+      scopes={[REVEAL_SCOPE]}
+      // Without a chat the refusal was for every chat (MCP payloads check "*").
+      // Leaving it unset would ask whether any chat is readable, which a grant
+      // on one session answers yes, and the control would hide itself.
+      resourceId={chatId ?? "*"}
+      coverage={chatId ? CHAT_READ_COVERAGE : undefined}
+      onGranted={() => {
+        retryChatReads();
+        onGranted?.();
+      }}
+      className={className}
+    />
   );
 }
 
