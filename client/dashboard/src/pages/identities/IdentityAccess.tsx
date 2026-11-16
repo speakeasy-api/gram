@@ -203,6 +203,8 @@ export default function IdentityAccess(): JSX.Element {
             // means. The badge column is as wide as the longest role name —
             // a fixed width let a long name run over its description — and
             // each row is a subgrid of it, so the descriptions still line up.
+            // A badge stops at 11rem and ends in an ellipsis, so one very
+            // long name cannot take the description's room in a narrow panel.
             <div className="grid grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)]">
               {roles.map((role) => (
                 <div
@@ -210,9 +212,15 @@ export default function IdentityAccess(): JSX.Element {
                   className="border-border col-span-full grid grid-cols-subgrid items-baseline gap-x-3 border-b px-4 py-3 last:border-b-0"
                 >
                   <span>
-                    <Badge variant="neutral" title={role.slug}>
-                      {/* A role the roles list did not return has no page to open. */}
-                      <Badge.Text>
+                    <Badge
+                      variant="neutral"
+                      title={role.slug}
+                      className="max-w-44"
+                    >
+                      {/* A role the roles list did not return has no page to open.
+                          Clipped on x only: the link's underline sits below
+                          the trimmed text box. */}
+                      <Badge.Text className="min-w-0 overflow-x-clip text-ellipsis">
                         <RoleLink
                           roleId={rolesById.has(role.id) ? role.id : undefined}
                         >
