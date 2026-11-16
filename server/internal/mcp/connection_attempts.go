@@ -375,6 +375,41 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	return changed
 }
 
+func ineligibleConsentKey(attempt mcpconnectionattempts.Attempt, clientID uuid.UUID) string {
+	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String()
+}
+
+// recordIneligibleConsent writes one row per attempt and client, however often the page reloads; a cache failure writes it anyway.
+func (s *Service) recordIneligibleConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, opts ...mcpconnectionattempts.Option) {
+	if attempt.IsZero() {
+		return
+	}
+	key := ineligibleConsentKey(attempt, clientID)
+	marked := false
+	if s.userSessionRefreshReplayCoordination != nil {
+		cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+		won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
+		cancel()
+		switch {
+		case err != nil:
+			logger.WarnContext(ctx, "claim ineligible consent row", attr.SlogError(err))
+		case !won:
+			return
+		default:
+			marked = true
+		}
+	}
+	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity, opts...) || !marked {
+		return
+	}
+	// Not accepted, so the next render offers it again.
+	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	if err := s.userSessionRefreshReplayCoordination.Delete(cacheCtx, key); err != nil {
+		logger.WarnContext(ctx, "forget ineligible consent row", attr.SlogError(err))
+	}
+}
+
 // memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
 const memberSetupChangedDetail = "setup_changed"
 
