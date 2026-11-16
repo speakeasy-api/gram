@@ -33,7 +33,7 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 
 	for name, check := range map[string]Check{
 		"generated connection":   ref.Connect(),
-		"constructed connection": MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).Connect(),
+		"constructed connection": mcpCheck(ScopeMCPConnect, server.String(), project.String()),
 		"probe of a tool call":   ref.ToolCall("", DispositionReadOnly).Probe(),
 	} {
 		allowed, err := GrantsAuthorize(grants, check)
