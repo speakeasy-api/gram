@@ -168,7 +168,7 @@ func UsageCommands() []string {
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"okta-resource-connections (list|confirm|reset)",
 		"okta-server-suggestions (list|dismiss|restore)",
-		"organizations (get|get-gateway|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|revoke-member-sign-ins|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
+		"organizations (get|get-gateway|get-project-gateway|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|revoke-member-sign-ins|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
 		"org-encryption (get-config|list-keys|create-gcp-key|verify-key|delete-key|switch-key|complete-switch|rollback-switch|rotate-data-key|resume)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions|link|unlink|list-links)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|set-default-project|disconnect)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-organization-gateway-overview|get-organization-gateway-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|get-org-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-project-gateway-overview|get-project-gateway-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|get-org-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -2171,6 +2171,10 @@ func ParseEndpoint(
 		organizationsGetGatewayFlags            = flag.NewFlagSet("get-gateway", flag.ExitOnError)
 		organizationsGetGatewaySessionTokenFlag = organizationsGetGatewayFlags.String("session-token", "", "")
 
+		organizationsGetProjectGatewayFlags                = flag.NewFlagSet("get-project-gateway", flag.ExitOnError)
+		organizationsGetProjectGatewaySessionTokenFlag     = organizationsGetProjectGatewayFlags.String("session-token", "", "")
+		organizationsGetProjectGatewayProjectSlugInputFlag = organizationsGetProjectGatewayFlags.String("project-slug-input", "", "")
+
 		organizationsSendInviteFlags            = flag.NewFlagSet("send-invite", flag.ExitOnError)
 		organizationsSendInviteBodyFlag         = organizationsSendInviteFlags.String("body", "REQUIRED", "")
 		organizationsSendInviteSessionTokenFlag = organizationsSendInviteFlags.String("session-token", "", "")
@@ -4002,13 +4006,15 @@ func ParseEndpoint(
 		telemetryGetMetaMcpServerUsageSessionTokenFlag     = telemetryGetMetaMcpServerUsageFlags.String("session-token", "", "")
 		telemetryGetMetaMcpServerUsageProjectSlugInputFlag = telemetryGetMetaMcpServerUsageFlags.String("project-slug-input", "", "")
 
-		telemetryGetOrganizationGatewayOverviewFlags            = flag.NewFlagSet("get-organization-gateway-overview", flag.ExitOnError)
-		telemetryGetOrganizationGatewayOverviewBodyFlag         = telemetryGetOrganizationGatewayOverviewFlags.String("body", "REQUIRED", "")
-		telemetryGetOrganizationGatewayOverviewSessionTokenFlag = telemetryGetOrganizationGatewayOverviewFlags.String("session-token", "", "")
+		telemetryGetProjectGatewayOverviewFlags                = flag.NewFlagSet("get-project-gateway-overview", flag.ExitOnError)
+		telemetryGetProjectGatewayOverviewBodyFlag             = telemetryGetProjectGatewayOverviewFlags.String("body", "REQUIRED", "")
+		telemetryGetProjectGatewayOverviewSessionTokenFlag     = telemetryGetProjectGatewayOverviewFlags.String("session-token", "", "")
+		telemetryGetProjectGatewayOverviewProjectSlugInputFlag = telemetryGetProjectGatewayOverviewFlags.String("project-slug-input", "", "")
 
-		telemetryGetOrganizationGatewayUsageFlags            = flag.NewFlagSet("get-organization-gateway-usage", flag.ExitOnError)
-		telemetryGetOrganizationGatewayUsageBodyFlag         = telemetryGetOrganizationGatewayUsageFlags.String("body", "REQUIRED", "")
-		telemetryGetOrganizationGatewayUsageSessionTokenFlag = telemetryGetOrganizationGatewayUsageFlags.String("session-token", "", "")
+		telemetryGetProjectGatewayUsageFlags                = flag.NewFlagSet("get-project-gateway-usage", flag.ExitOnError)
+		telemetryGetProjectGatewayUsageBodyFlag             = telemetryGetProjectGatewayUsageFlags.String("body", "REQUIRED", "")
+		telemetryGetProjectGatewayUsageSessionTokenFlag     = telemetryGetProjectGatewayUsageFlags.String("session-token", "", "")
+		telemetryGetProjectGatewayUsageProjectSlugInputFlag = telemetryGetProjectGatewayUsageFlags.String("project-slug-input", "", "")
 
 		telemetryGetProjectOverviewFlags                = flag.NewFlagSet("get-project-overview", flag.ExitOnError)
 		telemetryGetProjectOverviewBodyFlag             = telemetryGetProjectOverviewFlags.String("body", "REQUIRED", "")
@@ -5267,6 +5273,7 @@ func ParseEndpoint(
 
 		gatewaySessionsListGatewaySessionsFlags             = flag.NewFlagSet("list-gateway-sessions", flag.ExitOnError)
 		gatewaySessionsListGatewaySessionsGatewayIDFlag     = gatewaySessionsListGatewaySessionsFlags.String("gateway-id", "", "")
+		gatewaySessionsListGatewaySessionsProjectIDFlag     = gatewaySessionsListGatewaySessionsFlags.String("project-id", "", "")
 		gatewaySessionsListGatewaySessionsSearchFlag        = gatewaySessionsListGatewaySessionsFlags.String("search", "", "")
 		gatewaySessionsListGatewaySessionsServerIDFlag      = gatewaySessionsListGatewaySessionsFlags.String("server-id", "", "")
 		gatewaySessionsListGatewaySessionsProviderIDFlag    = gatewaySessionsListGatewaySessionsFlags.String("provider-id", "", "")
@@ -5281,6 +5288,7 @@ func ParseEndpoint(
 
 		gatewaySessionsListGatewaySessionFacetsFlags            = flag.NewFlagSet("list-gateway-session-facets", flag.ExitOnError)
 		gatewaySessionsListGatewaySessionFacetsGatewayIDFlag    = gatewaySessionsListGatewaySessionFacetsFlags.String("gateway-id", "", "")
+		gatewaySessionsListGatewaySessionFacetsProjectIDFlag    = gatewaySessionsListGatewaySessionFacetsFlags.String("project-id", "", "")
 		gatewaySessionsListGatewaySessionFacetsSessionTokenFlag = gatewaySessionsListGatewaySessionFacetsFlags.String("session-token", "", "")
 		gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag  = gatewaySessionsListGatewaySessionFacetsFlags.String("apikey-token", "", "")
 
@@ -6093,6 +6101,7 @@ func ParseEndpoint(
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsGetGatewayFlags.Usage = organizationsGetGatewayUsage
+	organizationsGetProjectGatewayFlags.Usage = organizationsGetProjectGatewayUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
 	organizationsUpdateInviteRoleFlags.Usage = organizationsUpdateInviteRoleUsage
@@ -6470,8 +6479,8 @@ func ParseEndpoint(
 	telemetryGetObservabilityOverviewFlags.Usage = telemetryGetObservabilityOverviewUsage
 	telemetryGetMcpNetworkTrafficFlags.Usage = telemetryGetMcpNetworkTrafficUsage
 	telemetryGetMetaMcpServerUsageFlags.Usage = telemetryGetMetaMcpServerUsageUsage
-	telemetryGetOrganizationGatewayOverviewFlags.Usage = telemetryGetOrganizationGatewayOverviewUsage
-	telemetryGetOrganizationGatewayUsageFlags.Usage = telemetryGetOrganizationGatewayUsageUsage
+	telemetryGetProjectGatewayOverviewFlags.Usage = telemetryGetProjectGatewayOverviewUsage
+	telemetryGetProjectGatewayUsageFlags.Usage = telemetryGetProjectGatewayUsageUsage
 	telemetryGetProjectOverviewFlags.Usage = telemetryGetProjectOverviewUsage
 	telemetryGetUnproxiedMcpServerUsageFlags.Usage = telemetryGetUnproxiedMcpServerUsageUsage
 	telemetryGetUnproxiedMcpServerToolUsageFlags.Usage = telemetryGetUnproxiedMcpServerToolUsageUsage
@@ -8311,6 +8320,9 @@ func ParseEndpoint(
 			case "get-gateway":
 				epf = organizationsGetGatewayFlags
 
+			case "get-project-gateway":
+				epf = organizationsGetProjectGatewayFlags
+
 			case "send-invite":
 				epf = organizationsSendInviteFlags
 
@@ -9388,11 +9400,11 @@ func ParseEndpoint(
 			case "get-meta-mcp-server-usage":
 				epf = telemetryGetMetaMcpServerUsageFlags
 
-			case "get-organization-gateway-overview":
-				epf = telemetryGetOrganizationGatewayOverviewFlags
+			case "get-project-gateway-overview":
+				epf = telemetryGetProjectGatewayOverviewFlags
 
-			case "get-organization-gateway-usage":
-				epf = telemetryGetOrganizationGatewayUsageFlags
+			case "get-project-gateway-usage":
+				epf = telemetryGetProjectGatewayUsageFlags
 
 			case "get-project-overview":
 				epf = telemetryGetProjectOverviewFlags
@@ -11728,6 +11740,9 @@ func ParseEndpoint(
 			case "get-gateway":
 				endpoint = c.GetGateway()
 				data, err = organizationsc.BuildGetGatewayPayload(*organizationsGetGatewaySessionTokenFlag)
+			case "get-project-gateway":
+				endpoint = c.GetProjectGateway()
+				data, err = organizationsc.BuildGetProjectGatewayPayload(*organizationsGetProjectGatewaySessionTokenFlag, *organizationsGetProjectGatewayProjectSlugInputFlag)
 			case "send-invite":
 				endpoint = c.SendInvite()
 				data, err = organizationsc.BuildSendInvitePayload(*organizationsSendInviteBodyFlag, *organizationsSendInviteSessionTokenFlag)
@@ -12817,12 +12832,12 @@ func ParseEndpoint(
 			case "get-meta-mcp-server-usage":
 				endpoint = c.GetMetaMcpServerUsage()
 				data, err = telemetryc.BuildGetMetaMcpServerUsagePayload(*telemetryGetMetaMcpServerUsageBodyFlag, *telemetryGetMetaMcpServerUsageApikeyTokenFlag, *telemetryGetMetaMcpServerUsageSessionTokenFlag, *telemetryGetMetaMcpServerUsageProjectSlugInputFlag)
-			case "get-organization-gateway-overview":
-				endpoint = c.GetOrganizationGatewayOverview()
-				data, err = telemetryc.BuildGetOrganizationGatewayOverviewPayload(*telemetryGetOrganizationGatewayOverviewBodyFlag, *telemetryGetOrganizationGatewayOverviewSessionTokenFlag)
-			case "get-organization-gateway-usage":
-				endpoint = c.GetOrganizationGatewayUsage()
-				data, err = telemetryc.BuildGetOrganizationGatewayUsagePayload(*telemetryGetOrganizationGatewayUsageBodyFlag, *telemetryGetOrganizationGatewayUsageSessionTokenFlag)
+			case "get-project-gateway-overview":
+				endpoint = c.GetProjectGatewayOverview()
+				data, err = telemetryc.BuildGetProjectGatewayOverviewPayload(*telemetryGetProjectGatewayOverviewBodyFlag, *telemetryGetProjectGatewayOverviewSessionTokenFlag, *telemetryGetProjectGatewayOverviewProjectSlugInputFlag)
+			case "get-project-gateway-usage":
+				endpoint = c.GetProjectGatewayUsage()
+				data, err = telemetryc.BuildGetProjectGatewayUsagePayload(*telemetryGetProjectGatewayUsageBodyFlag, *telemetryGetProjectGatewayUsageSessionTokenFlag, *telemetryGetProjectGatewayUsageProjectSlugInputFlag)
 			case "get-project-overview":
 				endpoint = c.GetProjectOverview()
 				data, err = telemetryc.BuildGetProjectOverviewPayload(*telemetryGetProjectOverviewBodyFlag, *telemetryGetProjectOverviewApikeyTokenFlag, *telemetryGetProjectOverviewSessionTokenFlag, *telemetryGetProjectOverviewProjectSlugInputFlag)
@@ -13641,10 +13656,10 @@ func ParseEndpoint(
 			switch epn {
 			case "list-gateway-sessions":
 				endpoint = c.ListGatewaySessions()
-				data, err = gatewaysessionsc.BuildListGatewaySessionsPayload(*gatewaySessionsListGatewaySessionsGatewayIDFlag, *gatewaySessionsListGatewaySessionsSearchFlag, *gatewaySessionsListGatewaySessionsServerIDFlag, *gatewaySessionsListGatewaySessionsProviderIDFlag, *gatewaySessionsListGatewaySessionsStatusFlag, *gatewaySessionsListGatewaySessionsCreatedAfterFlag, *gatewaySessionsListGatewaySessionsCreatedBeforeFlag, *gatewaySessionsListGatewaySessionsSortFlag, *gatewaySessionsListGatewaySessionsCursorFlag, *gatewaySessionsListGatewaySessionsLimitFlag, *gatewaySessionsListGatewaySessionsSessionTokenFlag, *gatewaySessionsListGatewaySessionsApikeyTokenFlag)
+				data, err = gatewaysessionsc.BuildListGatewaySessionsPayload(*gatewaySessionsListGatewaySessionsGatewayIDFlag, *gatewaySessionsListGatewaySessionsProjectIDFlag, *gatewaySessionsListGatewaySessionsSearchFlag, *gatewaySessionsListGatewaySessionsServerIDFlag, *gatewaySessionsListGatewaySessionsProviderIDFlag, *gatewaySessionsListGatewaySessionsStatusFlag, *gatewaySessionsListGatewaySessionsCreatedAfterFlag, *gatewaySessionsListGatewaySessionsCreatedBeforeFlag, *gatewaySessionsListGatewaySessionsSortFlag, *gatewaySessionsListGatewaySessionsCursorFlag, *gatewaySessionsListGatewaySessionsLimitFlag, *gatewaySessionsListGatewaySessionsSessionTokenFlag, *gatewaySessionsListGatewaySessionsApikeyTokenFlag)
 			case "list-gateway-session-facets":
 				endpoint = c.ListGatewaySessionFacets()
-				data, err = gatewaysessionsc.BuildListGatewaySessionFacetsPayload(*gatewaySessionsListGatewaySessionFacetsGatewayIDFlag, *gatewaySessionsListGatewaySessionFacetsSessionTokenFlag, *gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag)
+				data, err = gatewaysessionsc.BuildListGatewaySessionFacetsPayload(*gatewaySessionsListGatewaySessionFacetsGatewayIDFlag, *gatewaySessionsListGatewaySessionFacetsProjectIDFlag, *gatewaySessionsListGatewaySessionFacetsSessionTokenFlag, *gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag)
 			}
 		case "widgets":
 			c := widgetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -22565,6 +22580,7 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get: Get the active organization from the session.`)
 	fmt.Fprintln(os.Stderr, `    get-gateway: Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-project-gateway: Get the selected project's Project Gateway: the organization's gateway limited to that project's MCP servers. It is served under the same conditions as the organization's gateway. Requires project:read.`)
 	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
 	fmt.Fprintln(os.Stderr, `    update-invite-role: Change the role assigned to a pending WorkOS invitation.`)
@@ -22620,6 +22636,26 @@ func organizationsGetGatewayUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-gateway --session-token \"abc123\"")
+}
+
+func organizationsGetProjectGatewayUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations get-project-gateway", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the selected project's Project Gateway: the organization's gateway limited to that project's MCP servers. It is served under the same conditions as the organization's gateway. Requires project:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-project-gateway --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func organizationsSendInviteUsage() {
@@ -30386,8 +30422,8 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-network-traffic: Observed inbound public and private MCP request counts for a server or gateway over a recent window`)
 	fmt.Fprintln(os.Stderr, `    get-meta-mcp-server-usage: Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.`)
-	fmt.Fprintln(os.Stderr, `    get-organization-gateway-overview: Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.`)
-	fmt.Fprintln(os.Stderr, `    get-organization-gateway-usage: Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.`)
+	fmt.Fprintln(os.Stderr, `    get-project-gateway-overview: Observability overview metrics for calls dispatched through the selected project's Project Gateway: the Organization Gateway limited to that project's servers.`)
+	fmt.Fprintln(os.Stderr, `    get-project-gateway-usage: Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-usage: Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-tool-usage: Best-effort per-tool call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
@@ -30684,44 +30720,48 @@ func telemetryGetMetaMcpServerUsageUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-meta-mcp-server-usage --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func telemetryGetOrganizationGatewayOverviewUsage() {
+func telemetryGetProjectGatewayOverviewUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-organization-gateway-overview", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-project-gateway-overview", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.`)
+	fmt.Fprintln(os.Stderr, `Observability overview metrics for calls dispatched through the selected project's Project Gateway: the Organization Gateway limited to that project's servers.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-organization-gateway-overview --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-gateway-overview --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func telemetryGetOrganizationGatewayUsageUsage() {
+func telemetryGetProjectGatewayUsageUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-organization-gateway-usage", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-project-gateway-usage", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.`)
+	fmt.Fprintln(os.Stderr, `Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-organization-gateway-usage --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-gateway-usage --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetProjectOverviewUsage() {
@@ -36567,6 +36607,7 @@ func gatewaySessionsListGatewaySessionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] gateway-sessions list-gateway-sessions", os.Args[0])
 	fmt.Fprint(os.Stderr, " -gateway-id STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
 	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -server-id STRING")
 	fmt.Fprint(os.Stderr, " -provider-id STRING")
@@ -36586,6 +36627,7 @@ func gatewaySessionsListGatewaySessionsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -gateway-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -provider-id STRING: `)
@@ -36600,13 +36642,14 @@ func gatewaySessionsListGatewaySessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-sessions --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --server-id \"550e8400-e29b-41d4-a716-446655440000\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --created-after \"1970-01-01T00:00:01Z\" --created-before \"1970-01-01T00:00:01Z\" --sort \"oldest\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-sessions --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --server-id \"550e8400-e29b-41d4-a716-446655440000\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --created-after \"1970-01-01T00:00:01Z\" --created-before \"1970-01-01T00:00:01Z\" --sort \"oldest\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func gatewaySessionsListGatewaySessionFacetsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] gateway-sessions list-gateway-session-facets", os.Args[0])
 	fmt.Fprint(os.Stderr, " -gateway-id STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
@@ -36617,12 +36660,13 @@ func gatewaySessionsListGatewaySessionFacetsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -gateway-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-session-facets --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-session-facets --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // widgetsUsage displays the usage of the widgets command and its subcommands.

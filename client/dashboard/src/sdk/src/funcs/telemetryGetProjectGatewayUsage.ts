@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  GetObservabilityOverviewResult,
-  GetObservabilityOverviewResult$inboundSchema,
-} from "../models/components/getobservabilityoverviewresult.js";
+  GetMetaMcpServerUsageResult,
+  GetMetaMcpServerUsageResult$inboundSchema,
+} from "../models/components/getmetamcpserverusageresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetOrganizationGatewayOverviewRequest,
-  GetOrganizationGatewayOverviewRequest$outboundSchema,
-  GetOrganizationGatewayOverviewSecurity,
-} from "../models/operations/getorganizationgatewayoverview.js";
+  GetProjectGatewayUsageRequest,
+  GetProjectGatewayUsageRequest$outboundSchema,
+  GetProjectGatewayUsageSecurity,
+} from "../models/operations/getprojectgatewayusage.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getOrganizationGatewayOverview telemetry
+ * getProjectGatewayUsage telemetry
  *
  * @remarks
- * Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
+ * Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.
  */
-export function telemetryGetOrganizationGatewayOverview(
+export function telemetryGetProjectGatewayUsage(
   client: GramCore,
-  request: GetOrganizationGatewayOverviewRequest,
-  security?: GetOrganizationGatewayOverviewSecurity | undefined,
+  request: GetProjectGatewayUsageRequest,
+  security?: GetProjectGatewayUsageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    GetObservabilityOverviewResult,
+    GetMetaMcpServerUsageResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function telemetryGetOrganizationGatewayOverview(
 
 async function $do(
   client: GramCore,
-  request: GetOrganizationGatewayOverviewRequest,
-  security?: GetOrganizationGatewayOverviewSecurity | undefined,
+  request: GetProjectGatewayUsageRequest,
+  security?: GetProjectGatewayUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      GetObservabilityOverviewResult,
+      GetMetaMcpServerUsageResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,25 +95,26 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(GetOrganizationGatewayOverviewRequest$outboundSchema, value),
+    (value) => z.parse(GetProjectGatewayUsageRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.GetOrganizationGatewayActivityPayload,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.GetProjectGatewayActivityPayload, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/telemetry.getOrganizationGatewayOverview")();
+  const path = pathToFunc("/rpc/telemetry.getProjectGatewayUsage")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -122,6 +123,11 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
@@ -133,7 +139,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getOrganizationGatewayOverview",
+    operationID: "getProjectGatewayUsage",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -177,7 +183,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    GetObservabilityOverviewResult,
+    GetMetaMcpServerUsageResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -188,7 +194,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, GetObservabilityOverviewResult$inboundSchema),
+    M.json(200, GetMetaMcpServerUsageResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

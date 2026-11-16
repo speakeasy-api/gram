@@ -8,26 +8,26 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { telemetryGetOrganizationGatewayUsage } from "../funcs/telemetryGetOrganizationGatewayUsage.js";
+import { telemetryGetProjectGatewayUsage } from "../funcs/telemetryGetProjectGatewayUsage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GetMetaMcpServerUsageResult } from "../models/components/getmetamcpserverusageresult.js";
 import {
-  GetOrganizationGatewayUsageRequest,
-  GetOrganizationGatewayUsageSecurity,
-} from "../models/operations/getorganizationgatewayusage.js";
+  GetProjectGatewayUsageRequest,
+  GetProjectGatewayUsageSecurity,
+} from "../models/operations/getprojectgatewayusage.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetOrganizationGatewayUsageQueryData = GetMetaMcpServerUsageResult;
+export type GetProjectGatewayUsageQueryData = GetMetaMcpServerUsageResult;
 
-export function prefetchGetOrganizationGatewayUsage(
+export function prefetchGetProjectGatewayUsage(
   queryClient: QueryClient,
   client$: GramCore,
-  request: GetOrganizationGatewayUsageRequest,
-  security?: GetOrganizationGatewayUsageSecurity | undefined,
+  request: GetProjectGatewayUsageRequest,
+  security?: GetProjectGatewayUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildGetOrganizationGatewayUsageQuery(
+    ...buildGetProjectGatewayUsageQuery(
       client$,
       request,
       security,
@@ -36,24 +36,25 @@ export function prefetchGetOrganizationGatewayUsage(
   });
 }
 
-export function buildGetOrganizationGatewayUsageQuery(
+export function buildGetProjectGatewayUsageQuery(
   client$: GramCore,
-  request: GetOrganizationGatewayUsageRequest,
-  security?: GetOrganizationGatewayUsageSecurity | undefined,
+  request: GetProjectGatewayUsageRequest,
+  security?: GetProjectGatewayUsageSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<GetOrganizationGatewayUsageQueryData>;
+  ) => Promise<GetProjectGatewayUsageQueryData>;
 } {
   return {
-    queryKey: queryKeyGetOrganizationGatewayUsage({
+    queryKey: queryKeyGetProjectGatewayUsage({
       gramSession: request.gramSession,
+      gramProject: request.gramProject,
     }),
-    queryFn: async function getOrganizationGatewayUsageQueryFn(
+    queryFn: async function getProjectGatewayUsageQueryFn(
       ctx,
-    ): Promise<GetOrganizationGatewayUsageQueryData> {
+    ): Promise<GetProjectGatewayUsageQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +66,7 @@ export function buildGetOrganizationGatewayUsageQuery(
         signal: sig,
       };
 
-      return unwrapAsync(telemetryGetOrganizationGatewayUsage(
+      return unwrapAsync(telemetryGetProjectGatewayUsage(
         client$,
         request,
         security,
@@ -75,13 +76,11 @@ export function buildGetOrganizationGatewayUsageQuery(
   };
 }
 
-export function queryKeyGetOrganizationGatewayUsage(
-  parameters: { gramSession?: string | undefined },
+export function queryKeyGetProjectGatewayUsage(
+  parameters: {
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
 ): QueryKey {
-  return [
-    "@gram/client",
-    "telemetry",
-    "getOrganizationGatewayUsage",
-    parameters,
-  ];
+  return ["@gram/client", "telemetry", "getProjectGatewayUsage", parameters];
 }

@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  GetMetaMcpServerUsageResult,
-  GetMetaMcpServerUsageResult$inboundSchema,
-} from "../models/components/getmetamcpserverusageresult.js";
+  ProjectGateway,
+  ProjectGateway$inboundSchema,
+} from "../models/components/projectgateway.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetOrganizationGatewayUsageRequest,
-  GetOrganizationGatewayUsageRequest$outboundSchema,
-  GetOrganizationGatewayUsageSecurity,
-} from "../models/operations/getorganizationgatewayusage.js";
+  GetProjectGatewayRequest,
+  GetProjectGatewayRequest$outboundSchema,
+  GetProjectGatewaySecurity,
+} from "../models/operations/getprojectgateway.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getOrganizationGatewayUsage telemetry
+ * getProjectGateway organizations
  *
  * @remarks
- * Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.
+ * Get the selected project's Project Gateway: the organization's gateway limited to that project's MCP servers. It is served under the same conditions as the organization's gateway. Requires project:read.
  */
-export function telemetryGetOrganizationGatewayUsage(
+export function organizationsGetProjectGateway(
   client: GramCore,
-  request: GetOrganizationGatewayUsageRequest,
-  security?: GetOrganizationGatewayUsageSecurity | undefined,
+  request?: GetProjectGatewayRequest | undefined,
+  security?: GetProjectGatewaySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    GetMetaMcpServerUsageResult,
+    ProjectGateway,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function telemetryGetOrganizationGatewayUsage(
 
 async function $do(
   client: GramCore,
-  request: GetOrganizationGatewayUsageRequest,
-  security?: GetOrganizationGatewayUsageSecurity | undefined,
+  request?: GetProjectGatewayRequest | undefined,
+  security?: GetProjectGatewaySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      GetMetaMcpServerUsageResult,
+      ProjectGateway,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,25 +96,24 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(GetOrganizationGatewayUsageRequest$outboundSchema, value),
+      z.parse(z.optional(GetProjectGatewayRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.GetOrganizationGatewayActivityPayload,
-    { explode: true },
-  );
+  const body = null;
 
-  const path = pathToFunc("/rpc/telemetry.getOrganizationGatewayUsage")();
+  const path = pathToFunc("/rpc/organizations.getProjectGateway")();
 
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -122,6 +121,11 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
@@ -133,7 +137,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getOrganizationGatewayUsage",
+    operationID: "getProjectGateway",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -147,7 +151,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -177,7 +181,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    GetMetaMcpServerUsageResult,
+    ProjectGateway,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -188,7 +192,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, GetMetaMcpServerUsageResult$inboundSchema),
+    M.json(200, ProjectGateway$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

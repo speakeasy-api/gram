@@ -295,11 +295,19 @@ const ROUTE_STRUCTURE = {
 
       // The Organization Gateway. A static segment beside `add`,
       // `catalog` and `sources`, with the same latent toolset-slug collision.
-      // It lives under MCP rather than the organization settings because it
-      // is opened from the head of the MCP Servers list.
+      // It lives under MCP rather than the organization settings because the
+      // Project Gateway, opened from the head of the MCP Servers list, shares
+      // its page.
       organizationGateway: {
         title: "Organization Gateway",
         url: "organization-gateway",
+      },
+      // The Organization Gateway limited to this project's servers. It is
+      // opened from the head of the MCP Servers list and is on and off with
+      // the Organization Gateway.
+      projectGateway: {
+        title: "Project Gateway",
+        url: "project-gateway",
       },
       // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
       // no slug of its own — routing identity lives on its mcp_endpoints.

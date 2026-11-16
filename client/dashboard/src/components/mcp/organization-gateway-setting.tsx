@@ -46,11 +46,12 @@ export function OrganizationGatewaySwitch({
       <ConfirmDialog
         open={confirming === "on"}
         onOpenChange={onOpenChange}
-        title="Turn on Organization Gateway?"
+        title="Turn on gateways?"
         description={
           <>
-            Each person gets every MCP server they can access across all
-            projects, including access inherited from broad roles.
+            This turns on every project&apos;s Project Gateway and the
+            Organization Gateway. Through them, each person gets every MCP
+            server they can access, including access inherited from broad roles.
             <br />
             <br />
             We recommend reviewing MCP assignments first and removing any that
@@ -66,16 +67,16 @@ export function OrganizationGatewaySwitch({
       <ConfirmDialog
         open={confirming === "off"}
         onOpenChange={onOpenChange}
-        title="Turn off Organization Gateway?"
+        title="Turn off gateways?"
         description={
           <>
-            This removes your team&apos;s access to their servers through the
-            Organization Gateway. Clients connected to it stop working right
-            away.
+            This turns off every project&apos;s Project Gateway and the
+            Organization Gateway. Clients connected to any of them stop working
+            right away.
             <br />
             <br />
             Each MCP server keeps working at its own URL. You can turn the
-            gateway back on at any time.
+            gateways back on at any time.
           </>
         }
         confirmLabel="Turn off"
