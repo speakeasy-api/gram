@@ -967,7 +967,7 @@ const (
 
 func (s *Server) addNote(who, text string) []string {
 	if len(text) > maxNoteLength {
-		text = text[:maxNoteLength]
+		text = strings.ToValidUTF8(text[:maxNoteLength], "")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

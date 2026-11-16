@@ -456,7 +456,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(5, "expected 5 gateway members, found %d"),
+			fail:  postflightMustEqual(7, "expected 7 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
