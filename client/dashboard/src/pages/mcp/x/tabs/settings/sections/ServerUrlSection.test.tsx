@@ -235,6 +235,28 @@ describe("ServerUrlSection", () => {
     expect(updateEndpoint).not.toHaveBeenCalled();
   });
 
+  it("adds the organization prefix when renaming an unprefixed platform address", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "renamed" },
+    });
+    expect(screen.getByText(/This saves as .*\/mcp\/acme-renamed\./)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Save address"));
+    confirmWithServerName("Change address");
+    expect(updateEndpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          updateMcpEndpointForm: expect.objectContaining({
+            id: "endpoint-5",
+            slug: "acme-renamed",
+          }),
+        },
+      }),
+    );
+  });
+
   it("confirms before removing the last address that can serve", () => {
     const dead = {
       id: "endpoint-4",

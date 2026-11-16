@@ -509,9 +509,11 @@ function AddressRow({
   const { orgSlug } = useSlugs();
   // Platform endpoints carry the `${orgSlug}-` prefix, folded into the
   // read-only URL segment so the field holds just the suffix. Older unprefixed
-  // platform slugs and custom-domain endpoints show the whole slug.
+  // platform slugs and custom-domain endpoints show the whole slug; renaming an
+  // unprefixed platform slug adds the prefix, which the API requires.
   const orgPrefix = !endpoint.customDomainId && orgSlug ? `${orgSlug}-` : "";
   const slugPrefix = endpoint.slug.startsWith(orgPrefix) ? orgPrefix : "";
+  const unprefixed = orgPrefix !== "" && slugPrefix === "";
 
   const [suffix, setSuffix] = useState(() =>
     endpoint.slug.slice(slugPrefix.length),
@@ -520,7 +522,13 @@ function AddressRow({
     setSuffix(endpoint.slug.slice(slugPrefix.length));
   }, [endpoint.slug, slugPrefix]);
 
-  const fullSlug = `${slugPrefix}${suffix.trim()}`;
+  const trimmedSuffix = suffix.trim();
+  const fullSlug =
+    unprefixed &&
+    trimmedSuffix !== endpoint.slug &&
+    !trimmedSuffix.startsWith(orgPrefix)
+      ? `${orgPrefix}${trimmedSuffix}`
+      : `${slugPrefix}${trimmedSuffix}`;
 
   const queryClient = useQueryClient();
   // Set while a rename or removal waits for the usage confirmation. Only MCP
@@ -653,6 +661,11 @@ function AddressRow({
           </Button>
         </RequireScope>
       </Stack>
+      {unprefixed && dirty && trimmedSuffix && (
+        <FieldDescription className="text-xs">
+          {`New addresses start with ${orgPrefix}. This saves as ${baseUrlPrefix}${fullSlug}.`}
+        </FieldDescription>
+      )}
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
       {endpoint.customDomainId && (
