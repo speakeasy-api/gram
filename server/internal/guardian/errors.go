@@ -89,6 +89,11 @@ func (f AddressFailure) Problem() string {
 	}
 }
 
+// SetupMessage tells an end user that subject's setup stops it, in plain words; the reason stays with administrators.
+func SetupMessage(subject string) string {
+	return subject + " can't connect because of how it is set up. Waiting won't fix this. Ask your administrator to fix it."
+}
+
 // redirectHopError is a dial to an address an upstream redirected to, not one configured here.
 type redirectHopError struct{ err error }
 

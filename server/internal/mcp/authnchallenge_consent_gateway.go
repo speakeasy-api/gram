@@ -147,7 +147,7 @@ func (g gatewayServer) AddressNotice() string {
 	if g.Status != gatewayServerUnavailable || g.address == guardian.AddressFine {
 		return ""
 	}
-	return g.Name + " can't connect because of how it is set up. Waiting won't fix this. Ask your administrator to fix it."
+	return guardian.SetupMessage(g.Name)
 }
 
 // ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.

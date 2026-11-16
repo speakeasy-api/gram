@@ -2389,9 +2389,9 @@ func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginS
 // exchangeFailureAnswer is what a failed code exchange shows: an address an admin fixes, a provider outage, or the failure.
 func exchangeFailureAnswer(ctx context.Context, logger *slog.Logger, err error, tunneled bool, provider func() string) error {
 	failure := exchangeFailure(ctx, logger, err, tunneled)
-	if guardian.AddressFailureOf(err, tunneled) != guardian.AddressFine {
+	if address := guardian.AddressFailureOf(err, tunneled); address != guardian.AddressFine {
 		// Still tagged as caused outside Speakeasy, so the response headers stay as they were.
-		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, oops.WithBrowserReason(failure, oauthui.ReasonSignInAddress))
+		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, oops.WithBrowserAdminDetail(oops.WithBrowserReason(failure, oauthui.ReasonSignInAddress), SignInAddressDetail(address)))
 	}
 	if !exchangeFailureIsProviderOutage(failure, err) {
 		return failure

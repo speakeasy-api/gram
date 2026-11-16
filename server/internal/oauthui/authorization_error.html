@@ -266,6 +266,12 @@ consent page shows, so the person recognizes the flow they started. */ -}}
                 </dd>
                 {{end}}
               </div>
+              {{if .AdminDetail}}
+              <div>
+                <dt class="text-eyebrow">Problem</dt>
+                <dd class="mt-1 ml-0 text-sm break-words" data-admin-detail>{{.AdminDetail}}</dd>
+              </div>
+              {{end}}
               {{if .ClientID}}
               <div>
                 <dt class="text-eyebrow">MCP client ID</dt>

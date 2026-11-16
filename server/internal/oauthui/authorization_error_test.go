@@ -255,6 +255,19 @@ func TestAuthorizationErrorPageSignInAddress(t *testing.T) {
 	require.NotContains(t, page, "problem on our side")
 }
 
+// The administrator's detail appears only under Technical details and in their copied text.
+func TestAuthorizationErrorPageAdminDetailIsTechnicalOnly(t *testing.T) {
+	t.Parallel()
+
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadGateway, Code: "gateway_error", Description: "plain sentence", Reason: oauthui.ReasonSignInAddress, AdminDetail: "The exact problem."}))
+	body := response.Body.String()
+	require.Contains(t, body, `data-admin-detail>The exact problem.</dd>`)
+	require.Contains(t, body, "Problem: The exact problem.", "the copied technical details carry it")
+	page := strings.Join(strings.Fields(body), " ")
+	require.Contains(t, page, "because of how its sign-in is set up. This isn't something you did.")
+}
+
 func TestAuthorizationErrorRecoveryLink(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

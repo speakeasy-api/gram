@@ -312,7 +312,7 @@ func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaM
 	}
 	name := cmp.Or(member.name, member.slug)
 	if unavailable.address != guardian.AddressFine {
-		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " can't connect because of how it is set up. Waiting won't fix this. Ask your administrator.", ReconnectURL: "", NeedsAdmin: true})
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: guardian.SetupMessage(name), ReconnectURL: "", NeedsAdmin: true})
 	}
 	if unavailable.session == nil {
 		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: "", NeedsAdmin: false})
