@@ -96,7 +96,7 @@ func parseRemoteSessionsOrganizationFlags(args []string, getenv func(string) str
 // included, is a loopback address, localhost, or a Unix socket directory.
 func onlyLocalHosts(config *pgx.ConnConfig) bool {
 	isLocal := func(host string) bool {
-		if strings.HasPrefix(host, "/") || host == "localhost" {
+		if strings.HasPrefix(host, "/") || strings.EqualFold(host, "localhost") {
 			return true
 		}
 		ip := net.ParseIP(host)

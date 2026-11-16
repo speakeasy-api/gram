@@ -20,8 +20,8 @@ harness.
 These fix up PostgreSQL application data in place. They do not use the pipeline:
 each runs its own queries and transactions, defaults to a dry run, and writes
 only with `-apply` (or its own explicit write flag) plus confirmation of the
-target environment and database. Its guide documents the flags, output, and
-recovery.
+target environment and any other confirmations that backfill requires. Its
+guide documents the flags, output, and recovery.
 
 | Backfill                                                                    | Doc                                                                                    |
 | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |

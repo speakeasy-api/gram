@@ -73,6 +73,7 @@ func TestParseRemoteSessionsOrganizationFlagsPreviewTLS(t *testing.T) {
 		{name: "remote TLS", url: "postgres://user@db.internal:5432/gram?sslmode=require", wantErr: false},
 		{name: "loopback plaintext", url: "postgres://user@127.0.0.1:5432/gram?sslmode=disable", wantErr: false},
 		{name: "localhost plaintext", url: "postgres://user@localhost:5432/gram?sslmode=disable", wantErr: false},
+		{name: "localhost in capitals plaintext", url: "postgres://user@LOCALHOST:5432/gram?sslmode=disable", wantErr: false},
 		{name: "socket plaintext", url: "host=/tmp user=user dbname=gram sslmode=disable", wantErr: false},
 		{name: "loopback with a remote fallback", url: "postgres://user@127.0.0.1:5432,db.internal:5432/gram?sslmode=disable", wantErr: true},
 	}
