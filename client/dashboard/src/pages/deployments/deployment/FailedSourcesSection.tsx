@@ -233,11 +233,7 @@ export function FailedSourcesSection({
                       {source.name}
                     </span>
                     <span className="text-muted-foreground text-xs">
-                      {source.type === "openapi"
-                        ? "API Source"
-                        : source.type === "function"
-                          ? "Function"
-                          : "External MCP"}{" "}
+                      {source.type === "openapi" ? "API Source" : "Function"}{" "}
                       &middot;{" "}
                       {`${source.errors.length} error${source.errors.length !== 1 ? "s" : ""}`}
                     </span>

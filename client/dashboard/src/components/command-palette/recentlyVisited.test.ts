@@ -27,7 +27,7 @@ describe("pageLabel", () => {
       pageLabel(
         "Sources",
         `${BASE}/sources`,
-        `${BASE}/sources/externalmcp/notion`,
+        `${BASE}/sources/openapi/notion`,
       ),
     ).toBe("notion");
   });

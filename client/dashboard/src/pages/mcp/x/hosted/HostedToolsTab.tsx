@@ -85,8 +85,6 @@ export function HostedToolsTab({
     return scope ? new Set(scope.tools.map((tool) => tool.toolUrn)) : null;
   }, [effectiveActiveTag, toolFilters]);
 
-  // Check if this is an external MCP proxy server
-
   // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
   const hasOrphanedTools =
     (fullToolset?.toolUrns?.length ?? 0) > 0 &&
