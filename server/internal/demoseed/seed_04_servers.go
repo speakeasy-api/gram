@@ -642,6 +642,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	if err := s.seedInspect(ctx); err != nil {
+		return err
+	}
 	return s.seedAuthClients(ctx)
 }
 

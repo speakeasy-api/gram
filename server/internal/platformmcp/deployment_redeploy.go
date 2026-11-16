@@ -42,7 +42,9 @@ type DeploymentRedeployManagement interface {
 }
 
 type RedeployDeploymentInput struct {
-	ProjectID                  string `json:"project_id" jsonschema:"exact project UUID; never inferred"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID                  string `json:"-"`
 	DeploymentID               string `json:"deployment_id,omitempty" jsonschema:"exact source deployment UUID returned by the preview; omit only for a preview of the active deployment"`
 	ExpectedActiveDeploymentID string `json:"expected_active_deployment_id,omitempty" jsonschema:"active_deployment_id from the preview, or none if the project has no active deployment; required for confirmation"`
 	IdempotencyKey             string `json:"idempotency_key" jsonschema:"stable key of 1 to 128 characters for this redeployment; reuse unchanged on retries"`

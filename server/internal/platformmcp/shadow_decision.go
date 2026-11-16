@@ -31,7 +31,9 @@ var (
 )
 
 type DecideShadowMCPAccessInput struct {
-	ProjectID          string   `json:"project_id" jsonschema:"explicit project ID used to inspect the Shadow MCP target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID          string   `json:"-"`
 	TargetReference    string   `json:"target_reference" jsonschema:"short-lived opaque target reference returned by list_shadow_mcp_inventory or get_shadow_mcp_review"`
 	Decision           string   `json:"decision" jsonschema:"decision to enforce: allow or deny"`
 	Rationale          string   `json:"rationale" jsonschema:"bounded reason for the decision; required and stored in the audit trail"`
@@ -178,7 +180,7 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 		return DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(err)
 	}
 	output := DecideShadowMCPAccessOutput{Decision: stored.Decision, Audiences: stored.Audiences, State: nil, StateStatus: "pending", Receipt: riskMutationToolReceipt(receipt)}
-	state, stateErr := s.shadow.GetReview(ctx, principal, GetShadowMCPReviewInput{ProjectID: project.ID.String(), TargetReference: input.TargetReference})
+	state, stateErr := s.shadow.GetReview(ctx, principal, GetShadowMCPReviewInput{ProjectSlug: "", ProjectID: project.ID.String(), TargetReference: input.TargetReference})
 	if stateErr == nil {
 		output.State = &state
 		output.StateStatus = "complete"

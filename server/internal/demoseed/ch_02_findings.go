@@ -28,6 +28,7 @@ func (s *seeder) chDetectionsAndFindings(ctx context.Context, ch driver.Conn) er
 		s.chfGatewayMemberCalls,
 		s.chfOrganizationGatewayCalls,
 		s.chfGatewayGoneCalls,
+		s.chfDirectRemoteCalls,
 		s.chfGatewayHooks,
 		s.chfBillingMeterReadings,
 	}
@@ -939,6 +940,25 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 		})
 	}
 	return rows
+}
+
+// chfDirectRemoteCalls: calls made straight to Linear, Slack and GitHub
+// (not through a gateway), per tool, for the Inspect tab's per-tool health;
+// plus Linear and GitHub calls dispatched through the Direct mode gateway.
+func (s *seeder) chfDirectRemoteCalls(ctx context.Context, ch driver.Conn) error {
+	var rows []chfTelemetryRow
+	for _, server := range []string{"linear", "slack", "github"} {
+		rows = append(rows, s.directRemoteCalls(server, s.det("mcpserver-"+server), s.det("remotemcp-"+server), "", inspectRemoteTools[server])...)
+	}
+	for _, server := range []string{"linear", "github"} {
+		tools := make([]inspectTool, 0, 4)
+		for _, t := range inspectRemoteTools[server][:4] {
+			t.calls /= 5
+			tools = append(tools, t)
+		}
+		rows = append(rows, s.directRemoteCalls("gwdirect-"+server, s.det("mcpserver-"+server), s.det("remotemcp-"+server), s.directGatewayID().String(), tools)...)
+	}
+	return s.chfInsertTelemetry(ctx, ch, "direct remote server call telemetry", rows)
 }
 
 // chfGatewayGoneCalls: dispatches to GitHub from before it left the gateway

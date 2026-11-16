@@ -323,9 +323,8 @@ func TestChannelsAccessToolContract(t *testing.T) {
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
 	require.Equal(t, externalOnly, a.Meta.Audiences)
 	require.Empty(t, live.For(AudienceAssistant))
-	for _, field := range []string{"project_id", "project_slug"} {
-		require.Contains(t, string(a.InputSchema), field)
-	}
+	require.Contains(t, string(a.InputSchema), "project_slug")
+	require.NotContains(t, string(a.InputSchema), "project_id")
 	require.Contains(t, a.Description, "no default project fallback")
 }
 

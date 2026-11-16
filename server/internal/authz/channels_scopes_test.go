@@ -49,7 +49,7 @@ func TestChannelsAdminRoleDoesNotReadPrivateConversations(t *testing.T) {
 	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeChannelsAdmin, ResourceID: "project_example"}))
 	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeChannelsReadAll, ResourceID: "project_example"}),
 		"the administrator role must not carry channels:read_all; it is granted explicitly")
-	require.NotContains(t, adminScopes, ScopeChannelsReadAll)
+	require.NotContains(t, Model.deriveSystemRoleScopes(SystemRoleAdmin), ScopeChannelsReadAll)
 }
 
 // Channels is session-less by design: it authenticates an OAuth bearer or a
