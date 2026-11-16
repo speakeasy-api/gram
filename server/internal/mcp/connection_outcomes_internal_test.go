@@ -615,6 +615,39 @@ func TestRecordRemoteLoginRefusal_ExportOmitsProviderHost(t *testing.T) {
 	}
 }
 
+func TestRecordConsentPage_ExpiredCatalogReloadsExportOnce(t *testing.T) {
+	t.Parallel()
+
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	service := &Service{connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+
+	for range 4 {
+		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	}
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Len(t, sink.records, 2, "one per attempt, however often its page reloads")
+	for _, record := range sink.records {
+		require.Equal(t, otellog.SeverityWarn, record.Severity())
+	}
+}
+
+func TestRecordConsentPage_OtherProblemsRecordEachRender(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)
+	require.Len(t, rec.Rows(), 2)
+}
+
 func tokenRequest(t *testing.T) *http.Request {
 	t.Helper()
 	return httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)

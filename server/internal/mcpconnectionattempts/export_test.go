@@ -330,8 +330,8 @@ func TestExportSeverity_ByCatalogOutcome(t *testing.T) {
 		{name: "non-final admin failure stays error", code: CodeProviderOAuthInvalidClient, final: false, severity: log.SeverityError, text: "ERROR"},
 		{name: "non-final blocked", code: CodeNoServerAccess, final: false, severity: log.SeverityWarn, text: "WARN"},
 		{name: "non-final person failure", code: CodeInvalidGrant, final: false, severity: log.SeverityWarn, text: "WARN"},
-		{name: "non-final app failure", code: CodeRegistrationInvalid, final: false, severity: log.SeverityWarn, text: "WARN"},
 		{name: "final person failure", code: CodeInvalidGrant, final: true, severity: log.SeverityError, text: "ERROR"},
+		{name: "final app failure", code: CodeRegistrationInvalid, final: true, severity: log.SeverityError, text: "ERROR"},
 		{name: "final session changed", code: CodeSessionChanged, final: true, severity: log.SeverityError, text: "ERROR"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -345,7 +345,7 @@ func TestExportSeverity_ByCatalogOutcome(t *testing.T) {
 	}
 }
 
-func TestExportSeverity_LeavesOutNonFinalRowsThatAreNotFailures(t *testing.T) {
+func TestExportSeverity_LeavesOutNonFinalRowsThatAreNotPersonFailures(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -355,6 +355,7 @@ func TestExportSeverity_LeavesOutNonFinalRowsThatAreNotFailures(t *testing.T) {
 		{name: "needs sign-in", what: CodeNeedsSignIn},
 		{name: "person blocked", what: CodeToolNotApproved},
 		{name: "person declined", what: CodeCanceled},
+		{name: "app failure", what: CodeRegistrationInvalid},
 		{name: "app blocked", what: CodeClientNotCIMD},
 		{name: "success", what: ResultAccepted},
 		{name: "connected with a reason", what: CodeRefreshedUnverified},

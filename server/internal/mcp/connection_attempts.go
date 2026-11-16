@@ -240,12 +240,27 @@ func (s *Service) recordConsentPage(
 		}
 		s.recordMemberStatuses(ctx, logger, attempt, statuses, subject, fromRequest)
 	}
-	if problem != nil {
+	if problem != nil && s.firstConsentProblem(ctx, logger, attempt, problem) {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject, fromRequest)
 	}
 	if challengeState.FirstParty && !challengeState.CodeReconnect.undecidedOrCanceled() && firstPartyConnected(gateway, cards) {
 		s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, subject, fromRequest)
 	}
+}
+
+// firstConsentProblem folds reloads of an expired-catalog page into one row per attempt; a cache failure records it.
+func (s *Service) firstConsentProblem(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened) bool {
+	if problem != mcpconnectionattempts.CodeConnectionCatalogExpired || s.userSessionRefreshReplayCoordination == nil || attempt.IsZero() {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	first, err := s.userSessionRefreshReplayCoordination.Add(ctx, "connectionAttemptCatalogExpired:"+attempt.ID().String(), connectionAttemptEndTTL)
+	if err != nil {
+		logger.WarnContext(ctx, "claim expired catalog row", attr.SlogError(err))
+		return true
+	}
+	return first
 }
 
 // memberStatus is one gateway member's discovery row; status is its result and reason.
