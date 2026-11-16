@@ -1,6 +1,7 @@
 import { StatRow } from "@/components/stat-row";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { ReactNode, Ref } from "react";
 import type { ChannelMessage, ChannelsSnapshot } from "./api";
@@ -17,11 +18,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Enough to catch up at a glance; the list holds the rest. */
 const CATCH_UP_CONVERSATIONS = 5;
 const PREVIEW_MESSAGES = 2;
-
-const timeOfDay = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
 
 /**
  * What a person sees before choosing a conversation: how to get agents talking
@@ -41,6 +37,7 @@ export function ChannelsHome({
   onMarkAllRead,
   connectRef,
   notice,
+  partial,
   className,
 }: {
   conversations: Conversation[];
@@ -57,6 +54,8 @@ export function ChannelsHome({
   connectRef: Ref<HTMLElement>;
   /** A failure the person has to know about, shown above everything else. */
   notice?: ReactNode;
+  /** True while the project has conversations beyond the ones loaded. */
+  partial: boolean;
   className?: string;
 }): JSX.Element {
   const steps = [
@@ -136,6 +135,13 @@ export function ChannelsHome({
             ]}
           />
         )}
+
+        {partial && !settingUp ? (
+          <p className="text-muted-foreground -mt-4 text-xs">
+            These counts cover the conversations loaded so far. Load more from
+            the list to include the rest.
+          </p>
+        ) : null}
 
         {waiting.length > 0 ? (
           <section className="space-y-3">
@@ -352,7 +358,7 @@ function CatchUp({
                   dateTime={message.createdAt}
                   className="text-muted-foreground"
                 >
-                  {timeOfDay.format(new Date(message.createdAt))}
+                  {formatRelativeTime(new Date(message.createdAt))}
                 </time>
               </p>
               <p className="line-clamp-2 text-sm break-words whitespace-pre-wrap">

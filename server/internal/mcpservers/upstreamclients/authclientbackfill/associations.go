@@ -47,6 +47,31 @@ func PreflightServerAssociationsWithRegistrations(ctx context.Context, tx pgx.Tx
 	return err
 }
 
+// PreflightServerClientAttach is PreflightServerAssociations for a server about
+// to gain an association with clientID. The new client's registration has no
+// association to be found by yet, so it joins the one ordered pass over the
+// server's registrations rather than being gated separately after them.
+func PreflightServerClientAttach(ctx context.Context, tx pgx.Tx, organizationID string, serverID, clientID uuid.UUID) error {
+	if organizationID == "" {
+		return errors.New("preflight server client attach: no tenant scope")
+	}
+	q := New(tx)
+	registrations, err := q.ListOAuthClientsOfServers(ctx, ListOAuthClientsOfServersParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{serverID}})
+	if err != nil {
+		return fmt.Errorf("list OAuth synchronization scope: %w", err)
+	}
+	if err := q.LockOAuthRegistrationSyncScope(ctx, LockOAuthRegistrationSyncScopeParams{OrganizationID: organizationID, RegistrationIds: append(registrations, clientID)}); err != nil {
+		return fmt.Errorf("lock OAuth registration synchronization scope: %w", err)
+	}
+	return nil
+}
+
+// IsRetryableSync reports whether err is SyncServerAssociations's request to
+// roll back and retry the whole transaction after a concurrent change.
+func IsRetryableSync(err error) bool {
+	return errors.Is(err, errRace)
+}
+
 // gateOAuthRegistrations serializes the OAuth registrations the given servers
 // reach and reports them.
 func gateOAuthRegistrations(ctx context.Context, q *Queries, organizationID string, servers []uuid.UUID, extraRegistrationIDs ...uuid.UUID) ([]uuid.UUID, error) {

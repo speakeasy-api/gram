@@ -212,18 +212,18 @@ type GetMetaMcpServerUsageRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
-// GetOrganizationGatewayOverviewRequestBody is the type of the "telemetry"
-// service "getOrganizationGatewayOverview" endpoint HTTP request body.
-type GetOrganizationGatewayOverviewRequestBody struct {
+// GetProjectGatewayOverviewRequestBody is the type of the "telemetry" service
+// "getProjectGatewayOverview" endpoint HTTP request body.
+type GetProjectGatewayOverviewRequestBody struct {
 	// Start time in ISO 8601 format
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
 	To string `form:"to" json:"to" xml:"to"`
 }
 
-// GetOrganizationGatewayUsageRequestBody is the type of the "telemetry"
-// service "getOrganizationGatewayUsage" endpoint HTTP request body.
-type GetOrganizationGatewayUsageRequestBody struct {
+// GetProjectGatewayUsageRequestBody is the type of the "telemetry" service
+// "getProjectGatewayUsage" endpoint HTTP request body.
+type GetProjectGatewayUsageRequestBody struct {
 	// Start time in ISO 8601 format
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
@@ -1053,9 +1053,9 @@ type GetMetaMcpServerUsageResponseBody struct {
 	Members []*MetaMcpMemberUsageResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewResponseBody is the type of the "telemetry"
-// service "getOrganizationGatewayOverview" endpoint HTTP response body.
-type GetOrganizationGatewayOverviewResponseBody struct {
+// GetProjectGatewayOverviewResponseBody is the type of the "telemetry" service
+// "getProjectGatewayOverview" endpoint HTTP response body.
+type GetProjectGatewayOverviewResponseBody struct {
 	// Current period summary metrics
 	Summary *ObservabilitySummaryResponseBody `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Previous period summary metrics for trend calculation
@@ -1070,9 +1070,9 @@ type GetOrganizationGatewayOverviewResponseBody struct {
 	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 }
 
-// GetOrganizationGatewayUsageResponseBody is the type of the "telemetry"
-// service "getOrganizationGatewayUsage" endpoint HTTP response body.
-type GetOrganizationGatewayUsageResponseBody struct {
+// GetProjectGatewayUsageResponseBody is the type of the "telemetry" service
+// "getProjectGatewayUsage" endpoint HTTP response body.
+type GetProjectGatewayUsageResponseBody struct {
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel,omitempty" json:"funnel,omitempty" xml:"funnel,omitempty"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
@@ -3399,10 +3399,10 @@ type GetMetaMcpServerUsageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewUnauthorizedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "unauthorized" error.
-type GetOrganizationGatewayOverviewUnauthorizedResponseBody struct {
+// GetProjectGatewayOverviewUnauthorizedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetProjectGatewayOverviewUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3418,10 +3418,10 @@ type GetOrganizationGatewayOverviewUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewForbiddenResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "forbidden" error.
-type GetOrganizationGatewayOverviewForbiddenResponseBody struct {
+// GetProjectGatewayOverviewForbiddenResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "forbidden" error.
+type GetProjectGatewayOverviewForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3437,10 +3437,10 @@ type GetOrganizationGatewayOverviewForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewBadRequestResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "bad_request" error.
-type GetOrganizationGatewayOverviewBadRequestResponseBody struct {
+// GetProjectGatewayOverviewBadRequestResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "bad_request" error.
+type GetProjectGatewayOverviewBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3456,10 +3456,10 @@ type GetOrganizationGatewayOverviewBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewNotFoundResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "not_found" error.
-type GetOrganizationGatewayOverviewNotFoundResponseBody struct {
+// GetProjectGatewayOverviewNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectGatewayOverviewNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3475,10 +3475,10 @@ type GetOrganizationGatewayOverviewNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewConflictResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "conflict" error.
-type GetOrganizationGatewayOverviewConflictResponseBody struct {
+// GetProjectGatewayOverviewConflictResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectGatewayOverviewConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3494,10 +3494,10 @@ type GetOrganizationGatewayOverviewConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewUnsupportedMediaResponseBody is the type of
-// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
-// response body for the "unsupported_media" error.
-type GetOrganizationGatewayOverviewUnsupportedMediaResponseBody struct {
+// GetProjectGatewayOverviewUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetProjectGatewayOverviewUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3513,10 +3513,10 @@ type GetOrganizationGatewayOverviewUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewInvalidResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "invalid" error.
-type GetOrganizationGatewayOverviewInvalidResponseBody struct {
+// GetProjectGatewayOverviewInvalidResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectGatewayOverviewInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3532,10 +3532,10 @@ type GetOrganizationGatewayOverviewInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewInvariantViolationResponseBody is the type of
-// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
-// response body for the "invariant_violation" error.
-type GetOrganizationGatewayOverviewInvariantViolationResponseBody struct {
+// GetProjectGatewayOverviewInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetProjectGatewayOverviewInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3551,10 +3551,10 @@ type GetOrganizationGatewayOverviewInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewUnexpectedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "unexpected" error.
-type GetOrganizationGatewayOverviewUnexpectedResponseBody struct {
+// GetProjectGatewayOverviewUnexpectedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unexpected" error.
+type GetProjectGatewayOverviewUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3570,10 +3570,10 @@ type GetOrganizationGatewayOverviewUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewGatewayErrorResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "gateway_error" error.
-type GetOrganizationGatewayOverviewGatewayErrorResponseBody struct {
+// GetProjectGatewayOverviewGatewayErrorResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetProjectGatewayOverviewGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3589,10 +3589,10 @@ type GetOrganizationGatewayOverviewGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageUnauthorizedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "unauthorized" error.
-type GetOrganizationGatewayUsageUnauthorizedResponseBody struct {
+// GetProjectGatewayUsageUnauthorizedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetProjectGatewayUsageUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3608,10 +3608,10 @@ type GetOrganizationGatewayUsageUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageForbiddenResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "forbidden" error.
-type GetOrganizationGatewayUsageForbiddenResponseBody struct {
+// GetProjectGatewayUsageForbiddenResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "forbidden" error.
+type GetProjectGatewayUsageForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3627,10 +3627,10 @@ type GetOrganizationGatewayUsageForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageBadRequestResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "bad_request" error.
-type GetOrganizationGatewayUsageBadRequestResponseBody struct {
+// GetProjectGatewayUsageBadRequestResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "bad_request" error.
+type GetProjectGatewayUsageBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3646,10 +3646,10 @@ type GetOrganizationGatewayUsageBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageNotFoundResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "not_found" error.
-type GetOrganizationGatewayUsageNotFoundResponseBody struct {
+// GetProjectGatewayUsageNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectGatewayUsageNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3665,10 +3665,10 @@ type GetOrganizationGatewayUsageNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageConflictResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "conflict" error.
-type GetOrganizationGatewayUsageConflictResponseBody struct {
+// GetProjectGatewayUsageConflictResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectGatewayUsageConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3684,10 +3684,10 @@ type GetOrganizationGatewayUsageConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageUnsupportedMediaResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "unsupported_media" error.
-type GetOrganizationGatewayUsageUnsupportedMediaResponseBody struct {
+// GetProjectGatewayUsageUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetProjectGatewayUsageUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3703,10 +3703,10 @@ type GetOrganizationGatewayUsageUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageInvalidResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "invalid" error.
-type GetOrganizationGatewayUsageInvalidResponseBody struct {
+// GetProjectGatewayUsageInvalidResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectGatewayUsageInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3722,10 +3722,10 @@ type GetOrganizationGatewayUsageInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageInvariantViolationResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "invariant_violation" error.
-type GetOrganizationGatewayUsageInvariantViolationResponseBody struct {
+// GetProjectGatewayUsageInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetProjectGatewayUsageInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3741,10 +3741,10 @@ type GetOrganizationGatewayUsageInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageUnexpectedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "unexpected" error.
-type GetOrganizationGatewayUsageUnexpectedResponseBody struct {
+// GetProjectGatewayUsageUnexpectedResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "unexpected" error.
+type GetProjectGatewayUsageUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3760,10 +3760,10 @@ type GetOrganizationGatewayUsageUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationGatewayUsageGatewayErrorResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "gateway_error" error.
-type GetOrganizationGatewayUsageGatewayErrorResponseBody struct {
+// GetProjectGatewayUsageGatewayErrorResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetProjectGatewayUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10267,22 +10267,21 @@ func NewGetMetaMcpServerUsageRequestBody(p *telemetry.GetMetaMcpServerUsagePaylo
 	return body
 }
 
-// NewGetOrganizationGatewayOverviewRequestBody builds the HTTP request body
-// from the payload of the "getOrganizationGatewayOverview" endpoint of the
-// "telemetry" service.
-func NewGetOrganizationGatewayOverviewRequestBody(p *telemetry.GetOrganizationGatewayOverviewPayload) *GetOrganizationGatewayOverviewRequestBody {
-	body := &GetOrganizationGatewayOverviewRequestBody{
+// NewGetProjectGatewayOverviewRequestBody builds the HTTP request body from
+// the payload of the "getProjectGatewayOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayOverviewRequestBody(p *telemetry.GetProjectGatewayOverviewPayload) *GetProjectGatewayOverviewRequestBody {
+	body := &GetProjectGatewayOverviewRequestBody{
 		From: p.From,
 		To:   p.To,
 	}
 	return body
 }
 
-// NewGetOrganizationGatewayUsageRequestBody builds the HTTP request body from
-// the payload of the "getOrganizationGatewayUsage" endpoint of the "telemetry"
-// service.
-func NewGetOrganizationGatewayUsageRequestBody(p *telemetry.GetOrganizationGatewayUsagePayload) *GetOrganizationGatewayUsageRequestBody {
-	body := &GetOrganizationGatewayUsageRequestBody{
+// NewGetProjectGatewayUsageRequestBody builds the HTTP request body from the
+// payload of the "getProjectGatewayUsage" endpoint of the "telemetry" service.
+func NewGetProjectGatewayUsageRequestBody(p *telemetry.GetProjectGatewayUsagePayload) *GetProjectGatewayUsageRequestBody {
+	body := &GetProjectGatewayUsageRequestBody{
 		From: p.From,
 		To:   p.To,
 	}
@@ -13503,10 +13502,10 @@ func NewGetMetaMcpServerUsageGatewayError(body *GetMetaMcpServerUsageGatewayErro
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewGetObservabilityOverviewResultOK builds a
-// "telemetry" service "getOrganizationGatewayOverview" endpoint result from a
-// HTTP "OK" response.
-func NewGetOrganizationGatewayOverviewGetObservabilityOverviewResultOK(body *GetOrganizationGatewayOverviewResponseBody) *telemetry.GetObservabilityOverviewResult {
+// NewGetProjectGatewayOverviewGetObservabilityOverviewResultOK builds a
+// "telemetry" service "getProjectGatewayOverview" endpoint result from a HTTP
+// "OK" response.
+func NewGetProjectGatewayOverviewGetObservabilityOverviewResultOK(body *GetProjectGatewayOverviewResponseBody) *telemetry.GetObservabilityOverviewResult {
 	v := &telemetry.GetObservabilityOverviewResult{
 		IntervalSeconds: *body.IntervalSeconds,
 	}
@@ -13540,9 +13539,9 @@ func NewGetOrganizationGatewayOverviewGetObservabilityOverviewResultOK(body *Get
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewUnauthorized builds a telemetry service
-// getOrganizationGatewayOverview endpoint unauthorized error.
-func NewGetOrganizationGatewayOverviewUnauthorized(body *GetOrganizationGatewayOverviewUnauthorizedResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewUnauthorized builds a telemetry service
+// getProjectGatewayOverview endpoint unauthorized error.
+func NewGetProjectGatewayOverviewUnauthorized(body *GetProjectGatewayOverviewUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13555,9 +13554,9 @@ func NewGetOrganizationGatewayOverviewUnauthorized(body *GetOrganizationGatewayO
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewForbidden builds a telemetry service
-// getOrganizationGatewayOverview endpoint forbidden error.
-func NewGetOrganizationGatewayOverviewForbidden(body *GetOrganizationGatewayOverviewForbiddenResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewForbidden builds a telemetry service
+// getProjectGatewayOverview endpoint forbidden error.
+func NewGetProjectGatewayOverviewForbidden(body *GetProjectGatewayOverviewForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13570,9 +13569,9 @@ func NewGetOrganizationGatewayOverviewForbidden(body *GetOrganizationGatewayOver
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewBadRequest builds a telemetry service
-// getOrganizationGatewayOverview endpoint bad_request error.
-func NewGetOrganizationGatewayOverviewBadRequest(body *GetOrganizationGatewayOverviewBadRequestResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewBadRequest builds a telemetry service
+// getProjectGatewayOverview endpoint bad_request error.
+func NewGetProjectGatewayOverviewBadRequest(body *GetProjectGatewayOverviewBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13585,9 +13584,9 @@ func NewGetOrganizationGatewayOverviewBadRequest(body *GetOrganizationGatewayOve
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewNotFound builds a telemetry service
-// getOrganizationGatewayOverview endpoint not_found error.
-func NewGetOrganizationGatewayOverviewNotFound(body *GetOrganizationGatewayOverviewNotFoundResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewNotFound builds a telemetry service
+// getProjectGatewayOverview endpoint not_found error.
+func NewGetProjectGatewayOverviewNotFound(body *GetProjectGatewayOverviewNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13600,9 +13599,9 @@ func NewGetOrganizationGatewayOverviewNotFound(body *GetOrganizationGatewayOverv
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewConflict builds a telemetry service
-// getOrganizationGatewayOverview endpoint conflict error.
-func NewGetOrganizationGatewayOverviewConflict(body *GetOrganizationGatewayOverviewConflictResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewConflict builds a telemetry service
+// getProjectGatewayOverview endpoint conflict error.
+func NewGetProjectGatewayOverviewConflict(body *GetProjectGatewayOverviewConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13615,9 +13614,9 @@ func NewGetOrganizationGatewayOverviewConflict(body *GetOrganizationGatewayOverv
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewUnsupportedMedia builds a telemetry service
-// getOrganizationGatewayOverview endpoint unsupported_media error.
-func NewGetOrganizationGatewayOverviewUnsupportedMedia(body *GetOrganizationGatewayOverviewUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewUnsupportedMedia builds a telemetry service
+// getProjectGatewayOverview endpoint unsupported_media error.
+func NewGetProjectGatewayOverviewUnsupportedMedia(body *GetProjectGatewayOverviewUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13630,9 +13629,9 @@ func NewGetOrganizationGatewayOverviewUnsupportedMedia(body *GetOrganizationGate
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewInvalid builds a telemetry service
-// getOrganizationGatewayOverview endpoint invalid error.
-func NewGetOrganizationGatewayOverviewInvalid(body *GetOrganizationGatewayOverviewInvalidResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewInvalid builds a telemetry service
+// getProjectGatewayOverview endpoint invalid error.
+func NewGetProjectGatewayOverviewInvalid(body *GetProjectGatewayOverviewInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13645,9 +13644,9 @@ func NewGetOrganizationGatewayOverviewInvalid(body *GetOrganizationGatewayOvervi
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewInvariantViolation builds a telemetry
-// service getOrganizationGatewayOverview endpoint invariant_violation error.
-func NewGetOrganizationGatewayOverviewInvariantViolation(body *GetOrganizationGatewayOverviewInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewInvariantViolation builds a telemetry service
+// getProjectGatewayOverview endpoint invariant_violation error.
+func NewGetProjectGatewayOverviewInvariantViolation(body *GetProjectGatewayOverviewInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13660,9 +13659,9 @@ func NewGetOrganizationGatewayOverviewInvariantViolation(body *GetOrganizationGa
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewUnexpected builds a telemetry service
-// getOrganizationGatewayOverview endpoint unexpected error.
-func NewGetOrganizationGatewayOverviewUnexpected(body *GetOrganizationGatewayOverviewUnexpectedResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewUnexpected builds a telemetry service
+// getProjectGatewayOverview endpoint unexpected error.
+func NewGetProjectGatewayOverviewUnexpected(body *GetProjectGatewayOverviewUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13675,9 +13674,9 @@ func NewGetOrganizationGatewayOverviewUnexpected(body *GetOrganizationGatewayOve
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewGatewayError builds a telemetry service
-// getOrganizationGatewayOverview endpoint gateway_error error.
-func NewGetOrganizationGatewayOverviewGatewayError(body *GetOrganizationGatewayOverviewGatewayErrorResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayOverviewGatewayError builds a telemetry service
+// getProjectGatewayOverview endpoint gateway_error error.
+func NewGetProjectGatewayOverviewGatewayError(body *GetProjectGatewayOverviewGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13690,10 +13689,9 @@ func NewGetOrganizationGatewayOverviewGatewayError(body *GetOrganizationGatewayO
 	return v
 }
 
-// NewGetOrganizationGatewayUsageGetMetaMcpServerUsageResultOK builds a
-// "telemetry" service "getOrganizationGatewayUsage" endpoint result from a
-// HTTP "OK" response.
-func NewGetOrganizationGatewayUsageGetMetaMcpServerUsageResultOK(body *GetOrganizationGatewayUsageResponseBody) *telemetry.GetMetaMcpServerUsageResult {
+// NewGetProjectGatewayUsageGetMetaMcpServerUsageResultOK builds a "telemetry"
+// service "getProjectGatewayUsage" endpoint result from a HTTP "OK" response.
+func NewGetProjectGatewayUsageGetMetaMcpServerUsageResultOK(body *GetProjectGatewayUsageResponseBody) *telemetry.GetMetaMcpServerUsageResult {
 	v := &telemetry.GetMetaMcpServerUsageResult{}
 	v.Funnel = unmarshalMetaMcpDiscoveryFunnelResponseBodyToTelemetryMetaMcpDiscoveryFunnel(body.Funnel)
 	v.Members = make([]*telemetry.MetaMcpMemberUsage, len(body.Members))
@@ -13708,9 +13706,9 @@ func NewGetOrganizationGatewayUsageGetMetaMcpServerUsageResultOK(body *GetOrgani
 	return v
 }
 
-// NewGetOrganizationGatewayUsageUnauthorized builds a telemetry service
-// getOrganizationGatewayUsage endpoint unauthorized error.
-func NewGetOrganizationGatewayUsageUnauthorized(body *GetOrganizationGatewayUsageUnauthorizedResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageUnauthorized builds a telemetry service
+// getProjectGatewayUsage endpoint unauthorized error.
+func NewGetProjectGatewayUsageUnauthorized(body *GetProjectGatewayUsageUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13723,9 +13721,9 @@ func NewGetOrganizationGatewayUsageUnauthorized(body *GetOrganizationGatewayUsag
 	return v
 }
 
-// NewGetOrganizationGatewayUsageForbidden builds a telemetry service
-// getOrganizationGatewayUsage endpoint forbidden error.
-func NewGetOrganizationGatewayUsageForbidden(body *GetOrganizationGatewayUsageForbiddenResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageForbidden builds a telemetry service
+// getProjectGatewayUsage endpoint forbidden error.
+func NewGetProjectGatewayUsageForbidden(body *GetProjectGatewayUsageForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13738,9 +13736,9 @@ func NewGetOrganizationGatewayUsageForbidden(body *GetOrganizationGatewayUsageFo
 	return v
 }
 
-// NewGetOrganizationGatewayUsageBadRequest builds a telemetry service
-// getOrganizationGatewayUsage endpoint bad_request error.
-func NewGetOrganizationGatewayUsageBadRequest(body *GetOrganizationGatewayUsageBadRequestResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageBadRequest builds a telemetry service
+// getProjectGatewayUsage endpoint bad_request error.
+func NewGetProjectGatewayUsageBadRequest(body *GetProjectGatewayUsageBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13753,9 +13751,9 @@ func NewGetOrganizationGatewayUsageBadRequest(body *GetOrganizationGatewayUsageB
 	return v
 }
 
-// NewGetOrganizationGatewayUsageNotFound builds a telemetry service
-// getOrganizationGatewayUsage endpoint not_found error.
-func NewGetOrganizationGatewayUsageNotFound(body *GetOrganizationGatewayUsageNotFoundResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageNotFound builds a telemetry service
+// getProjectGatewayUsage endpoint not_found error.
+func NewGetProjectGatewayUsageNotFound(body *GetProjectGatewayUsageNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13768,9 +13766,9 @@ func NewGetOrganizationGatewayUsageNotFound(body *GetOrganizationGatewayUsageNot
 	return v
 }
 
-// NewGetOrganizationGatewayUsageConflict builds a telemetry service
-// getOrganizationGatewayUsage endpoint conflict error.
-func NewGetOrganizationGatewayUsageConflict(body *GetOrganizationGatewayUsageConflictResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageConflict builds a telemetry service
+// getProjectGatewayUsage endpoint conflict error.
+func NewGetProjectGatewayUsageConflict(body *GetProjectGatewayUsageConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13783,9 +13781,9 @@ func NewGetOrganizationGatewayUsageConflict(body *GetOrganizationGatewayUsageCon
 	return v
 }
 
-// NewGetOrganizationGatewayUsageUnsupportedMedia builds a telemetry service
-// getOrganizationGatewayUsage endpoint unsupported_media error.
-func NewGetOrganizationGatewayUsageUnsupportedMedia(body *GetOrganizationGatewayUsageUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageUnsupportedMedia builds a telemetry service
+// getProjectGatewayUsage endpoint unsupported_media error.
+func NewGetProjectGatewayUsageUnsupportedMedia(body *GetProjectGatewayUsageUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13798,9 +13796,9 @@ func NewGetOrganizationGatewayUsageUnsupportedMedia(body *GetOrganizationGateway
 	return v
 }
 
-// NewGetOrganizationGatewayUsageInvalid builds a telemetry service
-// getOrganizationGatewayUsage endpoint invalid error.
-func NewGetOrganizationGatewayUsageInvalid(body *GetOrganizationGatewayUsageInvalidResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageInvalid builds a telemetry service
+// getProjectGatewayUsage endpoint invalid error.
+func NewGetProjectGatewayUsageInvalid(body *GetProjectGatewayUsageInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13813,9 +13811,9 @@ func NewGetOrganizationGatewayUsageInvalid(body *GetOrganizationGatewayUsageInva
 	return v
 }
 
-// NewGetOrganizationGatewayUsageInvariantViolation builds a telemetry service
-// getOrganizationGatewayUsage endpoint invariant_violation error.
-func NewGetOrganizationGatewayUsageInvariantViolation(body *GetOrganizationGatewayUsageInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageInvariantViolation builds a telemetry service
+// getProjectGatewayUsage endpoint invariant_violation error.
+func NewGetProjectGatewayUsageInvariantViolation(body *GetProjectGatewayUsageInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13828,9 +13826,9 @@ func NewGetOrganizationGatewayUsageInvariantViolation(body *GetOrganizationGatew
 	return v
 }
 
-// NewGetOrganizationGatewayUsageUnexpected builds a telemetry service
-// getOrganizationGatewayUsage endpoint unexpected error.
-func NewGetOrganizationGatewayUsageUnexpected(body *GetOrganizationGatewayUsageUnexpectedResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageUnexpected builds a telemetry service
+// getProjectGatewayUsage endpoint unexpected error.
+func NewGetProjectGatewayUsageUnexpected(body *GetProjectGatewayUsageUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13843,9 +13841,9 @@ func NewGetOrganizationGatewayUsageUnexpected(body *GetOrganizationGatewayUsageU
 	return v
 }
 
-// NewGetOrganizationGatewayUsageGatewayError builds a telemetry service
-// getOrganizationGatewayUsage endpoint gateway_error error.
-func NewGetOrganizationGatewayUsageGatewayError(body *GetOrganizationGatewayUsageGatewayErrorResponseBody) *goa.ServiceError {
+// NewGetProjectGatewayUsageGatewayError builds a telemetry service
+// getProjectGatewayUsage endpoint gateway_error error.
+func NewGetProjectGatewayUsageGatewayError(body *GetProjectGatewayUsageGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -18591,9 +18589,9 @@ func ValidateGetMetaMcpServerUsageResponseBody(body *GetMetaMcpServerUsageRespon
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewResponseBody runs the validations
-// defined on GetOrganizationGatewayOverviewResponseBody
-func ValidateGetOrganizationGatewayOverviewResponseBody(body *GetOrganizationGatewayOverviewResponseBody) (err error) {
+// ValidateGetProjectGatewayOverviewResponseBody runs the validations defined
+// on GetProjectGatewayOverviewResponseBody
+func ValidateGetProjectGatewayOverviewResponseBody(body *GetProjectGatewayOverviewResponseBody) (err error) {
 	if body.Summary == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
 	}
@@ -18646,9 +18644,9 @@ func ValidateGetOrganizationGatewayOverviewResponseBody(body *GetOrganizationGat
 	return
 }
 
-// ValidateGetOrganizationGatewayUsageResponseBody runs the validations defined
-// on GetOrganizationGatewayUsageResponseBody
-func ValidateGetOrganizationGatewayUsageResponseBody(body *GetOrganizationGatewayUsageResponseBody) (err error) {
+// ValidateGetProjectGatewayUsageResponseBody runs the validations defined on
+// GetProjectGatewayUsageResponseBody
+func ValidateGetProjectGatewayUsageResponseBody(body *GetProjectGatewayUsageResponseBody) (err error) {
 	if body.Funnel == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("funnel", "body"))
 	}
@@ -21975,10 +21973,130 @@ func ValidateGetMetaMcpServerUsageGatewayErrorResponseBody(body *GetMetaMcpServe
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewUnauthorizedResponseBody runs the
+// ValidateGetProjectGatewayOverviewUnauthorizedResponseBody runs the
+// validations defined on getProjectGatewayOverview_unauthorized_response_body
+func ValidateGetProjectGatewayOverviewUnauthorizedResponseBody(body *GetProjectGatewayOverviewUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayOverviewForbiddenResponseBody runs the validations
+// defined on getProjectGatewayOverview_forbidden_response_body
+func ValidateGetProjectGatewayOverviewForbiddenResponseBody(body *GetProjectGatewayOverviewForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayOverviewBadRequestResponseBody runs the validations
+// defined on getProjectGatewayOverview_bad_request_response_body
+func ValidateGetProjectGatewayOverviewBadRequestResponseBody(body *GetProjectGatewayOverviewBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayOverviewNotFoundResponseBody runs the validations
+// defined on getProjectGatewayOverview_not_found_response_body
+func ValidateGetProjectGatewayOverviewNotFoundResponseBody(body *GetProjectGatewayOverviewNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayOverviewConflictResponseBody runs the validations
+// defined on getProjectGatewayOverview_conflict_response_body
+func ValidateGetProjectGatewayOverviewConflictResponseBody(body *GetProjectGatewayOverviewConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayOverviewUnsupportedMediaResponseBody runs the
 // validations defined on
-// getOrganizationGatewayOverview_unauthorized_response_body
-func ValidateGetOrganizationGatewayOverviewUnauthorizedResponseBody(body *GetOrganizationGatewayOverviewUnauthorizedResponseBody) (err error) {
+// getProjectGatewayOverview_unsupported_media_response_body
+func ValidateGetProjectGatewayOverviewUnsupportedMediaResponseBody(body *GetProjectGatewayOverviewUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22000,9 +22118,9 @@ func ValidateGetOrganizationGatewayOverviewUnauthorizedResponseBody(body *GetOrg
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewForbiddenResponseBody runs the
-// validations defined on getOrganizationGatewayOverview_forbidden_response_body
-func ValidateGetOrganizationGatewayOverviewForbiddenResponseBody(body *GetOrganizationGatewayOverviewForbiddenResponseBody) (err error) {
+// ValidateGetProjectGatewayOverviewInvalidResponseBody runs the validations
+// defined on getProjectGatewayOverview_invalid_response_body
+func ValidateGetProjectGatewayOverviewInvalidResponseBody(body *GetProjectGatewayOverviewInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22024,10 +22142,10 @@ func ValidateGetOrganizationGatewayOverviewForbiddenResponseBody(body *GetOrgani
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewBadRequestResponseBody runs the
+// ValidateGetProjectGatewayOverviewInvariantViolationResponseBody runs the
 // validations defined on
-// getOrganizationGatewayOverview_bad_request_response_body
-func ValidateGetOrganizationGatewayOverviewBadRequestResponseBody(body *GetOrganizationGatewayOverviewBadRequestResponseBody) (err error) {
+// getProjectGatewayOverview_invariant_violation_response_body
+func ValidateGetProjectGatewayOverviewInvariantViolationResponseBody(body *GetProjectGatewayOverviewInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22049,9 +22167,9 @@ func ValidateGetOrganizationGatewayOverviewBadRequestResponseBody(body *GetOrgan
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewNotFoundResponseBody runs the
-// validations defined on getOrganizationGatewayOverview_not_found_response_body
-func ValidateGetOrganizationGatewayOverviewNotFoundResponseBody(body *GetOrganizationGatewayOverviewNotFoundResponseBody) (err error) {
+// ValidateGetProjectGatewayOverviewUnexpectedResponseBody runs the validations
+// defined on getProjectGatewayOverview_unexpected_response_body
+func ValidateGetProjectGatewayOverviewUnexpectedResponseBody(body *GetProjectGatewayOverviewUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22073,9 +22191,9 @@ func ValidateGetOrganizationGatewayOverviewNotFoundResponseBody(body *GetOrganiz
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewConflictResponseBody runs the
-// validations defined on getOrganizationGatewayOverview_conflict_response_body
-func ValidateGetOrganizationGatewayOverviewConflictResponseBody(body *GetOrganizationGatewayOverviewConflictResponseBody) (err error) {
+// ValidateGetProjectGatewayOverviewGatewayErrorResponseBody runs the
+// validations defined on getProjectGatewayOverview_gateway_error_response_body
+func ValidateGetProjectGatewayOverviewGatewayErrorResponseBody(body *GetProjectGatewayOverviewGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22097,10 +22215,178 @@ func ValidateGetOrganizationGatewayOverviewConflictResponseBody(body *GetOrganiz
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewUnsupportedMediaResponseBody runs the
+// ValidateGetProjectGatewayUsageUnauthorizedResponseBody runs the validations
+// defined on getProjectGatewayUsage_unauthorized_response_body
+func ValidateGetProjectGatewayUsageUnauthorizedResponseBody(body *GetProjectGatewayUsageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageForbiddenResponseBody runs the validations
+// defined on getProjectGatewayUsage_forbidden_response_body
+func ValidateGetProjectGatewayUsageForbiddenResponseBody(body *GetProjectGatewayUsageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageBadRequestResponseBody runs the validations
+// defined on getProjectGatewayUsage_bad_request_response_body
+func ValidateGetProjectGatewayUsageBadRequestResponseBody(body *GetProjectGatewayUsageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageNotFoundResponseBody runs the validations
+// defined on getProjectGatewayUsage_not_found_response_body
+func ValidateGetProjectGatewayUsageNotFoundResponseBody(body *GetProjectGatewayUsageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageConflictResponseBody runs the validations
+// defined on getProjectGatewayUsage_conflict_response_body
+func ValidateGetProjectGatewayUsageConflictResponseBody(body *GetProjectGatewayUsageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageUnsupportedMediaResponseBody runs the
+// validations defined on getProjectGatewayUsage_unsupported_media_response_body
+func ValidateGetProjectGatewayUsageUnsupportedMediaResponseBody(body *GetProjectGatewayUsageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageInvalidResponseBody runs the validations
+// defined on getProjectGatewayUsage_invalid_response_body
+func ValidateGetProjectGatewayUsageInvalidResponseBody(body *GetProjectGatewayUsageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageInvariantViolationResponseBody runs the
 // validations defined on
-// getOrganizationGatewayOverview_unsupported_media_response_body
-func ValidateGetOrganizationGatewayOverviewUnsupportedMediaResponseBody(body *GetOrganizationGatewayOverviewUnsupportedMediaResponseBody) (err error) {
+// getProjectGatewayUsage_invariant_violation_response_body
+func ValidateGetProjectGatewayUsageInvariantViolationResponseBody(body *GetProjectGatewayUsageInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22122,9 +22408,9 @@ func ValidateGetOrganizationGatewayOverviewUnsupportedMediaResponseBody(body *Ge
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewInvalidResponseBody runs the
-// validations defined on getOrganizationGatewayOverview_invalid_response_body
-func ValidateGetOrganizationGatewayOverviewInvalidResponseBody(body *GetOrganizationGatewayOverviewInvalidResponseBody) (err error) {
+// ValidateGetProjectGatewayUsageUnexpectedResponseBody runs the validations
+// defined on getProjectGatewayUsage_unexpected_response_body
+func ValidateGetProjectGatewayUsageUnexpectedResponseBody(body *GetProjectGatewayUsageUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22146,303 +22432,9 @@ func ValidateGetOrganizationGatewayOverviewInvalidResponseBody(body *GetOrganiza
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewInvariantViolationResponseBody runs
-// the validations defined on
-// getOrganizationGatewayOverview_invariant_violation_response_body
-func ValidateGetOrganizationGatewayOverviewInvariantViolationResponseBody(body *GetOrganizationGatewayOverviewInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayOverviewUnexpectedResponseBody runs the
-// validations defined on
-// getOrganizationGatewayOverview_unexpected_response_body
-func ValidateGetOrganizationGatewayOverviewUnexpectedResponseBody(body *GetOrganizationGatewayOverviewUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayOverviewGatewayErrorResponseBody runs the
-// validations defined on
-// getOrganizationGatewayOverview_gateway_error_response_body
-func ValidateGetOrganizationGatewayOverviewGatewayErrorResponseBody(body *GetOrganizationGatewayOverviewGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageUnauthorizedResponseBody runs the
-// validations defined on getOrganizationGatewayUsage_unauthorized_response_body
-func ValidateGetOrganizationGatewayUsageUnauthorizedResponseBody(body *GetOrganizationGatewayUsageUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageForbiddenResponseBody runs the
-// validations defined on getOrganizationGatewayUsage_forbidden_response_body
-func ValidateGetOrganizationGatewayUsageForbiddenResponseBody(body *GetOrganizationGatewayUsageForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageBadRequestResponseBody runs the
-// validations defined on getOrganizationGatewayUsage_bad_request_response_body
-func ValidateGetOrganizationGatewayUsageBadRequestResponseBody(body *GetOrganizationGatewayUsageBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageNotFoundResponseBody runs the validations
-// defined on getOrganizationGatewayUsage_not_found_response_body
-func ValidateGetOrganizationGatewayUsageNotFoundResponseBody(body *GetOrganizationGatewayUsageNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageConflictResponseBody runs the validations
-// defined on getOrganizationGatewayUsage_conflict_response_body
-func ValidateGetOrganizationGatewayUsageConflictResponseBody(body *GetOrganizationGatewayUsageConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageUnsupportedMediaResponseBody runs the
-// validations defined on
-// getOrganizationGatewayUsage_unsupported_media_response_body
-func ValidateGetOrganizationGatewayUsageUnsupportedMediaResponseBody(body *GetOrganizationGatewayUsageUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageInvalidResponseBody runs the validations
-// defined on getOrganizationGatewayUsage_invalid_response_body
-func ValidateGetOrganizationGatewayUsageInvalidResponseBody(body *GetOrganizationGatewayUsageInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageInvariantViolationResponseBody runs the
-// validations defined on
-// getOrganizationGatewayUsage_invariant_violation_response_body
-func ValidateGetOrganizationGatewayUsageInvariantViolationResponseBody(body *GetOrganizationGatewayUsageInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageUnexpectedResponseBody runs the
-// validations defined on getOrganizationGatewayUsage_unexpected_response_body
-func ValidateGetOrganizationGatewayUsageUnexpectedResponseBody(body *GetOrganizationGatewayUsageUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationGatewayUsageGatewayErrorResponseBody runs the
-// validations defined on
-// getOrganizationGatewayUsage_gateway_error_response_body
-func ValidateGetOrganizationGatewayUsageGatewayErrorResponseBody(body *GetOrganizationGatewayUsageGatewayErrorResponseBody) (err error) {
+// ValidateGetProjectGatewayUsageGatewayErrorResponseBody runs the validations
+// defined on getProjectGatewayUsage_gateway_error_response_body
+func ValidateGetProjectGatewayUsageGatewayErrorResponseBody(body *GetProjectGatewayUsageGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

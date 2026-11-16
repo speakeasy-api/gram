@@ -440,7 +440,7 @@ WHERE t.organization_id = @org_id::text AND t.project_id = @project_id::uuid
   AND a.id = @assistant_id::uuid
   AND ag.project_id = @project_id::uuid AND ag.owner_user_id = @owner_user_id::text
   AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
-  AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
+  AND i.issuer = @issuer::text AND i.jwks_uri = @jwks_uri::text AND i.allow_wildcard_admission IS FALSE
   AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
   AND t.subject = 'assistant-trigger:' || r.id::text
   AND (SELECT count(*) FROM principal_grants g

@@ -11,10 +11,12 @@ import { Icon } from "@/components/ui/Icon";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -22,6 +24,10 @@ import {
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
 import type { LauncherCandidate } from "./candidates/types";
+import {
+  captureCommandPalettePerformance,
+  CommandPalettePerformanceTracker,
+} from "./performance";
 import { prefilter, rank } from "./ranker";
 import { useRecentsUserId } from "./recentlyVisited";
 
@@ -40,6 +46,8 @@ const ASK_AI_VALUE = "__ask_ai__";
 interface DisplayRow {
   candidate: LauncherCandidate;
 }
+
+const EMPTY_ROWS: DisplayRow[] = [];
 
 // Idle order for page actions: contextual Tool Actions first, then project
 // Pages before Organization pages, then anything else alphabetically.
@@ -254,7 +262,17 @@ export function CommandPalette(): JSX.Element {
   const { orgSlug, projectSlug } = useSlugs();
   const project = useProject();
   const { hasScope } = useRBAC();
+  const telemetry = useTelemetry();
   const [query, setQuery] = useState("");
+  const performanceTracker = useRef<CommandPalettePerformanceTracker | null>(
+    null,
+  );
+  if (performanceTracker.current === null) {
+    performanceTracker.current = new CommandPalettePerformanceTracker();
+  }
+  const tracker = performanceTracker.current;
+  const wasOpen = useRef(false);
+  const recordedRanking = useRef<object | null>(null);
 
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
@@ -277,12 +295,50 @@ export function CommandPalette(): JSX.Element {
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
 
-  const pre = useMemo(
-    () => prefilter(trimmedQuery, candidates),
-    [trimmedQuery, candidates],
-  );
-  const rows = useMemo(() => rank(pre), [pre]);
+  const ranked = useMemo(() => {
+    if (!isOpen || !hasQuery) return null;
+
+    const startedAt = performance.now();
+    const rows = rank(prefilter(trimmedQuery, candidates));
+    return { rows, duration: performance.now() - startedAt };
+  }, [candidates, hasQuery, isOpen, trimmedQuery]);
+  const rows = ranked?.rows ?? EMPTY_ROWS;
   const idle = useMemo(() => idleRows(candidates), [candidates]);
+
+  useEffect(() => {
+    const now = performance.now();
+    const pages = candidates.filter(
+      (candidate) => candidate.kind === "page",
+    ).length;
+    const resources = candidates.filter(
+      (candidate) => candidate.kind !== "page" && candidate.kind !== "recent",
+    ).length;
+
+    if (isOpen && !wasOpen.current) {
+      tracker.open(now, {
+        total: candidates.length,
+        pages,
+        resources,
+      });
+    }
+    if (isOpen) {
+      tracker.candidates(now, candidates.length, pages, resources);
+    } else if (wasOpen.current) {
+      const payload = tracker.close(
+        now,
+        inProject ? "project" : "organization",
+      );
+      if (payload) captureCommandPalettePerformance(telemetry, payload);
+    }
+    wasOpen.current = isOpen;
+  }, [candidates, inProject, isOpen, telemetry, tracker]);
+
+  useEffect(() => {
+    if (!isOpen || ranked === null || recordedRanking.current === ranked)
+      return;
+    recordedRanking.current = ranked;
+    tracker.ranking(ranked.duration);
+  }, [isOpen, ranked, tracker]);
 
   // cmdk only reselects the first item when its search changes. Controlling
   // the value pins it to the top row whenever the DOM order

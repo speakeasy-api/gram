@@ -24,7 +24,6 @@ const mocks = vi.hoisted(() => ({
     scopes: string[];
     resourceId?: string;
   }>,
-  toolsets: [] as unknown[],
   mcpServers: [] as unknown[],
   gateways: [] as unknown[],
   catalogServers: [] as unknown[],
@@ -89,12 +88,6 @@ vi.mock("@/pages/channels/api", () => ({
   channelsRequest: (...args: unknown[]) => mocks.channelsRequest(...args),
 }));
 
-vi.mock("@gram/client/react-query/listToolsets.js", () => ({
-  useListToolsets: (...args: unknown[]) => {
-    record("useListToolsets", args);
-    return { data: { toolsets: mocks.toolsets } };
-  },
-}));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: (...args: unknown[]) => {
     record("useMcpServers", args);
@@ -444,7 +437,6 @@ beforeEach(() => {
   mocks.activeOrganizationId = "org-acme";
   mocks.pluginWriteAccess = false;
   mocks.rbacCalls = [];
-  mocks.toolsets = [];
   mocks.mcpServers = [];
   mocks.gateways = [];
   mocks.catalogServers = [];
@@ -1383,7 +1375,7 @@ describe("useActionCandidates", () => {
 });
 
 describe("useRecentCandidates", () => {
-  it("keeps persisted Channels conversations as local search candidates", () => {
+  it("does not offer stored Channels visits while Channels is hidden", () => {
     mocks.recents = [
       {
         label: "Private agent session",
@@ -1392,9 +1384,7 @@ describe("useRecentCandidates", () => {
       },
     ];
     const { result } = renderCandidates();
-    const recent = byKind(result.current, "recent")[0];
-    expect(recent?.title).toBe("Private agent session");
-    expect(recent?.verbs).toEqual(["open"]);
+    expect(byKind(result.current, "recent")).toHaveLength(0);
   });
 
   // The stored entries are keyed per user, and until the session resolves
@@ -1480,14 +1470,6 @@ describe("useSourceCandidates", () => {
       functionsAssets: [
         { id: "fn-1", name: "Billing", slug: "billing", assetId: "a-2" },
       ],
-      externalMcps: [
-        {
-          id: "ext-1",
-          name: "Linear",
-          slug: "linear",
-          registryServerSpecifier: "x",
-        },
-      ],
     };
   });
 
@@ -1510,78 +1492,6 @@ describe("useSourceCandidates", () => {
     void billing?.run("open");
     expect(mocks.navigate).toHaveBeenLastCalledWith(
       "/acme/projects/default/mcp/sources/fn-1",
-    );
-  });
-
-  // An external MCP has no page of its own: it opens the hosted server built
-  // from it, found through the toolset whose tool URNs carry the source slug.
-  it("opens an external MCP on the hosted server that carries its tools", () => {
-    mocks.scopes = ["mcp:read"];
-    mocks.toolsets = [
-      {
-        id: "toolset-1",
-        name: "Linear",
-        slug: "linear-srv",
-        toolUrns: ["tools:externalmcp:linear:create_issue"],
-      },
-    ];
-    const { result } = renderCandidates();
-    const [linear] = byKind(result.current, "source").filter(
-      (c) => c.detail === "Source · external MCP",
-    );
-
-    expect(linear?.keywords).toEqual(
-      expect.arrayContaining(["linear", "externalmcp", "ext-1"]),
-    );
-    void linear?.run("open");
-    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
-      "/acme/projects/default/toolsets/linear-srv",
-    );
-  });
-
-  it("falls back to the sources list for an external MCP no server uses", () => {
-    mocks.scopes = ["mcp:read"];
-    mocks.toolsets = [
-      { id: "toolset-2", name: "Other", slug: "other", toolUrns: [] },
-    ];
-    const { result } = renderCandidates();
-    const [linear] = byKind(result.current, "source").filter(
-      (c) => c.detail === "Source · external MCP",
-    );
-
-    void linear?.run("open");
-    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
-      "/acme/projects/default/mcp/sources",
-    );
-  });
-
-  // Several servers can carry the same external MCP; opening the first would
-  // land on an arbitrary server, so the list is the honest target (as the
-  // legacy source redirect resolves it).
-  it("falls back to the sources list when several servers carry the same external MCP", () => {
-    mocks.scopes = ["mcp:read"];
-    mocks.toolsets = [
-      {
-        id: "toolset-1",
-        name: "Linear",
-        slug: "linear-srv",
-        toolUrns: ["tools:externalmcp:linear:create_issue"],
-      },
-      {
-        id: "toolset-2",
-        name: "Linear for support",
-        slug: "linear-support",
-        toolUrns: ["tools:externalmcp:linear:list_issues"],
-      },
-    ];
-    const { result } = renderCandidates();
-    const [linear] = byKind(result.current, "source").filter(
-      (c) => c.detail === "Source · external MCP",
-    );
-
-    void linear?.run("open");
-    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
-      "/acme/projects/default/mcp/sources",
     );
   });
 });
@@ -1728,7 +1638,6 @@ describe("useLauncherCandidates", () => {
     const names = Object.keys(mocks.calls);
     expect(names).toEqual(
       expect.arrayContaining([
-        "useListToolsets",
         "useMcpServers",
         "useMetaMcpServers",
         "useListMCPCatalog",
@@ -1776,7 +1685,6 @@ describe("useLauncherCandidates", () => {
     renderCandidates();
 
     for (const name of [
-      "useListToolsets",
       "useMcpServers",
       "useMetaMcpServers",
       "useListMCPCatalog",

@@ -13,7 +13,6 @@ import { assistantsListExecutionProfiles } from "../funcs/assistantsListExecutio
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsSetExecutionProfileChoice } from "../funcs/assistantsSetExecutionProfileChoice.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
-import { assistantsUpgradeIdentity } from "../funcs/assistantsUpgradeIdentity.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Assistant } from "../models/components/assistant.js";
 import { AssistantExecutionProfile } from "../models/components/assistantexecutionprofile.js";
@@ -65,10 +64,6 @@ import {
   UpdateAssistantRequest,
   UpdateAssistantSecurity,
 } from "../models/operations/updateassistant.js";
-import {
-  UpgradeAssistantIdentityRequest,
-  UpgradeAssistantIdentitySecurity,
-} from "../models/operations/upgradeassistantidentity.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Assistants extends ClientSDK {
@@ -274,25 +269,6 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsUpdate(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * upgradeAssistantIdentity assistants
-   *
-   * @remarks
-   * Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
-   */
-  async upgradeIdentity(
-    request: UpgradeAssistantIdentityRequest,
-    security?: UpgradeAssistantIdentitySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<Assistant> {
-    return unwrapAsync(assistantsUpgradeIdentity(
       this,
       request,
       security,

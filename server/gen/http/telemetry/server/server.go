@@ -30,8 +30,8 @@ type Server struct {
 	GetObservabilityOverview         http.Handler
 	GetMcpNetworkTraffic             http.Handler
 	GetMetaMcpServerUsage            http.Handler
-	GetOrganizationGatewayOverview   http.Handler
-	GetOrganizationGatewayUsage      http.Handler
+	GetProjectGatewayOverview        http.Handler
+	GetProjectGatewayUsage           http.Handler
 	GetProjectOverview               http.Handler
 	GetUnproxiedMcpServerUsage       http.Handler
 	GetUnproxiedMcpServerToolUsage   http.Handler
@@ -98,8 +98,8 @@ func New(
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"GetMcpNetworkTraffic", "POST", "/rpc/telemetry.getMcpNetworkTraffic"},
 			{"GetMetaMcpServerUsage", "POST", "/rpc/telemetry.getMetaMcpServerUsage"},
-			{"GetOrganizationGatewayOverview", "POST", "/rpc/telemetry.getOrganizationGatewayOverview"},
-			{"GetOrganizationGatewayUsage", "POST", "/rpc/telemetry.getOrganizationGatewayUsage"},
+			{"GetProjectGatewayOverview", "POST", "/rpc/telemetry.getProjectGatewayOverview"},
+			{"GetProjectGatewayUsage", "POST", "/rpc/telemetry.getProjectGatewayUsage"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
 			{"GetUnproxiedMcpServerUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerUsage"},
 			{"GetUnproxiedMcpServerToolUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerToolUsage"},
@@ -138,8 +138,8 @@ func New(
 		GetObservabilityOverview:         NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
 		GetMcpNetworkTraffic:             NewGetMcpNetworkTrafficHandler(e.GetMcpNetworkTraffic, mux, decoder, encoder, errhandler, formatter),
 		GetMetaMcpServerUsage:            NewGetMetaMcpServerUsageHandler(e.GetMetaMcpServerUsage, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationGatewayOverview:   NewGetOrganizationGatewayOverviewHandler(e.GetOrganizationGatewayOverview, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationGatewayUsage:      NewGetOrganizationGatewayUsageHandler(e.GetOrganizationGatewayUsage, mux, decoder, encoder, errhandler, formatter),
+		GetProjectGatewayOverview:        NewGetProjectGatewayOverviewHandler(e.GetProjectGatewayOverview, mux, decoder, encoder, errhandler, formatter),
+		GetProjectGatewayUsage:           NewGetProjectGatewayUsageHandler(e.GetProjectGatewayUsage, mux, decoder, encoder, errhandler, formatter),
 		GetProjectOverview:               NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
 		GetUnproxiedMcpServerUsage:       NewGetUnproxiedMcpServerUsageHandler(e.GetUnproxiedMcpServerUsage, mux, decoder, encoder, errhandler, formatter),
 		GetUnproxiedMcpServerToolUsage:   NewGetUnproxiedMcpServerToolUsageHandler(e.GetUnproxiedMcpServerToolUsage, mux, decoder, encoder, errhandler, formatter),
@@ -185,8 +185,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.GetMcpNetworkTraffic = m(s.GetMcpNetworkTraffic)
 	s.GetMetaMcpServerUsage = m(s.GetMetaMcpServerUsage)
-	s.GetOrganizationGatewayOverview = m(s.GetOrganizationGatewayOverview)
-	s.GetOrganizationGatewayUsage = m(s.GetOrganizationGatewayUsage)
+	s.GetProjectGatewayOverview = m(s.GetProjectGatewayOverview)
+	s.GetProjectGatewayUsage = m(s.GetProjectGatewayUsage)
 	s.GetProjectOverview = m(s.GetProjectOverview)
 	s.GetUnproxiedMcpServerUsage = m(s.GetUnproxiedMcpServerUsage)
 	s.GetUnproxiedMcpServerToolUsage = m(s.GetUnproxiedMcpServerToolUsage)
@@ -231,8 +231,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountGetMcpNetworkTrafficHandler(mux, h.GetMcpNetworkTraffic)
 	MountGetMetaMcpServerUsageHandler(mux, h.GetMetaMcpServerUsage)
-	MountGetOrganizationGatewayOverviewHandler(mux, h.GetOrganizationGatewayOverview)
-	MountGetOrganizationGatewayUsageHandler(mux, h.GetOrganizationGatewayUsage)
+	MountGetProjectGatewayOverviewHandler(mux, h.GetProjectGatewayOverview)
+	MountGetProjectGatewayUsageHandler(mux, h.GetProjectGatewayUsage)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
 	MountGetUnproxiedMcpServerUsageHandler(mux, h.GetUnproxiedMcpServerUsage)
 	MountGetUnproxiedMcpServerToolUsageHandler(mux, h.GetUnproxiedMcpServerToolUsage)
@@ -852,22 +852,22 @@ func NewGetMetaMcpServerUsageHandler(
 	})
 }
 
-// MountGetOrganizationGatewayOverviewHandler configures the mux to serve the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint.
-func MountGetOrganizationGatewayOverviewHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetProjectGatewayOverviewHandler configures the mux to serve the
+// "telemetry" service "getProjectGatewayOverview" endpoint.
+func MountGetProjectGatewayOverviewHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/telemetry.getOrganizationGatewayOverview", f)
+	mux.Handle("POST", "/rpc/telemetry.getProjectGatewayOverview", f)
 }
 
-// NewGetOrganizationGatewayOverviewHandler creates a HTTP handler which loads
-// the HTTP request and calls the "telemetry" service
-// "getOrganizationGatewayOverview" endpoint.
-func NewGetOrganizationGatewayOverviewHandler(
+// NewGetProjectGatewayOverviewHandler creates a HTTP handler which loads the
+// HTTP request and calls the "telemetry" service "getProjectGatewayOverview"
+// endpoint.
+func NewGetProjectGatewayOverviewHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -876,13 +876,13 @@ func NewGetOrganizationGatewayOverviewHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGetOrganizationGatewayOverviewRequest(mux, decoder)
-		encodeResponse = EncodeGetOrganizationGatewayOverviewResponse(encoder)
-		encodeError    = EncodeGetOrganizationGatewayOverviewError(encoder, formatter)
+		decodeRequest  = DecodeGetProjectGatewayOverviewRequest(mux, decoder)
+		encodeResponse = EncodeGetProjectGatewayOverviewResponse(encoder)
+		encodeError    = EncodeGetProjectGatewayOverviewError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationGatewayOverview")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectGatewayOverview")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -906,22 +906,21 @@ func NewGetOrganizationGatewayOverviewHandler(
 	})
 }
 
-// MountGetOrganizationGatewayUsageHandler configures the mux to serve the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint.
-func MountGetOrganizationGatewayUsageHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetProjectGatewayUsageHandler configures the mux to serve the
+// "telemetry" service "getProjectGatewayUsage" endpoint.
+func MountGetProjectGatewayUsageHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/telemetry.getOrganizationGatewayUsage", f)
+	mux.Handle("POST", "/rpc/telemetry.getProjectGatewayUsage", f)
 }
 
-// NewGetOrganizationGatewayUsageHandler creates a HTTP handler which loads the
-// HTTP request and calls the "telemetry" service "getOrganizationGatewayUsage"
-// endpoint.
-func NewGetOrganizationGatewayUsageHandler(
+// NewGetProjectGatewayUsageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "getProjectGatewayUsage" endpoint.
+func NewGetProjectGatewayUsageHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -930,13 +929,13 @@ func NewGetOrganizationGatewayUsageHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGetOrganizationGatewayUsageRequest(mux, decoder)
-		encodeResponse = EncodeGetOrganizationGatewayUsageResponse(encoder)
-		encodeError    = EncodeGetOrganizationGatewayUsageError(encoder, formatter)
+		decodeRequest  = DecodeGetProjectGatewayUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetProjectGatewayUsageResponse(encoder)
+		encodeError    = EncodeGetProjectGatewayUsageError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationGatewayUsage")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectGatewayUsage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

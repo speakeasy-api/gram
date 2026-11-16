@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -87,6 +88,7 @@ func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
 	require.Equal(t, route.ID.String(), output.Routes[0].ID)
 	require.Equal(t, destination.ID.String(), output.Routes[0].DestinationID)
 	require.True(t, output.Routes[0].Enabled)
+	require.Empty(t, output.Routes[0].MinSeverity, "only connection logs routes have a level")
 	require.True(t, strings.HasSuffix(output.ManagementURL, "/data/exports"))
 
 	encoded, err := json.Marshal(output)
@@ -738,4 +740,51 @@ func TestCreateDataExportCreatesConnectionLogs(t *testing.T) {
 	require.Equal(t, "mcp_connection_logs", output.Route.DataSource)
 	require.Equal(t, project.ID.String(), output.Route.ProjectID)
 	require.True(t, output.Route.Enabled)
+	require.Equal(t, dataexports.MinSeverityError, output.Route.MinSeverity, "the default level")
+}
+
+func TestCreateDataExportSetsTheConnectionLogLevel(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_connection_log_level")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test")).
+		WithDataExports(testenv.NewEncryptionClient(t), mustParseURL(t, "https://app.getgram.test"))
+
+	input := CreateDataExportInput{
+		ProjectID:     project.ID.String(),
+		Name:          "Connection logs collector",
+		EndpointURL:   "https://otel.example.test/v1",
+		DataSource:    "product_telemetry",
+		SensitiveData: "exclude",
+		Enabled:       nil,
+		MinSeverity:   dataexports.MinSeverityWarn,
+		Confirmed:     true,
+	}
+	_, err = reader.CreateDataExport(ctx, principal, input)
+	require.ErrorIs(t, err, ErrDataExportInvalidInput, "the level is only for connection logs")
+	require.Equal(t, "invalid_input", requireDataExportRefusal(t, err).Code)
+
+	input.DataSource = "mcp_connection_logs"
+	input.MinSeverity = "debug"
+	_, err = reader.CreateDataExport(ctx, principal, input)
+	require.ErrorIs(t, err, ErrDataExportInvalidInput)
+
+	input.MinSeverity = dataexports.MinSeverityWarn
+	output, err := reader.CreateDataExport(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, dataexports.MinSeverityWarn, output.Route.MinSeverity)
+	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionDataExportRouteCreate)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, dataexports.MinSeverityWarn, snapshot["min_severity"], "the create audit records the level")
+
+	listed, err := reader.ListDataExports(ctx, principal, ListDataExportsInput{ProjectID: project.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Routes, 1)
+	require.Equal(t, dataexports.MinSeverityWarn, listed.Routes[0].MinSeverity)
 }

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -45,7 +46,7 @@ const (
 // summaries.
 //
 // Pass DefaultSpec() for the shared production demo org.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, spec Spec) (retErr error) {
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL string, spec Spec) (retErr error) {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -99,7 +100,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	s, err := seedPostgres(ctx, logger, conn, blob, enc, spec)
+	s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, spec)
 	if err != nil {
 		return err
 	}
@@ -127,11 +128,15 @@ type txBeginner interface {
 // seedPostgres runs the Postgres seed for spec in one transaction on db, so a
 // failed run leaves the previous data in place. It returns the seeder, whose
 // clock the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, spec Spec) (*seeder, error) {
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL string, spec Spec) (*seeder, error) {
 	if enc == nil {
 		return nil, errors.New("demo seed needs the environment's encryption key")
 	}
-	s := &seeder{spec: spec, enc: enc, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	assistantIssuer := strings.TrimRight(assistantIssuerURL, "/")
+	if assistantIssuer == "" {
+		return nil, errors.New("demo seed needs the deployment's assistant trigger issuer origin")
+	}
+	s := &seeder{spec: spec, enc: enc, assistantIssuer: assistantIssuer, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {

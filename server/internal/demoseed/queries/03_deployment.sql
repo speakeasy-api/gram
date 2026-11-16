@@ -209,10 +209,10 @@ VALUES
 
 -- name: DeployInsertAssistant :exec
 INSERT INTO assistants
-  (id, organization_id, project_id, created_by_user_id, name, model, instructions)
+  (id, organization_id, project_id, created_by_user_id, name, model, reasoning_effort, instructions)
 VALUES
   (@id, @organization_id::text, @project_id::uuid, @created_by_user_id::text,
-   @name, 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.');
+   @name, 'anthropic/claude-sonnet-4.6', 'medium', 'Help summarize project activity.');
 
 -- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
@@ -231,14 +231,15 @@ VALUES
   (@id, @organization_id::text, @project_id::uuid, 'dashboard', @name::text || ' dashboard', 'assistant',
    @target_ref, @name::text);
 
--- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
--- the existing Speakeasy JWKS endpoint; this example cannot sign or run work.
+-- The project's assistant trigger trust registration, under the deployment's
+-- signing issuer. Runtime provisioning looks it up by issuer and creates it
+-- under this same name, so any other issuer would block every later binding
+-- in the project.
 -- name: DeployInsertAssistantWorkloadIssuer :exec
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
 VALUES (@id, @organization_id::text, @project_id::uuid,
-        @name, 'https://platform.example.invalid',
-        'https://platform.example.invalid/.well-known/jwks.json', FALSE);
+        @name, @issuer, @jwks_uri, FALSE);
 
 -- name: DeployInsertAssistantAgentBinding :exec
 INSERT INTO assistant_agent_bindings

@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
@@ -580,41 +581,77 @@ func connectionLogRelayRecord(body, organizationID, projectID string) *otelv1.Lo
 	return record
 }
 
-func TestLogRelayHandlerSendsOnlyErrorConnectionLogsToTheirRoute(t *testing.T) {
+func TestLogRelayHandlerSendsConnectionLogsAtOrAboveTheRouteLevel(t *testing.T) {
 	t.Parallel()
 
-	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
-	server := httptest.NewServer(http.HandlerFunc(capture.handler))
-	t.Cleanup(server.Close)
+	for _, tc := range []struct {
+		name  string
+		level string
+		want  []string
+	}{
+		{name: "default is error", level: "", want: []string{"error"}},
+		{name: "error drops warn and info", level: dataexports.MinSeverityError, want: []string{"error"}},
+		{name: "warn keeps warn and drops info", level: dataexports.MinSeverityWarn, want: []string{"warn", "error"}},
+		{name: "info keeps all", level: dataexports.MinSeverityInfo, want: []string{"warn", "info", "error"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	db, enc, _ := newRelayRouteTest(t, "/v1/logs")
-	projectID := createRelayTestProject(t, db, "org-test")
-	telemetryDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "telemetry"}), "include")
-	connectionDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "connection"}), "include")
-	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: telemetryDestination.ID, Valid: true})
-	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: connectionDestination.ID, Valid: true})
+			capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+			server := httptest.NewServer(http.HandlerFunc(capture.handler))
+			t.Cleanup(server.Close)
 
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
-	require.NoError(t, err)
-	handler := NewLogRelayHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, policy)
+			db, enc, _ := newRelayRouteTest(t, "/v1/logs")
+			projectID := createRelayTestProject(t, db, "org-test")
+			telemetryDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "telemetry"}), "include")
+			connectionDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "connection"}), "include")
+			createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: telemetryDestination.ID, Valid: true})
+			route := createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: connectionDestination.ID, Valid: true})
+			if tc.level != "" {
+				_, err := dataexportsrepo.New(db).UpsertMCPConnectionLogRouteSettings(t.Context(), dataexportsrepo.UpsertMCPConnectionLogRouteSettingsParams{
+					OrganizationID:    "org-test",
+					ProjectID:         projectID,
+					MinSeverity:       tc.level,
+					DataExportRouteID: route.ID,
+				})
+				require.NoError(t, err)
+			}
 
-	warn := connectionLogRelayRecord("warn", "org-test", projectID.String())
-	warn.SetSeverityNumber(otelv1.LogRecord_SEVERITY_NUMBER_WARN)
-	info := connectionLogRelayRecord("info", "org-test", projectID.String())
-	info.SetSeverityNumber(otelv1.LogRecord_SEVERITY_NUMBER_INFO)
-	telemetryInfo := relayTestLogRecord("telemetry-info", "org-test", projectID.String(), 0)
-	telemetryInfo.SetSeverityNumber(otelv1.LogRecord_SEVERITY_NUMBER_INFO)
-	messages, failures := logRelayTestMessages(warn, info, connectionLogRelayRecord("error", "org-test", projectID.String()), telemetryInfo)
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+			reader, meterProvider := readableMeter(t)
+			handler := NewLogRelayHandler(testenv.NewLogger(t), meterProvider, db, enc, policy)
 
-	require.NoError(t, handler.handleBatch(t.Context(), messages))
-	for _, failure := range failures {
-		require.NoError(t, failure)
+			warn := connectionLogRelayRecord("warn", "org-test", projectID.String())
+			warn.SetSeverityNumber(otelv1.LogRecord_SEVERITY_NUMBER_WARN)
+			info := connectionLogRelayRecord("info", "org-test", projectID.String())
+			info.SetSeverityNumber(otelv1.LogRecord_SEVERITY_NUMBER_INFO)
+			telemetryInfo := relayTestLogRecord("telemetry-info", "org-test", projectID.String(), 0)
+			telemetryInfo.SetSeverityNumber(otelv1.LogRecord_SEVERITY_NUMBER_INFO)
+			messages, failures := logRelayTestMessages(warn, info, connectionLogRelayRecord("error", "org-test", projectID.String()), telemetryInfo)
+
+			require.NoError(t, handler.handleBatch(t.Context(), messages))
+			for _, failure := range failures {
+				require.NoError(t, failure)
+			}
+			bodiesByCustomer := make(map[string][]string)
+			for _, request := range capture.snapshot() {
+				bodiesByCustomer[request.customer] = append(bodiesByCustomer[request.customer], relayRequestLogBodies(request.request)...)
+			}
+			require.ElementsMatch(t, tc.want, bodiesByCustomer["connection"])
+			require.Equal(t, []string{"telemetry-info"}, bodiesByCustomer["telemetry"], "product telemetry has no level")
+			require.Equal(t, int64(3-len(tc.want)), agentEventCount(t, reader, meterLogRelayRecordsDropped, attr.ReasonKey, string(relayReasonBelowSeverity)))
+		})
 	}
-	bodiesByCustomer := make(map[string][]string)
-	for _, request := range capture.snapshot() {
-		bodiesByCustomer[request.customer] = append(bodiesByCustomer[request.customer], relayRequestLogBodies(request.request)...)
-	}
-	require.Equal(t, map[string][]string{"connection": {"error"}, "telemetry": {"telemetry-info"}}, bodiesByCustomer)
+}
+
+func TestConnectionLogMinSeverity(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, otelv1.LogRecord_SEVERITY_NUMBER_INFO, connectionLogMinSeverity(dataexports.MinSeverityInfo))
+	require.Equal(t, otelv1.LogRecord_SEVERITY_NUMBER_WARN, connectionLogMinSeverity(dataexports.MinSeverityWarn))
+	require.Equal(t, otelv1.LogRecord_SEVERITY_NUMBER_ERROR, connectionLogMinSeverity(dataexports.MinSeverityError))
+	require.Equal(t, otelv1.LogRecord_SEVERITY_NUMBER_ERROR, connectionLogMinSeverity("verbose"), "an unknown level is the most restrictive")
 }
 
 func TestLogRelayHandlerSendsConnectionLogsOnlyToTheirRoute(t *testing.T) {

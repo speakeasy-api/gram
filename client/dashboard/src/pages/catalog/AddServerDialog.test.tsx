@@ -1,3 +1,4 @@
+import { accountSetupUrls } from "./account-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import {
@@ -15,6 +16,7 @@ import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
 
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
+  info: vi.fn(),
   providerSetup: "enabled" as "enabled" | "disabled" | "loading",
   hasScope: vi.fn(),
   onOpenChange: vi.fn(),
@@ -29,11 +31,15 @@ const mocks = vi.hoisted(() => ({
   workflow: vi.fn(),
 }));
 
+vi.mock("sonner", () => ({
+  toast: { info: mocks.info, error: vi.fn(), warning: vi.fn() },
+}));
 vi.mock("@/hooks/useProviderSetupRollout", () => ({
   useProviderSetupRollout: () => mocks.providerSetup,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "default" }),
+  useSession: () => ({ user: { id: "person-1" } }),
   useOrganization: () => ({ id: "org-1", slug: "acme" }),
 }));
 
@@ -158,6 +164,7 @@ function mockConfigureWorkflow(selectedServer = server): void {
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   mocks.providerSetup = "enabled";
   mocks.hasScope.mockReturnValue(false);
   mockConfigureWorkflow();
@@ -166,6 +173,84 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("guided setup identity defaults", () => {
+  const entries = [
+    ["github", "https://api.githubcopilot.com/mcp"],
+    ["slack", "https://mcp.slack.com/mcp"],
+    ["com.salesforce/hosted-mcp", salesforceServer.remotes[0]!.url],
+    [
+      "com.snowflake/cortex-mcp",
+      "https://{account_url}/api/v2/databases/{mcp_database}/schemas/{mcp_schema}/mcp-servers/{mcp_server_name}",
+    ],
+    ["com.okta/managed-mcp", "https://{yourOktaDomain}/mcp"],
+  ] as const;
+  function show(
+    registrySpecifier: string,
+    url: string,
+    props: Partial<React.ComponentProps<typeof AddServerDialog>> = {},
+  ) {
+    const entry = {
+      ...server,
+      registrySpecifier,
+      supportsDcr: false,
+      authSetup: "manual" as const,
+      remotes: [{ url, transportType: "streamable-http" as const }],
+    };
+    mockConfigureWorkflow(entry);
+    return render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[entry]}
+          open
+          openProviderSetup
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+          {...props}
+        />
+      </TooltipProvider>,
+    );
+  }
+  it.each(entries)(
+    "defaults %s guided setup to User Identity",
+    async (specifier, url) => {
+      show(specifier, url);
+      await screen.findByRole("radio", { name: /User Identity/ });
+      expect(mocks.workflow.mock.calls.at(-1)![0].initialConfiguration).toEqual(
+        { identityMode: "user" },
+      );
+    },
+  );
+  it("defaults gateway-originated Okta setup to User Identity", async () => {
+    show("com.okta/managed-mcp", "https://{yourOktaDomain}/mcp", {
+      openProviderSetup: false,
+      attachToGatewayId: "gateway-id",
+    });
+    await screen.findByRole("radio", { name: /User Identity/ });
+    expect(mocks.workflow.mock.calls.at(-1)![0].initialConfiguration).toEqual({
+      identityMode: "user",
+    });
+  });
+  it.each(["loading", "disabled"] as const)(
+    "does not override identity while guided setup is %s",
+    async (rollout) => {
+      mocks.providerSetup = rollout;
+      show("com.okta/managed-mcp", "https://{yourOktaDomain}/mcp");
+      await waitFor(() => expect(mocks.workflow).toHaveBeenCalled());
+      expect(
+        mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
+      ).toBeUndefined();
+    },
+  );
+  it("keeps ordinary manual-auth catalog entries on their existing default", async () => {
+    show("test/server", "https://mcp.example.test/mcp");
+    await screen.findByRole("radio", { name: /User Identity/ });
+    expect(
+      mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
+    ).toBeUndefined();
+  });
 });
 
 describe("Salesforce catalog Add entry", () => {
@@ -450,6 +535,19 @@ describe("AddServerDialog guardrails", () => {
     expect(mocks.installWithGuardrail).not.toHaveBeenCalled();
   });
 
+  it("reenables customize now when installation is deferred without a server", async () => {
+    mocks.installForCustomizing.mockResolvedValue([]);
+    mocks.workflow.mockReturnValue(guardrailsPhase());
+    renderDialog();
+    const button = await screen.findByRole("button", { name: "customize now" });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toHaveProperty("disabled", false));
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(mocks.installForCustomizing).toHaveBeenCalledTimes(2),
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
   it("installs, then opens the full editor pre-filled, on customize now", async () => {
     mocks.installForCustomizing.mockResolvedValue(["srv-1"]);
     mocks.workflow.mockReturnValue(guardrailsPhase());
@@ -671,6 +769,7 @@ describe.each([
       expect(mocks.navigate).not.toHaveBeenCalled();
       expect(mocks.onOpenChange).not.toHaveBeenCalled();
       if (status === "loading") {
+        sessionStorage.clear();
         mocks.providerSetup = "enabled";
         view.rerender(content());
         await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
@@ -748,14 +847,129 @@ it.each([{ headless: true }, { autoStartInstall: true }])(
           ]}
           open
           openProviderSetup
+          {...props}
           onOpenChange={(open) => {
             mocks.onOpenChange(open);
           }}
-          {...props}
         />
       </TooltipProvider>,
     );
     await waitFor(() => expect(mocks.workflow).toHaveBeenCalled());
     expect(mocks.navigate).not.toHaveBeenCalled();
+  },
+);
+
+describe.each(["snowflake", "okta"] as const)(
+  "%s server setup handoff",
+  (provider) => {
+    const snowflake = {
+      ...server,
+      registrySpecifier:
+        provider === "okta"
+          ? "com.okta/managed-mcp"
+          : "com.snowflake/cortex-mcp",
+      title: provider,
+      supportsDcr: false,
+      remotes: [
+        {
+          transportType: "streamable-http" as const,
+          url:
+            provider === "okta"
+              ? "https://{yourOktaDomain}/mcp"
+              : "https://{account_url}/api/v2/databases/{mcp_database}/schemas/{mcp_schema}/mcp-servers/{mcp_server_name}",
+        },
+      ],
+    };
+    function show(
+      props: { openProviderSetup?: boolean; attachToGatewayId?: string } = {},
+    ) {
+      return render(
+        <TooltipProvider>
+          <AddServerDialog
+            servers={[snowflake]}
+            open
+            openProviderSetup
+            {...props}
+            onOpenChange={(open) => {
+              mocks.onOpenChange(open);
+            }}
+          />
+        </TooltipProvider>,
+      );
+    }
+    it.each([
+      {},
+      { openProviderSetup: false, attachToGatewayId: "gateway-id" },
+    ])(
+      "defaults to User Identity without adding connection fields (%j)",
+      async (props) => {
+        mockConfigureWorkflow(snowflake);
+        show(props);
+        await screen.findByRole("radio", { name: /User Identity/ });
+        expect(mocks.workflow.mock.calls.at(-1)![0]).toMatchObject({
+          initialConfiguration: { identityMode: "user" },
+          accountSetupEnabled: true,
+        });
+        expect(
+          screen.getByRole("radio", { name: /Shared credential/ }),
+        ).toBeDefined();
+        expect(screen.getByRole("radio", { name: /Manual/ })).toBeDefined();
+        expect(
+          screen.queryByLabelText(/Public.*hostname|Public Account/),
+        ).toBeNull();
+        expect(screen.queryByLabelText(/MCP database/)).toBeNull();
+        expect(mocks.navigate).not.toHaveBeenCalled();
+      },
+    );
+    it.each([undefined, "gateway-id"])(
+      "opens the created server’s Setup page (gateway=%s)",
+      async (gateway) => {
+        mocks.workflow.mockReturnValue({
+          phase: "complete",
+          reset: mocks.reset,
+          statuses: [
+            {
+              key: "snowflake",
+              name: "Snowflake",
+              identityMode: "user",
+              remoteUrl: accountSetupUrls[provider],
+              status: "failed",
+              setupRequired: "Finish Snowflake setup.",
+              mcpServerId: "server",
+              mcpServerParam: "snowflake-installed",
+            },
+          ],
+        });
+        show(
+          gateway
+            ? { openProviderSetup: false, attachToGatewayId: gateway }
+            : {},
+        );
+        await waitFor(() =>
+          expect(mocks.navigate).toHaveBeenCalledWith(
+            "/acme/projects/default/mcp/snowflake-installed/setup" +
+              (gateway ? "?attachToGateway=gateway-id" : ""),
+          ),
+        );
+        expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+      },
+    );
+    it.each(["loading", "disabled"] as const)(
+      "does not enable Snowflake bootstrap while rollout is %s",
+      async (rollout) => {
+        mockConfigureWorkflow(snowflake);
+        mocks.providerSetup = rollout;
+        show();
+        await screen.findByRole("radio", { name: /User Identity/ });
+        const options = mocks.workflow.mock.calls.at(-1)![0];
+        expect(options.accountSetupEnabled).toBe(false);
+        expect(options.initialConfiguration).toBeUndefined();
+        expect(mocks.navigate).not.toHaveBeenCalled();
+        if (rollout === "loading") {
+          expect(await options.beforeInstall()).toBe(false);
+          expect(mocks.info).toHaveBeenCalled();
+        }
+      },
+    );
   },
 );

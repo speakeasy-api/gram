@@ -43,7 +43,7 @@ const (
 
 	memoryEvalCompensationAttemptTimeout   = 30 * time.Second
 	memoryEvalCompensationScheduleToClose  = 4 * time.Minute
-	memoryEvalRunWorkflowRunTimeout        = 3*time.Hour + 20*time.Minute
+	MemoryEvalRunWorkflowRunTimeout        = 3*time.Hour + 20*time.Minute
 	memoryEvalRunActivityHeartbeatInterval = 30 * time.Second
 )
 
@@ -66,7 +66,7 @@ func ExecuteMemoryEvalRunWorkflow(ctx context.Context, temporalEnv *tenv.Environ
 		TaskQueue:                string(temporalEnv.Queue()),
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowRunTimeout:       memoryEvalRunWorkflowRunTimeout,
+		WorkflowRunTimeout:       MemoryEvalRunWorkflowRunTimeout,
 	}, MemoryEvalRunWorkflow, input)
 	if err != nil {
 		return nil, fmt.Errorf("execute memory eval run workflow: %w", err)
@@ -153,4 +153,16 @@ func heartbeatEvery(ctx context.Context, interval time.Duration) func() {
 		}
 	}()
 	return func() { close(done) }
+}
+
+// TemporalMemoryEvalRunStarter starts MemoryEvalRunWorkflow for queued runs.
+type TemporalMemoryEvalRunStarter struct {
+	TemporalEnv *tenv.Environment
+}
+
+func (s *TemporalMemoryEvalRunStarter) StartMemoryEvalRun(ctx context.Context, runID uuid.UUID) error {
+	if _, err := ExecuteMemoryEvalRunWorkflow(ctx, s.TemporalEnv, MemoryEvalRunInput{RunID: runID}); err != nil {
+		return err
+	}
+	return nil
 }

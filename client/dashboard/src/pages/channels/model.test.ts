@@ -304,6 +304,45 @@ describe("presence", () => {
         },
       ],
     });
+    // Reconnecting under the same name is the same agent, not a second one.
+    const reconnected = snapshotWith({
+      instances: {
+        "agent-1": {
+          id: "agent-1",
+          subjectId: "identity-1",
+          label: "claude on laptop",
+          note: "",
+          expiresAt: online,
+        },
+      },
+      participants: {
+        "agent-1-before": {
+          id: "agent-1-before",
+          subjectId: "identity-1",
+          label: "claude on laptop",
+        },
+      },
+    });
+    expect(setupProgressOf(reconnected).agentsSeen).toBe(1);
+
+    // A message whose thread the snapshot does not carry proves nothing.
+    expect(
+      setupProgressOf(
+        snapshotWith({
+          messages: [
+            {
+              id: 1,
+              threadId: "not-loaded",
+              instanceId: "agent-1",
+              subjectId: "identity-1",
+              text: "Hi",
+              createdAt: "2026-01-01T00:00:00Z",
+            },
+          ],
+        }),
+      ).agentsTalking,
+    ).toBe(false);
+
     // A private message is not agents talking in a thread.
     expect(setupProgressOf(direct).agentsTalking).toBe(false);
 

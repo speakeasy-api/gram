@@ -17,19 +17,12 @@ type McpServerToolsetSummary struct {
 	Name string
 	// The toolset's description, if any
 	Description *string
-	// Number of tools the toolset serves: deployment-backed tools (HTTP, function,
-	// external MCP) that resolve in the project's latest completed deployment,
-	// plus its prompt templates and registered platform tools. External MCP proxy
-	// tools are excluded.
+	// Number of tools the toolset serves: deployment-backed tools (HTTP and
+	// function) that resolve in the project's latest completed deployment, plus
+	// its prompt templates and registered platform tools.
 	ToolCount int
 	// The toolset's tool selection mode
 	ToolSelectionMode string
-	// The distinct slugs of the external MCP sources the toolset's configured
-	// tools come from, sorted
-	ExternalMcpSlugs []string
-	// Whether every configured tool is an external MCP proxy tool, so the real
-	// tool count is unknown until a user signs in
-	ExternalMcpProxyOnly bool
 	// The ID of the external OAuth server attached to the toolset, if any
 	ExternalOauthServerID *string
 	// The registry specifier the toolset originated from, if any

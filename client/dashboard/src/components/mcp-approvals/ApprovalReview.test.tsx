@@ -11,10 +11,6 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-id", slug: "test-project" }),
 }));
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: "loading" }),
-}));
-
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
