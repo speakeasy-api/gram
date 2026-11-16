@@ -18,8 +18,8 @@ import (
 // emptying this list. Until then the derived tables keep today's behaviour.
 var independentBlockKinds = []Kind{"mcp"}
 
-// modelScope is one stored scope and where it comes from.
-type modelScope struct {
+// ModelScope is one stored scope and where it comes from.
+type ModelScope struct {
 	Scope      Scope
 	Type       ResourceType
 	Permission Permission
@@ -28,26 +28,28 @@ type modelScope struct {
 	Block bool
 }
 
-// modelScopes lists every scope in the model except root: each permission in
+// Scopes lists every scope in the model except root: each permission in
 // declaration order, followed by its block if it has one.
-func (r Registry) modelScopes() []modelScope {
-	var out []modelScope
+func (r Registry) Scopes() []ModelScope {
+	var out []ModelScope
 	for _, t := range r.Types {
 		for _, p := range t.Permissions {
-			out = append(out, modelScope{Scope: t.ScopeFor(p), Type: t, Permission: p, Block: false})
-			if hasBlock(p) {
-				out = append(out, modelScope{Scope: t.BlockScopeFor(p), Type: t, Permission: p, Block: true})
+			out = append(out, ModelScope{Scope: t.ScopeFor(p), Type: t, Permission: p, Block: false})
+			if p.HasBlock() {
+				out = append(out, ModelScope{Scope: t.BlockScopeFor(p), Type: t, Permission: p, Block: true})
 			}
 		}
 	}
 	return out
 }
 
-func hasBlock(p Permission) bool {
+// HasBlock reports whether p declares a generated block.
+func (p Permission) HasBlock() bool {
 	return slices.ContainsFunc(p.Exclusions, func(x Exclusion) bool { return x.Kind == ExclusionBlock })
 }
 
-func blockOf(p Permission) (Exclusion, bool) {
+// Block returns p's block exclusion, if it declares one.
+func (p Permission) Block() (Exclusion, bool) {
 	i := slices.IndexFunc(p.Exclusions, func(x Exclusion) bool { return x.Kind == ExclusionBlock })
 	if i < 0 {
 		var none Exclusion
@@ -89,7 +91,7 @@ func impliedClosure(t ResourceType, action Action) []Action {
 func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
 	out := make(map[Scope][]Scope)
 	out[r.Root.Scope] = nil
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		out[s.Scope] = nil
 	}
 	for _, t := range r.Types {
@@ -99,7 +101,7 @@ func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
 				lowerScope := t.ScopeFor(lower)
 				out[lowerScope] = append(out[lowerScope], t.ScopeFor(higher))
 
-				if slices.Contains(independentBlockKinds, t.Kind) || !hasBlock(higher) || !hasBlock(lower) {
+				if slices.Contains(independentBlockKinds, t.Kind) || !higher.HasBlock() || !lower.HasBlock() {
 					continue
 				}
 				higherBlock := t.BlockScopeFor(higher)
@@ -124,7 +126,7 @@ func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
 func (r Registry) deriveScopeExclusions() map[Scope]Scope {
 	out := make(map[Scope]Scope)
 	out[r.Root.Scope] = ""
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		out[s.Scope] = ""
 	}
 	for _, t := range r.Types {
@@ -148,7 +150,7 @@ func (r Registry) deriveScopeExclusions() map[Scope]Scope {
 func (r Registry) deriveScopeVisibility() map[Scope]scopeVisibility {
 	out := make(map[Scope]scopeVisibility)
 	out[r.Root.Scope] = scopeVisibilityInternal
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		if s.Block {
 			out[s.Scope] = scopeVisibilityInternal
 			continue
@@ -163,7 +165,7 @@ func (r Registry) deriveScopeVisibility() map[Scope]scopeVisibility {
 func (r Registry) deriveGrantSource() map[Scope]GrantSource {
 	out := make(map[Scope]GrantSource)
 	out[r.Root.Scope] = GrantSourceRoles
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		out[s.Scope] = s.Permission.Source
 	}
 	return out
@@ -174,7 +176,7 @@ func (r Registry) deriveGrantSource() map[Scope]GrantSource {
 func (r Registry) deriveResourceKinds() map[Scope]string {
 	out := make(map[Scope]string)
 	out[r.Root.Scope] = ResourceKindWildcard
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		out[s.Scope] = string(s.Type.Kind)
 	}
 	return out
@@ -202,7 +204,7 @@ func (r Registry) deriveAllowedSelectorKeys() map[string]map[string]bool {
 // to those keys. Blocks share their permission's.
 func (r Registry) deriveScopeSelectorKeys() map[Scope]map[string]bool {
 	out := make(map[Scope]map[string]bool)
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		if len(s.Permission.Dimensions) == 0 {
 			continue
 		}
@@ -258,7 +260,7 @@ func (r Registry) deriveSystemRoleScopes(role string) []Scope {
 // category and then by declaration, each block right after its permission.
 func (r Registry) deriveCatalog() []ScopeEntry {
 	entries := make([]ScopeEntry, 0)
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		entry := ScopeEntry{
 			Scope:        s.Scope,
 			Label:        s.Permission.Label,
@@ -268,7 +270,7 @@ func (r Registry) deriveCatalog() []ScopeEntry {
 			Sensitivity:  s.Permission.Sensitivity,
 		}
 		if s.Block {
-			block, _ := blockOf(s.Permission)
+			block, _ := s.Permission.Block()
 			entry.Label = "Exception: " + lowerFirst(s.Permission.Label)
 			entry.Description = "Store exceptions for " + block.Subject + "."
 			entry.Sensitivity = SensitivityNone
@@ -287,10 +289,10 @@ func (r Registry) deriveCatalog() []ScopeEntry {
 func (r Registry) deriveAgentEligibility() map[Scope]DerivedAgentEligibility {
 	out := make(map[Scope]DerivedAgentEligibility)
 	out[r.Root.Scope] = DerivedAgentEligibility{SafeSince: r.Root.Agent.safeSince, Retired: false}
-	for _, s := range r.modelScopes() {
+	for _, s := range r.Scopes() {
 		agent := s.Permission.Agent
 		if s.Block {
-			block, _ := blockOf(s.Permission)
+			block, _ := s.Permission.Block()
 			agent = block.Agent
 		}
 		out[s.Scope] = DerivedAgentEligibility{SafeSince: agent.safeSince, Retired: false}

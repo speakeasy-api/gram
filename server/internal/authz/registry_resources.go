@@ -5,12 +5,16 @@ package authz
 // model.go for the vocabulary). Model is validated when the package loads; an
 // invalid edit panics at startup and fails every test.
 //
+// Scopes are written as strings, not Scope* constants: the constants are
+// generated from this literal (scopes_gen.go), so the model must compile
+// without them. Validate rejects any string that names no declared scope.
+//
 // Scope strings are today's. R1 and R6 of the RBAC foundations plan (renaming
 // plugin:write and log:read, moving org:hooks_ingest's project dimension) are
 // parked until scopes are redefined, so those permissions keep the historical
 // Scope and Dimensions they are stored and checked with.
 var Model = Registry{
-	Root: RootPermission{Scope: ScopeRoot, Agent: AgentUnsafe()},
+	Root: RootPermission{Scope: "root", Agent: AgentUnsafe()},
 	Types: []ResourceType{
 		{
 			Kind:       "org",
@@ -127,7 +131,7 @@ var Model = Registry{
 					// The three Channels permissions are independent of each other and
 					// of every MCP permission.
 					Action:      "channels_connect",
-					LegacyScope: ScopeChannelsConnect,
+					LegacyScope: "channels:connect",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -141,7 +145,7 @@ var Model = Registry{
 				{
 					// R1 (parked): stored as channels:admin, checked on a project.
 					Action:      "channels_admin",
-					LegacyScope: ScopeChannelsAdmin,
+					LegacyScope: "channels:admin",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -157,7 +161,7 @@ var Model = Registry{
 					// Not an Admin default: it discloses other members' private
 					// conversations and is granted explicitly.
 					Action:      "channels_read_all",
-					LegacyScope: ScopeChannelsReadAll,
+					LegacyScope: "channels:read_all",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -197,7 +201,7 @@ var Model = Registry{
 				{
 					// R1 (parked): stored as plugin:write, checked on a project.
 					Action:      "plugin_write",
-					LegacyScope: ScopePluginWrite,
+					LegacyScope: "plugin:write",
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "plugin write access"),
 					Dimensions:  nil,
@@ -212,7 +216,7 @@ var Model = Registry{
 					// R1 (parked): stored as log:read, checked on a project.
 					// Neither project:* nor org:admin implies it.
 					Action:      "log_read",
-					LegacyScope: ScopeLogRead,
+					LegacyScope: "log:read",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -226,7 +230,7 @@ var Model = Registry{
 				{
 					// R1 (parked): stored as memory:read, checked on a project.
 					Action:      "memory_read",
-					LegacyScope: ScopeMemoryRead,
+					LegacyScope: "memory:read",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -240,7 +244,7 @@ var Model = Registry{
 				{
 					// R1 (parked): stored as memory:write, checked on a project.
 					Action:      "memory_write",
-					LegacyScope: ScopeMemoryWrite,
+					LegacyScope: "memory:write",
 					Implies:     []Action{"memory_read"},
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -331,7 +335,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "auth",
-					LegacyScope: ScopeMCPAuth,
+					LegacyScope: "mcp:auth",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(5), "auth client use"),
 					Dimensions:  nil,
@@ -631,47 +635,47 @@ var Model = Registry{
 	},
 	SystemRoles: map[string][]Scope{
 		SystemRoleAdmin: {
-			ScopeChannelsConnect,
-			ScopeChannelsAdmin,
+			"channels:connect",
+			"channels:admin",
 			// channels:read_all is deliberately not a default; see its
 			// permission.
-			ScopeOrgRead,
-			ScopeOrgAdmin,
-			ScopeProjectRead,
-			ScopeProjectWrite,
-			ScopeMCPRead,
-			ScopeMCPWrite,
-			ScopeMCPConnect,
-			ScopeMCPAuth,
-			ScopeEnvironmentRead,
-			ScopeEnvironmentWrite,
-			ScopeSkillRead,
-			ScopeSkillWrite,
-			ScopeAssistantRead,
-			ScopeAssistantWrite,
-			ScopePluginWrite,
-			ScopeAgentRead,
-			ScopeAgentWrite,
-			ScopeAgentAuthorize,
-			ScopeAgentTransfer,
-			ScopeWorkloadRead,
-			ScopeWorkloadWrite,
+			"org:read",
+			"org:admin",
+			"project:read",
+			"project:write",
+			"mcp:read",
+			"mcp:write",
+			"mcp:connect",
+			"mcp:auth",
+			"environment:read",
+			"environment:write",
+			"skill:read",
+			"skill:write",
+			"assistant:read",
+			"assistant:write",
+			"plugin:write",
+			"agent:read",
+			"agent:write",
+			"agent:authorize",
+			"agent:transfer",
+			"workload:read",
+			"workload:write",
 			// Admins turn team memory on and curate it. Members need an
 			// explicit grant.
-			ScopeMemoryRead,
-			ScopeMemoryWrite,
+			"memory:read",
+			"memory:write",
 			// chat:* and log:read are deliberately not defaults for any role:
 			// transcripts and raw tool logs must be granted explicitly.
 		},
 		SystemRoleMember: {
-			ScopeOrgRead,
-			ScopeProjectRead,
-			ScopeMCPRead,
-			ScopeMCPConnect,
-			ScopeMCPAuth,
-			ScopeSkillRead,
-			ScopeAssistantRead,
-			ScopeWorkloadRead,
+			"org:read",
+			"project:read",
+			"mcp:read",
+			"mcp:connect",
+			"mcp:auth",
+			"skill:read",
+			"assistant:read",
+			"workload:read",
 			// environment:read is not a member default: environment values
 			// include secrets.
 		},
