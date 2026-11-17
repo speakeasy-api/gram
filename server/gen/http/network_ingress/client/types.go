@@ -74,7 +74,12 @@ type CreateIngressResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -111,7 +116,12 @@ type UpdateIngressResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -148,7 +158,12 @@ type RotateCredentialsResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -194,7 +209,12 @@ type CheckHealthResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -1562,7 +1582,12 @@ type NetworkIngressResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -1781,6 +1806,7 @@ func NewCreateIngressNetworkIngressOK(body *CreateIngressResponseBody) *networki
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
@@ -1957,6 +1983,7 @@ func NewUpdateIngressNetworkIngressOK(body *UpdateIngressResponseBody) *networki
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
@@ -2133,6 +2160,7 @@ func NewRotateCredentialsNetworkIngressOK(body *RotateCredentialsResponseBody) *
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
@@ -2622,6 +2650,7 @@ func NewCheckHealthNetworkIngressOK(body *CheckHealthResponseBody) *networkingre
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,

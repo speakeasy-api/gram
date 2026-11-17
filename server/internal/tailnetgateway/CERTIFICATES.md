@@ -105,8 +105,11 @@ and never renews while a window check is due. (When the window cannot be
 read, it renews two thirds through the certificate's lifetime.) A renewal is
 adopted only if it is later than the held certificate. Expiry is not a
 state; `certStatus` works it out from the clock. A slot without a valid
-certificate reports `awaiting_certificate`, and the ingress shows
-`provider_certificate_unavailable` with the reason and retry time.
+certificate because a request failed, or whose certificate expired, reports
+`awaiting_certificate`, and the ingress shows
+`provider_certificate_unavailable` with the reason and retry time. A slot
+whose first request is still running, or that waits for another slot's lease
+or for control to list the service name, reports `starting` instead.
 
 ## Not handled
 
