@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -459,7 +460,15 @@ func TestConsentTemplate_ServiceCardStacksOnNarrowScreens(t *testing.T) {
 	page := renderGatewayConsent(t, gatewayTemplateData(nil, cards))
 
 	for _, card := range cards {
-		require.Regexp(t, `data-remote-client="`+card.ClientID+`"[^>]*> <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">`, page, card.ClientID)
-		require.Regexp(t, `(?s)data-remote-client="`+card.ClientID+`".*?<form method="POST" action="[^"]*/remote-session" class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"`, page, card.ClientID)
+		// Only this card's markup, up to the next card or the end of the list.
+		start := strings.Index(page, `data-remote-client="`+card.ClientID+`"`)
+		require.GreaterOrEqual(t, start, 0, card.ClientID)
+		segment := page[start:]
+		if end := strings.Index(segment[1:], "data-remote-client="); end >= 0 {
+			segment = segment[:end+1]
+		}
+		require.Regexp(t, `^data-remote-client="`+card.ClientID+`"[^>]*> <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">`, segment, card.ClientID)
+		require.Regexp(t, `<form method="POST" action="[^"]*/remote-session" class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"`, segment, card.ClientID)
+		require.Contains(t, segment, `name="client_id" value="`+card.ClientID+`"`, card.ClientID)
 	}
 }
