@@ -114,7 +114,7 @@ func (q *Queries) GetShadowMCPOfficialServerChoice(ctx context.Context, arg GetS
 	return i, err
 }
 
-const listDeniedShadowMCPServerURLs = `-- name: ListDeniedShadowMCPServerURLs :many
+const listBlockedShadowMCPServerURLs = `-- name: ListBlockedShadowMCPServerURLs :many
 SELECT r.target_key
 FROM mcp_approval_requests r
 JOIN LATERAL (
@@ -130,26 +130,36 @@ WHERE r.project_id = $1
   AND r.target_kind = 'server_url'
   AND r.deleted IS FALSE
   AND r.status <> 'superseded'
-  AND latest.decision = 'denied'
   AND (
-    cardinality(latest.granted_principal_urns) = 0
-    OR latest.granted_principal_urns && $2::text[]
+    (
+      latest.decision = 'denied'
+      AND (
+        cardinality(latest.granted_principal_urns) = 0
+        OR latest.granted_principal_urns && $2::text[]
+      )
+    )
+    OR (
+      latest.decision = 'approved'
+      AND cardinality(latest.granted_principal_urns) > 0
+      AND NOT (latest.granted_principal_urns && $2::text[])
+    )
   )
 `
 
-type ListDeniedShadowMCPServerURLsParams struct {
+type ListBlockedShadowMCPServerURLsParams struct {
 	ProjectID     uuid.UUID
 	PrincipalUrns []string
 }
 
-// The server URLs a denial blocks for one user in a project. With no
-// blocking Shadow MCP policy covering the user, the project is in the
-// built-in blocklist mode: every server connects except these. A denial with
-// no principals blocks everyone; one narrowed to people or roles blocks a
-// user who holds one of them. A superseded request carries no standing
-// decision.
-func (q *Queries) ListDeniedShadowMCPServerURLs(ctx context.Context, arg ListDeniedShadowMCPServerURLsParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listDeniedShadowMCPServerURLs, arg.ProjectID, arg.PrincipalUrns)
+// The server URLs a standing decision blocks for one user in a project. With
+// no blocking Shadow MCP policy covering the user, the project is in the
+// built-in blocklist mode: every server connects except these. A denial
+// blocks the people or roles it names, or everyone when it names none. An
+// approval narrowed to people or roles lets only them through, so it blocks
+// everyone else. @principal_urns holds the user's own principals, user:all
+// included. A superseded request carries no standing decision.
+func (q *Queries) ListBlockedShadowMCPServerURLs(ctx context.Context, arg ListBlockedShadowMCPServerURLsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listBlockedShadowMCPServerURLs, arg.ProjectID, arg.PrincipalUrns)
 	if err != nil {
 		return nil, err
 	}
@@ -222,8 +232,8 @@ func (q *Queries) ListShadowMCPOfficialServerChoices(ctx context.Context, projec
 	return items, nil
 }
 
-const listStandingShadowMCPDenials = `-- name: ListStandingShadowMCPDenials :many
-SELECT r.target_key, latest.granted_principal_urns
+const listStandingShadowMCPDecisions = `-- name: ListStandingShadowMCPDecisions :many
+SELECT r.target_key, latest.decision, latest.granted_principal_urns
 FROM mcp_approval_requests r
 JOIN LATERAL (
   SELECT d.decision, d.granted_principal_urns
@@ -238,26 +248,26 @@ WHERE r.project_id = $1
   AND r.target_kind = 'server_url'
   AND r.deleted IS FALSE
   AND r.status <> 'superseded'
-  AND latest.decision = 'denied'
 `
 
-type ListStandingShadowMCPDenialsRow struct {
+type ListStandingShadowMCPDecisionsRow struct {
 	TargetKey            string
+	Decision             string
 	GrantedPrincipalUrns []string
 }
 
-// Every server URL whose standing decision in a project is a denial, with
-// the people or roles it was narrowed to (none means everyone).
-func (q *Queries) ListStandingShadowMCPDenials(ctx context.Context, projectID uuid.UUID) ([]ListStandingShadowMCPDenialsRow, error) {
-	rows, err := q.db.Query(ctx, listStandingShadowMCPDenials, projectID)
+// Every server URL with a standing decision in a project, with the decision
+// and the people or roles it covers (none means everyone).
+func (q *Queries) ListStandingShadowMCPDecisions(ctx context.Context, projectID uuid.UUID) ([]ListStandingShadowMCPDecisionsRow, error) {
+	rows, err := q.db.Query(ctx, listStandingShadowMCPDecisions, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListStandingShadowMCPDenialsRow
+	var items []ListStandingShadowMCPDecisionsRow
 	for rows.Next() {
-		var i ListStandingShadowMCPDenialsRow
-		if err := rows.Scan(&i.TargetKey, &i.GrantedPrincipalUrns); err != nil {
+		var i ListStandingShadowMCPDecisionsRow
+		if err := rows.Scan(&i.TargetKey, &i.Decision, &i.GrantedPrincipalUrns); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

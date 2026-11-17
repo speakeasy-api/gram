@@ -369,3 +369,25 @@ func TestService_ReadShadowMCPInventoryTarget_NarrowDenialIsRestricted(t *testin
 	require.NoError(t, err)
 	require.Equal(t, shadowMCPInventoryAccessRestricted, server.Access)
 }
+
+// An approval narrowed to a role lets only that role through: in the
+// built-in blocklist the server reads restricted.
+func TestService_ReadShadowMCPInventoryTarget_NarrowApprovalIsRestricted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://github.example.com/mcp", "approved", 0)
+	seedApprovalDecisionRow(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, request.ID, "approved", []string{"role:engineer"})
+
+	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindServerURL,
+		TargetKey:      "https://github.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessRestricted, server.Access)
+}

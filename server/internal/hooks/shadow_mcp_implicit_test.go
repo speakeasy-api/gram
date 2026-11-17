@@ -155,3 +155,31 @@ func TestShadowMCPBuiltInBlocklistNarrowDenial(t *testing.T) {
 	require.False(t, enforce(forOthersURL))
 	require.True(t, enforce(forMeURL))
 }
+
+// An approval narrowed to people or roles lets only them through in the
+// built-in blocklist; everyone else is blocked.
+func TestShadowMCPBuiltInBlocklistNarrowApproval(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.riskScanner = &stubResultScanner{}
+
+	forOthersURL := "https://others-only.example.com/mcp"
+	forMeURL := "https://me-only.example.com/mcp"
+	seedServerDecision(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, forOthersURL, "approved", "user:someone-else")
+	seedServerDecision(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, forMeURL, "approved", "user:"+authCtx.UserID)
+
+	policy := ti.service.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
+	require.NotNil(t, policy)
+
+	enforce := func(serverURL string) bool {
+		_, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+			policy, "do_thing", shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "server"})
+		return denied
+	}
+	require.True(t, enforce(forOthersURL))
+	require.False(t, enforce(forMeURL))
+}

@@ -84,13 +84,14 @@ WHERE id = @id
     AND project_id = @project_id
     AND deleted IS FALSE;
 
--- name: ListDeniedShadowMCPServerURLs :many
--- The server URLs a denial blocks for one user in a project. With no
--- blocking Shadow MCP policy covering the user, the project is in the
--- built-in blocklist mode: every server connects except these. A denial with
--- no principals blocks everyone; one narrowed to people or roles blocks a
--- user who holds one of them. A superseded request carries no standing
--- decision.
+-- name: ListBlockedShadowMCPServerURLs :many
+-- The server URLs a standing decision blocks for one user in a project. With
+-- no blocking Shadow MCP policy covering the user, the project is in the
+-- built-in blocklist mode: every server connects except these. A denial
+-- blocks the people or roles it names, or everyone when it names none. An
+-- approval narrowed to people or roles lets only them through, so it blocks
+-- everyone else. @principal_urns holds the user's own principals, user:all
+-- included. A superseded request carries no standing decision.
 SELECT r.target_key
 FROM mcp_approval_requests r
 JOIN LATERAL (
@@ -106,16 +107,25 @@ WHERE r.project_id = @project_id
   AND r.target_kind = 'server_url'
   AND r.deleted IS FALSE
   AND r.status <> 'superseded'
-  AND latest.decision = 'denied'
   AND (
-    cardinality(latest.granted_principal_urns) = 0
-    OR latest.granted_principal_urns && @principal_urns::text[]
+    (
+      latest.decision = 'denied'
+      AND (
+        cardinality(latest.granted_principal_urns) = 0
+        OR latest.granted_principal_urns && @principal_urns::text[]
+      )
+    )
+    OR (
+      latest.decision = 'approved'
+      AND cardinality(latest.granted_principal_urns) > 0
+      AND NOT (latest.granted_principal_urns && @principal_urns::text[])
+    )
   );
 
--- name: ListStandingShadowMCPDenials :many
--- Every server URL whose standing decision in a project is a denial, with
--- the people or roles it was narrowed to (none means everyone).
-SELECT r.target_key, latest.granted_principal_urns
+-- name: ListStandingShadowMCPDecisions :many
+-- Every server URL with a standing decision in a project, with the decision
+-- and the people or roles it covers (none means everyone).
+SELECT r.target_key, latest.decision, latest.granted_principal_urns
 FROM mcp_approval_requests r
 JOIN LATERAL (
   SELECT d.decision, d.granted_principal_urns
@@ -129,5 +139,4 @@ JOIN LATERAL (
 WHERE r.project_id = @project_id
   AND r.target_kind = 'server_url'
   AND r.deleted IS FALSE
-  AND r.status <> 'superseded'
-  AND latest.decision = 'denied';
+  AND r.status <> 'superseded';

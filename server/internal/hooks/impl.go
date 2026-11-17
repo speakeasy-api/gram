@@ -557,7 +557,7 @@ func (s *Service) implicitShadowMCPPolicy(ctx context.Context, organizationID st
 	if s.shadowMCPClient == nil {
 		return nil
 	}
-	denied, err := s.shadowMCPClient.DeniedServerURLs(ctx, organizationID, projectID, userID)
+	denied, err := s.shadowMCPClient.BlockedServerURLs(ctx, organizationID, projectID, userID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to list denied shadow mcp servers; defaulting to off",
 			attr.SlogError(err),

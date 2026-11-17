@@ -1229,8 +1229,9 @@ type shadowMCPInventoryPolicyState struct {
 	// targeted allow_all policies is restricted, not blocked.
 	everyoneBlockedURLs map[string]struct{}
 
-	// someBlockedURLs holds the URLs a denial narrowed to people or roles
-	// blocks in the built-in blocklist: blocked for them only, so restricted.
+	// someBlockedURLs holds the URLs the built-in blocklist blocks for some
+	// people only, so they read restricted: a denial narrowed to people or
+	// roles blocks them, and a narrowed approval blocks everyone else.
 	someBlockedURLs map[string]struct{}
 
 	// blockAllPolicyAudiences maps each deny-by-default policy to its
@@ -1420,23 +1421,28 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	}
 	if !hasEveryoneBlockingPolicy {
 		// The built-in blocklist covers everyone no blocking policy covers:
-		// every server connects for them except those a standing denial
+		// every server connects for them except those a standing decision
 		// blocks. A denial for everyone blocks everyone, since a targeted
-		// policy blocks a denied server for its own audience too; one
-		// narrowed to people or roles blocks only them.
-		denials, err := shadowmcprepo.New(s.db).ListStandingShadowMCPDenials(ctx, projectID)
+		// policy blocks a denied server for its own audience too. A denial
+		// narrowed to people or roles blocks only them, and an approval
+		// narrowed to people or roles blocks everyone else.
+		decisions, err := shadowmcprepo.New(s.db).ListStandingShadowMCPDecisions(ctx, projectID)
 		if err != nil {
-			return state, fmt.Errorf("listing shadow mcp denials: %w", err)
+			return state, fmt.Errorf("listing shadow mcp decisions: %w", err)
 		}
-		for _, denial := range denials {
-			if _, ok := canonicalURLSet[denial.TargetKey]; !ok {
+		for _, decision := range decisions {
+			if _, ok := canonicalURLSet[decision.TargetKey]; !ok {
 				continue
 			}
-			if len(denial.GrantedPrincipalUrns) == 0 || slices.Contains(denial.GrantedPrincipalUrns, authz.AllUsersPrincipal().String()) {
-				state.everyoneBlockedURLs[denial.TargetKey] = struct{}{}
+			forEveryone := len(decision.GrantedPrincipalUrns) == 0 || slices.Contains(decision.GrantedPrincipalUrns, authz.AllUsersPrincipal().String())
+			if decision.Decision == shadowMCPInventoryBypassStatusDenied && forEveryone {
+				state.everyoneBlockedURLs[decision.TargetKey] = struct{}{}
 				continue
 			}
-			state.someBlockedURLs[denial.TargetKey] = struct{}{}
+			if forEveryone {
+				continue
+			}
+			state.someBlockedURLs[decision.TargetKey] = struct{}{}
 		}
 	}
 	if len(blockingPolicyIDs) == 0 {

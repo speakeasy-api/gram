@@ -260,8 +260,10 @@ describe("DecideAccessSheet", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("shows the audience picker when a block-by-default policy exists", () => {
+  it("shows the audience picker under Advanced when a block-by-default policy exists", () => {
     renderSheet({ disposition: "block_all" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(
       screen.getAllByText("Who the approval covers").length,
@@ -346,6 +348,7 @@ describe("DecideAccessSheet", () => {
       target: { ...target, approvalRequestId: "existing-request-id" },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.click(screen.getByTestId("audience-select"));
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
 
@@ -400,6 +403,38 @@ describe("DecideAccessSheet", () => {
         }),
       }),
     );
+  });
+
+  it("narrows an approval while servers are allowed by default", async () => {
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+      disposition: null,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByTestId("audience-select"));
+    expect(
+      screen.getAllByText(
+        "Allow the server only for the people or roles below.",
+      ).length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            recordDecisionRequestBody: expect.objectContaining({
+              decision: "approved",
+              grantedPrincipalUrns: [
+                "user:user-one",
+                "role:organization:role-one",
+              ],
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   it("offers no denial audience when servers are blocked by default", () => {
