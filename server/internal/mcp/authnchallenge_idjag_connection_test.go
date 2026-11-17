@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -461,6 +462,45 @@ func TestIDJAGExchangeRecordsUnusableKeySet(t *testing.T) {
 	row := requireOneIDJAGRow(t, f.rec, mcpconnectionattempts.CodeConfigurationRequired, assertion, jti)
 	requireRefusedBy(t, row, mcpconnectionattempts.WhoAdmin, "key_set_unusable")
 	require.Empty(t, refusalsWithoutRow(t, f.reader))
+}
+
+// A caller that hangs up while the key set is fetched has not shown that the key set failed.
+func TestIDJAGExchangeDisconnectDuringKeyFetchWritesNoRow(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	release := make(chan struct{})
+	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(func() {
+		close(release)
+		jwksServer.Close()
+	})
+	rootCAs := x509.NewCertPool()
+	rootCAs.AddCert(jwksServer.Certificate())
+	f := newIDJAGTrustFixture(t, rootCAs, func(ctx context.Context, ti *testInstance, organizationID string) uuid.UUID {
+		return createTrustedIDJAGIssuer(t, ctx, ti, organizationID, "https://identity.example.test", jwksServer.URL).ID
+	})
+	signer := newIDJAGTestAssertion(t)
+	assertion := signer.sign(t, "https://identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())
+
+	ctx, cancel := context.WithCancel(f.ctx)
+	defer cancel()
+	done := make(chan *httptest.ResponseRecorder)
+	go func() { done <- postIDJAGForm(t, ctx, f.ti, f.slug, idJAGForm(f.clientID, assertion)) }()
+	require.Eventually(t, func() bool { return requests.Load() == 1 }, 10*time.Second, 10*time.Millisecond)
+	cancel()
+	w := <-done
+
+	requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
+	f.rec.RequireNothing()
+	require.Equal(t, map[string]int64{"token_assertion_key_fetch_cancelled": 1}, refusalsWithoutRow(t, f.reader))
 }
 
 // A person who can use none of a gateway's servers has no server to connect to.

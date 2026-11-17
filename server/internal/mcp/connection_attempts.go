@@ -956,6 +956,9 @@ func idJAGAssertionHappened(err error) (mcpconnectionattempts.Code, mcpconnectio
 	// Our key store failing in the stale-key fallback, recorded like any key store outage.
 	case reason == idjag.ReasonKeyUnusable && errors.Is(err, idjag.ErrStaleKeysUnreadable):
 		return mcpconnectionattempts.CodeAssertionCheckUnavailable, mcpconnectionattempts.Detail(string(idjag.ReasonKeyStoreUnavailable)), ""
+	// The request ended while the key set was fetched: nothing shows the key set failed.
+	case reason == idjag.ReasonKeyUnusable && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)):
+		return none, detail, "token_assertion_key_fetch_cancelled"
 	// The stored key set itself failed, not the caller's key: the administrator's setup.
 	case reason == idjag.ReasonKeyUnusable && !errors.Is(err, jwks.ErrKeyAlgorithmMismatch):
 		return mcpconnectionattempts.CodeConfigurationRequired, mcpconnectionattempts.Detail("key_set_unusable"), ""
