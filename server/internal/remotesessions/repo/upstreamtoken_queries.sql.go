@@ -13,6 +13,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const clearEMACredentialAccessTokenPlatformCopies = `-- name: ClearEMACredentialAccessTokenPlatformCopies :execrows
+UPDATE remote_session_ema_credentials AS c
+SET access_token_encrypted = NULL
+WHERE c.id IN (
+    SELECT target.id FROM remote_session_ema_credentials AS target
+    WHERE target.organization_id = $1::text
+      AND target.access_token_encrypted IS NOT NULL
+    ORDER BY target.id
+    LIMIT $2
+  )
+  AND c.organization_id = $1::text
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $3
+`
+
+type ClearEMACredentialAccessTokenPlatformCopiesParams struct {
+	OrganizationID    string
+	LimitValue        int32
+	DecidedGeneration int64
+}
+
+// Destroys up to limit platform-key copies of the organization's EMA access
+// tokens after finalize. The organization-key copy stays.
+func (q *Queries) ClearEMACredentialAccessTokenPlatformCopies(ctx context.Context, arg ClearEMACredentialAccessTokenPlatformCopiesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearEMACredentialAccessTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearRemoteSessionAccessTokenPlatformCopies = `-- name: ClearRemoteSessionAccessTokenPlatformCopies :execrows
 UPDATE remote_sessions AS s
 SET access_token_encrypted = NULL
@@ -123,6 +157,53 @@ func (q *Queries) ClearRemoteSessionRefreshTokenPlatformCopies(ctx context.Conte
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const countEMACredentialAccessTokenCopies = `-- name: CountEMACredentialAccessTokenCopies :one
+SELECT
+    COUNT(*) FILTER (
+        WHERE c.access_token_encrypted IS NOT NULL
+          AND c.access_token_org_encrypted IS NULL
+          AND u.id IS NULL
+    )::bigint AS waiting,
+    COUNT(*) FILTER (
+        WHERE c.access_token_encrypted IS NOT NULL
+          AND c.access_token_org_encrypted IS NULL
+          AND u.id IS NOT NULL
+    )::bigint AS unreadable,
+    0::bigint AS unattributed,
+    COUNT(*) FILTER (WHERE c.access_token_encrypted IS NOT NULL)::bigint AS platform_copies
+FROM remote_session_ema_credentials AS c
+LEFT JOIN organization_encryption_unreadable_values AS u
+  ON u.organization_id = c.organization_id
+  AND u.use_case = 'oauth-session-tokens'
+  AND u.source_column = 'remote_session_ema_credentials.access_token_encrypted'
+  AND u.row_id = c.id::text
+  AND u.platform_ciphertext_sha256 = sha256(convert_to(c.access_token_encrypted, 'UTF8'))
+WHERE c.organization_id = $1::text
+`
+
+type CountEMACredentialAccessTokenCopiesRow struct {
+	Waiting        int64
+	Unreadable     int64
+	Unattributed   int64
+	PlatformCopies int64
+}
+
+// The organization's EMA access token counts. A slot's organization_id and
+// project_id are NULL together (remote_session_ema_credentials_project_ref_check),
+// so a slot without an organization belongs to none and is never
+// unattributed: it stays on the platform key.
+func (q *Queries) CountEMACredentialAccessTokenCopies(ctx context.Context, organizationID string) (CountEMACredentialAccessTokenCopiesRow, error) {
+	row := q.db.QueryRow(ctx, countEMACredentialAccessTokenCopies, organizationID)
+	var i CountEMACredentialAccessTokenCopiesRow
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.Unattributed,
+		&i.PlatformCopies,
+	)
+	return i, err
 }
 
 const countRemoteSessionAccessTokenCopies = `-- name: CountRemoteSessionAccessTokenCopies :one
@@ -347,6 +428,95 @@ func (q *Queries) GetRemoteSessionRowFixture(ctx context.Context, id uuid.UUID) 
 	return i, err
 }
 
+const listEMACredentialAccessTokensSealed = `-- name: ListEMACredentialAccessTokensSealed :many
+SELECT c.id, c.access_token_encrypted::text AS platform_copy, c.access_token_org_encrypted::text AS org_copy
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id = $1::text
+  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_org_encrypted IS NOT NULL
+  AND ($2::uuid IS NULL OR c.id > $2::uuid)
+ORDER BY c.id
+LIMIT $3
+`
+
+type ListEMACredentialAccessTokensSealedParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListEMACredentialAccessTokensSealedRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+	OrgCopy      string
+}
+
+// EMA access tokens of the organization that hold both copies, paged by id,
+// for verification.
+func (q *Queries) ListEMACredentialAccessTokensSealed(ctx context.Context, arg ListEMACredentialAccessTokensSealedParams) ([]ListEMACredentialAccessTokensSealedRow, error) {
+	rows, err := q.db.Query(ctx, listEMACredentialAccessTokensSealed, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMACredentialAccessTokensSealedRow
+	for rows.Next() {
+		var i ListEMACredentialAccessTokensSealedRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy, &i.OrgCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMACredentialAccessTokensWaiting = `-- name: ListEMACredentialAccessTokensWaiting :many
+SELECT c.id, c.access_token_encrypted::text AS platform_copy
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id = $1::text
+  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_org_encrypted IS NULL
+  AND ($2::uuid IS NULL OR c.id > $2::uuid)
+ORDER BY c.id
+LIMIT $3
+`
+
+type ListEMACredentialAccessTokensWaitingParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListEMACredentialAccessTokensWaitingRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+}
+
+// EMA access tokens of the organization with a platform-key copy and no
+// organization-key copy, retired slots included, paged by id.
+func (q *Queries) ListEMACredentialAccessTokensWaiting(ctx context.Context, arg ListEMACredentialAccessTokensWaitingParams) ([]ListEMACredentialAccessTokensWaitingRow, error) {
+	rows, err := q.db.Query(ctx, listEMACredentialAccessTokensWaiting, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMACredentialAccessTokensWaitingRow
+	for rows.Next() {
+		var i ListEMACredentialAccessTokensWaitingRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionAccessTokensSealed = `-- name: ListRemoteSessionAccessTokensSealed :many
 SELECT s.id, s.access_token_encrypted::text AS platform_copy, s.access_token_org_encrypted::text AS org_copy
 FROM remote_sessions AS s
@@ -525,6 +695,45 @@ func (q *Queries) ListRemoteSessionRefreshTokensWaiting(ctx context.Context, arg
 	return items, nil
 }
 
+const sealEMACredentialAccessTokenWaiting = `-- name: SealEMACredentialAccessTokenWaiting :execrows
+UPDATE remote_session_ema_credentials AS c
+SET access_token_org_encrypted = $1
+WHERE c.id = $2
+  AND c.organization_id = $3::text
+  AND c.access_token_encrypted = $4
+  AND c.access_token_org_encrypted IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $5
+`
+
+type SealEMACredentialAccessTokenWaitingParams struct {
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	PlatformCopy      pgtype.Text
+	DecidedGeneration int64
+}
+
+// Adds the organization-key copy of an EMA access token the backfill sealed.
+// It lands only while the row still holds the platform-key copy that was read
+// and no organization-key copy, and changes nothing else about the slot.
+func (q *Queries) SealEMACredentialAccessTokenWaiting(ctx context.Context, arg SealEMACredentialAccessTokenWaitingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sealEMACredentialAccessTokenWaiting,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.PlatformCopy,
+		arg.DecidedGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const sealRemoteSessionAccessTokenWaiting = `-- name: SealRemoteSessionAccessTokenWaiting :execrows
 UPDATE remote_sessions AS s
 SET access_token_org_encrypted = $1
@@ -601,6 +810,63 @@ func (q *Queries) SealRemoteSessionRefreshTokenWaiting(ctx context.Context, arg 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setEMACredentialAccessToken = `-- name: SetEMACredentialAccessToken :one
+UPDATE remote_session_ema_credentials AS c
+SET
+    access_token_encrypted = $1::text,
+    access_token_org_encrypted = $2::text
+WHERE c.id = $3
+  AND c.organization_id IS NOT DISTINCT FROM $4::text
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $5
+RETURNING c.id, c.organization_id, c.updated_at, c.access_token_encrypted, c.access_token_org_encrypted
+`
+
+type SetEMACredentialAccessTokenParams struct {
+	PlatformCopy      pgtype.Text
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    pgtype.Text
+	DecidedGeneration int64
+}
+
+type SetEMACredentialAccessTokenRow struct {
+	ID                      uuid.UUID
+	OrganizationID          pgtype.Text
+	UpdatedAt               pgtype.Timestamptz
+	AccessTokenEncrypted    pgtype.Text
+	AccessTokenOrgEncrypted pgtype.Text
+}
+
+// Stores an EMA credential's access token as the copies sealed under the
+// decided transition generation. Run it in the transaction of the statement
+// that published the slot, which owns updated_at, the slot's
+// compare-and-swap version; this statement changes nothing else. No rows means
+// the slot is gone, belongs to another organization, or the transition moved
+// since the decision.
+func (q *Queries) SetEMACredentialAccessToken(ctx context.Context, arg SetEMACredentialAccessTokenParams) (SetEMACredentialAccessTokenRow, error) {
+	row := q.db.QueryRow(ctx, setEMACredentialAccessToken,
+		arg.PlatformCopy,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.DecidedGeneration,
+	)
+	var i SetEMACredentialAccessTokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UpdatedAt,
+		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
+	)
+	return i, err
 }
 
 const setRemoteSessionTokens = `-- name: SetRemoteSessionTokens :one

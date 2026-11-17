@@ -27,8 +27,6 @@ var guardExemptFiles = map[string]string{
 var pendingWriters = []string{
 	"UpsertTrustedDelegationCredential",
 	"CompleteTrustedDelegationRefresh",
-	"UpsertEMACredential",
-	"UpsertSpeakeasyEMACredential",
 }
 
 // tokenValues are the bare names of the values the use case holds. Each is

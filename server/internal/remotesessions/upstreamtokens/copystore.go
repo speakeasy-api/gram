@@ -36,6 +36,15 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			count:       countRemoteSessionRefreshTokenCopies,
 			clear:       clearRemoteSessionRefreshTokenPlatformCopies,
 		},
+		&copyStore{
+			db:          db,
+			columns:     EMACredentialAccessToken,
+			listWaiting: listEMACredentialAccessTokensWaiting,
+			sealWaiting: sealEMACredentialAccessTokenWaiting,
+			listSealed:  listEMACredentialAccessTokensSealed,
+			count:       countEMACredentialAccessTokenCopies,
+			clear:       clearEMACredentialAccessTokenPlatformCopies,
+		},
 	}
 }
 
@@ -271,6 +280,67 @@ func clearRemoteSessionRefreshTokenPlatformCopies(ctx context.Context, q *repo.Q
 	n, err := q.ClearRemoteSessionRefreshTokenPlatformCopies(ctx, repo.ClearRemoteSessionRefreshTokenPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
 	if err != nil {
 		return 0, fmt.Errorf("clear refresh token platform copies: %w", err)
+	}
+
+	return n, nil
+}
+
+func listEMACredentialAccessTokensWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
+	rows, err := q.ListEMACredentialAccessTokensWaiting(ctx, repo.ListEMACredentialAccessTokensWaitingParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list waiting EMA access tokens: %w", err)
+	}
+
+	values := make([]orgencryption.WaitingValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.WaitingValue{RowID: row.ID.String(), Platform: row.PlatformCopy})
+	}
+
+	return values, nil
+}
+
+func sealEMACredentialAccessTokenWaiting(ctx context.Context, q *repo.Queries, organizationID string, generation int64, id uuid.UUID, platformCopy string, orgCopy string) (int64, error) {
+	n, err := q.SealEMACredentialAccessTokenWaiting(ctx, repo.SealEMACredentialAccessTokenWaitingParams{
+		OrgCopy:           conv.ToPGText(orgCopy),
+		ID:                id,
+		OrganizationID:    organizationID,
+		PlatformCopy:      conv.ToPGText(platformCopy),
+		DecidedGeneration: generation,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("seal waiting EMA access token: %w", err)
+	}
+
+	return n, nil
+}
+
+func listEMACredentialAccessTokensSealed(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.SealedValue, error) {
+	rows, err := q.ListEMACredentialAccessTokensSealed(ctx, repo.ListEMACredentialAccessTokensSealedParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list sealed EMA access tokens: %w", err)
+	}
+
+	values := make([]orgencryption.SealedValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.SealedValue{RowID: row.ID.String(), Platform: row.PlatformCopy, Org: row.OrgCopy})
+	}
+
+	return values, nil
+}
+
+func countEMACredentialAccessTokenCopies(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
+	row, err := q.CountEMACredentialAccessTokenCopies(ctx, organizationID)
+	if err != nil {
+		return orgencryption.CopyCounts{}, fmt.Errorf("count EMA access token copies: %w", err)
+	}
+
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+}
+
+func clearEMACredentialAccessTokenPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
+	n, err := q.ClearEMACredentialAccessTokenPlatformCopies(ctx, repo.ClearEMACredentialAccessTokenPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	if err != nil {
+		return 0, fmt.Errorf("clear EMA access token platform copies: %w", err)
 	}
 
 	return n, nil

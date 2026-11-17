@@ -60,6 +60,13 @@ var (
 		PlatformColumn: "remote_sessions.refresh_token_encrypted",
 		OrgColumn:      "remote_sessions.refresh_token_org_encrypted",
 	}
+
+	// EMACredentialAccessToken is the access token an EMA credential holds.
+	EMACredentialAccessToken = orgencryption.CopyColumns{
+		UseCase:        orgencryption.UseCaseOAuthSessionTokens,
+		PlatformColumn: "remote_session_ema_credentials.access_token_encrypted",
+		OrgColumn:      "remote_session_ema_credentials.access_token_org_encrypted",
+	}
 )
 
 // maxWriteAttempts bounds how often a write decides, seals and writes again
@@ -71,6 +78,10 @@ const maxWriteAttempts = 3
 // ErrSessionNotFound means the remote session to write does not exist, is
 // deleted, or belongs to another organization.
 var ErrSessionNotFound = errors.New("upstreamtokens: remote session not found")
+
+// ErrEMACredentialNotFound means the EMA credential to write does not exist,
+// is retired, or belongs to another organization.
+var ErrEMACredentialNotFound = errors.New("upstreamtokens: EMA credential not found")
 
 // Stored returns the copies a row stores for one value.
 func Stored(platform, org pgtype.Text) orgencryption.Copies {
@@ -370,6 +381,41 @@ func (t *Tokens) SetRemoteSession(ctx context.Context, dbtx repo.DBTX, sessionID
 	})
 	if err != nil {
 		return repo.RemoteSession{}, err
+	}
+
+	return row, nil
+}
+
+// SetEMACredential stores an EMA credential's access token and returns the
+// stored copies. Run it in the transaction of the statement that published
+// the slot, which owns every other column, including updated_at.
+// organizationID is the slot's organization_id as that statement returned it.
+func (t *Tokens) SetEMACredential(ctx context.Context, dbtx repo.DBTX, credentialID uuid.UUID, organizationID pgtype.Text, accessToken string) (repo.SetEMACredentialAccessTokenRow, error) {
+	var row repo.SetEMACredentialAccessTokenRow
+	err := t.write(ctx, dbtx, organizationID, ErrEMACredentialNotFound, func(dc decision) (bool, error) {
+		access, err := t.seal(ctx, dc, EMACredentialAccessToken, accessToken)
+		if err != nil {
+			return false, err
+		}
+
+		row, err = repo.New(dbtx).SetEMACredentialAccessToken(ctx, repo.SetEMACredentialAccessTokenParams{
+			PlatformCopy:      access.Platform,
+			OrgCopy:           access.Org,
+			ID:                credentialID,
+			OrganizationID:    organizationID,
+			DecidedGeneration: dc.generation(),
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return false, nil
+		case err != nil:
+			return false, fmt.Errorf("store EMA credential access token: %w", err)
+		default:
+			return true, nil
+		}
+	})
+	if err != nil {
+		return repo.SetEMACredentialAccessTokenRow{}, err
 	}
 
 	return row, nil

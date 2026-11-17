@@ -233,6 +233,113 @@ WHERE s.id IN (
     FOR KEY SHARE
   ), 0) = @decided_generation;
 
+-- name: SetEMACredentialAccessToken :one
+-- Stores an EMA credential's access token as the copies sealed under the
+-- decided transition generation. Run it in the transaction of the statement
+-- that published the slot, which owns updated_at, the slot's
+-- compare-and-swap version; this statement changes nothing else. No rows means
+-- the slot is gone, belongs to another organization, or the transition moved
+-- since the decision.
+UPDATE remote_session_ema_credentials AS c
+SET
+    access_token_encrypted = sqlc.narg('platform_copy')::text,
+    access_token_org_encrypted = sqlc.narg('org_copy')::text
+WHERE c.id = @id
+  AND c.organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = @decided_generation
+RETURNING c.id, c.organization_id, c.updated_at, c.access_token_encrypted, c.access_token_org_encrypted;
+
+-- name: ListEMACredentialAccessTokensWaiting :many
+-- EMA access tokens of the organization with a platform-key copy and no
+-- organization-key copy, retired slots included, paged by id.
+SELECT c.id, c.access_token_encrypted::text AS platform_copy
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id = @organization_id::text
+  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_org_encrypted IS NULL
+  AND (sqlc.narg('after')::uuid IS NULL OR c.id > sqlc.narg('after')::uuid)
+ORDER BY c.id
+LIMIT @limit_value;
+
+-- name: SealEMACredentialAccessTokenWaiting :execrows
+-- Adds the organization-key copy of an EMA access token the backfill sealed.
+-- It lands only while the row still holds the platform-key copy that was read
+-- and no organization-key copy, and changes nothing else about the slot.
+UPDATE remote_session_ema_credentials AS c
+SET access_token_org_encrypted = @org_copy
+WHERE c.id = @id
+  AND c.organization_id = @organization_id::text
+  AND c.access_token_encrypted = @platform_copy
+  AND c.access_token_org_encrypted IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = @decided_generation;
+
+-- name: ListEMACredentialAccessTokensSealed :many
+-- EMA access tokens of the organization that hold both copies, paged by id,
+-- for verification.
+SELECT c.id, c.access_token_encrypted::text AS platform_copy, c.access_token_org_encrypted::text AS org_copy
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id = @organization_id::text
+  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_org_encrypted IS NOT NULL
+  AND (sqlc.narg('after')::uuid IS NULL OR c.id > sqlc.narg('after')::uuid)
+ORDER BY c.id
+LIMIT @limit_value;
+
+-- name: CountEMACredentialAccessTokenCopies :one
+-- The organization's EMA access token counts. A slot's organization_id and
+-- project_id are NULL together (remote_session_ema_credentials_project_ref_check),
+-- so a slot without an organization belongs to none and is never
+-- unattributed: it stays on the platform key.
+SELECT
+    COUNT(*) FILTER (
+        WHERE c.access_token_encrypted IS NOT NULL
+          AND c.access_token_org_encrypted IS NULL
+          AND u.id IS NULL
+    )::bigint AS waiting,
+    COUNT(*) FILTER (
+        WHERE c.access_token_encrypted IS NOT NULL
+          AND c.access_token_org_encrypted IS NULL
+          AND u.id IS NOT NULL
+    )::bigint AS unreadable,
+    0::bigint AS unattributed,
+    COUNT(*) FILTER (WHERE c.access_token_encrypted IS NOT NULL)::bigint AS platform_copies
+FROM remote_session_ema_credentials AS c
+LEFT JOIN organization_encryption_unreadable_values AS u
+  ON u.organization_id = c.organization_id
+  AND u.use_case = 'oauth-session-tokens'
+  AND u.source_column = 'remote_session_ema_credentials.access_token_encrypted'
+  AND u.row_id = c.id::text
+  AND u.platform_ciphertext_sha256 = sha256(convert_to(c.access_token_encrypted, 'UTF8'))
+WHERE c.organization_id = @organization_id::text;
+
+-- name: ClearEMACredentialAccessTokenPlatformCopies :execrows
+-- Destroys up to limit platform-key copies of the organization's EMA access
+-- tokens after finalize. The organization-key copy stays.
+UPDATE remote_session_ema_credentials AS c
+SET access_token_encrypted = NULL
+WHERE c.id IN (
+    SELECT target.id FROM remote_session_ema_credentials AS target
+    WHERE target.organization_id = @organization_id::text
+      AND target.access_token_encrypted IS NOT NULL
+    ORDER BY target.id
+    LIMIT @limit_value
+  )
+  AND c.organization_id = @organization_id::text
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = @decided_generation;
+
 -- name: GetRemoteSessionRowFixture :one
 -- Test fixture: the session row as stored, soft-deleted or not.
 SELECT * FROM remote_sessions WHERE id = @id;

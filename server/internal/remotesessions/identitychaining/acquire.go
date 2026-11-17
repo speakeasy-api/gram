@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -42,6 +43,12 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 		}
 		resourceAS = endpoint
 		return success
+	}
+	// The redeemed token has to be stored, so the organization's key must be
+	// able to seal it before anything is asked of a provider.
+	if err := c.tokens.RequireUsable(ctx, nil, conv.ToPGText(req.OrganizationID)); err != nil {
+		logger.WarnContext(ctx, "identity chaining credential cannot be stored right now", attr.SlogError(err))
+		return none, newOutcome(StageRedemption, ReasonTransientFailure, ConfidenceVerified, true), false
 	}
 	grant, outcome := src.issue(ctx, logger, req, sel, ready)
 	if !outcome.Succeeded() {

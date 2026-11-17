@@ -227,7 +227,7 @@ func newSpeakeasyLiveFixture(t *testing.T) *speakeasyLiveFixture {
 	t.Cleanup(endpoint.Close)
 	expectedAudience = endpoint.URL
 	// Replace the fixture binding's resource client with a live HTTP endpoint.
-	remoteID, clientID := prepareResourceClient(t, f.db, f.chainer.enc, f.req.OrganizationID, endpoint.URL, endpoint.URL, testResourceClient, "resource-secret")
+	remoteID, clientID := prepareResourceClient(t, f.db, f.enc, f.req.OrganizationID, endpoint.URL, endpoint.URL, testResourceClient, "resource-secret")
 	bindResource(t, f.db, f.req, remoteID, clientID, endpoint.URL, remotesessions.PreparationStateReady)
 	// Retire the original fixture binding before testing the live resource.
 	f.setBinding(t, remotesessions.PreparationStateUnlinked)
@@ -238,8 +238,8 @@ func newSpeakeasyLiveFixture(t *testing.T) *speakeasyLiveFixture {
 	policy, err := guardian.NewUnsafePolicy(tp, nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 	sharedCache := cache.NewRedisCacheAdapter(redisClient)
-	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.chainer.enc, policy, nil, sharedCache, base)
-	chainer := New(logger, f.db, f.chainer.enc, challenges, nil, nil, sharedCache)
+	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.enc, policy, nil, sharedCache, base)
+	chainer := New(logger, f.db, f.chainer.tokens, challenges, nil, nil, sharedCache)
 	chainer.SetSpeakeasyIssuer(gate, signer, flags)
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	return &speakeasyLiveFixture{
@@ -266,7 +266,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	checkExchange()
 	require.True(t, consentOutcome.Succeeded(), "%+v", consentOutcome)
 	require.EqualValues(t, 1, calls.Load(), "consent redeems once for its sign-in")
-	governor := NewGovernor(logger, f.db, f.chainer.enc, nil)
+	governor := NewGovernor(logger, f.db, f.chainer.tokens, nil)
 	governor.SetSpeakeasyIssuer(gate, signer, flags)
 	governor.SetResourceResolver(challenges.ResolveEMAResource)
 	governor.SetCachedResourceResolver(challenges.CachedEMAResource)
@@ -276,7 +276,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.EqualValues(t, 1, metadataCalls.Load())
 	// A second replica reads the shared result while discovery is unavailable.
 	metadataUnavailable.Store(true)
-	otherChallenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.chainer.enc, policy, nil, sharedCache, base)
+	otherChallenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.enc, policy, nil, sharedCache, base)
 	chainer.SetResourceResolver(otherChallenges.ResolveEMAResource)
 	require.True(t, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Succeeded())
 	require.EqualValues(t, 1, calls.Load(), "a repeat consent check reuses the consent credential")

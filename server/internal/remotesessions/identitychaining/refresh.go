@@ -256,9 +256,9 @@ func (g *Governor) storedCredentialUsable(ctx context.Context, req Request, sel 
 		return false, nil
 	case err != nil:
 		return false, err
-	case !row.Usable || g.enc == nil:
+	case !row.Usable || g.tokens == nil:
 		return false, nil
 	}
-	value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
+	value, err := openCredential(ctx, g.tokens, row)
 	return err == nil && value != "", nil
 }

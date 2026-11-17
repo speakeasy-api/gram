@@ -170,7 +170,7 @@ func (f chainedRefreshFixture) installNonProbingChainer(t *testing.T, cached fun
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, f.ti.enc, policy, nil, f.ti.cacheAdapter, f.ti.serverURL)
-	chainer := identitychaining.New(logger, f.ti.conn, f.ti.enc, challenges, remotesessions.NewDelegationService(f.ti.conn, f.ti.enc, challenges), nil, f.ti.cacheAdapter)
+	chainer := identitychaining.New(logger, f.ti.conn, challenges.UpstreamTokens(), challenges, remotesessions.NewDelegationService(f.ti.conn, f.ti.enc, challenges), nil, f.ti.cacheAdapter)
 	chainer.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
 		t.Error("the token endpoint must never probe the upstream")
 		return protectedresource.EndpointResource{}, errors.New("unexpected probe")

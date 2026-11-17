@@ -5949,12 +5949,12 @@ SELECT EXISTS (
 
 -- name: GetEMACredentialForUse :one
 -- Reads the live slot for one chained identity and whether its provenance
--- still matches the request's current binding and delegation. Callers decrypt
--- access_token_encrypted only when usable is true, and retire the slot when
+-- still matches the request's current binding and delegation. Callers open
+-- the access token only when usable is true, and retire the slot when
 -- it is false. A credential published before the human's latest sign-in is
 -- unusable, so signing in again replaces a token the upstream revoked.
 -- NULL provenance left by a parent delete reads as unusable, never as NULL.
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'external'
     AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
@@ -5993,6 +5993,8 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
   AND c.ema_provider = 'external';
 
 -- name: UpsertEMACredential :one
+-- Stores no token: the caller stores it with SetEMACredentialAccessToken in the
+-- same transaction, which also replaces the token of a slot this updates.
 -- Publishes a chained credential only while the binding generation, the
 -- human's latest sign-in, and the delegation and endpoint authority it was
 -- acquired under still hold, so a sign-in, revocation, unlink, rebind or
@@ -6002,12 +6004,12 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
 INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
-  trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes, access_token_encrypted, access_expires_at,
+  trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes, access_expires_at,
   downstream_refresh_token_observed, last_used_at
 )
 SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
   @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
-  @trusted_issuer_session_id::uuid, 'external', @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text, @access_expires_at::timestamptz,
+  @trusted_issuer_session_id::uuid, 'external', @requested_scopes::text[], @granted_scopes::text[], @access_expires_at::timestamptz,
   @downstream_refresh_token_observed::boolean, clock_timestamp()
 WHERE EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b
@@ -6075,7 +6077,6 @@ DO UPDATE SET
   trusted_issuer_session_id = EXCLUDED.trusted_issuer_session_id,
   requested_scopes = EXCLUDED.requested_scopes,
   granted_scopes = EXCLUDED.granted_scopes,
-  access_token_encrypted = EXCLUDED.access_token_encrypted,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
@@ -6197,7 +6198,7 @@ WHERE id = @id AND project_id = @project_id::uuid;
 
 -- name: ListEMACredentialsFixture :many
 -- TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
-SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
+SELECT id, deleted, access_token_encrypted, access_token_org_encrypted, ema_binding_generation, subject_urn, updated_at
 FROM remote_session_ema_credentials
 WHERE project_id = @project_id
 ORDER BY created_at, id;
@@ -6708,7 +6709,7 @@ WHERE i.id = @id AND i.organization_id = @organization_id
 FOR SHARE OF s;
 
 -- name: GetSpeakeasyEMACredentialForUse :one
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'speakeasy'
     AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
@@ -6743,7 +6744,7 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
 -- A consent credential has no MCP grant yet and belongs to the sign-in whose
 -- consent page minted it. Its provenance predicate matches
 -- GetSpeakeasyEMACredentialForUse, so adoption and reuse judge it alike.
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'speakeasy'
     AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
@@ -6777,6 +6778,8 @@ ORDER BY c.updated_at DESC, c.id DESC
 LIMIT 1;
 
 -- name: UpsertSpeakeasyEMACredential :one
+-- Stores no token: the caller stores it with SetEMACredentialAccessToken in the
+-- same transaction, which also replaces the token of a slot this updates.
 -- The caller locks the binding, sign-in and issuer and checks the exact
 -- grant before this statement. Client changes during redemption still fence
 -- publication. Each authenticated MCP grant keeps its own slot; a consent
@@ -6785,13 +6788,13 @@ INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
   ema_provider, internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id,
-  sign_in_id, user_session_id, requested_scopes, granted_scopes, access_token_encrypted,
+  sign_in_id, user_session_id, requested_scopes, granted_scopes,
   access_expires_at, downstream_refresh_token_observed, last_used_at
 )
 SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
   @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
   'speakeasy', @internal_session_issuer_id::uuid, @internal_session_issuer_updated_at::timestamptz, @internal_session_issuer_key_id::uuid,
-  @sign_in_id::uuid, sqlc.narg('user_session_id')::uuid, @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text,
+  @sign_in_id::uuid, sqlc.narg('user_session_id')::uuid, @requested_scopes::text[], @granted_scopes::text[],
   @access_expires_at::timestamptz, @downstream_refresh_token_observed::boolean, clock_timestamp()
 WHERE EXISTS (
   SELECT 1 FROM remote_session_ema_bindings b
@@ -6823,7 +6826,6 @@ DO UPDATE SET
   user_session_id = EXCLUDED.user_session_id,
   requested_scopes = EXCLUDED.requested_scopes,
   granted_scopes = EXCLUDED.granted_scopes,
-  access_token_encrypted = EXCLUDED.access_token_encrypted,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,

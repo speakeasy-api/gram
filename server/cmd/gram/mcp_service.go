@@ -220,7 +220,7 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 	if err != nil {
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
-	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer := identitychaining.New(logger, db, challenges.UpstreamTokens(), challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	chainer.SetCachedResourceResolver(challenges.CachedEMAResource)
 	chainer.SetMeterProvider(meter)

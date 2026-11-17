@@ -4151,7 +4151,7 @@ func (q *Queries) GetEMAChainingUserIssuer(ctx context.Context, arg GetEMAChaini
 }
 
 const getEMACredentialForUse = `-- name: GetEMACredentialForUse :one
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'external'
     AND c.remote_session_issuer_id = $1::uuid
@@ -4206,17 +4206,19 @@ type GetEMACredentialForUseParams struct {
 }
 
 type GetEMACredentialForUseRow struct {
-	ID                   uuid.UUID
-	UpdatedAt            pgtype.Timestamptz
-	AccessTokenEncrypted pgtype.Text
-	AccessExpiresAt      pgtype.Timestamptz
-	GrantedScopes        []string
-	Usable               bool
+	ID                      uuid.UUID
+	UpdatedAt               pgtype.Timestamptz
+	OrganizationID          pgtype.Text
+	AccessTokenEncrypted    pgtype.Text
+	AccessTokenOrgEncrypted pgtype.Text
+	AccessExpiresAt         pgtype.Timestamptz
+	GrantedScopes           []string
+	Usable                  bool
 }
 
 // Reads the live slot for one chained identity and whether its provenance
-// still matches the request's current binding and delegation. Callers decrypt
-// access_token_encrypted only when usable is true, and retire the slot when
+// still matches the request's current binding and delegation. Callers open
+// the access token only when usable is true, and retire the slot when
 // it is false. A credential published before the human's latest sign-in is
 // unusable, so signing in again replaces a token the upstream revoked.
 // NULL provenance left by a parent delete reads as unusable, never as NULL.
@@ -4239,7 +4241,9 @@ func (q *Queries) GetEMACredentialForUse(ctx context.Context, arg GetEMACredenti
 	err := row.Scan(
 		&i.ID,
 		&i.UpdatedAt,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.GrantedScopes,
 		&i.Usable,
@@ -6605,7 +6609,7 @@ func (q *Queries) GetRemoteURLForMcpServer(ctx context.Context, arg GetRemoteURL
 }
 
 const getSpeakeasyConsentEMACredentialForUse = `-- name: GetSpeakeasyConsentEMACredentialForUse :one
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'speakeasy'
     AND c.remote_session_issuer_id = $1::uuid
@@ -6658,12 +6662,14 @@ type GetSpeakeasyConsentEMACredentialForUseParams struct {
 }
 
 type GetSpeakeasyConsentEMACredentialForUseRow struct {
-	ID                   uuid.UUID
-	UpdatedAt            pgtype.Timestamptz
-	AccessTokenEncrypted pgtype.Text
-	AccessExpiresAt      pgtype.Timestamptz
-	GrantedScopes        []string
-	Usable               bool
+	ID                      uuid.UUID
+	UpdatedAt               pgtype.Timestamptz
+	OrganizationID          pgtype.Text
+	AccessTokenEncrypted    pgtype.Text
+	AccessTokenOrgEncrypted pgtype.Text
+	AccessExpiresAt         pgtype.Timestamptz
+	GrantedScopes           []string
+	Usable                  bool
 }
 
 // A consent credential has no MCP grant yet and belongs to the sign-in whose
@@ -6691,7 +6697,9 @@ func (q *Queries) GetSpeakeasyConsentEMACredentialForUse(ctx context.Context, ar
 	err := row.Scan(
 		&i.ID,
 		&i.UpdatedAt,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.GrantedScopes,
 		&i.Usable,
@@ -6700,7 +6708,7 @@ func (q *Queries) GetSpeakeasyConsentEMACredentialForUse(ctx context.Context, ar
 }
 
 const getSpeakeasyEMACredentialForUse = `-- name: GetSpeakeasyEMACredentialForUse :one
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'speakeasy'
     AND c.remote_session_issuer_id = $1::uuid
@@ -6752,12 +6760,14 @@ type GetSpeakeasyEMACredentialForUseParams struct {
 }
 
 type GetSpeakeasyEMACredentialForUseRow struct {
-	ID                   uuid.UUID
-	UpdatedAt            pgtype.Timestamptz
-	AccessTokenEncrypted pgtype.Text
-	AccessExpiresAt      pgtype.Timestamptz
-	GrantedScopes        []string
-	Usable               bool
+	ID                      uuid.UUID
+	UpdatedAt               pgtype.Timestamptz
+	OrganizationID          pgtype.Text
+	AccessTokenEncrypted    pgtype.Text
+	AccessTokenOrgEncrypted pgtype.Text
+	AccessExpiresAt         pgtype.Timestamptz
+	GrantedScopes           []string
+	Usable                  bool
 }
 
 func (q *Queries) GetSpeakeasyEMACredentialForUse(ctx context.Context, arg GetSpeakeasyEMACredentialForUseParams) (GetSpeakeasyEMACredentialForUseRow, error) {
@@ -6783,7 +6793,9 @@ func (q *Queries) GetSpeakeasyEMACredentialForUse(ctx context.Context, arg GetSp
 	err := row.Scan(
 		&i.ID,
 		&i.UpdatedAt,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.GrantedScopes,
 		&i.Usable,
@@ -8115,19 +8127,20 @@ func (q *Queries) ListEMAChainingResourceCandidates(ctx context.Context, arg Lis
 }
 
 const listEMACredentialsFixture = `-- name: ListEMACredentialsFixture :many
-SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
+SELECT id, deleted, access_token_encrypted, access_token_org_encrypted, ema_binding_generation, subject_urn, updated_at
 FROM remote_session_ema_credentials
 WHERE project_id = $1
 ORDER BY created_at, id
 `
 
 type ListEMACredentialsFixtureRow struct {
-	ID                   uuid.UUID
-	Deleted              bool
-	AccessTokenEncrypted pgtype.Text
-	EmaBindingGeneration pgtype.Int8
-	SubjectUrn           string
-	UpdatedAt            pgtype.Timestamptz
+	ID                      uuid.UUID
+	Deleted                 bool
+	AccessTokenEncrypted    pgtype.Text
+	AccessTokenOrgEncrypted pgtype.Text
+	EmaBindingGeneration    pgtype.Int8
+	SubjectUrn              string
+	UpdatedAt               pgtype.Timestamptz
 }
 
 // TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
@@ -8144,6 +8157,7 @@ func (q *Queries) ListEMACredentialsFixture(ctx context.Context, projectID uuid.
 			&i.ID,
 			&i.Deleted,
 			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
 			&i.EmaBindingGeneration,
 			&i.SubjectUrn,
 			&i.UpdatedAt,
@@ -18513,13 +18527,13 @@ const upsertEMACredential = `-- name: UpsertEMACredential :one
 INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
-  trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes, access_token_encrypted, access_expires_at,
+  trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes, access_expires_at,
   downstream_refresh_token_observed, last_used_at
 )
 SELECT $1::text, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
   $6::text, $7::text, 'binding', $8::uuid, $9::bigint,
-  $10::uuid, 'external', $11::text[], $12::text[], $13::text, $14::timestamptz,
-  $15::boolean, clock_timestamp()
+  $10::uuid, 'external', $11::text[], $12::text[], $13::timestamptz,
+  $14::boolean, clock_timestamp()
 WHERE EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.id = $8::uuid AND b.generation = $9::bigint
@@ -18549,7 +18563,7 @@ WHERE EXISTS (
     JOIN remote_session_issuers AS ti ON ti.id = tc.remote_session_issuer_id
       AND ti.project_id IS NULL AND (ti.organization_id = $1::text OR ti.organization_id IS NULL) AND ti.deleted IS FALSE
     WHERE s.id = $10::uuid AND s.deleted IS FALSE
-      AND s.credential_obtained_at IS NOT DISTINCT FROM $16::timestamptz
+      AND s.credential_obtained_at IS NOT DISTINCT FROM $15::timestamptz
       AND s.observation_status IS DISTINCT FROM 'reauthentication_required'
       AND s.observation_status IS DISTINCT FROM 'configuration_failure'
       AND s.organization_id = $1::text AND s.project_id IS NULL
@@ -18586,7 +18600,6 @@ DO UPDATE SET
   trusted_issuer_session_id = EXCLUDED.trusted_issuer_session_id,
   requested_scopes = EXCLUDED.requested_scopes,
   granted_scopes = EXCLUDED.granted_scopes,
-  access_token_encrypted = EXCLUDED.access_token_encrypted,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
@@ -18607,7 +18620,6 @@ type UpsertEMACredentialParams struct {
 	TrustedIssuerSessionID         uuid.UUID
 	RequestedScopes                []string
 	GrantedScopes                  []string
-	AccessTokenEncrypted           string
 	AccessExpiresAt                pgtype.Timestamptz
 	DownstreamRefreshTokenObserved bool
 	TrustedCredentialObtainedAt    pgtype.Timestamptz
@@ -18618,6 +18630,8 @@ type UpsertEMACredentialRow struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+// Stores no token: the caller stores it with SetEMACredentialAccessToken in the
+// same transaction, which also replaces the token of a slot this updates.
 // Publishes a chained credential only while the binding generation, the
 // human's latest sign-in, and the delegation and endpoint authority it was
 // acquired under still hold, so a sign-in, revocation, unlink, rebind or
@@ -18638,7 +18652,6 @@ func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredenti
 		arg.TrustedIssuerSessionID,
 		arg.RequestedScopes,
 		arg.GrantedScopes,
-		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.DownstreamRefreshTokenObserved,
 		arg.TrustedCredentialObtainedAt,
@@ -18962,14 +18975,14 @@ INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
   ema_provider, internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id,
-  sign_in_id, user_session_id, requested_scopes, granted_scopes, access_token_encrypted,
+  sign_in_id, user_session_id, requested_scopes, granted_scopes,
   access_expires_at, downstream_refresh_token_observed, last_used_at
 )
 SELECT $1::text, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
   $6::text, $7::text, 'binding', $8::uuid, $9::bigint,
   'speakeasy', $10::uuid, $11::timestamptz, $12::uuid,
-  $13::uuid, $14::uuid, $15::text[], $16::text[], $17::text,
-  $18::timestamptz, $19::boolean, clock_timestamp()
+  $13::uuid, $14::uuid, $15::text[], $16::text[],
+  $17::timestamptz, $18::boolean, clock_timestamp()
 WHERE EXISTS (
   SELECT 1 FROM remote_session_ema_bindings b
   JOIN remote_session_clients rc ON rc.id = b.remote_session_client_id AND rc.deleted IS FALSE
@@ -19000,7 +19013,6 @@ DO UPDATE SET
   user_session_id = EXCLUDED.user_session_id,
   requested_scopes = EXCLUDED.requested_scopes,
   granted_scopes = EXCLUDED.granted_scopes,
-  access_token_encrypted = EXCLUDED.access_token_encrypted,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
@@ -19025,7 +19037,6 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	UserSessionID                  uuid.NullUUID
 	RequestedScopes                []string
 	GrantedScopes                  []string
-	AccessTokenEncrypted           string
 	AccessExpiresAt                pgtype.Timestamptz
 	DownstreamRefreshTokenObserved bool
 }
@@ -19035,6 +19046,8 @@ type UpsertSpeakeasyEMACredentialRow struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+// Stores no token: the caller stores it with SetEMACredentialAccessToken in the
+// same transaction, which also replaces the token of a slot this updates.
 // The caller locks the binding, sign-in and issuer and checks the exact
 // grant before this statement. Client changes during redemption still fence
 // publication. Each authenticated MCP grant keeps its own slot; a consent
@@ -19057,7 +19070,6 @@ func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSp
 		arg.UserSessionID,
 		arg.RequestedScopes,
 		arg.GrantedScopes,
-		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.DownstreamRefreshTokenObserved,
 	)

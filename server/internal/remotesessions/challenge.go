@@ -424,6 +424,12 @@ func WithUpstreamTokens(tokens *upstreamtokens.Tokens) ChallengeManagerOption {
 	}
 }
 
+// UpstreamTokens is the seam the manager opens and stores upstream tokens
+// with, for components built over the same manager.
+func (m *ChallengeManager) UpstreamTokens() *upstreamtokens.Tokens {
+	return m.tokens
+}
+
 func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) ChallengeManagerOption {
 	return func(m *ChallengeManager) {
 		m.privateAuthorityValidator = validator

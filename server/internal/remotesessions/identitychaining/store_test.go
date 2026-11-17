@@ -11,14 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -34,6 +38,9 @@ type chainStoreFixture struct {
 	sel        selection
 	sessionID  uuid.UUID
 	configHash string
+
+	// enc is the platform key the fixture's rows are sealed with.
+	enc *encryption.Client
 }
 
 func newChainStoreFixture(t *testing.T) chainStoreFixture {
@@ -84,9 +91,10 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), db, enc, policy, nil, nil, serverURL)
 	delegation := remotesessions.NewDelegationService(db, enc, challenges)
-	chainer := &Chainer{Governor: Governor{logger: logger, db: db, enc: enc, delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
+	chainer := &Chainer{Governor: Governor{logger: logger, db: db, tokens: upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
 	return chainStoreFixture{
 		db:         db,
+		enc:        enc,
 		chainer:    chainer,
 		configHash: configHash,
 		req:        req,
@@ -175,7 +183,7 @@ func (f chainStoreFixture) addSlashVariantBinding(t *testing.T, state string) {
 func (f chainStoreFixture) addAmbiguousBinding(t *testing.T) {
 	t.Helper()
 	issuerURL := "https://other-resource-issuer.example.test"
-	issuer, client := prepareResourceClient(t, f.db, f.chainer.enc, f.req.OrganizationID, issuerURL, issuerURL+"/token", "other-client", "other-secret")
+	issuer, client := prepareResourceClient(t, f.db, f.enc, f.req.OrganizationID, issuerURL, issuerURL+"/token", "other-client", "other-secret")
 	bindResource(t, f.db, f.req, issuer, client, f.sel.resource, remotesessions.PreparationStateReady)
 }
 
@@ -737,4 +745,49 @@ func TestStore_SelectBindingRestrictedToInboundIssuerAndProject(t *testing.T) {
 	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
 	require.Equal(t, success, outcome, "the binding's own issuer and project select it")
 	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}
+
+func TestStore_PublishSealsUnderTheOrganizationKey(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	f.chainer.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
+	rows := f.credentials(t)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].AccessTokenEncrypted.Valid, "dual_write keeps the platform-key copy for a rollback")
+	require.True(t, rows[0].AccessTokenOrgEncrypted.Valid, "dual_write seals the credential under the organization's key")
+
+	token, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.True(t, ok)
+	require.Equal(t, "downstream-token", token.Value())
+
+	require.NoError(t, fixture.Provisioner.Suspend(t.Context(), f.req.OrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+	_, ok = f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.False(t, ok, "nothing falls back to the platform-key copy")
+	require.Error(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("renewed-token")), "a credential the key cannot seal is not stored")
+	require.Equal(t, rows[0].AccessTokenOrgEncrypted, f.credentials(t)[0].AccessTokenOrgEncrypted, "the failed publish rolled back")
+}
+
+func TestStore_RetirementErasesBothCopies(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	f.chainer.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
+	f.setBinding(t, remotesessions.PreparationStateReady)
+
+	_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.False(t, ok)
+	rows := f.credentials(t)
+	require.True(t, rows[0].Deleted)
+	require.False(t, rows[0].AccessTokenEncrypted.Valid)
+	require.False(t, rows[0].AccessTokenOrgEncrypted.Valid, "a retired credential cannot come back from the organization-key copy")
 }

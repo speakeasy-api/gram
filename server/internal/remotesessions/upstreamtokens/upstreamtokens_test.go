@@ -2,9 +2,11 @@ package upstreamtokens_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -234,7 +236,7 @@ func TestSessionWithoutOrganizationStaysOnThePlatformKey(t *testing.T) {
 	require.Equal(t, "access", access)
 	require.Equal(t, "refresh", refresh)
 
-	for _, store := range upstreamtokens.CopyStores(ti.conn) {
+	for _, store := range remoteSessionStores(ti.conn) {
 		counts, err := store.Count(t.Context(), ti.orgID)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), counts.Unattributed, "%s: its client's organization cannot finalize past it", store.Columns().PlatformColumn)
@@ -255,7 +257,7 @@ func TestBackfillVerifyAndFinalizeMoveTokensToTheOrganizationKey(t *testing.T) {
 	require.NoError(t, repo.New(ti.conn).SoftDeleteRemoteSessionFixture(t.Context(), revoked.ID))
 
 	stores := upstreamtokens.CopyStores(ti.conn)
-	for _, store := range stores {
+	for _, store := range remoteSessionStores(ti.conn) {
 		counts, err := store.Count(t.Context(), ti.orgID)
 		require.NoError(t, err)
 		require.Equal(t, orgencryption.CopyCounts{Waiting: 2, Unreadable: 0, Unattributed: 0, PlatformCopies: 2}, counts, store.Columns().PlatformColumn)
@@ -317,4 +319,15 @@ func TestCopyStoreCountsUnreadableTokens(t *testing.T) {
 	counts, err := stores[0].Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1}, counts)
+}
+
+// remoteSessionStores are the CopyStores of the remote session columns.
+func remoteSessionStores(conn *pgxpool.Pool) []orgencryption.CopyStore {
+	var stores []orgencryption.CopyStore
+	for _, store := range upstreamtokens.CopyStores(conn) {
+		if strings.HasPrefix(store.Columns().PlatformColumn, "remote_sessions.") {
+			stores = append(stores, store)
+		}
+	}
+	return stores
 }
