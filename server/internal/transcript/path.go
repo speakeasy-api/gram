@@ -4,10 +4,11 @@ import "slices"
 
 // Path returns the trajectory that ends at leaf: the entries from its tree
 // root to leaf, in order. It stops at a root. After a compaction the root is
-// the summary, which is what the model sees first.
+// the summary, which is what the model sees first. It also stops before a
+// parent that was not loaded.
 func Path(leaf *Node) []*Node {
 	var out []*Node
-	for n := leaf; n != nil && !n.hidden; n = n.Parent {
+	for n := leaf; visible(n); n = n.Parent {
 		out = append(out, n)
 	}
 	slices.Reverse(out)
@@ -18,7 +19,7 @@ func Path(leaf *Node) []*Node {
 // leaf, so it covers the whole session up to leaf.
 func FullPath(leaf *Node) []*Node {
 	var out []*Node
-	for n := leaf; n != nil && !n.hidden; {
+	for n := leaf; visible(n); {
 		out = append(out, n)
 		switch {
 		case n.Parent != nil && !n.Parent.hidden:
@@ -31,4 +32,8 @@ func FullPath(leaf *Node) []*Node {
 	}
 	slices.Reverse(out)
 	return out
+}
+
+func visible(n *Node) bool {
+	return n != nil && !n.hidden && !n.placeholder
 }

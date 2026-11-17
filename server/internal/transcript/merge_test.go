@@ -357,6 +357,199 @@ func TestMerge_ContinuesFromStoredNodes(t *testing.T) {
 	require.Equal(t, PathKey(stored[1].PathKey, res.Added[0].ContentKey), res.Added[0].PathKey)
 }
 
+func TestMerge_CompactionThroughAChainOfDroppedLines(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+	))
+	require.NoError(t, err)
+
+	summary := Entry{Role: RoleUser, Text: "summary", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("meta")}
+	res, err := tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links: []Link{
+			{ID: line("b1"), To: parentLine("u2"), Compaction: true},
+			{ID: line("meta"), To: parentLine("b1")},
+		},
+		Entries: []Entry{summary},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+	require.False(t, res.Added[0].ParentID().Valid)
+	require.Equal(t, mustNode(t, tr, line("u2")).ID, res.Added[0].ContinuesID().UUID, "the continuation survives the dropped line")
+}
+
+func TestMerge_NewCompactionDoesNotMatchAnOlderOne(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	summary := func(id string) Entry {
+		return Entry{Role: RoleUser, Text: "same summary", Synthetic: true, IDs: []NaturalID{line(id)}, Parent: parentLine("b" + id)}
+	}
+
+	_, err := tr.Merge(transcriptDelivery(transcriptPrompt("u1", "", "p1", "hi")))
+	require.NoError(t, err)
+	_, err = tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("bs1"), To: parentLine("u1"), Compaction: true}}, Entries: []Entry{summary("s1")}})
+	require.NoError(t, err)
+	_, err = tr.Merge(transcriptDelivery(transcriptPrompt("u2", "s1", "p2", "more")))
+	require.NoError(t, err)
+
+	// An inference "summary" with no IDs and the second compaction's summary
+	// have the same text as the first summary.
+	res, err := tr.Merge(Delivery{
+		Source:  SourceAnthropicInference,
+		Entries: []Entry{{Role: RoleUser, Text: "same summary", Synthetic: true, Continues: &NaturalID{Kind: KindClaudeEntry, Value: "u2", Block: LastBlock}}},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1, "a root that continues from another leaf is not a match")
+	require.Equal(t, mustNode(t, tr, line("u2")).ID, res.Added[0].ContinuesID().UUID)
+}
+
+func TestMerge_TranscriptSummaryLinksARootInferenceStoredFirst(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+	))
+	require.NoError(t, err)
+
+	// After compaction, inference sees a frame that starts with the summary.
+	res, err := tr.Merge(inferenceFrame(user("summary of the chat"), assistant("continuing")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 2)
+	root := res.Added[0]
+	require.False(t, root.ContinuesID().Valid, "inference cannot know the old leaf")
+
+	summary := Entry{Role: RoleUser, Text: "summary of the chat", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")}
+	res, err = tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("b1"), To: parentLine("u2"), Compaction: true}},
+		Entries: []Entry{summary},
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+	require.Len(t, res.Seen, 1)
+	require.Equal(t, root, res.Seen[0].Node)
+	require.Equal(t, mustNode(t, tr, line("u2")), res.Seen[0].Continues, "the stored root gains its continuation")
+	require.Equal(t, mustNode(t, tr, line("u2")).ID, root.ContinuesID().UUID)
+}
+
+func TestLoad_IncrementalLoadsStayConnected(t *testing.T) {
+	t.Parallel()
+	ids := sequentialIDs()
+	grand, _ := ids()
+	parent, _ := ids()
+	child, _ := ids()
+	key := ContentKey(Entry{Role: RoleUser, Text: "x"})
+
+	tr := New(ids)
+	tr.Load([]Stored{{ID: child, ParentID: uuid.NullUUID{UUID: parent, Valid: true}, Role: RoleUser, ContentKey: key}})
+	childNode := tr.nodes[child]
+	require.Len(t, Path(childNode), 1, "a path stops before a parent that is not loaded")
+
+	tr.Load([]Stored{{ID: parent, ParentID: uuid.NullUUID{UUID: grand, Valid: true}, Role: RoleAssistant, ContentKey: key}})
+	require.Same(t, tr.nodes[parent], childNode.Parent, "the later load fills the same parent")
+	require.Len(t, Path(childNode), 2)
+
+	tr.Load([]Stored{{ID: grand, Role: RoleUser, ContentKey: key}})
+	require.Len(t, Path(childNode), 3)
+	require.Len(t, tr.root.Children, 1)
+
+	tr.Load([]Stored{{ID: grand, Role: RoleUser, ContentKey: key}})
+	require.Len(t, tr.root.Children, 1, "loading a node twice does not attach it twice")
+}
+
+func TestMerge_AliasesAreEmittedOnce(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "read it"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+	))
+	require.NoError(t, err)
+
+	d := Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("att"), To: parentLine("u2")}},
+		Entries: []Entry{transcriptToolResult("u3", "att", "toolu_1", "contents")},
+	}
+	res, err := tr.Merge(d)
+	require.NoError(t, err)
+	require.Len(t, res.Aliases, 1)
+
+	res, err = tr.Merge(d)
+	require.NoError(t, err)
+	require.Empty(t, res.Aliases, "a re-sent link is not new")
+	require.Empty(t, res.Added)
+}
+
+func TestMerge_DroppedFirstLineCanBeNamedLater(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	res, err := tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("start"), To: nil}},
+		Entries: []Entry{transcriptPrompt("u1", "start", "p1", "hi")},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []Alias{{ID: line("start"), Node: nil}}, res.Aliases, "nil Node: the start of the conversation")
+
+	// The user rewinds to the very start in a later upload.
+	res, err = tr.Merge(transcriptDelivery(transcriptPrompt("u2", "start", "p2", "hello again")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+	require.False(t, res.Added[0].ParentID().Valid)
+	require.Len(t, tr.root.Children, 2)
+
+	// A transcript rebuilt from storage knows the alias too.
+	fresh := New(sequentialIDs())
+	fresh.LoadStartAliases([]NaturalID{line("start")})
+	res, err = fresh.Merge(transcriptDelivery(transcriptPrompt("u9", "start", "p9", "hi")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+}
+
+func TestContentKey_Normalization(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reminders with attributes are ignored in prompts", func(t *testing.T) {
+		t.Parallel()
+		plain := ContentKey(Entry{Role: RoleUser, Text: "fix it"})
+		tagged := ContentKey(Entry{Role: RoleUser, Text: "<system-reminder source=\"memory\">notes</system-reminder>\nfix it"})
+		require.Equal(t, plain, tagged)
+	})
+
+	t.Run("reminders are ignored in tool results", func(t *testing.T) {
+		t.Parallel()
+		plain := ContentKey(Entry{Role: RoleTool, Result: &ToolResult{CallID: "toolu_1", Text: "ok"}})
+		tagged := ContentKey(Entry{Role: RoleTool, Result: &ToolResult{CallID: "toolu_1", Text: "ok\n<system-reminder>file changed</system-reminder>"}})
+		require.Equal(t, plain, tagged)
+	})
+
+	t.Run("assistant text keeps a literal reminder tag", func(t *testing.T) {
+		t.Parallel()
+		plain := ContentKey(Entry{Role: RoleAssistant, Text: "done"})
+		tagged := ContentKey(Entry{Role: RoleAssistant, Text: "<system-reminder>x</system-reminder>done"})
+		require.NotEqual(t, plain, tagged)
+	})
+
+	t.Run("tool input formatting and key order do not change the key", func(t *testing.T) {
+		t.Parallel()
+		compact := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte(`{"command":"ls","timeout":120000}`)}})
+		spaced := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte("{\n  \"timeout\": 120000,\n  \"command\": \"ls\"\n}")}})
+		require.Equal(t, compact, spaced)
+	})
+
+	t.Run("invalid tool input is used as written", func(t *testing.T) {
+		t.Parallel()
+		a := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte(` {not json `)}})
+		b := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte(`{not json`)}})
+		require.Equal(t, a, b)
+	})
+}
+
 func TestSplit_OneEntryPerBlock(t *testing.T) {
 	t.Parallel()
 	entries := Split(Message{Role: RoleAssistant, MessageID: "msg_1", Blocks: []Block{

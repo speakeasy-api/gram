@@ -25,6 +25,9 @@ type Node struct {
 	PathKey    []byte
 
 	hidden bool
+	// placeholder marks a node known only by its ID: a parent or old leaf
+	// that a partial load did not include. Paths stop before it.
+	placeholder bool
 }
 
 // ParentID is the parent to store in chat_messages.parent_message_id.
@@ -64,11 +67,17 @@ type Seen struct {
 	// for example a transcript line that matched an inference entry. The
 	// writer stores them; the node now has IDs, so its sibling_key clears.
 	NewIDs []NaturalID
+	// Continues is set when the entry linked a stored root to the old leaf it
+	// continues from, for example a transcript summary that matched a root an
+	// inference frame stored first. The writer stores it.
+	Continues *Node
 }
 
 // Alias maps the ID of a dropped source line to the entry that stands for it.
 type Alias struct {
-	ID   NaturalID
+	ID NaturalID
+	// Node is the entry the line stands for. Nil means the line stands for
+	// the start of the conversation.
 	Node *Node
 }
 
@@ -78,7 +87,8 @@ type Result struct {
 	// to risk scanning, metering and events.
 	Added []*Node
 	Seen  []Seen
-	// Aliases are links the writer stores so later deliveries can name them.
+	// Aliases are links that are new or changed, for the writer to store so
+	// later deliveries can name them.
 	Aliases []Alias
 }
 
@@ -101,6 +111,7 @@ type idKey struct {
 // the writer serializes deliveries for one chat.
 type Transcript struct {
 	root      *Node
+	nodes     map[uuid.UUID]*Node
 	byID      map[NaturalID]*Node
 	lastBlock map[idKey]*Node
 	aliases   map[NaturalID]*Node
@@ -109,17 +120,11 @@ type Transcript struct {
 
 // New returns an empty transcript. newID makes the ID of every added node.
 func New(newID func() (uuid.UUID, error)) *Transcript {
+	root := blankNode(uuid.Nil)
+	root.hidden = true
 	return &Transcript{
-		root: &Node{
-			ID:         uuid.Nil,
-			Parent:     nil,
-			Continues:  nil,
-			Children:   nil,
-			Entry:      Entry{IDs: nil, Parent: nil, Continues: nil, Synthetic: false, Role: "", Text: "", Call: nil, Result: nil, MessageID: "", At: zeroTime},
-			ContentKey: nil,
-			PathKey:    nil,
-			hidden:     true,
-		},
+		root:      root,
+		nodes:     map[uuid.UUID]*Node{},
 		byID:      map[NaturalID]*Node{},
 		lastBlock: map[idKey]*Node{},
 		aliases:   map[NaturalID]*Node{},
@@ -127,41 +132,39 @@ func New(newID func() (uuid.UUID, error)) *Transcript {
 	}
 }
 
-// Load adds stored nodes, parents before children. A node whose parent was
-// not loaded hangs under a placeholder with that ID, so a partial load still
-// answers lookups among the children of the loaded nodes.
+// Load adds stored nodes, parents before children. It can be called more
+// than once: a node whose parent is not loaded yet hangs under a placeholder
+// with that ID, and a later Load of that parent fills the same placeholder,
+// so incremental loads stay connected.
 func (t *Transcript) Load(stored []Stored) {
-	nodes := make(map[uuid.UUID]*Node, len(stored))
-	get := func(id uuid.NullUUID) *Node {
-		if !id.Valid {
-			return nil
-		}
-		if n, ok := nodes[id.UUID]; ok {
-			return n
-		}
-		n := t.blank(id.UUID)
-		nodes[id.UUID] = n
-		return n
-	}
 	for _, s := range stored {
-		n, ok := nodes[s.ID]
-		if !ok {
-			n = t.blank(s.ID)
-			nodes[s.ID] = n
+		n := t.node(s.ID)
+		if !n.placeholder {
+			continue // loaded before
 		}
+		n.placeholder = false
 		n.Entry.Role = s.Role
 		n.Entry.Synthetic = s.Synthetic
-		n.Entry.IDs = append(n.Entry.IDs, s.IDs...)
 		n.ContentKey = s.ContentKey
 		n.PathKey = s.PathKey
-		n.Continues = get(s.ContinuesID)
-		parent := get(s.ParentID)
-		if parent == nil {
-			parent = t.root
+		if s.ContinuesID.Valid {
+			n.Continues = t.node(s.ContinuesID.UUID)
+		}
+		parent := t.root
+		if s.ParentID.Valid {
+			parent = t.node(s.ParentID.UUID)
 		}
 		n.Parent = parent
 		parent.Children = append(parent.Children, n)
-		t.register(n, s.IDs)
+		t.adopt(n, s.IDs)
+	}
+}
+
+// LoadStartAliases restores aliases stored for dropped lines that stand for
+// the start of the conversation (Alias.Node was nil when they were stored).
+func (t *Transcript) LoadStartAliases(ids []NaturalID) {
+	for _, id := range ids {
+		t.aliases[id] = t.root
 	}
 }
 
@@ -186,8 +189,13 @@ func (t *Transcript) Merge(d Delivery) (Result, error) {
 			return Result{Added: nil, Seen: nil, Aliases: nil}, err
 		}
 
-		if n := t.find(parent, e); n != nil {
-			res.Seen = append(res.Seen, Seen{Index: i, Node: n, NewIDs: t.adopt(n, e.IDs)})
+		if n := t.find(parent, continues, e); n != nil {
+			seen := Seen{Index: i, Node: n, NewIDs: t.adopt(n, e.IDs), Continues: nil}
+			if continues != nil && n.Continues == nil {
+				n.Continues = continues
+				seen.Continues = continues
+			}
+			res.Seen = append(res.Seen, seen)
 			cursor = n
 			continue
 		}
@@ -205,13 +213,26 @@ func (t *Transcript) Merge(d Delivery) (Result, error) {
 	}
 
 	for _, l := range d.Links {
-		if l.Compaction || l.To == nil {
+		if l.Compaction {
 			continue
 		}
-		if n, ok := t.lookup(*l.To); ok {
-			t.aliases[l.ID] = n
-			res.Aliases = append(res.Aliases, Alias{ID: l.ID, Node: n})
+		target := t.root
+		if l.To != nil {
+			n, ok := t.lookup(*l.To)
+			if !ok {
+				continue
+			}
+			target = n
 		}
+		if prev, ok := t.aliases[l.ID]; ok && prev == target {
+			continue
+		}
+		t.aliases[l.ID] = target
+		alias := Alias{ID: l.ID, Node: target}
+		if target.hidden {
+			alias.Node = nil
+		}
+		res.Aliases = append(res.Aliases, alias)
 	}
 	return res, nil
 }
@@ -236,7 +257,8 @@ func (t *Transcript) start(cursor *Node, e Entry, links map[NaturalID]Link) (par
 }
 
 // resolve turns a parent reference into a node, following links for lines
-// that have no entry. A compaction link makes the entry a new tree root.
+// that have no entry. A compaction link anywhere on the way makes the entry
+// a new tree root that continues from the link's target.
 func (t *Transcript) resolve(ref NaturalID, links map[NaturalID]Link, depth int) (parent, continues *Node, err error) {
 	if n, ok := t.lookup(ref); ok {
 		return n, nil, nil
@@ -253,14 +275,14 @@ func (t *Transcript) resolve(ref NaturalID, links map[NaturalID]Link, depth int)
 	if l.To == nil {
 		return t.root, nil, nil
 	}
-	target, _, err := t.resolve(*l.To, links, depth+1)
+	target, cont, err := t.resolve(*l.To, links, depth+1)
 	if err != nil {
 		return nil, nil, err
 	}
 	if l.Compaction {
 		return t.root, target, nil
 	}
-	return target, nil, nil
+	return target, cont, nil
 }
 
 // find returns the stored node that e already is, or nil.
@@ -270,7 +292,9 @@ func (t *Transcript) resolve(ref NaturalID, links map[NaturalID]Link, depth int)
 // entry without IDs joins the branch in use now. A child does not match when
 // it and e both have an ID of the same kind: two prompt IDs, or two
 // transcript lines, are two entries even with the same text (a rewind).
-func (t *Transcript) find(parent *Node, e Entry) *Node {
+// A new compaction root only matches a root that continues from the same
+// old leaf, or a root whose continuation is not known yet.
+func (t *Transcript) find(parent, continues *Node, e Entry) *Node {
 	for _, id := range e.IDs {
 		if n, ok := t.byID[id]; ok {
 			return n
@@ -278,6 +302,9 @@ func (t *Transcript) find(parent *Node, e Entry) *Node {
 	}
 	key := ContentKey(e)
 	for _, c := range slices.Backward(parent.Children) {
+		if continues != nil && c.Continues != nil && c.Continues != continues {
+			continue
+		}
 		if bytes.Equal(c.ContentKey, key) && !sameKind(c.Entry.IDs, e.IDs) {
 			return c
 		}
@@ -306,18 +333,17 @@ func (t *Transcript) attach(parent, continues *Node, e Entry) (*Node, error) {
 		return nil, fmt.Errorf("transcript: new node id: %w", err)
 	}
 	key := ContentKey(e)
-	n := &Node{
-		ID:         id,
-		Parent:     parent,
-		Continues:  continues,
-		Children:   nil,
-		Entry:      e,
-		ContentKey: key,
-		PathKey:    PathKey(parent.PathKey, key),
-		hidden:     false,
-	}
+	n := blankNode(id)
+	n.Parent = parent
+	n.Continues = continues
+	n.Entry = e
+	n.Entry.IDs = nil
+	n.ContentKey = key
+	n.PathKey = PathKey(parent.PathKey, key)
+	n.placeholder = false
 	parent.Children = append(parent.Children, n)
-	t.register(n, e.IDs)
+	t.nodes[id] = n
+	t.adopt(n, e.IDs)
 	return n, nil
 }
 
@@ -329,20 +355,14 @@ func (t *Transcript) adopt(n *Node, ids []NaturalID) []NaturalID {
 			continue
 		}
 		added = append(added, id)
-	}
-	n.Entry.IDs = append(n.Entry.IDs, added...)
-	t.register(n, added)
-	return added
-}
-
-func (t *Transcript) register(n *Node, ids []NaturalID) {
-	for _, id := range ids {
 		t.byID[id] = n
 		k := idKey{kind: id.Kind, value: id.Value}
 		if prev, ok := t.lastBlock[k]; !ok || id.Block >= blockOf(prev, k) {
 			t.lastBlock[k] = n
 		}
 	}
+	n.Entry.IDs = append(n.Entry.IDs, added...)
+	return added
 }
 
 func (t *Transcript) lookup(ref NaturalID) (*Node, bool) {
@@ -360,16 +380,28 @@ func (t *Transcript) lookup(ref NaturalID) (*Node, bool) {
 	return n, ok
 }
 
-func (t *Transcript) blank(id uuid.UUID) *Node {
+// node returns the node with this ID, creating a placeholder if the
+// transcript has not seen it yet.
+func (t *Transcript) node(id uuid.UUID) *Node {
+	if n, ok := t.nodes[id]; ok {
+		return n
+	}
+	n := blankNode(id)
+	t.nodes[id] = n
+	return n
+}
+
+func blankNode(id uuid.UUID) *Node {
 	return &Node{
-		ID:         id,
-		Parent:     nil,
-		Continues:  nil,
-		Children:   nil,
-		Entry:      Entry{IDs: nil, Parent: nil, Continues: nil, Synthetic: false, Role: "", Text: "", Call: nil, Result: nil, MessageID: "", At: zeroTime},
-		ContentKey: nil,
-		PathKey:    nil,
-		hidden:     false,
+		ID:          id,
+		Parent:      nil,
+		Continues:   nil,
+		Children:    nil,
+		Entry:       Entry{IDs: nil, Parent: nil, Continues: nil, Synthetic: false, Role: "", Text: "", Call: nil, Result: nil, MessageID: "", At: zeroTime},
+		ContentKey:  nil,
+		PathKey:     nil,
+		hidden:      false,
+		placeholder: true,
 	}
 }
 
