@@ -15,8 +15,9 @@ type Check struct {
 	ResourceID   string
 	Dimensions   map[string]string
 	// exact refuses every grant key the check leaves out, even one its
-	// scope opens. Blocks, exemptions, containment and direct overrides of a
-	// tool call are matched exactly; only the engine sets it.
+	// scope opens. Blocks, exemptions, containment, direct overrides of a
+	// tool call, auth client checks and risk policy bypass checks are matched
+	// exactly. Only authz constructors and engine paths set it.
 	exact bool
 	// representedUser binds $represented_user; only the engine sets it.
 	representedUser string
@@ -142,7 +143,8 @@ func (c Check) keysRefusingGrant(grant Selector) (missing []string, matched bool
 //   - a risk policy audience question, which names no server, against a
 //     server limit. Matching there places the caller under the policy.
 //
-// An exact check may omit nothing. Every other check opens no key.
+// An exact check may omit nothing, and neither may any check of another
+// kind.
 func (c Check) mayOmit(key string) bool {
 	if c.exact {
 		return false
