@@ -152,18 +152,21 @@ type unavailableCard struct {
 }
 
 // waitAction is what to do when the cause is the service's and waiting helps.
-const waitAction = "Try again in a few minutes."
+const waitAction = "Try again shortly."
+
+// adminAction is what to do when an administrator must fix the cause.
+const adminAction = "Ask your administrator."
 
 // unavailableCauses is each named cause's card; who fixes it picks the status word.
 var unavailableCauses = map[mcpconnectionattempts.Code]unavailableCard{
-	mcpconnectionattempts.CodeProviderRateLimited:      {problem: "This server is getting too many requests right now.", action: waitAction},
-	mcpconnectionattempts.CodeProviderServerError:      {problem: "This server ran into an error.", action: waitAction},
-	mcpconnectionattempts.CodeProviderUnreachable:      {problem: "This server isn't responding.", action: waitAction},
-	mcpconnectionattempts.CodeRemoteSessionUnavailable: {problem: "This server's sign-in service is having problems.", action: waitAction},
-	mcpconnectionattempts.CodeSharedCredentialRejected: {problem: "The service rejected the sign-in details saved for this server.", action: "Ask your administrator to update them."},
-	mcpconnectionattempts.CodeStaticKeyRejected:        {problem: "The service rejected the sign-in details saved for this server.", action: "Ask your administrator to update them."},
-	mcpconnectionattempts.CodeCredentialMisconfigured:  {problem: "This server's sign-in settings aren't right.", action: "Ask your administrator to check them."},
-	mcpconnectionattempts.CodeTunnelUnavailable:        {problem: "This server's private network tunnel is down.", action: "Ask your administrator to check it."},
+	mcpconnectionattempts.CodeProviderRateLimited:      {problem: "Too many requests.", action: waitAction},
+	mcpconnectionattempts.CodeProviderServerError:      {problem: "The server had an error.", action: waitAction},
+	mcpconnectionattempts.CodeProviderUnreachable:      {problem: "The server isn't responding.", action: waitAction},
+	mcpconnectionattempts.CodeRemoteSessionUnavailable: {problem: "Its sign-in service is down.", action: waitAction},
+	mcpconnectionattempts.CodeSharedCredentialRejected: {problem: "Its saved sign-in was rejected.", action: adminAction},
+	mcpconnectionattempts.CodeStaticKeyRejected:        {problem: "Its saved sign-in was rejected.", action: adminAction},
+	mcpconnectionattempts.CodeCredentialMisconfigured:  {problem: "Its sign-in isn't set up correctly.", action: adminAction},
+	mcpconnectionattempts.CodeTunnelUnavailable:        {problem: "Its private network tunnel is down.", action: adminAction},
 }
 
 // unavailableLabel says why a member did not list its tools and what to do.

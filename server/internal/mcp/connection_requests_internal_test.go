@@ -1044,9 +1044,9 @@ func TestUnavailableLabelFollowsWhoFixes(t *testing.T) {
 		switch {
 		case meaning.WhoFixes == mcpconnectionattempts.WhoProvider:
 			require.True(t, named, "%s is the provider's, so waiting helps and the card says so", code)
-			require.Regexp(t, `^Unavailable · .+\. Try again in a few minutes\.$`, label, code.String())
+			require.Regexp(t, `^Unavailable · .+\. Try again shortly\.$`, label, code.String())
 		case named && meaning.WhoFixes == mcpconnectionattempts.WhoAdmin:
-			require.Regexp(t, `^Can't connect · .+\. Ask your administrator to .+\.$`, label, code.String())
+			require.Regexp(t, `^Can't connect · .+\. Ask your administrator\.$`, label, code.String())
 		default:
 			require.False(t, named, code.String())
 			require.Equal(t, unavailableGenericLabel, label, code.String())
@@ -1059,14 +1059,14 @@ func TestUnavailableLabelWording(t *testing.T) {
 	t.Parallel()
 
 	for code, want := range map[mcpconnectionattempts.Code]string{
-		mcpconnectionattempts.CodeProviderRateLimited:      "Unavailable · This server is getting too many requests right now. Try again in a few minutes.",
-		mcpconnectionattempts.CodeProviderServerError:      "Unavailable · This server ran into an error. Try again in a few minutes.",
-		mcpconnectionattempts.CodeProviderUnreachable:      "Unavailable · This server isn't responding. Try again in a few minutes.",
-		mcpconnectionattempts.CodeRemoteSessionUnavailable: "Unavailable · This server's sign-in service is having problems. Try again in a few minutes.",
-		mcpconnectionattempts.CodeSharedCredentialRejected: "Can't connect · The service rejected the sign-in details saved for this server. Ask your administrator to update them.",
-		mcpconnectionattempts.CodeStaticKeyRejected:        "Can't connect · The service rejected the sign-in details saved for this server. Ask your administrator to update them.",
-		mcpconnectionattempts.CodeCredentialMisconfigured:  "Can't connect · This server's sign-in settings aren't right. Ask your administrator to check them.",
-		mcpconnectionattempts.CodeTunnelUnavailable:        "Can't connect · This server's private network tunnel is down. Ask your administrator to check it.",
+		mcpconnectionattempts.CodeProviderRateLimited:      "Unavailable · Too many requests. Try again shortly.",
+		mcpconnectionattempts.CodeProviderServerError:      "Unavailable · The server had an error. Try again shortly.",
+		mcpconnectionattempts.CodeProviderUnreachable:      "Unavailable · The server isn't responding. Try again shortly.",
+		mcpconnectionattempts.CodeRemoteSessionUnavailable: "Unavailable · Its sign-in service is down. Try again shortly.",
+		mcpconnectionattempts.CodeSharedCredentialRejected: "Can't connect · Its saved sign-in was rejected. Ask your administrator.",
+		mcpconnectionattempts.CodeStaticKeyRejected:        "Can't connect · Its saved sign-in was rejected. Ask your administrator.",
+		mcpconnectionattempts.CodeCredentialMisconfigured:  "Can't connect · Its sign-in isn't set up correctly. Ask your administrator.",
+		mcpconnectionattempts.CodeTunnelUnavailable:        "Can't connect · Its private network tunnel is down. Ask your administrator.",
 		mcpconnectionattempts.CodeMemberToolsMissing:       unavailableGenericLabel,
 	} {
 		require.Equal(t, want, unavailableLabel(code), code.String())

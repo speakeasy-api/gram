@@ -472,10 +472,10 @@ func TestConsentTemplate_AdminFixedCardWarns(t *testing.T) {
 	}
 	class, label := statusOf("tunnel")
 	require.Equal(t, "text-xs text-default-warning", class)
-	require.Equal(t, "Can't connect · This server's private network tunnel is down. Ask your administrator to check it.", label)
+	require.Equal(t, "Can't connect · Its private network tunnel is down. Ask your administrator.", label)
 	class, label = statusOf("busy")
 	require.Equal(t, "text-xs text-muted-foreground", class)
-	require.Equal(t, "Unavailable · This server ran into an error. Try again in a few minutes.", label)
+	require.Equal(t, "Unavailable · The server had an error. Try again shortly.", label)
 	for _, server := range view.Servers {
 		require.False(t, server.NeedsAttention(), "%s: styling changes no controls", server.Slug)
 	}
