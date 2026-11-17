@@ -175,6 +175,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/slackapp"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
+	"github.com/speakeasy-api/gram/server/internal/slackdm"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -2117,9 +2118,14 @@ func newStartCommand() *cli.Command {
 					WithDashboardURL(siteURL.String()).
 					WithAssistantsDisabled(!assistantsCore.RuntimeAvailable()).
 					WithHome(slackapp.NewHomeSource(logger, db, featureFlags).WithServerURL(serverURL))
-				// Home tab approval clicks are handled by the Slack app; every
-				// other interaction goes on to the approval DM handler.
-				o11y.AttachHandler(mux, http.MethodPost, slackapproval.InteractionsPath, slackapp.NewHomeInteractions(slackEvents, approvalService, slackInteractions).ServeHTTP)
+				// Clicks go to the handler that owns their action ID: Home tab
+				// approvals to the Slack app, approval DMs to slackapproval.
+				// Anything else is verified and acknowledged by the router.
+				slackRouter := slackdm.NewRouter(logger, secret)
+				slackRouter.
+					Handle(slackapp.HomeActionPrefix, slackapp.NewHomeInteractions(slackEvents, approvalService, slackRouter.Unclaimed())).
+					Handle(slackapproval.ActionPrefix, slackInteractions)
+				o11y.AttachHandler(mux, http.MethodPost, slackdm.InteractionsPath, slackRouter.ServeHTTP)
 				o11y.AttachHandler(mux, http.MethodPost, slackapp.EventsPath, slackEvents.ServeHTTP)
 			}
 
