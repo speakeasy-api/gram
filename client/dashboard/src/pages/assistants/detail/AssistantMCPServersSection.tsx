@@ -102,10 +102,11 @@ export function AssistantMCPServersSection({
   // assistant) is managed on the Channels tab, so it is left out here; saves
   // still send it, since they replace the whole list. Until both lists load,
   // rows wait, so the Slack toolset never shows as removable.
-  const toolsetsQuery = useListToolsets(undefined, undefined, {
+  const gramProject = useProjectSlugForRequests();
+  const toolsetsQuery = useListToolsets({ gramProject }, undefined, {
     throwOnError: false,
   });
-  const assistantsQuery = useAssistantsList(undefined, undefined, {
+  const assistantsQuery = useAssistantsList({ gramProject }, undefined, {
     throwOnError: false,
   });
   const classified = toolsetsQuery.isSuccess && assistantsQuery.isSuccess;
@@ -129,7 +130,6 @@ export function AssistantMCPServersSection({
     (ref) => !(ref.kind === "toolset" && slackToolsetSlugs.has(ref.slug)),
   );
 
-  const gramProject = useProjectSlugForRequests();
   const { data: environmentsResult } = useListEnvironments(
     { gramProject },
     undefined,

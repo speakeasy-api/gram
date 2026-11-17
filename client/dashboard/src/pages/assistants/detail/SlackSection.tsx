@@ -368,7 +368,9 @@ function SlackInstall({
 }): JSX.Element {
   const sdk = useSdkClient();
   const draft = useAssistantDraft();
-  const keys: SlackCredentialKey[] = [...slack.required, "SLACK_USER_TOKEN"];
+  const keys: SlackCredentialKey[] = [
+    ...new Set<SlackCredentialKey>([...slack.required, "SLACK_USER_TOKEN"]),
+  ];
   const [values, setValues] = useState<Record<string, string>>({});
   const webhookUrl = slack.trigger?.webhookUrl;
   const { deepLink } = useMemo(
@@ -444,6 +446,7 @@ function SlackInstall({
           <div key={key} className="flex flex-col gap-1">
             <Label htmlFor={`slack-${key}`}>
               {SLACK_CREDENTIALS[key].label}
+              {slack.required.includes(key) ? "" : " (optional)"}
             </Label>
             <Input
               id={`slack-${key}`}

@@ -74,6 +74,11 @@ export function slackConnection(
   const set = new Set(
     (env?.entries ?? []).filter((e) => e.hasValue).map((e) => e.name),
   );
+  // The server falls back to SLACK_TOKEN for both bot and user calls.
+  if (set.has("SLACK_TOKEN")) {
+    set.add("SLACK_BOT_TOKEN");
+    set.add("SLACK_USER_TOKEN");
+  }
 
   return {
     connected: !!trigger || !!slackRef,
