@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { toast } from "sonner";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import { useRefreshUserSessionClientCIMDMutation } from "@gram/client/react-query/refreshUserSessionClientCIMD.js";
