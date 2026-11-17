@@ -953,8 +953,9 @@ func idJAGAssertionHappened(err error) (mcpconnectionattempts.Code, mcpconnectio
 	switch {
 	case reason == idjag.ReasonTrustUnavailable && errors.Is(err, idjag.ErrNoTrustedIssuer):
 		return none, detail, "token_trusted_issuer_not_configured"
+	// The stored key set itself failed, not the caller's key: the administrator's setup.
 	case reason == idjag.ReasonKeyUnusable && !errors.Is(err, jwks.ErrKeyAlgorithmMismatch):
-		return none, detail, "token_assertion_key_set_unusable"
+		return mcpconnectionattempts.CodeConfigurationRequired, mcpconnectionattempts.Detail("key_set_unusable"), ""
 	case slices.Contains(unverifiedIDJAGReasons, reason):
 		return none, detail, "token_" + string(reason)
 	case reason == idjag.ReasonKeyUnresolvable:

@@ -438,8 +438,8 @@ func TestIDJAGExchangeRecordsTrustLinkWithoutKeys(t *testing.T) {
 	require.Empty(t, row.SubjectURN)
 }
 
-// A key set address that answers 404 is not the app's fault, and is counted apart from a caller's bad key.
-func TestIDJAGExchangeUnusableKeySetWritesNoRow(t *testing.T) {
+// A key set address that answers 404 is the administrator's incomplete setup, not the app's fault.
+func TestIDJAGExchangeRecordsUnusableKeySet(t *testing.T) {
 	t.Parallel()
 
 	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -452,13 +452,15 @@ func TestIDJAGExchangeUnusableKeySetWritesNoRow(t *testing.T) {
 		return createTrustedIDJAGIssuer(t, ctx, ti, organizationID, "https://identity.example.test", jwksServer.URL).ID
 	})
 	signer := newIDJAGTestAssertion(t)
-	assertion := signer.sign(t, "https://identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())
+	jti := uuid.NewString()
+	assertion := signer.sign(t, "https://identity.example.test", f.resource, f.resource, f.clientID, mockidp.MockUserEmail, jti)
 
 	w := postIDJAGForm(t, f.ctx, f.ti, f.slug, idJAGForm(f.clientID, assertion))
 	requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
 
-	f.rec.RequireNothing()
-	require.Equal(t, map[string]int64{"token_assertion_key_set_unusable": 1}, refusalsWithoutRow(t, f.reader))
+	row := requireOneIDJAGRow(t, f.rec, mcpconnectionattempts.CodeConfigurationRequired, assertion, jti)
+	requireRefusedBy(t, row, mcpconnectionattempts.WhoAdmin, "key_set_unusable")
+	require.Empty(t, refusalsWithoutRow(t, f.reader))
 }
 
 // A person who can use none of a gateway's servers has no server to connect to.
