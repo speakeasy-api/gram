@@ -51,10 +51,6 @@ const (
 	// resolver, so no client was evaluated.
 	mandatoryReasonResolverOff = "resolver_off"
 
-	// mandatoryReasonNoConnectionOwner is a personal client used by a session
-	// that represents no user.
-	mandatoryReasonNoConnectionOwner = "no_connection_owner"
-
 	mandatoryShadowTimeout = 250 * time.Millisecond
 
 	onceLogTTL  = 10 * time.Minute
@@ -182,15 +178,18 @@ func isAccessDenial(err error) bool {
 	return errors.As(err, &shareable) && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeNotFound)
 }
 
-// shadowAuthClientUse records the check for using a resolved client. A
-// personal client a non-user session uses has no connection owner to check
-// yet, so it is recorded as skipped rather than as an invalid check.
-func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, owner string) {
-	if clientType == authClientTypeRemoteSession && owner == "" {
-		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
+// shadowAuthClientUse records the decision for using a resolved client, the
+// one enforcement makes, against today's decision. permit carries its
+// resolved connection owner.
+func (s *Service) shadowAuthClientUse(ctx context.Context, legacyAllowed bool, permit authClientPermitRequest) {
+	m := s.newMandatoryShadow(ctx, permit.OrganizationID)
+	if m == nil {
 		return
 	}
-	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, owner))
+	use := mandatoryAuthClientCheck(permit.ProjectID, permit.ClientID, permit.RegistrationID, permit.ClientType, permit.connectionOwner())
+	m.recordDecision(ctx, mandatorySurfaceAuthClient, legacyAllowed, use, func() (authz.MandatoryDecision, error) {
+		return decideAuthClientUse(ctx, m.authorization, permit, s.mandatoryServerVisibility)
+	})
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A

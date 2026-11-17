@@ -233,9 +233,8 @@ const MandatoryPolicySourceVisibility MandatoryPolicySource = "visibility"
 // policy. Every caller that presents a credential is still decided by its
 // policy exactly as Decide does, so a credential from another organization is
 // never authority here and an inactive or out-of-limits credential stays
-// denied. Private servers are decided by Decide alone. Only mcp:connect is
-// visibility-aware: an mcp:auth check is refused here and stays strict on
-// every server through Decide.
+// denied. Private servers are decided by Decide alone. An mcp:auth check is
+// refused here; DecideAuthClientAdmission decides those.
 func (m MandatoryAuthorization) DecideServerAdmission(organizationID string, visibility MandatoryServerVisibility, connect Check) (MandatoryDecision, error) {
 	if connect.Scope != ScopeMCPConnect {
 		return MandatoryDecision{}, fmt.Errorf("server admission decides %s, not %s", ScopeMCPConnect, connect.Scope)
@@ -243,10 +242,40 @@ func (m MandatoryAuthorization) DecideServerAdmission(organizationID string, vis
 	if decision, done, err := validateMandatoryChecks([]Check{connect}); done || err != nil {
 		return decision, err
 	}
-	if visibility == MandatoryServerPublic && m.publicAnonymous && m.caller == MandatoryCallerAnonymous {
-		return MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceVisibility, Reason: MandatoryDenyReasonNone}, nil
+	if m.admittedByVisibility(visibility) {
+		return visibilityAdmission(), nil
 	}
 	return m.Decide(organizationID, connect)
+}
+
+// DecideAuthClientAdmission decides mcp:auth for using an auth client a server
+// in organizationID resolved, under the server's visibility. It does no I/O.
+//
+// A public server admits a caller with no credential to the client it
+// resolved for that caller, as it admits the caller to the server: an
+// anonymous caller can reach only what public access already serves it, such
+// as the personal connection it made itself. Such a caller names nobody a
+// check could carry, so its admission does not read the check. Every caller
+// that presents a credential, and every caller of a private server, is
+// decided by Decide.
+func (m MandatoryAuthorization) DecideAuthClientAdmission(organizationID string, visibility MandatoryServerVisibility, use Check) (MandatoryDecision, error) {
+	if use.Scope != ScopeMCPAuth {
+		return MandatoryDecision{}, fmt.Errorf("auth client admission decides %s, not %s", ScopeMCPAuth, use.Scope)
+	}
+	if m.admittedByVisibility(visibility) {
+		return visibilityAdmission(), nil
+	}
+	return m.Decide(organizationID, use)
+}
+
+// admittedByVisibility reports whether visibility alone admits the caller:
+// an anonymous caller that presented no credential, on a public server.
+func (m MandatoryAuthorization) admittedByVisibility(visibility MandatoryServerVisibility) bool {
+	return visibility == MandatoryServerPublic && m.publicAnonymous && m.caller == MandatoryCallerAnonymous
+}
+
+func visibilityAdmission() MandatoryDecision {
+	return MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceVisibility, Reason: MandatoryDenyReasonNone}
 }
 
 // Decide evaluates checks on a server in organizationID. It does no I/O.
