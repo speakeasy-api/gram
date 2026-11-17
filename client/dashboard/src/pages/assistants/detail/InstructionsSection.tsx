@@ -55,6 +55,10 @@ export function InstructionsSection({
 
   const next = joinInstructions(draft);
   const dirty = next !== joinInstructions(saved);
+  // The automatic Slack rules alone don't count as instructions.
+  const hasEditableText = [draft.Tasks, draft.Personality, draft.preamble].some(
+    (part) => part.trim() !== "",
+  );
 
   const update = useAssistantsUpdateMutation({
     onSuccess: () => {
@@ -74,7 +78,6 @@ export function InstructionsSection({
     <Section
       id={ASSISTANT_INSTRUCTIONS_SECTION_ID}
       title="Instructions"
-
       footer={
         canWrite ? (
           <div className="ml-auto flex items-center gap-2">
@@ -101,7 +104,7 @@ export function InstructionsSection({
                   },
                 })
               }
-              disabled={!dirty || update.isPending || next.trim() === ""}
+              disabled={!dirty || update.isPending || !hasEditableText}
             >
               {update.isPending ? "Saving…" : "Save"}
             </Button>
@@ -128,7 +131,6 @@ export function InstructionsSection({
         <Field
           id="assistant-personality"
           label="Personality"
-
           action={
             <PersonalitySelect
               value={preset}

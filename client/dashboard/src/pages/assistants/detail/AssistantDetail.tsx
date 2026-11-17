@@ -131,10 +131,14 @@ function AssistantDetailInner(): JSX.Element {
         : null,
     [assistant, triggers, toolsetsQuery.data, environmentsQuery.data],
   );
+  // Empty fallbacks are only safe once every list has loaded; a failed list
+  // would hide an existing Slack setup and invite a duplicate.
   const settled =
-    !triggersQuery.isPending &&
-    !toolsetsQuery.isPending &&
-    !environmentsQuery.isPending;
+    triggersQuery.isSuccess &&
+    toolsetsQuery.isSuccess &&
+    environmentsQuery.isSuccess;
+  const loadFailed =
+    triggersQuery.isError || toolsetsQuery.isError || environmentsQuery.isError;
 
   const chrome = useMemo(
     () =>
@@ -170,6 +174,8 @@ function AssistantDetailInner(): JSX.Element {
               assistant={assistant}
               slack={slack}
               triggers={triggers}
+              settled={settled}
+              loadFailed={loadFailed}
             />
           )}
           {tab === "identity" && <IdentityTab assistant={assistant} />}
@@ -496,10 +502,14 @@ function ChannelsTab({
   assistant,
   slack,
   triggers,
+  settled,
+  loadFailed,
 }: {
   assistant: Assistant;
   slack: SlackConnection;
   triggers: TriggerInstance[];
+  settled: boolean;
+  loadFailed: boolean;
 }): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
@@ -508,13 +518,24 @@ function ChannelsTab({
   const [editing, setEditing] = useState<TriggerInstance | null>(null);
   const [creating, setCreating] = useState(false);
 
+  if (!settled) {
+    return loadFailed ? (
+      <Text small muted>
+        Couldn't load this assistant's channels. Reload the page to try again.
+      </Text>
+    ) : (
+      <div role="status" aria-label="Loading channels">
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+
   return (
     <>
       <SlackSection assistant={assistant} slack={slack} triggers={triggers} />
       <Section
         id={ASSISTANT_TRIGGERS_SECTION_ID}
         title="Triggers"
-
         action={
           canManageTriggers ? (
             <Button variant="secondary" onClick={() => setCreating(true)}>
@@ -530,6 +551,7 @@ function ChannelsTab({
         />
       </Section>
       <TriggerDialog
+        key={assistant.id}
         open={creating || editing !== null}
         onOpenChange={(open) => {
           if (open) return;

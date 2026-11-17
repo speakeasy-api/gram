@@ -67,6 +67,10 @@ export function slackConnection(
   const required: SlackCredentialKey[] = [];
   if (trigger) required.push("SLACK_SIGNING_SECRET");
   if (slackRef || trigger) required.push("SLACK_BOT_TOKEN");
+  // Slack only lets a user token search messages and files.
+  if (urns.has(`${SLACK_TOOL_URN_PREFIX}search_messages_and_files`)) {
+    required.push("SLACK_USER_TOKEN");
+  }
   const set = new Set(
     (env?.entries ?? []).filter((e) => e.hasValue).map((e) => e.name),
   );
@@ -99,7 +103,7 @@ export const SLACK_CREDENTIALS: Record<
     placeholder: "xoxb-…",
   },
   SLACK_USER_TOKEN: {
-    label: "User token (optional)",
+    label: "User token",
     where: "OAuth & Permissions → User OAuth Token",
     placeholder: "xoxp-…",
   },

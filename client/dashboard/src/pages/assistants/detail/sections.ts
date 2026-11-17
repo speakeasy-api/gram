@@ -61,8 +61,10 @@ export function splitInstructions(text: string): InstructionParts {
     Behavior: "",
     Tasks: "",
   };
+  // A heading that repeats keeps every block, so saving loses nothing.
   for (const r of ranges) {
-    parts[r.name] = text.slice(r.contentStart, r.end).trim();
+    const body = text.slice(r.contentStart, r.end).trim();
+    parts[r.name] = [parts[r.name], body].filter(Boolean).join("\n\n");
   }
   return parts;
 }

@@ -50,7 +50,7 @@ function slackTriggerConfig(
 
 /**
  * The environment that holds the assistant's own credentials. Found from
- * what it is already bound to, else by its conventional name, else created.
+ * what it is already bound to, else created.
  */
 async function ensureAssistantEnv(
   sdk: Gram,
@@ -78,12 +78,16 @@ async function ensureAssistantEnv(
     if (bound) return { id: bound.id, slug: bound.slug };
   }
 
-  const byName = envs.find((e) => e.name === envNameFor(assistant.name));
-  if (byName) return { id: byName.id, slug: byName.slug };
-
+  // Names aren't unique across assistants, so a new environment is created
+  // rather than adopting one that only shares the name.
+  const taken = new Set(envs.map((e) => e.name));
+  let name = envNameFor(assistant.name);
+  for (let n = 2; taken.has(name); n++) {
+    name = `${envNameFor(assistant.name)} ${n}`;
+  }
   const created = await sdk.environments.create({
     createEnvironmentForm: {
-      name: envNameFor(assistant.name),
+      name,
       description: `Shared credentials for ${assistant.name}.`,
       entries: [],
       organizationId,
@@ -123,10 +127,15 @@ async function recomputeBehaviorSection(
   });
 }
 
-/** The assistant's own Slack toolset: attached, not shared, has Slack tools. */
+/**
+ * The assistant's Slack toolset: attached and has Slack tools. Unless
+ * `includeShared`, one another assistant also uses doesn't count, so setup
+ * never rewrites a toolset it doesn't own.
+ */
 async function findSlackToolset(
   sdk: Gram,
   assistant: Assistant,
+  includeShared = false,
 ): Promise<{ slug: string; toolUrns: string[] } | undefined> {
   const [toolsets, assistants] = await Promise.all([
     sdk.toolsets.list(),
@@ -141,7 +150,7 @@ async function findSlackToolset(
   const found = toolsets.toolsets.find(
     (t) =>
       attached.has(t.slug) &&
-      !shared.has(t.slug) &&
+      (includeShared || !shared.has(t.slug)) &&
       t.tools.some((tool) => tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX)),
   );
   return found
@@ -264,7 +273,8 @@ export async function removeSlack(
   assistant: Assistant,
   triggers: readonly TriggerInstance[],
 ): Promise<Assistant> {
-  const existing = await findSlackToolset(sdk, assistant);
+  // Detaching a shared toolset leaves it in place for the others.
+  const existing = await findSlackToolset(sdk, assistant, true);
   let current = assistant;
   if (existing) {
     current = await sdk.assistants.update({

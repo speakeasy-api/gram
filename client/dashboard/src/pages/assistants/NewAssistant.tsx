@@ -153,6 +153,7 @@ export default function NewAssistantPage(): JSX.Element {
             type="button"
             variant="tertiary"
             onClick={() => routes.assistants.goTo()}
+            disabled={create.isPending}
           >
             Cancel
           </Button>

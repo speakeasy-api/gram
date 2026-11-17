@@ -174,6 +174,7 @@ export function AssistantOverviewSettings({
         </Field>
         <Field id="assistant-model" label="Model">
           <ModelSelect
+            id="assistant-model"
             value={draft.model}
             onValueChange={set("model")}
             disabled={disabled}
@@ -186,6 +187,7 @@ export function AssistantOverviewSettings({
           hint={isKit ? KIT_REASONING_EFFORT_HELP : REASONING_EFFORT_HELP}
         >
           <ReasoningEffortSelect
+            id="assistant-reasoning"
             disabledOff={isKit}
             value={draft.reasoningEffort}
             onValueChange={set("reasoningEffort")}

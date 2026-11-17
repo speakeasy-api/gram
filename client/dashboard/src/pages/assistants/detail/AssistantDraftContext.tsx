@@ -33,8 +33,8 @@ export function AssistantDraftProvider({
     undefined,
     {
       enabled: !!assistantId,
-      retry: false,
-      throwOnError: false,
+      // A failed load goes to the route's error page, not an endless skeleton.
+      throwOnError: true,
       refetchOnWindowFocus: false,
     },
   );

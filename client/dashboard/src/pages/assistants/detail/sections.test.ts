@@ -27,6 +27,12 @@ describe("splitInstructions", () => {
     expect(joinInstructions(splitInstructions(text))).toBe(text);
   });
 
+  it("keeps every block when a heading repeats", () => {
+    expect(
+      splitInstructions("# Tasks\nTriage bugs.\n\n# Tasks\nWrite notes.").Tasks,
+    ).toBe("Triage bugs.\n\nWrite notes.");
+  });
+
   it("drops empty sections when joining", () => {
     expect(
       joinInstructions({

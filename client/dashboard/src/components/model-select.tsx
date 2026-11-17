@@ -19,12 +19,15 @@ export function ModelSelect({
   disabled,
   ariaLabel = "Model",
   triggerClassName,
+  id,
 }: {
   value: string;
   onValueChange: (model: string) => void;
   disabled?: boolean;
   ariaLabel?: string;
   triggerClassName?: string;
+  /** Lets a `<label htmlFor>` point at the trigger. */
+  id?: string;
 }): JSX.Element {
   const options: AvailableModel[] = AVAILABLE_MODELS.some(
     (m) => m.value === value,
@@ -35,6 +38,7 @@ export function ModelSelect({
   return (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger
+        id={id}
         size="sm"
         aria-label={ariaLabel}
         className={triggerClassName}

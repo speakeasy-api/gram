@@ -20,7 +20,10 @@ import { useToolsets } from "@/pages/toolsets/useToolsets";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import type { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
 import type { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
-import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import {
+  invalidateAllAssistantsList,
+  useAssistantsList,
+} from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
@@ -95,15 +98,30 @@ export function AssistantMCPServersSection({
   const [addOpen, setAddOpen] = useState(false);
 
   const attached = attachedRefs(assistant);
-  // The assistant's own Slack toolset is managed on the Channels tab, so it
-  // is left out here; saves still send it, since they replace the whole list.
-  const { data: toolsetsResult } = useListToolsets(undefined, undefined, {
+  // The assistant's own Slack toolset (Slack tools, attached to no other
+  // assistant) is managed on the Channels tab, so it is left out here; saves
+  // still send it, since they replace the whole list. Until both lists load,
+  // rows wait, so the Slack toolset never shows as removable.
+  const toolsetsQuery = useListToolsets(undefined, undefined, {
     throwOnError: false,
   });
+  const assistantsQuery = useAssistantsList(undefined, undefined, {
+    throwOnError: false,
+  });
+  const classified = toolsetsQuery.isSuccess && assistantsQuery.isSuccess;
+  const sharedSlugs = new Set(
+    (assistantsQuery.data?.assistants ?? [])
+      .filter((other) => other.id !== assistant.id)
+      .flatMap((other) => other.toolsets.map((ref) => ref.toolsetSlug)),
+  );
   const slackToolsetSlugs = new Set(
-    (toolsetsResult?.toolsets ?? [])
-      .filter((t) =>
-        t.tools.some((tool) => tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX)),
+    (toolsetsQuery.data?.toolsets ?? [])
+      .filter(
+        (t) =>
+          !sharedSlugs.has(t.slug) &&
+          t.tools.some((tool) =>
+            tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
+          ),
       )
       .map((t) => t.slug),
   );
@@ -176,7 +194,6 @@ export function AssistantMCPServersSection({
     <Section
       id={ASSISTANT_MCP_SERVERS_SECTION_ID}
       title="MCP servers"
-
       action={
         <RequireScope
           scope="assistant:write"
@@ -189,7 +206,7 @@ export function AssistantMCPServersSection({
             variant="tertiary"
             size="sm"
             onClick={() => setAddOpen(true)}
-            disabled={update.isPending}
+            disabled={update.isPending || !classified}
           >
             <Button.LeftIcon>
               <Icon name="plus" className="h-3 w-3" />
@@ -199,7 +216,13 @@ export function AssistantMCPServersSection({
         </RequireScope>
       }
     >
-      {shown.length === 0 ? (
+      {!classified ? (
+        <Text small muted>
+          {toolsetsQuery.isError || assistantsQuery.isError
+            ? "Couldn't load MCP servers. Reload the page to try again."
+            : "Loading…"}
+        </Text>
+      ) : shown.length === 0 ? (
         <Text small muted>
           No MCP servers.
         </Text>

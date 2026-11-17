@@ -114,7 +114,8 @@ export default function AssistantsIndex(): JSX.Element {
       if (!query) return true;
       return (
         assistant.name.toLowerCase().includes(query) ||
-        assistant.model.toLowerCase().includes(query)
+        assistant.model.toLowerCase().includes(query) ||
+        modelLabel(assistant.model).toLowerCase().includes(query)
       );
     });
   }, [assistants, search]);
@@ -235,11 +236,13 @@ function AssistantsBody({
   );
 }
 
+function modelLabel(model: string): string {
+  return AVAILABLE_MODELS.find((m) => m.value === model)?.label ?? model;
+}
+
 /** "Claude Sonnet 4.6 · 2 MCP servers": what it runs on and with. */
 function assistantSummary(assistant: Assistant): string {
-  const model =
-    AVAILABLE_MODELS.find((m) => m.value === assistant.model)?.label ??
-    assistant.model;
+  const model = modelLabel(assistant.model);
   const servers = assistantAttachedServerSlugs(assistant).length;
   if (servers === 0) return `${model} · No MCP servers`;
   return `${model} · ${servers} MCP server${servers === 1 ? "" : "s"}`;

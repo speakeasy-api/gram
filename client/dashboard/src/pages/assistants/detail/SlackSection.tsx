@@ -54,7 +54,10 @@ export function SlackSection({
   const organization = useOrganization();
   const draft = useAssistantDraft();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("assistant:write", assistant.id, project.id);
+  // Setup also writes the project's toolsets, environments and triggers.
+  const canWrite =
+    hasScope("assistant:write", assistant.id, project.id) &&
+    hasScope("project:write", project.id);
   const [setupOpen, setSetupOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [editingTokens, setEditingTokens] = useState(false);
