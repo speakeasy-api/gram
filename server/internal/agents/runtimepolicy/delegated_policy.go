@@ -280,7 +280,10 @@ var storedOnlyLimitScopes = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrit
 // authz.ValidateSelector.
 func validateStoredDelegatedSelector(scope authz.Scope, selector authz.Selector) error {
 	if !slices.Contains(storedOnlyLimitScopes, scope) {
-		return authz.ValidateSelector(scope, selector)
+		if err := authz.ValidateSelector(scope, selector); err != nil {
+			return fmt.Errorf("validate selector: %w", err)
+		}
+		return nil
 	}
 	unlimited := maps.Clone(selector)
 	delete(unlimited, authz.SelectorKeyTool)
@@ -290,11 +293,14 @@ func validateStoredDelegatedSelector(scope authz.Scope, selector authz.Selector)
 			authz.SelectorKeyResourceID:   authz.WildcardResource,
 			authz.SelectorKeyDisposition:  disposition,
 		}); err != nil {
-			return err
+			return fmt.Errorf("validate stored disposition limit: %w", err)
 		}
 		delete(unlimited, authz.SelectorKeyDisposition)
 	}
-	return authz.ValidateSelector(scope, unlimited)
+	if err := authz.ValidateSelector(scope, unlimited); err != nil {
+		return fmt.Errorf("validate selector without stored limits: %w", err)
+	}
+	return nil
 }
 
 func delegatedPolicyClosure(version DelegatedPolicyVersion, requested []DelegatedPolicyGrant) ([]DelegatedPolicyGrant, error) {
