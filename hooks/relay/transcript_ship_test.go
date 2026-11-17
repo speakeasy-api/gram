@@ -264,6 +264,30 @@ func TestCoworkReportsEmptyTranscript(t *testing.T) {
 	require.NotNil(t, uploads[0].Diagnostic)
 	require.Equal(t, transcriptSkipEmpty, uploads[0].Diagnostic.Reason)
 	require.Empty(t, uploads[0].Entries)
+
+	// A later Stop on the same empty file does not report it again.
+	invokeClaude(t, cfg, claudeStop(transcript))
+	uploads, _ = ts.recorded()
+	require.Len(t, uploads, 1)
+}
+
+// TestCoworkRetriesEmptyReportAfterFailure: a skip report the server did not
+// acknowledge is sent again on the next Stop.
+func TestCoworkRetriesEmptyReportAfterFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	ts.respond(http.StatusServiceUnavailable)
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, "")
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	ts.respond(http.StatusOK)
+	invokeClaude(t, cfg, claudeStop(transcript))
+	invokeClaude(t, cfg, claudeStop(transcript))
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 2, "the failed report is retried once, then not again")
 }
 
 func TestCoworkRetriesUnsettledUpload(t *testing.T) {

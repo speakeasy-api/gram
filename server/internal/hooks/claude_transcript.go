@@ -109,8 +109,9 @@ type claudeTranscriptUpload struct {
 	Entries claudeTranscriptEntries `json:"entries"`
 
 	// Diagnostic, when set, reports why the binary's Stop hook shipped no
-	// lines. Such an upload carries no entries and stores nothing; the server
-	// only logs it, because a skip inside the Cowork VM is otherwise silent.
+	// lines. The server logs it, because a skip inside the Cowork VM is
+	// otherwise silent. Such an upload normally carries no entries; any it
+	// does carry are stored as usual.
 	Diagnostic *claudeTranscriptDiagnostic `json:"diagnostic"`
 }
 
@@ -199,6 +200,10 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 
 	if upload.Diagnostic != nil {
 		s.logClaudeTranscriptSkip(ctx, authCtx, upload)
+	}
+	// A skip report carries no entries. One that does is still stored, so a
+	// client mixing the two never loses transcript rows.
+	if upload.Diagnostic != nil && len(upload.Entries) == 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: 0, Warnings: nil})
@@ -241,7 +246,7 @@ func (s *Service) logClaudeTranscriptSkip(ctx context.Context, authCtx *contextv
 		attr.SlogHookSource(truncateDiagnostic(upload.Adapter)),
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogProjectID(authCtx.ProjectID.String()),
-		attr.SlogGenAIConversationID(upload.SessionID),
+		attr.SlogGenAIConversationID(truncateDiagnostic(upload.SessionID)),
 	)
 }
 

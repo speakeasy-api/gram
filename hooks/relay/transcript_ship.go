@@ -236,9 +236,12 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 			if chunk.end == chunk.start {
 				// A Stop follows a reply, so a transcript that has never held a
 				// complete line means Claude did not write it where the hook
-				// said. A replaced file still being written is not reported.
-				if offset == 0 && chunk.start == 0 {
-					r.reportTranscriptSkip(ctx, client, c, upload, transcriptSkipEmpty, "no complete line at "+path)
+				// said. It is reported once. A replaced file has a recorded
+				// offset, so one still being written is not reported.
+				if chunk.start == 0 && !transcriptOffsetRecorded(marker) && !transcriptEmptyReported(marker) {
+					if r.reportTranscriptSkip(ctx, client, c, upload, transcriptSkipEmpty, "no complete line at "+path) {
+						markTranscriptEmptyReported(marker)
+					}
 				}
 				return
 			}
@@ -271,14 +274,46 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 // the reason reaches the server's logs instead of only a local debug log that
 // nobody reads inside the Cowork VM. It is best effort: a failed report is
 // only logged locally.
-func (r *Relay) reportTranscriptSkip(ctx context.Context, client *http.Client, c creds, upload transcriptUpload, reason, detail string) {
+func (r *Relay) reportTranscriptSkip(ctx context.Context, client *http.Client, c creds, upload transcriptUpload, reason, detail string) bool {
 	if len(detail) > transcriptDiagnosticMaxDetail {
-		detail = detail[:transcriptDiagnosticMaxDetail]
+		detail = strings.ToValidUTF8(detail[:transcriptDiagnosticMaxDetail], "")
 	}
 	upload.OffsetStart, upload.OffsetEnd, upload.Entries = 0, 0, nil
 	upload.Diagnostic = &transcriptDiagnostic{Reason: reason, Detail: detail}
 	status, _, err := postTranscript(ctx, client, c, upload)
 	r.debugf("transcript skip reported session=%s reason=%s status=%d err=%v", upload.SessionID, reason, status, err)
+	return err == nil && status >= 200 && status < 300
+}
+
+// transcriptOffsetRecorded reports whether an offset was ever written for the
+// transcript: a shipped chunk or a recorded restart of a replaced file.
+func transcriptOffsetRecorded(marker string) bool {
+	if marker == "" {
+		return false
+	}
+	_, err := os.Stat(marker)
+	return err == nil
+}
+
+// transcriptEmptyReportedPath marks that an empty transcript was already
+// reported, so later Stops on the same empty file do not report it again.
+func transcriptEmptyReportedPath(marker string) string {
+	return marker + ".empty-reported"
+}
+
+func transcriptEmptyReported(marker string) bool {
+	if marker == "" {
+		return false
+	}
+	_, err := os.Stat(transcriptEmptyReportedPath(marker))
+	return err == nil
+}
+
+func markTranscriptEmptyReported(marker string) {
+	if marker == "" {
+		return
+	}
+	_ = atomicWriteCacheFile(transcriptEmptyReportedPath(marker), []byte("1"))
 }
 
 // inCoworkVM reports whether a Claude Code event fires inside Claude's
