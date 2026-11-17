@@ -22,13 +22,6 @@ var guardExemptFiles = map[string]string{
 	"../../demoseed/queries/04_servers.sql": "demo placeholder",
 }
 
-// pendingWriters store token copies outside upstreamtoken_queries.sql until
-// their tables move onto Tokens in the following changes.
-var pendingWriters = []string{
-	"UpsertTrustedDelegationCredential",
-	"CompleteTrustedDelegationRefresh",
-}
-
 // tokenValues are the bare names of the values the use case holds. Each is
 // stored as <value>_encrypted and <value>_org_encrypted.
 var tokenValues = []string{"access_token", "refresh_token", "identity_assertion", "upstream_subject", "nonce"}
@@ -201,7 +194,7 @@ func TestOnlyUpstreamTokenQueriesStoreATokenCopy(t *testing.T) {
 	require.NoError(t, err)
 
 	offenders := map[string][]string{}
-	var fixtures, pending []string
+	var fixtures []string
 	err = filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -239,8 +232,6 @@ func TestOnlyUpstreamTokenQueriesStoreATokenCopy(t *testing.T) {
 			case len(problems) == 0:
 			case strings.Contains(name, "Fixture"):
 				fixtures = append(fixtures, name)
-			case slices.Contains(pendingWriters, name):
-				pending = append(pending, name)
 			default:
 				offenders[path+": "+name] = problems
 			}
@@ -249,8 +240,6 @@ func TestOnlyUpstreamTokenQueriesStoreATokenCopy(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Contains(t, fixtures, "UpsertRemoteSessionFixture", "the scan reaches the queries that plant token copies")
-	slices.Sort(pending)
-	require.Equal(t, slices.Sorted(slices.Values(pendingWriters)), slices.Compact(pending), "every pending writer still stores a token copy; drop the ones that moved onto Tokens")
 	require.Empty(t, offenders, "these queries store a token copy outside upstreamtoken_queries.sql, or erase only one copy of a value; store tokens through upstreamtokens.Tokens and erase both copies together")
 
 	callers := fixtureCallers(t, fixtures)
@@ -446,4 +435,54 @@ func TestUnpairedPresenceChecks(t *testing.T) {
 	require.Equal(t, []string{"s.refresh_token_encrypted IS NOT NULL"}, unpairedPresenceChecks("WHERE s.refresh_token_encrypted IS NOT NULL AND s.deleted IS FALSE"))
 	require.Equal(t, []string{"c.access_token_encrypted IS NULL"}, unpairedPresenceChecks("WHERE c.access_token_encrypted IS NULL"))
 	require.Empty(t, unpairedPresenceChecks("WHERE c.client_secret_encrypted IS NULL"), "other values are not this use case's")
+}
+
+// copyReadPattern matches Go code reading the text or presence of one stored
+// token copy directly.
+var copyReadPattern = regexp.MustCompile(`\b(?:AccessToken|RefreshToken|IdentityAssertion|UpstreamSubject|Nonce)(?:Org)?Encrypted\.(?:String|Valid)\b`)
+
+// TestProductionCodeNeverReadsOneTokenCopy keeps production code from
+// deciding anything from one copy of a stored token. Whether a value is set is
+// Has over both copies, and its plaintext is Open with the copy the
+// organization's transition state reads. Code passes the copies to Stored and
+// leaves the rest to Tokens.
+func TestProductionCodeNeverReadsOneTokenCopy(t *testing.T) {
+	t.Parallel()
+
+	self, err := filepath.Abs(".")
+	require.NoError(t, err)
+
+	offenders := map[string][]string{}
+	err = filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case "repo", "testrepo":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("resolve %s: %w", path, err)
+		}
+		if filepath.Dir(absolute) == self {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if matches := copyReadPattern.FindAllString(string(content), -1); len(matches) > 0 {
+			offenders[path] = matches
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.Empty(t, offenders, "this code reads one copy of a stored token; use upstreamtokens.Has or Tokens.Open over both copies")
 }

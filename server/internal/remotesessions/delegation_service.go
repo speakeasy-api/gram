@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/delegation"
 )
 
@@ -30,10 +29,10 @@ var (
 
 type DelegationService struct{ service *delegation.Service }
 
-func NewDelegationService(db *pgxpool.Pool, enc *encryption.Client, manager *ChallengeManager) *DelegationService {
+func NewDelegationService(db *pgxpool.Pool, manager *ChallengeManager) *DelegationService {
 	dependencies := delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, manager.federatedClientPaused, nil)
 	dependencies.Connections = manager.connections
-	return &DelegationService{service: delegation.New(db, enc, dependencies)}
+	return &DelegationService{service: delegation.New(db, manager.tokens, dependencies)}
 }
 
 func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), paused func(context.Context, *FederatedProvider) bool, now func() time.Time) delegation.Dependencies {

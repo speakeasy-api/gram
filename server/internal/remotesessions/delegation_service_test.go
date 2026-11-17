@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/delegation"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -28,6 +29,7 @@ var DelegationTestDatabase testenv.PostgresDBCloneFunc
 type delegationAdapterFixture struct {
 	db              *pgxpool.Pool
 	enc             *encryption.Client
+	tokens          *upstreamtokens.Tokens
 	now             func() time.Time
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
@@ -36,7 +38,7 @@ type delegationAdapterFixture struct {
 }
 
 func (s *delegationAdapterFixture) service() *DelegationService {
-	return &DelegationService{service: delegation.New(s.db, s.enc, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, s.refreshPaused, func() time.Time { return s.now() }))}
+	return &DelegationService{service: delegation.New(s.db, s.tokens, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, s.refreshPaused, func() time.Time { return s.now() }))}
 }
 func (s *delegationAdapterFixture) RetainVerifiedLogin(ctx context.Context, p *FederatedProvider, human string, i *FederatedIdentity, requested bool) error {
 	return s.service().RetainVerifiedLogin(ctx, p, human, i, requested)
@@ -96,7 +98,7 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	s := &delegationAdapterFixture{db: db, enc: enc, now: func() time.Time { return now }}
+	s := &delegationAdapterFixture{db: db, enc: enc, tokens: upstreamtokens.WithoutOrganizationEncryption(testenv.NewLogger(t), db, enc), now: func() time.Time { return now }}
 	s.loadProvider = func(_ context.Context, org string, issuer, client uuid.UUID) (*FederatedProvider, error) {
 		if org != p.organizationID || issuer != p.issuer.ID || client != p.client.ID {
 			return nil, ErrFederatedConfiguration

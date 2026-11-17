@@ -1123,7 +1123,7 @@ func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityC
 	if config.RemoteChallengeManager == nil {
 		return nil
 	}
-	g := identitychaining.NewGovernor(config.Logger, config.DB, config.UpstreamTokens, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g := identitychaining.NewGovernor(config.Logger, config.DB, config.UpstreamTokens, remotesessions.NewDelegationService(config.DB, config.RemoteChallengeManager))
 	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner, config.FeatureFlags)
 	g.SetResourceResolver(config.RemoteChallengeManager.ResolveEMAResource)
 	return g

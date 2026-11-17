@@ -331,3 +331,71 @@ func remoteSessionStores(conn *pgxpool.Pool) []orgencryption.CopyStore {
 	}
 	return stores
 }
+
+func TestSetTrustedIssuerSessionReplacesKeepsAndErasesEachValue(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.enroll(t)
+	session, err := repo.New(ti.conn).CreateTrustedIssuerSessionFixture(t.Context(), repo.CreateTrustedIssuerSessionFixtureParams{
+		OrganizationID:        ti.orgID,
+		RemoteSessionClientID: ti.createClient(t).ID,
+		SubjectUrn:            "user:" + uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	first, err := ti.tokens.SetTrustedIssuerSession(t.Context(), ti.conn, session.ID, session.OrganizationID, upstreamtokens.TrustedIssuerSessionValues{
+		IdentityAssertion: new("assertion"), RefreshToken: new("refresh"), UpstreamSubject: new("subject"), Nonce: new("nonce"),
+	})
+	require.NoError(t, err)
+	require.True(t, first.RefreshTokenEncrypted.Valid)
+	require.True(t, first.RefreshTokenOrgEncrypted.Valid, "dual_write seals every replaced value under the organization's key")
+	require.Equal(t, session.UpdatedAt, first.UpdatedAt, "the statement that changed the session owns updated_at")
+
+	second, err := ti.tokens.SetTrustedIssuerSession(t.Context(), ti.conn, session.ID, session.OrganizationID, upstreamtokens.TrustedIssuerSessionValues{
+		IdentityAssertion: new(""), RefreshToken: new("rotated"), UpstreamSubject: nil, Nonce: nil,
+	})
+	require.NoError(t, err)
+	require.False(t, second.IdentityAssertionEncrypted.Valid)
+	require.False(t, second.IdentityAssertionOrgEncrypted.Valid, "an erased value clears both copies")
+	require.Equal(t, first.UpstreamSubjectEncrypted, second.UpstreamSubjectEncrypted, "a kept value keeps both stored copies")
+	require.Equal(t, first.UpstreamSubjectOrgEncrypted, second.UpstreamSubjectOrgEncrypted)
+	require.Equal(t, first.NonceOrgEncrypted, second.NonceOrgEncrypted)
+
+	for columns, want := range map[orgencryption.CopyColumns]string{
+		upstreamtokens.TrustedIssuerSessionRefreshToken:    "rotated",
+		upstreamtokens.TrustedIssuerSessionUpstreamSubject: "subject",
+		upstreamtokens.TrustedIssuerSessionNonce:           "nonce",
+	} {
+		var stored orgencryption.Copies
+		switch columns {
+		case upstreamtokens.TrustedIssuerSessionRefreshToken:
+			stored = upstreamtokens.Stored(nullText(), second.RefreshTokenOrgEncrypted)
+		case upstreamtokens.TrustedIssuerSessionUpstreamSubject:
+			stored = upstreamtokens.Stored(nullText(), second.UpstreamSubjectOrgEncrypted)
+		default:
+			stored = upstreamtokens.Stored(nullText(), second.NonceOrgEncrypted)
+		}
+		opened, err := ti.tokens.Open(t.Context(), ti.conn, second.OrganizationID, columns, stored)
+		require.NoError(t, err)
+		require.Equal(t, want, opened, columns.OrgColumn)
+	}
+}
+
+func TestCopyStoresCoverEveryOrganizationKeyColumn(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	got := map[string]bool{}
+	for _, store := range upstreamtokens.CopyStores(ti.conn) {
+		got[store.Columns().OrgColumn] = true
+	}
+
+	want, err := repo.New(ti.conn).ListOrganizationKeyTokenColumnsFixture(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, want)
+	for _, column := range want {
+		require.True(t, got[column], "%s has no CopyStore, so finalize would leave its platform-key copies behind", column)
+	}
+	require.Len(t, got, len(want), "every CopyStore names an organization-key column of the use case's tables")
+}

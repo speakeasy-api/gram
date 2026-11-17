@@ -5478,6 +5478,62 @@ WHERE s.organization_id = @organization_id::text
   );
 
 -- name: UpsertTrustedDelegationCredential :one
+-- Expected generation is zero for absence. Prepare explicit fields, then
+-- re-read and prepare again after a CAS miss. It stores no tokens: the caller
+-- stores, keeps or erases each value with SetTrustedIssuerSessionTokens in the
+-- same transaction.
+-- Refresh completion also advances generation, preventing stale preservation.
+INSERT INTO trusted_issuer_sessions AS s (
+  organization_id, remote_session_client_id, subject_urn,
+  identity_assertion_expires_at, refresh_expires_at, credential_config_hash, observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at, retry_after, offline_access_refused_at, offline_access_request_config_hash
+)
+SELECT @organization_id::text, @client_id::uuid, @subject_urn::text,
+  sqlc.narg(identity_assertion_expires_at), sqlc.narg(refresh_expires_at), sqlc.narg(credential_config_hash), sqlc.narg(observation_status), sqlc.narg(observed_at), sqlc.narg(credential_obtained_at), sqlc.narg(last_refresh_succeeded_at), sqlc.narg(retry_after), sqlc.narg(offline_access_refused_at), sqlc.narg(offline_access_request_config_hash)
+WHERE EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
+      AND c.id = @client_id::uuid AND c.remote_session_issuer_id = @issuer_id::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+  AND (@expected_generation::bigint = 0 OR EXISTS (
+    SELECT 1 FROM trusted_issuer_sessions AS current
+    WHERE current.organization_id = @organization_id::text
+      AND current.remote_session_client_id = @client_id::uuid
+      AND current.subject_urn = @subject_urn::text AND current.project_id IS NULL
+      AND current.deleted IS FALSE AND COALESCE(current.credential_generation, 1) = @expected_generation::bigint))
+ON CONFLICT (remote_session_client_id, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  identity_assertion_expires_at = EXCLUDED.identity_assertion_expires_at,
+  refresh_expires_at = EXCLUDED.refresh_expires_at,
+  credential_config_hash = EXCLUDED.credential_config_hash,
+  observation_status = EXCLUDED.observation_status,
+  observed_at = EXCLUDED.observed_at,
+  credential_obtained_at = EXCLUDED.credential_obtained_at,
+  last_refresh_succeeded_at = EXCLUDED.last_refresh_succeeded_at,
+  retry_after = EXCLUDED.retry_after,
+  offline_access_refused_at = EXCLUDED.offline_access_refused_at,
+  offline_access_request_config_hash = EXCLUDED.offline_access_request_config_hash,
+  credential_generation = COALESCE(s.credential_generation, 1) + 1,
+  refresh_claim_id = NULL, updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text AND s.project_id IS NULL
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
+RETURNING s.*;
+
+-- name: UpsertTrustedDelegationCredentialFixture :one
+-- Test fixture: UpsertTrustedDelegationCredential that also stores platform-key
+-- copies, for tests of organizations in platform_key.
 -- Expected generation is zero for absence. Prepare explicit fields, including
 -- preserved refresh tokens, then re-read and prepare again after a CAS miss.
 -- Refresh completion also advances generation, preventing stale preservation.
@@ -5613,14 +5669,12 @@ WHERE s.organization_id = @organization_id::text
 
 -- name: CompleteTrustedDelegationRefresh :one
 -- Retain the claim for ambiguous outcomes; only definitive completion releases
--- it. Explicit fields allow rotation without inventing an assertion.
+-- it. Explicit fields allow rotation without inventing an assertion. It stores
+-- no tokens: the caller stores, keeps or erases each value with
+-- SetTrustedIssuerSessionTokens in the same transaction.
 UPDATE trusted_issuer_sessions AS s SET
-  identity_assertion_encrypted = sqlc.narg(identity_assertion_encrypted),
   identity_assertion_expires_at = sqlc.narg(identity_assertion_expires_at),
-  refresh_token_encrypted = sqlc.narg(refresh_token_encrypted),
   refresh_expires_at = sqlc.narg(refresh_expires_at),
-  upstream_subject_encrypted = sqlc.narg(upstream_subject_encrypted),
-  nonce_encrypted = sqlc.narg(nonce_encrypted),
   credential_config_hash = sqlc.narg(credential_config_hash),
   observation_status = sqlc.narg(observation_status),
   observed_at = sqlc.narg(observed_at),

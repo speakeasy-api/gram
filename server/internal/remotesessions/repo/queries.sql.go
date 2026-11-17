@@ -966,33 +966,29 @@ func (q *Queries) ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx context.Co
 
 const completeTrustedDelegationRefresh = `-- name: CompleteTrustedDelegationRefresh :one
 UPDATE trusted_issuer_sessions AS s SET
-  identity_assertion_encrypted = $1,
-  identity_assertion_expires_at = $2,
-  refresh_token_encrypted = $3,
-  refresh_expires_at = $4,
-  upstream_subject_encrypted = $5,
-  nonce_encrypted = $6,
-  credential_config_hash = $7,
-  observation_status = $8,
-  observed_at = $9,
-  credential_obtained_at = $10,
-  last_refresh_succeeded_at = $11,
-  retry_after = $12,
-  offline_access_refused_at = $13,
-  offline_access_request_config_hash = $14,
+  identity_assertion_expires_at = $1,
+  refresh_expires_at = $2,
+  credential_config_hash = $3,
+  observation_status = $4,
+  observed_at = $5,
+  credential_obtained_at = $6,
+  last_refresh_succeeded_at = $7,
+  retry_after = $8,
+  offline_access_refused_at = $9,
+  offline_access_request_config_hash = $10,
   credential_generation = COALESCE(s.credential_generation, 1) + 1,
-  refresh_claim_id = $15::uuid, updated_at = clock_timestamp()
-WHERE s.organization_id = $16::text
-  AND s.remote_session_client_id = $17::uuid
-  AND s.subject_urn = $18::text AND s.project_id IS NULL AND s.deleted IS FALSE
-  AND COALESCE(s.credential_generation, 1) = $19::bigint
-  AND s.refresh_claim_id = $20::uuid
+  refresh_claim_id = $11::uuid, updated_at = clock_timestamp()
+WHERE s.organization_id = $12::text
+  AND s.remote_session_client_id = $13::uuid
+  AND s.subject_urn = $14::text AND s.project_id IS NULL AND s.deleted IS FALSE
+  AND COALESCE(s.credential_generation, 1) = $15::bigint
+  AND s.refresh_claim_id = $16::uuid
   AND EXISTS (
     SELECT 1 FROM organization_metadata AS o
     JOIN remote_session_clients AS c ON c.organization_id = o.id
     JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-    WHERE o.id = $16::text AND o.disabled_at IS NULL
-      AND c.id = $17::uuid AND c.remote_session_issuer_id = $21::uuid
+    WHERE o.id = $12::text AND o.disabled_at IS NULL
+      AND c.id = $13::uuid AND c.remote_session_issuer_id = $17::uuid
       AND c.project_id IS NULL AND c.deleted IS FALSE
       AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
       AND i.deleted IS FALSE
@@ -1002,19 +998,15 @@ WHERE s.organization_id = $16::text
           AND usi.trusted_remote_session_issuer_id = i.id)
       AND EXISTS (SELECT 1 FROM users AS u
         JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
-        WHERE 'user:' || u.id = $18::text AND u.deleted_at IS NULL
+        WHERE 'user:' || u.id = $14::text AND u.deleted_at IS NULL
           AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
   )
 RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_org_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.upstream_subject_org_encrypted, s.nonce_encrypted, s.nonce_org_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type CompleteTrustedDelegationRefreshParams struct {
-	IdentityAssertionEncrypted     pgtype.Text
 	IdentityAssertionExpiresAt     pgtype.Timestamptz
-	RefreshTokenEncrypted          pgtype.Text
 	RefreshExpiresAt               pgtype.Timestamptz
-	UpstreamSubjectEncrypted       pgtype.Text
-	NonceEncrypted                 pgtype.Text
 	CredentialConfigHash           pgtype.Text
 	ObservationStatus              pgtype.Text
 	ObservedAt                     pgtype.Timestamptz
@@ -1033,15 +1025,13 @@ type CompleteTrustedDelegationRefreshParams struct {
 }
 
 // Retain the claim for ambiguous outcomes; only definitive completion releases
-// it. Explicit fields allow rotation without inventing an assertion.
+// it. Explicit fields allow rotation without inventing an assertion. It stores
+// no tokens: the caller stores, keeps or erases each value with
+// SetTrustedIssuerSessionTokens in the same transaction.
 func (q *Queries) CompleteTrustedDelegationRefresh(ctx context.Context, arg CompleteTrustedDelegationRefreshParams) (TrustedIssuerSession, error) {
 	row := q.db.QueryRow(ctx, completeTrustedDelegationRefresh,
-		arg.IdentityAssertionEncrypted,
 		arg.IdentityAssertionExpiresAt,
-		arg.RefreshTokenEncrypted,
 		arg.RefreshExpiresAt,
-		arg.UpstreamSubjectEncrypted,
-		arg.NonceEncrypted,
 		arg.CredentialConfigHash,
 		arg.ObservationStatus,
 		arg.ObservedAt,
@@ -19081,6 +19071,133 @@ func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSp
 const upsertTrustedDelegationCredential = `-- name: UpsertTrustedDelegationCredential :one
 INSERT INTO trusted_issuer_sessions AS s (
   organization_id, remote_session_client_id, subject_urn,
+  identity_assertion_expires_at, refresh_expires_at, credential_config_hash, observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at, retry_after, offline_access_refused_at, offline_access_request_config_hash
+)
+SELECT $1::text, $2::uuid, $3::text,
+  $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+WHERE EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = $1::text AND o.disabled_at IS NULL
+      AND c.id = $2::uuid AND c.remote_session_issuer_id = $14::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = $3::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+  AND ($15::bigint = 0 OR EXISTS (
+    SELECT 1 FROM trusted_issuer_sessions AS current
+    WHERE current.organization_id = $1::text
+      AND current.remote_session_client_id = $2::uuid
+      AND current.subject_urn = $3::text AND current.project_id IS NULL
+      AND current.deleted IS FALSE AND COALESCE(current.credential_generation, 1) = $15::bigint))
+ON CONFLICT (remote_session_client_id, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  identity_assertion_expires_at = EXCLUDED.identity_assertion_expires_at,
+  refresh_expires_at = EXCLUDED.refresh_expires_at,
+  credential_config_hash = EXCLUDED.credential_config_hash,
+  observation_status = EXCLUDED.observation_status,
+  observed_at = EXCLUDED.observed_at,
+  credential_obtained_at = EXCLUDED.credential_obtained_at,
+  last_refresh_succeeded_at = EXCLUDED.last_refresh_succeeded_at,
+  retry_after = EXCLUDED.retry_after,
+  offline_access_refused_at = EXCLUDED.offline_access_refused_at,
+  offline_access_request_config_hash = EXCLUDED.offline_access_request_config_hash,
+  credential_generation = COALESCE(s.credential_generation, 1) + 1,
+  refresh_claim_id = NULL, updated_at = clock_timestamp()
+WHERE s.organization_id = $1::text AND s.project_id IS NULL
+  AND COALESCE(s.credential_generation, 1) = $15::bigint
+RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_org_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.upstream_subject_org_encrypted, s.nonce_encrypted, s.nonce_org_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
+`
+
+type UpsertTrustedDelegationCredentialParams struct {
+	OrganizationID                 string
+	ClientID                       uuid.UUID
+	SubjectUrn                     string
+	IdentityAssertionExpiresAt     pgtype.Timestamptz
+	RefreshExpiresAt               pgtype.Timestamptz
+	CredentialConfigHash           pgtype.Text
+	ObservationStatus              pgtype.Text
+	ObservedAt                     pgtype.Timestamptz
+	CredentialObtainedAt           pgtype.Timestamptz
+	LastRefreshSucceededAt         pgtype.Timestamptz
+	RetryAfter                     pgtype.Timestamptz
+	OfflineAccessRefusedAt         pgtype.Timestamptz
+	OfflineAccessRequestConfigHash pgtype.Text
+	IssuerID                       uuid.UUID
+	ExpectedGeneration             int64
+}
+
+// Expected generation is zero for absence. Prepare explicit fields, then
+// re-read and prepare again after a CAS miss. It stores no tokens: the caller
+// stores, keeps or erases each value with SetTrustedIssuerSessionTokens in the
+// same transaction.
+// Refresh completion also advances generation, preventing stale preservation.
+func (q *Queries) UpsertTrustedDelegationCredential(ctx context.Context, arg UpsertTrustedDelegationCredentialParams) (TrustedIssuerSession, error) {
+	row := q.db.QueryRow(ctx, upsertTrustedDelegationCredential,
+		arg.OrganizationID,
+		arg.ClientID,
+		arg.SubjectUrn,
+		arg.IdentityAssertionExpiresAt,
+		arg.RefreshExpiresAt,
+		arg.CredentialConfigHash,
+		arg.ObservationStatus,
+		arg.ObservedAt,
+		arg.CredentialObtainedAt,
+		arg.LastRefreshSucceededAt,
+		arg.RetryAfter,
+		arg.OfflineAccessRefusedAt,
+		arg.OfflineAccessRequestConfigHash,
+		arg.IssuerID,
+		arg.ExpectedGeneration,
+	)
+	var i TrustedIssuerSession
+	err := row.Scan(
+		&i.ID,
+		&i.RemoteSessionClientID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SubjectUrn,
+		&i.IdentityAssertionEncrypted,
+		&i.IdentityAssertionOrgEncrypted,
+		&i.IdentityAssertionExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
+		&i.RefreshExpiresAt,
+		&i.LastRefreshAttemptAt,
+		&i.OfflineAccessRefusedAt,
+		&i.OfflineAccessRequestConfigHash,
+		&i.CredentialGeneration,
+		&i.RefreshClaimID,
+		&i.UpstreamSubjectEncrypted,
+		&i.UpstreamSubjectOrgEncrypted,
+		&i.NonceEncrypted,
+		&i.NonceOrgEncrypted,
+		&i.CredentialConfigHash,
+		&i.ObservationStatus,
+		&i.ObservedAt,
+		&i.CredentialObtainedAt,
+		&i.LastRefreshSucceededAt,
+		&i.RetryAfter,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertTrustedDelegationCredentialFixture = `-- name: UpsertTrustedDelegationCredentialFixture :one
+INSERT INTO trusted_issuer_sessions AS s (
+  organization_id, remote_session_client_id, subject_urn,
   identity_assertion_encrypted, identity_assertion_expires_at, refresh_token_encrypted, refresh_expires_at, upstream_subject_encrypted, nonce_encrypted, credential_config_hash, observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at, retry_after, offline_access_refused_at, offline_access_request_config_hash
 )
 SELECT $1::text, $2::uuid, $3::text,
@@ -19132,7 +19249,7 @@ WHERE s.organization_id = $1::text AND s.project_id IS NULL
 RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_org_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.upstream_subject_org_encrypted, s.nonce_encrypted, s.nonce_org_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
-type UpsertTrustedDelegationCredentialParams struct {
+type UpsertTrustedDelegationCredentialFixtureParams struct {
 	OrganizationID                 string
 	ClientID                       uuid.UUID
 	SubjectUrn                     string
@@ -19154,11 +19271,13 @@ type UpsertTrustedDelegationCredentialParams struct {
 	ExpectedGeneration             int64
 }
 
+// Test fixture: UpsertTrustedDelegationCredential that also stores platform-key
+// copies, for tests of organizations in platform_key.
 // Expected generation is zero for absence. Prepare explicit fields, including
 // preserved refresh tokens, then re-read and prepare again after a CAS miss.
 // Refresh completion also advances generation, preventing stale preservation.
-func (q *Queries) UpsertTrustedDelegationCredential(ctx context.Context, arg UpsertTrustedDelegationCredentialParams) (TrustedIssuerSession, error) {
-	row := q.db.QueryRow(ctx, upsertTrustedDelegationCredential,
+func (q *Queries) UpsertTrustedDelegationCredentialFixture(ctx context.Context, arg UpsertTrustedDelegationCredentialFixtureParams) (TrustedIssuerSession, error) {
+	row := q.db.QueryRow(ctx, upsertTrustedDelegationCredentialFixture,
 		arg.OrganizationID,
 		arg.ClientID,
 		arg.SubjectUrn,

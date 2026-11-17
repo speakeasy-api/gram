@@ -8,9 +8,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -99,12 +103,12 @@ type delegationCredential struct {
 	id              uuid.UUID
 	generation      int64
 	claim           uuid.UUID
-	assertion       string
+	assertion       secret
 	assertionExpiry time.Time
-	refresh         string
+	refresh         secret
 	refreshExpiry   time.Time
-	subject         string
-	nonce           string
+	subject         secret
+	nonce           secret
 	config          string
 	refusedAt       time.Time
 	requestConfig   string
@@ -131,12 +135,20 @@ type delegationStore interface {
 	clearExpired(context.Context, Binding, time.Time) error
 }
 
+// secretKeys opens a credential's stored secrets and checks, before a
+// refresh, that the organization's key can store what it returns.
+// *upstreamtokens.Tokens implements it.
+type secretKeys interface {
+	Open(ctx context.Context, db repo.DBTX, organizationID pgtype.Text, columns orgencryption.CopyColumns, stored orgencryption.Copies) (string, error)
+	RequireUsable(ctx context.Context, db repo.DBTX, organizationID pgtype.Text) error
+}
+
 // Service lazily renews upstream credentials. A durable claim is never
 // stolen after a lease timeout: an ambiguous rotating POST cannot be replayed.
 // A new validated login is the recovery path for an abandoned claim.
 type Service struct {
 	store           delegationStore
-	enc             *encryption.Client
+	tokens          secretKeys
 	now             func() time.Time
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
@@ -145,12 +157,12 @@ type Service struct {
 	refreshPaused   func(context.Context, Provider) bool
 }
 
-func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *Service {
+func New(db *pgxpool.Pool, tokens *upstreamtokens.Tokens, dependencies Dependencies) *Service {
 	now := dependencies.Now
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused, connections: dependencies.Connections}
+	return &Service{store: &delegationRepository{db: db, tokens: tokens}, tokens: tokens, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused, connections: dependencies.Connections}
 }
 func delegationBinding(p Provider, humanID string) Binding { return p.Binding(humanID) }
 func validDelegationBinding(b Binding) bool {
@@ -160,29 +172,30 @@ func validDelegationBinding(b Binding) bool {
 	subject, err := urn.ParseSessionSubject(urn.NewUserSubject(b.HumanID).String())
 	return err == nil && subject.String() == urn.NewUserSubject(b.HumanID).String()
 }
-func (s *Service) encrypt(value string) (string, error) {
-	if value == "" {
-		return "", nil
-	}
-	encrypted, err := s.enc.Encrypt([]byte(value))
-	if err != nil {
-		return "", ErrTemporary
-	}
-	return encrypted, nil
-}
 
 // errCredentialDecryption marks a Speakeasy key or ciphertext fault without exposing encrypted values.
 var errCredentialDecryption = errors.New("stored credential could not be decrypted")
 
-func (s *Service) decrypt(value string) (string, error) {
-	if value == "" {
+// open decrypts a value with the key its organization's transition state
+// reads. A value that does not decrypt is a Speakeasy key or ciphertext fault,
+// ErrConfiguration; a key that cannot open it right now is ErrTemporary, which
+// never asks anyone to sign in again.
+func (s *Service) open(ctx context.Context, b Binding, columns orgencryption.CopyColumns, value secret) (string, error) {
+	if value.stored == nil {
+		return value.plain, nil
+	}
+	if !upstreamtokens.Has(*value.stored) {
 		return "", nil
 	}
-	decrypted, err := s.enc.Decrypt(value)
-	if err != nil {
+	plain, err := s.tokens.Open(ctx, nil, conv.ToPGText(b.OrganizationID), columns, *value.stored)
+	switch {
+	case err == nil:
+		return plain, nil
+	case orgencryption.IsUnreadable(err):
 		return "", errors.Join(ErrConfiguration, errCredentialDecryption)
+	default:
+		return "", ErrTemporary
 	}
-	return decrypted, nil
 }
 
 // configurationRetryDelay paces renewal while an administrator fixes a refusal that kept the token.
@@ -228,7 +241,7 @@ func configurationFailureError(c delegationCredential) error {
 }
 
 func usableRefresh(c delegationCredential, now time.Time) bool {
-	return (c.status == "durable_credential_present" || c.status == "temporary_failure" || configurationFailureRetained(c)) && c.refresh != "" && (c.refreshExpiry.IsZero() || c.refreshExpiry.After(now)) && c.claim == uuid.Nil
+	return (c.status == "durable_credential_present" || c.status == "temporary_failure" || configurationFailureRetained(c)) && c.refresh.present() && (c.refreshExpiry.IsZero() || c.refreshExpiry.After(now)) && c.claim == uuid.Nil
 }
 func (s *Service) OfflineStatus(ctx context.Context, p Provider, humanID string) (OfflineStatus, error) {
 	if p == nil || !validDelegationBinding(delegationBinding(p, humanID)) {
@@ -268,26 +281,13 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 		if hash == "" || requestHash == "" {
 			return ErrConfiguration
 		}
-		assertion := ""
-		var err error
+		var assertion secret
 		if identity.Expiration().After(now) {
-			assertion, err = s.encrypt(tokens.IDToken())
-			if err != nil {
-				return err
-			}
+			assertion = newSecret(tokens.IDToken())
 		}
-		refresh, err := s.encrypt(tokens.RefreshToken())
-		if err != nil {
-			return err
-		}
-		subject, err := s.encrypt(identity.SubjectID())
-		if err != nil {
-			return err
-		}
-		nonce, err := s.encrypt(identity.NonceValue())
-		if err != nil {
-			return err
-		}
+		refresh := newSecret(tokens.RefreshToken())
+		subject := newSecret(identity.SubjectID())
+		nonce := newSecret(identity.NonceValue())
 		expiry := time.Time{}
 		expiryKnown := false
 		if reported := tokens.RefreshExpiresAt(); reported != nil {
@@ -299,7 +299,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 		}
 		refreshExpired := expiryKnown && !expiry.After(now)
 		if refreshExpired {
-			refresh = ""
+			refresh = erasedSecret()
 			expiry = time.Time{}
 		}
 		for range 3 {
@@ -312,9 +312,9 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 			// A callback installs a new generation; a late refresh cannot overwrite it.
 			next.claim = uuid.Nil
 			next.retryAfter = time.Time{}
-			sameIdentity := current.config == hash && current.subject == "" && current.refresh == ""
-			if current.config == hash && current.subject != "" {
-				plain, e := s.decrypt(current.subject)
+			sameIdentity := current.config == hash && !current.subject.present() && !current.refresh.present()
+			if current.config == hash && current.subject.present() {
+				plain, e := s.open(ctx, b, upstreamtokens.TrustedIssuerSessionUpstreamSubject, current.subject)
 				if e != nil {
 					return e
 				}
@@ -334,7 +334,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 			}
 			next.assertion = assertion
 			next.assertionExpiry = identity.Expiration()
-			if assertion == "" {
+			if !assertion.present() {
 				next.assertionExpiry = time.Time{}
 			}
 			next.subject = subject
@@ -342,25 +342,25 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 			next.config = hash
 			next.observedAt = now
 			// A preserved refresh family remains bound to its original login nonce.
-			if refresh == "" && sameIdentity && current.claim == uuid.Nil && !retained {
+			if !refresh.present() && sameIdentity && current.claim == uuid.Nil && !retained {
 				next.nonce = current.nonce
 			}
 			// Do not resurrect a possibly spent refresh token from an in-flight claim.
-			if refresh != "" {
+			if refresh.present() {
 				next.refresh = refresh
 				next.refreshExpiry = expiry
 				next.obtainedAt = now
 			} else if refreshExpired || !sameIdentity || current.claim != uuid.Nil || retained {
-				next.refresh = ""
+				next.refresh = erasedSecret()
 				next.refreshExpiry = time.Time{}
 			}
 			if !next.refreshExpiry.IsZero() && !next.refreshExpiry.After(now) {
-				next.refresh = ""
+				next.refresh = erasedSecret()
 				next.refreshExpiry = time.Time{}
 			}
-			if next.assertion == "" && next.refresh == "" {
-				next.subject = ""
-				next.nonce = ""
+			if !next.assertion.present() && !next.refresh.present() {
+				next.subject = erasedSecret()
+				next.nonce = erasedSecret()
 			}
 			next.status = "assertion_only"
 			if !offlineRequested {
@@ -370,7 +370,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 					next.status = "offline_unsupported"
 				}
 			}
-			if next.refresh != "" {
+			if next.refresh.present() {
 				next.status = "durable_credential_present"
 				next.refusedAt = time.Time{}
 				next.requestConfig = requestHash
@@ -379,7 +379,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				next.requestConfig = requestHash
 				next.status = "refused"
 			}
-			if !next.refusedAt.IsZero() && next.requestConfig == requestHash && next.refresh == "" {
+			if !next.refusedAt.IsZero() && next.requestConfig == requestHash && !next.refresh.present() {
 				next.status = "refused"
 			}
 			next = eraseExpiredDelegationSecrets(next, s.now())
@@ -466,8 +466,8 @@ func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Auth
 	switch {
 	case c.claim != uuid.Nil:
 		return claimError(c, now)
-	case c.assertion != "" && c.assertionExpiry.After(now.Add(time.Minute)):
-		_, err := s.assertion(c)
+	case c.assertion.present() && c.assertionExpiry.After(now.Add(time.Minute)):
+		_, err := s.assertion(ctx, b, c)
 		return err
 	case c.status == "reauthentication_required":
 		return ErrReauthentication
@@ -476,7 +476,7 @@ func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Auth
 	case !usableRefresh(c, now):
 		return ErrReauthentication
 	}
-	_, _, _, err = s.refreshSecrets(c)
+	_, _, _, err = s.refreshSecrets(ctx, b, c)
 	return err
 }
 
@@ -563,8 +563,8 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	if c.claim != uuid.Nil {
 		return Assertion{}, claimError(c, now)
 	}
-	if c.assertion != "" && c.assertionExpiry.After(now.Add(time.Minute)) {
-		return s.assertion(c)
+	if c.assertion.present() && c.assertionExpiry.After(now.Add(time.Minute)) {
+		return s.assertion(ctx, b, c)
 	}
 	// A successful refresh without an ID token cannot renew the portable path.
 	// Keep its rotation, but do not spin through more grants on every tool call.
@@ -640,7 +640,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
-	refresh, subject, nonce, err := s.refreshSecrets(c)
+	refresh, subject, nonce, err := s.refreshSecrets(ctx, b, c)
 	if err != nil {
 		code := mcpconnectionattempts.CodeReauthenticationRequired
 		if errors.Is(err, errCredentialDecryption) {
@@ -648,6 +648,12 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		}
 		s.recordRenewal(ctx, b, code)
 		return Assertion{}, err
+	}
+	// A refresh may rotate the refresh token, and the only copy of the new one
+	// is what the provider answers, so it must be storable before it is asked.
+	if err := s.tokens.RequireUsable(ctx, nil, conv.ToPGText(b.OrganizationID)); err != nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		return Assertion{}, ErrTemporary
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
 	if err != nil {
@@ -680,18 +686,15 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		invalidIdentity := errors.As(refreshErr, &failure) && failure.Kind == RefreshInvalidIdentity
 		if result != nil && result.Credentials != nil && !invalidIdentity {
 			refreshErr = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
-			c.assertion = ""
+			c.assertion = erasedSecret()
 			c.assertionExpiry = time.Time{}
 			if rotation := result.Credentials.RefreshToken(); rotation != "" {
-				c.refresh, err = s.encrypt(rotation)
-				if err != nil {
-					return Assertion{}, err
-				}
+				c.refresh = newSecret(rotation)
 			}
 			if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
 				c.refreshExpiry = *expiry
 				if !expiry.After(s.now()) {
-					c.refresh = ""
+					c.refresh = erasedSecret()
 				}
 			}
 		}
@@ -708,24 +711,21 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	next.status = "reauthentication_required"
 	next.claim = uuid.Nil
 	next.retryAfter = time.Time{}
-	next.assertion = ""
+	next.assertion = erasedSecret()
 	next.assertionExpiry = time.Time{}
 	if rotation := result.Credentials.RefreshToken(); rotation != "" {
-		next.refresh, err = s.encrypt(rotation)
-		if err != nil {
-			return Assertion{}, err
-		}
+		next.refresh = newSecret(rotation)
 	}
 	// Lifetime updates are independent of token rotation. Omission cannot
 	// remove a previously known bound.
 	if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
 		next.refreshExpiry = *expiry
 		if !expiry.After(s.now()) {
-			next.refresh = ""
+			next.refresh = erasedSecret()
 		}
 	}
 	if !next.refreshExpiry.IsZero() && !next.refreshExpiry.After(s.now()) {
-		next.refresh = ""
+		next.refresh = erasedSecret()
 		next.refreshExpiry = time.Time{}
 	}
 	if identity := result.Identity; identity != nil {
@@ -735,13 +735,10 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity, SigningFailure: false, RetryAfter: 0})
 		}
 		if identity.Expiration().After(s.now()) {
-			next.assertion, err = s.encrypt(result.Credentials.IDToken())
-			if err != nil {
-				return Assertion{}, err
-			}
+			next.assertion = newSecret(result.Credentials.IDToken())
 			next.assertionExpiry = identity.Expiration()
 			next.status = "assertion_only"
-			if next.refresh != "" {
+			if next.refresh.present() {
 				next.status = "durable_credential_present"
 			}
 		}
@@ -768,7 +765,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		}
 	}
 	next = eraseExpiredDelegationSecrets(next, s.now())
-	if (next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute))) && next.status != "configuration_failure" && !quarantined {
+	if (!next.assertion.present() || !next.assertionExpiry.After(s.now().Add(time.Minute))) && next.status != "configuration_failure" && !quarantined {
 		next.status = "reauthentication_required"
 	}
 	ok, err := s.store.finish(persistCtx, b, c.generation, claim, next)
@@ -794,12 +791,12 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
-	if next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
+	if !next.assertion.present() || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
 		renewalDecided = true
 		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrReauthentication
 	}
-	assertion, err := s.assertion(next)
+	assertion, err := s.assertion(ctx, b, next)
 	if err != nil {
 		return Assertion{}, err
 	}
@@ -814,15 +811,15 @@ func definitiveDelegationFailure(err error) bool {
 	return errors.Is(err, ErrConfiguration) || errors.Is(err, ErrReauthentication) || errors.Is(err, pgx.ErrNoRows)
 }
 
-func (s *Service) assertion(c delegationCredential) (Assertion, error) {
-	if c.assertion == "" || !c.assertionExpiry.After(s.now().Add(time.Minute)) {
+func (s *Service) assertion(ctx context.Context, b Binding, c delegationCredential) (Assertion, error) {
+	if !c.assertion.present() || !c.assertionExpiry.After(s.now().Add(time.Minute)) {
 		return Assertion{}, ErrReauthentication
 	}
-	value, err := s.decrypt(c.assertion)
+	value, err := s.open(ctx, b, upstreamtokens.TrustedIssuerSessionIdentityAssertion, c.assertion)
 	if err != nil {
 		return Assertion{}, err
 	}
-	subject, err := s.decrypt(c.subject)
+	subject, err := s.open(ctx, b, upstreamtokens.TrustedIssuerSessionUpstreamSubject, c.subject)
 	if err != nil {
 		return Assertion{}, err
 	}
@@ -831,14 +828,14 @@ func (s *Service) assertion(c delegationCredential) (Assertion, error) {
 
 // refreshSecrets decrypts what a renewal of c sends. A secret that does not
 // decrypt, or a missing refresh token or subject, is ErrConfiguration.
-func (s *Service) refreshSecrets(c delegationCredential) (refresh, subject, nonce string, err error) {
-	if refresh, err = s.decrypt(c.refresh); err != nil {
+func (s *Service) refreshSecrets(ctx context.Context, b Binding, c delegationCredential) (refresh, subject, nonce string, err error) {
+	if refresh, err = s.open(ctx, b, upstreamtokens.TrustedIssuerSessionRefreshToken, c.refresh); err != nil {
 		return "", "", "", err
 	}
-	if subject, err = s.decrypt(c.subject); err != nil {
+	if subject, err = s.open(ctx, b, upstreamtokens.TrustedIssuerSessionUpstreamSubject, c.subject); err != nil {
 		return "", "", "", err
 	}
-	if nonce, err = s.decrypt(c.nonce); err != nil {
+	if nonce, err = s.open(ctx, b, upstreamtokens.TrustedIssuerSessionNonce, c.nonce); err != nil {
 		return "", "", "", err
 	}
 	if refresh == "" || subject == "" {
@@ -847,12 +844,12 @@ func (s *Service) refreshSecrets(c delegationCredential) (refresh, subject, nonc
 	return refresh, subject, nonce, nil
 }
 func clearDelegationSecrets(c delegationCredential) delegationCredential {
-	c.assertion = ""
+	c.assertion = erasedSecret()
 	c.assertionExpiry = time.Time{}
-	c.refresh = ""
+	c.refresh = erasedSecret()
 	c.refreshExpiry = time.Time{}
-	c.subject = ""
-	c.nonce = ""
+	c.subject = erasedSecret()
+	c.nonce = erasedSecret()
 	c.claim = uuid.Nil
 	return c
 }
@@ -880,19 +877,19 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	}
 	switch kind {
 	case RefreshInvalidGrant:
-		next.refresh = ""
+		next.refresh = erasedSecret()
 		next.refreshExpiry = time.Time{}
 		next.status = "reauthentication_required"
 		if !next.assertionExpiry.After(s.now()) {
-			next.assertion = ""
+			next.assertion = erasedSecret()
 			next.assertionExpiry = time.Time{}
-			next.subject = ""
-			next.nonce = ""
+			next.subject = erasedSecret()
+			next.nonce = erasedSecret()
 		}
 		outcome = ErrReauthentication
 	case RefreshConfiguration, RefreshClientRejected, RefreshSetup:
 		// Nothing here says the refresh token is invalid.
-		next.assertion = ""
+		next.assertion = erasedSecret()
 		next.assertionExpiry = time.Time{}
 		next.status = "configuration_failure"
 		next.retryAfter = s.now().Add(configurationRetryDelay)
@@ -998,16 +995,16 @@ func (s *Service) Revoke(ctx context.Context, b Binding, authority Authorizer) e
 // provider/configuration reads. Unknown refresh expiry remains unknown.
 func eraseExpiredDelegationSecrets(c delegationCredential, now time.Time) delegationCredential {
 	if !c.assertionExpiry.After(now) {
-		c.assertion = ""
+		c.assertion = erasedSecret()
 		c.assertionExpiry = time.Time{}
 	}
 	if !c.refreshExpiry.IsZero() && !c.refreshExpiry.After(now) {
-		c.refresh = ""
+		c.refresh = erasedSecret()
 		c.refreshExpiry = time.Time{}
 	}
-	if c.assertion == "" && c.refresh == "" {
-		c.subject = ""
-		c.nonce = ""
+	if !c.assertion.present() && !c.refresh.present() {
+		c.subject = erasedSecret()
+		c.nonce = erasedSecret()
 	}
 	return c
 }

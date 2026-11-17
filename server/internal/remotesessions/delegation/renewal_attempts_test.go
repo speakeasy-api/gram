@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -216,12 +216,11 @@ func TestRenewal_PostClaimSetupRecordsExactlyOnce(t *testing.T) {
 			require.NoError(t, err)
 			switch tc.secret {
 			case "refresh":
-				c.refresh, err = s.enc.Encrypt([]byte(""))
-				require.NoError(t, err)
+				c.refresh = plantedSecret(t, s, "")
 			case "subject":
-				c.subject = ""
+				c.subject = secret{}
 			case "nonce":
-				c.nonce = "invalid-ciphertext"
+				c.nonce = unreadableSecret("invalid-ciphertext")
 			}
 			store.rows[b] = c
 			s.loadProvider = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
@@ -422,14 +421,21 @@ func TestRenewal_PanicAfterPOSTRecordsInternalError(t *testing.T) {
 	requireSpentClaimHeld(t, s, store, b)
 }
 
-func TestRenewal_EncryptionFaultAfterPOSTRecordsInternalError(t *testing.T) {
+func TestRenewal_UnusableKeyNeverAsksTheProvider(t *testing.T) {
 	t.Parallel()
-	s, store, p, b, allow, rec := newRenewalFixture(t, 30*time.Second)
-	original := s.enc
-	renewThroughFault(t, s, p, b, allow, func() { s.enc = &encryption.Client{} })
-	s.enc = original
-	requireOneInternalError(t, rec, b)
-	requireSpentClaimHeld(t, s, store, b)
+	s, store, _, b, allow, rec := newRenewalFixture(t, 30*time.Second)
+	keys, ok := s.tokens.(*platformSecretKeys)
+	require.True(t, ok)
+	keys.unusable = orgencryption.ErrSuspended
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		t.Fatal("a refresh whose result cannot be stored must not be sent")
+		return nil, nil
+	}
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary, "a key that cannot be used right now is retryable, never a reason to sign in again")
+	rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable)
+	require.Equal(t, uuid.Nil, store.rows[b].claim, "nothing was spent, so the claim is released")
 }
 
 func TestRenewal_FinishFailureAfterPOSTRecordsInternalError(t *testing.T) {
@@ -438,15 +444,6 @@ func TestRenewal_FinishFailureAfterPOSTRecordsInternalError(t *testing.T) {
 	renewThroughFault(t, s, p, b, allow, func() { store.finishError = errors.New("fixture store unavailable") })
 	requireOneInternalError(t, rec, b)
 	requireSpentClaimHeld(t, s, store, b)
-}
-
-func TestRenewal_AssertionDecryptFaultRecordsInternalError(t *testing.T) {
-	t.Parallel()
-	s, store, p, b, allow, rec := newRenewalFixture(t, 30*time.Second)
-	renewThroughFault(t, s, p, b, allow, func() {
-		s.store = renewalFinishHookStore{delegationStore: store, after: func() { s.enc = &encryption.Client{} }}
-	})
-	requireOneInternalError(t, rec, b)
 }
 
 func TestRenewal_SupersededAfterPOSTRecordsNothing(t *testing.T) {
@@ -459,17 +456,6 @@ func TestRenewal_SupersededAfterPOSTRecordsNothing(t *testing.T) {
 	})
 	rec.RequireNothing()
 	requireSpentClaimHeld(t, s, store, b)
-}
-
-type renewalFinishHookStore struct {
-	delegationStore
-	after func()
-}
-
-func (s renewalFinishHookStore) finish(ctx context.Context, b Binding, generation int64, claim uuid.UUID, next delegationCredential) (bool, error) {
-	ok, err := s.delegationStore.finish(ctx, b, generation, claim, next)
-	s.after()
-	return ok, err
 }
 
 func TestRenewal_QuarantineNamesSignInRecovery(t *testing.T) {

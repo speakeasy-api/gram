@@ -76,7 +76,7 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	trusted, err := repo.New(db).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer, ClientID: idpClient})
 	require.NoError(t, err)
 	configHash := remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient)
-	session, err := repo.New(db).UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+	session, err := repo.New(db).UpsertTrustedDelegationCredentialFixture(ctx, repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: org, ClientID: idpClient, IssuerID: idpIssuer, SubjectUrn: urn.NewUserSubject(human).String(), ExpectedGeneration: 0,
 		CredentialConfigHash: pgtype.Text{String: configHash, Valid: true},
 		ObservationStatus:    pgtype.Text{String: "assertion_only", Valid: true},
@@ -90,7 +90,7 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), db, enc, policy, nil, nil, serverURL)
-	delegation := remotesessions.NewDelegationService(db, enc, challenges)
+	delegation := remotesessions.NewDelegationService(db, challenges)
 	chainer := &Chainer{Governor: Governor{logger: logger, db: db, tokens: upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
 	return chainStoreFixture{
 		db:         db,
@@ -223,7 +223,7 @@ func (f chainStoreFixture) signIn(t *testing.T, at time.Time, status string) {
 	if !at.IsZero() {
 		obtained = pgtype.Timestamptz{Time: at, Valid: true, InfinityModifier: pgtype.Finite}
 	}
-	_, err = q.UpsertTrustedDelegationCredential(t.Context(), repo.UpsertTrustedDelegationCredentialParams{
+	_, err = q.UpsertTrustedDelegationCredentialFixture(t.Context(), repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject, ExpectedGeneration: current.CredentialGeneration.Int64,
 		CredentialConfigHash: pgtype.Text{String: f.configHash, Valid: true},
 		ObservationStatus:    pgtype.Text{String: status, Valid: true}, CredentialObtainedAt: obtained,

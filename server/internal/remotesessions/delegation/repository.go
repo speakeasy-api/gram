@@ -11,11 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type delegationRepository struct{ db *pgxpool.Pool }
+type delegationRepository struct {
+	db     *pgxpool.Pool
+	tokens *upstreamtokens.Tokens
+}
 
 func delegationTime(v time.Time) pgtype.Timestamptz {
 	return conv.PtrToPGTimestamptz(conv.PtrEmpty(v))
@@ -28,12 +33,12 @@ func credentialFromRow(row repo.TrustedIssuerSession) delegationCredential {
 	return delegationCredential{
 		id:         row.ID,
 		generation: generation, claim: row.RefreshClaimID.UUID,
-		assertion:       row.IdentityAssertionEncrypted.String,
+		assertion:       storedSecret(row.IdentityAssertionEncrypted, row.IdentityAssertionOrgEncrypted),
 		assertionExpiry: row.IdentityAssertionExpiresAt.Time,
-		refresh:         row.RefreshTokenEncrypted.String,
+		refresh:         storedSecret(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 		refreshExpiry:   row.RefreshExpiresAt.Time,
-		subject:         row.UpstreamSubjectEncrypted.String,
-		nonce:           row.NonceEncrypted.String,
+		subject:         storedSecret(row.UpstreamSubjectEncrypted, row.UpstreamSubjectOrgEncrypted),
+		nonce:           storedSecret(row.NonceEncrypted, row.NonceOrgEncrypted),
 		config:          row.CredentialConfigHash.String,
 		status:          row.ObservationStatus.String,
 		observedAt:      row.ObservedAt.Time,
@@ -53,28 +58,53 @@ func (r *delegationRepository) load(ctx context.Context, b Binding) (delegationC
 	return credentialFromRow(row), nil
 }
 func (r *delegationRepository) save(ctx context.Context, b Binding, expected int64, c delegationCredential) (bool, error) {
-	_, err := repo.New(r.db).UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
-		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: expected,
-		IdentityAssertionEncrypted:     conv.ToPGTextEmpty(c.assertion),
-		IdentityAssertionExpiresAt:     delegationTime(c.assertionExpiry),
-		RefreshTokenEncrypted:          conv.ToPGTextEmpty(c.refresh),
-		RefreshExpiresAt:               delegationTime(c.refreshExpiry),
-		UpstreamSubjectEncrypted:       conv.ToPGTextEmpty(c.subject),
-		NonceEncrypted:                 conv.ToPGTextEmpty(c.nonce),
-		CredentialConfigHash:           conv.ToPGTextEmpty(c.config),
-		ObservationStatus:              conv.ToPGTextEmpty(c.status),
-		ObservedAt:                     delegationTime(c.observedAt),
-		CredentialObtainedAt:           delegationTime(c.obtainedAt),
-		LastRefreshSucceededAt:         delegationTime(c.refreshedAt),
-		RetryAfter:                     delegationTime(c.retryAfter),
-		OfflineAccessRefusedAt:         delegationTime(c.refusedAt),
-		OfflineAccessRequestConfigHash: conv.ToPGTextEmpty(c.requestConfig),
+	return r.write(ctx, b, c, func(q *repo.Queries) (repo.TrustedIssuerSession, error) {
+		return q.UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+			OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: expected,
+			IdentityAssertionExpiresAt:     delegationTime(c.assertionExpiry),
+			RefreshExpiresAt:               delegationTime(c.refreshExpiry),
+			CredentialConfigHash:           conv.ToPGTextEmpty(c.config),
+			ObservationStatus:              conv.ToPGTextEmpty(c.status),
+			ObservedAt:                     delegationTime(c.observedAt),
+			CredentialObtainedAt:           delegationTime(c.obtainedAt),
+			LastRefreshSucceededAt:         delegationTime(c.refreshedAt),
+			RetryAfter:                     delegationTime(c.retryAfter),
+			OfflineAccessRefusedAt:         delegationTime(c.refusedAt),
+			OfflineAccessRequestConfigHash: conv.ToPGTextEmpty(c.requestConfig),
+		})
 	})
+}
+
+// write runs a compare-and-swap statement that changes everything about a
+// credential but its secrets, then stores, keeps or erases each secret through
+// the seam, in one transaction. It reports false when the compare-and-swap
+// lost. A secret that cannot be stored rolls back the whole write.
+func (r *delegationRepository) write(ctx context.Context, b Binding, c delegationCredential, update func(*repo.Queries) (repo.TrustedIssuerSession, error)) (bool, error) {
+	dbtx, err := r.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin delegation credential write: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := update(repo.New(dbtx))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("update delegation credential: %w", err)
+	}
+
+	if _, err := r.tokens.SetTrustedIssuerSession(ctx, dbtx, row.ID, row.OrganizationID, upstreamtokens.TrustedIssuerSessionValues{
+		IdentityAssertion: c.assertion.write(),
+		RefreshToken:      c.refresh.write(),
+		UpstreamSubject:   c.subject.write(),
+		Nonce:             c.nonce.write(),
+	}); err != nil {
+		return false, fmt.Errorf("store delegation credential secrets: %w", err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit delegation credential write: %w", err)
 	}
 	return true, nil
 }
@@ -91,30 +121,21 @@ func (r *delegationRepository) claim(ctx context.Context, b Binding, generation 
 	return true, nil
 }
 func (r *delegationRepository) finish(ctx context.Context, b Binding, generation int64, claim uuid.UUID, c delegationCredential) (bool, error) {
-	_, err := repo.New(r.db).CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{
-		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim, NextRefreshClaimID: uuid.NullUUID{UUID: c.claim, Valid: c.claim != uuid.Nil},
-		IdentityAssertionEncrypted:     conv.ToPGTextEmpty(c.assertion),
-		IdentityAssertionExpiresAt:     delegationTime(c.assertionExpiry),
-		RefreshTokenEncrypted:          conv.ToPGTextEmpty(c.refresh),
-		RefreshExpiresAt:               delegationTime(c.refreshExpiry),
-		UpstreamSubjectEncrypted:       conv.ToPGTextEmpty(c.subject),
-		NonceEncrypted:                 conv.ToPGTextEmpty(c.nonce),
-		CredentialConfigHash:           conv.ToPGTextEmpty(c.config),
-		ObservationStatus:              conv.ToPGTextEmpty(c.status),
-		ObservedAt:                     delegationTime(c.observedAt),
-		CredentialObtainedAt:           delegationTime(c.obtainedAt),
-		LastRefreshSucceededAt:         delegationTime(c.refreshedAt),
-		RetryAfter:                     delegationTime(c.retryAfter),
-		OfflineAccessRefusedAt:         delegationTime(c.refusedAt),
-		OfflineAccessRequestConfigHash: conv.ToPGTextEmpty(c.requestConfig),
+	return r.write(ctx, b, c, func(q *repo.Queries) (repo.TrustedIssuerSession, error) {
+		return q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{
+			OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim, NextRefreshClaimID: uuid.NullUUID{UUID: c.claim, Valid: c.claim != uuid.Nil},
+			IdentityAssertionExpiresAt:     delegationTime(c.assertionExpiry),
+			RefreshExpiresAt:               delegationTime(c.refreshExpiry),
+			CredentialConfigHash:           conv.ToPGTextEmpty(c.config),
+			ObservationStatus:              conv.ToPGTextEmpty(c.status),
+			ObservedAt:                     delegationTime(c.observedAt),
+			CredentialObtainedAt:           delegationTime(c.obtainedAt),
+			LastRefreshSucceededAt:         delegationTime(c.refreshedAt),
+			RetryAfter:                     delegationTime(c.retryAfter),
+			OfflineAccessRefusedAt:         delegationTime(c.refusedAt),
+			OfflineAccessRequestConfigHash: conv.ToPGTextEmpty(c.requestConfig),
+		})
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("update delegation credential: %w", err)
-	}
-	return true, nil
 }
 func (r *delegationRepository) clearExpired(ctx context.Context, b Binding, _ time.Time) error {
 	_, err := repo.New(r.db).ClearExpiredTrustedDelegationAssertion(ctx, repo.ClearExpiredTrustedDelegationAssertionParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})

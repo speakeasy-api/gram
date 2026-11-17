@@ -45,6 +45,42 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			count:       countEMACredentialAccessTokenCopies,
 			clear:       clearEMACredentialAccessTokenPlatformCopies,
 		},
+		&copyStore{
+			db:          db,
+			columns:     TrustedIssuerSessionIdentityAssertion,
+			listWaiting: listTrustedIssuerSessionIdentityAssertionsWaiting,
+			sealWaiting: sealTrustedIssuerSessionIdentityAssertionWaiting,
+			listSealed:  listTrustedIssuerSessionIdentityAssertionsSealed,
+			count:       countTrustedIssuerSessionIdentityAssertionCopies,
+			clear:       clearTrustedIssuerSessionIdentityAssertionPlatformCopies,
+		},
+		&copyStore{
+			db:          db,
+			columns:     TrustedIssuerSessionRefreshToken,
+			listWaiting: listTrustedIssuerSessionRefreshTokensWaiting,
+			sealWaiting: sealTrustedIssuerSessionRefreshTokenWaiting,
+			listSealed:  listTrustedIssuerSessionRefreshTokensSealed,
+			count:       countTrustedIssuerSessionRefreshTokenCopies,
+			clear:       clearTrustedIssuerSessionRefreshTokenPlatformCopies,
+		},
+		&copyStore{
+			db:          db,
+			columns:     TrustedIssuerSessionUpstreamSubject,
+			listWaiting: listTrustedIssuerSessionUpstreamSubjectsWaiting,
+			sealWaiting: sealTrustedIssuerSessionUpstreamSubjectWaiting,
+			listSealed:  listTrustedIssuerSessionUpstreamSubjectsSealed,
+			count:       countTrustedIssuerSessionUpstreamSubjectCopies,
+			clear:       clearTrustedIssuerSessionUpstreamSubjectPlatformCopies,
+		},
+		&copyStore{
+			db:          db,
+			columns:     TrustedIssuerSessionNonce,
+			listWaiting: listTrustedIssuerSessionNoncesWaiting,
+			sealWaiting: sealTrustedIssuerSessionNonceWaiting,
+			listSealed:  listTrustedIssuerSessionNoncesSealed,
+			count:       countTrustedIssuerSessionNonceCopies,
+			clear:       clearTrustedIssuerSessionNoncePlatformCopies,
+		},
 	}
 }
 
@@ -341,6 +377,250 @@ func clearEMACredentialAccessTokenPlatformCopies(ctx context.Context, q *repo.Qu
 	n, err := q.ClearEMACredentialAccessTokenPlatformCopies(ctx, repo.ClearEMACredentialAccessTokenPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
 	if err != nil {
 		return 0, fmt.Errorf("clear EMA access token platform copies: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionIdentityAssertionsWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
+	rows, err := q.ListTrustedIssuerSessionIdentityAssertionsWaiting(ctx, repo.ListTrustedIssuerSessionIdentityAssertionsWaitingParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list waiting trusted issuer session identity assertions: %w", err)
+	}
+
+	values := make([]orgencryption.WaitingValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.WaitingValue{RowID: row.ID.String(), Platform: row.PlatformCopy})
+	}
+
+	return values, nil
+}
+
+func sealTrustedIssuerSessionIdentityAssertionWaiting(ctx context.Context, q *repo.Queries, organizationID string, generation int64, id uuid.UUID, platformCopy string, orgCopy string) (int64, error) {
+	n, err := q.SealTrustedIssuerSessionIdentityAssertionWaiting(ctx, repo.SealTrustedIssuerSessionIdentityAssertionWaitingParams{
+		OrgCopy:           conv.ToPGText(orgCopy),
+		ID:                id,
+		OrganizationID:    organizationID,
+		PlatformCopy:      conv.ToPGText(platformCopy),
+		DecidedGeneration: generation,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("seal waiting trusted issuer session identity assertion: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionIdentityAssertionsSealed(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.SealedValue, error) {
+	rows, err := q.ListTrustedIssuerSessionIdentityAssertionsSealed(ctx, repo.ListTrustedIssuerSessionIdentityAssertionsSealedParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list sealed trusted issuer session identity assertions: %w", err)
+	}
+
+	values := make([]orgencryption.SealedValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.SealedValue{RowID: row.ID.String(), Platform: row.PlatformCopy, Org: row.OrgCopy})
+	}
+
+	return values, nil
+}
+
+func countTrustedIssuerSessionIdentityAssertionCopies(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
+	row, err := q.CountTrustedIssuerSessionIdentityAssertionCopies(ctx, organizationID)
+	if err != nil {
+		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session identity assertion copies: %w", err)
+	}
+
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+}
+
+func clearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
+	n, err := q.ClearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx, repo.ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	if err != nil {
+		return 0, fmt.Errorf("clear trusted issuer session identity assertion platform copies: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionRefreshTokensWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
+	rows, err := q.ListTrustedIssuerSessionRefreshTokensWaiting(ctx, repo.ListTrustedIssuerSessionRefreshTokensWaitingParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list waiting trusted issuer session refresh tokens: %w", err)
+	}
+
+	values := make([]orgencryption.WaitingValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.WaitingValue{RowID: row.ID.String(), Platform: row.PlatformCopy})
+	}
+
+	return values, nil
+}
+
+func sealTrustedIssuerSessionRefreshTokenWaiting(ctx context.Context, q *repo.Queries, organizationID string, generation int64, id uuid.UUID, platformCopy string, orgCopy string) (int64, error) {
+	n, err := q.SealTrustedIssuerSessionRefreshTokenWaiting(ctx, repo.SealTrustedIssuerSessionRefreshTokenWaitingParams{
+		OrgCopy:           conv.ToPGText(orgCopy),
+		ID:                id,
+		OrganizationID:    organizationID,
+		PlatformCopy:      conv.ToPGText(platformCopy),
+		DecidedGeneration: generation,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("seal waiting trusted issuer session refresh token: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionRefreshTokensSealed(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.SealedValue, error) {
+	rows, err := q.ListTrustedIssuerSessionRefreshTokensSealed(ctx, repo.ListTrustedIssuerSessionRefreshTokensSealedParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list sealed trusted issuer session refresh tokens: %w", err)
+	}
+
+	values := make([]orgencryption.SealedValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.SealedValue{RowID: row.ID.String(), Platform: row.PlatformCopy, Org: row.OrgCopy})
+	}
+
+	return values, nil
+}
+
+func countTrustedIssuerSessionRefreshTokenCopies(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
+	row, err := q.CountTrustedIssuerSessionRefreshTokenCopies(ctx, organizationID)
+	if err != nil {
+		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session refresh token copies: %w", err)
+	}
+
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+}
+
+func clearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
+	n, err := q.ClearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx, repo.ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	if err != nil {
+		return 0, fmt.Errorf("clear trusted issuer session refresh token platform copies: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionUpstreamSubjectsWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
+	rows, err := q.ListTrustedIssuerSessionUpstreamSubjectsWaiting(ctx, repo.ListTrustedIssuerSessionUpstreamSubjectsWaitingParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list waiting trusted issuer session upstream subjects: %w", err)
+	}
+
+	values := make([]orgencryption.WaitingValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.WaitingValue{RowID: row.ID.String(), Platform: row.PlatformCopy})
+	}
+
+	return values, nil
+}
+
+func sealTrustedIssuerSessionUpstreamSubjectWaiting(ctx context.Context, q *repo.Queries, organizationID string, generation int64, id uuid.UUID, platformCopy string, orgCopy string) (int64, error) {
+	n, err := q.SealTrustedIssuerSessionUpstreamSubjectWaiting(ctx, repo.SealTrustedIssuerSessionUpstreamSubjectWaitingParams{
+		OrgCopy:           conv.ToPGText(orgCopy),
+		ID:                id,
+		OrganizationID:    organizationID,
+		PlatformCopy:      conv.ToPGText(platformCopy),
+		DecidedGeneration: generation,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("seal waiting trusted issuer session upstream subject: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionUpstreamSubjectsSealed(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.SealedValue, error) {
+	rows, err := q.ListTrustedIssuerSessionUpstreamSubjectsSealed(ctx, repo.ListTrustedIssuerSessionUpstreamSubjectsSealedParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list sealed trusted issuer session upstream subjects: %w", err)
+	}
+
+	values := make([]orgencryption.SealedValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.SealedValue{RowID: row.ID.String(), Platform: row.PlatformCopy, Org: row.OrgCopy})
+	}
+
+	return values, nil
+}
+
+func countTrustedIssuerSessionUpstreamSubjectCopies(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
+	row, err := q.CountTrustedIssuerSessionUpstreamSubjectCopies(ctx, organizationID)
+	if err != nil {
+		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session upstream subject copies: %w", err)
+	}
+
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+}
+
+func clearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
+	n, err := q.ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx, repo.ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	if err != nil {
+		return 0, fmt.Errorf("clear trusted issuer session upstream subject platform copies: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionNoncesWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
+	rows, err := q.ListTrustedIssuerSessionNoncesWaiting(ctx, repo.ListTrustedIssuerSessionNoncesWaitingParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list waiting trusted issuer session nonces: %w", err)
+	}
+
+	values := make([]orgencryption.WaitingValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.WaitingValue{RowID: row.ID.String(), Platform: row.PlatformCopy})
+	}
+
+	return values, nil
+}
+
+func sealTrustedIssuerSessionNonceWaiting(ctx context.Context, q *repo.Queries, organizationID string, generation int64, id uuid.UUID, platformCopy string, orgCopy string) (int64, error) {
+	n, err := q.SealTrustedIssuerSessionNonceWaiting(ctx, repo.SealTrustedIssuerSessionNonceWaitingParams{
+		OrgCopy:           conv.ToPGText(orgCopy),
+		ID:                id,
+		OrganizationID:    organizationID,
+		PlatformCopy:      conv.ToPGText(platformCopy),
+		DecidedGeneration: generation,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("seal waiting trusted issuer session nonce: %w", err)
+	}
+
+	return n, nil
+}
+
+func listTrustedIssuerSessionNoncesSealed(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.SealedValue, error) {
+	rows, err := q.ListTrustedIssuerSessionNoncesSealed(ctx, repo.ListTrustedIssuerSessionNoncesSealedParams{OrganizationID: organizationID, After: after, LimitValue: limit})
+	if err != nil {
+		return nil, fmt.Errorf("list sealed trusted issuer session nonces: %w", err)
+	}
+
+	values := make([]orgencryption.SealedValue, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, orgencryption.SealedValue{RowID: row.ID.String(), Platform: row.PlatformCopy, Org: row.OrgCopy})
+	}
+
+	return values, nil
+}
+
+func countTrustedIssuerSessionNonceCopies(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
+	row, err := q.CountTrustedIssuerSessionNonceCopies(ctx, organizationID)
+	if err != nil {
+		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session nonce copies: %w", err)
+	}
+
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+}
+
+func clearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
+	n, err := q.ClearTrustedIssuerSessionNoncePlatformCopies(ctx, repo.ClearTrustedIssuerSessionNoncePlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	if err != nil {
+		return 0, fmt.Errorf("clear trusted issuer session nonce platform copies: %w", err)
 	}
 
 	return n, nil

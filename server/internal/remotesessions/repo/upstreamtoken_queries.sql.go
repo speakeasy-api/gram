@@ -159,6 +159,142 @@ func (q *Queries) ClearRemoteSessionRefreshTokenPlatformCopies(ctx context.Conte
 	return result.RowsAffected(), nil
 }
 
+const clearTrustedIssuerSessionIdentityAssertionPlatformCopies = `-- name: ClearTrustedIssuerSessionIdentityAssertionPlatformCopies :execrows
+UPDATE trusted_issuer_sessions AS s
+SET identity_assertion_encrypted = NULL
+WHERE s.id IN (
+    SELECT target.id FROM trusted_issuer_sessions AS target
+    WHERE target.organization_id = $1::text
+      AND target.identity_assertion_encrypted IS NOT NULL
+    ORDER BY target.id
+    LIMIT $2
+  )
+  AND s.organization_id = $1::text
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $3
+`
+
+type ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams struct {
+	OrganizationID    string
+	LimitValue        int32
+	DecidedGeneration int64
+}
+
+// Destroys up to limit platform-key copies of the value after finalize. The
+// organization-key copy stays.
+func (q *Queries) ClearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionIdentityAssertionPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearTrustedIssuerSessionNoncePlatformCopies = `-- name: ClearTrustedIssuerSessionNoncePlatformCopies :execrows
+UPDATE trusted_issuer_sessions AS s
+SET nonce_encrypted = NULL
+WHERE s.id IN (
+    SELECT target.id FROM trusted_issuer_sessions AS target
+    WHERE target.organization_id = $1::text
+      AND target.nonce_encrypted IS NOT NULL
+    ORDER BY target.id
+    LIMIT $2
+  )
+  AND s.organization_id = $1::text
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $3
+`
+
+type ClearTrustedIssuerSessionNoncePlatformCopiesParams struct {
+	OrganizationID    string
+	LimitValue        int32
+	DecidedGeneration int64
+}
+
+// Destroys up to limit platform-key copies of the value after finalize. The
+// organization-key copy stays.
+func (q *Queries) ClearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionNoncePlatformCopiesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionNoncePlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearTrustedIssuerSessionRefreshTokenPlatformCopies = `-- name: ClearTrustedIssuerSessionRefreshTokenPlatformCopies :execrows
+UPDATE trusted_issuer_sessions AS s
+SET refresh_token_encrypted = NULL
+WHERE s.id IN (
+    SELECT target.id FROM trusted_issuer_sessions AS target
+    WHERE target.organization_id = $1::text
+      AND target.refresh_token_encrypted IS NOT NULL
+    ORDER BY target.id
+    LIMIT $2
+  )
+  AND s.organization_id = $1::text
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $3
+`
+
+type ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams struct {
+	OrganizationID    string
+	LimitValue        int32
+	DecidedGeneration int64
+}
+
+// Destroys up to limit platform-key copies of the value after finalize. The
+// organization-key copy stays.
+func (q *Queries) ClearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearTrustedIssuerSessionUpstreamSubjectPlatformCopies = `-- name: ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies :execrows
+UPDATE trusted_issuer_sessions AS s
+SET upstream_subject_encrypted = NULL
+WHERE s.id IN (
+    SELECT target.id FROM trusted_issuer_sessions AS target
+    WHERE target.organization_id = $1::text
+      AND target.upstream_subject_encrypted IS NOT NULL
+    ORDER BY target.id
+    LIMIT $2
+  )
+  AND s.organization_id = $1::text
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $3
+`
+
+type ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams struct {
+	OrganizationID    string
+	LimitValue        int32
+	DecidedGeneration int64
+}
+
+// Destroys up to limit platform-key copies of the value after finalize. The
+// organization-key copy stays.
+func (q *Queries) ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionUpstreamSubjectPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countEMACredentialAccessTokenCopies = `-- name: CountEMACredentialAccessTokenCopies :one
 SELECT
     COUNT(*) FILTER (
@@ -322,6 +458,230 @@ func (q *Queries) CountRemoteSessionRefreshTokenCopies(ctx context.Context, orga
 	return i, err
 }
 
+const countTrustedIssuerSessionIdentityAssertionCopies = `-- name: CountTrustedIssuerSessionIdentityAssertionCopies :one
+SELECT
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_org_encrypted IS NULL
+          AND u.id IS NULL
+    )::bigint AS waiting,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_org_encrypted IS NULL
+          AND u.id IS NOT NULL
+    )::bigint AS unreadable,
+    COUNT(*) FILTER (
+        WHERE s.organization_id IS NULL
+          AND (s.identity_assertion_encrypted IS NOT NULL OR s.identity_assertion_org_encrypted IS NOT NULL)
+    )::bigint AS unattributed,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.identity_assertion_encrypted IS NOT NULL
+    )::bigint AS platform_copies
+FROM trusted_issuer_sessions AS s
+LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+LEFT JOIN organization_encryption_unreadable_values AS u
+  ON u.organization_id = s.organization_id
+  AND u.use_case = 'oauth-session-tokens'
+  AND u.source_column = 'trusted_issuer_sessions.identity_assertion_encrypted'
+  AND u.row_id = s.id::text
+  AND u.platform_ciphertext_sha256 = sha256(convert_to(s.identity_assertion_encrypted, 'UTF8'))
+WHERE s.organization_id = $1::text
+   OR (s.organization_id IS NULL AND c.organization_id = $1::text)
+`
+
+type CountTrustedIssuerSessionIdentityAssertionCopiesRow struct {
+	Waiting        int64
+	Unreadable     int64
+	Unattributed   int64
+	PlatformCopies int64
+}
+
+// The organization's counts for the value. Unattributed counts sessions
+// without organization_id whose trusted client belongs to the organization:
+// the organization-scoped queries never reach them.
+func (q *Queries) CountTrustedIssuerSessionIdentityAssertionCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionIdentityAssertionCopiesRow, error) {
+	row := q.db.QueryRow(ctx, countTrustedIssuerSessionIdentityAssertionCopies, organizationID)
+	var i CountTrustedIssuerSessionIdentityAssertionCopiesRow
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.Unattributed,
+		&i.PlatformCopies,
+	)
+	return i, err
+}
+
+const countTrustedIssuerSessionNonceCopies = `-- name: CountTrustedIssuerSessionNonceCopies :one
+SELECT
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_org_encrypted IS NULL
+          AND u.id IS NULL
+    )::bigint AS waiting,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_org_encrypted IS NULL
+          AND u.id IS NOT NULL
+    )::bigint AS unreadable,
+    COUNT(*) FILTER (
+        WHERE s.organization_id IS NULL
+          AND (s.nonce_encrypted IS NOT NULL OR s.nonce_org_encrypted IS NOT NULL)
+    )::bigint AS unattributed,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.nonce_encrypted IS NOT NULL
+    )::bigint AS platform_copies
+FROM trusted_issuer_sessions AS s
+LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+LEFT JOIN organization_encryption_unreadable_values AS u
+  ON u.organization_id = s.organization_id
+  AND u.use_case = 'oauth-session-tokens'
+  AND u.source_column = 'trusted_issuer_sessions.nonce_encrypted'
+  AND u.row_id = s.id::text
+  AND u.platform_ciphertext_sha256 = sha256(convert_to(s.nonce_encrypted, 'UTF8'))
+WHERE s.organization_id = $1::text
+   OR (s.organization_id IS NULL AND c.organization_id = $1::text)
+`
+
+type CountTrustedIssuerSessionNonceCopiesRow struct {
+	Waiting        int64
+	Unreadable     int64
+	Unattributed   int64
+	PlatformCopies int64
+}
+
+// The organization's counts for the value. Unattributed counts sessions
+// without organization_id whose trusted client belongs to the organization:
+// the organization-scoped queries never reach them.
+func (q *Queries) CountTrustedIssuerSessionNonceCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionNonceCopiesRow, error) {
+	row := q.db.QueryRow(ctx, countTrustedIssuerSessionNonceCopies, organizationID)
+	var i CountTrustedIssuerSessionNonceCopiesRow
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.Unattributed,
+		&i.PlatformCopies,
+	)
+	return i, err
+}
+
+const countTrustedIssuerSessionRefreshTokenCopies = `-- name: CountTrustedIssuerSessionRefreshTokenCopies :one
+SELECT
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_org_encrypted IS NULL
+          AND u.id IS NULL
+    )::bigint AS waiting,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_org_encrypted IS NULL
+          AND u.id IS NOT NULL
+    )::bigint AS unreadable,
+    COUNT(*) FILTER (
+        WHERE s.organization_id IS NULL
+          AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::bigint AS unattributed,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.refresh_token_encrypted IS NOT NULL
+    )::bigint AS platform_copies
+FROM trusted_issuer_sessions AS s
+LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+LEFT JOIN organization_encryption_unreadable_values AS u
+  ON u.organization_id = s.organization_id
+  AND u.use_case = 'oauth-session-tokens'
+  AND u.source_column = 'trusted_issuer_sessions.refresh_token_encrypted'
+  AND u.row_id = s.id::text
+  AND u.platform_ciphertext_sha256 = sha256(convert_to(s.refresh_token_encrypted, 'UTF8'))
+WHERE s.organization_id = $1::text
+   OR (s.organization_id IS NULL AND c.organization_id = $1::text)
+`
+
+type CountTrustedIssuerSessionRefreshTokenCopiesRow struct {
+	Waiting        int64
+	Unreadable     int64
+	Unattributed   int64
+	PlatformCopies int64
+}
+
+// The organization's counts for the value. Unattributed counts sessions
+// without organization_id whose trusted client belongs to the organization:
+// the organization-scoped queries never reach them.
+func (q *Queries) CountTrustedIssuerSessionRefreshTokenCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionRefreshTokenCopiesRow, error) {
+	row := q.db.QueryRow(ctx, countTrustedIssuerSessionRefreshTokenCopies, organizationID)
+	var i CountTrustedIssuerSessionRefreshTokenCopiesRow
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.Unattributed,
+		&i.PlatformCopies,
+	)
+	return i, err
+}
+
+const countTrustedIssuerSessionUpstreamSubjectCopies = `-- name: CountTrustedIssuerSessionUpstreamSubjectCopies :one
+SELECT
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_org_encrypted IS NULL
+          AND u.id IS NULL
+    )::bigint AS waiting,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_org_encrypted IS NULL
+          AND u.id IS NOT NULL
+    )::bigint AS unreadable,
+    COUNT(*) FILTER (
+        WHERE s.organization_id IS NULL
+          AND (s.upstream_subject_encrypted IS NOT NULL OR s.upstream_subject_org_encrypted IS NOT NULL)
+    )::bigint AS unattributed,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND s.upstream_subject_encrypted IS NOT NULL
+    )::bigint AS platform_copies
+FROM trusted_issuer_sessions AS s
+LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+LEFT JOIN organization_encryption_unreadable_values AS u
+  ON u.organization_id = s.organization_id
+  AND u.use_case = 'oauth-session-tokens'
+  AND u.source_column = 'trusted_issuer_sessions.upstream_subject_encrypted'
+  AND u.row_id = s.id::text
+  AND u.platform_ciphertext_sha256 = sha256(convert_to(s.upstream_subject_encrypted, 'UTF8'))
+WHERE s.organization_id = $1::text
+   OR (s.organization_id IS NULL AND c.organization_id = $1::text)
+`
+
+type CountTrustedIssuerSessionUpstreamSubjectCopiesRow struct {
+	Waiting        int64
+	Unreadable     int64
+	Unattributed   int64
+	PlatformCopies int64
+}
+
+// The organization's counts for the value. Unattributed counts sessions
+// without organization_id whose trusted client belongs to the organization:
+// the organization-scoped queries never reach them.
+func (q *Queries) CountTrustedIssuerSessionUpstreamSubjectCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionUpstreamSubjectCopiesRow, error) {
+	row := q.db.QueryRow(ctx, countTrustedIssuerSessionUpstreamSubjectCopies, organizationID)
+	var i CountTrustedIssuerSessionUpstreamSubjectCopiesRow
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.Unattributed,
+		&i.PlatformCopies,
+	)
+	return i, err
+}
+
 const createRemoteSessionFixture = `-- name: CreateRemoteSessionFixture :one
 INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id)
 VALUES (
@@ -377,6 +737,57 @@ func (q *Queries) CreateRemoteSessionFixture(ctx context.Context, arg CreateRemo
 		&i.LastValidatedAt,
 		&i.ValidationStatus,
 		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createTrustedIssuerSessionFixture = `-- name: CreateTrustedIssuerSessionFixture :one
+INSERT INTO trusted_issuer_sessions (organization_id, remote_session_client_id, subject_urn)
+VALUES ($1::text, $2::uuid, $3::text)
+RETURNING id, remote_session_client_id, organization_id, project_id, subject_urn, identity_assertion_encrypted, identity_assertion_org_encrypted, identity_assertion_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, refresh_expires_at, last_refresh_attempt_at, offline_access_refused_at, offline_access_request_config_hash, credential_generation, refresh_claim_id, upstream_subject_encrypted, upstream_subject_org_encrypted, nonce_encrypted, nonce_org_encrypted, credential_config_hash, observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at, retry_after, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateTrustedIssuerSessionFixtureParams struct {
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+	SubjectUrn            string
+}
+
+// Test fixture: a live trusted issuer session with no secrets.
+func (q *Queries) CreateTrustedIssuerSessionFixture(ctx context.Context, arg CreateTrustedIssuerSessionFixtureParams) (TrustedIssuerSession, error) {
+	row := q.db.QueryRow(ctx, createTrustedIssuerSessionFixture, arg.OrganizationID, arg.RemoteSessionClientID, arg.SubjectUrn)
+	var i TrustedIssuerSession
+	err := row.Scan(
+		&i.ID,
+		&i.RemoteSessionClientID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SubjectUrn,
+		&i.IdentityAssertionEncrypted,
+		&i.IdentityAssertionOrgEncrypted,
+		&i.IdentityAssertionExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
+		&i.RefreshExpiresAt,
+		&i.LastRefreshAttemptAt,
+		&i.OfflineAccessRefusedAt,
+		&i.OfflineAccessRequestConfigHash,
+		&i.CredentialGeneration,
+		&i.RefreshClaimID,
+		&i.UpstreamSubjectEncrypted,
+		&i.UpstreamSubjectOrgEncrypted,
+		&i.NonceEncrypted,
+		&i.NonceOrgEncrypted,
+		&i.CredentialConfigHash,
+		&i.ObservationStatus,
+		&i.ObservedAt,
+		&i.CredentialObtainedAt,
+		&i.LastRefreshSucceededAt,
+		&i.RetryAfter,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -510,6 +921,37 @@ func (q *Queries) ListEMACredentialAccessTokensWaiting(ctx context.Context, arg 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationKeyTokenColumnsFixture = `-- name: ListOrganizationKeyTokenColumnsFixture :many
+SELECT (table_name || '.' || column_name)::text AS org_column
+FROM information_schema.columns
+WHERE table_schema = current_schema()
+  AND table_name IN ('remote_sessions', 'trusted_issuer_sessions', 'remote_session_ema_credentials')
+  AND column_name LIKE '%\_org\_encrypted'
+ORDER BY 1
+`
+
+// Test fixture: every organization-key token column of the oauth-session-tokens
+// tables, as table.column.
+func (q *Queries) ListOrganizationKeyTokenColumnsFixture(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationKeyTokenColumnsFixture)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var org_column string
+		if err := rows.Scan(&org_column); err != nil {
+			return nil, err
+		}
+		items = append(items, org_column)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -695,6 +1137,362 @@ func (q *Queries) ListRemoteSessionRefreshTokensWaiting(ctx context.Context, arg
 	return items, nil
 }
 
+const listTrustedIssuerSessionIdentityAssertionsSealed = `-- name: ListTrustedIssuerSessionIdentityAssertionsSealed :many
+SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy, s.identity_assertion_org_encrypted::text AS org_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_org_encrypted IS NOT NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionIdentityAssertionsSealedParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionIdentityAssertionsSealedRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+	OrgCopy      string
+}
+
+// Trusted issuer session identity assertions of the organization that hold both copies,
+// paged by id, for verification.
+func (q *Queries) ListTrustedIssuerSessionIdentityAssertionsSealed(ctx context.Context, arg ListTrustedIssuerSessionIdentityAssertionsSealedParams) ([]ListTrustedIssuerSessionIdentityAssertionsSealedRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionIdentityAssertionsSealed, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionIdentityAssertionsSealedRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionIdentityAssertionsSealedRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy, &i.OrgCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrustedIssuerSessionIdentityAssertionsWaiting = `-- name: ListTrustedIssuerSessionIdentityAssertionsWaiting :many
+SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_org_encrypted IS NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionIdentityAssertionsWaitingParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionIdentityAssertionsWaitingRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+}
+
+// Trusted issuer session identity assertions of the organization with a platform-key copy
+// and no organization-key copy, soft-deleted sessions included, paged by id.
+func (q *Queries) ListTrustedIssuerSessionIdentityAssertionsWaiting(ctx context.Context, arg ListTrustedIssuerSessionIdentityAssertionsWaitingParams) ([]ListTrustedIssuerSessionIdentityAssertionsWaitingRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionIdentityAssertionsWaiting, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionIdentityAssertionsWaitingRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionIdentityAssertionsWaitingRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrustedIssuerSessionNoncesSealed = `-- name: ListTrustedIssuerSessionNoncesSealed :many
+SELECT s.id, s.nonce_encrypted::text AS platform_copy, s.nonce_org_encrypted::text AS org_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_org_encrypted IS NOT NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionNoncesSealedParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionNoncesSealedRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+	OrgCopy      string
+}
+
+// Trusted issuer session nonces of the organization that hold both copies,
+// paged by id, for verification.
+func (q *Queries) ListTrustedIssuerSessionNoncesSealed(ctx context.Context, arg ListTrustedIssuerSessionNoncesSealedParams) ([]ListTrustedIssuerSessionNoncesSealedRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionNoncesSealed, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionNoncesSealedRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionNoncesSealedRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy, &i.OrgCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrustedIssuerSessionNoncesWaiting = `-- name: ListTrustedIssuerSessionNoncesWaiting :many
+SELECT s.id, s.nonce_encrypted::text AS platform_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_org_encrypted IS NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionNoncesWaitingParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionNoncesWaitingRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+}
+
+// Trusted issuer session nonces of the organization with a platform-key copy
+// and no organization-key copy, soft-deleted sessions included, paged by id.
+func (q *Queries) ListTrustedIssuerSessionNoncesWaiting(ctx context.Context, arg ListTrustedIssuerSessionNoncesWaitingParams) ([]ListTrustedIssuerSessionNoncesWaitingRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionNoncesWaiting, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionNoncesWaitingRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionNoncesWaitingRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrustedIssuerSessionRefreshTokensSealed = `-- name: ListTrustedIssuerSessionRefreshTokensSealed :many
+SELECT s.id, s.refresh_token_encrypted::text AS platform_copy, s.refresh_token_org_encrypted::text AS org_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_org_encrypted IS NOT NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionRefreshTokensSealedParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionRefreshTokensSealedRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+	OrgCopy      string
+}
+
+// Trusted issuer session refresh tokens of the organization that hold both copies,
+// paged by id, for verification.
+func (q *Queries) ListTrustedIssuerSessionRefreshTokensSealed(ctx context.Context, arg ListTrustedIssuerSessionRefreshTokensSealedParams) ([]ListTrustedIssuerSessionRefreshTokensSealedRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionRefreshTokensSealed, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionRefreshTokensSealedRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionRefreshTokensSealedRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy, &i.OrgCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrustedIssuerSessionRefreshTokensWaiting = `-- name: ListTrustedIssuerSessionRefreshTokensWaiting :many
+SELECT s.id, s.refresh_token_encrypted::text AS platform_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_org_encrypted IS NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionRefreshTokensWaitingParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionRefreshTokensWaitingRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+}
+
+// Trusted issuer session refresh tokens of the organization with a platform-key copy
+// and no organization-key copy, soft-deleted sessions included, paged by id.
+func (q *Queries) ListTrustedIssuerSessionRefreshTokensWaiting(ctx context.Context, arg ListTrustedIssuerSessionRefreshTokensWaitingParams) ([]ListTrustedIssuerSessionRefreshTokensWaitingRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionRefreshTokensWaiting, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionRefreshTokensWaitingRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionRefreshTokensWaitingRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrustedIssuerSessionUpstreamSubjectsSealed = `-- name: ListTrustedIssuerSessionUpstreamSubjectsSealed :many
+SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy, s.upstream_subject_org_encrypted::text AS org_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_org_encrypted IS NOT NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionUpstreamSubjectsSealedParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionUpstreamSubjectsSealedRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+	OrgCopy      string
+}
+
+// Trusted issuer session upstream subjects of the organization that hold both copies,
+// paged by id, for verification.
+func (q *Queries) ListTrustedIssuerSessionUpstreamSubjectsSealed(ctx context.Context, arg ListTrustedIssuerSessionUpstreamSubjectsSealedParams) ([]ListTrustedIssuerSessionUpstreamSubjectsSealedRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionUpstreamSubjectsSealed, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionUpstreamSubjectsSealedRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionUpstreamSubjectsSealedRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy, &i.OrgCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrustedIssuerSessionUpstreamSubjectsWaiting = `-- name: ListTrustedIssuerSessionUpstreamSubjectsWaiting :many
+SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = $1::text
+  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_org_encrypted IS NULL
+  AND ($2::uuid IS NULL OR s.id > $2::uuid)
+ORDER BY s.id
+LIMIT $3
+`
+
+type ListTrustedIssuerSessionUpstreamSubjectsWaitingParams struct {
+	OrganizationID string
+	After          uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListTrustedIssuerSessionUpstreamSubjectsWaitingRow struct {
+	ID           uuid.UUID
+	PlatformCopy string
+}
+
+// Trusted issuer session upstream subjects of the organization with a platform-key copy
+// and no organization-key copy, soft-deleted sessions included, paged by id.
+func (q *Queries) ListTrustedIssuerSessionUpstreamSubjectsWaiting(ctx context.Context, arg ListTrustedIssuerSessionUpstreamSubjectsWaitingParams) ([]ListTrustedIssuerSessionUpstreamSubjectsWaitingRow, error) {
+	rows, err := q.db.Query(ctx, listTrustedIssuerSessionUpstreamSubjectsWaiting, arg.OrganizationID, arg.After, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrustedIssuerSessionUpstreamSubjectsWaitingRow
+	for rows.Next() {
+		var i ListTrustedIssuerSessionUpstreamSubjectsWaitingRow
+		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sealEMACredentialAccessTokenWaiting = `-- name: SealEMACredentialAccessTokenWaiting :execrows
 UPDATE remote_session_ema_credentials AS c
 SET access_token_org_encrypted = $1
@@ -800,6 +1598,162 @@ type SealRemoteSessionRefreshTokenWaitingParams struct {
 // under the same rules as SealRemoteSessionAccessTokenWaiting.
 func (q *Queries) SealRemoteSessionRefreshTokenWaiting(ctx context.Context, arg SealRemoteSessionRefreshTokenWaitingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, sealRemoteSessionRefreshTokenWaiting,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.PlatformCopy,
+		arg.DecidedGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sealTrustedIssuerSessionIdentityAssertionWaiting = `-- name: SealTrustedIssuerSessionIdentityAssertionWaiting :execrows
+UPDATE trusted_issuer_sessions AS s
+SET identity_assertion_org_encrypted = $1
+WHERE s.id = $2
+  AND s.organization_id = $3::text
+  AND s.identity_assertion_encrypted = $4
+  AND s.identity_assertion_org_encrypted IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $5
+`
+
+type SealTrustedIssuerSessionIdentityAssertionWaitingParams struct {
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	PlatformCopy      pgtype.Text
+	DecidedGeneration int64
+}
+
+// Adds the organization-key copy of a value the backfill sealed. It lands only
+// while the row still holds the platform-key copy that was read and no
+// organization-key copy, and changes nothing else about the session.
+func (q *Queries) SealTrustedIssuerSessionIdentityAssertionWaiting(ctx context.Context, arg SealTrustedIssuerSessionIdentityAssertionWaitingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sealTrustedIssuerSessionIdentityAssertionWaiting,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.PlatformCopy,
+		arg.DecidedGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sealTrustedIssuerSessionNonceWaiting = `-- name: SealTrustedIssuerSessionNonceWaiting :execrows
+UPDATE trusted_issuer_sessions AS s
+SET nonce_org_encrypted = $1
+WHERE s.id = $2
+  AND s.organization_id = $3::text
+  AND s.nonce_encrypted = $4
+  AND s.nonce_org_encrypted IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $5
+`
+
+type SealTrustedIssuerSessionNonceWaitingParams struct {
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	PlatformCopy      pgtype.Text
+	DecidedGeneration int64
+}
+
+// Adds the organization-key copy of a value the backfill sealed. It lands only
+// while the row still holds the platform-key copy that was read and no
+// organization-key copy, and changes nothing else about the session.
+func (q *Queries) SealTrustedIssuerSessionNonceWaiting(ctx context.Context, arg SealTrustedIssuerSessionNonceWaitingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sealTrustedIssuerSessionNonceWaiting,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.PlatformCopy,
+		arg.DecidedGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sealTrustedIssuerSessionRefreshTokenWaiting = `-- name: SealTrustedIssuerSessionRefreshTokenWaiting :execrows
+UPDATE trusted_issuer_sessions AS s
+SET refresh_token_org_encrypted = $1
+WHERE s.id = $2
+  AND s.organization_id = $3::text
+  AND s.refresh_token_encrypted = $4
+  AND s.refresh_token_org_encrypted IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $5
+`
+
+type SealTrustedIssuerSessionRefreshTokenWaitingParams struct {
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	PlatformCopy      pgtype.Text
+	DecidedGeneration int64
+}
+
+// Adds the organization-key copy of a value the backfill sealed. It lands only
+// while the row still holds the platform-key copy that was read and no
+// organization-key copy, and changes nothing else about the session.
+func (q *Queries) SealTrustedIssuerSessionRefreshTokenWaiting(ctx context.Context, arg SealTrustedIssuerSessionRefreshTokenWaitingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sealTrustedIssuerSessionRefreshTokenWaiting,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.PlatformCopy,
+		arg.DecidedGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sealTrustedIssuerSessionUpstreamSubjectWaiting = `-- name: SealTrustedIssuerSessionUpstreamSubjectWaiting :execrows
+UPDATE trusted_issuer_sessions AS s
+SET upstream_subject_org_encrypted = $1
+WHERE s.id = $2
+  AND s.organization_id = $3::text
+  AND s.upstream_subject_encrypted = $4
+  AND s.upstream_subject_org_encrypted IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $5
+`
+
+type SealTrustedIssuerSessionUpstreamSubjectWaitingParams struct {
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	PlatformCopy      pgtype.Text
+	DecidedGeneration int64
+}
+
+// Adds the organization-key copy of a value the backfill sealed. It lands only
+// while the row still holds the platform-key copy that was read and no
+// organization-key copy, and changes nothing else about the session.
+func (q *Queries) SealTrustedIssuerSessionUpstreamSubjectWaiting(ctx context.Context, arg SealTrustedIssuerSessionUpstreamSubjectWaitingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sealTrustedIssuerSessionUpstreamSubjectWaiting,
 		arg.OrgCopy,
 		arg.ID,
 		arg.OrganizationID,
@@ -961,6 +1915,123 @@ func (q *Queries) SetRemoteSessionTokens(ctx context.Context, arg SetRemoteSessi
 		&i.LastValidatedAt,
 		&i.ValidationStatus,
 		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const setTrustedIssuerSessionTokens = `-- name: SetTrustedIssuerSessionTokens :one
+UPDATE trusted_issuer_sessions AS s
+SET
+    identity_assertion_encrypted = CASE
+        WHEN $1::boolean THEN $2::text
+        ELSE s.identity_assertion_encrypted END,
+    identity_assertion_org_encrypted = CASE
+        WHEN $1::boolean THEN $3::text
+        ELSE s.identity_assertion_org_encrypted END,
+    refresh_token_encrypted = CASE
+        WHEN $4::boolean THEN $5::text
+        ELSE s.refresh_token_encrypted END,
+    refresh_token_org_encrypted = CASE
+        WHEN $4::boolean THEN $6::text
+        ELSE s.refresh_token_org_encrypted END,
+    upstream_subject_encrypted = CASE
+        WHEN $7::boolean THEN $8::text
+        ELSE s.upstream_subject_encrypted END,
+    upstream_subject_org_encrypted = CASE
+        WHEN $7::boolean THEN $9::text
+        ELSE s.upstream_subject_org_encrypted END,
+    nonce_encrypted = CASE
+        WHEN $10::boolean THEN $11::text
+        ELSE s.nonce_encrypted END,
+    nonce_org_encrypted = CASE
+        WHEN $10::boolean THEN $12::text
+        ELSE s.nonce_org_encrypted END
+WHERE s.id = $13
+  AND s.organization_id IS NOT DISTINCT FROM $14::text
+  AND s.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+    FOR KEY SHARE
+  ), 0) = $15
+RETURNING id, remote_session_client_id, organization_id, project_id, subject_urn, identity_assertion_encrypted, identity_assertion_org_encrypted, identity_assertion_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, refresh_expires_at, last_refresh_attempt_at, offline_access_refused_at, offline_access_request_config_hash, credential_generation, refresh_claim_id, upstream_subject_encrypted, upstream_subject_org_encrypted, nonce_encrypted, nonce_org_encrypted, credential_config_hash, observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at, retry_after, created_at, updated_at, deleted_at, deleted
+`
+
+type SetTrustedIssuerSessionTokensParams struct {
+	ReplaceIdentityAssertion      bool
+	IdentityAssertionPlatformCopy pgtype.Text
+	IdentityAssertionOrgCopy      pgtype.Text
+	ReplaceRefreshToken           bool
+	RefreshTokenPlatformCopy      pgtype.Text
+	RefreshTokenOrgCopy           pgtype.Text
+	ReplaceUpstreamSubject        bool
+	UpstreamSubjectPlatformCopy   pgtype.Text
+	UpstreamSubjectOrgCopy        pgtype.Text
+	ReplaceNonce                  bool
+	NoncePlatformCopy             pgtype.Text
+	NonceOrgCopy                  pgtype.Text
+	ID                            uuid.UUID
+	OrganizationID                pgtype.Text
+	DecidedGeneration             int64
+}
+
+// Stores, keeps or erases each value of a trusted issuer session as the
+// copies sealed under the decided transition generation. A value whose
+// replace flag is false keeps both stored copies as they are. Run it in the
+// transaction of the statement that changed the session, which owns
+// updated_at; this statement changes nothing else. No rows means the session
+// is gone, belongs to another organization, or the transition moved since the
+// decision.
+func (q *Queries) SetTrustedIssuerSessionTokens(ctx context.Context, arg SetTrustedIssuerSessionTokensParams) (TrustedIssuerSession, error) {
+	row := q.db.QueryRow(ctx, setTrustedIssuerSessionTokens,
+		arg.ReplaceIdentityAssertion,
+		arg.IdentityAssertionPlatformCopy,
+		arg.IdentityAssertionOrgCopy,
+		arg.ReplaceRefreshToken,
+		arg.RefreshTokenPlatformCopy,
+		arg.RefreshTokenOrgCopy,
+		arg.ReplaceUpstreamSubject,
+		arg.UpstreamSubjectPlatformCopy,
+		arg.UpstreamSubjectOrgCopy,
+		arg.ReplaceNonce,
+		arg.NoncePlatformCopy,
+		arg.NonceOrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.DecidedGeneration,
+	)
+	var i TrustedIssuerSession
+	err := row.Scan(
+		&i.ID,
+		&i.RemoteSessionClientID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SubjectUrn,
+		&i.IdentityAssertionEncrypted,
+		&i.IdentityAssertionOrgEncrypted,
+		&i.IdentityAssertionExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
+		&i.RefreshExpiresAt,
+		&i.LastRefreshAttemptAt,
+		&i.OfflineAccessRefusedAt,
+		&i.OfflineAccessRequestConfigHash,
+		&i.CredentialGeneration,
+		&i.RefreshClaimID,
+		&i.UpstreamSubjectEncrypted,
+		&i.UpstreamSubjectOrgEncrypted,
+		&i.NonceEncrypted,
+		&i.NonceOrgEncrypted,
+		&i.CredentialConfigHash,
+		&i.ObservationStatus,
+		&i.ObservedAt,
+		&i.CredentialObtainedAt,
+		&i.LastRefreshSucceededAt,
+		&i.RetryAfter,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

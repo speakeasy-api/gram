@@ -43,17 +43,17 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true},
 	}))
 	text := func(s string) pgtype.Text { return pgtype.Text{String: s, Valid: true} }
-	params := repo.UpsertTrustedDelegationCredentialParams{
+	params := repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject,
 		IdentityAssertionEncrypted: text("encrypted-assertion"),
 		IdentityAssertionExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 		RefreshTokenEncrypted:      text("encrypted-refresh"), UpstreamSubjectEncrypted: text("encrypted-subject"),
 		NonceEncrypted: text("encrypted-nonce"), CredentialConfigHash: text("config"),
 	}
-	row, err := q.UpsertTrustedDelegationCredential(ctx, params)
+	row, err := q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), row.CredentialGeneration.Int64)
-	_, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// Cleanup cannot act through a mismatched issuer binding.
 	require.NoError(t, fixtures.ExpireDelegationAssertionFixture(ctx, row.ID))
@@ -86,7 +86,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.True(t, attempted.LastRefreshAttemptAt.Valid)
 
 	// Claim acquisition invalidates callback snapshots that might preserve a spent token.
-	_, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.NoError(t, fixtures.BackdateDelegationRefreshAttemptFixture(ctx, row.ID))
 	_, err = q.ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: uuid.New()})
@@ -94,12 +94,12 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	// Fresh login supersedes the in-flight generation; its late result cannot win.
 	params.ExpectedGeneration = claimed.CredentialGeneration.Int64
 	params.RefreshTokenEncrypted = text("new-login-refresh")
-	replacement, err := q.UpsertTrustedDelegationCredential(ctx, params)
+	replacement, err := q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	require.False(t, replacement.RefreshClaimID.Valid)
 	require.True(t, replacement.LastRefreshAttemptAt.Valid)
 	require.WithinDuration(t, time.Now().Add(-48*time.Hour), replacement.LastRefreshAttemptAt.Time, time.Minute)
-	_, err = q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID, RefreshTokenEncrypted: text("late-refresh")})
+	_, err = q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	get := repo.GetTrustedDelegationCredentialParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject}
 	read, err := q.GetTrustedDelegationCredential(ctx, get)
@@ -113,12 +113,11 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	claimID = uuid.New()
 	claimed, err = q.ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: read.CredentialGeneration.Int64, RefreshClaimID: claimID})
 	require.NoError(t, err)
-	completed, err := q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID, RefreshTokenEncrypted: text("rotated-refresh"), UpstreamSubjectEncrypted: text("encrypted-subject"), NonceEncrypted: text("encrypted-nonce")})
+	completed, err := q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID})
 	require.NoError(t, err)
 	require.Greater(t, completed.CredentialGeneration.Int64, claimed.CredentialGeneration.Int64)
-	require.Equal(t, "rotated-refresh", completed.RefreshTokenEncrypted.String)
+	require.Equal(t, "new-login-refresh", completed.RefreshTokenEncrypted.String, "the completion leaves the tokens to SetTrustedIssuerSessionTokens in the same transaction")
 	require.False(t, completed.RefreshClaimID.Valid)
-	require.False(t, completed.IdentityAssertionEncrypted.Valid)
 
 	// Release remains possible after live trust removal and changes only its own claim.
 	claimID = uuid.New()
@@ -155,7 +154,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, fixtures.RestoreDelegationUserIssuersFixture(ctx, org))
 	completed, err = q.GetTrustedDelegationCredential(ctx, get)
 	require.NoError(t, err)
-	require.Equal(t, "rotated-refresh", completed.RefreshTokenEncrypted.String)
+	require.Equal(t, "new-login-refresh", completed.RefreshTokenEncrypted.String)
 	require.False(t, completed.RefreshClaimID.Valid)
 	get.OrganizationID = "org_another_test"
 	_, err = q.GetTrustedDelegationCredential(ctx, get)
@@ -180,7 +179,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count)
 	params.ExpectedGeneration = read.CredentialGeneration.Int64
-	_, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	// Aggregate timestamps describe current-registration observations only.
 	require.NoError(t, fixtures.MarkDelegationObservedFixture(ctx, row.ID))
@@ -225,7 +224,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	_, err = fixtures.GetDelegationAssertionOrSubjectPresentFixture(ctx, row.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	params.ExpectedGeneration = 0
-	row, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	row, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	// Explicit revocation must work after removal of trust, without a live read.
 	require.NoError(t, fixtures.RevokeDelegationUserIssuersFixture(ctx, org))

@@ -13,7 +13,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,8 +136,8 @@ func (s *delegationMemoryStore) clearExpired(_ context.Context, b Binding, now t
 		return nil
 	}
 	// Repository expiry cleanup erases only the assertion without changing CAS.
-	if c.assertion != "" && !c.assertionExpiry.After(now) {
-		c.assertion = ""
+	if c.assertion.present() && !c.assertionExpiry.After(now) {
+		c.assertion = secret{}
 		c.assertionExpiry = time.Time{}
 		s.rows[b] = c
 	}
@@ -156,7 +159,7 @@ func newDelegationUnitFixture(t *testing.T) (*Service, *delegationMemoryStore, *
 	require.True(t, validDelegationBinding(b))
 	store := &delegationMemoryStore{rows: make(map[Binding]delegationCredential)}
 	now := time.Unix(1700000000, 0)
-	service := &Service{store: store, enc: enc, now: func() time.Time { return now }}
+	service := &Service{store: store, tokens: &platformSecretKeys{enc: enc, unusable: nil}, now: func() time.Time { return now }}
 	store.clock = func() time.Time { return service.now() }
 	service.loadProvider = func(_ context.Context, org string, issuer, client uuid.UUID) (Provider, error) {
 		if org != p.organizationID || issuer != p.issuer.ID || client != p.client.ID {
@@ -186,11 +189,64 @@ func delegationRenewal(p Provider, now time.Time, id, refresh string) *RefreshRe
 	}
 	return r
 }
-func delegationPlain(t *testing.T, s *Service, ciphertext string) string {
+
+// delegationPlain is a secret's value: as set, or opened from the platform-key
+// copy the fixture planted.
+func delegationPlain(t *testing.T, s *Service, value secret) string {
 	t.Helper()
-	plain, err := s.decrypt(ciphertext)
+	if value.stored == nil {
+		return value.plain
+	}
+	if !value.stored.Platform.Valid {
+		return ""
+	}
+	keys, ok := s.tokens.(*platformSecretKeys)
+	require.True(t, ok)
+	plain, err := keys.enc.Decrypt(value.stored.Platform.String)
 	require.NoError(t, err)
 	return plain
+}
+
+// platformSecretKeys opens planted platform-key copies the way a process
+// without organization encryption opens them for an organization in
+// platform_key, with no transition state to read. unusable, when set, is the
+// key problem every call reports.
+type platformSecretKeys struct {
+	enc      *encryption.Client
+	unusable error
+}
+
+func (k *platformSecretKeys) Open(_ context.Context, _ repo.DBTX, _ pgtype.Text, _ orgencryption.CopyColumns, stored orgencryption.Copies) (string, error) {
+	if k.unusable != nil {
+		return "", k.unusable
+	}
+	if !stored.Platform.Valid {
+		return "", orgencryption.ErrMissing
+	}
+	plain, err := k.enc.Decrypt(stored.Platform.String)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", orgencryption.ErrUnreadable, err)
+	}
+	return plain, nil
+}
+
+func (k *platformSecretKeys) RequireUsable(context.Context, repo.DBTX, pgtype.Text) error {
+	return k.unusable
+}
+
+// unreadableSecret is a stored platform-key copy that does not decrypt.
+func unreadableSecret(ciphertext string) secret {
+	return storedSecret(pgtype.Text{String: ciphertext, Valid: true}, pgtype.Text{String: "", Valid: false})
+}
+
+// plantedSecret is a platform-key copy of plain the fixture's key seals.
+func plantedSecret(t *testing.T, s *Service, plain string) secret {
+	t.Helper()
+	keys, ok := s.tokens.(*platformSecretKeys)
+	require.True(t, ok)
+	ciphertext, err := keys.enc.Encrypt([]byte(plain))
+	require.NoError(t, err)
+	return storedSecret(pgtype.Text{String: ciphertext, Valid: true}, pgtype.Text{String: "", Valid: false})
 }
 
 func TestDelegationServiceConcurrentRefresh(t *testing.T) {
@@ -482,10 +538,14 @@ func TestDelegationServiceEncryptedRetentionAndRedaction(t *testing.T) {
 	require.Equal(t, EphemeralFederatedCredentials{}, identity.credentials.value)
 	c, err := store.load(t.Context(), b)
 	require.NoError(t, err)
-	for _, pair := range []struct{ encrypted, plain string }{{c.assertion, "secret-id"}, {c.refresh, "secret-refresh"}, {c.subject, "secret-subject"}, {c.nonce, "secret-nonce"}} {
-		require.NotEmpty(t, pair.encrypted)
-		require.NotContains(t, pair.encrypted, pair.plain)
-		require.Equal(t, pair.plain, delegationPlain(t, s, pair.encrypted))
+	// The store seals each value it writes; the service only holds it.
+	for _, pair := range []struct {
+		value secret
+		plain string
+	}{{c.assertion, "secret-id"}, {c.refresh, "secret-refresh"}, {c.subject, "secret-subject"}, {c.nonce, "secret-nonce"}} {
+		require.True(t, pair.value.present())
+		require.Equal(t, pair.plain, delegationPlain(t, s, pair.value))
+		require.NotContains(t, fmt.Sprintf("%v %+v %#v", pair.value, pair.value, pair.value), pair.plain)
 	}
 	a, err := s.Resolve(t.Context(), b, allow)
 	require.NoError(t, err)
@@ -1355,7 +1415,7 @@ func TestDelegationServicePrePOSTAttempt(t *testing.T) {
 			switch name {
 			case "decrypt failure":
 				c := store.rows[b]
-				c.refresh = "invalid ciphertext"
+				c.refresh = unreadableSecret("invalid ciphertext")
 				store.rows[b] = c
 			case "CAS conflict":
 				store.attemptConflict = true
@@ -1754,7 +1814,7 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 		t.Parallel()
 		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) {
 			c.status = "reauthentication_required"
-			c.refresh = ""
+			c.refresh = secret{}
 		})
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
 		require.NoError(t, s.Check(t.Context(), b, allow), "Check alone does not see a recorded reauthentication")
@@ -1807,7 +1867,7 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 	})
 	t.Run("live assertion that does not decrypt", func(t *testing.T) {
 		t.Parallel()
-		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.assertion = "not-a-ciphertext" })
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.assertion = unreadableSecret("not-a-ciphertext") })
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
 		_, err := s.Resolve(t.Context(), b, allow)
 		require.ErrorIs(t, err, ErrConfiguration)
@@ -1818,7 +1878,7 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "", time.Hour), true))
 		store.mu.Lock()
 		c := store.rows[b]
-		c.subject = "not-a-ciphertext"
+		c.subject = unreadableSecret("not-a-ciphertext")
 		store.rows[b] = c
 		store.mu.Unlock()
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
@@ -1826,14 +1886,14 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 	})
 	t.Run("refresh grant that does not decrypt", func(t *testing.T) {
 		t.Parallel()
-		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.refresh = "not-a-ciphertext" })
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.refresh = unreadableSecret("not-a-ciphertext") })
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
 		_, err := s.Resolve(t.Context(), b, allow)
 		require.ErrorIs(t, err, ErrConfiguration)
 	})
 	t.Run("refresh grant whose nonce does not decrypt", func(t *testing.T) {
 		t.Parallel()
-		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.nonce = "not-a-ciphertext" })
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.nonce = unreadableSecret("not-a-ciphertext") })
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
 	})
 	t.Run("assertion inside the safety window without a refresh grant", func(t *testing.T) {
@@ -1843,14 +1903,13 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 	})
 	t.Run("refresh grant without a subject", func(t *testing.T) {
 		t.Parallel()
-		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.subject = "" })
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.subject = secret{} })
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
 	})
 	t.Run("refresh grant whose subject seals an empty value", func(t *testing.T) {
 		t.Parallel()
 		s, b, allow := retained(t, "refresh", time.Minute, nil)
-		sealed, err := s.enc.Encrypt([]byte(""))
-		require.NoError(t, err)
+		sealed := plantedSecret(t, s, "")
 		store, ok := s.store.(*delegationMemoryStore)
 		require.True(t, ok)
 		store.mu.Lock()

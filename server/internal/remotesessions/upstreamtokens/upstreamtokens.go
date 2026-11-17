@@ -67,6 +67,34 @@ var (
 		PlatformColumn: "remote_session_ema_credentials.access_token_encrypted",
 		OrgColumn:      "remote_session_ema_credentials.access_token_org_encrypted",
 	}
+
+	// TrustedIssuerSessionIdentityAssertion is a trusted issuer session's identity assertion.
+	TrustedIssuerSessionIdentityAssertion = orgencryption.CopyColumns{
+		UseCase:        orgencryption.UseCaseOAuthSessionTokens,
+		PlatformColumn: "trusted_issuer_sessions.identity_assertion_encrypted",
+		OrgColumn:      "trusted_issuer_sessions.identity_assertion_org_encrypted",
+	}
+
+	// TrustedIssuerSessionRefreshToken is a trusted issuer session's refresh token.
+	TrustedIssuerSessionRefreshToken = orgencryption.CopyColumns{
+		UseCase:        orgencryption.UseCaseOAuthSessionTokens,
+		PlatformColumn: "trusted_issuer_sessions.refresh_token_encrypted",
+		OrgColumn:      "trusted_issuer_sessions.refresh_token_org_encrypted",
+	}
+
+	// TrustedIssuerSessionUpstreamSubject is a trusted issuer session's upstream subject.
+	TrustedIssuerSessionUpstreamSubject = orgencryption.CopyColumns{
+		UseCase:        orgencryption.UseCaseOAuthSessionTokens,
+		PlatformColumn: "trusted_issuer_sessions.upstream_subject_encrypted",
+		OrgColumn:      "trusted_issuer_sessions.upstream_subject_org_encrypted",
+	}
+
+	// TrustedIssuerSessionNonce is a trusted issuer session's nonce.
+	TrustedIssuerSessionNonce = orgencryption.CopyColumns{
+		UseCase:        orgencryption.UseCaseOAuthSessionTokens,
+		PlatformColumn: "trusted_issuer_sessions.nonce_encrypted",
+		OrgColumn:      "trusted_issuer_sessions.nonce_org_encrypted",
+	}
 )
 
 // maxWriteAttempts bounds how often a write decides, seals and writes again
@@ -78,6 +106,10 @@ const maxWriteAttempts = 3
 // ErrSessionNotFound means the remote session to write does not exist, is
 // deleted, or belongs to another organization.
 var ErrSessionNotFound = errors.New("upstreamtokens: remote session not found")
+
+// ErrTrustedIssuerSessionNotFound means the trusted issuer session to write
+// does not exist, is deleted, or belongs to another organization.
+var ErrTrustedIssuerSessionNotFound = errors.New("upstreamtokens: trusted issuer session not found")
 
 // ErrEMACredentialNotFound means the EMA credential to write does not exist,
 // is retired, or belongs to another organization.
@@ -416,6 +448,105 @@ func (t *Tokens) SetEMACredential(ctx context.Context, dbtx repo.DBTX, credentia
 	})
 	if err != nil {
 		return repo.SetEMACredentialAccessTokenRow{}, err
+	}
+
+	return row, nil
+}
+
+// TrustedIssuerSessionValues are the values a trusted issuer session write
+// stores. A nil value keeps both stored copies as they are; an empty one
+// erases both.
+type TrustedIssuerSessionValues struct {
+	// IdentityAssertion is the identity assertion (ID token).
+	IdentityAssertion *string
+
+	// RefreshToken is the refresh token.
+	RefreshToken *string
+
+	// UpstreamSubject is the upstream subject identifier.
+	UpstreamSubject *string
+
+	// Nonce is the sign-in nonce the refresh family is bound to.
+	Nonce *string
+}
+
+// sealedValue is one value of a write: whether it replaces the stored
+// copies, and the copies that replace them.
+type sealedValue struct {
+	replace bool
+	copies  orgencryption.Copies
+}
+
+// sealValue seals a value of a write: nil keeps the stored copies, an empty
+// value erases them.
+func (t *Tokens) sealValue(ctx context.Context, dc decision, columns orgencryption.CopyColumns, value *string) (sealedValue, error) {
+	switch {
+	case value == nil:
+		return sealedValue{replace: false, copies: orgencryption.ErasedCopies()}, nil
+	case *value == "":
+		return sealedValue{replace: true, copies: orgencryption.ErasedCopies()}, nil
+	}
+
+	copies, err := t.seal(ctx, dc, columns, *value)
+	if err != nil {
+		return sealedValue{}, err
+	}
+
+	return sealedValue{replace: true, copies: copies}, nil
+}
+
+// SetTrustedIssuerSession stores, keeps or erases each value of a trusted
+// issuer session and returns the updated row. Run it in the transaction of
+// the statement that changed the session, which owns every other column,
+// including updated_at. organizationID is the row's organization_id.
+func (t *Tokens) SetTrustedIssuerSession(ctx context.Context, dbtx repo.DBTX, sessionID uuid.UUID, organizationID pgtype.Text, values TrustedIssuerSessionValues) (repo.TrustedIssuerSession, error) {
+	var row repo.TrustedIssuerSession
+	err := t.write(ctx, dbtx, organizationID, ErrTrustedIssuerSessionNotFound, func(dc decision) (bool, error) {
+		assertion, err := t.sealValue(ctx, dc, TrustedIssuerSessionIdentityAssertion, values.IdentityAssertion)
+		if err != nil {
+			return false, err
+		}
+		refresh, err := t.sealValue(ctx, dc, TrustedIssuerSessionRefreshToken, values.RefreshToken)
+		if err != nil {
+			return false, err
+		}
+		subject, err := t.sealValue(ctx, dc, TrustedIssuerSessionUpstreamSubject, values.UpstreamSubject)
+		if err != nil {
+			return false, err
+		}
+		nonce, err := t.sealValue(ctx, dc, TrustedIssuerSessionNonce, values.Nonce)
+		if err != nil {
+			return false, err
+		}
+
+		row, err = repo.New(dbtx).SetTrustedIssuerSessionTokens(ctx, repo.SetTrustedIssuerSessionTokensParams{
+			ReplaceIdentityAssertion:      assertion.replace,
+			IdentityAssertionPlatformCopy: assertion.copies.Platform,
+			IdentityAssertionOrgCopy:      assertion.copies.Org,
+			ReplaceRefreshToken:           refresh.replace,
+			RefreshTokenPlatformCopy:      refresh.copies.Platform,
+			RefreshTokenOrgCopy:           refresh.copies.Org,
+			ReplaceUpstreamSubject:        subject.replace,
+			UpstreamSubjectPlatformCopy:   subject.copies.Platform,
+			UpstreamSubjectOrgCopy:        subject.copies.Org,
+			ReplaceNonce:                  nonce.replace,
+			NoncePlatformCopy:             nonce.copies.Platform,
+			NonceOrgCopy:                  nonce.copies.Org,
+			ID:                            sessionID,
+			OrganizationID:                organizationID,
+			DecidedGeneration:             dc.generation(),
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return false, nil
+		case err != nil:
+			return false, fmt.Errorf("store trusted issuer session tokens: %w", err)
+		default:
+			return true, nil
+		}
+	})
+	if err != nil {
+		return repo.TrustedIssuerSession{}, err
 	}
 
 	return row, nil

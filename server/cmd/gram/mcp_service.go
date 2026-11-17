@@ -190,7 +190,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 	if err := service.SetMCPRegistryAuth(c.String("mcp-registry-auth")); err != nil {
 		return nil, fmt.Errorf("configure MCP registry auth: %w", err)
 	}
-	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
+	delegation := remotesessions.NewDelegationService(d.DB, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
 	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
 	if err != nil {

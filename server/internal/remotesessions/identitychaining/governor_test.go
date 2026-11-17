@@ -96,7 +96,7 @@ func (f chainStoreFixture) retainRefreshableDelegation(t *testing.T, status stri
 	if status == "durable_credential_present" {
 		refresh = sealed("refresh")
 	}
-	_, err = q.UpsertTrustedDelegationCredential(t.Context(), repo.UpsertTrustedDelegationCredentialParams{
+	_, err = q.UpsertTrustedDelegationCredentialFixture(t.Context(), repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject, ExpectedGeneration: current.CredentialGeneration.Int64,
 		CredentialConfigHash:       pgtype.Text{String: f.configHash, Valid: true},
 		ObservationStatus:          pgtype.Text{String: status, Valid: true},

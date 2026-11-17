@@ -195,7 +195,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	require.NoError(t, err)
 	encryptedSubject, err := enc.Encrypt([]byte(upstreamSubject))
 	require.NoError(t, err)
-	_, err = q.UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: org, ClientID: idpClient.ID, IssuerID: idpIssuer.ID, SubjectUrn: urn.NewUserSubject(human).String(), ExpectedGeneration: 0,
 		IdentityAssertionEncrypted: pgtype.Text{String: encryptedToken, Valid: true},
 		IdentityAssertionExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
@@ -216,7 +216,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
-	chainer := New(logger, db, upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks)
+	chainer := New(logger, db, upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), challenges, remotesessions.NewDelegationService(db, challenges), keys, locks)
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)
 	return devIDPFixture{
