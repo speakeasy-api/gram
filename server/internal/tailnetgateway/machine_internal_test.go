@@ -33,6 +33,7 @@ func TestWakesOnServingBoundaryAndCustomerWaits(t *testing.T) {
 		{NodeStatusAwaitingCertificate, NodeStatusOnline, true},
 		{NodeStatusNeedsLogin, NodeStatusNeedsLogin, false},
 		{NodeStatusStarting, NodeStatusStarting, false},
+		{NodeStatusAwaitingApproval, NodeStatusStarting, false},
 		{NodeStatusStarting, NodeStatusError, false},
 		{NodeStatusAwaitingApproval, NodeStatusDraining, false},
 		{NodeStatusDraining, NodeStatusStopped, false},
@@ -51,6 +52,7 @@ func TestProbeTransitionFollowsTheNode(t *testing.T) {
 	unapproved := NodeState{Online: false, BackendState: "Running", NeedsLogin: false, AwaitingApproval: true, NodeID: "n1", FQDN: "private.example.ts.net"}
 	refused := NodeState{Online: false, BackendState: "NeedsLogin", NeedsLogin: true, AwaitingApproval: false, NodeID: "", FQDN: ""}
 	uncertified := NodeState{Online: false, BackendState: "Running", AwaitingCertificate: true, CertificateStatus: "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC", NodeID: "n1", FQDN: "private.example.ts.net"}
+	obtaining := NodeState{Online: false, BackendState: "Running", AwaitingCertificate: false, CertificateStatus: "obtaining a TLS certificate for private.example.ts.net", NodeID: "n1", FQDN: "private.example.ts.net"}
 	connecting := NodeState{Online: false, BackendState: "Starting", NeedsLogin: false, AwaitingApproval: false, NodeID: "", FQDN: ""}
 
 	for _, tc := range []struct {
@@ -58,22 +60,27 @@ func TestProbeTransitionFollowsTheNode(t *testing.T) {
 		from  NodeStatus
 		state NodeState
 		err   error
+		grace bool
 		want  transition
 	}{
-		{"comes online", NodeStatusStarting, running, nil, transition{to: NodeStatusOnline, message: "", wake: true}},
-		{"stays online", NodeStatusOnline, running, nil, transition{to: NodeStatusOnline, message: "", wake: false}},
-		{"waits for approval", NodeStatusStarting, unapproved, nil, transition{to: NodeStatusAwaitingApproval, message: "the tailnet has not approved this node to host svc:private", wake: true}},
-		{"keeps waiting", NodeStatusAwaitingApproval, unapproved, nil, transition{to: NodeStatusAwaitingApproval, message: "the tailnet has not approved this node to host svc:private", wake: false}},
-		{"approval revoked", NodeStatusOnline, unapproved, nil, transition{to: NodeStatusAwaitingApproval, message: "the tailnet has not approved this node to host svc:private", wake: true}},
-		{"waits for a certificate", NodeStatusStarting, uncertified, nil, transition{to: NodeStatusAwaitingCertificate, message: "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC", wake: true}},
-		{"identity refused", NodeStatusOnline, refused, nil, transition{to: NodeStatusNeedsLogin, message: "NeedsLogin", wake: true}},
-		{"still connecting", NodeStatusStarting, connecting, nil, transition{to: NodeStatusStarting, message: "Starting", wake: false}},
-		{"probe failed while online", NodeStatusOnline, NodeState{}, errors.New("tsnet status: gone"), transition{to: NodeStatusError, message: "tsnet status: gone", wake: true}},
-		{"probe failed while starting", NodeStatusStarting, NodeState{}, errors.New("tsnet status: gone"), transition{to: NodeStatusError, message: "tsnet status: gone", wake: false}},
+		{"comes online", NodeStatusStarting, running, nil, false, transition{to: NodeStatusOnline, message: "", wake: true}},
+		{"stays online", NodeStatusOnline, running, nil, false, transition{to: NodeStatusOnline, message: "", wake: false}},
+		{"waits for approval", NodeStatusStarting, unapproved, nil, false, transition{to: NodeStatusAwaitingApproval, message: "the tailnet has not approved this node to host svc:private", wake: true}},
+		{"keeps waiting", NodeStatusAwaitingApproval, unapproved, nil, false, transition{to: NodeStatusAwaitingApproval, message: "the tailnet has not approved this node to host svc:private", wake: false}},
+		{"approval revoked", NodeStatusOnline, unapproved, nil, false, transition{to: NodeStatusAwaitingApproval, message: "the tailnet has not approved this node to host svc:private", wake: true}},
+		{"waits for a certificate", NodeStatusStarting, uncertified, nil, false, transition{to: NodeStatusAwaitingCertificate, message: "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC", wake: true}},
+		{"identity refused", NodeStatusOnline, refused, nil, false, transition{to: NodeStatusNeedsLogin, message: "NeedsLogin", wake: true}},
+		{"approval on its way", NodeStatusStarting, unapproved, nil, true, transition{to: NodeStatusStarting, message: "waiting for the tailnet to approve this node to host svc:private", wake: false}},
+		{"approval overdue", NodeStatusStarting, unapproved, nil, false, transition{to: NodeStatusAwaitingApproval, message: "the tailnet has not approved this node to host svc:private", wake: true}},
+		{"first certificate request in flight", NodeStatusStarting, obtaining, nil, false, transition{to: NodeStatusStarting, message: "obtaining a TLS certificate for private.example.ts.net", wake: false}},
+		{"certificate refused", NodeStatusStarting, uncertified, nil, true, transition{to: NodeStatusAwaitingCertificate, message: "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC", wake: true}},
+		{"still connecting", NodeStatusStarting, connecting, nil, false, transition{to: NodeStatusStarting, message: "Starting", wake: false}},
+		{"probe failed while online", NodeStatusOnline, NodeState{}, errors.New("tsnet status: gone"), false, transition{to: NodeStatusError, message: "tsnet status: gone", wake: true}},
+		{"probe failed while starting", NodeStatusStarting, NodeState{}, errors.New("tsnet status: gone"), false, transition{to: NodeStatusError, message: "tsnet status: gone", wake: false}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, probeTransition(tc.from, "svc:private", tc.state, tc.err))
+			require.Equal(t, tc.want, probeTransition(tc.from, "svc:private", tc.state, tc.err, tc.grace))
 		})
 	}
 }

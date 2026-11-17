@@ -874,7 +874,7 @@ const (
 	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
 	TestEventKey = attribute.Key("speakeasy.test_event")
 	// TestEventIDKey is shared by every record one data export test sends, so a destination can find them.
-	TestEventIDKey = attribute.Key("speakeasy.test_event.id")
+	TestEventIDKey = attribute.Key("speakeasy.test_event_id")
 
 	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")

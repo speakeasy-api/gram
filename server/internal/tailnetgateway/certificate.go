@@ -11,6 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/speakeasy-api/sc"
+	"golang.org/x/sync/semaphore"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
@@ -104,185 +107,47 @@ var errCertificateIssuing = errors.New("another gateway slot is obtaining the ce
 // holds its certificate.
 var errCertificateNotObtained = errors.New("the gateway has not obtained its TLS certificate yet")
 
-// certPhase is where a node is with its certificate. Whether a held
-// certificate has expired is not a phase: it follows from the clock, and
-// certStatus works it out.
-type certPhase int
-
-const (
-	// phaseObtaining: no certificate is held and no request has failed.
-	phaseObtaining certPhase = iota
-	// phaseRetrying: no certificate is held and the last request failed.
-	phaseRetrying
-	// phaseServing: a certificate is held and nothing is failing.
-	phaseServing
-	// phaseRenewFailing: a certificate is held and the last renewal failed;
-	// the node keeps serving it.
-	phaseRenewFailing
-	// phaseStopped: the node is closing and starts no more requests.
-	phaseStopped
-)
-
-// certState is a node's certificate state. Every transition goes through
-// apply, and every choice of what to do next through decide, both pure.
-type certState struct {
-	phase certPhase
-
-	// cert is the certificate served, nil in phaseObtaining and
-	// phaseRetrying.
-	cert *tls.Certificate
-
-	// err is why the last request failed, in phaseRetrying and
-	// phaseRenewFailing.
-	err error
-
-	// failures counts consecutive failures that back off: refusals naming
-	// their own retry time do not count.
-	failures int
-
-	// retryAt holds every request back after a failure; zero otherwise.
-	retryAt time.Time
-
-	// While a certificate is held: refreshAt is when to re-read the store,
-	// windowCheckAt when to ask for the renewal window, renewAt when to
-	// renew. A zero windowCheckAt means at once.
-	refreshAt     time.Time
-	windowCheckAt time.Time
-	renewAt       time.Time
-}
-
-// certAction is the request step a node takes next.
-type certAction int
-
-const (
-	actionNone certAction = iota
-	// actionObtain gets a certificate while none is held.
-	actionObtain
-	// actionCheckStore re-reads the store for another slot's renewal.
-	actionCheckStore
-	// actionFetchWindow asks for the held certificate's renewal window.
-	actionFetchWindow
-	// actionRenew renews the held certificate under the lease.
-	actionRenew
-)
-
-// certOutcome is the result of running one action.
-type certOutcome struct {
-	action certAction
-
-	// cert is the certificate obtained, found in the store (nil for none)
-	// or renewed into.
-	cert *tls.Certificate
-
-	// renewAt and checkAgain are the window's answer, for actionFetchWindow.
-	renewAt, checkAgain time.Time
-
-	err error
-}
-
 // errRenewalUnchanged is a renewal that returned the certificate it was
-// asked to replace.
-var errRenewalUnchanged = errors.New("the renewal returned the certificate it was asked to replace")
+// asked to replace, or one that expires no later.
+var errRenewalUnchanged = errors.New("the renewal returned no certificate later than the one it was asked to replace")
 
-// decide is the step a node in st takes at now, or actionNone.
-func decide(st certState, now time.Time) certAction {
+// backsOff reports whether a failure counts toward the backoff. A refusal
+// naming its own retry time, control not yet listing the service name, and
+// another slot holding the lease do not.
+func backsOff(err error) bool {
+	return !isCertificateRateLimited(err) && !isCertificateDomainPending(err) && !errors.Is(err, errCertificateIssuing)
+}
+
+// certStatus reports whether snap holds a certificate valid at now, whether
+// the node is without one because a request failed, and, when it holds none,
+// why. A node whose first request is still running, or that waits for another
+// slot's lease or for control to list its service name, has not failed: those
+// clear on their own within seconds. Whether a held certificate has expired is
+// not a state: it follows from the clock.
+func certStatus(snap sc.Snapshot[certState, certContext], domain string, now time.Time) (valid bool, failed bool, message string) {
+	c := snap.Context
 	switch {
-	case st.phase == phaseStopped, now.Before(st.retryAt):
-		return actionNone
-	case st.cert == nil:
-		return actionObtain
-	case !now.Before(st.refreshAt):
-		return actionCheckStore
-	case !now.Before(st.windowCheckAt):
-		return actionFetchWindow
-	case !now.Before(st.renewAt):
-		return actionRenew
+	case snap.In(certStopped):
+		return false, false, "the gateway node is stopping"
+	case c.cert == nil && c.err == nil:
+		return false, false, "obtaining a TLS certificate for " + domain
+	case c.cert == nil:
+		return false, certificateRequestFailed(c.err), certificateFailureMessage(domain, c.err, c.retryAt)
+	case now.Before(c.cert.Leaf.NotAfter):
+		return true, false, ""
+	case c.err == nil:
+		return false, true, "the TLS certificate for " + domain + " has expired"
 	default:
-		return actionNone
+		return false, true, fmt.Sprintf("the TLS certificate for %s has expired; %v; retrying after %s",
+			domain, c.err, c.retryAt.UTC().Format("2006-01-02 15:04 UTC"))
 	}
 }
 
-// apply is the state after outcome at now. refreshIn is how long until the
-// next store read, passed in so the jitter stays out of apply.
-func apply(st certState, o certOutcome, now time.Time, refreshIn time.Duration) certState {
-	if st.phase == phaseStopped {
-		return st
-	}
-	switch o.action {
-	case actionObtain:
-		if o.err != nil {
-			return failed(st, o.err, now)
-		}
-		return serving(st, o.cert, now, refreshIn)
-	case actionCheckStore:
-		if o.err == nil && replaces(o.cert, st.cert) {
-			return serving(st, o.cert, now, refreshIn)
-		}
-		st.refreshAt = now.Add(refreshIn)
-		return st
-	case actionFetchWindow:
-		if o.err != nil {
-			st.renewAt, st.windowCheckAt = fallbackRenewAt(st.cert.Leaf), now.Add(renewalCheckMin)
-			return st
-		}
-		st.renewAt, st.windowCheckAt = o.renewAt, o.checkAgain
-		return st
-	case actionRenew:
-		if o.err == nil && o.cert.Leaf.Equal(st.cert.Leaf) {
-			o.err = errRenewalUnchanged
-		}
-		if o.err != nil {
-			return failed(st, o.err, now)
-		}
-		return serving(st, o.cert, now, refreshIn)
-	case actionNone:
-	}
-	return st
-}
-
-// serving holds cert with nothing failing; its window is asked for at once.
-func serving(st certState, cert *tls.Certificate, now time.Time, refreshIn time.Duration) certState {
-	return certState{
-		phase: phaseServing, cert: cert, err: nil, failures: 0, retryAt: time.Time{},
-		refreshAt: now.Add(refreshIn), windowCheckAt: time.Time{}, renewAt: time.Time{},
-	}
-}
-
-// failed records a failed obtain or renewal and when to retry.
-func failed(st certState, err error, now time.Time) certState {
-	if !isCertificateRateLimited(err) && !isCertificateDomainPending(err) && !errors.Is(err, errCertificateIssuing) {
-		st.failures++
-	}
-	st.err = err
-	st.retryAt = nextCertificateRetry(now, err, st.failures)
-	st.phase = phaseRetrying
-	if st.cert != nil {
-		st.phase = phaseRenewFailing
-	}
-	return st
-}
-
-// certStatus reports whether st holds a certificate valid at now and, when it
-// does not, why.
-func certStatus(st certState, domain string, now time.Time) (bool, string) {
-	switch st.phase {
-	case phaseObtaining:
-		return false, "obtaining a TLS certificate for " + domain
-	case phaseRetrying:
-		return false, certificateFailureMessage(domain, st.err, st.retryAt)
-	case phaseServing, phaseRenewFailing:
-		if now.Before(st.cert.Leaf.NotAfter) {
-			return true, ""
-		}
-		if st.phase == phaseServing {
-			return false, "the TLS certificate for " + domain + " has expired"
-		}
-		return false, fmt.Sprintf("the TLS certificate for %s has expired; %v; retrying after %s",
-			domain, st.err, st.retryAt.UTC().Format("2006-01-02 15:04 UTC"))
-	case phaseStopped:
-		return false, "the gateway node is stopping"
-	}
-	return false, ""
+// certificateRequestFailed reports whether err is a refusal or failure, as
+// opposed to a wait that normally clears within seconds: another slot holding
+// the issuance lease, or control not yet listing the service name.
+func certificateRequestFailed(err error) bool {
+	return !errors.Is(err, errCertificateIssuing) && !isCertificateDomainPending(err)
 }
 
 // replaces reports whether stored is a later certificate than held.
@@ -290,95 +155,91 @@ func replaces(stored, held *tls.Certificate) bool {
 	return stored != nil && !stored.Leaf.Equal(held.Leaf) && stored.Leaf.NotAfter.After(held.Leaf.NotAfter)
 }
 
-// maxStepsPerRequest bounds one request's steps: obtain or re-read the
-// store, read the window, renew, read the new certificate's window.
-const maxStepsPerRequest = 4
-
 // certificateTracker requests a node's service certificate in the background,
 // holds it for the node's TLS handshakes, and renews it when its renewal
-// window says so. It runs the actions decide picks and feeds their outcomes
-// to apply; it decides nothing itself.
+// window says so. certificateChart decides every step; the tracker only
+// drives it from the node's heartbeat and reports what it did.
 type certificateTracker struct {
-	domain  string
-	source  certificateSource
-	windows renewalWindows
-	logger  *slog.Logger
-	now     func() time.Time
-
-	// requests is a pod-wide semaphore bounding concurrent requests; nil
-	// means unbounded.
-	requests chan struct{}
+	domain string
+	logger *slog.Logger
+	now    func() time.Time
 
 	// events, when set, is told the outcome of each obtain, renewal and
 	// window request.
 	events func(ctx context.Context, operation CertificateOperation, result CertificateResult)
 
-	// stop is closed by Close, which cancels any request in flight.
-	stop     chan struct{}
-	stopOnce sync.Once
+	// inst runs the chart. The chart decides only when the tracker polls,
+	// so a node does no certificate work between heartbeats; its requests
+	// run on goroutines of their own, one at a time since each has its own
+	// state.
+	inst *sc.Instance[certState, certContext]
 
-	// attempts tracks the request goroutine so Close can wait for it.
-	attempts sync.WaitGroup
-
-	// mu guards state and attempting.
-	mu    sync.Mutex
-	state certState
-
-	// attempting is true while a request is in flight; at most one is. It
-	// applies on top of any phase.
-	attempting bool
+	closeOnce sync.Once
 }
 
-func newCertificateTracker(domain string, source certificateSource, windows renewalWindows, requests chan struct{}, logger *slog.Logger, now func() time.Time) *certificateTracker {
-	return &certificateTracker{
-		domain: domain, source: source, windows: windows, logger: logger, now: now, requests: requests, events: nil,
-		stop: make(chan struct{}), stopOnce: sync.Once{}, attempts: sync.WaitGroup{},
-		mu: sync.Mutex{}, attempting: false,
-		state: certState{
-			phase: phaseObtaining, cert: nil, err: nil, failures: 0, retryAt: time.Time{},
-			refreshAt: time.Time{}, windowCheckAt: time.Time{}, renewAt: time.Time{},
-		},
+// newCertificateTracker starts a node's tracker. requests is a pod-wide
+// semaphore bounding concurrent requests, nil for unbounded; a request waits
+// for its turn without holding up the node.
+func newCertificateTracker(
+	domain string,
+	source certificateSource,
+	windows renewalWindows,
+	requests *semaphore.Weighted,
+	events func(ctx context.Context, operation CertificateOperation, result CertificateResult),
+	logger *slog.Logger,
+	now func() time.Time,
+) (*certificateTracker, error) {
+	m, err := bindCertificates(source, windows, now)
+	if err != nil {
+		return nil, err
 	}
+	t := &certificateTracker{domain: domain, logger: logger, now: now, events: events, inst: nil, closeOnce: sync.Once{}}
+	opts := []sc.RunOption{
+		sc.WithClock(now),
+		sc.WithHooks(&sc.Hooks[certState, certContext]{Transition: t.observe, Ignored: nil, EffectStarted: nil, EffectFinished: nil}),
+	}
+	if requests != nil {
+		opts = append(opts, sc.LimitServices(requests))
+	}
+	start := certContext{
+		cert: nil, err: nil, failures: 0, retryAt: time.Time{},
+		refreshAt: time.Time{}, windowCheckAt: time.Time{}, renewAt: time.Time{},
+		refreshEvery: refreshInterval(),
+	}
+	inst, err := m.Instance(context.Background(), start, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("start certificate chart: %w", err)
+	}
+	t.inst = inst
+	return t, nil
 }
 
-// Poll reports whether a valid certificate is held and, when it is not, why.
-// It never blocks: when decide has a step due and no request is in flight,
-// it starts one in the background.
-func (t *certificateTracker) Poll() (bool, string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	now := t.now()
-	if !t.attempting && decide(t.state, now) != actionNone && t.acquire() {
-		t.attempting = true
-		t.attempts.Go(func() {
-			defer t.release()
-			t.request()
-		})
-	}
-	return certStatus(t.state, t.domain, now)
+// Poll reports whether a valid certificate is held, whether a request failed
+// when it is not, and why.
+// It never waits for a request: when one is due it starts it in the
+// background.
+func (t *certificateTracker) Poll() (valid bool, failed bool, message string) {
+	// The only error is a closed instance, whose snapshot reports stopped.
+	_, _ = t.inst.Send(context.Background(), certPoll{})
+	return certStatus(t.inst.Snapshot(), t.domain, t.now())
 }
 
 // Certificate returns the certificate for a TLS handshake, failing the
-// handshake until one is obtained. It never asks for one: only the tracker's
+// handshake until one is obtained. It never asks for one: only the chart's
 // own requests, which take the issuance lease, do.
 func (t *certificateTracker) Certificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.state.cert == nil {
-		return nil, errCertificateNotObtained
+	if cert := t.inst.Snapshot().Context.cert; cert != nil {
+		return cert, nil
 	}
-	return t.state.cert, nil
+	return nil, errCertificateNotObtained
 }
 
 // ExpiresAt is when the certificate served expires, zero while none is held.
 func (t *certificateTracker) ExpiresAt() time.Time {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.state.cert == nil {
-		return time.Time{}
+	if cert := t.inst.Snapshot().Context.cert; cert != nil {
+		return cert.Leaf.NotAfter
 	}
-	return t.state.cert.Leaf.NotAfter
+	return time.Time{}
 }
 
 // Await polls until the certificate is held, wait elapses, ctx is done, or
@@ -393,7 +254,7 @@ func (t *certificateTracker) Await(ctx context.Context, wait time.Duration) {
 	ticker := time.NewTicker(certificateAwaitPollInterval)
 	defer ticker.Stop()
 	for {
-		if ready, _ := t.Poll(); ready {
+		if ready, _, _ := t.Poll(); ready {
 			return
 		}
 		if t.nextRequestAfter(deadline) {
@@ -411,150 +272,99 @@ func (t *certificateTracker) Await(ctx context.Context, wait time.Duration) {
 // nextRequestAfter reports whether a request has failed and the retry is not
 // due until after deadline.
 func (t *certificateTracker) nextRequestAfter(deadline time.Time) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return !t.attempting && t.state.phase == phaseRetrying && t.state.retryAt.After(deadline)
+	snap := t.inst.Snapshot()
+	return snap.In(certRetrying) && snap.Context.retryAt.After(deadline)
+}
+
+// busy reports whether a request is running or waiting for its turn.
+func (t *certificateTracker) busy() bool {
+	return len(t.inst.Snapshot().Services()) > 0
 }
 
 // Close stops any request in flight and waits for it.
 func (t *certificateTracker) Close() {
-	t.mu.Lock()
-	t.state.phase = phaseStopped
-	t.mu.Unlock()
-	t.stopOnce.Do(func() { close(t.stop) })
-	t.attempts.Wait()
+	t.closeOnce.Do(func() {
+		_, _ = t.inst.Send(context.Background(), certStop{})
+		t.inst.Close()
+	})
 }
 
-// acquire takes a pod-wide request slot without waiting.
-func (t *certificateTracker) acquire() bool {
-	if t.requests == nil {
-		return true
-	}
-	select {
-	case t.requests <- struct{}{}:
-		return true
-	default:
-		return false
-	}
-}
-
-func (t *certificateTracker) release() {
-	if t.requests != nil {
-		<-t.requests
-	}
-}
-
-// request runs the steps decide picks until none is due, applying each
-// outcome before deciding again.
-func (t *certificateTracker) request() {
-	ctx, cancel := context.WithTimeout(context.Background(), certificateFetchTimeout)
-	defer cancel()
-	stopWatch := make(chan struct{})
-	defer close(stopWatch)
-	go func() {
-		select {
-		case <-t.stop:
-			cancel()
-		case <-stopWatch:
-		}
-	}()
-	defer func() {
-		t.mu.Lock()
-		t.attempting = false
-		t.mu.Unlock()
-	}()
-
-	for range maxStepsPerRequest {
-		t.mu.Lock()
-		st, now := t.state, t.now()
-		t.mu.Unlock()
-		action := decide(st, now)
-		if action == actionNone {
-			return
-		}
-		outcome := t.run(ctx, action, st, now)
-
-		t.mu.Lock()
-		before := t.state
-		t.state = apply(t.state, outcome, t.now(), jittered(certificateRefreshInterval))
-		after := t.state
-		t.mu.Unlock()
-		t.log(ctx, before, after, outcome)
-	}
-}
-
-// run performs action; it is the only place the tracker does I/O.
-func (t *certificateTracker) run(ctx context.Context, action certAction, st certState, now time.Time) certOutcome {
-	outcome := certOutcome{action: action, cert: nil, renewAt: time.Time{}, checkAgain: time.Time{}, err: nil}
-	switch action {
-	case actionObtain:
-		outcome.cert, outcome.err = t.source.Obtain(ctx, now)
-	case actionCheckStore:
-		outcome.cert, outcome.err = t.source.Stored(ctx)
-	case actionFetchWindow:
-		outcome.renewAt, outcome.checkAgain, outcome.err = t.windows.RenewAt(ctx, st.cert.Leaf, now)
-	case actionRenew:
-		outcome.cert, outcome.err = t.source.Renew(ctx, st.cert, now)
-	case actionNone:
-	}
-	return outcome
-}
-
-// certificateOperation names a step counted in metrics; re-reading the store
-// is not a certificate request.
-func certificateOperation(action certAction) (CertificateOperation, bool) {
-	switch action {
-	case actionObtain:
+// certificateOperation names a request counted in metrics; re-reading the
+// store is not a certificate request.
+func certificateOperation(request certState) (CertificateOperation, bool) {
+	switch request {
+	case certObtaining:
 		return CertificateOperationObtain, true
-	case actionRenew:
+	case certRenewing:
 		return CertificateOperationRenew, true
-	case actionFetchWindow:
+	case certFetchingWindow:
 		return CertificateOperationWindow, true
-	case actionNone, actionCheckStore:
+	case certCheckingStore, certWaiting, certRetrying, certServing, certRenewBackoff, certStopped:
 	}
 	return "", false
 }
 
-// log reports what a step changed.
-func (t *certificateTracker) log(ctx context.Context, before, after certState, o certOutcome) {
-	if after.phase == phaseStopped {
+// requestIn is the request state snap is in, if any.
+func requestIn(snap sc.Snapshot[certState, certContext]) (certState, bool) {
+	for _, s := range []certState{certObtaining, certCheckingStore, certFetchingWindow, certRenewing} {
+		if snap.In(s) {
+			return s, true
+		}
+	}
+	return "", false
+}
+
+// observe counts and logs each request's outcome.
+func (t *certificateTracker) observe(ctx context.Context, step sc.Step[certState, certContext]) {
+	request, ok := requestIn(step.From)
+	if !ok || step.To.In(certStopped) {
 		return
 	}
-	if operation, ok := certificateOperation(o.action); ok && t.events != nil {
-		// A renewal returning the certificate it replaced fails in apply.
-		err := o.err
-		if o.action == actionRenew && err == nil && after.phase == phaseRenewFailing {
-			err = after.err
+	var err error
+	switch ev := step.Event.(type) {
+	case sc.Failed:
+		err = ev.Err
+	case sc.Done[*tls.Certificate], sc.Done[renewalWindow]:
+		if request == certRenewing {
+			// A renewal returning the certificate it replaced fails in
+			// the chart.
+			err = step.To.Context.err
 		}
+	default:
+		return
+	}
+
+	before, after := step.From.Context, step.To.Context
+	if operation, ok := certificateOperation(request); ok && t.events != nil {
 		t.events(ctx, operation, certificateResult(err))
 	}
 	if after.cert != nil && (before.cert == nil || !before.cert.Leaf.Equal(after.cert.Leaf)) {
 		t.logger.InfoContext(ctx, "obtained tailnet service certificate", attr.SlogHostName(t.domain), attr.SlogTailnetGatewayCertificateExpiresAt(after.cert.Leaf.NotAfter))
 	}
-	if o.err == nil {
+	if err == nil {
 		return
 	}
-	if errors.Is(o.err, errCertificateIssuing) {
+	if errors.Is(err, errCertificateIssuing) {
 		// Waiting for another slot's lease is expected, and retried every
 		// few seconds; it is not worth a warning each time.
 		t.logger.DebugContext(ctx, "waiting for another gateway slot to obtain the tailnet service certificate", attr.SlogHostName(t.domain))
 		return
 	}
-	switch o.action {
-	case actionCheckStore:
-		t.logger.WarnContext(ctx, "could not read the stored tailnet service certificate", attr.SlogHostName(t.domain), attr.SlogError(o.err))
-	case actionFetchWindow:
+	switch request {
+	case certCheckingStore:
+		t.logger.WarnContext(ctx, "could not read the stored tailnet service certificate", attr.SlogHostName(t.domain), attr.SlogError(err))
+	case certFetchingWindow:
 		t.logger.WarnContext(ctx, "could not read the certificate renewal window; renewing two thirds through its lifetime",
-			attr.SlogHostName(t.domain), attr.SlogError(o.err))
-	case actionRenew:
+			attr.SlogHostName(t.domain), attr.SlogError(err))
+	case certRenewing:
 		t.logger.WarnContext(ctx, "could not renew tailnet service certificate",
-			attr.SlogHostName(t.domain), attr.SlogError(after.err), attr.SlogTailnetGatewayCertificateExpiresAt(after.cert.Leaf.NotAfter),
-			attr.SlogRetryAttempt(after.failures), attr.SlogRetryWait(after.retryAt.Sub(t.now())))
-	case actionObtain:
+			attr.SlogHostName(t.domain), attr.SlogError(err), attr.SlogTailnetGatewayCertificateExpiresAt(after.cert.Leaf.NotAfter),
+			attr.SlogRetryAttempt(after.failures), attr.SlogRetryWait(after.retryAt.Sub(step.At)))
+	case certObtaining:
 		t.logger.WarnContext(ctx, "could not obtain tailnet service certificate",
-			attr.SlogHostName(t.domain), attr.SlogError(after.err),
-			attr.SlogRetryAttempt(after.failures), attr.SlogRetryWait(after.retryAt.Sub(t.now())))
-	case actionNone:
+			attr.SlogHostName(t.domain), attr.SlogError(err),
+			attr.SlogRetryAttempt(after.failures), attr.SlogRetryWait(after.retryAt.Sub(step.At)))
+	case certWaiting, certRetrying, certServing, certRenewBackoff, certStopped:
 	}
 }
 

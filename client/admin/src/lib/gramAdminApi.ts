@@ -657,6 +657,8 @@ export type AdminOrganizationAssistant = {
   status: string;
   identity_state: AdminAssistantIdentityState;
   agent_id?: string;
+  agent_name?: string;
+  agent_name_repair_state?: "not_needed" | "pending" | "conflict";
   // 2 is the default runtime, 3 is Kit.
   runtime_version: number;
   created_by_user_id?: string;
@@ -679,6 +681,42 @@ export function listOrganizationAssistants(
   return gramAdminFetch<AdminOrganizationAssistants>(
     `/admin/organization.assistants?${qs}`,
   );
+}
+
+export type AdminAssistantMigrationOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  assistants: number;
+};
+
+export function listAssistantMigrationOrganizations(): Promise<{
+  organizations: AdminAssistantMigrationOrganization[];
+}> {
+  return gramAdminFetch("/admin/assistants.organizations");
+}
+
+export type AdminAssistantNameRepairRun = {
+  organization_id: string;
+  repaired: number;
+  conflicts: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: "repaired" | "conflict" | "failed";
+  }[];
+};
+
+export function repairAssistantAgentNames(
+  organizationID: string,
+): Promise<AdminAssistantNameRepairRun> {
+  return gramAdminMutation("/admin/organization.repairAssistantAgentNames", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organization_id: organizationID }),
+  });
 }
 
 export type AdminAssistantIdentityMigrationOutcome =

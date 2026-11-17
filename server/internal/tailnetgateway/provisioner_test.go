@@ -434,6 +434,23 @@ func TestProvisionerReportsSlotWaitingForLoginAsError(t *testing.T) {
 	require.Equal(t, k8s.NetworkIngressStatusError, observation.Status, "a slot waiting for login is not healthy")
 }
 
+func TestProvisionerReportsHostsStillComingUpAsPending(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovcomingup")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	// The gateway reports starting while a node's first certificate request
+	// runs and while its approval is within the grace period.
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusStarting, "nONE")
+	f.heartbeat(t, 1, tailnetgateway.NodeStatusStarting, "nTWO")
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusPending, observation.Status, "hosts that are still coming up are not an error")
+	require.Empty(t, observation.ErrorCode)
+}
+
 func TestProvisionerReportsHostsAwaitingACertificate(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

@@ -1821,7 +1821,7 @@ JOIN user_session_clients AS c ON c.id = us.user_session_client_id
 WHERE COALESCE(us.credential_id, us.id) = $1::uuid
   AND us.user_session_issuer_id = $2::uuid
   AND us.organization_id = $3::text
-  AND us.project_id IS NOT DISTINCT FROM $4::uuid
+  AND (us.project_id IS NULL OR us.project_id = $4::uuid)
   AND c.user_session_issuer_id = us.user_session_issuer_id
   AND us.subject_urn = $5
   AND c.client_id = $6::text
@@ -1844,6 +1844,8 @@ type GetReconnectSessionPolicyParams struct {
 
 // Resolve the original credential across refresh rotation, without reviving
 // revoked/expired connections or borrowing another client's catalogue.
+// Sessions from an organization-wide issuer have no project and may reconnect
+// through any project's gateway in that organization.
 func (q *Queries) GetReconnectSessionPolicy(ctx context.Context, arg GetReconnectSessionPolicyParams) ([]byte, error) {
 	row := q.db.QueryRow(ctx, getReconnectSessionPolicy,
 		arg.CredentialID,
@@ -4596,6 +4598,71 @@ func (q *Queries) ListUserSessionConsentsByProjectID(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listUserSessionIssuerBoundRemoteSessionClients = `-- name: ListUserSessionIssuerBoundRemoteSessionClients :many
+SELECT
+    client.id,
+    client.client_id,
+    remote_issuer.id AS remote_session_issuer_id,
+    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
+    remote_issuer.issuer AS remote_session_issuer_url
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
+WHERE link.user_session_issuer_id = $1::uuid
+  AND client.deleted IS FALSE
+  AND remote_issuer.deleted IS FALSE
+  AND (client.organization_id IS NULL OR client.organization_id = $2::text)
+  AND (client.project_id IS NULL OR EXISTS (
+    SELECT 1 FROM projects AS client_project
+    WHERE client_project.id = client.project_id
+      AND client_project.organization_id = $2::text
+      AND client_project.deleted IS FALSE
+  ))
+ORDER BY client.id
+`
+
+type ListUserSessionIssuerBoundRemoteSessionClientsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type ListUserSessionIssuerBoundRemoteSessionClientsRow struct {
+	ID                      uuid.UUID
+	ClientID                string
+	RemoteSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerName string
+	RemoteSessionIssuerUrl  string
+}
+
+// The live remote session clients an issuer binds, with the authorization
+// server each one belongs to. Clients scoped to another organization, or to a
+// project outside it, are left out.
+func (q *Queries) ListUserSessionIssuerBoundRemoteSessionClients(ctx context.Context, arg ListUserSessionIssuerBoundRemoteSessionClientsParams) ([]ListUserSessionIssuerBoundRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerBoundRemoteSessionClients, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionIssuerBoundRemoteSessionClientsRow
+	for rows.Next() {
+		var i ListUserSessionIssuerBoundRemoteSessionClientsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientID,
+			&i.RemoteSessionIssuerID,
+			&i.RemoteSessionIssuerName,
+			&i.RemoteSessionIssuerUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuerCimdClientsByIssuerID = `-- name: ListUserSessionIssuerCimdClientsByIssuerID :many
 SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
 FROM user_session_issuer_cimd_clients AS cimd
@@ -4907,6 +4974,95 @@ func (q *Queries) ListUserSessionIssuerMigrationImpactServers(ctx context.Contex
 			&i.UserSessionIssuerID,
 			&i.Hosted,
 			&i.AuthorizationServers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessionIssuerServerRemoteSessionClients = `-- name: ListUserSessionIssuerServerRemoteSessionClients :many
+SELECT
+    server.id AS mcp_server_id,
+    COALESCE(server.name, server.slug, server.id::text)::text AS mcp_server_name,
+    project.id AS project_id,
+    project.name AS project_name,
+    client.id,
+    client.client_id,
+    remote_issuer.id AS remote_session_issuer_id,
+    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
+    remote_issuer.issuer AS remote_session_issuer_url
+FROM mcp_servers AS server
+JOIN projects AS project ON project.id = server.project_id
+JOIN mcp_server_remote_session_clients AS association
+    ON association.mcp_server_id = server.id
+   AND association.project_id = server.project_id
+JOIN remote_session_clients AS client ON client.id = association.remote_session_client_id
+JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
+WHERE (server.user_session_issuer_id = $1::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_server_members AS member
+      JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+      WHERE member.mcp_server_id = server.id
+        AND member.deleted IS FALSE
+        AND gateway.deleted IS FALSE
+        AND gateway.organization_id = $2::text
+        AND gateway.user_session_issuer_id = $1::uuid
+    ))
+  AND server.deleted IS FALSE
+  AND project.organization_id = $2::text
+  AND project.deleted IS FALSE
+  AND association.deleted IS FALSE
+  AND client.deleted IS FALSE
+  AND remote_issuer.deleted IS FALSE
+ORDER BY server.id, client.id
+`
+
+type ListUserSessionIssuerServerRemoteSessionClientsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type ListUserSessionIssuerServerRemoteSessionClientsRow struct {
+	McpServerID             uuid.UUID
+	McpServerName           string
+	ProjectID               uuid.UUID
+	ProjectName             string
+	ID                      uuid.UUID
+	ClientID                string
+	RemoteSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerName string
+	RemoteSessionIssuerUrl  string
+}
+
+// The remote session clients associated with each live MCP server that uses
+// an issuer in the organization, with the authorization server each client
+// belongs to. A server uses the issuer when it is attached directly or is a
+// member of a live gateway attached to it.
+func (q *Queries) ListUserSessionIssuerServerRemoteSessionClients(ctx context.Context, arg ListUserSessionIssuerServerRemoteSessionClientsParams) ([]ListUserSessionIssuerServerRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerServerRemoteSessionClients, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionIssuerServerRemoteSessionClientsRow
+	for rows.Next() {
+		var i ListUserSessionIssuerServerRemoteSessionClientsRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerName,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ID,
+			&i.ClientID,
+			&i.RemoteSessionIssuerID,
+			&i.RemoteSessionIssuerName,
+			&i.RemoteSessionIssuerUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -7952,7 +8108,7 @@ UPDATE user_sessions AS us SET tool_selection = $1, updated_at = clock_timestamp
 WHERE COALESCE(us.credential_id, us.id) = $2::uuid
   AND us.user_session_issuer_id = $3::uuid
   AND us.organization_id = $4::text
-  AND us.project_id IS NOT DISTINCT FROM $5::uuid
+  AND (us.project_id IS NULL OR us.project_id = $5::uuid)
   AND us.subject_urn = $6
   AND us.tool_selection -> 'catalog' ->> 'id' = $7::text
   AND EXISTS (SELECT 1 FROM user_session_clients AS c

@@ -194,7 +194,7 @@ describe("SendTestEventSection", () => {
     const id = screen.getByText(testEventId);
     expect(id.className).toContain("whitespace-nowrap");
     const code = id.closest("code");
-    expect(code?.textContent).toBe(`speakeasy.test_event.id=${testEventId}`);
+    expect(code?.textContent).toBe(`speakeasy.test_event_id=${testEventId}`);
     expect(code?.querySelector("wbr")?.nextSibling).toBe(id);
   });
 
@@ -210,7 +210,7 @@ describe("SendTestEventSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy test event ID" }));
 
     expect(writeText).toHaveBeenCalledWith(
-      `speakeasy.test_event.id=${testEventId}`,
+      `speakeasy.test_event_id=${testEventId}`,
     );
   });
 

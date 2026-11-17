@@ -217,13 +217,13 @@ export function SendTestEventSection({
                 {findLabel(result.signals)}
               </Text>
               <code className="min-w-0 font-mono text-xs">
-                speakeasy.test_event.id=
+                speakeasy.test_event_id=
                 <wbr />
                 <span className="whitespace-nowrap">{result.testEventId}</span>
               </code>
               <CopyButton
                 size="xs"
-                text={`speakeasy.test_event.id=${result.testEventId}`}
+                text={`speakeasy.test_event_id=${result.testEventId}`}
                 tooltip="Copy test event ID"
               />
             </div>

@@ -136,6 +136,8 @@ type Endpoints struct {
 	ListMemoryEvalRuns                      goa.Endpoint
 	GetMemoryEvalRun                        goa.Endpoint
 	StartMemoryEvalRun                      goa.Endpoint
+	ListAssistantOrganizations              goa.Endpoint
+	RepairOrganizationAssistantAgentNames   goa.Endpoint
 	ListOrganizationAssistants              goa.Endpoint
 	MigrateOrganizationAssistantIdentities  goa.Endpoint
 	MigrateOrganizationAssistantsToKit      goa.Endpoint
@@ -283,6 +285,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListMemoryEvalRuns:                      NewListMemoryEvalRunsEndpoint(s, a.APIKeyAuth),
 		GetMemoryEvalRun:                        NewGetMemoryEvalRunEndpoint(s, a.APIKeyAuth),
 		StartMemoryEvalRun:                      NewStartMemoryEvalRunEndpoint(s, a.APIKeyAuth),
+		ListAssistantOrganizations:              NewListAssistantOrganizationsEndpoint(s, a.APIKeyAuth),
+		RepairOrganizationAssistantAgentNames:   NewRepairOrganizationAssistantAgentNamesEndpoint(s, a.APIKeyAuth),
 		ListOrganizationAssistants:              NewListOrganizationAssistantsEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitEndpoint(s, a.APIKeyAuth),
@@ -410,6 +414,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListMemoryEvalRuns = m(e.ListMemoryEvalRuns)
 	e.GetMemoryEvalRun = m(e.GetMemoryEvalRun)
 	e.StartMemoryEvalRun = m(e.StartMemoryEvalRun)
+	e.ListAssistantOrganizations = m(e.ListAssistantOrganizations)
+	e.RepairOrganizationAssistantAgentNames = m(e.RepairOrganizationAssistantAgentNames)
 	e.ListOrganizationAssistants = m(e.ListOrganizationAssistants)
 	e.MigrateOrganizationAssistantIdentities = m(e.MigrateOrganizationAssistantIdentities)
 	e.MigrateOrganizationAssistantsToKit = m(e.MigrateOrganizationAssistantsToKit)
@@ -3117,6 +3123,53 @@ func NewStartMemoryEvalRunEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.StartMemoryEvalRun(ctx, p)
+	}
+}
+
+// NewListAssistantOrganizationsEndpoint returns an endpoint function that
+// calls the method "listAssistantOrganizations" of service "admin".
+func NewListAssistantOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAssistantOrganizationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAssistantOrganizations(ctx, p)
+	}
+}
+
+// NewRepairOrganizationAssistantAgentNamesEndpoint returns an endpoint
+// function that calls the method "repairOrganizationAssistantAgentNames" of
+// service "admin".
+func NewRepairOrganizationAssistantAgentNamesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RepairOrganizationAssistantAgentNamesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RepairOrganizationAssistantAgentNames(ctx, p)
 	}
 }
 

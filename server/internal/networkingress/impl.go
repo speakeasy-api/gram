@@ -191,7 +191,29 @@ func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get network ingress").LogError(ctx, s.logger)
 	}
-	return &gen.NetworkIngressResult{Ingress: mv.BuildNetworkIngressView(ingress)}, nil
+	view := mv.BuildNetworkIngressView(ingress)
+	if ingress.LastError.String == k8s.NetworkIngressErrorProviderCertificateUnavailable {
+		view.StatusDetail = s.certificateFailure(ctx, ingress)
+	}
+	return &gen.NetworkIngressResult{Ingress: view}, nil
+}
+
+// certificateFailure is the gateway's message for why ingress has no TLS
+// certificate, or nil when no slot reports one. The error code alone still
+// explains the state, so a failed read is logged rather than failing the
+// request.
+func (s *Service) certificateFailure(ctx context.Context, ingress repo.NetworkIngress) *string {
+	message, err := repo.New(s.db).GetNetworkIngressCertificateFailure(ctx, repo.GetNetworkIngressCertificateFailureParams{
+		NetworkIngressID: ingress.ID, OrganizationID: ingress.OrganizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		s.logger.ErrorContext(ctx, "read gateway certificate failure", attr.SlogError(err), attr.SlogNetworkIngressID(ingress.ID.String()))
+		return nil
+	}
+	return conv.FromPGText[string](message)
 }
 
 type tailscaleCredentials struct {
