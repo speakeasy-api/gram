@@ -153,6 +153,9 @@ const (
 	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
 	// ReasonSignInRestarted identifies a consent link the person left to sign in again.
 	ReasonSignInRestarted Reason = "sign-in-restarted"
+	// ReasonSignInNotStarted identifies a new sign-in that couldn't start; the
+	// description is a fixed, user-safe sentence saying what to do.
+	ReasonSignInNotStarted Reason = "sign-in-not-started"
 )
 
 // check reports a failed server connection check, rather than a failed connection.
@@ -160,7 +163,7 @@ func (r Reason) check() bool {
 	switch r {
 	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNotAllowed:
 		return true
-	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInRestarted:
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInRestarted, ReasonSignInNotStarted:
 		return false
 	default:
 		return false

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -318,6 +319,28 @@ func requireSwitchRefused(t *testing.T, err error, code oops.Code, message strin
 	}
 }
 
+// refusedSwitchPage posts the switch through the browser error handler and returns the page a refusal shows.
+func refusedSwitchPage(t *testing.T, fx *switchFixture) string {
+	t.Helper()
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"switch_account"}, "client_id": {fx.clientA.String()}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	oops.BrowserErrHandle(fx.ti.logger, func(w http.ResponseWriter, r *http.Request) error {
+		return fx.ti.service.ServeConsentAction(w, r, fx.endpoint)
+	}).ServeHTTP(w, req)
+	require.Empty(t, w.Header().Get("Location"))
+	return strings.Join(strings.Fields(html.UnescapeString(w.Body.String())), " ")
+}
+
+func requireRefusedSwitchPage(t *testing.T, fx *switchFixture, sentence string) {
+	t.Helper()
+	page := refusedSwitchPage(t, fx)
+	require.Contains(t, page, "Couldn't start a new sign-in")
+	require.Contains(t, page, `<p class="text-sm text-foreground" data-what-happened> `+sentence+` </p>`, "the reason is the page's one sentence")
+	require.NotContains(t, page, "close this tab")
+}
+
 func checkCard(t *testing.T, fx *switchFixture) map[string]string {
 	t.Helper()
 	w, err := postChainCheck(t, fx.consentActionFixture, nil)
@@ -355,6 +378,9 @@ func TestConsentSwitchAccount_OfferedOnlyForAPersonalAccount(t *testing.T) {
 		require.NotContains(t, body, "action", name)
 		_, err := postSwitchAccount(t, fx, nil)
 		requireSwitchRefused(t, err, oops.CodeBadRequest, tc.refusal)
+		if tc.refusal != "" {
+			requireRefusedSwitchPage(t, fx, tc.refusal)
+		}
 	}
 	require.Empty(t, fx.revoker.sessions())
 
@@ -412,6 +438,9 @@ func TestConsentSwitchAccount_RestartsTheSameAuthorizationRequest(t *testing.T) 
 	_, err = postSwitchAccount(t, fx, nil)
 	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
 	require.Len(t, fx.revoker.sessions(), 1, "a replay ends nothing")
+	replayed := refusedSwitchPage(t, fx)
+	require.Contains(t, replayed, "You started a new sign-in for this connection.", "a replay explains the switch already made")
+	require.NotContains(t, replayed, "idp.example.com")
 }
 
 // A personal email off the organization's verified domains is never pre-filled.
@@ -439,7 +468,7 @@ func TestConsentSwitchAccount_RefusesForgedAndForeignRequests(t *testing.T) {
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("state", uuid.NewString()) })
 	require.Error(t, err)
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("client_id", uuid.NewString()) })
-	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "This page changed. Go back, reload it, and try again.")
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Del("client_id") })
 	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("server", "not-a-gateway-server") })
@@ -475,6 +504,8 @@ func TestConsentSwitchAccount_EndingTheSessionFailsCleanly(t *testing.T) {
 	_, err := postSwitchAccount(t, fx, nil)
 	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Try again.")
 	require.Equal(t, before, fx.state(t), "the consent page keeps working")
+	requireRefusedSwitchPage(t, fx, "Speakeasy couldn't start a new sign-in. Try again.")
+	require.Equal(t, before, fx.state(t))
 	require.Empty(t, fx.mock.buildAuthURLParams.State, "no sign-in was started")
 
 	fx.revoker.fail(nil)
@@ -621,9 +652,12 @@ func requireSwitchedPage(t *testing.T, fx *switchFixture, old consentActionFixtu
 	w := renderSpent(t, old)
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Empty(t, w.Header().Get("Location"), "it never redirects")
-	page := strings.Join(strings.Fields(w.Body.String()), " ")
+	page := strings.Join(strings.Fields(html.UnescapeString(w.Body.String())), " ")
+	require.Contains(t, page, "New sign-in started")
 	require.Contains(t, page, "You started a new sign-in for this connection.")
-	require.Contains(t, page, "Go forward to continue signing in, or start connecting again from")
+	require.Contains(t, page, `Finish it in this tab, or start connecting again from <span class="text-foreground font-medium">Routability Client</span>.`, "with the client's own name")
+	require.NotContains(t, page, "Couldn't connect")
+	require.NotContains(t, page, "close this tab")
 	for _, secret := range append([]string{"idp.example.com", fx.workosOrganization, fx.subject.ID + "@" + switchWorkDomain}, secrets...) {
 		require.NotContains(t, page, secret)
 	}

@@ -111,47 +111,56 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	focusServer := r.PostForm.Get("server")
 	if focusServer != "" {
 		if !endpoint.MetaMcpServerID.Valid || len(focusServer) > maxFocusServerLength {
-			return oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger)
+			return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
 		}
 		members, err := s.consentSubjectMembers(ctx, endpoint, state)
 		if err != nil {
-			return oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger)
+			return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
 		}
 		if !slices.ContainsFunc(members, func(member metaMember) bool { return member.slug == focusServer }) {
-			return oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger)
+			return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
 		}
 	}
 	if _, _, err := s.chainedConsentClient(ctx, logger, endpoint, state, r.PostForm.Get("client_id")); err != nil {
-		return err
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeBadRequest {
+			return switchRefused(oops.E(oops.CodeBadRequest, err, switchAccountChanged))
+		}
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry))
 	}
 	verdict, err := s.accountSwitchOffered(ctx, endpoint, state, time.Now())
 	switch {
 	case err != nil:
-		return oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger)
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
 	case verdict == accountSwitchExpired:
-		return oops.E(oops.CodeBadRequest, nil, switchAccountExpired).LogWarn(ctx, logger)
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountExpired).LogWarn(ctx, logger))
 	case verdict != accountSwitchOK:
-		return oops.E(oops.CodeBadRequest, nil, switchAccountUnavailable).LogWarn(ctx, logger)
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountUnavailable).LogWarn(ctx, logger))
 	}
 	session, err := signins.SessionForSignIn(ctx, s.db, endpoint.OrganizationID, state.AuthorizerUserID, *state.SignInID)
 	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger)
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
 	}
 	if session.WorkOSSessionID == "" {
-		return oops.E(oops.CodeBadRequest, nil, switchAccountUnavailable).LogWarn(ctx, logger)
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountUnavailable).LogWarn(ctx, logger))
 	}
 
 	// Single use: a replayed or stale action finds nothing to restart.
 	consumed, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+state.ID)
 	switch {
 	case errors.Is(err, redisCache.ErrCacheMiss):
-		return oops.E(oops.CodeBadRequest, err, switchAccountExpired).LogWarn(ctx, logger)
+		return switchRefused(oops.E(oops.CodeBadRequest, err, switchAccountExpired).LogWarn(ctx, logger))
 	case err != nil:
-		return oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger)
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
 	}
 	if !sameAccountSwitch(consumed, state) {
 		s.restoreConsentChallenge(r, logger, consumed)
-		return oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger)
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
+	}
+
+	// The display name the consent page showed, for the old page's message.
+	clientName := ""
+	if client, cerr := s.resolveUserSessionClient(ctx, logger, endpoint, consumed.ClientID, lookupClientOnly); cerr == nil {
+		clientName = client.ClientName
 	}
 
 	next := consumed
@@ -172,10 +181,10 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	})
 	if err != nil {
 		s.restoreConsentChallenge(r, logger, consumed)
-		return err
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry))
 	}
 	// The old page's URL, reached again with Back, says why instead of "expired".
-	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug}
+	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug, ClientName: clientName}
 	if err := s.accountSwitchCache.Store(context.WithoutCancel(ctx), marker); err != nil {
 		logger.WarnContext(ctx, "mark consent challenge as switched", attr.SlogError(err))
 	}
@@ -192,11 +201,13 @@ func (s *Service) restoreConsentChallenge(r *http.Request, logger *slog.Logger, 
 }
 
 // accountSwitchMarker records only that an account switch spent a consent
-// challenge. It holds nothing about the new sign-in, so presenting the old
-// consent URL reveals and grants nothing.
+// challenge, and the client name that page showed. It holds nothing about the
+// new sign-in, so presenting the old consent URL reveals and grants nothing.
 type accountSwitchMarker struct {
 	ID      string `json:"id"`
 	McpSlug string `json:"mcp_slug"`
+	// ClientName is the MCP client's display name the consent page showed.
+	ClientName string `json:"client_name,omitempty"`
 }
 
 var _ cache.CacheableObject[accountSwitchMarker] = (*accountSwitchMarker)(nil)
@@ -217,5 +228,14 @@ func (s *Service) switchedConsentError(ctx context.Context, logger *slog.Logger,
 	if err != nil || marker.McpSlug != endpoint.Slug {
 		return nil
 	}
-	return fmt.Errorf("load consent challenge: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this consent page started a new sign-in").LogInfo(ctx, logger), oauthui.ReasonSignInRestarted))
+	page := oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this consent page started a new sign-in").LogInfo(ctx, logger), oauthui.ReasonSignInRestarted)
+	if marker.ClientName != "" {
+		page = oops.WithBrowserClient(page, marker.ClientName)
+	}
+	return fmt.Errorf("load consent challenge: %w", page)
+}
+
+// switchRefused shows a refused switch's one-sentence reason on the page.
+func switchRefused(err *oops.ShareableError) error {
+	return fmt.Errorf("switch account: %w", oops.WithBrowserReason(err, oauthui.ReasonSignInNotStarted))
 }

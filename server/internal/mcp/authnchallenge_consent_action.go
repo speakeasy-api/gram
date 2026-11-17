@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -88,6 +89,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	// must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {

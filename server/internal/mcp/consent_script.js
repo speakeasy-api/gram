@@ -701,6 +701,9 @@
           actions.className = "flex flex-col items-start gap-3";
         }
         if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
+          // No left padding, so its text lines up with the button and note.
+          fallback.className =
+            "text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center text-xs underline-offset-2";
           fallback.removeAttribute("data-connect-fallback");
           fallback.textContent = "Use a separate sign-in";
         }

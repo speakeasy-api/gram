@@ -261,7 +261,8 @@ setTimeout(() => {
   assert.equal(personal.group.getAttribute('hidden'), null, 'the switch and its note are shown together');
   assert.equal(personal.row.className, 'flex flex-col gap-3', 'the actions sit under the text at every width');
   assert.equal(personal.actions.className, 'flex flex-col items-start gap-3', 'a larger gap before the quiet link');
-  assert.equal(personal.fallback.className, quiet, 'the separate sign-in stays quiet');
+  assert.equal(personal.fallback.className, 'text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center text-xs underline-offset-2', 'the separate sign-in stays quiet');
+  assert.doesNotMatch(personal.fallback.className, /\bpx-/, 'its text shares the button and note left edge');
   assert.equal(personal.fallback.textContent, 'Use a separate sign-in');
 
   const admin = cards.admin;

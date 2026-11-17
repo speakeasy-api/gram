@@ -2,6 +2,7 @@ package oauthui_test
 
 import (
 	"context"
+	stdhtml "html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -202,7 +203,7 @@ func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 		{"expired", oauthui.ReasonExpired, "link expired or was already used"},
 		{"unavailable", oauthui.ReasonUnavailable, "This is a problem on our side"},
 		{"session", oauthui.ReasonSessionChanged, "current browser or sign-in session"},
-		{"restarted", oauthui.ReasonSignInRestarted, "You started a new sign-in for this connection."},
+		{"restarted", oauthui.ReasonSignInRestarted, "Finish it in this tab, or start connecting again from"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -438,4 +439,15 @@ func TestAuthorizationErrorConnectionReference(t *testing.T) {
 	require.Contains(t, body, "data-connection-reference")
 	require.Contains(t, body, "6f1c0000-0000-0000-0000-000000000000")
 	require.Contains(t, body, "Reference: <span")
+}
+
+func TestAuthorizationErrorPage_SignInNotStartedShowsItsSentence(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "bad_request", Reason: oauthui.ReasonSignInNotStarted, Description: "This page expired; start connecting again."}))
+	page := strings.Join(strings.Fields(stdhtml.UnescapeString(response.Body.String())), " ")
+	require.Contains(t, page, "Couldn't start a new sign-in")
+	require.Contains(t, page, "data-what-happened> This page expired; start connecting again. </p>")
+	require.NotContains(t, page, "close this tab")
+	require.NotContains(t, page, "Couldn't connect")
 }

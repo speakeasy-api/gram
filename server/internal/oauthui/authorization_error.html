@@ -9,7 +9,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>{{if .Setup}}Couldn't finish setup{{else if .Check}}Couldn't check the connection{{else}}Couldn't connect{{end}} · Speakeasy</title>
+    <title>{{if .Setup}}Couldn't finish setup{{else if .Check}}Couldn't check the connection{{else if eq .Kind "sign-in-restarted"}}New sign-in started{{else if eq .Kind "sign-in-not-started"}}Couldn't start a new sign-in{{else}}Couldn't connect{{end}} · Speakeasy</title>
     {{/* The stylesheet is the one the MCP consent page uses, compiled from the
     dashboard design system by `aube run -F dashboard build:consent-page` and
     inlined, so every authorization page looks like the dashboard. */}}
@@ -28,7 +28,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
         server they were connecting. The OAuth error itself stays under
         Technical details: it is written for developers, not for them. */}}
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
-          <p class="text-eyebrow text-default-destructive">{{if .Setup}}Couldn't finish setup{{else if .Check}}Couldn't check the connection{{else}}Couldn't connect{{end}}</p>
+          <p class="text-eyebrow {{if eq .Kind "sign-in-restarted"}}text-muted-foreground{{else}}text-default-destructive{{end}}">{{if .Setup}}Couldn't finish setup{{else if .Check}}Couldn't check the connection{{else if eq .Kind "sign-in-restarted"}}New sign-in started{{else if eq .Kind "sign-in-not-started"}}Couldn't start a new sign-in{{else}}Couldn't connect{{end}}</p>
           <h1
             id="page-title"
             class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1"
@@ -53,6 +53,8 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             Your organization doesn't allow {{template "client" .}} to connect to {{template "server" .}}.
             {{else if eq .Kind "sign-in-restarted"}}
             You started a new sign-in for this connection.
+            {{else if eq .Kind "sign-in-not-started"}}
+            {{.Description}}
             {{else if eq .Kind "expired"}}
             This connection link expired or was already used.
             {{else if eq .Kind "session-changed"}}
@@ -110,6 +112,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{end}}
         </header>
 
+        {{if ne .Kind "sign-in-not-started"}}
         <p class="text-sm border-b px-6 py-6 sm:px-8">
           {{if .Setup}}
           Return to the Speakeasy dashboard and open your organization’s setup.
@@ -118,7 +121,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           Ask your organization's administrators to review this connection.
           Share the technical details below with them.
           {{else if eq .Kind "sign-in-restarted"}}
-          Go forward to continue signing in, or start connecting again from {{template "client" .}}.
+          Finish it in this tab, or start connecting again from {{template "client" .}}.
           {{else if or (eq .Kind "expired") (eq .Kind "session-changed") (eq .Kind "invalid-link") (eq .Kind "canceled")}}
           {{if .Recovery}}
           Use the button below to return to {{template "client" .}} and start connecting again.
@@ -172,6 +175,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           share the technical details below with your IT administrators.
           {{end}}
         </p>
+        {{end}}
 
         {{/* Closed by default, like the consent page's configuration: the
         person only needs these to pass along. */}}
@@ -297,7 +301,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             >{{.Recovery.Label}}</a
           >
         </div>
-        {{else if and (not .Setup) (ne .Kind "canceled")}}
+        {{else if and (not .Setup) (ne .Kind "canceled") (ne .Kind "sign-in-restarted") (ne .Kind "sign-in-not-started")}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8">
           {{if .Check}}
           <p class="text-sm text-muted-foreground">
