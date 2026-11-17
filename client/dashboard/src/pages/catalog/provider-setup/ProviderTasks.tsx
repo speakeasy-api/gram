@@ -27,6 +27,7 @@ import { Alert } from "@/components/ui/Alert";
 import { slackAppManifest, slackAppCreationUrl } from "./slack";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { GitHubOrgField } from "./GitHubOrgField";
 
 function Plan() {
   const { s } = useSetup();
@@ -235,11 +236,7 @@ function GitHubTask() {
           We’ll use this organization to open its OAuth app settings on
           github.com.
         </p>
-        <SetupField
-          field="org"
-          label="GitHub organization"
-          placeholder="your-organization"
-        />
+        <GitHubOrgField />
       </>
     );
   const directory = orgValid(s)
