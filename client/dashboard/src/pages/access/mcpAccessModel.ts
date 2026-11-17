@@ -40,6 +40,11 @@ export const DISPOSITION_COPY: Record<
     badge: "Open World Tools",
     description: "Reach systems outside the server",
   },
+  unannotated: {
+    label: "Unannotated",
+    badge: "Unannotated Tools",
+    description: "Declare none of the annotations above",
+  },
 };
 
 /** Which tools of a server (or of every server) a role can call. */
@@ -62,25 +67,21 @@ export const DISPOSITION_PRECEDENCE = [
   "open_world",
 ] as const satisfies readonly Disposition[];
 
-const DISPOSITION_HINT = {
-  read_only: "readOnlyHint",
-  destructive: "destructiveHint",
-  idempotent: "idempotentHint",
-  open_world: "openWorldHint",
-} as const;
-
 /**
- * The one disposition the runtime assigns a tool: the first of its hints set
- * to true, in DISPOSITION_PRECEDENCE order.
+ * The one disposition the server assigns a tool (authz.DispositionFromHints):
+ * the first of its hints set to true, except that a tool claiming to be both
+ * read-only and destructive counts as destructive, and a tool with no hint set
+ * is unannotated. disposition-cases.gen.json holds the server's answers, and
+ * the tests check this function against them.
  */
-export function toolDisposition(
-  tool: ServerTool,
-): (typeof DISPOSITIONS)[number] | null {
-  return (
-    DISPOSITION_PRECEDENCE.find(
-      (disposition) => tool.annotations?.[DISPOSITION_HINT[disposition]],
-    ) ?? null
-  );
+export function toolDisposition(tool: ServerTool): Disposition {
+  const hints = tool.annotations;
+  if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
+  if (hints?.readOnlyHint) return "read_only";
+  if (hints?.destructiveHint) return "destructive";
+  if (hints?.idempotentHint) return "idempotent";
+  if (hints?.openWorldHint) return "open_world";
+  return "unannotated";
 }
 
 /**
@@ -102,8 +103,7 @@ export function convertToolLimit(
         .filter((tool) => {
           if (limit.kind === "all") return true;
           if (limit.kind !== "annotations") return false;
-          const disposition = toolDisposition(tool);
-          return !!disposition && limit.dispositions.includes(disposition);
+          return limit.dispositions.includes(toolDisposition(tool));
         })
         .map((tool) => tool.name);
       return { kind: "tools", tools: names };

@@ -61,12 +61,12 @@ export interface Narrowing {
  * authz/selector.go. The set is closed, which is what makes "only these" and
  * "everything but these" two ways of writing the same restriction.
  */
-const DISPOSITIONS: SetResourceAudienceEntryDispositions[] = [
+const DISPOSITIONS = [
   "read_only",
   "destructive",
   "idempotent",
   "open_world",
-];
+] as const satisfies readonly SetResourceAudienceEntryDispositions[];
 
 function serverLabel(resourceName?: string): string {
   return resourceName ?? "this server";
