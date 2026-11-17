@@ -16,6 +16,8 @@
 //     AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md. It defaults to a dry run.
 //   - remote-sessions-organization: PostgreSQL application-data backfill; see
 //     REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md. It defaults to a dry run.
+//   - client-scopes: clears scopes copied onto remote session clients before
+//     #7199; see CLIENT_SCOPES_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -109,9 +111,11 @@ func run() int {
 		return runAuditKitRuntimeSecurity(args, os.Stdout, os.Getenv)
 	case remoteSessionsOrganizationName:
 		return runRemoteSessionsOrganization(args, os.Stdout, os.Getenv)
+	case "client-scopes":
+		return runClientScopes(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, client-scopes)")
 		return 2
 	}
 }
