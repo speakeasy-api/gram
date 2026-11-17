@@ -272,7 +272,10 @@ setTimeout(() => {
   assert.match(admin.fallback.className, /\bbg-primary\b/);
 
   personal.switchAccount.listeners.click({ preventDefault() {} });
-  assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'a second click does nothing');
+  assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'the first click marks the switch busy');
+  let secondPrevented = false;
+  personal.switchAccount.listeners.click({ preventDefault() { secondPrevented = true; } });
+  assert.equal(secondPrevented, true, 'a second click does nothing');
 
   windowListeners.pageshow({ persisted: false });
   assert.equal(reloads, 0);

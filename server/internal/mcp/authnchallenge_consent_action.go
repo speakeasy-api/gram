@@ -1,5 +1,6 @@
-// Per-card consent actions do not consume challenges. Delegation retry consumes
-// and rotates the challenge; approve/deny remain the only grant-minting actions.
+// Per-card consent actions do not consume challenges. Delegation retry and
+// account switch consume and rotate the challenge; approve/deny remain the
+// only grant-minting actions.
 
 package mcp
 
@@ -85,8 +86,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
-	// Plain Get: card actions are idempotent within the challenge TTL and
-	// must not consume the state the approve POST needs.
+	// Plain Get: card actions must not consume the state the approve POST needs;
+	// the ones that do take it themselves.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		if errors.Is(err, redisCache.ErrCacheMiss) {

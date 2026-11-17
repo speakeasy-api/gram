@@ -468,7 +468,7 @@ func TestConsentSwitchAccount_RefusesForgedAndForeignRequests(t *testing.T) {
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Del("csrf_token") })
 	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("state", uuid.NewString()) })
-	require.Error(t, err)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "authn challenge state not found or expired")
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("client_id", uuid.NewString()) })
 	requireSwitchRefused(t, err, oops.CodeBadRequest, "This page changed. Go back, reload it, and try again.")
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Del("client_id") })

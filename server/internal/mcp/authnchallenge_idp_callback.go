@@ -660,7 +660,7 @@ func (s *Service) restartSignIn(w http.ResponseWriter, r *http.Request, logger *
 	}
 	if err = s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
-		return oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
 	}
 	if handoff != "" {
 		logger.InfoContext(ctx, "requiring a fresh login")
