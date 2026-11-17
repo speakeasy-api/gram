@@ -657,7 +657,7 @@ func requireSwitchedPage(t *testing.T, fx *switchFixture, old consentActionFixtu
 	page := strings.Join(strings.Fields(html.UnescapeString(w.Body.String())), " ")
 	require.Contains(t, page, "New sign-in started")
 	require.Contains(t, page, "You started a new sign-in for this connection.")
-	require.Contains(t, page, `Finish it in this tab, or start connecting again from <span class="text-foreground font-medium">Routability Client</span>.`, "with the client's own name")
+	require.Contains(t, page, `Continue the sign-in you started, or start connecting again from <span class="text-foreground font-medium">Routability Client</span>.`, "with the client's own name")
 	require.NotContains(t, page, "Couldn't connect")
 	require.NotContains(t, page, "close this tab")
 	for _, secret := range append([]string{"idp.example.com", fx.workosOrganization, fx.subject.ID + "@" + switchWorkDomain}, secrets...) {

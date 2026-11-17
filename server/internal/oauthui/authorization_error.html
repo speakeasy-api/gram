@@ -121,7 +121,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           Ask your organization's administrators to review this connection.
           Share the technical details below with them.
           {{else if eq .Kind "sign-in-restarted"}}
-          Finish it in this tab, or start connecting again from {{template "client" .}}.
+          Continue the sign-in you started, or start connecting again from {{template "client" .}}.
           {{else if or (eq .Kind "expired") (eq .Kind "session-changed") (eq .Kind "invalid-link") (eq .Kind "canceled")}}
           {{if .Recovery}}
           Use the button below to return to {{template "client" .}} and start connecting again.

@@ -203,7 +203,7 @@ func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 		{"expired", oauthui.ReasonExpired, "link expired or was already used"},
 		{"unavailable", oauthui.ReasonUnavailable, "This is a problem on our side"},
 		{"session", oauthui.ReasonSessionChanged, "current browser or sign-in session"},
-		{"restarted", oauthui.ReasonSignInRestarted, "Finish it in this tab, or start connecting again from"},
+		{"restarted", oauthui.ReasonSignInRestarted, "Continue the sign-in you started, or start connecting again from"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
