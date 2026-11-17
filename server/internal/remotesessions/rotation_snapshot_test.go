@@ -87,7 +87,7 @@ func TestRotationSnapshot_RejectsChangesDuringHTTP(t *testing.T) {
 				enc := testenv.NewEncryptionClient(t)
 				base, err := url.Parse(testServerURL)
 				require.NoError(t, err)
-				revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), policy, nil)
+				revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), nil, policy, nil)
 				rotator := remotesessions.NewClientRotator(logger, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), policy, nil, ti.redisCache, base, revoker, audit.NewLogger(), nil)
 				done := make(chan error, 1)
 				go func() {

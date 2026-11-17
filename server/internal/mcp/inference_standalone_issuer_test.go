@@ -39,7 +39,7 @@ func TestWorkloadInference_Standalone(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{}, guardian.WithTLSRootCAs(issuer.RootCAs()))
 	require.NoError(t, err)
 	service := usersessions.NewService(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn,
-		ti.sessionManager, ti.chatSessionsManager, ti.authzEngine, ti.audit, policy, nil, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc),
+		ti.sessionManager, ti.chatSessionsManager, ti.authzEngine, ti.audit, policy, nil, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), nil,
 		usersessions.NewSigner("test-jwt-secret"), ti.serverURL.String(),
 		authserver.Hosts{ServerURL: ti.serverURL.String()}, nil, nil)
 	created, err := service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{

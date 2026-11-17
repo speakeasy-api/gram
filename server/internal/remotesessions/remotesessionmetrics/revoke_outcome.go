@@ -29,6 +29,12 @@ const (
 	// upstream's behavior to tolerate.
 	RevokeOutcomeInternal RevokeOutcome = "internal_error"
 
+	// RevokeOutcomeKeyUnavailable means the organization's key could not open
+	// the stored token right now, such as a suspended or unreachable key. Its
+	// own series because, unlike an unreadable token, the grant is still live
+	// upstream and nothing retries the revocation.
+	RevokeOutcomeKeyUnavailable RevokeOutcome = "key_unavailable"
+
 	// RevokeOutcomeDropped means a bulk batch ran out of budget before the
 	// session was attempted at all. Its own series so the batch total still adds
 	// up and a rising share is legible as "batches are outgrowing the budget"

@@ -60,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
@@ -93,25 +94,29 @@ type platformMCPConfig struct {
 	InboundEMARemoteIssuers platformmcp.InboundEMARemoteIssuerManagement
 	// Workspaces creates the first organization for a user who connects with
 	// none. Nil refuses such a user, as before self-serve signup existed.
-	Workspaces             platformmcp.WorkspaceProvisioner
-	SignalAuthoring        *sigint.Service
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
-	DashboardURL           *url.URL
-	Environment            string
-	JWTSigningKey          string
-	ProductFeatures        *productfeatures.Client
-	IssuerGate             *internalsessionissuers.Gate
-	IssuerSigner           *internalsessionissuers.Signer
-	FeatureFlags           feature.Provider
-	DistributionAdmission  *admission.Guard
-	Authz                  *authz.Engine
-	Encryption             *encryption.Client
+	Workspaces            platformmcp.WorkspaceProvisioner
+	SignalAuthoring       *sigint.Service
+	Logger                *slog.Logger
+	MeterProvider         metric.MeterProvider
+	TracerProvider        trace.TracerProvider
+	Mux                   goahttp.Muxer
+	DB                    *pgxpool.Pool
+	Redis                 *redis.Client
+	ServerURL             *url.URL
+	DashboardURL          *url.URL
+	Environment           string
+	JWTSigningKey         string
+	ProductFeatures       *productfeatures.Client
+	IssuerGate            *internalsessionissuers.Gate
+	IssuerSigner          *internalsessionissuers.Signer
+	FeatureFlags          feature.Provider
+	DistributionAdmission *admission.Guard
+	Authz                 *authz.Engine
+	Encryption            *encryption.Client
+
+	// UpstreamTokens opens stored upstream OAuth tokens over the process's
+	// organization encryption.
+	UpstreamTokens         *upstreamtokens.Tokens
 	Identity               *identity.Resolver
 	Sessions               *sessions.Manager
 	Catalog                *externalmcp.CatalogService
@@ -589,7 +594,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
@@ -1383,7 +1388,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).

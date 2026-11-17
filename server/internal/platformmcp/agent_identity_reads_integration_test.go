@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens/upstreamtokenstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -77,7 +78,7 @@ func (f agentIdentityFixture) service(t *testing.T, checks AgentAuthorizationChe
 	t.Helper()
 
 	engine := authz.NewEngine(testenv.NewLogger(t), f.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	return NewAgentIdentityReadService(testenv.NewLogger(t), f.conn, testenv.NewEncryptionClient(t), engine, checks, allowBudget())
+	return NewAgentIdentityReadService(testenv.NewLogger(t), f.conn, upstreamtokenstest.New(t, f.conn, testenv.NewEncryptionClient(t)), engine, checks, allowBudget())
 }
 
 func (f agentIdentityFixture) grant(t *testing.T, scope authz.Scope, selector authz.Selector) {

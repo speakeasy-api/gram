@@ -37,9 +37,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -191,6 +193,9 @@ type RefreshService struct {
 	// secrets opens the client secret a refresh authenticates with.
 	secrets *clientsecrets.Secrets
 
+	// tokens opens and stores the session's upstream tokens.
+	tokens *upstreamtokens.Tokens
+
 	policy  *guardian.Policy
 	tunnels *tunnelrouting.HTTPClient
 	locks   cache.Cache
@@ -240,6 +245,17 @@ func WithRefreshClientSecrets(secrets *clientsecrets.Secrets) RefreshOption {
 	}
 }
 
+// WithRefreshUpstreamTokens installs the process's upstream token seam, which
+// knows the organization encryption configured in the process. Without it the
+// service opens and stores session tokens as a process without organization
+// encryption: platform_key works and every other transition state fails
+// closed. Production wiring always passes it.
+func WithRefreshUpstreamTokens(tokens *upstreamtokens.Tokens) RefreshOption {
+	return func(s *RefreshService) {
+		s.tokens = tokens
+	}
+}
+
 // WithRefreshIDTokenVerifier restates a session's upstream identity from the
 // ID token a refresh grant returns.
 func WithRefreshIDTokenVerifier(verifier IDTokenVerifier) RefreshOption {
@@ -286,6 +302,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		db:             db,
 		enc:            enc,
 		secrets:        nil,
+		tokens:         nil,
 		policy:         policy,
 		tunnels:        tunnels,
 		locks:          locks,
@@ -304,6 +321,9 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}
 	if s.secrets == nil {
 		s.secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
+	}
+	if s.tokens == nil {
+		s.tokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, enc)
 	}
 	if s.enricher == nil && policy != nil {
 		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, s.issuerMetadata)
@@ -929,8 +949,11 @@ func (s *RefreshService) refresh(
 
 	// An unreadable refresh token can't be sent, so it never takes the lease;
 	// a row that moved since the snapshot is used instead. The post-lock reread checks again.
+	// A key that cannot open it right now fails the refresh as retryable.
 	if hasRefreshToken(sess) && refreshTokenUsable(sess, time.Now()) {
-		if _, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String); err != nil {
+		if _, err := openRefreshToken(ctx, s.tokens, sess); err != nil && !orgencryption.IsUnreadable(err) {
+			return zero, nil, nil, newTokenRefreshError("the session's stored refresh token could not be opened right now; try again shortly", err, refreshRemedyRetry)
+		} else if err != nil {
 			current, done, rerr := s.rereadActiveSession(ctx, q, sess, sess.UpdatedAt.Time)
 			if rerr != nil {
 				return zero, nil, nil, rerr
@@ -1182,7 +1205,7 @@ func (s *RefreshService) refresh(
 	if !accessTokenLive(latest, time.Now()) {
 		return zero, &client, nil, refreshErr
 	}
-	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted.String)
+	plain, err := openAccessToken(ctx, s.tokens, latest)
 	if err != nil {
 		return zero, &client, nil, refreshErr
 	}
@@ -1227,8 +1250,9 @@ func accessTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bo
 	return sess.AccessExpiresAt.Time.After(now.Add(AccessTokenExpirySkew))
 }
 
+// hasRefreshToken reports whether sess stores a refresh token in either copy.
 func hasRefreshToken(sess remotesessions_repo.RemoteSession) bool {
-	return sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
+	return upstreamtokens.Has(refreshTokenCopies(sess))
 }
 
 func refreshTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
@@ -1259,7 +1283,7 @@ func (s *RefreshService) rereadActiveSession(ctx context.Context, q *remotesessi
 		return none, nil, fmt.Errorf("re-read active remote_session: %w", err)
 	}
 	if current.UpdatedAt.Time.After(snapshotAt) && accessTokenLive(current, time.Now()) {
-		if plain, derr := s.enc.Decrypt(current.AccessTokenEncrypted.String); derr == nil {
+		if plain, derr := openAccessToken(ctx, s.tokens, current); derr == nil {
 			return none, &RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
 		}
 	}
@@ -1315,7 +1339,7 @@ func (s *RefreshService) awaitRefreshedSession(
 			return zero, false, 0
 		}
 
-		plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted.String)
+		plain, err := openAccessToken(ctx, s.tokens, latest)
 		if err != nil {
 			return zero, false, 0
 		}

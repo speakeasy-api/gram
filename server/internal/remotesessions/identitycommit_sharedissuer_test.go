@@ -324,7 +324,7 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	subject := urn.NewUserSubject(auth.UserID)
 	cipher, err := enc.Encrypt([]byte("own-token"))
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: issuer,
 		RemoteSessionClientID: ownClient, AccessTokenEncrypted: cipher,
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),

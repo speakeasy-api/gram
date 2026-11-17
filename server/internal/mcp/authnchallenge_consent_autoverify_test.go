@@ -250,7 +250,7 @@ func configureAutoRefreshGrant(t *testing.T, ctx context.Context, fx validationF
 	require.NoError(t, err)
 	refreshEncrypted, err := fx.ti.enc.Encrypt([]byte("auto-refresh-token"))
 	require.NoError(t, err)
-	grant, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	grant, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            fx.subject,
 		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 		RemoteSessionClientID: fx.clientID,

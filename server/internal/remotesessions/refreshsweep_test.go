@@ -115,7 +115,7 @@ func seedSweepSession(
 		refreshToken = conv.ToPGText("refresh-ciphertext")
 	}
 	subject := urn.NewUserSubject("subject-" + slug)
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientUUID,
@@ -437,7 +437,7 @@ func seedSweepSharedGrant(
 	}))
 
 	subject := urn.NewUserSubject("subject-" + slug)
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   issuerA,
 		RemoteSessionClientID: clientUUID,

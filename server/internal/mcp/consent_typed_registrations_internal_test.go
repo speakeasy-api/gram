@@ -167,7 +167,7 @@ func TestTypedRegistrationStatusesPreserveConsentedSession(t *testing.T) {
 	subject := urn.NewUserSubject("user_1")
 	accessEnc, err := f.service.enc.Encrypt([]byte("typed-upstream-token"))
 	require.NoError(t, err)
-	session, err := remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	session, err := remotesessionsrepo.New(pool).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   consentedUnder,
 		RemoteSessionClientID: f.registration,

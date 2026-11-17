@@ -356,7 +356,7 @@ func TestJWTAccessTokenRefreshCASRejectsStaleRestatement(t *testing.T) {
 					hookErr.Store(&err)
 					return
 				}
-				_, err = env.q.UpsertRemoteSession(hookCtx, repo.UpsertRemoteSessionParams{
+				_, err = env.q.UpsertRemoteSessionFixture(hookCtx, repo.UpsertRemoteSessionFixtureParams{
 					SubjectUrn: env.subject, UserSessionIssuerID: current.UserSessionIssuerID, RemoteSessionClientID: env.clientID,
 					AccessTokenEncrypted: current.AccessTokenEncrypted.String, AccessExpiresAt: current.AccessExpiresAt,
 					RefreshTokenEncrypted: current.RefreshTokenEncrypted, AuthorizationExpiresAt: current.AuthorizationExpiresAt, RefreshExpiresAt: current.RefreshExpiresAt,

@@ -194,7 +194,7 @@ func seedClient(t *testing.T, ctx context.Context, pool *pgxpool.Pool, remoteIss
 func seedSessionWithoutOrganization(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userIssuerID, clientID uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	session, err := remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	session, err := remotesessionsrepo.New(pool).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()),
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,

@@ -67,7 +67,7 @@ func upsertLiveSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, en
 	t.Helper()
 	accessEnc, err := enc.Encrypt([]byte(token))
 	require.NoError(t, err)
-	session, err := repo.New(conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   signIn,
 		RemoteSessionClientID: clientID,

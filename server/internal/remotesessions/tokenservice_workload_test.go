@@ -59,7 +59,7 @@ func TestResolveAuthorization_WorkloadOwner(t *testing.T) {
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "owner has no session")
 	cipher, err := enc.Encrypt([]byte("owner-access-token"))
 	require.NoError(t, err)
-	source, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: userIssuer, RemoteSessionClientID: clientID, AccessTokenEncrypted: cipher, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	source, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: userIssuer, RemoteSessionClientID: clientID, AccessTokenEncrypted: cipher, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 	require.NoError(t, err)
 	resolved, err := resolve(workloadCtx, caller)
 	require.NoError(t, err)

@@ -65,7 +65,7 @@ func TestResolveAccessToken_InvalidGrantClearsRefreshGrant(t *testing.T) {
 	// preserves its per-session preferences.
 	freshAccess, err := testenv.NewEncryptionClient(t).Encrypt([]byte("fresh-access"))
 	require.NoError(t, err)
-	fresh, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	fresh, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   env.session.UserSessionIssuerID,
 		RemoteSessionClientID: env.clientID,
@@ -145,7 +145,7 @@ func TestResolveAccessToken_InvalidGrantAdoptsConcurrentRelink(t *testing.T) {
 	require.NoError(t, err)
 	relinkedRefresh, err := enc.Encrypt([]byte("refresh-relinked"))
 	require.NoError(t, err)
-	winner, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	winner, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   env.session.UserSessionIssuerID,
 		RemoteSessionClientID: env.clientID,

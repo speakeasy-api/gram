@@ -138,7 +138,7 @@ func seedExpiredRemoteSession(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, err)
 	refreshEncStr := refreshEnc
 
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,

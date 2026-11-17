@@ -1305,7 +1305,7 @@ func TestFreshInvalidGrantWritesOnlyTheRefreshRow(t *testing.T) {
 func upsertUnreadableRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, userSessionIssuerID, remoteSessionClientID uuid.UUID, subject urn.SessionSubject, resource string) {
 	t.Helper()
 
-	_, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err := remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteSessionClientID: remoteSessionClientID,
@@ -1431,7 +1431,7 @@ func overwriteMemberTokens(t *testing.T, ctx context.Context, f memberRefreshOut
 	}
 	current, err := remotesessions_repo.New(f.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(f.ti.conn).UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = remotesessions_repo.New(f.ti.conn).UpdateRemoteSessionTokensIfUnchangedFixture(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: f.subject, RemoteSessionClientID: f.clientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: encrypt(access), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)),
 		RefreshTokenEncrypted: conv.ToPGText(encrypt(refresh)), Scopes: current.Scopes,
@@ -1514,7 +1514,7 @@ func TestUnreadableUpstreamTokenGatewayMemberMisconfiguredNamesAdministrator(t *
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
 	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: clientID,
 		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 		RefreshTokenEncrypted: conv.ToPGText(refresh), RefreshExpiresAt: pgtype.Timestamptz{Valid: false},

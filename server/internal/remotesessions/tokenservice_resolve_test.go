@@ -130,7 +130,7 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	subject := urn.NewUserSubject("resolve-happy-subject")
 	accessEnc, err := enc.Encrypt([]byte("upstream-access-token"))
 	require.NoError(t, err)
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,
@@ -293,7 +293,7 @@ func TestResolveAuthorization_ResolvesReviewedIssuerBinding(t *testing.T) {
 	subject := urn.NewUserSubject("resolve-authorization-subject")
 	accessEnc, err := enc.Encrypt([]byte("authorization-access-token"))
 	require.NoError(t, err)
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,
@@ -385,7 +385,7 @@ func TestResolveAccessTokens_ExpiredAuthorizationRejectsUnexpiredAccessToken(t *
 	accessEnc, err := enc.Encrypt([]byte("still-unexpired-access-token"))
 	require.NoError(t, err)
 
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             subject,
 		UserSessionIssuerID:    userIssuerID,
 		RemoteSessionClientID:  clientID,
@@ -422,7 +422,7 @@ func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
 	subject := urn.NewUserSubject("resolve-platform-subject")
 	accessEnc, err := enc.Encrypt([]byte("platform-upstream-token"))
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: uuid.MustParse(clientID),
@@ -467,7 +467,7 @@ func TestResolveAccessTokens_MultipleUpstreamsCarryQualifiedResources(t *testing
 	} {
 		accessEnc, err := enc.Encrypt([]byte(seed.token))
 		require.NoError(t, err)
-		_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            subject,
 			UserSessionIssuerID:   userIssuerID,
 			RemoteSessionClientID: seed.clientID,
@@ -508,7 +508,7 @@ func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
 	subject := urn.NewUserSubject("resolve-partial-subject")
 	accessEnc, err := enc.Encrypt([]byte("token-a"))
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientA,

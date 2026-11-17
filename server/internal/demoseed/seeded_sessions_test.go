@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens/upstreamtokenstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -40,7 +41,7 @@ func TestSeededSessionsHoldFixtureTokens(t *testing.T) {
 	for _, key := range keys {
 		sess, err := remotesessionsrepo.New(db).GetRemoteSessionByIDIncludingDeleted(ctx, remotesessionsrepo.GetRemoteSessionByIDIncludingDeletedParams{ID: s.det(key), ProjectID: uuid.NullUUID{UUID: s.projectID(), Valid: true}})
 		require.NoError(t, err, key)
-		require.True(t, remotesessions.StoredSignInUsable(enc, sess, now), "%s reads as connected", key)
+		require.True(t, remotesessions.StoredSignInUsable(ctx, upstreamtokenstest.New(t, db, enc), sess, now), "%s reads as connected", key)
 		require.True(t, sess.RefreshTokenEncrypted.Valid, "%s holds a refresh token", key)
 		access, err := enc.Decrypt(sess.AccessTokenEncrypted.String)
 		require.NoError(t, err, key)

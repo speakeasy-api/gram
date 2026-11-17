@@ -114,7 +114,7 @@ func TestCommitServerIdentityConfigurationFromTemplateCreatesIndependentClient(t
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), []uuid.UUID{sourceIssuerID}))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	_, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject(authCtx.UserID),
 		UserSessionIssuerID:   sourceIssuerID,
 		RemoteSessionClientID: template.ID,

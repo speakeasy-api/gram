@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -159,7 +160,7 @@ func (m *ChallengeManager) AuthClientRemoteSessionStatuses(ctx context.Context, 
 	for _, row := range rows {
 		states = append(states, remotesessions_repo.ListRemoteSessionStatusesForSubjectRow(row))
 	}
-	return m.remoteSessionStates(states), nil
+	return m.remoteSessionStates(ctx, states), nil
 }
 
 // DisconnectAuthClientRemoteSession is DisconnectRemoteSession for a
@@ -188,8 +189,9 @@ func (m *ChallengeManager) DisconnectAuthClientRemoteSession(ctx context.Context
 	for _, row := range disconnected {
 		m.revoker.RevokeDetached(ctx, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
-			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			OrganizationID:        row.OrganizationID,
+			AccessToken:           upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted),
+			RefreshToken:          upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 		})
 	}
 

@@ -97,7 +97,7 @@ func seedRecheckSession(t *testing.T, ctx context.Context, ti *testInstance, slu
 	}
 	subject := urn.NewUserSubject("subject-" + slug)
 	q := repo.New(ti.conn)
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientUUID,
@@ -324,7 +324,7 @@ func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
 	require.NoError(t, err)
 
 	subject := urn.NewUserSubject("subject-" + slug)
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, AccessTokenEncrypted: "access-ciphertext",
 		AccessExpiresAt: pgtype.Timestamptz{}, RefreshTokenEncrypted: pgtype.Text{}, RefreshExpiresAt: pgtype.Timestamptz{}, Scopes: []string{}, Resource: pgtype.Text{}, AutoRefresh: false,
 	})

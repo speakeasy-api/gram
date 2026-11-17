@@ -90,6 +90,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -2028,6 +2029,12 @@ func (d orgEncryptionDeps) Cipher(logger *slog.Logger, platform *encryption.Clie
 // secrets over the process's organization encryption.
 func (d orgEncryptionDeps) ClientSecrets(logger *slog.Logger, platform *encryption.Client) *clientsecrets.Secrets {
 	return clientsecrets.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// UpstreamTokens builds the stored upstream OAuth token seam over the
+// process's organization encryption and transition state.
+func (d orgEncryptionDeps) UpstreamTokens(logger *slog.Logger, platform *encryption.Client) *upstreamtokens.Tokens {
+	return upstreamtokens.New(logger, d.Cipher(logger, platform), platform)
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.

@@ -100,7 +100,7 @@ func storeTokens(t *testing.T, env syntheticExpiryEnv, access, refresh string, a
 	}
 	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchangedFixture(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID,
 		ExpectedUpdatedAt: current.UpdatedAt, AccessTokenEncrypted: encrypt(access),
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)), RefreshTokenEncrypted: conv.ToPGText(encrypt(refresh)),
@@ -439,7 +439,7 @@ func TestRemoteSessionStatuses_NothingUsableIsExpired(t *testing.T) {
 	env, logs := unreadableEnv(t, "nothing-usable", &refreshes, healingRefresh)
 	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchangedFixture(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: "", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 		Scopes: current.Scopes,
@@ -514,7 +514,7 @@ func TestRefreshNow_LapsedGrantSkipsTheDecrypt(t *testing.T) {
 	env, logs := unreadableEnv(t, "unreadable-lapsed", &refreshes, healingRefresh)
 	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchangedFixture(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 		RefreshTokenEncrypted: conv.ToPGText("not-ciphertext"), RefreshTokenRotated: true,
@@ -539,7 +539,7 @@ func TestResolveAccessTokens_LapsedUnreadableAccessIsAnOrdinaryReconnect(t *test
 	env, logs := unreadableEnv(t, "unreadable-lapsed-access", &refreshes, healingRefresh)
 	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchangedFixture(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 		RefreshTokenRotated: true, Scopes: current.Scopes,
@@ -563,7 +563,7 @@ func TestRemoteSessionsNeedReconnect_EmptyAccessWithReadableRefreshRenews(t *tes
 	env, _ := unreadableEnv(t, "empty-access-renews", &refreshes, healingRefresh)
 	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchangedFixture(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: "", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 		RefreshTokenEncrypted: current.RefreshTokenEncrypted, Scopes: current.Scopes,
@@ -590,7 +590,7 @@ func TestResolveAccessTokens_EmptyRefreshTokenIsNeverSent(t *testing.T) {
 	require.NoError(t, err)
 	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchangedFixture(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: stale, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 		RefreshTokenEncrypted: conv.ToPGText(empty), Scopes: current.Scopes,

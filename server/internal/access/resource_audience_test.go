@@ -1271,7 +1271,7 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	})
 	require.NoError(t, err)
 	// The ciphertext is never decrypted.
-	session, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	session, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewAgentSubject(agent.ID),
 		UserSessionIssuerID:   issuer.ID,
 		RemoteSessionClientID: client.ID,

@@ -96,7 +96,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 		callers[user] = authenticate(sourceKindDashboard, `{"text":"hi","user_id":"`+user+`"}`)
 		encrypted, err := enc.Encrypt([]byte("private-" + user))
 		require.NoError(t, err)
-		_, err = q.UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(user), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: encrypted, Scopes: []string{}, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText(turnUserResource)})
+		_, err = q.UpsertRemoteSessionFixture(ctx, remoterepo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(user), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: encrypted, Scopes: []string{}, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText(turnUserResource)})
 		require.NoError(t, err)
 	}
 	for _, user := range []string{"user-1", "user-2"} {

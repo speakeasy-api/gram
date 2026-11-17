@@ -38,7 +38,7 @@ func TestAgentConnectionHealth(t *testing.T) {
 			project := seedProject(t, db, "org-a", "example")
 			agent := createAgent(t, db, "org-a", "owner", "Example agent")
 			_, issuer := seedManagedSession(t, db, "org-a", "user:owner")
-			session := seedManagedUpstreamWith(t, db, "org-a", issuer, "user:owner", func(p *remoterepo.UpsertRemoteSessionParams) {
+			session := seedManagedUpstreamWith(t, db, "org-a", issuer, "user:owner", func(p *remoterepo.UpsertRemoteSessionFixtureParams) {
 				p.AccessExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite}
 				p.RefreshTokenEncrypted = pgtype.Text{String: "", Valid: false}
 				if tc.refresh {

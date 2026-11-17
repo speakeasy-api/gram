@@ -739,7 +739,7 @@ func TestReconnectDuringRestatementKeepsItsIdentity(t *testing.T) {
 				reconnectErr = gerr
 				return identity, nil
 			}
-			_, reconnectErr = env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+			_, reconnectErr = env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 				SubjectUrn:             env.subject,
 				UserSessionIssuerID:    current.UserSessionIssuerID,
 				RemoteSessionClientID:  env.clientID,

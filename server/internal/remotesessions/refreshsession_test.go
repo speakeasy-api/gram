@@ -69,7 +69,7 @@ func seedRefreshableOrgSession(t *testing.T, ctx context.Context, ti *testInstan
 	authorizationExpiresAt := time.Now().Add(24 * time.Hour)
 	refreshExpiresAt := time.Now().Add(2 * time.Hour)
 
-	row, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	row, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             urn.NewUserSubject("subject-" + slug),
 		UserSessionIssuerID:    userIssuerID,
 		RemoteSessionClientID:  clientUUID,
@@ -208,7 +208,7 @@ func TestRefreshSession_UnreadableRefreshToken(t *testing.T) {
 	// A non-empty value that is not valid ciphertext: passes the has-refresh-token
 	// gate but fails to decrypt.
 	bogus := "not-valid-ciphertext"
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject("admin-refresh-corrupt-subject"),
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientUUID,

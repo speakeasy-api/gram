@@ -896,6 +896,7 @@ func newWorkerCommand() *cli.Command {
 				DB:                             db,
 				EncryptionClient:               encryptionClient,
 				ClientSecrets:                  orgEncryption.ClientSecrets(logger, encryptionClient),
+				UpstreamTokens:                 orgEncryption.UpstreamTokens(logger, encryptionClient),
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,

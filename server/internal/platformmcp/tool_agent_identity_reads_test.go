@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens/upstreamtokenstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -117,6 +118,6 @@ func TestAssignedConnectionExpired(t *testing.T) {
 		"nothing stored can be read":        {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: unreadable, AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: unreadable}, want: true},
 		"unreadable access, refresh renews": {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: unreadable, AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: refresh}, want: false},
 	} {
-		require.Equal(t, tc.want, !remotesessions.StoredSignInUsable(enc, tc.session, now), name)
+		require.Equal(t, tc.want, !remotesessions.StoredSignInUsable(t.Context(), upstreamtokenstest.New(t, nil, enc), tc.session, now), name)
 	}
 }

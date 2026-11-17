@@ -41,7 +41,7 @@ func expireConsentGrant(t *testing.T, ctx context.Context, ti *testInstance, iss
 	t.Helper()
 	accessEncrypted, err := ti.enc.Encrypt([]byte("dead-token"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             subject,
 		UserSessionIssuerID:    issuer,
 		RemoteSessionClientID:  client,
@@ -302,7 +302,7 @@ func storeVerifyGrant(t *testing.T, ctx context.Context, fx validationFixture, r
 	t.Helper()
 	accessEncrypted, err := fx.ti.enc.Encrypt([]byte("stale-token"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.endpoint.UserSessionIssuerID,
 		RemoteSessionClientID:  fx.clientID,
@@ -599,7 +599,7 @@ func TestServeConsentAction_RefreshUnreadableSignInPointsToTheCard(t *testing.T)
 		ctx, fx := seedMetaValidationFixture(t, "refresh-unreadable-live-"+uuid.NewString()[:8])
 		access, err := fx.ti.enc.Encrypt([]byte("live-token"))
 		require.NoError(t, err)
-		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn: fx.subject, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID,
 			AccessTokenEncrypted: access, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 			RefreshTokenEncrypted: conv.ToPGText("not-ciphertext"), Scopes: []string{}, Resource: conv.ToPGText(fx.member.url),
@@ -632,7 +632,7 @@ func TestServeConsentAction_VerifyMisconfiguredRenewalMatchesReadableGrant(t *te
 		}
 		refresh, err := fx.ti.enc.Encrypt([]byte("refresh-token"))
 		require.NoError(t, err)
-		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn: fx.subject, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID,
 			AccessTokenEncrypted: access, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)),
 			RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: conv.ToPGText(fx.member.url),

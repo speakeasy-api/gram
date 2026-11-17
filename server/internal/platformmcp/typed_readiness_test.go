@@ -148,7 +148,7 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	chosen := clients[1]
 	token, err := testenv.NewEncryptionClient(t).Encrypt([]byte("usable-offer-token"))
 	require.NoError(t, err)
-	session, err := remotesessionsrepo.New(conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(f.principal.UserID), UserSessionIssuerID: f.userSessionIssuerID, RemoteSessionClientID: chosen.ID, AccessTokenEncrypted: token, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	session, err := remotesessionsrepo.New(conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(f.principal.UserID), UserSessionIssuerID: f.userSessionIssuerID, RemoteSessionClientID: chosen.ID, AccessTokenEncrypted: token, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 	require.NoError(t, err)
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "typed-offer-target", Version: "1.0.0"}, nil)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, nil)

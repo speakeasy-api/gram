@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 
 	"github.com/google/uuid"
 )
@@ -123,6 +124,6 @@ func (e *SessionEnricher) JWTAccessToken(ctx context.Context, target JWTAccessTo
 func ClientRotationLeaseKey(clientID uuid.UUID) string { return clientRotationLeaseKey(clientID) }
 
 // StoreRemoteSessionGrant exposes the consent write to tests.
-func StoreRemoteSessionGrant(ctx context.Context, q *repo.Queries, organizationID string, params repo.UpsertRemoteSessionParams) (repo.RemoteSession, error) {
-	return storeRemoteSessionGrant(ctx, q, organizationID, params)
+func StoreRemoteSessionGrant(ctx context.Context, dbtx repo.DBTX, tokens *upstreamtokens.Tokens, organizationID string, params repo.UpsertRemoteSessionGrantParams, issued upstreamtokens.RemoteSessionTokens) (repo.RemoteSession, error) {
+	return storeRemoteSessionGrant(ctx, dbtx, tokens, organizationID, params, issued)
 }

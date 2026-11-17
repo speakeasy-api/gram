@@ -42,9 +42,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -85,6 +87,9 @@ type UpstreamRevoker struct {
 	// secrets opens the secret of the client a revoked grant was issued to.
 	secrets *clientsecrets.Secrets
 
+	// tokens opens the stored token a revocation sends.
+	tokens *upstreamtokens.Tokens
+
 	// client is built once and shared by every direct-dial revocation.
 	// Guardian's pooled transport is meant for exactly this: a long-lived client
 	// making repeated requests to the same hosts. Even a batch spanning several
@@ -101,7 +106,7 @@ type UpstreamRevoker struct {
 	assertions TokenEndpointAssertionSigner
 }
 
-func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, secrets *clientsecrets.Secrets, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, signers ...TokenEndpointAssertionSigner) *UpstreamRevoker {
+func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, secrets *clientsecrets.Secrets, tokens *upstreamtokens.Tokens, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, signers ...TokenEndpointAssertionSigner) *UpstreamRevoker {
 	logger = logger.With(attr.SlogComponent("remote-session-upstream-revoke"))
 	var signer TokenEndpointAssertionSigner = unavailableTokenEndpointAssertionSigner{}
 	if len(signers) > 0 {
@@ -110,12 +115,16 @@ func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider
 	if secrets == nil {
 		secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
 	}
+	if tokens == nil {
+		tokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, enc)
+	}
 	return &UpstreamRevoker{
 		logger:     logger,
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		db:         db,
 		enc:        enc,
 		secrets:    secrets,
+		tokens:     tokens,
 		client:     noRedirectClient(policy.PooledClient()),
 		tunnels:    tunnels,
 		metrics:    remotesessionmetrics.NewRevoke(logger, meterProvider),
@@ -138,39 +147,41 @@ type RevokedCredentials struct {
 	// supply the revocation endpoint and the client authentication to use.
 	RemoteSessionClientID uuid.UUID
 
-	// AccessTokenEncrypted is the session's stored access token, sent only when
-	// no refresh token is stored.
-	AccessTokenEncrypted string
+	// OrganizationID is the session's organization, whose transition state
+	// decides which copy of each token is opened. NULL for a session under a
+	// global client, whose tokens stay on the platform key.
+	OrganizationID pgtype.Text
 
-	// RefreshTokenEncrypted is the session's stored refresh token, preferred
-	// over the access token when present. Invalid when the grant never issued
-	// one or a prior invalid_grant cleared it.
-	RefreshTokenEncrypted pgtype.Text
+	// AccessToken is the session's stored access token copies, sent only when
+	// no refresh token is stored.
+	AccessToken orgencryption.Copies
+
+	// RefreshToken is the session's stored refresh token copies, preferred
+	// over the access token when present. Neither copy is set when the grant
+	// never issued one or a prior invalid_grant cleared it.
+	RefreshToken orgencryption.Copies
 }
 
 // revocationTokens is the token material one revocation can draw on, in the two
 // forms it arrives in.
 //
-// Every path that revokes a tombstoned session reads the ciphertext back out of
-// the row it just tombstoned. The remote-login callback has no row: it holds a
-// pair it exchanged upstream and could not store, and must be able to hand that
-// pair over before — or instead of — encrypting it.
+// Every path that revokes a tombstoned session reads the stored copies back out
+// of the row it just tombstoned. The remote-login callback has no row: it holds
+// a pair it exchanged upstream and could not store, and must be able to hand
+// that pair over before — or instead of — sealing it.
 type revocationTokens struct {
+	// access and refresh are a plaintext pair that was never stored.
 	access  string
 	refresh string
 
-	// encrypted reports whether access and refresh hold ciphertext that has to
-	// be decrypted before it can be sent.
-	encrypted bool
+	// stored is the tombstoned session's stored copies, opened instead of
+	// access and refresh when set.
+	stored *RevokedCredentials
 }
 
 // tokens adapts stored credentials to the form the revocation reads.
 func (c RevokedCredentials) tokens() revocationTokens {
-	refresh := ""
-	if c.RefreshTokenEncrypted.Valid {
-		refresh = c.RefreshTokenEncrypted.String
-	}
-	return revocationTokens{access: c.AccessTokenEncrypted, refresh: refresh, encrypted: true}
+	return revocationTokens{access: "", refresh: "", stored: &c}
 }
 
 // revokedCredentials adapts the rows returned by a bulk soft-delete into the
@@ -180,8 +191,9 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 	for _, row := range rows {
 		creds = append(creds, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
-			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			OrganizationID:        row.OrganizationID,
+			AccessToken:           upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted),
+			RefreshToken:          upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 		})
 	}
 	return creds
@@ -239,8 +251,9 @@ func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo
 	for _, row := range rows {
 		creds = append(creds, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
-			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			OrganizationID:        row.OrganizationID,
+			AccessToken:           upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted),
+			RefreshToken:          upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 		})
 	}
 	return creds, nil
@@ -291,8 +304,9 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 		for _, row := range rows {
 			creds = append(creds, RevokedCredentials{
 				RemoteSessionClientID: row.RemoteSessionClientID,
-				AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
-				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+				OrganizationID:        row.OrganizationID,
+				AccessToken:           upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted),
+				RefreshToken:          upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 			})
 		}
 	}
@@ -340,8 +354,9 @@ func (r *UpstreamRevoker) DetachOrganizationUserSessionIssuerFromClients(ctx con
 		for _, row := range rows {
 			creds = append(creds, RevokedCredentials{
 				RemoteSessionClientID: row.RemoteSessionClientID,
-				AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
-				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+				OrganizationID:        row.OrganizationID,
+				AccessToken:           upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted),
+				RefreshToken:          upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 			})
 		}
 	}
@@ -398,7 +413,7 @@ func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID u
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, clientID, nil, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false})
+	r.revoke(revokeCtx, clientID, nil, revocationTokens{access: accessToken, refresh: refreshToken, stored: nil})
 }
 
 // RevokeAllDetached runs upstream revocations for a batch of sessions that have
@@ -576,12 +591,13 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, is
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
-	token, hint, ok := r.tokenToRevoke(ctx, tokens)
-	if !ok {
-		// Either there was no token at all, or a stored one could not be
-		// decrypted. Neither is recoverable and neither is the upstream's
-		// fault; tokenToRevoke has already logged a decryption failure.
-		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSkipped
+	token, hint, skipped := r.tokenToRevoke(ctx, tokens)
+	if skipped != "" {
+		// There was no token at all, a stored one could not be decrypted, or
+		// the organization's key could not open it right now. None is the
+		// upstream's fault, and tokenToRevoke has already logged a stored
+		// token it could not open.
+		return client.IssuerUrl, skipped
 	}
 
 	var clientSecret string
@@ -680,7 +696,8 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, is
 }
 
 // tokenToRevoke picks which of the grant's two credentials to send, returning
-// the plaintext token and its RFC 7009 token_type_hint.
+// the plaintext token and its RFC 7009 token_type_hint, or the outcome to
+// record when there is nothing it can send.
 //
 // The refresh token wins whenever one is present. RFC 7009 §2.1 says revoking a
 // refresh token SHOULD also invalidate the access tokens derived from it, while
@@ -692,20 +709,30 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, is
 // call for the access token would cover upstreams that ignore the SHOULD, at the
 // cost of doubling the fan-out on every bulk revoke; the spec-conforming single
 // call is the deliberate choice here.
-func (r *UpstreamRevoker) tokenToRevoke(ctx context.Context, tokens revocationTokens) (token string, hint string, ok bool) {
-	selected, hint := tokens.access, "access_token"
-	if tokens.refresh != "" {
-		selected, hint = tokens.refresh, "refresh_token"
-	}
-	if selected == "" {
-		return "", "", false
-	}
-	if !tokens.encrypted {
-		return selected, hint, true
+func (r *UpstreamRevoker) tokenToRevoke(ctx context.Context, tokens revocationTokens) (token string, hint string, skipped remotesessionmetrics.RevokeOutcome) {
+	stored := tokens.stored
+	if stored == nil {
+		selected, hint := tokens.access, "access_token"
+		if tokens.refresh != "" {
+			selected, hint = tokens.refresh, "refresh_token"
+		}
+		if selected == "" {
+			return "", "", remotesessionmetrics.RevokeOutcomeSkipped
+		}
+		return selected, hint, ""
 	}
 
-	plain, err := r.enc.Decrypt(selected)
-	if err != nil {
+	columns, copies, hint := upstreamtokens.RemoteSessionAccessToken, stored.AccessToken, "access_token"
+	if upstreamtokens.Has(stored.RefreshToken) {
+		columns, copies, hint = upstreamtokens.RemoteSessionRefreshToken, stored.RefreshToken, "refresh_token"
+	}
+	if !upstreamtokens.Has(copies) {
+		return "", "", remotesessionmetrics.RevokeOutcomeSkipped
+	}
+
+	plain, err := r.tokens.Open(ctx, nil, stored.OrganizationID, columns, copies)
+	switch {
+	case err != nil && orgencryption.IsUnreadable(err):
 		// Logged without the session id's token material and without retry: an
 		// undecryptable token cannot be sent to anyone, so there is nothing to
 		// recover. The local revoke has already taken effect regardless.
@@ -713,7 +740,17 @@ func (r *UpstreamRevoker) tokenToRevoke(ctx context.Context, tokens revocationTo
 			attr.SlogOAuthGrant(hint),
 			attr.SlogError(fmt.Errorf("decrypt %s: %w", hint, err)),
 		)
-		return "", "", false
+		return "", "", remotesessionmetrics.RevokeOutcomeSkipped
+	case err != nil:
+		// The organization's key could not open the token right now. The
+		// revocation is not retried, so the upstream grant stays live until it
+		// expires; the local revoke has already taken effect.
+		r.logger.ErrorContext(ctx, "upstream revoke: stored token could not be opened right now; the upstream grant stays live",
+			attr.SlogOAuthGrant(hint),
+			attr.SlogOrganizationID(stored.OrganizationID.String),
+			attr.SlogError(fmt.Errorf("open %s: %w", hint, err)),
+		)
+		return "", "", remotesessionmetrics.RevokeOutcomeKeyUnavailable
 	}
-	return plain, hint, true
+	return plain, hint, ""
 }

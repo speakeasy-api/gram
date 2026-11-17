@@ -11726,8 +11726,11 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.organization_id,
   s.access_token_encrypted,
+  s.access_token_org_encrypted,
   s.refresh_token_encrypted,
+  s.refresh_token_org_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -11769,27 +11772,30 @@ type ListRemoteSessionStatusesForSubjectParams struct {
 }
 
 type ListRemoteSessionStatusesForSubjectRow struct {
-	RemoteSessionClientID  uuid.UUID
-	AutoRefresh            bool
-	Resource               pgtype.Text
-	Scopes                 []string
-	AccessExpiresAt        pgtype.Timestamptz
-	AuthorizationExpiresAt pgtype.Timestamptz
-	RefreshExpiresAt       pgtype.Timestamptz
-	UpstreamSubject        pgtype.Text
-	UpstreamEmail          pgtype.Text
-	UpstreamDisplayName    pgtype.Text
-	IdentitySource         pgtype.Text
-	Enrichment             []byte
-	ID                     uuid.UUID
-	UpdatedAt              pgtype.Timestamptz
-	LastValidatedAt        pgtype.Timestamptz
-	ValidationStatus       pgtype.Text
-	ValidationReason       pgtype.Text
-	AccessTokenEncrypted   pgtype.Text
-	RefreshTokenEncrypted  pgtype.Text
-	CanRefresh             bool
-	Status                 string
+	RemoteSessionClientID    uuid.UUID
+	AutoRefresh              bool
+	Resource                 pgtype.Text
+	Scopes                   []string
+	AccessExpiresAt          pgtype.Timestamptz
+	AuthorizationExpiresAt   pgtype.Timestamptz
+	RefreshExpiresAt         pgtype.Timestamptz
+	UpstreamSubject          pgtype.Text
+	UpstreamEmail            pgtype.Text
+	UpstreamDisplayName      pgtype.Text
+	IdentitySource           pgtype.Text
+	Enrichment               []byte
+	ID                       uuid.UUID
+	UpdatedAt                pgtype.Timestamptz
+	LastValidatedAt          pgtype.Timestamptz
+	ValidationStatus         pgtype.Text
+	ValidationReason         pgtype.Text
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
+	CanRefresh               bool
+	Status                   string
 }
 
 // Bulk lookup for the consent renderer: returns each non-deleted
@@ -11862,8 +11868,11 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.OrganizationID,
 			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
 			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -11896,8 +11905,11 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.organization_id,
   s.access_token_encrypted,
+  s.access_token_org_encrypted,
   s.refresh_token_encrypted,
+  s.refresh_token_org_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -11931,27 +11943,30 @@ type ListRemoteSessionStatusesInTenantParams struct {
 }
 
 type ListRemoteSessionStatusesInTenantRow struct {
-	RemoteSessionClientID  uuid.UUID
-	AutoRefresh            bool
-	Resource               pgtype.Text
-	Scopes                 []string
-	AccessExpiresAt        pgtype.Timestamptz
-	AuthorizationExpiresAt pgtype.Timestamptz
-	RefreshExpiresAt       pgtype.Timestamptz
-	UpstreamSubject        pgtype.Text
-	UpstreamEmail          pgtype.Text
-	UpstreamDisplayName    pgtype.Text
-	IdentitySource         pgtype.Text
-	Enrichment             []byte
-	ID                     uuid.UUID
-	UpdatedAt              pgtype.Timestamptz
-	LastValidatedAt        pgtype.Timestamptz
-	ValidationStatus       pgtype.Text
-	ValidationReason       pgtype.Text
-	AccessTokenEncrypted   pgtype.Text
-	RefreshTokenEncrypted  pgtype.Text
-	CanRefresh             bool
-	Status                 string
+	RemoteSessionClientID    uuid.UUID
+	AutoRefresh              bool
+	Resource                 pgtype.Text
+	Scopes                   []string
+	AccessExpiresAt          pgtype.Timestamptz
+	AuthorizationExpiresAt   pgtype.Timestamptz
+	RefreshExpiresAt         pgtype.Timestamptz
+	UpstreamSubject          pgtype.Text
+	UpstreamEmail            pgtype.Text
+	UpstreamDisplayName      pgtype.Text
+	IdentitySource           pgtype.Text
+	Enrichment               []byte
+	ID                       uuid.UUID
+	UpdatedAt                pgtype.Timestamptz
+	LastValidatedAt          pgtype.Timestamptz
+	ValidationStatus         pgtype.Text
+	ValidationReason         pgtype.Text
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
+	CanRefresh               bool
+	Status                   string
 }
 
 // ListRemoteSessionStatusesForSubject for the auth client resolver, over the
@@ -11992,8 +12007,11 @@ func (q *Queries) ListRemoteSessionStatusesInTenant(ctx context.Context, arg Lis
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.OrganizationID,
 			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
 			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -16066,7 +16084,7 @@ WHERE s.subject_urn = $1
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
-RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted
 `
 
 type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
@@ -16078,9 +16096,12 @@ type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 }
 
 type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  pgtype.Text
-	RefreshTokenEncrypted pgtype.Text
+	RemoteSessionClientID    uuid.UUID
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
 }
 
 // Consent-screen disconnect: soft-deletes the subject's grant for one
@@ -16113,7 +16134,14 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 	var items []SoftDeleteRemoteSessionBySubjectAndClientRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionBySubjectAndClientRow
-		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.OrganizationID,
+			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -16157,7 +16185,7 @@ WHERE s.subject_urn = $1
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
   AND s.deleted IS FALSE
-RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted
 `
 
 type SoftDeleteRemoteSessionBySubjectAndClientInTenantParams struct {
@@ -16168,9 +16196,12 @@ type SoftDeleteRemoteSessionBySubjectAndClientInTenantParams struct {
 }
 
 type SoftDeleteRemoteSessionBySubjectAndClientInTenantRow struct {
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  pgtype.Text
-	RefreshTokenEncrypted pgtype.Text
+	RemoteSessionClientID    uuid.UUID
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
 }
 
 // SoftDeleteRemoteSessionBySubjectAndClient for a registration a server offers
@@ -16194,7 +16225,14 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClientInTenant(ctx context.
 	var items []SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
-		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.OrganizationID,
+			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -16301,13 +16339,16 @@ SET deleted_at = clock_timestamp(),
     validation_status = NULL,
     validation_reason = NULL
 WHERE remote_session_client_id = $1 AND deleted IS FALSE
-RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
+RETURNING remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, refresh_token_encrypted, refresh_token_org_encrypted
 `
 
 type SoftDeleteRemoteSessionsByClientIDRow struct {
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  pgtype.Text
-	RefreshTokenEncrypted pgtype.Text
+	RemoteSessionClientID    uuid.UUID
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
 }
 
 // Returns the stored credentials of every session it tombstones.
@@ -16320,7 +16361,14 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remote
 	var items []SoftDeleteRemoteSessionsByClientIDRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionsByClientIDRow
-		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.OrganizationID,
+			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -16345,13 +16393,16 @@ SET deleted_at = clock_timestamp(),
     validation_status = NULL,
     validation_reason = NULL
 WHERE remote_session_client_id = ANY($1::uuid[]) AND deleted IS FALSE
-RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
+RETURNING remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, refresh_token_encrypted, refresh_token_org_encrypted
 `
 
 type SoftDeleteRemoteSessionsByClientIDsRow struct {
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  pgtype.Text
-	RefreshTokenEncrypted pgtype.Text
+	RemoteSessionClientID    uuid.UUID
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
 }
 
 // Bulk form of SoftDeleteRemoteSessionsByClientID: the orphan cascade sweeps
@@ -16366,7 +16417,14 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientIDs(ctx context.Context, remot
 	var items []SoftDeleteRemoteSessionsByClientIDsRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionsByClientIDsRow
-		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.OrganizationID,
+			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -16410,7 +16468,7 @@ WHERE s.subject_urn = $2
     )
     OR s.user_session_issuer_id = usi.id
   )
-RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted
 `
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
@@ -16423,9 +16481,12 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
 }
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  pgtype.Text
-	RefreshTokenEncrypted pgtype.Text
+	RemoteSessionClientID    uuid.UUID
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
 }
 
 // Cascade for a revoked user session: tombstones every upstream grant the
@@ -16464,7 +16525,14 @@ func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx cont
 	var items []SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow
-		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.OrganizationID,
+			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -17268,6 +17336,111 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		&i.MetadataLastError,
 		&i.MetadataLastErrorAt,
 		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateRefreshedRemoteSessionIfUnchanged = `-- name: UpdateRefreshedRemoteSessionIfUnchanged :one
+UPDATE remote_sessions
+SET
+    access_expires_at = $1,
+    authorization_expires_at = $2,
+    -- A refresh that keeps the same refresh token and reports no deadline leaves the known one standing.
+    refresh_expires_at = CASE
+        WHEN $3::boolean THEN $4
+        ELSE COALESCE($4, refresh_expires_at) END,
+    scopes = $5,
+    resource = COALESCE(resource, NULLIF($6::text, '')),
+    -- JWT-derived display identity describes the access token being replaced;
+    -- the subject binding stays so a replacement token for another account is
+    -- still rejected. Higher ranked sources survive rotation until they restate.
+    upstream_email = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_email END,
+    upstream_display_name = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_display_name END,
+    identity_source = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE identity_source END,
+    -- A refreshed token has not been presented anywhere yet, and the stored
+    -- introspection answer described the token it replaces; a rotated refresh
+    -- token likewise retires the record of having introspected the old one.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    enrichment = CASE
+        WHEN $3::boolean
+        THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
+        ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
+    updated_at = clock_timestamp()
+WHERE subject_urn = $7
+  AND remote_session_client_id = $8
+  AND deleted IS FALSE
+  AND updated_at = $9
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRefreshedRemoteSessionIfUnchangedParams struct {
+	AccessExpiresAt        pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshTokenRotated    bool
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	BackfillResource       pgtype.Text
+	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientID  uuid.UUID
+	ExpectedUpdatedAt      pgtype.Timestamptz
+}
+
+// Compare-and-swap write for the refresh path. It stores no tokens: the
+// caller stores them with SetRemoteSessionTokens in the same transaction. Update-only on purpose: an
+// INSERT here would undo a revocation that landed mid-refresh. No rows means
+// another writer won or the session was revoked; both end in a re-auth challenge.
+// Keyed by (subject, client) + CAS only: the session's user_session_issuer_id
+// is provenance, never part of the credential's identity.
+// backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
+// COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
+// refresh_token_rotated is decided in Go on the plaintexts: ciphertexts differ on
+// every encryption, so they cannot say whether the provider echoed the same token.
+func (q *Queries) UpdateRefreshedRemoteSessionIfUnchanged(ctx context.Context, arg UpdateRefreshedRemoteSessionIfUnchangedParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, updateRefreshedRemoteSessionIfUnchanged,
+		arg.AccessExpiresAt,
+		arg.AuthorizationExpiresAt,
+		arg.RefreshTokenRotated,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+		arg.BackfillResource,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.OrganizationID,
+		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -18134,11 +18307,9 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 	return i, err
 }
 
-const updateRemoteSessionTokensIfUnchanged = `-- name: UpdateRemoteSessionTokensIfUnchanged :one
+const updateRemoteSessionTokensIfUnchangedFixture = `-- name: UpdateRemoteSessionTokensIfUnchangedFixture :one
 UPDATE remote_sessions
 SET
-    -- Cast for the same reason as in UpsertRemoteSession: switch to sqlc.narg
-    -- when finalized organizations write NULL, and never write '' instead.
     access_token_encrypted = $1::text,
     access_expires_at = $2,
     refresh_token_encrypted = $3,
@@ -18173,7 +18344,7 @@ WHERE subject_urn = $9
 RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
-type UpdateRemoteSessionTokensIfUnchangedParams struct {
+type UpdateRemoteSessionTokensIfUnchangedFixtureParams struct {
 	AccessTokenEncrypted   string
 	AccessExpiresAt        pgtype.Timestamptz
 	RefreshTokenEncrypted  pgtype.Text
@@ -18187,6 +18358,8 @@ type UpdateRemoteSessionTokensIfUnchangedParams struct {
 	ExpectedUpdatedAt      pgtype.Timestamptz
 }
 
+// Test fixture: UpdateRefreshedRemoteSessionIfUnchanged that also stores
+// platform-key token copies, for tests of organizations in platform_key.
 // Compare-and-swap write for the refresh path. Update-only on purpose: an
 // INSERT here would undo a revocation that landed mid-refresh. No rows means
 // another writer won or the session was revoked; both end in a re-auth challenge.
@@ -18196,8 +18369,8 @@ type UpdateRemoteSessionTokensIfUnchangedParams struct {
 // COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
 // refresh_token_rotated is decided in Go on the plaintexts: ciphertexts differ on
 // every encryption, so they cannot say whether the provider echoed the same token.
-func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg UpdateRemoteSessionTokensIfUnchangedParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, updateRemoteSessionTokensIfUnchanged,
+func (q *Queries) UpdateRemoteSessionTokensIfUnchangedFixture(ctx context.Context, arg UpdateRemoteSessionTokensIfUnchangedFixtureParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, updateRemoteSessionTokensIfUnchangedFixture,
 		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.RefreshTokenEncrypted,
@@ -18466,7 +18639,7 @@ func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredenti
 	return i, err
 }
 
-const upsertRemoteSession = `-- name: UpsertRemoteSession :one
+const upsertRemoteSessionFixture = `-- name: UpsertRemoteSessionFixture :one
 INSERT INTO remote_sessions (
     subject_urn,
     user_session_issuer_id,
@@ -18497,10 +18670,6 @@ VALUES (
         JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
         WHERE client.id = $3
     ),
-    -- The column is nullable, but every writer still stores a platform-key
-    -- token, so the cast keeps the parameter a string. Switch it to
-    -- sqlc.narg when a finalized organization starts writing NULL here; never
-    -- write '' in place of NULL.
     $4::text,
     $5,
     $6,
@@ -18541,7 +18710,7 @@ DO UPDATE SET
 RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
-type UpsertRemoteSessionParams struct {
+type UpsertRemoteSessionFixtureParams struct {
 	SubjectUrn             urn.SessionSubject
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
@@ -18560,26 +18729,178 @@ type UpsertRemoteSessionParams struct {
 	Enrichment             []byte
 }
 
+// Test fixture: UpsertRemoteSessionGrant that also stores platform-key token
+// copies, for tests of organizations in platform_key. Production stores
+// tokens through upstreamtokens.Tokens.SetRemoteSession instead.
 // Used by /mcp/remote_login_callback to materialise a fresh authorization for the
 // remote_session for a (subject, client) pair. Conflict target matches the
 // partial unique index on (subject_urn, remote_session_client_id) WHERE
 // deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
 // Attachments keep this source row and read its current credentials. Token refresh uses
-// UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
+// UpdateRefreshedRemoteSessionIfUnchanged and never advances this generation. A
 // soft-deleted row falls outside the partial index, so a re-auth after
 // revocation inserts a fresh active row alongside the tombstone.
 // organization_id is the client's organization, through its project first,
 // never the sign-in's: the issuer only records where the grant was made.
 // Joining organization_metadata leaves it NULL rather than failing the
 // sign-in when a project names an organization with no metadata row.
-func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessionParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, upsertRemoteSession,
+func (q *Queries) UpsertRemoteSessionFixture(ctx context.Context, arg UpsertRemoteSessionFixtureParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, upsertRemoteSessionFixture,
 		arg.SubjectUrn,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
 		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.RefreshTokenEncrypted,
+		arg.AuthorizationExpiresAt,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+		arg.Resource,
+		arg.AutoRefresh,
+		arg.UpstreamSubject,
+		arg.UpstreamEmail,
+		arg.UpstreamDisplayName,
+		arg.IdentitySource,
+		arg.Enrichment,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.OrganizationID,
+		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRemoteSessionGrant = `-- name: UpsertRemoteSessionGrant :one
+INSERT INTO remote_sessions (
+    subject_urn,
+    user_session_issuer_id,
+    remote_session_client_id,
+    organization_id,
+    access_expires_at,
+    authorization_expires_at,
+    refresh_expires_at,
+    scopes,
+    resource,
+    auto_refresh,
+    upstream_subject,
+    upstream_email,
+    upstream_display_name,
+    identity_source,
+    enrichment
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    (
+        SELECT org.id
+        FROM remote_session_clients AS client
+        LEFT JOIN projects AS project ON project.id = client.project_id
+        JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+        WHERE client.id = $3
+    ),
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12,
+    $13,
+    $14
+)
+ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    grant_generation = remote_sessions.grant_generation + 1,
+    -- Same client, so the same organization; this fills rows written before
+    -- the column existed.
+    organization_id = EXCLUDED.organization_id,
+    access_expires_at = EXCLUDED.access_expires_at,
+    authorization_expires_at = EXCLUDED.authorization_expires_at,
+    refresh_expires_at = EXCLUDED.refresh_expires_at,
+    scopes = EXCLUDED.scopes,
+    resource = EXCLUDED.resource,
+    -- A new grant replaces the identity wholesale and resets observed validity.
+    upstream_subject = EXCLUDED.upstream_subject,
+    upstream_email = EXCLUDED.upstream_email,
+    upstream_display_name = EXCLUDED.upstream_display_name,
+    identity_source = EXCLUDED.identity_source,
+    enrichment = EXCLUDED.enrichment,
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    updated_at = clock_timestamp()
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRemoteSessionGrantParams struct {
+	SubjectUrn             urn.SessionSubject
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientID  uuid.UUID
+	AccessExpiresAt        pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	Resource               pgtype.Text
+	AutoRefresh            bool
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
+}
+
+// Used by /mcp/remote_login_callback to materialise a fresh authorization for the
+// remote_session for a (subject, client) pair. It stores no tokens: the
+// caller stores them with SetRemoteSessionTokens in the same transaction,
+// which also replaces the tokens of a row this updates. Conflict target matches the
+// partial unique index on (subject_urn, remote_session_client_id) WHERE
+// deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
+// Attachments keep this source row and read its current credentials. Token refresh uses
+// UpdateRefreshedRemoteSessionIfUnchanged and never advances this generation. A
+// soft-deleted row falls outside the partial index, so a re-auth after
+// revocation inserts a fresh active row alongside the tombstone.
+// organization_id is the client's organization, through its project first,
+// never the sign-in's: the issuer only records where the grant was made.
+// Joining organization_metadata leaves it NULL rather than failing the
+// sign-in when a project names an organization with no metadata row.
+func (q *Queries) UpsertRemoteSessionGrant(ctx context.Context, arg UpsertRemoteSessionGrantParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, upsertRemoteSessionGrant,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.AccessExpiresAt,
 		arg.AuthorizationExpiresAt,
 		arg.RefreshExpiresAt,
 		arg.Scopes,

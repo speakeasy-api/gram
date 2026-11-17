@@ -379,7 +379,7 @@ func TestOrganizationUserSessionIssuerMigrateLeavesTombstonesOnSource(t *testing
 		ClientID: "tombstone-migrate-remote-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	remoteSession, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: sourceID, RemoteSessionClientID: remoteClient.ID,
 		AccessTokenEncrypted: "test-ciphertext", Scopes: []string{"openid"},
 	})
@@ -533,7 +533,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.Equal(t, int64(1), stamped)
 
 	subject := urn.NewUserSubject("remote-migrate-user")
-	remoteSession, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   sourceID,
 		RemoteSessionClientID: remoteClient.ID,

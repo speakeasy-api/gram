@@ -75,7 +75,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	cipher, err := ti.enc.Encrypt([]byte("upstream-placeholder"))
 	require.NoError(t, err)
 	createSession := func(subject urn.SessionSubject) uuid.UUID {
-		session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn: subject, UserSessionIssuerID: fx.target.UserSessionIssuerID,
 			RemoteSessionClientID: clientID, AccessTokenEncrypted: cipher,
 			AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{},

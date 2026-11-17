@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/sessionlist"
 	"strings"
 	"time"
@@ -252,8 +253,9 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgsessionsgen.Rev
 	// project-scoped RevokeRemoteSession; see upstreamrevoke.go.
 	s.revoker.RevokeDetached(ctx, RevokedCredentials{
 		RemoteSessionClientID: revoked.RemoteSessionClientID,
-		AccessTokenEncrypted:  revoked.AccessTokenEncrypted.String,
-		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+		OrganizationID:        revoked.OrganizationID,
+		AccessToken:           upstreamtokens.Stored(revoked.AccessTokenEncrypted, revoked.AccessTokenOrgEncrypted),
+		RefreshToken:          upstreamtokens.Stored(revoked.RefreshTokenEncrypted, revoked.RefreshTokenOrgEncrypted),
 	})
 
 	return nil

@@ -34,7 +34,7 @@ func TestServeAgentGateway_UnreadableConnectionAsksEditorsToReconnect(t *testing
 	q := remotesessionsrepo.New(ti.conn)
 	current, err := q.GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: urn.NewUserSubject(authCtx.UserID), RemoteSessionClientID: seeded.binding.RemoteSessionClientID})
 	require.NoError(t, err)
-	_, err = q.UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessionsrepo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = q.UpdateRemoteSessionTokensIfUnchangedFixture(ctx, remotesessionsrepo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: current.SubjectUrn, RemoteSessionClientID: current.RemoteSessionClientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: current.Scopes,
 	})
