@@ -641,7 +641,7 @@
 
   // Identity-chained cards render neutral, so they read right without script.
   // Check each exchange in the background and settle the card in place; any
-  // failure keeps the neutral copy and the separate sign-in fallback.
+  // failure keeps the neutral copy and the own-account fallback.
   var connectedSummary = document.querySelector("[data-connected-summary]");
   var chainActionURL = (function () {
     var services = document.querySelector("[data-service-connections]");
@@ -670,16 +670,26 @@
       return;
     }
     if (state === "rejected") {
+      var service = card.getAttribute("data-remote-display") || "";
+      var ownAccount = service
+        ? "your own " + service + " account"
+        : "your own account";
       status.className = "text-xs text-default-warning";
       status.textContent =
         result.message ||
-        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
+        "Your identity provider sign-in wasn't accepted. Use " +
+          ownAccount +
+          ".";
       var fallback = card.querySelector("button[data-connect-fallback]");
       if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
         fallback.className =
           "bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm";
         fallback.removeAttribute("data-connect-fallback");
-        fallback.textContent = "Use a separate sign-in";
+        fallback.textContent = "Use " + ownAccount;
+        // A long service name would crowd the text; the card's title already names it.
+        if (service && fallback.offsetWidth > card.offsetWidth / 2) {
+          fallback.textContent = "Use your own account";
+        }
       }
       signalChainRejected();
       return;

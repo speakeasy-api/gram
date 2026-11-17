@@ -120,7 +120,7 @@ func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
 	require.Contains(t, page, "0 of 1 connected", "a chained service counts once its check connects")
 	require.Contains(t, page, `data-chain-check="pending"`)
 	require.Contains(t, page, "data-connect-fallback")
-	require.Contains(t, page, "Use a separate sign-in instead")
+	require.Regexp(t, "Use your own .+ account instead", page)
 	require.Contains(t, page, `data-consent-enabled="true"`)
 	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 
@@ -237,7 +237,7 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, "a governed sole tunneled service must not auto-connect")
 	require.Nil(t, loc)
 	require.Contains(t, page, consentManagedCopy)
-	require.Contains(t, page, "Use a separate sign-in instead")
+	require.Regexp(t, "Use your own .+ account instead", page)
 
 	reqs := g.seen()
 	require.Len(t, reqs, 1)

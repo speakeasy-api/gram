@@ -83,7 +83,9 @@ const statuses = ['connected', 'rejected', 'ready', 'error', 'offline'].map((id)
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = fallbackClass;
-  const card = element({ 'data-remote-client': id });
+  const card = element({ 'data-remote-client': id, 'data-remote-display': 'Example' });
+  card.offsetWidth = 600;
+  fallback.offsetWidth = 180;
   card.querySelector = (selector) => ({
     'input[name="state"]': { value: 'state-1' },
     'input[name="csrf_token"]': { value: 'csrf-1' },
@@ -156,7 +158,7 @@ setTimeout(() => {
   assert.equal(no.status.textContent, 'Example refused.');
   assert.match(no.fallback.className, /\bbg-primary\b/);
   assert.match(no.fallback.className, /\bwhitespace-nowrap\b/, 'the label stays on one line beside long card text');
-  assert.equal(no.fallback.textContent, 'Use a separate sign-in');
+  assert.equal(no.fallback.textContent, 'Use your own Example account');
   assert.equal(no.fallback.getAttribute('data-connect-fallback'), null);
   assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');
   assert.deepEqual(dispatched, ['gram:consent-chain-rejected']);

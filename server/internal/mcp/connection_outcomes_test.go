@@ -782,7 +782,7 @@ func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 	ctx, fx, state := seedRefusedChainCheck(t, "attempt-inelig-", identitychaining.ReasonIneligibleIdentity)
 	rec := recordConnections(t, fx.ti)
 	for range 3 {
-		require.Contains(t, requireRefusedChainCheck(t, fx), "Ask your administrator, or use a separate sign-in.")
+		require.Contains(t, requireRefusedChainCheck(t, fx), "Ask your administrator, or use your own ")
 	}
 
 	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
