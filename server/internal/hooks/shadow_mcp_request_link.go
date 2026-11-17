@@ -58,6 +58,11 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 	if official, ok := s.shadowMCPOfficialServer(ctx, params.OrganizationID, params.ProjectID, params.Evidence.FullURL); ok && !official.DirectAccessAllowed {
 		return strings.TrimSpace(message) + "\n\n" + shadowMCPOfficialServerRedirect(official)
 	}
+	// The built-in blocklist has no policy to request a bypass of: its
+	// servers are blocked because an administrator denied them.
+	if params.RiskPolicyID == "" {
+		return message
+	}
 	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
 		return message

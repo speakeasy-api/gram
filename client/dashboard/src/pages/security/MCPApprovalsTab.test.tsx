@@ -132,7 +132,7 @@ describe("MCPApprovalsTab", () => {
     });
   });
 
-  it("renders the inventory with the policy status beside its description", () => {
+  it("renders the inventory under its description, with no policy card", () => {
     render(
       <MemoryRouter>
         <MCPApprovalsTab />
@@ -144,12 +144,8 @@ describe("MCPApprovalsTab", () => {
     expect(
       screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "No policy is enabled. All Shadow MCP servers are allowed.",
-      ),
-    ).toBeTruthy();
+    // The mode lives in the page header, so the tab shows no policy card.
+    expect(screen.queryByText("No Policy")).toBeNull();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
     expect(
@@ -219,12 +215,6 @@ describe("MCPApprovalsTab", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Blocking")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Block policy is enabled. Servers without allow rules are blocked for the policy's audience.",
-      ),
-    ).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();

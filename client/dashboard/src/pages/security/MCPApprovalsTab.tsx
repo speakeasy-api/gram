@@ -1,6 +1,5 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
-import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
@@ -94,12 +93,6 @@ export function MCPApprovalsTab(): JSX.Element {
           or raised in an access request, with its review state. Click a server
           for its evidence, requesters, and decision history.
         </Text>
-        {policyDataReady ? (
-          <ShadowMCPPolicyStatus
-            disposition={disposition}
-            policyState={policyState}
-          />
-        ) : null}
       </div>
       {policiesQuery.isError ? (
         <Alert variant="error">

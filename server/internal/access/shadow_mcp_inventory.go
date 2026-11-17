@@ -1405,6 +1405,15 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		}
 	}
 	if len(blockingPolicyIDs) == 0 {
+		// No blocking policy: the project is in the built-in blocklist mode.
+		// Every server connects except those whose standing decision is a
+		// denial, which are blocked for everyone, as the hooks enforce.
+		state.hasBlockingPolicy = true
+		for serverURL, approval := range state.approvalsByURL {
+			if approval.StandingDecision != nil && *approval.StandingDecision == shadowMCPInventoryBypassStatusDenied {
+				state.everyoneBlockedURLs[serverURL] = struct{}{}
+			}
+		}
 		return state, nil
 	}
 

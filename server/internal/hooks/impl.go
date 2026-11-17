@@ -519,12 +519,15 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 	return logger
 }
 
-// lookupShadowMCPBlockingPolicy returns the first enabled shadow_mcp policy
-// with action=block for the given project, or nil when no such policy exists.
-// A nil scanner (test setups) or lookup failure returns nil so the hook falls
-// back to permissive behaviour. Flag-action policies are intentionally ignored
-// here — they surface as findings via the batch scanner instead of denying at
-// the hook layer.
+// lookupShadowMCPBlockingPolicy returns the shadow_mcp policy that governs a
+// user's MCP calls in a project. An enabled blocking policy that applies to
+// the user wins. Without one the project is in the built-in blocklist mode:
+// an implicit allow-all policy whose blocked list is the servers an
+// administrator denied, so a denial and a link to an official version take
+// effect with no policy to set up. Flag-action policies are intentionally
+// ignored here; they surface as findings via the batch scanner instead of
+// denying at the hook layer. A nil scanner (test setups) or a lookup failure
+// returns nil so the hook falls back to permissive behaviour.
 func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
 	if s.riskScanner == nil || projectID == "" {
 		return nil
@@ -540,5 +543,33 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		)
 		return nil
 	}
-	return policy
+	if policy != nil {
+		return policy
+	}
+	return s.implicitShadowMCPPolicy(ctx, pid)
+}
+
+// implicitShadowMCPPolicy is the built-in blocklist for a project without a
+// blocking policy. It has no ID: blocks it causes are recorded without a
+// policy, and the block message offers no request link, since a server is
+// only on this list because an administrator denied it.
+func (s *Service) implicitShadowMCPPolicy(ctx context.Context, projectID uuid.UUID) *risk.ShadowMCPPolicy {
+	if s.shadowMCPClient == nil {
+		return nil
+	}
+	denied, err := s.shadowMCPClient.DeniedServerURLs(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to list denied shadow mcp servers; defaulting to off",
+			attr.SlogError(err),
+		)
+		return nil
+	}
+	return &risk.ShadowMCPPolicy{
+		ID:          "",
+		Name:        shadowmcp.ImplicitPolicyName,
+		Version:     0,
+		UserMessage: nil,
+		Disposition: risk.ShadowMCPDispositionAllowAll,
+		BlockedURLs: denied,
+	}
 }

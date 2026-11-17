@@ -277,3 +277,36 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 	})
 	require.Error(t, err)
 }
+
+// Without a blocking policy the project is in the built-in blocklist mode:
+// a server reads as allowed until an administrator denies it, then blocked.
+// There is no "observed" in-between.
+func TestService_ReadShadowMCPInventoryTarget_BuiltInBlocklist(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+	read := func() *gen.ShadowMCPInventoryServer {
+		server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			TargetKind:     shadowMCPTargetKindServerURL,
+			TargetKey:      "https://github.example.com/mcp",
+		})
+		require.NoError(t, err)
+		return server
+	}
+
+	server := read()
+	require.Equal(t, shadowMCPInventoryAccessAllowed, server.Access)
+	require.NotNil(t, server.AccessSummary)
+	require.Equal(t, shadowMCPAccessStateAllowed, server.AccessSummary.State)
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://github.example.com/mcp", "denied", 0)
+	seedApprovalDecisionRow(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, request.ID, "denied", []string{"user:all"})
+
+	server = read()
+	require.Equal(t, shadowMCPInventoryAccessBlocked, server.Access)
+	require.Equal(t, shadowMCPAccessStateBlocked, server.AccessSummary.State)
+}

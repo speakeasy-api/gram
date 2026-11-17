@@ -114,6 +114,48 @@ func (q *Queries) GetShadowMCPOfficialServerChoice(ctx context.Context, arg GetS
 	return i, err
 }
 
+const listDeniedShadowMCPServerURLs = `-- name: ListDeniedShadowMCPServerURLs :many
+SELECT r.target_key
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.target_kind = 'server_url'
+  AND r.deleted IS FALSE
+  AND r.status <> 'superseded'
+  AND (
+    SELECT d.decision
+    FROM mcp_approval_decisions d
+    WHERE d.mcp_approval_request_id = r.id
+      AND d.project_id = r.project_id
+      AND d.deleted IS FALSE
+    ORDER BY d.decided_at DESC, d.id DESC
+    LIMIT 1
+  ) = 'denied'
+`
+
+// The server URLs whose standing decision in a project is a denial. With no
+// blocking Shadow MCP policy, a project is in the built-in blocklist mode:
+// every server connects except these. A superseded request carries no
+// standing decision.
+func (q *Queries) ListDeniedShadowMCPServerURLs(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDeniedShadowMCPServerURLs, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var target_key string
+		if err := rows.Scan(&target_key); err != nil {
+			return nil, err
+		}
+		items = append(items, target_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listShadowMCPOfficialServerChoices = `-- name: ListShadowMCPOfficialServerChoices :many
 SELECT
     c.server_url,

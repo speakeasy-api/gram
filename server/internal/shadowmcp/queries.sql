@@ -83,3 +83,24 @@ FROM mcp_servers
 WHERE id = @id
     AND project_id = @project_id
     AND deleted IS FALSE;
+
+-- name: ListDeniedShadowMCPServerURLs :many
+-- The server URLs whose standing decision in a project is a denial. With no
+-- blocking Shadow MCP policy, a project is in the built-in blocklist mode:
+-- every server connects except these. A superseded request carries no
+-- standing decision.
+SELECT r.target_key
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.target_kind = 'server_url'
+  AND r.deleted IS FALSE
+  AND r.status <> 'superseded'
+  AND (
+    SELECT d.decision
+    FROM mcp_approval_decisions d
+    WHERE d.mcp_approval_request_id = r.id
+      AND d.project_id = r.project_id
+      AND d.deleted IS FALSE
+    ORDER BY d.decided_at DESC, d.id DESC
+    LIMIT 1
+  ) = 'denied';

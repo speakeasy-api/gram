@@ -81,7 +81,11 @@ import {
   type RuleCategory,
   type PolicyAction,
 } from "./policy-data";
-import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
+import {
+  isShadowMCPModePolicy,
+  POLICY_TYPE_LABEL,
+  policyTypeOf,
+} from "./policy-type";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { useDetectionRulesStore } from "./detection-rules-data";
@@ -642,6 +646,9 @@ function PolicyCenterContent() {
     (): PolicyRow[] =>
       (data?.policies ?? [])
         .filter((policy) => nlEnabled || !isPromptPolicy(policy))
+        // The Shadow MCP page owns the policy behind "blocked by default"; it
+        // is a setting there, not a policy here.
+        .filter((policy) => !isShadowMCPModePolicy(policy))
         .map((policy) => {
           const kind: PolicyKind = isPromptPolicy(policy) ? "prompt" : "risk";
           return { kind, policy };
