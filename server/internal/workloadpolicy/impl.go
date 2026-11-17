@@ -44,7 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -377,21 +377,18 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 	return &types.WorkloadTokenEndpoints{Items: items}, nil
 }
 
-// mcpHost is the host an organization's MCP servers are reached on: its custom
-// domain when that domain carries an IP allowlist, which locks the platform
-// host out, and platformHost otherwise.
+// mcpHost is the host an organization's MCP servers are reached on: its
+// custom domain when that domain carries an IP allowlist and is serving, since
+// the allowlist locks the platform host out, and platformHost otherwise.
 func (s *Service) mcpHost(ctx context.Context, organizationID string, platformHost string) (string, error) {
-	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, organizationID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return platformHost, nil
-	case err != nil:
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organizationID)
+	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to read the organization's custom domain").LogError(ctx, s.logger)
 	}
-	if len(domain.IpAllowlist) == 0 {
+	if lockdown.ServingHost == "" {
 		return platformHost, nil
 	}
-	return domain.Domain, nil
+	return lockdown.ServingHost, nil
 }
 
 // requireTrustDomain enforces the WIMSE identifier draft's guidance that a trust

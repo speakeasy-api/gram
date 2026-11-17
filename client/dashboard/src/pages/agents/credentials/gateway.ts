@@ -24,19 +24,28 @@ function platformBase(): string {
  * The origin agents must dial when it is not the platform host. An
  * organization whose custom domain has an IP allowlist is locked out of the
  * platform host, so its agents reach the gateway on that domain, where the
- * allowlist is enforced. Every other organization uses the platform host.
+ * allowlist is enforced, once the domain is verified and activated. Before
+ * then the domain refuses traffic too, so the platform host is quoted. Every
+ * other organization uses the platform host.
  */
 export function agentGatewayBase(
-  domain: Pick<CustomDomain, "domain" | "ipAllowlist"> | undefined,
+  domain:
+    | Pick<CustomDomain, "domain" | "ipAllowlist" | "verified" | "activated">
+    | undefined,
 ): string | undefined {
   if (!domain || domain.ipAllowlist.length === 0) return undefined;
+  if (!domain.verified || !domain.activated) return undefined;
   return `https://${domain.domain}`;
 }
 
-/** agentGatewayURL on the organization's own origin. Empty without an agent. */
+/**
+ * agentGatewayURL on the organization's own origin. Empty without an agent,
+ * and while the custom domain is loading, so an allowlisted organization is
+ * never shown the platform address it is locked out of.
+ */
 export function useAgentGatewayURL(agentID: string | null | undefined): string {
-  const { domain } = useCustomDomain();
-  if (!agentID) return "";
+  const { domain, isLoading } = useCustomDomain();
+  if (!agentID || isLoading) return "";
   return agentGatewayURL(agentID, agentGatewayBase(domain));
 }
 
@@ -74,6 +83,13 @@ export async function mintInstallCommand(
   // browser may not be inside a custom domain's IP allowlist, and the server
   // writes the organization's own gateway address into the installed config.
   const installURL = new URL(new URL(gatewayURL).pathname, platformBase());
+  // The key goes to the platform host, not the quoted gateway, so that is
+  // the host whose transport must be safe.
+  if (!isCredentialSafe(installURL.toString())) {
+    throw new Error(
+      `This deployment serves MCP over plaintext HTTP at ${installURL.origin}, so a setup command is not prepared: it would send the agent key unencrypted.`,
+    );
+  }
   const response = await fetch(`${installURL.toString()}/install-code`, {
     method: "POST",
     headers: { Authorization: `Bearer ${secret}` },

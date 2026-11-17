@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -32,6 +33,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 // AgentInstallCodeRoute mints a code; AgentInstallScriptRoute redeems it.
@@ -115,15 +117,22 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 	}
 
 	// The installed runtime dials the gateway where the organization's
-	// lockdown lets it: its custom domain when that domain has an IP allowlist,
-	// since the platform host refuses it there.
+	// lockdown lets it: its custom domain when that domain has an IP allowlist
+	// and is serving, since the platform host refuses it there.
 	gatewayBaseURL := serverURL
-	lockdownDomain, err := s.organizationLockdownDomain(ctx, s.logger, organizationID)
+	lockdown, err := s.organizationLockdown(ctx, s.logger, organizationID)
 	if err != nil {
 		return err
 	}
-	if lockdownDomain != "" {
-		gatewayBaseURL = "https://" + lockdownDomain
+	if lockdown.ServingHost != "" {
+		gatewayBaseURL = "https://" + lockdown.ServingHost
+	}
+
+	// Hooks report to /rpc/hooks.*, which only the platform hosts serve, so a
+	// code minted on a custom domain still points them at the platform.
+	hooksServerURL := serverURL
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfaceCustomDomain {
+		hooksServerURL = strings.TrimSuffix(s.serverURL.String(), "/")
 	}
 
 	code, err := newInstallCode()
@@ -135,7 +144,7 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		AgentID:         agentID.String(),
 		Key:             httpheaders.AuthorizationBearerToken(r),
 		URL:             gatewayBaseURL + "/agent-mcp/" + agentID.String(),
-		ServerURL:       serverURL,
+		ServerURL:       hooksServerURL,
 		OrganizationID:  organizationID,
 		ProjectSlug:     projectSlug,
 		InstallFailOpen: s.hooksInstallFailOpen(ctx, organizationID),

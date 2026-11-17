@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
@@ -146,29 +145,21 @@ func (s *Service) endpointCustomDomainLockdown(ctx context.Context, logger *slog
 // project only to read the organization off it — so surfaces that know their
 // organization directly can ask at that scope.
 func (s *Service) organizationCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (bool, error) {
-	domain, err := s.organizationLockdownDomain(ctx, logger, organizationID)
+	lockdown, err := s.organizationLockdown(ctx, logger, organizationID)
 	if err != nil {
 		return false, err
 	}
-	return domain != "", nil
+	return lockdown.LockedDown, nil
 }
 
-// organizationLockdownDomain is the custom domain an organization's MCP
-// traffic is pinned to: its domain when that domain carries an IP allowlist,
-// and empty when the organization has no domain or an open one.
-func (s *Service) organizationLockdownDomain(ctx context.Context, logger *slog.Logger, organizationID string) (string, error) {
-	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, organizationID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil
-	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+// organizationLockdown reads the organization's custom-domain lockdown,
+// including the host its traffic must use once the domain is serving.
+func (s *Service) organizationLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (customdomains.Lockdown, error) {
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organizationID)
+	if err != nil {
+		return customdomains.Lockdown{}, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
 	}
-
-	if len(domain.IpAllowlist) == 0 {
-		return "", nil
-	}
-	return domain.Domain, nil
+	return lockdown, nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,

@@ -66,7 +66,12 @@ const mocks = vi.hoisted(() => ({
   getPlugin: vi.fn(),
   listPolicyGrants: vi.fn(),
   // The organization's custom domain, if any.
-  customDomains: [] as { domain: string; ipAllowlist: string[] }[],
+  customDomains: [] as {
+    domain: string;
+    ipAllowlist: string[];
+    verified: boolean;
+    activated: boolean;
+  }[],
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -735,7 +740,12 @@ describe("Provisioning a new agent", () => {
 
   it("quotes the custom domain when its IP allowlist locks the platform host", async () => {
     mocks.customDomains = [
-      { domain: "mcp.example.com", ipAllowlist: ["203.0.113.0/24"] },
+      {
+        domain: "mcp.example.com",
+        ipAllowlist: ["203.0.113.0/24"],
+        verified: true,
+        activated: true,
+      },
     ];
     fireEvent.click(await reachCredentialStep());
 

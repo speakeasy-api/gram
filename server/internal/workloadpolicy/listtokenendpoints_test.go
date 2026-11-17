@@ -210,8 +210,9 @@ func issuerIDs(items []*types.WorkloadTokenEndpoint) []string {
 }
 
 // An organization whose custom domain has an IP allowlist is locked out of the
-// platform host, so its MCP servers are reached on the domain and that is the
-// host a platform must be allowed to call. An open domain changes nothing.
+// platform host, so once the domain is serving its MCP servers are reached
+// there, and that is the host a platform must be allowed to call. An open
+// domain changes nothing.
 func TestListTokenEndpoints_McpHostFollowsAllowlistedCustomDomain(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -231,10 +232,20 @@ func TestListTokenEndpoints_McpHostFollowsAllowlistedCustomDomain(t *testing.T) 
 	require.Len(t, result.Items, 1)
 	require.Equal(t, "gram.example.com", result.Items[0].McpHost)
 
-	_, err = domains.UpdateCustomDomainIPAllowlist(ctx, customdomainsrepo.UpdateCustomDomainIPAllowlistParams{
+	domain, err := domains.UpdateCustomDomainIPAllowlist(ctx, customdomainsrepo.UpdateCustomDomainIPAllowlistParams{
 		OrganizationID: ti.orgID,
 		IpAllowlist:    []string{"203.0.113.0/24"},
 	})
+	require.NoError(t, err)
+
+	// Until the domain is verified and activated it refuses traffic, so it is
+	// not an address a platform can use yet.
+	result, err = ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "gram.example.com", result.Items[0].McpHost)
+
+	_, err = domains.UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{ID: domain.ID, Verified: true, Activated: true})
 	require.NoError(t, err)
 
 	result, err = ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
