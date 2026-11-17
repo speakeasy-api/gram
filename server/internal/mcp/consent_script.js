@@ -654,27 +654,22 @@
     return service ? "your own " + service + " account" : "your own account";
   }
 
-  // Labels a card's own-account link with the service's name when fits
+  // Labels a card's own-account button with the service's name when fits
   // allows it, and "Use your own account" otherwise.
-  function labelOwnAccount(card, link, fits) {
-    var chevron = document.createElement("span");
-    chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = "\u203a";
-    link.textContent = "Use " + ownAccount(card);
-    link.appendChild(chevron);
-    if (card.getAttribute("data-remote-display") && !fits(link)) {
-      link.textContent = "Use your own account";
-      link.appendChild(chevron);
+  function labelOwnAccount(card, button, fits) {
+    button.textContent = "Use " + ownAccount(card);
+    if (card.getAttribute("data-remote-display") && !fits(button)) {
+      button.textContent = "Use your own account";
     }
   }
 
-  // Beside the card's text a long service name would crowd it, so the link
+  // Beside the card's text a long service name would crowd it, so the button
   // keeps it within half the card; under the text, within the card's width.
   // The card's title already names the service.
   Array.prototype.forEach.call(
     document.querySelectorAll("button[data-connect-fallback]"),
-    function (link) {
-      var card = link.closest("[data-remote-client]");
+    function (button) {
+      var card = button.closest("[data-remote-client]");
       if (!card) {
         return;
       }
@@ -682,10 +677,10 @@
       var actions = card.querySelector("[data-card-actions]");
       var besideText =
         !row || window.getComputedStyle(row).flexDirection === "row";
-      labelOwnAccount(card, link, function (button) {
+      labelOwnAccount(card, button, function (labelled) {
         return besideText || !actions
-          ? button.offsetWidth <= card.offsetWidth / 2
-          : button.offsetWidth <= actions.clientWidth;
+          ? labelled.offsetWidth <= card.offsetWidth / 2
+          : labelled.offsetWidth <= actions.clientWidth;
       });
     },
   );
