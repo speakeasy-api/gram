@@ -12,7 +12,7 @@ import {
   useMembers,
 } from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,

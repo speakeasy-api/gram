@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Spinner } from "@/components/ui/Spinner";
 import { Stack } from "@/components/ui/Stack";
 import type { Column } from "@/components/ui/Table";

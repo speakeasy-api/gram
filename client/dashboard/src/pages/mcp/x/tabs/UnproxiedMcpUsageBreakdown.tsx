@@ -1,7 +1,7 @@
 import { IdentityLink } from "@/components/identity-link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { type Column, Table } from "@/components/ui/Table";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { buildGetUnproxiedMcpServerToolUsageQuery } from "@gram/client/react-query/getUnproxiedMcpServerToolUsage.js";
 import { buildGetUnproxiedMcpServerUserUsageQuery } from "@gram/client/react-query/getUnproxiedMcpServerUserUsage.js";

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { Heading } from "@/components/ui/Heading";
 import { SplashScreen } from "@/components/ui/LogoLoader";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";

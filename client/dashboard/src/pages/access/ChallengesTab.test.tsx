@@ -46,7 +46,7 @@ vi.mock("@/hooks/useReadableAgents", () => ({
   useReadableAgents: () => ({ data: [], isError: false }),
 }));
 
-vi.mock("@/components/ui/Skeleton", () => ({
+vi.mock("@/components/ui/SkeletonTable", () => ({
   SkeletonTable: () => <div data-testid="skeleton-table" />,
 }));
 

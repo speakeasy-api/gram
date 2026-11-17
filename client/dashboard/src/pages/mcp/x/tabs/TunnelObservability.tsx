@@ -35,7 +35,7 @@ import {
   Tooltip,
   type ChartOptions,
 } from "chart.js";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Line } from "react-chartjs-2";

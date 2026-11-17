@@ -24,7 +24,7 @@ import type { ChatMessage } from "@gram/client/models/components/chatmessage.js"
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useQuery } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { TriangleAlert } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { useLayoutEffect, useRef, useState } from "react";

@@ -14,7 +14,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { z } from "zod";
 import {
   invalidateAllListInvites,

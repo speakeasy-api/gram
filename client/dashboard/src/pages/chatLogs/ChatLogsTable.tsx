@@ -30,7 +30,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Table, type Column, type SortDescriptor } from "@/components/ui/Table";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import {
   ArrowUpRight,
   CircleDashed,
@@ -56,7 +56,7 @@ import {
   summarizeLineage,
   type LineageSummary,
 } from "./sessionLinks";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];

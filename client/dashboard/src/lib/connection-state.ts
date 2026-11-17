@@ -1,4 +1,4 @@
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionUpstream } from "@gram/client/models/components/usersessionupstream.js";

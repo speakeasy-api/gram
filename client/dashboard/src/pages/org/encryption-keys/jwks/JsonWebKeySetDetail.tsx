@@ -8,7 +8,8 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
-import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { activeDetailTab } from "@/lib/detail-tabs";

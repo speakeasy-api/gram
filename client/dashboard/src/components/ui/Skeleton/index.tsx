@@ -2,7 +2,6 @@ import { Children, cloneElement, isValidElement } from "react";
 import { cn } from "@/lib/utils";
 import "./skeleton.css";
 import { Stack } from "../Stack";
-import { Table, type Column } from "../Table";
 
 export interface SkeletonProps {
   /**
@@ -86,42 +85,6 @@ export function Skeleton({
             ),
           });
       })}
-    </div>
-  );
-}
-
-/**
- * A five-row placeholder shaped like a data table. Pass `columns` (one grid
- * width per column) to match the table it stands in for.
- */
-export function SkeletonTable({
-  className,
-  label,
-  columns: widths = ["0.25fr", "0.5fr", "1fr"],
-}: {
-  className?: string;
-  columns?: Column<{ a: string }>["width"][];
-} & Pick<SkeletonProps, "label"> = {}): React.JSX.Element {
-  const columns: Column<{ a: string }>[] = widths.map((width, i) => ({
-    header: "",
-    key: String(i),
-    render: () => (
-      <Skeleton>
-        <div className="h-6 w-full" />
-      </Skeleton>
-    ),
-    width,
-  }));
-
-  return (
-    <div {...statusProps(label)}>
-      <Table
-        columns={columns}
-        data={[{ a: "a" }, { a: "b" }, { a: "c" }, { a: "d" }, { a: "e" }]}
-        rowKey={(row) => row.a}
-        hideHeader
-        className={className}
-      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 
 export type DayGroup<T> = {
   /** The local calendar day, yyyy-MM-dd. */

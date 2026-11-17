@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import type { Column } from "@/components/ui/Table";
 import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";

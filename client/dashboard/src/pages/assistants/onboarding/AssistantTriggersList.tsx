@@ -8,7 +8,7 @@ import type { TriggerEvent } from "@gram/client/models/components/triggerevent.j
 import { TriggerEventStatus } from "@gram/client/models/components/triggerevent.js";
 import type { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
 import { useTriggerEvents } from "@gram/client/react-query/triggerEvents.js";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useState } from "react";
 import { slackReplyModeLabel } from "./slackCapabilities";
 import { Skeleton } from "@/components/ui/Skeleton";

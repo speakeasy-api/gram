@@ -1,5 +1,5 @@
 import { ShadowAISetupEmptyState } from "@/components/setup-empty-state";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { Page } from "@/components/page-layout";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";

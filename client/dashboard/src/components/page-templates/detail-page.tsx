@@ -2,7 +2,7 @@ import { DetailBody } from "@/components/detail-body";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import type { ReleaseStage } from "@/components/release-stage-badge";
 import type { ReactNode } from "react";
 import { TabbedPage, type PageTab } from "./tabbed-page";

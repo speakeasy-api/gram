@@ -7,7 +7,7 @@ import {
   type FilterValue,
   useFilterState,
 } from "@/components/filters";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";

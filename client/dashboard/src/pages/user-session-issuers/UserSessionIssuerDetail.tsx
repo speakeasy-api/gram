@@ -44,7 +44,7 @@ import {
   unavailableReason,
 } from "./issuerDisplay";
 import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 
 export default function UserSessionIssuerDetail(): JSX.Element {
   const orgRoutes = useOrgRoutes();

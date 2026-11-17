@@ -2,7 +2,7 @@ import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Heading } from "@/components/ui/Heading";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";

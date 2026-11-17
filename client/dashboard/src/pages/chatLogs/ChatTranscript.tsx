@@ -13,7 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowUp,

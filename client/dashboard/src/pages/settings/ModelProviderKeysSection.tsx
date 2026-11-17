@@ -1,7 +1,7 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useOrganization } from "@/contexts/Auth";
 import { Heading } from "@/components/ui/Heading";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";

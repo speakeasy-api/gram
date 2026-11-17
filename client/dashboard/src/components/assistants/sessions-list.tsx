@@ -23,7 +23,7 @@ import { useRoutes } from "@/routes";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useAssistantSessionSummary } from "@gram/client/react-query/assistantSessionSummary.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useEffect, useState } from "react";
 
 const SESSION_PAGE_LIMIT = 8;

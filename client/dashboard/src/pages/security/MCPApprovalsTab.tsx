@@ -12,7 +12,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";

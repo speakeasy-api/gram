@@ -2,7 +2,7 @@ import { HumanizeDateTime } from "@/lib/dates";
 
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
-import { isAfter } from "date-fns";
+import { isAfter } from "date-fns/isAfter";
 import { Text } from "@/components/ui/Text";
 
 export function UpdatedAt({

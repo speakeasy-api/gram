@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import {

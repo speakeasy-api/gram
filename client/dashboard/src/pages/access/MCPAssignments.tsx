@@ -24,7 +24,7 @@ import {
   AssignmentProject,
   AssignmentServerIcon,
 } from "./AssignmentServerIcon";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Sheet,

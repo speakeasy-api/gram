@@ -19,7 +19,7 @@ import {
   ServerPickerSheet,
   type ServerPickerOption,
 } from "@/components/mcp/ServerPickerSheet";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";

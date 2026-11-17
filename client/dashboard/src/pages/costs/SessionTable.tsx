@@ -1,10 +1,10 @@
 import { formatCost } from "@/lib/money";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { SessionSummary } from "@gram/client/models/components/sessionsummary.js";
 import { llmTokens } from "./taxonomy";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { formatDurationFromNanos } from "../chatLogs/claudeUsage";

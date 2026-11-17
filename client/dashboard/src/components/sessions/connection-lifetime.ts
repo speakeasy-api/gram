@@ -1,4 +1,4 @@
-import { formatDistance } from "date-fns";
+import { formatDistance } from "date-fns/formatDistance";
 
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import { dateTimeFormatters } from "@/lib/dates";

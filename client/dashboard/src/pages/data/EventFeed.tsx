@@ -26,7 +26,7 @@ import {
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EventDetailSheet } from "./EventDetailSheet";
 import { EventKindBadge, EventSourceIcon } from "./event-display";

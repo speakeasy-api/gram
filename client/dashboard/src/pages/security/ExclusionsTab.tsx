@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import {
@@ -23,7 +23,7 @@ import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpd
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import type { JSX, ReactNode } from "react";
 import { Ellipsis, Plus } from "lucide-react";
 import { serializeExclusionExpression } from "./exclusion-expression";

@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { StatRow, type StatRowMetric } from "@/components/stat-row";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import type { IconName } from "@/components/ui/Icon/names";
 import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { cn } from "@/lib/utils";

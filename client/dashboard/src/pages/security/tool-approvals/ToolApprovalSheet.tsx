@@ -18,7 +18,7 @@ import { useRiskDecideApprovalMutation } from "@gram/client/react-query/riskDeci
 import { invalidateAllRiskGetApproval } from "@gram/client/react-query/riskGetApproval.js";
 import { invalidateAllRiskListApprovals } from "@gram/client/react-query/riskListApprovals.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { approvalStatusBadge, requesterLabel } from "./approval-labels";

@@ -29,7 +29,7 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { keepPreviousData } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";

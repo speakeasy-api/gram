@@ -349,7 +349,7 @@ vi.mock("@/components/ui/Table", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/Skeleton", () => ({
+vi.mock("@/components/ui/SkeletonTable", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
