@@ -172,7 +172,7 @@ func (s *Service) ListClientSessions(ctx context.Context, payload *orgsessionsge
 			case "expiry":
 				at = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
 				grantExpiry := last.AccessExpiresAt
-				if last.RefreshTokenEncrypted.Valid {
+				if upstreamtokens.Has(upstreamtokens.Stored(last.RefreshTokenEncrypted, last.RefreshTokenOrgEncrypted)) {
 					grantExpiry = last.RefreshExpiresAt
 				}
 				for _, deadline := range []pgtype.Timestamptz{last.AuthorizationExpiresAt, grantExpiry} {
@@ -298,7 +298,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 
 	// Defense in depth: the UI hides the action for sessions without a refresh
 	// token, but the gate is not authoritative.
-	if !row.RemoteSession.RefreshTokenEncrypted.Valid || row.RemoteSession.RefreshTokenEncrypted.String == "" {
+	if !hasRefreshToken(row.RemoteSession) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "remote session has no refresh token").LogError(ctx, logger)
 	}
 

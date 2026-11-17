@@ -221,7 +221,7 @@ func (m *ChallengeManager) RefreshAuthClientRemoteSession(ctx context.Context, a
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session in tenant: %w", err)
 	}
-	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
+	if !hasRefreshToken(session) {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 

@@ -1391,7 +1391,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
+	if !hasRefreshToken(session) {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 

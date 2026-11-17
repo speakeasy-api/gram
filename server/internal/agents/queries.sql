@@ -565,7 +565,7 @@ WHERE a.organization_id = @organization_id
     )
     OR (s.authorization_expires_at IS NOT NULL AND s.authorization_expires_at <= now())
     OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
-      AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
+      AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= now()))
   );
 
 -- name: ListOwnedAgentIDs :many
