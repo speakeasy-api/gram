@@ -167,15 +167,67 @@ func (n LocalNamer) owns(hostname string) bool {
 	return strings.HasPrefix(hostname, n.qualifier+"-")
 }
 
+// QualifiedNamer names a deployed environment's gateway machines after its
+// qualifier, speakeasy-gw-<qualifier>-<slot>, so two environments serving one
+// tailnet, such as dev beside production, register devices that can be told
+// apart. Hostnames, services and ownership are production's: the qualifier
+// renames only what each environment registers for itself.
+type QualifiedNamer struct {
+	ProductionNamer
+
+	qualifier string
+}
+
+var _ Namer = QualifiedNamer{ProductionNamer: ProductionNamer{}, qualifier: ""}
+
+// machineNameQualifierPattern accepts a short lowercase qualifier such as dev.
+// At most 8 characters keeps machine names short, and without punctuation the
+// qualifier fits auth key descriptions, which Tailscale limits to letters,
+// digits and spaces.
+var machineNameQualifierPattern = regexp.MustCompile(`^[a-z0-9]{1,8}$`)
+
+// ErrQualifierWithDevID rejects a machine name qualifier beside a development
+// id: a local stack already qualifies every name with its id.
+var ErrQualifierWithDevID = errors.New("a gateway machine name qualifier cannot be combined with a network ingress development id")
+
+// NewQualifiedNamer returns the namer for an environment's machine name
+// qualifier. Qualifiers starting with local are refused so an environment's
+// machines never look like a local stack's.
+func NewQualifiedNamer(qualifier string) (QualifiedNamer, error) {
+	if !machineNameQualifierPattern.MatchString(qualifier) || strings.HasPrefix(qualifier, "local") {
+		return QualifiedNamer{ProductionNamer: ProductionNamer{}, qualifier: ""}, fmt.Errorf("invalid gateway machine name qualifier %q: use up to 8 lowercase letters or digits, not starting with local", qualifier)
+	}
+	return QualifiedNamer{ProductionNamer: ProductionNamer{}, qualifier: qualifier}, nil
+}
+
+func (n QualifiedNamer) ServiceComment(context.Context) (string, error) {
+	return fmt.Sprintf("%s (%s)", productionServiceComment, n.qualifier), nil
+}
+
+func (n QualifiedNamer) MachineName(_ context.Context, slot int32) (string, error) {
+	return fmt.Sprintf("%s%s-%d", machineNamePrefix, n.qualifier, slot), nil
+}
+
+func (n QualifiedNamer) AuthKeyDescription(_ context.Context, ingressID uuid.UUID, slot int32) (string, error) {
+	return fmt.Sprintf("Speakeasy gateway %s %s slot %d", n.qualifier, shortIngressID(ingressID), slot), nil
+}
+
 // NewNamer selects the namer for a process: a LocalNamer when a development
-// id is configured, which only local development accepts, and the
-// ProductionNamer otherwise.
-func NewNamer(environment, devID string) (Namer, error) {
-	if devID == "" {
+// id is configured, which only local development accepts; a QualifiedNamer
+// when a gateway machine name qualifier is; and the ProductionNamer
+// otherwise.
+func NewNamer(environment, devID, qualifier string) (Namer, error) {
+	switch {
+	case devID != "" && qualifier != "":
+		return nil, ErrQualifierWithDevID
+	case devID != "":
+		if environment != "local" {
+			return nil, ErrDevIDOutsideLocal
+		}
+		return NewLocalNamer(devID)
+	case qualifier != "":
+		return NewQualifiedNamer(qualifier)
+	default:
 		return ProductionNamer{}, nil
 	}
-	if environment != "local" {
-		return nil, ErrDevIDOutsideLocal
-	}
-	return NewLocalNamer(devID)
 }

@@ -56,17 +56,60 @@ func TestLocalNamer(t *testing.T) {
 func TestNewNamer(t *testing.T) {
 	t.Parallel()
 
-	namer, err := networkingress.NewNamer("prod", "")
+	namer, err := networkingress.NewNamer("prod", "", "")
 	require.NoError(t, err)
 	require.IsType(t, networkingress.ProductionNamer{}, namer)
 
-	namer, err = networkingress.NewNamer("local", "ab12")
+	namer, err = networkingress.NewNamer("local", "ab12", "")
 	require.NoError(t, err)
 	require.IsType(t, networkingress.LocalNamer{}, namer)
 
 	for _, environment := range []string{"dev", "prod", ""} {
-		_, err := networkingress.NewNamer(environment, "ab12")
+		_, err := networkingress.NewNamer(environment, "ab12", "")
 		require.ErrorIs(t, err, networkingress.ErrDevIDOutsideLocal, "environment %q", environment)
+	}
+
+	namer, err = networkingress.NewNamer("dev", "", "dev")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.QualifiedNamer{}, namer)
+
+	_, err = networkingress.NewNamer("local", "ab12", "dev")
+	require.ErrorIs(t, err, networkingress.ErrQualifierWithDevID)
+
+	_, err = networkingress.NewNamer("dev", "", "Dev")
+	require.Error(t, err, "an invalid qualifier is refused")
+}
+
+func TestQualifiedNamer(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	namer, err := networkingress.NewQualifiedNamer("dev")
+	require.NoError(t, err)
+	require.Equal(t, "speakeasy-gw-dev-0", must(namer.MachineName(ctx, 0)))
+	require.Equal(t, "Speakeasy private MCP ingress (dev)", must(namer.ServiceComment(ctx)))
+	ingressID := uuid.MustParse("1a2b3c4d-0000-4000-8000-000000000000")
+	require.Equal(t, "Speakeasy gateway dev 1a2b3c4d slot 2", must(namer.AuthKeyDescription(ctx, ingressID, 2)))
+
+	// Hostnames, services and ownership stay production's.
+	require.Equal(t, "speakeasy", must(namer.Hostname(ctx, "speakeasy")))
+	require.Equal(t, "svc:speakeasy", must(namer.ServiceName(ctx, "speakeasy")))
+	require.True(t, must(namer.OwnsHostname(ctx, "speakeasy")))
+	require.False(t, must(namer.OwnsHostname(ctx, "local-ab12-speakeasy")), "a deployed environment never manages a local stack's service")
+	_, err = namer.Hostname(ctx, "local-ab12-speakeasy")
+	require.ErrorIs(t, err, networkingress.ErrReservedHostname)
+}
+
+func TestNewQualifiedNamerRejectsInvalidQualifiers(t *testing.T) {
+	t.Parallel()
+
+	for _, qualifier := range []string{"", "Dev", "de-v", "dev12345a", "de v", "local", "localdev"} {
+		t.Run(qualifier, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := networkingress.NewQualifiedNamer(qualifier)
+			require.Error(t, err)
+		})
 	}
 }
 
@@ -81,7 +124,9 @@ func TestAuthKeyDescriptionsAreAcceptedByTailscale(t *testing.T) {
 	// The longest development id and slot give the longest descriptions.
 	local, err := networkingress.NewLocalNamer("abcd1234")
 	require.NoError(t, err)
-	for _, namer := range []networkingress.Namer{networkingress.ProductionNamer{}, local} {
+	qualified, err := networkingress.NewQualifiedNamer("abcd1234")
+	require.NoError(t, err)
+	for _, namer := range []networkingress.Namer{networkingress.ProductionNamer{}, local, qualified} {
 		for _, slot := range []int32{0, 1000} {
 			description := must(namer.AuthKeyDescription(ctx, uuid.New(), slot))
 			require.Regexp(t, authKeyDescriptionPattern, description)

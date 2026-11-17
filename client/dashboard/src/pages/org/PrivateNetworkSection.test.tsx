@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   featuresLoading: false,
   ingressError: false,
   ingressPending: false,
+  gatewayTag: "tag:speakeasy",
   ingressOptions: undefined as
     | {
         enabled?: boolean;
@@ -103,7 +104,7 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
   useNetworkIngress: (...args: unknown[]) => {
     state.ingressOptions = args[2] as typeof state.ingressOptions;
     return {
-      data: { ingress: state.ingress },
+      data: { ingress: state.ingress, gatewayTag: state.gatewayTag },
       error: state.ingressError ? new Error("unavailable") : null,
       isLoading: false,
       isPending: state.ingressPending,
@@ -171,6 +172,7 @@ beforeEach(() => {
   state.featuresLoading = false;
   state.ingressError = false;
   state.ingressPending = false;
+  state.gatewayTag = "tag:speakeasy";
   state.ingressOptions = undefined;
   state.createMutate.mockReset();
   state.createOptions = undefined;
@@ -336,6 +338,21 @@ describe("PrivateNetworkSection", () => {
     ).toBeTruthy();
     expect(screen.getByText(/"dst": \["svc:speakeasy"\]/)).toBeTruthy();
     expect(screen.getByText(/run Tailscale 1\.86 or later/)).toBeTruthy();
+  });
+
+  it("uses the environment's gateway tag in the policy and OAuth steps", () => {
+    state.gatewayTag = "tag:speakeasy-dev";
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(
+      screen.getByText(/"tag:speakeasy-dev": \["autogroup:admin"\]/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy-dev"\]/),
+    ).toBeTruthy();
+    expect(screen.getAllByText("tag:speakeasy-dev")).toHaveLength(2);
+    expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
   });
 
   it.each(["disabled", "missing", "error"] as const)(
@@ -779,6 +796,21 @@ describe("PrivateNetworkSection", () => {
         state: { data: { ingress: { status: "online" } } },
       }),
     ).toBe(false);
+  });
+
+  it("names the environment's gateway tag when asking for approval", () => {
+    state.gatewayTag = "tag:speakeasy-dev";
+    state.ingress = configuredIngress({
+      hostname: "private-mcp",
+      status: "error",
+      lastError: "provider_service_not_approved",
+    });
+
+    render(<PrivateNetworkSection />);
+
+    expect(
+      screen.getByText(/"svc:private-mcp": \["tag:speakeasy-dev"\]/),
+    ).toBeTruthy();
   });
 
   it("explains a missing certificate and waits instead of offering a retry", () => {

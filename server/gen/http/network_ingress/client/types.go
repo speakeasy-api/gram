@@ -42,6 +42,10 @@ type RotateCredentialsRequestBody struct {
 // "getIngress" endpoint HTTP response body.
 type GetIngressResponseBody struct {
 	Ingress *NetworkIngressResponseBody `form:"ingress,omitempty" json:"ingress,omitempty" xml:"ingress,omitempty"`
+	// Tailscale tag this environment's gateway nodes and services carry. The
+	// organization's tailnet policy must own it, auto-approve the connection's
+	// service for it, and the OAuth client must be scoped to it.
+	GatewayTag *string `form:"gateway_tag,omitempty" json:"gateway_tag,omitempty" xml:"gateway_tag,omitempty"`
 }
 
 // CreateIngressResponseBody is the type of the "networkIngress" service
@@ -1631,7 +1635,9 @@ func NewRotateCredentialsRequestBody(p *networkingress.RotateCredentialsPayload)
 // NewGetIngressNetworkIngressResultOK builds a "networkIngress" service
 // "getIngress" endpoint result from a HTTP "OK" response.
 func NewGetIngressNetworkIngressResultOK(body *GetIngressResponseBody) *networkingress.NetworkIngressResult {
-	v := &networkingress.NetworkIngressResult{}
+	v := &networkingress.NetworkIngressResult{
+		GatewayTag: *body.GatewayTag,
+	}
 	if body.Ingress != nil {
 		v.Ingress = unmarshalNetworkIngressResponseBodyToNetworkingressNetworkIngress(body.Ingress)
 	}
@@ -2828,6 +2834,9 @@ func NewCheckHealthGatewayError(body *CheckHealthGatewayErrorResponseBody) *goa.
 // ValidateGetIngressResponseBody runs the validations defined on
 // GetIngressResponseBody
 func ValidateGetIngressResponseBody(body *GetIngressResponseBody) (err error) {
+	if body.GatewayTag == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_tag", "body"))
+	}
 	if body.Ingress != nil {
 		if err2 := ValidateNetworkIngressResponseBody(body.Ingress); err2 != nil {
 			err = goa.MergeErrors(err, err2)

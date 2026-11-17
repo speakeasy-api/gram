@@ -13,6 +13,16 @@ per-ingress attestor pods.
   fencing. A force-deleted or partitioned pod can briefly overlap with its
   replacement; Tailscale allows one live session per node key, which bounds
   that overlap.
+- An environment that shares customer tailnets with another, such as dev
+  beside production, sets `GRAM_NETWORK_INGRESS_GATEWAY_NAME_QUALIFIER` on
+  both the reconciler and the gateway. Its machines are then
+  `speakeasy-gw-<qualifier>-<n>`, and its auth key descriptions and service
+  comments carry the qualifier. Hostnames and services are not qualified.
+  Production leaves it unset. The ACL tag is set separately
+  (`GRAM_NETWORK_INGRESS_GATEWAY_TAG` on the reconciler and API server,
+  `GRAM_TAILNET_GATEWAY_TAG` on the gateway, both `tag:speakeasy` by
+  default), and the dashboard shows the configured tag in the policy it asks
+  customers to add.
 - The reconciler (`gram network-ingress-worker`) creates one
   `network_ingress_nodes` row per slot, defines the Tailscale Service
   `svc:<label>` through the Tailscale API and mints a one-shot, preauthorized,
@@ -165,14 +175,15 @@ as a renewal. Because worktrees share the names, run the private network
 group in one worktree at a time.
 
 Naming lives behind `networkingress.Namer`, one method per artifact.
-`LocalNamer` gives:
+`ProductionNamer`, `QualifiedNamer` (a deployed environment with a machine
+name qualifier) and `LocalNamer` give:
 
-| Artifact                                 | Production            | Local                                          |
-| ---------------------------------------- | --------------------- | ---------------------------------------------- |
-| Connection hostname                      | as requested          | `local-<id>-<requested>` (the API prefixes it) |
-| Tailscale Service                        | `svc:<hostname>`      | `svc:local-<id>-<hostname>`                    |
-| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-local-<id>-<slot>`               |
-| Service comment and auth key description | Speakeasy             | name `local-<id>`                              |
+| Artifact                                 | Production            | Qualified (`dev`)         | Local                                          |
+| ---------------------------------------- | --------------------- | ------------------------- | ---------------------------------------------- |
+| Connection hostname                      | as requested          | as requested              | `local-<id>-<requested>` (the API prefixes it) |
+| Tailscale Service                        | `svc:<hostname>`      | `svc:<hostname>`          | `svc:local-<id>-<hostname>`                    |
+| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-dev-<slot>` | `speakeasy-gw-local-<id>-<slot>`               |
+| Service comment and auth key description | Speakeasy             | name `dev`                | name `local-<id>`                              |
 
 Beyond naming, a local stack never touches a hostname without its prefix. The
 reconciler refuses to define its service and leaves it alone on rename and
