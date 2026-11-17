@@ -107,7 +107,7 @@ func packageMatches(path string, prefixes []string) bool {
 }
 
 func isAuthzCheckType(t types.Type) bool {
-	named, ok := t.(*types.Named)
+	named, ok := types.Unalias(t).(*types.Named)
 	if !ok {
 		return false
 	}

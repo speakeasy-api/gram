@@ -44,8 +44,9 @@ if err := s.authz.Require(ctx, authz.Environments(p).Write()); err != nil {
 if err := s.authz.Require(ctx, authz.Environments(p).Read()); err != nil {
 	return err
 }
-// a project-wide grant OR a grant on the resource, and a block on either refuses
-if err := s.authz.Require(ctx, authz.AnyOf(authz.Project(p).Write(), authz.Skill(id).Write())); err != nil {
+// either of two permissions on the resource, and a block on either refuses
+// (a wildcard grant already covers one resource, so never pair those)
+if err := s.authz.Require(ctx, authz.AnyOf(authz.MCPServer(id, p).Write(), authz.MCPServer(id, p).Connect())); err != nil {
 	return err
 }
 // a branch, not a denial (no challenge logged)
