@@ -367,6 +367,43 @@ describe("DecideAccessSheet", () => {
     );
   });
 
+  it("narrows a denial to chosen people or roles under Advanced", async () => {
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+      disposition: null,
+    });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Deny/ }));
+    expect(screen.queryAllByText("Who the denial covers")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByTestId("audience-select"));
+    fireEvent.click(screen.getByRole("button", { name: "Deny Server" }));
+
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.decideMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          recordDecisionRequestBody: expect.objectContaining({
+            decision: "denied",
+            grantedPrincipalUrns: [
+              "user:user-one",
+              "role:organization:role-one",
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("offers no denial audience when servers are blocked by default", () => {
+    renderSheet({ disposition: "block_all" });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Deny/ }));
+    expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
+  });
+
   it("says nothing changed when opening the request itself fails", async () => {
     mocks.createMutateAsync.mockRejectedValue(new Error("boom"));
     renderSheet();

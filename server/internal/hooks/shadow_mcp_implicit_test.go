@@ -16,7 +16,7 @@ import (
 
 // seedServerDecision records a standing approve or deny decision for a
 // server URL in a project, the way a review records one.
-func seedServerDecision(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, serverURL string, decision string) {
+func seedServerDecision(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, serverURL string, decision string, principals ...string) {
 	t.Helper()
 	key, ok := shadowmcp.OfficialServerKey(serverURL)
 	require.True(t, ok)
@@ -33,6 +33,9 @@ func seedServerDecision(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 		RiskPolicyBypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
+	if len(principals) == 0 {
+		principals = []string{"user:all"}
+	}
 	_, err = queries.CreateApprovalDecision(ctx, mcpapprovalrepo.CreateApprovalDecisionParams{
 		OrganizationID:       organizationID,
 		ProjectID:            projectID,
@@ -42,7 +45,7 @@ func seedServerDecision(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 		Rationale:            conv.ToPGText("decided in a test"),
 		EvidenceSnapshot:     []byte(`{}`),
 		EvidenceVersion:      1,
-		GrantedPrincipalUrns: []string{"user:all"},
+		GrantedPrincipalUrns: principals,
 		McpResearchReportID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
@@ -123,4 +126,32 @@ func TestShadowMCPBlockingPolicyWinsOverBuiltInBlocklist(t *testing.T) {
 
 	policy := ti.service.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
 	require.Same(t, explicit, policy)
+}
+
+// A denial narrowed to people or roles blocks only them in the built-in
+// blocklist; everyone else still connects.
+func TestShadowMCPBuiltInBlocklistNarrowDenial(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.riskScanner = &stubResultScanner{}
+
+	forOthersURL := "https://others.example.com/mcp"
+	forMeURL := "https://me.example.com/mcp"
+	seedServerDecision(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, forOthersURL, "denied", "user:someone-else")
+	seedServerDecision(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, forMeURL, "denied", "user:"+authCtx.UserID)
+
+	policy := ti.service.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
+	require.NotNil(t, policy)
+
+	enforce := func(serverURL string) bool {
+		_, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+			policy, "do_thing", shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "server"})
+		return denied
+	}
+	require.False(t, enforce(forOthersURL))
+	require.True(t, enforce(forMeURL))
 }

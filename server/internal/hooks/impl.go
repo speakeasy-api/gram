@@ -546,18 +546,18 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 	if policy != nil {
 		return policy
 	}
-	return s.implicitShadowMCPPolicy(ctx, pid)
+	return s.implicitShadowMCPPolicy(ctx, organizationID, pid, userID)
 }
 
 // implicitShadowMCPPolicy is the built-in blocklist for a project without a
 // blocking policy. It has no ID: blocks it causes are recorded without a
 // policy, and the block message offers no request link, since a server is
 // only on this list because an administrator denied it.
-func (s *Service) implicitShadowMCPPolicy(ctx context.Context, projectID uuid.UUID) *risk.ShadowMCPPolicy {
+func (s *Service) implicitShadowMCPPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) *risk.ShadowMCPPolicy {
 	if s.shadowMCPClient == nil {
 		return nil
 	}
-	denied, err := s.shadowMCPClient.DeniedServerURLs(ctx, projectID)
+	denied, err := s.shadowMCPClient.DeniedServerURLs(ctx, organizationID, projectID, userID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to list denied shadow mcp servers; defaulting to off",
 			attr.SlogError(err),

@@ -117,27 +117,39 @@ func (q *Queries) GetShadowMCPOfficialServerChoice(ctx context.Context, arg GetS
 const listDeniedShadowMCPServerURLs = `-- name: ListDeniedShadowMCPServerURLs :many
 SELECT r.target_key
 FROM mcp_approval_requests r
+JOIN LATERAL (
+  SELECT d.decision, d.granted_principal_urns
+  FROM mcp_approval_decisions d
+  WHERE d.mcp_approval_request_id = r.id
+    AND d.project_id = r.project_id
+    AND d.deleted IS FALSE
+  ORDER BY d.decided_at DESC, d.id DESC
+  LIMIT 1
+) latest ON TRUE
 WHERE r.project_id = $1
   AND r.target_kind = 'server_url'
   AND r.deleted IS FALSE
   AND r.status <> 'superseded'
+  AND latest.decision = 'denied'
   AND (
-    SELECT d.decision
-    FROM mcp_approval_decisions d
-    WHERE d.mcp_approval_request_id = r.id
-      AND d.project_id = r.project_id
-      AND d.deleted IS FALSE
-    ORDER BY d.decided_at DESC, d.id DESC
-    LIMIT 1
-  ) = 'denied'
+    cardinality(latest.granted_principal_urns) = 0
+    OR latest.granted_principal_urns && $2::text[]
+  )
 `
 
-// The server URLs whose standing decision in a project is a denial. With no
-// blocking Shadow MCP policy, a project is in the built-in blocklist mode:
-// every server connects except these. A superseded request carries no
-// standing decision.
-func (q *Queries) ListDeniedShadowMCPServerURLs(ctx context.Context, projectID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, listDeniedShadowMCPServerURLs, projectID)
+type ListDeniedShadowMCPServerURLsParams struct {
+	ProjectID     uuid.UUID
+	PrincipalUrns []string
+}
+
+// The server URLs a denial blocks for one user in a project. With no
+// blocking Shadow MCP policy covering the user, the project is in the
+// built-in blocklist mode: every server connects except these. A denial with
+// no principals blocks everyone; one narrowed to people or roles blocks a
+// user who holds one of them. A superseded request carries no standing
+// decision.
+func (q *Queries) ListDeniedShadowMCPServerURLs(ctx context.Context, arg ListDeniedShadowMCPServerURLsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDeniedShadowMCPServerURLs, arg.ProjectID, arg.PrincipalUrns)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +212,52 @@ func (q *Queries) ListShadowMCPOfficialServerChoices(ctx context.Context, projec
 			&i.ChosenMcpServerName,
 			&i.ChosenMcpServerSlug,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStandingShadowMCPDenials = `-- name: ListStandingShadowMCPDenials :many
+SELECT r.target_key, latest.granted_principal_urns
+FROM mcp_approval_requests r
+JOIN LATERAL (
+  SELECT d.decision, d.granted_principal_urns
+  FROM mcp_approval_decisions d
+  WHERE d.mcp_approval_request_id = r.id
+    AND d.project_id = r.project_id
+    AND d.deleted IS FALSE
+  ORDER BY d.decided_at DESC, d.id DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE r.project_id = $1
+  AND r.target_kind = 'server_url'
+  AND r.deleted IS FALSE
+  AND r.status <> 'superseded'
+  AND latest.decision = 'denied'
+`
+
+type ListStandingShadowMCPDenialsRow struct {
+	TargetKey            string
+	GrantedPrincipalUrns []string
+}
+
+// Every server URL whose standing decision in a project is a denial, with
+// the people or roles it was narrowed to (none means everyone).
+func (q *Queries) ListStandingShadowMCPDenials(ctx context.Context, projectID uuid.UUID) ([]ListStandingShadowMCPDenialsRow, error) {
+	rows, err := q.db.Query(ctx, listStandingShadowMCPDenials, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStandingShadowMCPDenialsRow
+	for rows.Next() {
+		var i ListStandingShadowMCPDenialsRow
+		if err := rows.Scan(&i.TargetKey, &i.GrantedPrincipalUrns); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

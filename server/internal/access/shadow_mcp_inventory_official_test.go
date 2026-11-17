@@ -347,3 +347,25 @@ func TestService_ReadShadowMCPInventoryTarget_TargetedPolicyAndBuiltInBlocklist(
 
 	require.Equal(t, shadowMCPInventoryAccessBlocked, read().Access)
 }
+
+// A denial narrowed to a role blocks that role only: in the built-in
+// blocklist the server reads restricted, not blocked.
+func TestService_ReadShadowMCPInventoryTarget_NarrowDenialIsRestricted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://github.example.com/mcp", "denied", 0)
+	seedApprovalDecisionRow(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, request.ID, "denied", []string{"role:contractor"})
+
+	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindServerURL,
+		TargetKey:      "https://github.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessRestricted, server.Access)
+}

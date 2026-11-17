@@ -27,6 +27,7 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	shadowmcprepo "github.com/speakeasy-api/gram/server/internal/shadowmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1228,6 +1229,10 @@ type shadowMCPInventoryPolicyState struct {
 	// targeted allow_all policies is restricted, not blocked.
 	everyoneBlockedURLs map[string]struct{}
 
+	// someBlockedURLs holds the URLs a denial narrowed to people or roles
+	// blocks in the built-in blocklist: blocked for them only, so restricted.
+	someBlockedURLs map[string]struct{}
+
 	// blockAllPolicyAudiences maps each deny-by-default policy to its
 	// audience principal URNs (the evaluate grants). A bypass grant only
 	// frees the users the policy would have blocked, so whether a URL is
@@ -1271,6 +1276,7 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		allowedPolicyIDs:          map[string][]string{},
 		blockedPolicyIDs:          map[string][]string{},
 		everyoneBlockedURLs:       map[string]struct{}{},
+		someBlockedURLs:           map[string]struct{}{},
 		blockAllPolicyAudiences:   map[string][]string{},
 		bypassPrincipalsByURL:     map[string]map[string]map[string]struct{}{},
 		requestsByURL:             map[string]shadowMCPInventoryRequestState{},
@@ -1351,7 +1357,9 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 					continue
 				}
 				state.blockedPolicyIDs[serverURL] = append(state.blockedPolicyIDs[serverURL], policyID)
-				if everyoneAudience {
+				// A block rule for everyone under an everyone policy blocks
+				// everyone; one narrowed to people or roles blocks only them.
+				if everyoneAudience && grant.PrincipalUrn == authz.AllUsersPrincipal().String() {
 					state.everyoneBlockedURLs[serverURL] = struct{}{}
 				}
 			}
@@ -1412,13 +1420,23 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	}
 	if !hasEveryoneBlockingPolicy {
 		// The built-in blocklist covers everyone no blocking policy covers:
-		// every server connects for them except those whose standing decision
-		// is a denial. A targeted policy blocks a denied server for its own
-		// audience too, so a denial is a block for everyone.
-		for serverURL, approval := range state.approvalsByURL {
-			if approval.StandingDecision != nil && *approval.StandingDecision == shadowMCPInventoryBypassStatusDenied {
-				state.everyoneBlockedURLs[serverURL] = struct{}{}
+		// every server connects for them except those a standing denial
+		// blocks. A denial for everyone blocks everyone, since a targeted
+		// policy blocks a denied server for its own audience too; one
+		// narrowed to people or roles blocks only them.
+		denials, err := shadowmcprepo.New(s.db).ListStandingShadowMCPDenials(ctx, projectID)
+		if err != nil {
+			return state, fmt.Errorf("listing shadow mcp denials: %w", err)
+		}
+		for _, denial := range denials {
+			if _, ok := canonicalURLSet[denial.TargetKey]; !ok {
+				continue
 			}
+			if len(denial.GrantedPrincipalUrns) == 0 || slices.Contains(denial.GrantedPrincipalUrns, authz.AllUsersPrincipal().String()) {
+				state.everyoneBlockedURLs[denial.TargetKey] = struct{}{}
+				continue
+			}
+			state.someBlockedURLs[denial.TargetKey] = struct{}{}
 		}
 	}
 	if len(blockingPolicyIDs) == 0 {
@@ -1482,7 +1500,8 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInventoryRowState {
 	requestState := s.requestsByURL[canonicalURL]
 	allowedPolicyIDs := s.allowedPolicyIDs[canonicalURL]
-	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0
+	_, deniedForSome := s.someBlockedURLs[canonicalURL]
+	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0 || deniedForSome
 	_, blockedForEveryoneList := s.everyoneBlockedURLs[canonicalURL]
 	// A block sourced from an everyone-audience policy stops every user; one
 	// sourced only from targeted policies stops a subset, which reads as
@@ -1584,7 +1603,7 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	blockedFor := shadowMCPAccessReachNone
 	if _, everyone := s.everyoneBlockedURLs[canonicalURL]; everyone {
 		blockedFor = shadowMCPAccessReachEveryone
-	} else if len(s.blockedPolicyIDs[canonicalURL]) > 0 || (s.hasBlockAllPolicy && !s.hasEveryoneBlockAllPolicy) {
+	} else if _, some := s.someBlockedURLs[canonicalURL]; some || len(s.blockedPolicyIDs[canonicalURL]) > 0 || (s.hasBlockAllPolicy && !s.hasEveryoneBlockAllPolicy) {
 		blockedFor = shadowMCPAccessReachSome
 	}
 

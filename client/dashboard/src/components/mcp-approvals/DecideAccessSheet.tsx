@@ -1,6 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
@@ -78,6 +84,19 @@ function approveSublabel(stdio: boolean, audienceSelectable: boolean): string {
 }
 
 /**
+ * Who a decision covers, as sent to the API: nothing means everyone. An
+ * approval uses the approval audience and a denial its own.
+ */
+export function grantedPrincipalUrns(
+  decision: AccessDecision,
+  approveAudience: string[],
+  denyAudience: string[],
+): string[] | undefined {
+  const audience = decision === "approved" ? approveAudience : denyAudience;
+  return audience.length > 0 ? audience : undefined;
+}
+
+/**
  * Allow or deny one MCP server. This is the single write path for server
  * access: the decision is recorded on the server's approval request (opened
  * on the spot when none exists) and the recorded decision is what mints or
@@ -107,6 +126,7 @@ export function DecideAccessSheet({
   const decide = useRecordMcpApprovalDecisionMutation();
   const [decision, setDecision] = useState<AccessDecision>("approved");
   const [audience, setAudience] = useState<string[]>([]);
+  const [denyAudience, setDenyAudience] = useState<string[]>([]);
   const [rationale, setRationale] = useState(RATIONALE_PREFILL.approved);
   const [rationaleEdited, setRationaleEdited] = useState(false);
   // The request a previous submit already opened or promoted, so a retry
@@ -124,6 +144,7 @@ export function DecideAccessSheet({
     if (!open) {
       setDecision("approved");
       setAudience([]);
+      setDenyAudience([]);
       setRationale(RATIONALE_PREFILL.approved);
       setRationaleEdited(false);
       setOpenedRequestId(undefined);
@@ -134,11 +155,15 @@ export function DecideAccessSheet({
   if (!target) return null;
 
   const stdio = target.targetKind === "stdio_command";
-  // Under an allow-by-default policy a narrow approval is inexpressible —
-  // approving clears the block for everyone — so the audience picker only
-  // appears when a block-by-default policy can scope who passes. A stdio
-  // command has no URL for grants to attach to, so it never shows one.
-  const audienceSelectable = disposition !== "allow_all" && !stdio;
+  // While servers are allowed by default (with or without a policy) a narrow
+  // approval is inexpressible: approving clears the block for everyone. So
+  // the audience picker only appears when servers are blocked by default. A
+  // stdio command has no URL for grants to attach to, so it never shows one.
+  const audienceSelectable = disposition === "block_all" && !stdio;
+  // A denial can be narrowed to people or roles wherever servers are allowed
+  // by default: it blocks only them. Under blocked by default a denial
+  // withdraws the approval, which already blocks everyone.
+  const denyAudienceSelectable = disposition !== "block_all" && !stdio;
   const isSubmitting =
     submitting ||
     createRequest.isPending ||
@@ -198,10 +223,11 @@ export function DecideAccessSheet({
             id: requestId,
             decision,
             rationale: trimmedRationale,
-            grantedPrincipalUrns:
-              decision === "approved" && audience.length > 0
-                ? audience
-                : undefined,
+            grantedPrincipalUrns: grantedPrincipalUrns(
+              decision,
+              audience,
+              denyAudienceSelectable ? denyAudience : [],
+            ),
           },
         },
       });
@@ -310,6 +336,32 @@ export function DecideAccessSheet({
                 </span>
               </label>
             </RadioGroup>
+
+            {decision === "denied" && denyAudienceSelectable && (
+              <Collapsible>
+                <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+                  <Icon name="chevron-right" className="size-3.5" aria-hidden />
+                  Advanced
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  <section className="border-border space-y-2 border p-3">
+                    <Text variant="small" className="font-medium">
+                      Who the denial covers
+                    </Text>
+                    <MultiSelect
+                      options={audienceGroups(members, roles)}
+                      defaultValue={denyAudience}
+                      onValueChange={setDenyAudience}
+                      placeholder="Everyone in the project"
+                    />
+                    <Text muted small>
+                      Pick people or roles to block the server only for them.
+                      Leave empty to deny for everyone.
+                    </Text>
+                  </section>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
             {stdio && (
               <Text muted small>

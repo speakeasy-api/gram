@@ -161,6 +161,25 @@ func TestRecordDecision_AllowAllPolicyInverts(t *testing.T) {
 	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBlock, policyID, serverURL))
 }
 
+// Under an allow_all policy a denial narrowed to a person writes the block
+// rule for that person only.
+func TestRecordDecision_AllowAllNarrowDenialBlocksOnlyThem(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "allow_all")
+	serverURL := "https://mcp.example.com/narrow-deny"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	principal := seedMemberPrincipal(t, ctx, ti, "user-contractor-deny")
+	payload := decisionPayload(requestID.String(), "denied")
+	payload.GrantedPrincipalUrns = []string{principal}
+	_, err := ti.service.RecordDecision(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, []string{principal}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBlock, policyID, serverURL))
+}
+
 // An stdio target has no URL to key a grant on: the decision records without
 // touching enforcement state.
 func TestRecordDecision_StdioTargetRecordsWithoutGrants(t *testing.T) {

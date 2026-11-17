@@ -28,7 +28,8 @@ import (
 //     unless excepted. Approve replaces the server's risk_policy:bypass
 //     audience with the decision's principals; deny revokes it.
 //   - allow_all: servers are allowed unless block-ruled. Approve revokes the
-//     server's risk_policy:block rule; deny writes one for everyone.
+//     server's risk_policy:block rule; deny writes one for the people or
+//     roles the denial names, or for everyone when it names none.
 //
 // Only server_url targets are enforceable — grants key on the canonical URL,
 // and an stdio command has none. Platform callers reject stdio targets; the
@@ -123,7 +124,13 @@ func applyDecisionToPolicy(
 		if err := policybypass.RevokePolicyURLGrantVariants(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL); err != nil {
 			return fmt.Errorf("revoke block rule variants on denial: %w", err)
 		}
-		if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL, []urn.Principal{authz.AllUsersPrincipal()}); err != nil {
+		// A denial narrowed to people or roles blocks only them; one with no
+		// principals blocks everyone.
+		blocked := principals
+		if len(blocked) == 0 {
+			blocked = []urn.Principal{authz.AllUsersPrincipal()}
+		}
+		if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL, blocked); err != nil {
 			return fmt.Errorf("write block rule on denial: %w", err)
 		}
 	default:
