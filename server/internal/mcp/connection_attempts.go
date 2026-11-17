@@ -944,9 +944,14 @@ var unverifiedIDJAGReasons = []idjag.Reason{
 	idjag.ReasonKeyUnknown, idjag.ReasonKeyUnusable, idjag.ReasonSignatureInvalid,
 }
 
+// keyFetchCancelled is a key set fetch that ended because a request context ended.
+func keyFetchCancelled(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
 // idJAGAssertionHappened names an ID-JAG the validator refused or could not check; the detail is its reason.
 // A refusal with no proof of a real flow returns only a metric label, never a code.
-func idJAGAssertionHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option, string) {
+func idJAGAssertionHappened(ctx context.Context, err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option, string) {
 	reason := idjag.ReasonOf(err)
 	detail := mcpconnectionattempts.Detail(string(reason))
 	none := mcpconnectionattempts.Code{}
@@ -956,9 +961,12 @@ func idJAGAssertionHappened(err error) (mcpconnectionattempts.Code, mcpconnectio
 	// Our key store failing in the stale-key fallback, recorded like any key store outage.
 	case reason == idjag.ReasonKeyUnusable && errors.Is(err, idjag.ErrStaleKeysUnreadable):
 		return mcpconnectionattempts.CodeAssertionCheckUnavailable, mcpconnectionattempts.Detail(string(idjag.ReasonKeyStoreUnavailable)), ""
-	// The request ended while the key set was fetched: nothing shows the key set failed.
-	case reason == idjag.ReasonKeyUnusable && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)):
+	// This request ended while the key set was fetched: nothing shows the key set failed.
+	case reason == idjag.ReasonKeyUnusable && keyFetchCancelled(err) && ctx.Err() != nil:
 		return none, detail, "token_assertion_key_fetch_cancelled"
+	// A shared fetch another caller ended: from this live request, the key set could not be fetched.
+	case reason == idjag.ReasonKeyUnusable && keyFetchCancelled(err):
+		return mcpconnectionattempts.CodeIDPTransientFailure, detail, ""
 	// The stored key set itself failed, not the caller's key: the administrator's setup.
 	case reason == idjag.ReasonKeyUnusable && !errors.Is(err, jwks.ErrKeyAlgorithmMismatch):
 		return mcpconnectionattempts.CodeConfigurationRequired, mcpconnectionattempts.Detail("key_set_unusable"), ""

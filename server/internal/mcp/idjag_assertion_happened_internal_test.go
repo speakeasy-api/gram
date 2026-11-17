@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -18,7 +19,7 @@ func TestIDJAGAssertionHappenedStaleKeyReadFailure(t *testing.T) {
 	t.Parallel()
 
 	storeDown := &idjag.Error{Reason: idjag.ReasonKeyUnusable, Err: fmt.Errorf("read stale issuer keys: %w: %w", idjag.ErrStaleKeysUnreadable, oops.MarkStoreConnectionLost(errors.New("key store unreachable")))}
-	code, _, unrecorded := idJAGAssertionHappened(storeDown)
+	code, _, unrecorded := idJAGAssertionHappened(t.Context(), storeDown)
 	require.Empty(t, unrecorded)
 	require.Equal(t, mcpconnectionattempts.CodeAssertionCheckUnavailable, code)
 	meaning, ok := mcpconnectionattempts.MeaningOf(code.String())
@@ -29,6 +30,23 @@ func TestIDJAGAssertionHappenedStaleKeyReadFailure(t *testing.T) {
 	require.False(t, idjag.IsStoreFault(storeDown))
 
 	unusable := &idjag.Error{Reason: idjag.ReasonKeyUnusable, Err: jwks.ErrKeySetInvalid}
-	code, _, _ = idJAGAssertionHappened(unusable)
+	code, _, _ = idJAGAssertionHappened(t.Context(), unusable)
 	require.Equal(t, mcpconnectionattempts.CodeConfigurationRequired, code, "a key set that cannot be used is still the administrator's")
+}
+
+// A key set fetch that ended in a cancellation writes no row only when this request ended; a live request that shared another caller's fetch gets the key set problem.
+func TestIDJAGAssertionHappenedCancelledKeyFetch(t *testing.T) {
+	t.Parallel()
+
+	cancelledFetch := &idjag.Error{Reason: idjag.ReasonKeyUnusable, Err: fmt.Errorf("fetch key set: request key set: %w", context.Canceled)}
+
+	ended, cancel := context.WithCancel(t.Context())
+	cancel()
+	code, _, unrecorded := idJAGAssertionHappened(ended, cancelledFetch)
+	require.Equal(t, mcpconnectionattempts.Code{}, code)
+	require.Equal(t, "token_assertion_key_fetch_cancelled", unrecorded)
+
+	code, _, unrecorded = idJAGAssertionHappened(t.Context(), cancelledFetch)
+	require.Empty(t, unrecorded)
+	require.Equal(t, mcpconnectionattempts.CodeIDPTransientFailure, code)
 }

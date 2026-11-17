@@ -622,7 +622,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		ClientID:            clientRow.ClientID,
 	})
 	if err != nil {
-		if code, detail, unrecorded := idJAGAssertionHappened(err); unrecorded != "" {
+		if code, detail, unrecorded := idJAGAssertionHappened(ctx, err); unrecorded != "" {
 			s.refusedWithoutRow(ctx, t, unrecorded)
 		} else {
 			t.Refuse(ctx, code, detail)
