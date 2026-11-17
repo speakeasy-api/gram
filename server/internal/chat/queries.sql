@@ -1989,8 +1989,51 @@ WHERE c.project_id = @project_id
   AND m.created_at <= @time_end;
 
 -- name: GetChatMetricsSummary :one
--- Aggregate the requested chat window first so resolution selection does not
--- sort unrelated project history for empty or narrow windows.
+-- Starts from the project's messages in the window, a range scan on
+-- chat_messages_project_id_created_at_idx, so the work grows with the chats
+-- active in the window rather than with the project's whole chat history. The
+-- latest resolution is one index probe per active chat. Neither step's plan
+-- depends on the planner's row estimate for the window, which is unreliable
+-- when created_at statistics lag behind recent inserts.
+WITH window_chats AS MATERIALIZED (
+  SELECT
+    m.chat_id,
+    MIN(m.created_at) AS first_message_at,
+    MAX(m.created_at) AS last_message_at
+  FROM chat_messages m
+  WHERE m.project_id = @project_id::uuid
+    AND m.created_at >= @time_start
+    AND m.created_at <= @time_end
+  GROUP BY m.chat_id
+),
+chat_stats AS (
+  SELECT
+    wc.chat_id,
+    EXTRACT(EPOCH FROM (wc.last_message_at - wc.first_message_at)) * 1000 AS duration_ms
+  FROM window_chats wc
+  INNER JOIN chats c ON c.id = wc.chat_id
+  WHERE c.project_id = @project_id::uuid
+    AND c.deleted IS FALSE
+)
+SELECT
+  COUNT(*)::bigint as total_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolution.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolution.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolution.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
+FROM chat_stats
+LEFT JOIN LATERAL (
+  SELECT cr.resolution
+  FROM chat_resolutions cr
+  WHERE cr.chat_id = chat_stats.chat_id
+    AND cr.project_id = @project_id::uuid
+  ORDER BY cr.created_at DESC
+  LIMIT 1
+) latest_resolution ON TRUE;
+
+-- name: ReferenceChatMetricsSummary :one
+-- Test fixture: the chats-first form GetChatMetricsSummary replaced. Tests
+-- compare the two on the same data to show the rewrite keeps its results.
 WITH chat_stats AS MATERIALIZED (
   SELECT
     c.id as chat_id,
