@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -248,7 +249,8 @@ func (g *Governor) refusedWithoutCredential(ctx context.Context, logger *slog.Lo
 
 // storedCredentialUsable reports whether sel's stored credential is usable now
 // and still decrypts, as the runtime requires before releasing it. A missing
-// or undecryptable credential is unusable; a failed read is an error.
+// or undecryptable credential is unusable; a failed read, or an organization
+// key that cannot open it right now, is an error.
 func (g *Governor) storedCredentialUsable(ctx context.Context, req Request, sel selection) (bool, error) {
 	row, err := readCredential(ctx, repo.New(g.db), req, sel, g.now())
 	switch {
@@ -260,5 +262,13 @@ func (g *Governor) storedCredentialUsable(ctx context.Context, req Request, sel 
 		return false, nil
 	}
 	value, err := openCredential(ctx, g.tokens, row)
-	return err == nil && value != "", nil
+	switch {
+	case err != nil && !orgencryption.IsUnreadable(err):
+		// The organization's key could not open it right now, which says
+		// nothing about whether the credential is usable.
+		return false, err
+	case err != nil:
+		return false, nil
+	}
+	return value != "", nil
 }

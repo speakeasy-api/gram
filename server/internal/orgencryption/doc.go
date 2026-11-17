@@ -44,10 +44,12 @@
 // # Fencing
 //
 // Transition state is cached per process, and a writer can hold a Decision
-// across a provider call, so every feature statement that writes or clears
-// either copy of a value fences itself on the generation it decided under. It
-// adds this predicate, comparing against the row's own organization column
-// rather than a caller parameter so a row of another organization never
+// across a provider call, so every feature statement that stores either copy
+// of a value, or clears one copy and not the other, fences itself on the
+// generation it decided under. A statement that clears both copies of a value
+// needs no fence: erasing is correct under any transition state. A fenced
+// statement adds this predicate, comparing against the row's own organization
+// column rather than a caller parameter so a row of another organization never
 // passes:
 //
 //	AND COALESCE((

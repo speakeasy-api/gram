@@ -2001,7 +2001,13 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 	// The pair the exchange returns has to be stored, and the code cannot be
 	// redeemed twice, so the organization's key must be able to seal it first.
-	if err := m.tokens.RequireUsable(ctx, nil, client.OrganizationID); err != nil {
+	// The session takes its client's organization, through the client's
+	// project first; the login state names that project's organization.
+	sessionOrganization := client.OrganizationID
+	if client.ProjectID.Valid && client.ProjectID.UUID == state.ProjectID && state.OrganizationID != "" {
+		sessionOrganization = conv.ToPGText(state.OrganizationID)
+	}
+	if err := m.tokens.RequireUsable(ctx, nil, sessionOrganization); err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try signing in again shortly").LogError(ctx, logger)
 	}

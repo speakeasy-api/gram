@@ -19,14 +19,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -111,7 +115,7 @@ func TestFederatedLoginProvisionedHuman(t *testing.T) {
 
 func TestFederatedLoginCredentialHandoff(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"consumer", "consumer_failure", "membership_denied"} {
+	for _, scenario := range []string{"consumer", "consumer_failure", "membership_denied", "organization_key_unusable"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			runFederatedLogin(t, scenario, nil)
@@ -186,6 +190,12 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		_, err = orgsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: f.organizationID, UserID: conv.ToPGText(duplicateID)})
 	case "workos_deleted_directory":
 		err = directoryrepo.New(ti.conn).SetOrganizationDirectoryUserDeletionFixture(ctx, directoryrepo.SetOrganizationDirectoryUserDeletionFixtureParams{OrganizationID: f.organizationID, LocalDeleted: false, WorkosDeleted: true})
+	case "organization_key_unusable":
+		// The service runs without organization encryption, so an enrolled
+		// organization's tokens cannot be sealed here and the key check fails.
+		keys := orgencryptiontest.New(t, ti.conn)
+		transitions := orgencryption.NewTransitions(testenv.NewLogger(t), ti.conn, audit.NewLogger(), keys.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+		_, err = transitions.Enroll(ctx, f.organizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
 	}
 	require.NoError(t, err)
 	beforeUsers, err := usersrepo.New(ti.conn).SnapshotOrganizationUsersFixture(ctx, usersrepo.SnapshotOrganizationUsersFixtureParams{UserID: mockidp.MockUserID, OrganizationIds: []string{f.organizationID, f.otherOrg}})
@@ -289,6 +299,10 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		require.Equal(t, "Your account is not provisioned for this organization. Contact your administrator", failure.Query().Get("error_description"))
 		require.Empty(t, resolver.memberChecks, "provisioned-human resolution must reject before the membership hook")
 		require.Zero(t, consumed, "unresolved humans must never reach credential handoff")
+	case "organization_key_unusable":
+		failure, parseErr := url.Parse(result.Header().Get("Location"))
+		require.NoError(t, parseErr)
+		require.Equal(t, "Sign-in is temporarily unavailable. Try again shortly", failure.Query().Get("error_description"))
 	}
 	require.Zero(t, f.otherProviderCalls.Load(), "never contact a provider from another organization")
 	if scenario == "consumer" || scenario == "consumer_failure" {
@@ -310,7 +324,7 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 	count := provider.exchangeCount()
 	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), routeIDPCallback(callback)), "callback is single-use even on rejection")
 	require.Equal(t, count, provider.exchangeCount(), "replay must not reach the token endpoint")
-	if scenario == "missing_cookie" || scenario == "wrong_cookie" || scenario == "expired_state" || scenario == "changed_client" || scenario == "deleted_client" || scenario == "changed_issuer" || scenario == "missing_response_issuer" || scenario == "wrong_response_issuer" {
+	if scenario == "missing_cookie" || scenario == "wrong_cookie" || scenario == "expired_state" || scenario == "changed_client" || scenario == "deleted_client" || scenario == "changed_issuer" || scenario == "missing_response_issuer" || scenario == "wrong_response_issuer" || scenario == "organization_key_unusable" {
 		require.Zero(t, provider.exchangeCount())
 	} else {
 		require.Equal(t, 1, provider.exchangeCount(), "identity and membership failures must exercise verified exchange")

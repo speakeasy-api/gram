@@ -438,6 +438,33 @@ func TestRenewal_UnusableKeyNeverAsksTheProvider(t *testing.T) {
 	require.Equal(t, uuid.Nil, store.rows[b].claim, "nothing was spent, so the claim is released")
 }
 
+func TestRenewal_UnusableKeyOpeningStoredSecretsIsRetryable(t *testing.T) {
+	t.Parallel()
+	s, store, _, b, allow, rec := newRenewalFixture(t, 30*time.Second)
+	// Production loads secrets as the row stores them, so opening them is the
+	// first thing a renewal asks of the key.
+	store.mu.Lock()
+	c := store.rows[b]
+	c.assertion = plantedSecret(t, s, delegationPlain(t, s, c.assertion))
+	c.refresh = plantedSecret(t, s, delegationPlain(t, s, c.refresh))
+	c.subject = plantedSecret(t, s, delegationPlain(t, s, c.subject))
+	c.nonce = plantedSecret(t, s, delegationPlain(t, s, c.nonce))
+	store.rows[b] = c
+	store.mu.Unlock()
+	keys, ok := s.tokens.(*platformSecretKeys)
+	require.True(t, ok)
+	keys.unusable = orgencryption.ErrSuspended
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		t.Fatal("a refresh whose secrets cannot be opened must not be sent")
+		return nil, nil
+	}
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable)
+	require.Equal(t, uuid.Nil, store.rows[b].claim, "nothing was spent, so the claim is released")
+}
+
 func TestRenewal_FinishFailureAfterPOSTRecordsInternalError(t *testing.T) {
 	t.Parallel()
 	s, store, p, b, allow, rec := newRenewalFixture(t, 30*time.Second)

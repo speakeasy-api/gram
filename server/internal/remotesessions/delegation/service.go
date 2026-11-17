@@ -643,8 +643,13 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	refresh, subject, nonce, err := s.refreshSecrets(ctx, b, c)
 	if err != nil {
 		code := mcpconnectionattempts.CodeReauthenticationRequired
-		if errors.Is(err, errCredentialDecryption) {
+		switch {
+		case errors.Is(err, errCredentialDecryption):
 			code = mcpconnectionattempts.CodeInternalError
+		case errors.Is(err, ErrTemporary):
+			// The organization's key could not open the secrets right now;
+			// nobody needs to sign in again.
+			code = mcpconnectionattempts.CodeRenewalRetryable
 		}
 		s.recordRenewal(ctx, b, code)
 		return Assertion{}, err

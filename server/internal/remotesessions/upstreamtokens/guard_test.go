@@ -18,8 +18,8 @@ import (
 var guardExemptFiles = map[string]string{
 	// The demo seed stores placeholder tokens for the demo organization,
 	// which stays in platform_key. Moving it onto Tokens is a follow-up.
-	"../../demoseed/queries/04_fixture.sql": "demo placeholder",
-	"../../demoseed/queries/04_servers.sql": "demo placeholder",
+	"../../../internal/demoseed/queries/04_fixture.sql": "demo placeholder",
+	"../../../internal/demoseed/queries/04_servers.sql": "demo placeholder",
 }
 
 // tokenValues are the bare names of the values the use case holds. Each is
@@ -108,7 +108,8 @@ var (
 	// caseResultPattern matches each result of a CASE expression.
 	caseResultPattern = regexp.MustCompile(`(?is)\b(?:THEN|ELSE)\s+(\S+)`)
 
-	// targetTablePattern matches the table a write statement changes.
+	// targetTablePattern matches each table a write statement changes,
+	// including the writes of its common table expressions.
 	targetTablePattern = regexp.MustCompile(`(?is)\b(?:UPDATE|INSERT\s+INTO)\s+(\w+)`)
 )
 
@@ -148,7 +149,7 @@ func tokenWriteProblems(statement string) []string {
 			problems = append(problems, value+": only one of its two copies is erased")
 		}
 	}
-	if columns := insertColumnsPattern.FindStringSubmatch(statement); columns != nil {
+	for _, columns := range insertColumnsPattern.FindAllStringSubmatch(statement, -1) {
 		for _, value := range tokenValues {
 			if regexp.MustCompile(`(?i)\b` + value + `_(org_)?encrypted\b`).MatchString(columns[1]) {
 				problems = append(problems, value+" is inserted")
@@ -157,6 +158,17 @@ func tokenWriteProblems(statement string) []string {
 	}
 	slices.Sort(problems)
 	return problems
+}
+
+// writesTokenTable reports whether any write in statement changes a table
+// whose token copies the use case holds.
+func writesTokenTable(statement string) bool {
+	for _, target := range targetTablePattern.FindAllStringSubmatch(statement, -1) {
+		if slices.Contains(tokenTables, strings.ToLower(target[1])) {
+			return true
+		}
+	}
+	return false
 }
 
 // erases reports whether expression can only clear column.
@@ -195,11 +207,14 @@ func TestOnlyUpstreamTokenQueriesStoreATokenCopy(t *testing.T) {
 
 	offenders := map[string][]string{}
 	var fixtures []string
-	err = filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(serverRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".sql") {
+		if entry.IsDir() {
+			return skipUnscannedDir(entry)
+		}
+		if !strings.HasSuffix(path, ".sql") {
 			return nil
 		}
 		absolute, err := filepath.Abs(path)
@@ -223,8 +238,7 @@ func TestOnlyUpstreamTokenQueriesStoreATokenCopy(t *testing.T) {
 			}
 			name := queries[location[2]:location[3]]
 			statement := lineCommentPattern.ReplaceAllString(queries[location[1]:end], "")
-			target := targetTablePattern.FindStringSubmatch(statement)
-			if !writePattern.MatchString(statement) || target == nil || !slices.Contains(tokenTables, strings.ToLower(target[1])) {
+			if !writePattern.MatchString(statement) || !writesTokenTable(statement) {
 				continue
 			}
 			problems := tokenWriteProblems(statement)
@@ -244,6 +258,19 @@ func TestOnlyUpstreamTokenQueriesStoreATokenCopy(t *testing.T) {
 
 	callers := fixtureCallers(t, fixtures)
 	require.Empty(t, callers, "production code calls a fixture that plants token copies directly; store tokens through upstreamtokens.Tokens instead")
+}
+
+// serverRoot is the server module, relative to this package. The scans cover
+// every queries file in it, including the tools under cmd.
+const serverRoot = "../../.."
+
+// skipUnscannedDir skips generated code, migrations and dependencies.
+func skipUnscannedDir(entry fs.DirEntry) error {
+	switch entry.Name() {
+	case "gen", "migrations", "node_modules", ".git":
+		return filepath.SkipDir
+	}
+	return nil
 }
 
 // fixtureCallersOutsideTests are non-test Go packages that exist to support
@@ -267,11 +294,14 @@ func fixtureCallers(t *testing.T, fixtures []string) map[string][]string {
 	}
 
 	callers := map[string][]string{}
-	err := filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir(serverRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || filepath.Base(filepath.Dir(path)) == "repo" {
+		if entry.IsDir() {
+			return skipUnscannedDir(entry)
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || filepath.Base(filepath.Dir(path)) == "repo" {
 			return nil
 		}
 		absolute, err := filepath.Abs(path)
@@ -388,11 +418,14 @@ func TestEveryTokenPresenceCheckConsidersBothCopies(t *testing.T) {
 
 	offenders := map[string][]string{}
 	var checked int
-	err = filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(serverRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".sql") {
+		if entry.IsDir() {
+			return skipUnscannedDir(entry)
+		}
+		if !strings.HasSuffix(path, ".sql") {
 			return nil
 		}
 		absolute, err := filepath.Abs(path)
@@ -453,7 +486,7 @@ func TestProductionCodeNeverReadsOneTokenCopy(t *testing.T) {
 	require.NoError(t, err)
 
 	offenders := map[string][]string{}
-	err = filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(serverRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -462,7 +495,7 @@ func TestProductionCodeNeverReadsOneTokenCopy(t *testing.T) {
 			case "repo", "testrepo":
 				return filepath.SkipDir
 			}
-			return nil
+			return skipUnscannedDir(entry)
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
@@ -484,5 +517,6 @@ func TestProductionCodeNeverReadsOneTokenCopy(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+	require.True(t, copyReadPattern.MatchString("if sess.RefreshTokenEncrypted.Valid {"), "the pattern matches a direct read of one copy")
 	require.Empty(t, offenders, "this code reads one copy of a stored token; use upstreamtokens.Has or Tokens.Open over both copies")
 }

@@ -2,6 +2,8 @@ package identitychaining
 
 import (
 	"bytes"
+	"context"
+	"log/slog"
 	"net/url"
 	"testing"
 	"time"
@@ -790,4 +792,37 @@ func TestStore_RetirementErasesBothCopies(t *testing.T) {
 	require.True(t, rows[0].Deleted)
 	require.False(t, rows[0].AccessTokenEncrypted.Valid)
 	require.False(t, rows[0].AccessTokenOrgEncrypted.Valid, "a retired credential cannot come back from the organization-key copy")
+}
+
+// refusingSource fails its test if anything asks it to issue an ID-JAG.
+type refusingSource struct{ t *testing.T }
+
+func (s refusingSource) kind() remotesessions.EMAProviderKind {
+	return remotesessions.EMAProviderExternal
+}
+func (s refusingSource) available() bool { return true }
+func (s refusingSource) authorize(context.Context, *slog.Logger, Request, *selection) Outcome {
+	return success
+}
+func (s refusingSource) checkReuse(context.Context, Request, selection) Outcome { return success }
+func (s refusingSource) issue(context.Context, *slog.Logger, Request, selection, func() Outcome) (issuedGrant, Outcome) {
+	s.t.Error("an ID-JAG must not be issued for a credential that could not be stored")
+	return issuedGrant{}, success
+}
+
+func TestAcquire_UnusableOrganizationKeyAsksNoProvider(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	f.chainer.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+	require.NoError(t, fixture.Provisioner.Suspend(t.Context(), f.req.OrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+
+	_, outcome, issued := f.chainer.acquire(t.Context(), testenv.NewLogger(t), f.req, f.sel, refusingSource{t: t})
+	require.False(t, issued)
+	require.Equal(t, ReasonTransientFailure, outcome.Reason, "a key that cannot be used right now is retryable")
+	require.True(t, outcome.Retryable)
+	require.Empty(t, f.credentials(t), "nothing was stored")
 }

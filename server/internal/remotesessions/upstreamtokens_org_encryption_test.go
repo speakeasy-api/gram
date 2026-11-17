@@ -1,10 +1,12 @@
 package remotesessions_test
 
 import (
+	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -116,4 +118,21 @@ func TestRevocationOpensTheOrganizationKeyCopy(t *testing.T) {
 
 	calls, _, _ = spy.snapshot()
 	require.Equal(t, 1, calls, "a token the key cannot open right now is never sent, and nothing falls back to the platform key")
+}
+
+func TestSignInWithASuspendedOrganizationKeyNeverRedeemsTheCode(t *testing.T) {
+	t.Parallel()
+
+	var exchanges atomic.Int32
+	ctx, env, callback, err := driveSyntheticLogin(t, "org-key-sign-in", func(w http.ResponseWriter, _ *http.Request) {
+		exchanges.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"live-access","refresh_token":"live-refresh"}`))
+	}, withSuspendedOrganizationKey())
+	require.Error(t, err)
+	require.NotEqual(t, http.StatusSeeOther, callback.Code)
+	require.Zero(t, exchanges.Load(), "a code is never redeemed for tokens that could not be stored")
+
+	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "nothing was stored")
 }

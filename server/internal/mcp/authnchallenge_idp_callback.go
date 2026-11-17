@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -366,6 +367,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	if federation := challengeState.Federation; federation != nil {
 		verified := federation.ValidatedIdentity
 		if !optionalRefused {
+			// The login's credentials are retained once verified, and the code
+			// cannot be redeemed twice, so the organization's key must be able
+			// to seal them before the provider is asked.
+			if s.federatedLoginConsumer != nil {
+				if err := s.remoteChallengeMgr.UpstreamTokens().RequireUsable(ctx, nil, conv.ToPGText(endpoint.OrganizationID)); err != nil {
+					return failFederationDependency(fmt.Errorf("%w: organization key: %w", remotesessions.ErrFederatedUnavailable, err), "Sign-in is temporarily unavailable. Try again shortly")
+				}
+			}
 			verified, err = s.remoteChallengeMgr.ExchangeFederatedCode(ctx, provider, federation.CallbackURL, code, federation.Nonce, federation.Verifier)
 			if err != nil {
 				return failFederationDependency(err, "Federated identity verification failed. Restart login or contact your administrator")

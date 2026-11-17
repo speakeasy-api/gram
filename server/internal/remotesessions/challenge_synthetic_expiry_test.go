@@ -264,6 +264,8 @@ type syntheticLoginOptions struct {
 	registrationTelemetry bool
 	// orgEncryption seals tokens under organization encryption in dual_write.
 	orgEncryption bool
+	// suspendOrganizationKey suspends the organization's key before the callback.
+	suspendOrganizationKey bool
 	// keyCache, when set, backs the key resolver so a test can seed key-set state.
 	keyCache jwks.Cache
 	// signingAlgs is the issuer row's id_token_signing_alg_values_supported.
@@ -355,6 +357,12 @@ func withRegistrationTelemetry() syntheticLoginOption {
 // before the sign-in.
 func withOrganizationEncryption() syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.orgEncryption = true }
+}
+
+// withSuspendedOrganizationKey is withOrganizationEncryption with the
+// organization's key suspended before the callback.
+func withSuspendedOrganizationKey() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.orgEncryption, o.suspendOrganizationKey = true, true }
 }
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
@@ -576,6 +584,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		tokens := upstreamtokens.New(logger, orgencryption.NewCipher(logger, enc, fixture.Service, transitions), enc)
 		_, err := transitions.Enroll(ctx, authCtx.ActiveOrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
 		require.NoError(t, err)
+		if options.suspendOrganizationKey {
+			require.NoError(t, fixture.Provisioner.Suspend(ctx, authCtx.ActiveOrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+		}
 		orgEncryption = &syntheticOrgEncryption{fixture: fixture, transitions: transitions, tokens: tokens}
 		managerOptions = append(managerOptions, remotesessions.WithUpstreamTokens(tokens))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshUpstreamTokens(tokens))
