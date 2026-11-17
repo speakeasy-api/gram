@@ -307,7 +307,7 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 	case identitychaining.ReasonIneligibleIdentity:
 		return rejected("Your organization can't vouch for your account to %s, for example because your email isn't on one of its verified domains. Ask your administrator, or use a separate sign-in.")
 	case identitychaining.ReasonUnmanagedAccount:
-		return rejected("You're signed in to Speakeasy with a personal account, not one your company manages, so Speakeasy can't sign you in to %s. This includes Google and Microsoft accounts you created yourself with your work email. You can use a separate sign-in instead.")
+		return rejected("You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal.")
 	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,
 		identitychaining.ReasonMalformedResponse, identitychaining.ReasonTransientFailure, identitychaining.ReasonUnknownRejection,
 		identitychaining.ReasonStaleConfiguration, identitychaining.ReasonProviderUnavailable:

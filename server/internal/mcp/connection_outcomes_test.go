@@ -833,7 +833,7 @@ func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
 		reason identitychaining.Reason
 		says   string
 	}{
-		{identitychaining.ReasonUnmanagedAccount, "You're signed in to Speakeasy with a personal account, not one your company manages, so Speakeasy can't sign you in to %s. This includes Google and Microsoft accounts you created yourself with your work email. You can use a separate sign-in instead."},
+		{identitychaining.ReasonUnmanagedAccount, "You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal."},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -1264,7 +1264,7 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 		who    mcpconnectionattempts.WhoFixes
 		says   string
 	}{
-		{identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "not one your company manages"},
+		{identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "count as personal"},
 		{identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Ask your administrator"},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
