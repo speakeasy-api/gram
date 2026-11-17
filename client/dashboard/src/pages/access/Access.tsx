@@ -22,6 +22,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { AccessRequestsTab } from "./AccessRequestsTab";
+import { useState } from "react";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
 import { MCPAssignments } from "./MCPAssignments";
@@ -99,9 +100,19 @@ function AccessInner() {
     throwOnError: false,
   });
   const pendingCount = pendingRequests.data?.requests.length;
-  const grantRequest = grantRequestId
+  // Keep the request the dialog opened on: once it is decided it leaves the
+  // pending list, and the dialog still has to show the outcome.
+  const foundRequest = grantRequestId
     ? pendingRequests.data?.requests.find((r) => r.id === grantRequestId)
     : undefined;
+  const [openedRequest, setOpenedRequest] = useState<AccessRequest>();
+  if (foundRequest && openedRequest?.id !== foundRequest.id) {
+    setOpenedRequest(foundRequest);
+  }
+  const grantRequest =
+    grantRequestId && openedRequest?.id === grantRequestId
+      ? openedRequest
+      : undefined;
 
   const closeGrantDialog = () => {
     const next = new URLSearchParams(searchParams);

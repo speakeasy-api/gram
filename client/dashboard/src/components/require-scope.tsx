@@ -4,6 +4,11 @@ import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { invalidateTemporaryAccess } from "./temporary-access-helpers";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -29,6 +34,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { Popover, PopoverAnchor, PopoverContent } from "./ui/Popover";
 import { SelfGrantAccess } from "./temporary-access";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
@@ -126,6 +132,8 @@ export function RequireScope(
           className={props.className}
           scopes={scopes}
           all={all}
+          resourceId={resourceId}
+          projectId={projectId}
         >
           {resolveChildren(true)}
         </ScopeDisabled>
@@ -176,50 +184,77 @@ function requiredScopeLabel(
 
 /**
  * Wraps children in a visually-disabled state with a tooltip explaining why.
+ * Clicking the disabled control opens the same explanation with the way to get
+ * the permission: Request Access, or a temporary self-grant for an admin.
  */
 function ScopeDisabled({
   reason = "You don't have permission to perform this action.",
   className,
   scopes,
   all,
+  resourceId,
+  projectId,
   children,
 }: {
   reason?: string;
   className?: string;
   scopes: Scope[];
   all: boolean;
+  resourceId?: string;
+  projectId?: string;
   children: React.ReactNode;
 }) {
   const { catalogue } = useScopeCatalogue();
+  const [open, setOpen] = React.useState(false);
   const scopeHint = requiredScopeLabel(scopes, all, catalogue);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className={cn(
-            "pointer-events-none inline-flex opacity-50 select-none",
-            className,
-          )}
-        >
-          {/* Wrapper div that re-enables pointer events for the tooltip to work */}
-          <div
-            className="pointer-events-auto w-full cursor-not-allowed **:cursor-not-allowed"
-            onClickCapture={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            {children}
-          </div>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        <span>{reason}</span>
-        {scopeHint && (
-          <span className="mt-1 block opacity-80">{scopeHint}</span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <PopoverAnchor asChild>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "pointer-events-none inline-flex opacity-50 select-none",
+                className,
+              )}
+            >
+              {/* Wrapper div that re-enables pointer events for the tooltip to work */}
+              <div
+                className="pointer-events-auto w-full cursor-not-allowed **:cursor-not-allowed"
+                onClickCapture={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOpen(true);
+                }}
+              >
+                {children}
+              </div>
+            </div>
+          </TooltipTrigger>
+        </PopoverAnchor>
+        {!open && (
+          <TooltipContent>
+            <span>{reason}</span>
+            {scopeHint && (
+              <span className="mt-1 block opacity-80">{scopeHint}</span>
+            )}
+          </TooltipContent>
         )}
-      </TooltipContent>
-    </Tooltip>
+      </Tooltip>
+      <PopoverContent align="start" className="w-80 space-y-3 text-sm">
+        <div className="space-y-1">
+          <p>{reason}</p>
+          {scopeHint && <p className="text-muted-foreground">{scopeHint}</p>}
+        </div>
+        <RequestScopeAccess
+          scopes={scopes}
+          all={all}
+          resourceId={resourceId}
+          projectId={projectId}
+          align="start"
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -248,6 +283,11 @@ type RequestScopeAccessProps = {
   coverage?: { one: string; all: string };
   /** Runs once an admin has given themselves the access. */
   onGranted?: () => void;
+  /**
+   * Where the result lines up: centered under a full-page message, or with
+   * the start of a banner's text above it.
+   */
+  align?: "center" | "start";
   className?: string;
 };
 
@@ -359,6 +399,7 @@ function RequestScopeAccessButton({
   resourceId,
   projectId,
   className,
+  align = "center",
   accessRequestsOn,
   pending,
   onRequested,
@@ -368,7 +409,13 @@ function RequestScopeAccessButton({
   onRequested: (() => void) | undefined;
 }): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
-    "idle" | "sending" | "sent" | "pending" | "no-admin" | "error"
+    | "idle"
+    | "sending"
+    | "sent"
+    | "pending"
+    | "not-requestable"
+    | "no-admin"
+    | "error"
   >("idle");
   const { hasScope } = useRBAC();
   const { catalogue } = useScopeCatalogue();
@@ -380,13 +427,23 @@ function RequestScopeAccessButton({
   const missingScopes = getRequestableScopes(scopes).filter(
     (s) => !hasScope(s, resourceId, projectId),
   );
+  // Members who can't read the organization can't load the catalogue either;
+  // a scope it does not describe is offered, and the server refuses it if it
+  // can't be given temporarily.
   const requestableScopes = accessRequestsOn
-    ? missingScopes.filter((s) => catalogue.get(s)?.temporaryGrantable)
+    ? missingScopes.filter(
+        (s) => catalogue.get(s)?.temporaryGrantable !== false,
+      )
     : missingScopes;
   if (missingScopes.length === 0) return null;
-  if (requestableScopes.length === 0) {
+  const stack = cn(
+    "flex flex-col gap-1",
+    align === "start" ? "items-start text-left" : "items-center text-center",
+    className,
+  );
+  if (requestableScopes.length === 0 || requestState === "not-requestable") {
     return (
-      <p className="text-muted-foreground text-sm">
+      <p className={cn("text-muted-foreground max-w-sm text-sm", stack)}>
         This access can't be requested here. Ask an organization administrator
         to give it to you.
       </p>
@@ -433,6 +490,16 @@ function RequestScopeAccessButton({
       setRequestState("sent");
       return;
     }
+    const refused = results.every(
+      (r) =>
+        r.status === "rejected" &&
+        r.reason instanceof GramError &&
+        r.reason.statusCode === 400,
+    );
+    if (accessRequestsOn && refused) {
+      setRequestState("not-requestable");
+      return;
+    }
     const reachedServer = results.some((r) => r.status === "fulfilled");
     setRequestState(reachedServer ? "no-admin" : "error");
   };
@@ -442,7 +509,7 @@ function RequestScopeAccessButton({
   switch (state) {
     case "pending":
       return (
-        <div className="flex flex-col items-center gap-1">
+        <div className={stack}>
           <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
             <Icon name="check" className="size-4" />
             Request pending
@@ -451,27 +518,34 @@ function RequestScopeAccessButton({
             An organization admin can approve it in Speakeasy or Slack. It
             lapses after 24 hours.
           </p>
+          {accessRequestsOn && (
+            <AccessRequestWatcher
+              scopes={requestableScopes}
+              resourceId={resourceId ?? "*"}
+              onDecided={() => {
+                setRequestState("idle");
+                onRequested?.();
+              }}
+            />
+          )}
         </div>
       );
     case "idle":
+    case "sending":
       return (
         <Button
           variant="secondary"
           size="sm"
           className={className}
           onClick={() => void handleRequestAccess()}
-          disabled={requestAccessMutation.isPending}
+          disabled={state === "sending"}
         >
-          {requestAccessMutation.isPending ? "Sending..." : "Request Access"}
+          {state === "sending" ? "Sending…" : "Request Access"}
         </Button>
-      );
-    case "sending":
-      return (
-        <p className="text-muted-foreground text-sm">Sending request...</p>
       );
     case "sent":
       return (
-        <div className="flex flex-col items-center gap-1">
+        <div className={stack}>
           <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
             <Icon name="check" className="size-4" />
             Request sent
@@ -483,14 +557,14 @@ function RequestScopeAccessButton({
       );
     case "no-admin":
       return (
-        <p className="text-destructive text-sm">
+        <p className={cn("text-destructive max-w-sm text-sm", stack)}>
           No organization administrator could be notified. Contact an
           administrator directly to request access.
         </p>
       );
     case "error":
       return (
-        <div className="flex flex-col items-center gap-2">
+        <div className={stack}>
           <p className="text-destructive text-sm">
             Failed to send request. Please try again.
           </p>
@@ -504,6 +578,73 @@ function RequestScopeAccessButton({
         </div>
       );
   }
+}
+
+/** How often a pending request is checked while its requester waits. */
+const ACCESS_REQUEST_POLL_MS = 15_000;
+
+/**
+ * Watches the viewer's pending request for this access while "Request pending"
+ * shows, so the page opens up without a reload once an admin decides it,
+ * from Speakeasy or Slack. React Query pauses the polling in background tabs,
+ * and grants refetch on focus anyway. Renders nothing.
+ */
+function AccessRequestWatcher({
+  scopes,
+  resourceId,
+  onDecided,
+}: {
+  scopes: string[];
+  resourceId: string;
+  onDecided: () => void;
+}): null {
+  const queryClient = useQueryClient();
+  const seenPending = React.useRef(new Set<string>());
+  const mine = useAccessRequests({ mine: true }, undefined, {
+    refetchInterval: ACCESS_REQUEST_POLL_MS,
+    throwOnError: false,
+  });
+
+  React.useEffect(() => {
+    if (!mine.data) return;
+    const matching = mine.data.requests.filter(
+      (request) =>
+        scopes.includes(request.scope) &&
+        request.selector.resourceId === resourceId,
+    );
+    if (
+      seenPending.current.size === 0 &&
+      !matching.some((request) => request.status === "pending")
+    ) {
+      // Decided before this page last looked: show the current state, no toast.
+      invalidateTemporaryAccess(queryClient);
+      onDecided();
+      return;
+    }
+    for (const request of matching) {
+      if (request.status === "pending") {
+        seenPending.current.add(request.id);
+        continue;
+      }
+      if (!seenPending.current.delete(request.id)) continue;
+      // The request the viewer is waiting on was decided.
+      invalidateTemporaryAccess(queryClient);
+      if (request.status === "approved") {
+        toast.success(
+          request.grantExpiresAt
+            ? `Access approved until ${format(request.grantExpiresAt, "HH:mm")}.`
+            : "Access approved.",
+        );
+      } else if (request.status === "denied") {
+        toast.error("Your access request was denied.");
+      } else {
+        toast.info("Your access request expired before anyone decided it.");
+      }
+      onDecided();
+    }
+  }, [mine.data, scopes, resourceId, queryClient, onDecided]);
+
+  return null;
 }
 
 /**

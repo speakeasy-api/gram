@@ -193,8 +193,12 @@ export function GrantAccessDialog({
         if (!open) onClose();
       }}
     >
-      <Dialog.Content className="sm:max-w-md">
-        <Dialog.Header>
+      {/* Wide enough for the approval choices on one row, and never taller
+          than the window: the header and footer stay put while the body
+          scrolls. min-w-0 children keep truncated role descriptions inside the
+          dialog instead of widening it. */}
+      <Dialog.Content className="flex max-h-[calc(100dvh-4rem)] w-[calc(100vw-2rem)] flex-col sm:max-w-2xl">
+        <Dialog.Header className="shrink-0 pr-6">
           <Dialog.Title>Grant Access</Dialog.Title>
           {/* Opened from access-request emails and from server team-access
               rows alike, so the copy names the permission without assuming a
@@ -206,139 +210,144 @@ export function GrantAccessDialog({
           </Dialog.Description>
         </Dialog.Header>
 
-        {partOf.length > 0 && (
-          <ul className="space-y-1">
-            {partOf.map((task) => {
-              const alsoNeeds = task.scopes.filter((s) => s !== scope);
-              return (
-                <li key={task.slug}>
-                  <Text muted small>
-                    Part of <strong>{task.label}</strong>
-                    {alsoNeeds.length > 0 && (
-                      <>
-                        , which also needs{" "}
-                        {alsoNeeds
-                          .map((s) => scopeLabel(catalogue, s))
-                          .join(", ")}
-                      </>
-                    )}
-                    .
-                  </Text>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <div className="-mx-6 min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-6">
+          {partOf.length > 0 && (
+            <ul className="space-y-1">
+              {partOf.map((task) => {
+                const alsoNeeds = task.scopes.filter((s) => s !== scope);
+                return (
+                  <li key={task.slug}>
+                    <Text muted small>
+                      Part of <strong>{task.label}</strong>
+                      {alsoNeeds.length > 0 && (
+                        <>
+                          , which also needs{" "}
+                          {alsoNeeds
+                            .map((s) => scopeLabel(catalogue, s))
+                            .join(", ")}
+                        </>
+                      )}
+                      .
+                    </Text>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
-        {isLoading && (
-          <div
-            role="status"
-            aria-label="Loading members, roles and permissions"
-            className="space-y-2"
-          >
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
-        )}
-
-        {loadFailed && (
-          <div className="flex flex-col items-center gap-3 py-4">
-            <Text variant="body" className="text-destructive text-sm">
-              Failed to load members, roles and permissions.
-            </Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                if (membersError) void refetchMembers();
-                if (rolesError) void refetchRoles();
-                if (scopesError) refetchScopes();
-              }}
+          {isLoading && (
+            <div
+              role="status"
+              aria-label="Loading members, roles and permissions"
+              className="space-y-2"
             >
-              Retry
-            </Button>
-          </div>
-        )}
-
-        {!isLoading && !loadFailed && !member && (
-          <Text muted small className="py-4">
-            This member is no longer part of the organization.
-          </Text>
-        )}
-
-        {member && !isLoading && !loadFailed && (
-          <div className="space-y-4 py-2">
-            <div className="border-border flex items-center gap-3 border p-3">
-              <Avatar className="h-9 w-9">
-                {member.photoUrl && (
-                  <AvatarImage src={member.photoUrl} alt={member.name} />
-                )}
-                <AvatarFallback className="text-sm">
-                  {memberInitials(member)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <Text variant="body" className="font-medium">
-                  {member.name}
-                </Text>
-                <Text variant="body" className="text-muted-foreground text-sm">
-                  {member.email}
-                </Text>
-              </div>
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
             </div>
+          )}
 
-            {request?.message && (
-              <Text muted small>
-                “{request.message}”
-              </Text>
-            )}
-
-            {request?.status === "pending" && !granted && (
-              <AccessRequestDecision
-                request={request}
-                requesterName={member.name}
-              />
-            )}
-
-            {granted ? (
-              <div className="flex flex-col items-center gap-1 py-2">
-                <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
-                  <Icon name="check" className="size-4" />
-                  Access granted
-                </div>
-                <Text muted small>
-                  {member.name} now has {label}.
-                </Text>
-              </div>
-            ) : (
-              <RoleSuggestionList
-                member={member}
-                scope={scope}
-                label={label}
-                suggestions={suggestions}
-                labelFor={labelFor}
-                pendingRoleId={
-                  updateMemberRoles.isPending ? assignedRoleId : null
-                }
-                onAssign={requestAssign}
-                onCreateRole={() => setCreatingRole(true)}
-              />
-            )}
-
-            {updateMemberRoles.isError && (
+          {loadFailed && (
+            <div className="flex flex-col items-center gap-3 py-4">
               <Text variant="body" className="text-destructive text-sm">
-                Failed to assign the role. Please try again.
+                Failed to load members, roles and permissions.
               </Text>
-            )}
-
-            <div className="flex justify-end pt-2">
-              <Button variant="secondary" onClick={onClose}>
-                {granted ? "Done" : "Cancel"}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  if (membersError) void refetchMembers();
+                  if (rolesError) void refetchRoles();
+                  if (scopesError) refetchScopes();
+                }}
+              >
+                Retry
               </Button>
             </div>
-          </div>
-        )}
+          )}
+
+          {!isLoading && !loadFailed && !member && (
+            <Text muted small className="py-4">
+              This member is no longer part of the organization.
+            </Text>
+          )}
+
+          {member && !isLoading && !loadFailed && (
+            <div className="space-y-4 py-2">
+              <div className="border-border flex items-center gap-3 border p-3">
+                <Avatar className="h-9 w-9">
+                  {member.photoUrl && (
+                    <AvatarImage src={member.photoUrl} alt={member.name} />
+                  )}
+                  <AvatarFallback className="text-sm">
+                    {memberInitials(member)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <Text variant="body" className="font-medium">
+                    {member.name}
+                  </Text>
+                  <Text
+                    variant="body"
+                    className="text-muted-foreground text-sm"
+                  >
+                    {member.email}
+                  </Text>
+                </div>
+              </div>
+
+              {request?.message && (
+                <Text muted small>
+                  “{request.message}”
+                </Text>
+              )}
+
+              {request?.status === "pending" && !granted && (
+                <AccessRequestDecision
+                  request={request}
+                  requesterName={member.name}
+                />
+              )}
+
+              {granted ? (
+                <div className="flex flex-col items-center gap-1 py-2">
+                  <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+                    <Icon name="check" className="size-4" />
+                    Access granted
+                  </div>
+                  <Text muted small>
+                    {member.name} now has {label}.
+                  </Text>
+                </div>
+              ) : (
+                <RoleSuggestionList
+                  member={member}
+                  scope={scope}
+                  label={label}
+                  suggestions={suggestions}
+                  labelFor={labelFor}
+                  pendingRoleId={
+                    updateMemberRoles.isPending ? assignedRoleId : null
+                  }
+                  onAssign={requestAssign}
+                  onCreateRole={() => setCreatingRole(true)}
+                />
+              )}
+
+              {updateMemberRoles.isError && (
+                <Text variant="body" className="text-destructive text-sm">
+                  Failed to assign the role. Please try again.
+                </Text>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex shrink-0 justify-end">
+          <Button variant="secondary" onClick={onClose}>
+            {granted ? "Done" : "Cancel"}
+          </Button>
+        </div>
       </Dialog.Content>
 
       {creatingRole && (

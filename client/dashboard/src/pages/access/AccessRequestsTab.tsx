@@ -63,9 +63,14 @@ export function AccessRequestsTab({
       {
         key: "createdAt",
         header: "Asked",
-        width: "140px",
+        width: "160px",
         render: (row) => (
-          <Text muted small title={row.createdAt.toISOString()}>
+          <Text
+            muted
+            small
+            className="whitespace-nowrap"
+            title={row.createdAt.toISOString()}
+          >
             {formatDistanceToNow(row.createdAt, { addSuffix: true })}
           </Text>
         ),

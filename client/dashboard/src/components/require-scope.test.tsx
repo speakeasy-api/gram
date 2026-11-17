@@ -11,8 +11,14 @@ const mutateAsync = vi.hoisted(() =>
 // temporarily, and the viewer's own pending requests.
 const accessRequests = vi.hoisted(() => ({
   on: false,
+  catalogueLoaded: true,
   grantable: new Set<string>(),
-  pending: [] as { scope: string; selector: { resourceId: string } }[],
+  pending: [] as {
+    scope: string;
+    selector: { resourceId: string };
+    status?: string;
+    grantExpiresAt?: Date;
+  }[],
 }));
 
 vi.mock("@/components/page-header", () => {
@@ -36,8 +42,11 @@ vi.mock("@/hooks/useScopeCatalogue", () => ({
   useScopeCatalogue: () => ({
     catalogue: {
       get: (slug: string) =>
-        accessRequests.grantable.has(slug)
-          ? { label: slug, temporaryGrantable: true }
+        accessRequests.catalogueLoaded
+          ? {
+              label: slug,
+              temporaryGrantable: accessRequests.grantable.has(slug),
+            }
           : undefined,
     },
     tasks: [],
@@ -49,10 +58,29 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/accessRequests.js", () => ({
-  useAccessRequests: () => ({
-    data: { requests: accessRequests.pending },
+  // The pending list is read once, like the page's own query, so it still
+  // shows a request an admin has since decided; the watcher's polled list of
+  // every status sees the decision.
+  useAccessRequests: (request?: { status?: string }) => ({
+    data: {
+      requests: accessRequests.pending.map((item) => ({
+        id: "request-1",
+        ...item,
+        status: request?.status ?? item.status ?? "pending",
+      })),
+    },
     refetch: () => Promise.resolve(),
   }),
+}));
+const toast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+}));
+vi.mock("sonner", () => ({ toast }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({ invalidateQueries: () => Promise.resolve() }),
 }));
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
   useRequestAccessMutation: () => ({ mutateAsync, isPending: false }),
@@ -67,6 +95,7 @@ import { RequestScopeAccess, RequireScope } from "./require-scope";
 afterEach(() => {
   cleanup();
   accessRequests.on = false;
+  accessRequests.catalogueLoaded = true;
   accessRequests.grantable = new Set();
   accessRequests.pending = [];
   mutateAsync.mockClear();
@@ -157,5 +186,40 @@ describe("RequestScopeAccess", () => {
 
     expect(screen.queryByRole("button", { name: "Request Access" })).toBeNull();
     expect(screen.getByText(/Ask an organization administrator/)).toBeTruthy();
+  });
+
+  it("offers the request when the catalogue cannot be read", () => {
+    accessRequests.on = true;
+    accessRequests.catalogueLoaded = false;
+    render(<RequestScopeAccess scopes={["org:read"]} />);
+
+    expect(screen.getByRole("button", { name: "Request Access" })).toBeTruthy();
+  });
+
+  it("tells the requester once their pending request is approved", () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    accessRequests.pending = [
+      { scope: "log:read", selector: { resourceId: "project-1" } },
+    ];
+    const { rerender } = render(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
+    expect(screen.getByText("Request pending")).toBeTruthy();
+
+    accessRequests.pending = [
+      {
+        scope: "log:read",
+        selector: { resourceId: "project-1" },
+        status: "approved",
+        grantExpiresAt: new Date(2026, 10, 19, 14, 30),
+      },
+    ];
+    rerender(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith("Access approved until 14:30.");
   });
 });

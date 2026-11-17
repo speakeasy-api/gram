@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import type { AccessRequest } from "@gram/client/models/components/accessrequest.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { invalidateAllAccessRequests } from "@gram/client/react-query/accessRequests.js";
 import { useDecideAccessRequestMutation } from "@gram/client/react-query/decideAccessRequest.js";
 import { invalidateAllTemporaryGrants } from "@gram/client/react-query/temporaryGrants.js";
@@ -44,7 +45,7 @@ export function AccessRequestDecision({
         <Text variant="body" className="text-sm">
           {decided.status === "approved" && decided.grantExpiresAt
             ? `${requesterName} has access until ${format(new Date(decided.grantExpiresAt), "d MMM, HH:mm")}.`
-            : `Request denied. ${requesterName} will be told.`}
+            : "Request denied."}
         </Text>
       </div>
     );
@@ -94,8 +95,9 @@ export function AccessRequestDecision({
       </Text>
       {decide.isError && (
         <Text variant="body" className="text-destructive text-sm">
-          {decide.error.message ||
-            "The request could not be decided. Try again."}
+          {decide.error instanceof GramError && decide.error.statusCode === 409
+            ? `${requesterName} already has this access, or the request was decided elsewhere. Check their temporary access, or deny the request.`
+            : "The request could not be decided. Try again."}
         </Text>
       )}
     </div>
