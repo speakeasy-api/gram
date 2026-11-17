@@ -155,13 +155,6 @@ report_url_ok() {
 }
 report_install_failure() {
   [ -r "$report_config" ] || return 0
-  # One report per version an hour, so a failing install does not report on
-  # every hook call.
-  if [ -n "${install_dir:-}" ]; then
-    report_stamp="${install_dir}.reported"
-    [ -z "$(find "$report_stamp" -mmin -60 2>/dev/null)" ] || return 0
-    : >"$report_stamp" 2>/dev/null || true
-  fi
   server_url=$(config_field server_url)
   api_key=$(config_field hooks_api_key)
   project=$(config_field project)
@@ -171,6 +164,13 @@ report_install_failure() {
   case "$report_host" in *[!A-Za-z0-9._-]*) report_host= ;; esac
   case "$report_harness" in *[!A-Za-z0-9._-]*) report_harness= ;; esac
   case "$api_key$project" in *[!A-Za-z0-9._-]*) return 0 ;; esac
+  # One report per version an hour, so a failing install does not report on
+  # every hook call.
+  if [ -n "${install_dir:-}" ]; then
+    report_stamp="${install_dir}.reported"
+    [ -z "$(find "$report_stamp" -mmin -60 2>/dev/null)" ] || return 0
+    : >"$report_stamp" 2>/dev/null || true
+  fi
   now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
   body=$(printf '{"schema_version":"hook.ingest.v1","source":{"adapter":"bootstrap","hostname":"%%s"},"event":{"type":"client.install_failed","occurred_at":"%%s"},"data":{"install_failure":{"cause":"%%s","attempted_at":"%%s","version":"%%s","os":"%%s","arch":"%%s","harness":"%%s"}}}' \
     "$report_host" "$now" "$1" "$now" "$version" "${os:-}" "${arch:-}" "$report_harness")
@@ -550,18 +550,18 @@ function Send-InstallFailure([string]$Cause) {
             elseif ($Arg.StartsWith("--provider=", [StringComparison]::Ordinal)) { $Harness = $Arg.Substring(11) }
         }
         if (-not $ConfigPath -or -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return }
-        if ($InstallDir) {
-            $Stamp = "$InstallDir.reported"
-            $Recent = Get-Item -LiteralPath $Stamp -ErrorAction SilentlyContinue
-            if ($Recent -and $Recent.LastWriteTimeUtc -gt [DateTime]::UtcNow.AddHours(-1)) { return }
-            [System.IO.File]::WriteAllText($Stamp, "")
-        }
         $Config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
         if (-not $Config.server_url -or -not $Config.hooks_api_key) { return }
         $Parsed = $null
         if (-not [Uri]::TryCreate([string]$Config.server_url, [UriKind]::Absolute, [ref]$Parsed)) { return }
         if ($Parsed.UserInfo) { return }
         if ($Parsed.Scheme -ne "https" -and -not ($Parsed.Scheme -eq "http" -and $Parsed.IsLoopback)) { return }
+        if ($InstallDir) {
+            $Stamp = "$InstallDir.reported"
+            $Recent = Get-Item -LiteralPath $Stamp -ErrorAction SilentlyContinue
+            if ($Recent -and $Recent.LastWriteTimeUtc -gt [DateTime]::UtcNow.AddHours(-1)) { return }
+            try { [System.IO.File]::WriteAllText($Stamp, "") } catch { }
+        }
         $Now = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         $Body = @{
             schema_version = "hook.ingest.v1"

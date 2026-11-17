@@ -12,7 +12,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const (
@@ -206,10 +205,10 @@ func boundedDeviceOS(v string) string {
 	return hookMetricDimensionUnknown
 }
 
-// boundedInstallVersion keeps only the pinned release: bootstrap scripts never
-// send anything else, so any other value is collapsed to keep the series finite.
+// boundedInstallVersion keeps a version only when it has the shape of a
+// release, so scripts pinned to older releases still report their version.
 func boundedInstallVersion(v string) string {
-	if v == plugins.LatestHooksVersion() {
+	if releaseVersionPattern.MatchString(v) {
 		return v
 	}
 	return hookMetricDimensionUnknown
