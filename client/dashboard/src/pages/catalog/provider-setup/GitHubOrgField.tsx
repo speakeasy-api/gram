@@ -1,7 +1,7 @@
 import { useGitHubAccountSearch } from "@/hooks/useGitHubAccountSearch";
 import { type JSX, useId, useState } from "react";
 import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
+import { GitHubAccountResults } from "@/components/GitHubAccountResults";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
 import { normalizeGitHubOrg } from "./github";
 import { useSetup } from "./setup-context";
@@ -15,7 +15,7 @@ export function GitHubOrgField(): JSX.Element {
   const canSearch = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/.test(query);
   const showResults = open && canSearch;
   const search = useGitHubAccountSearch(showResults ? query : "", true);
-  const results = search.results.map((item) => item.login);
+  const results = search.results;
   const listOpen = showResults && results.length > 0;
   const error = s.errors.org;
   const select = (login: string) => {
@@ -24,7 +24,6 @@ export function GitHubOrgField(): JSX.Element {
     setActiveIndex(-1);
   };
   let status = "No organizations found. You can enter the name manually.";
-  if (search.loading) status = "Searching GitHub…";
   if (search.failed)
     status = "Search unavailable. You can enter the name manually.";
 
@@ -86,39 +85,21 @@ export function GitHubOrgField(): JSX.Element {
             }
             if (event.key === "Enter" && showResults && results[activeIndex]) {
               event.preventDefault();
-              select(results[activeIndex]);
+              select(results[activeIndex].login);
             }
           }}
         />
         {showResults && (
-          <div className="bg-popover absolute top-full right-0 left-0 z-50 border p-1 shadow-md">
-            {listOpen ? (
-              <div id={listId} role="listbox" aria-label="GitHub organizations">
-                {results.map((login, index) => (
-                  <Button
-                    key={login}
-                    id={`${listId}-${index}`}
-                    role="option"
-                    tabIndex={-1}
-                    variant="tertiary"
-                    className="w-full justify-start aria-selected:bg-accent"
-                    aria-selected={index === activeIndex}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => select(login)}
-                  >
-                    {login}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <p
-                role="status"
-                className="text-muted-foreground px-2 py-3 text-sm"
-              >
-                {status}
-              </p>
-            )}
-          </div>
+          <GitHubAccountResults
+            id={listId}
+            label="GitHub organizations"
+            results={results}
+            activeIndex={activeIndex}
+            onActiveIndexChange={setActiveIndex}
+            onSelect={(account) => select(account.login)}
+            loading={search.loading}
+            emptyMessage={status}
+          />
         )}
       </div>
       {error && <FieldError id="setup-github-org-error">{error}</FieldError>}

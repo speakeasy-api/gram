@@ -3,7 +3,7 @@ import {
   MIN_GITHUB_SEARCH_LENGTH,
   type GithubUserResult,
 } from "@/hooks/useGitHubAccountSearch";
-import { Spinner } from "@/components/ui/Spinner";
+import { GitHubAccountResults } from "@/components/GitHubAccountResults";
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
 import { Dialog } from "@/components/ui/Dialog";
@@ -291,60 +291,41 @@ export const PublishDialog = memo(function PublishDialog({
                   data-bwignore="true"
                   data-form-type="other"
                   role="combobox"
-                  aria-expanded={dropdownOpen}
-                  aria-controls="github-user-results"
+                  aria-expanded={dropdownOpen && results.length > 0}
+                  aria-controls={
+                    dropdownOpen && results.length
+                      ? "github-user-results"
+                      : undefined
+                  }
+                  aria-activedescendant={
+                    dropdownOpen && results[activeIndex]
+                      ? `github-user-results-${activeIndex}`
+                      : undefined
+                  }
                   aria-autocomplete="list"
                   className="h-7 flex-1 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                 />
               </div>
 
               {dropdownOpen && (
-                <div
+                <GitHubAccountResults
                   id="github-user-results"
-                  role="listbox"
-                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto border p-1 shadow-lg"
-                >
-                  {searchLoading && (
-                    <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs">
-                      <Spinner className="mr-0 h-3 w-3" />
-                      Searching GitHub…
-                    </div>
-                  )}
-                  {!searchLoading && results.length === 0 && (
-                    <div className="text-muted-foreground px-2 py-1.5 text-xs">
+                  label="GitHub accounts"
+                  results={results}
+                  activeIndex={activeIndex}
+                  onActiveIndexChange={setActiveIndex}
+                  onSelect={selectResult}
+                  loading={searchLoading}
+                  emptyMessage={
+                    <>
                       No matches. Press Enter to add{" "}
                       <code className="text-foreground">
                         {draft.trim().replace(/^@/, "")}
                       </code>{" "}
                       anyway.
-                    </div>
-                  )}
-                  {results.map((user, idx) => (
-                    <button
-                      type="button"
-                      key={user.login}
-                      role="option"
-                      aria-selected={idx === activeIndex}
-                      onClick={() => selectResult(user)}
-                      onMouseEnter={() => setActiveIndex(idx)}
-                      className={`flex w-full items-center gap-2 px-2 py-1 text-left ${
-                        idx === activeIndex
-                          ? "bg-accent text-accent-foreground"
-                          : ""
-                      }`}
-                    >
-                      <img
-                        src={user.avatar_url}
-                        alt=""
-                        className="h-5 w-5 flex-shrink-0 rounded-full"
-                        loading="lazy"
-                      />
-                      <span className="text-foreground text-sm">
-                        {user.login}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                    </>
+                  }
+                />
               )}
             </div>
             <p className="text-muted-foreground text-xs">
