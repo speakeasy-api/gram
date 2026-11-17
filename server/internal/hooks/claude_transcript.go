@@ -107,7 +107,24 @@ type claudeTranscriptUpload struct {
 
 	// Entries are the raw transcript JSONL lines, one JSON object each.
 	Entries claudeTranscriptEntries `json:"entries"`
+
+	// Diagnostic, when set, reports why the binary's Stop hook shipped no
+	// lines. Such an upload carries no entries and stores nothing; the server
+	// only logs it, because a skip inside the Cowork VM is otherwise silent.
+	Diagnostic *claudeTranscriptDiagnostic `json:"diagnostic"`
 }
+
+// claudeTranscriptDiagnostic is a skip the binary reports instead of entries.
+type claudeTranscriptDiagnostic struct {
+	// Reason is a short machine-readable slug, such as transcript_path_invalid.
+	Reason string `json:"reason"`
+	// Detail is the binary's error text, capped by claudeTranscriptMaxDiagnosticBytes.
+	Detail string `json:"detail"`
+}
+
+// claudeTranscriptMaxDiagnosticBytes bounds each diagnostic field the server
+// logs, so a client cannot write arbitrarily long log lines.
+const claudeTranscriptMaxDiagnosticBytes = 512
 
 // errClaudeTranscriptTooManyEntries rejects an upload carrying more than
 // claudeTranscriptMaxEntries entries.
@@ -180,6 +197,14 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if upload.Diagnostic != nil {
+		s.logClaudeTranscriptSkip(ctx, authCtx, upload)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: 0, Warnings: nil})
+		return
+	}
+
 	// The binary hangs up once its own budget runs out; a detached context
 	// lets a write that already started finish, so the retry the binary makes
 	// on its next Stop finds the rows and stores nothing twice.
@@ -204,6 +229,29 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: persisted.stored, Warnings: warnings})
+}
+
+// logClaudeTranscriptSkip records why the binary's Stop hook shipped no
+// transcript lines for a session.
+func (s *Service) logClaudeTranscriptSkip(ctx context.Context, authCtx *contextvalues.AuthContext, upload *claudeTranscriptUpload) {
+	s.logger.WarnContext(ctx, "hooks binary skipped a claude transcript upload",
+		attr.SlogEvent("hooks_claude_transcript_client_skip"),
+		attr.SlogReason(truncateDiagnostic(upload.Diagnostic.Reason)),
+		attr.SlogErrorMessage(truncateDiagnostic(upload.Diagnostic.Detail)),
+		attr.SlogHookSource(truncateDiagnostic(upload.Adapter)),
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogGenAIConversationID(upload.SessionID),
+	)
+}
+
+// truncateDiagnostic caps a client-supplied diagnostic field at
+// claudeTranscriptMaxDiagnosticBytes, keeping valid UTF-8.
+func truncateDiagnostic(v string) string {
+	if len(v) <= claudeTranscriptMaxDiagnosticBytes {
+		return v
+	}
+	return strings.ToValidUTF8(v[:claudeTranscriptMaxDiagnosticBytes], "")
 }
 
 // readClaudeTranscriptUpload decodes and validates the request body. The
