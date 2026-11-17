@@ -13,6 +13,8 @@ import (
 func TestOpenKeys_Golden(t *testing.T) {
 	t.Parallel()
 
+	// No project_id: a type's parent key is never opened. org:hooks_ingest
+	// declares project_id itself, and org has no parent.
 	project := []string{SelectorKeyProjectID}
 	server := []string{SelectorKeyServerURL, SelectorKeyServerIdentity}
 	// A list of entries, not a map literal, so the list names only the
@@ -21,19 +23,12 @@ func TestOpenKeys_Golden(t *testing.T) {
 		scope Scope
 		keys  openKeys
 	}{
-		{ScopeAssistantRead, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeAssistantWrite, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeEnvironmentRead, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeEnvironmentWrite, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeInferenceExecute, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeMCPRead, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeMCPWrite, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
 		{ScopeOrgHooksIngest, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
 		{ScopeRiskPolicyBlock, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
 		{ScopeRiskPolicyBypass, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
 		{ScopeRiskPolicyEvaluate, openKeys{Probe: server, Connection: nil, PolicyAudience: server}},
 		{ScopeMCPConnect, openKeys{
-			Probe:          []string{SelectorKeyProjectID, SelectorKeyTool, SelectorKeyDisposition},
+			Probe:          []string{SelectorKeyTool, SelectorKeyDisposition},
 			Connection:     []string{SelectorKeyTool, SelectorKeyDisposition},
 			PolicyAudience: nil,
 		}},
@@ -64,8 +59,9 @@ func TestOpenKeys_NoneOnAuthClientsBlocksOrRoot(t *testing.T) {
 func TestOpenKeys_ExactCheckOpensNothing(t *testing.T) {
 	t.Parallel()
 
-	probe := Check{Scope: ScopeMCPRead, ResourceKind: "", ResourceID: "server-1", Dimensions: nil, exact: false, representedUser: "", probe: true, anyOf: nil, operation: operationDefault}
-	require.True(t, probe.mayOmit(SelectorKeyProjectID))
-	probe.exact = true
+	probe := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "server-1", Dimensions: nil, exact: false, representedUser: "", probe: true, anyOf: nil, operation: operationDefault}
+	require.True(t, probe.mayOmit(SelectorKeyTool))
 	require.False(t, probe.mayOmit(SelectorKeyProjectID))
+	probe.exact = true
+	require.False(t, probe.mayOmit(SelectorKeyTool))
 }

@@ -313,25 +313,20 @@ func camelAction(action Action) string {
 	return b.String()
 }
 
-// validateParentDimension requires a type that opens its parent key (mcp
-// grants bounded by project_id, which a probe may leave out) to mark that key
-// Required. Only a probe then leaves the parent out: every other check is
-// refused as invalid without it. A parent key nothing opens may stay
-// optional, since a check without it matches no grant bounded on it.
+// validateParentDimension refuses to open a type's parent key (project_id on
+// a type inside a project), wherever it is declared. A check that leaves the
+// parent out must never match a grant bounded to some parent: it either fails
+// as invalid, when the key is Required, or matches no bounded grant.
 func validateParentDimension(fail func(string, ...any), t ResourceType) {
 	if t.Parent == "" {
 		return
 	}
 	key := string(t.Parent) + "_id"
-	opened := false
 	for _, p := range t.Permissions {
 		for _, open := range p.Open {
-			opened = opened || slices.Contains(open.Keys, key)
-		}
-	}
-	for _, d := range t.Dimensions {
-		if d.Key == key && !d.Required && opened {
-			fail("%s: dimension %q names the parent %s and a check may leave it out, so it must be Required", t.Kind, key, t.Parent)
+			if slices.Contains(open.Keys, key) {
+				fail("%s.%s: %q names the parent %s and must never be opened", t.Kind, p.Action, key, t.Parent)
+			}
 		}
 	}
 }
@@ -339,7 +334,8 @@ func validateParentDimension(fail func(string, ...any), t ResourceType) {
 // validateOpenKeys checks a permission's open keys: each kind of check at
 // most once, with at least one key, and every key a dimension of the
 // permission or its type. Only a permission with dimension sets has a
-// connection, the plain form of its ref that leaves the set out.
+// connection, the plain form of its ref that leaves the set out, and a
+// connection may open only keys those sets carry.
 func validateOpenKeys(fail func(string, ...any), owner string, p Permission, declared func(string) bool) {
 	seen := make(map[OpenOn]bool, len(p.Open))
 	for _, open := range p.Open {
@@ -348,6 +344,11 @@ func validateOpenKeys(fail func(string, ...any), owner string, p Permission, dec
 		case OpenOnConnection:
 			if len(p.DimensionSets) == 0 {
 				fail("%s: only a permission with dimension sets has a connection to open keys on", owner)
+			}
+			for _, key := range open.Keys {
+				if !slices.ContainsFunc(p.DimensionSets, func(set DimensionSet) bool { return slices.Contains(set.Keys, key) }) {
+					fail("%s: a connection may only open keys a dimension set carries, not %q", owner, key)
+				}
 			}
 		default:
 			fail("%s: open keys on an unknown kind of check, %s", owner, open.On)
