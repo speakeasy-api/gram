@@ -1664,6 +1664,7 @@ func unmarshalNetworkIngressResponseBodyToNetworkingressNetworkIngress(v *Networ
 		Status:                *v.Status,
 		DNSName:               v.DNSName,
 		LastError:             v.LastError,
+		StatusDetail:          v.StatusDetail,
 		HealthCheckedAt:       v.HealthCheckedAt,
 		ConnectedSince:        v.ConnectedSince,
 		CreatedAt:             *v.CreatedAt,

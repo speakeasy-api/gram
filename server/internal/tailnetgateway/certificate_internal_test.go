@@ -149,27 +149,28 @@ func TestCertificateTrackerWaitsForTheRetryTimeAfterARateLimit(t *testing.T) {
 	fetch := newScriptedFetch(t, errRateLimited)
 	tracker := newTestTracker(t, fetch.fetch, clock.Now)
 
-	ready, _ := tracker.Poll()
+	ready, _, _ := tracker.Poll()
 	require.False(t, ready)
 	<-fetch.called
 	settle(t, tracker)
 
-	ready, reason := tracker.Poll()
+	ready, failed, reason := tracker.Poll()
 	require.False(t, ready)
+	require.True(t, failed, "a refused request is a failure the slot reports")
 	require.Equal(t, "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC", reason)
 	require.Equal(t, 1, fetch.count(), "no new request before Let's Encrypt's retry time")
 
 	clock.Set(time.Date(2026, time.November, 12, 22, 53, 33, 0, time.UTC))
-	ready, _ = tracker.Poll()
+	ready, _, _ = tracker.Poll()
 	require.False(t, ready)
 	<-fetch.called
 	settle(t, tracker)
-	ready, reason = tracker.Poll()
+	ready, _, reason = tracker.Poll()
 	require.True(t, ready, "the retry after the window reopens obtains the certificate")
 	require.Empty(t, reason)
 	require.Equal(t, 2, fetch.count())
 
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	require.Equal(t, 2, fetch.count(), "a held certificate is not requested again before its refresh")
 }
 
@@ -179,7 +180,7 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	tracker := newTestTracker(t, fetch.fetch, time.Now)
 
 	tracker.Await(t.Context(), time.Minute)
-	ready, _ := tracker.Poll()
+	ready, _, _ := tracker.Poll()
 	require.True(t, ready, "a normal start holds the certificate by its first heartbeat")
 
 	failing := newScriptedFetch(t, errRateLimited)
@@ -190,7 +191,7 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	started := time.Now()
 	refused.Await(t.Context(), time.Minute)
 	require.Less(t, time.Since(started), 30*time.Second, "a refusal ends the wait instead of holding the start for the full minute")
-	ready, _ = refused.Poll()
+	ready, _, _ = refused.Poll()
 	require.False(t, ready)
 }
 
@@ -201,14 +202,14 @@ func TestCertificateTrackerWaitsThroughTheShortRetryAfterApproval(t *testing.T) 
 	fetch := newScriptedFetch(t, pending, errRateLimited)
 	tracker := newTestTracker(t, fetch.fetch, clock.Now)
 
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 	require.False(t, tracker.nextRequestAfter(clock.Now().Add(certificateStartWait)),
 		"control lists the service name within seconds of approval, so a start keeps waiting")
 
 	clock.Advance(certificateDomainRetry)
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 	require.True(t, tracker.nextRequestAfter(clock.Now().Add(certificateStartWait)),
@@ -222,11 +223,11 @@ func TestCertificateTrackerBacksOffOnlyForRealFailures(t *testing.T) {
 	fetch := newScriptedFetch(t, errRateLimited, reset)
 	tracker := newTestTracker(t, fetch.fetch, clock.Now)
 
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 	clock.Set(time.Date(2026, time.November, 12, 22, 54, 0, 0, time.UTC))
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 
@@ -240,11 +241,12 @@ func TestCertificateTrackerWaitsForAnotherSlotWithoutBackingOff(t *testing.T) {
 	fetch := newScriptedFetch(t, errCertificateIssuing)
 	tracker := newTestTracker(t, fetch.fetch, newTestClock(now).Now)
 
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
-	ready, reason := tracker.Poll()
+	ready, failed, reason := tracker.Poll()
 	require.False(t, ready)
+	require.False(t, failed, "waiting for another slot's lease is not a failure")
 	require.Equal(t, "another gateway slot is obtaining the TLS certificate for private.example.ts.net", reason)
 	require.False(t, tracker.nextRequestAfter(now.Add(certificateStartWait)), "a start waits for the other slot to store the certificate")
 
@@ -307,7 +309,7 @@ func TestCertificateHandshakeNeverRequestsACertificate(t *testing.T) {
 	handshakes.Wait()
 	require.Zero(t, fetch.count(), "a client connecting before the certificate is held asks for nothing")
 
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 	cert, err := tracker.Certificate(&tls.ClientHelloInfo{ServerName: "private.example.ts.net"})
@@ -498,7 +500,7 @@ func (c *connection) pollUntil(t *testing.T, done func(*certificateTracker) bool
 	require.Eventually(t, func() bool {
 		all, waiting := true, false
 		for _, tracker := range c.trackers {
-			_, _ = tracker.Poll()
+			_, _, _ = tracker.Poll()
 			idle := !tracker.busy()
 			ok := idle && done(tracker)
 			waiting = waiting || (idle && errors.Is(tracker.held().err, errCertificateIssuing))
@@ -535,7 +537,7 @@ func TestSlotsOfOneConnectionOrderOneCertificate(t *testing.T) {
 	// Every slot is approved at once and every slot gets client handshakes
 	// while the first order is held open.
 	for _, tracker := range c.trackers {
-		_, _ = tracker.Poll()
+		_, _, _ = tracker.Poll()
 	}
 	require.Eventually(t, func() bool { return c.tsnet.orders.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
 	for _, tracker := range c.trackers {
@@ -602,8 +604,9 @@ func TestCertificateRequestsShareAPodWideLimit(t *testing.T) {
 	fetch := newScriptedFetch(t)
 	tracker := startTestTracker(t, fetchSource{fetch: fetch.fetch}, farWindows{}, requests, nil, time.Now)
 
-	ready, reason := tracker.Poll()
+	ready, failed, reason := tracker.Poll()
 	require.False(t, ready)
+	require.False(t, failed, "a request not yet made has not failed")
 	require.Equal(t, "obtaining a TLS certificate for private.example.ts.net", reason)
 	require.Never(t, func() bool { return fetch.count() > 0 }, 50*time.Millisecond, time.Millisecond,
 		"a node whose turn has not come does not start a request")

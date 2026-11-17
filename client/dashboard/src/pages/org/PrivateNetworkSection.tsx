@@ -319,15 +319,19 @@ function ConfiguredPrivateNetwork({
           </Alert>
         ) : certificateUnavailable ? (
           <Alert variant="error" dismissible={false}>
-            <Text small>
-              Speakeasy&apos;s gateway is approved, but Tailscale hasn&apos;t
-              obtained an HTTPS certificate for <code>{ingress.hostname}</code>{" "}
-              yet, so devices can&apos;t connect. This usually means your
-              tailnet has used its weekly allowance of new certificates from
-              Let&apos;s Encrypt, which every machine and service on the tailnet
-              shares. Speakeasy retries on its own and this page updates once
-              the certificate is issued; there&apos;s nothing to change.
-            </Text>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy&apos;s gateway is approved, but it couldn&apos;t get a
+                valid HTTPS certificate for <code>{ingress.hostname}</code>, so
+                devices can&apos;t connect yet. Speakeasy retries on its own and
+                this page updates once the certificate is issued.
+              </Text>
+              {ingress.statusDetail && (
+                <Text small muted>
+                  Latest attempt: {ingress.statusDetail}
+                </Text>
+              )}
+            </div>
           </Alert>
         ) : encryptionKeyUnavailable ? (
           <Alert variant="error" dismissible={false}>

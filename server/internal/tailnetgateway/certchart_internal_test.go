@@ -252,23 +252,29 @@ func TestCertStatus(t *testing.T) {
 		c      certContext
 		at     time.Time
 		ready  bool
+		failed bool
 		reason string
 	}{
-		{name: "obtaining", in: certWaiting, c: certContext{}, at: stateNow, ready: false, reason: "obtaining a TLS certificate for private.example.ts.net"},
-		{name: "retrying", in: certRetrying, c: certContext{err: errRateLimited, retryAt: stateNow.Add(time.Hour)}, at: stateNow, ready: false,
+		{name: "obtaining", in: certWaiting, c: certContext{}, at: stateNow, ready: false, failed: false, reason: "obtaining a TLS certificate for private.example.ts.net"},
+		{name: "retrying", in: certRetrying, c: certContext{err: errRateLimited, retryAt: stateNow.Add(time.Hour)}, at: stateNow, ready: false, failed: true,
 			reason: "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 23:00 UTC"},
-		{name: "serving", in: certServing, c: servingContext(cert), at: stateNow, ready: true, reason: ""},
-		{name: "renewal failing but still valid", in: certRenewBackoff, c: failing, at: stateNow, ready: true, reason: ""},
-		{name: "expired", in: certServing, c: servingContext(cert), at: stateNow.Add(time.Hour), ready: false, reason: "the TLS certificate for private.example.ts.net has expired"},
-		{name: "expired after failed renewals", in: certRenewBackoff, c: failing, at: stateNow.Add(time.Hour), ready: false,
+		{name: "serving", in: certServing, c: servingContext(cert), at: stateNow, ready: true, failed: false, reason: ""},
+		{name: "renewal failing but still valid", in: certRenewBackoff, c: failing, at: stateNow, ready: true, failed: false, reason: ""},
+		{name: "expired", in: certServing, c: servingContext(cert), at: stateNow.Add(time.Hour), ready: false, failed: true, reason: "the TLS certificate for private.example.ts.net has expired"},
+		{name: "expired after failed renewals", in: certRenewBackoff, c: failing, at: stateNow.Add(time.Hour), ready: false, failed: true,
 			reason: "the TLS certificate for private.example.ts.net has expired; acme: connection reset; retrying after 2026-11-13 00:00 UTC"},
-		{name: "stopped", in: certStopped, c: servingContext(cert), at: stateNow, ready: false, reason: "the gateway node is stopping"},
+		{name: "waiting for another slot", in: certRetrying, c: certContext{err: errCertificateIssuing, retryAt: stateNow.Add(5 * time.Second)}, at: stateNow, ready: false, failed: false,
+			reason: "another gateway slot is obtaining the TLS certificate for private.example.ts.net"},
+		{name: "service name not listed yet", in: certRetrying, c: certContext{err: errors.New(`invalid domain "private.example.ts.net"`), retryAt: stateNow.Add(5 * time.Second)}, at: stateNow, ready: false, failed: false,
+			reason: "could not obtain a TLS certificate for private.example.ts.net: invalid domain \"private.example.ts.net\"; retrying after 2026-11-12 22:00 UTC"},
+		{name: "stopped", in: certStopped, c: servingContext(cert), at: stateNow, ready: false, failed: false, reason: "the gateway node is stopping"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			snap, _ := startIn(t, tc.c, tc.in)
-			ready, reason := certStatus(snap, "private.example.ts.net", tc.at)
+			ready, failed, reason := certStatus(snap, "private.example.ts.net", tc.at)
 			require.Equal(t, tc.ready, ready)
+			require.Equal(t, tc.failed, failed)
 			require.Equal(t, tc.reason, reason)
 		})
 	}
@@ -502,11 +508,11 @@ func TestCertificateTrackerReportsEachRequest(t *testing.T) {
 	}
 	tracker := startTestTracker(t, fetchSource{fetch: fetch.fetch}, farWindows{}, nil, events, clock.Now)
 
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 	clock.Advance(time.Hour)
-	_, _ = tracker.Poll()
+	_, _, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 

@@ -118,26 +118,36 @@ func backsOff(err error) bool {
 	return !isCertificateRateLimited(err) && !isCertificateDomainPending(err) && !errors.Is(err, errCertificateIssuing)
 }
 
-// certStatus reports whether snap holds a certificate valid at now and, when
-// it does not, why. Whether a held certificate has expired is not a state: it
-// follows from the clock.
-func certStatus(snap sc.Snapshot[certState, certContext], domain string, now time.Time) (bool, string) {
+// certStatus reports whether snap holds a certificate valid at now, whether
+// the node is without one because a request failed, and, when it holds none,
+// why. A node whose first request is still running, or that waits for another
+// slot's lease or for control to list its service name, has not failed: those
+// clear on their own within seconds. Whether a held certificate has expired is
+// not a state: it follows from the clock.
+func certStatus(snap sc.Snapshot[certState, certContext], domain string, now time.Time) (valid bool, failed bool, message string) {
 	c := snap.Context
 	switch {
 	case snap.In(certStopped):
-		return false, "the gateway node is stopping"
+		return false, false, "the gateway node is stopping"
 	case c.cert == nil && c.err == nil:
-		return false, "obtaining a TLS certificate for " + domain
+		return false, false, "obtaining a TLS certificate for " + domain
 	case c.cert == nil:
-		return false, certificateFailureMessage(domain, c.err, c.retryAt)
+		return false, certificateRequestFailed(c.err), certificateFailureMessage(domain, c.err, c.retryAt)
 	case now.Before(c.cert.Leaf.NotAfter):
-		return true, ""
+		return true, false, ""
 	case c.err == nil:
-		return false, "the TLS certificate for " + domain + " has expired"
+		return false, true, "the TLS certificate for " + domain + " has expired"
 	default:
-		return false, fmt.Sprintf("the TLS certificate for %s has expired; %v; retrying after %s",
+		return false, true, fmt.Sprintf("the TLS certificate for %s has expired; %v; retrying after %s",
 			domain, c.err, c.retryAt.UTC().Format("2006-01-02 15:04 UTC"))
 	}
+}
+
+// certificateRequestFailed reports whether err is a refusal or failure, as
+// opposed to a wait that normally clears within seconds: another slot holding
+// the issuance lease, or control not yet listing the service name.
+func certificateRequestFailed(err error) bool {
+	return !errors.Is(err, errCertificateIssuing) && !isCertificateDomainPending(err)
 }
 
 // replaces reports whether stored is a later certificate than held.
@@ -204,10 +214,11 @@ func newCertificateTracker(
 	return t, nil
 }
 
-// Poll reports whether a valid certificate is held and, when it is not, why.
+// Poll reports whether a valid certificate is held, whether a request failed
+// when it is not, and why.
 // It never waits for a request: when one is due it starts it in the
 // background.
-func (t *certificateTracker) Poll() (bool, string) {
+func (t *certificateTracker) Poll() (valid bool, failed bool, message string) {
 	// The only error is a closed instance, whose snapshot reports stopped.
 	_, _ = t.inst.Send(context.Background(), certPoll{})
 	return certStatus(t.inst.Snapshot(), t.domain, t.now())
@@ -243,7 +254,7 @@ func (t *certificateTracker) Await(ctx context.Context, wait time.Duration) {
 	ticker := time.NewTicker(certificateAwaitPollInterval)
 	defer ticker.Stop()
 	for {
-		if ready, _ := t.Poll(); ready {
+		if ready, _, _ := t.Poll(); ready {
 			return
 		}
 		if t.nextRequestAfter(deadline) {
