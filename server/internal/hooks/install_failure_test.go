@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -94,7 +95,7 @@ func TestIngest_InstallFailureRecordsDiagnosticRowAndCounter(t *testing.T) {
 	require.Equal(t, int64(1), point.Value)
 	for key, want := range map[attr.Key]string{
 		attr.HookInstallCauseKey:   "checksum_mismatch",
-		attr.HookInstallVersionKey: "0.3.46",
+		attr.HookInstallVersionKey: hookMetricDimensionUnknown,
 		attr.HookDeviceHarnessKey:  "claude",
 		attr.HookDeviceOSKey:       "darwin",
 		attr.OrganizationSlugKey:   authCtx.OrganizationSlug,
@@ -177,4 +178,11 @@ func TestIngest_DeliveryFailureRejectsInstallFailureBlock(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, err.Error(), "data.install_failure is not valid on client.delivery_failed")
+}
+
+func TestBoundedInstallVersionKeepsOnlyThePinnedRelease(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, plugins.LatestHooksVersion(), boundedInstallVersion(plugins.LatestHooksVersion()))
+	require.Equal(t, hookMetricDimensionUnknown, boundedInstallVersion("0.0.1-made-up"))
+	require.Equal(t, hookMetricDimensionUnknown, boundedInstallVersion(""))
 }

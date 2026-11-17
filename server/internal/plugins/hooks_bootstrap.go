@@ -155,6 +155,13 @@ report_url_ok() {
 }
 report_install_failure() {
   [ -r "$report_config" ] || return 0
+  # One report per version an hour, so a failing install does not report on
+  # every hook call.
+  if [ -n "${install_dir:-}" ]; then
+    report_stamp="${install_dir}.reported"
+    [ -z "$(find "$report_stamp" -mmin -60 2>/dev/null)" ] || return 0
+    : >"$report_stamp" 2>/dev/null || true
+  fi
   server_url=$(config_field server_url)
   api_key=$(config_field hooks_api_key)
   project=$(config_field project)
@@ -543,6 +550,12 @@ function Send-InstallFailure([string]$Cause) {
             elseif ($Arg.StartsWith("--provider=", [StringComparison]::Ordinal)) { $Harness = $Arg.Substring(11) }
         }
         if (-not $ConfigPath -or -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return }
+        if ($InstallDir) {
+            $Stamp = "$InstallDir.reported"
+            $Recent = Get-Item -LiteralPath $Stamp -ErrorAction SilentlyContinue
+            if ($Recent -and $Recent.LastWriteTimeUtc -gt [DateTime]::UtcNow.AddHours(-1)) { return }
+            [System.IO.File]::WriteAllText($Stamp, "")
+        }
         $Config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
         if (-not $Config.server_url -or -not $Config.hooks_api_key) { return }
         $Parsed = $null

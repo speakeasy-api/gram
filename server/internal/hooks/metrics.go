@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const (
@@ -139,7 +140,7 @@ func (m *metrics) RecordInstallFailure(ctx context.Context, params installFailur
 		attr.HookInstallCause(params.Cause),
 		attr.HookDeviceHarness(boundedInstallHarness(params.Harness)),
 		attr.HookDeviceOS(boundedDeviceOS(params.OS)),
-		attr.HookInstallVersion(boundedBinaryVersion(params.Version)),
+		attr.HookInstallVersion(boundedInstallVersion(params.Version)),
 	}
 	if params.OrgSlug != "" {
 		attrs = append(attrs, attr.OrganizationSlug(params.OrgSlug))
@@ -200,6 +201,15 @@ func boundedInstallHarness(v string) string {
 // the counter's OS series finite.
 func boundedDeviceOS(v string) string {
 	if _, ok := knownDeviceOS[v]; ok {
+		return v
+	}
+	return hookMetricDimensionUnknown
+}
+
+// boundedInstallVersion keeps only the pinned release: bootstrap scripts never
+// send anything else, so any other value is collapsed to keep the series finite.
+func boundedInstallVersion(v string) string {
+	if v == plugins.LatestHooksVersion() {
 		return v
 	}
 	return hookMetricDimensionUnknown

@@ -4879,6 +4879,23 @@ func TestHooksBootstrapReportsInstallFailures(t *testing.T) {
 	}
 }
 
+func TestHooksBootstrapReportsInstallFailureOncePerHour(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	server, reports := installFailureServer(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	config := writeInstallFailureConfig(t, server.URL, "gram_test_key")
+	script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, false, "releases.test")
+	cache := t.TempDir()
+
+	for range 3 {
+		out, err := runHooksBootstrap(t, script, cache, "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+		require.Error(t, err, string(out))
+	}
+	require.Len(t, reports, 1)
+}
+
 func TestHooksBootstrapSkipsInstallFailureReportWithoutKey(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -4935,7 +4952,7 @@ func TestHooksBootstrapReportsInstallFailureWithWget(t *testing.T) {
 	if err := os.Remove(filepath.Join(path, "curl")); err != nil {
 		require.ErrorIs(t, err, os.ErrNotExist)
 	}
-	for _, tool := range []string{"wget", "sed", "head", "date", "timeout", "cat"} {
+	for _, tool := range []string{"wget", "sed", "head", "date", "timeout", "cat", "find"} {
 		if resolved, err := exec.LookPath(tool); err == nil {
 			require.NoError(t, os.Symlink(resolved, filepath.Join(path, tool)))
 		}
