@@ -50,7 +50,7 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 	}
 	tag := config.Gateway.Tag
 	if tag == "" {
-		tag = tailnetgateway.DefaultTag
+		tag = networkingress.DefaultGatewayTag
 	}
 	slots := config.Gateway.Slots
 	if slots <= 0 {

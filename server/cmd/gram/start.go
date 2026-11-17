@@ -1691,6 +1691,7 @@ func newStartCommand() *cli.Command {
 				cache.NewRedisCacheAdapter(redisClient),
 				authzProvisioner,
 				productfeatures.SeedOrganizationDefaultsTx,
+				productfeatures.SeedNewOrganizationDefaultsTx,
 				productfeatures.SeedEnterpriseTrialBundleTx,
 				auditLogger,
 				trialEmailNotifier,
@@ -1876,7 +1877,7 @@ func newStartCommand() *cli.Command {
 			ingressPublicationRequester := plugins.PublicationRequests{Enabled: publicationEmit}
 			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient).
 				WithFeatures(featureFlags)
-			networkIngressService.UseNamer(networkIngressConfig.Gateway.Namer)
+			networkIngressService.UseGateway(networkIngressConfig.Gateway)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithHostedServerWriter(toolsetsSvc).WithServerURL(serverURL)
