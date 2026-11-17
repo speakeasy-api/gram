@@ -2726,6 +2726,12 @@ JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
 JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
 WHERE b.id = @id;
 
+-- name: GetLocalEMATypedAuthClientResourceFixture :one
+-- Reads the resource of the typed auth client the local seed records for the
+-- Enterprise Sign-In (ID-JAG) Server's client.
+SELECT resource FROM mcp_auth_client_emas
+WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+
 -- name: SetCustomDomainHealthWithoutDNSObservation :exec
 -- Models a worker that does not write the independent DNS observation columns.
 UPDATE custom_domains

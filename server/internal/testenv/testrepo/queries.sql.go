@@ -2538,6 +2538,20 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	return id, err
 }
 
+const getLocalEMATypedAuthClientResourceFixture = `-- name: GetLocalEMATypedAuthClientResourceFixture :one
+SELECT resource FROM mcp_auth_client_emas
+WHERE remote_session_client_id = $1 AND deleted IS FALSE
+`
+
+// Reads the resource of the typed auth client the local seed records for the
+// Enterprise Sign-In (ID-JAG) Server's client.
+func (q *Queries) GetLocalEMATypedAuthClientResourceFixture(ctx context.Context, remoteSessionClientID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getLocalEMATypedAuthClientResourceFixture, remoteSessionClientID)
+	var resource string
+	err := row.Scan(&resource)
+	return resource, err
+}
+
 const getLocalEMAWiringFixture = `-- name: GetLocalEMAWiringFixture :one
 SELECT b.resource,
        idp.issuer AS identity_provider,
