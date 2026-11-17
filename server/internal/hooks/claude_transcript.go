@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -198,6 +200,11 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Every authenticated upload is logged once, whatever its outcome: no other
+	// signal on the request names the organization or session it came from.
+	receipt := claudeTranscriptReceipt{start: time.Now(), status: http.StatusOK, stored: 0, warnings: 0}
+	defer func() { s.logClaudeTranscriptReceived(ctx, r.ContentLength, authCtx, upload, receipt) }()
+
 	if upload.Diagnostic != nil {
 		s.logClaudeTranscriptSkip(ctx, authCtx, upload)
 	}
@@ -225,15 +232,73 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 			attr.SlogProjectID(authCtx.ProjectID.String()),
 			attr.SlogGenAIConversationID(upload.SessionID),
 		)
+		receipt.status = status
+		receipt.stored = persisted.stored
 		http.Error(w, http.StatusText(status), status)
 		return
 	}
 
 	warnings := s.claudeTranscriptWarnings(ctx, authCtx, upload.SessionID, persisted)
+	receipt.stored = persisted.stored
+	receipt.warnings = len(warnings)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(claudeTranscriptResult{Stored: persisted.stored, Warnings: warnings})
+}
+
+// claudeTranscriptReceipt is the outcome of one authenticated upload, logged
+// by logClaudeTranscriptReceived when the request finishes.
+type claudeTranscriptReceipt struct {
+	start    time.Time
+	status   int
+	stored   int64
+	warnings int
+}
+
+// logClaudeTranscriptReceived records one authenticated upload: who sent it
+// (organization, project, session, and the binary build and harness from the
+// device headers) and what came of it. The request's IP address is one of a
+// shared egress pool and its span carries no organization, so this line is the
+// only way to follow one organization's uploads, including those that store
+// nothing.
+func (s *Service) logClaudeTranscriptReceived(ctx context.Context, bodyBytes int64, authCtx *contextvalues.AuthContext, upload *claudeTranscriptUpload, receipt claudeTranscriptReceipt) {
+	attrs := []slog.Attr{
+		attr.SlogEvent("hooks_claude_transcript_received"),
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogGenAIConversationID(truncateDiagnostic(upload.SessionID)),
+		attr.SlogHookSource(truncateDiagnostic(upload.Adapter)),
+		attr.SlogHookTranscriptEntryCount(len(upload.Entries)),
+		attr.SlogHookTranscriptOffsetStart(upload.OffsetStart),
+		attr.SlogHookTranscriptOffsetEnd(upload.OffsetEnd),
+		attr.SlogHookTranscriptStoredCount(receipt.stored),
+		attr.SlogHookTranscriptWarningCount(receipt.warnings),
+		attr.SlogHTTPResponseStatusCode(receipt.status),
+		attr.SlogHTTPServerRequestDuration(time.Since(receipt.start).Seconds()),
+	}
+	// The body was read under claudeTranscriptMaxBodyBytes, so a length the
+	// client declared is within it; -1 means it declared none.
+	if bodyBytes >= 0 && bodyBytes <= claudeTranscriptMaxBodyBytes {
+		attrs = append(attrs, attr.SlogHTTPRequestBodyBytes(int(bodyBytes)))
+	}
+	if upload.Diagnostic != nil {
+		attrs = append(attrs, attr.SlogReason(truncateDiagnostic(upload.Diagnostic.Reason)))
+	}
+	device := middleware.HookDeviceAttributes(ctx)
+	if v := device[attr.HookDeviceBinaryVersionKey]; v != "" {
+		attrs = append(attrs, attr.SlogHookDeviceBinaryVersion(v))
+	}
+	if v := device[attr.HookDeviceHarnessKey]; v != "" {
+		attrs = append(attrs, attr.SlogHookDeviceHarness(v))
+	}
+	if v := device[attr.HookDeviceHarnessVariantKey]; v != "" {
+		attrs = append(attrs, attr.SlogHookDeviceHarnessVariant(v))
+	}
+	if v := device[attr.HookDeviceInstallRouteKey]; v != "" {
+		attrs = append(attrs, attr.SlogHookDeviceInstallRoute(v))
+	}
+	s.logger.LogAttrs(ctx, slog.LevelInfo, "received claude transcript upload", attrs...)
 }
 
 // logClaudeTranscriptSkip records why the binary's Stop hook shipped no

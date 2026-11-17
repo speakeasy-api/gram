@@ -137,6 +137,39 @@ func TestHookDeviceTelemetryIgnoresNonHookRoutes(t *testing.T) {
 	require.False(t, found, "device attributes must not be stamped on non-hook routes")
 }
 
+// The hooks binary uploads Claude transcripts to /transcript, outside the
+// /rpc/hooks.* routes, and stamps the same device headers on those uploads.
+func TestHookDeviceTelemetryCoversTranscriptUploads(t *testing.T) {
+	t.Parallel()
+
+	handler, exporter := newDeviceTelemetryHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/transcript", nil)
+	req.Header.Set("X-Gram-Device-Binary-Version", "1.2.3")
+	req.Header.Set("X-Gram-Device-Install-Route", "marketplace")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	attrs := spanAttrs(t, exporter)
+	require.Equal(t, "1.2.3", attrs[attr.HookDeviceBinaryVersionKey].AsString())
+	require.Equal(t, "marketplace", attrs[attr.HookDeviceInstallRouteKey].AsString())
+
+	var device map[attr.Key]string
+	ctxHandler := middleware.HookDeviceTelemetry(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		device = middleware.HookDeviceAttributes(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+	ctxHandler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/transcript", nil))
+	require.Nil(t, device, "a transcript upload without device headers carries no device attributes")
+
+	req = httptest.NewRequest(http.MethodPost, "/transcript", nil)
+	req.Header.Set("X-Gram-Device-Binary-Version", "1.2.3")
+	ctxHandler.ServeHTTP(httptest.NewRecorder(), req)
+	require.Equal(t, map[attr.Key]string{attr.HookDeviceBinaryVersionKey: "1.2.3"}, device)
+}
+
 func TestHookDeviceTelemetryCarriesDeviceAttributesOnContext(t *testing.T) {
 	t.Parallel()
 
@@ -197,6 +230,7 @@ func TestHookDeviceTelemetryRecordsEndpointGeneration(t *testing.T) {
 		{"legacy cursor with device token", "/rpc/hooks.cursor", map[string]string{"Authorization": "Bearer t"}, middleware.HookEndpointGenerationLegacyKeyed},
 		{"legacy codex with key", "/rpc/hooks.codex", map[string]string{"Gram-Key": "k"}, middleware.HookEndpointGenerationLegacyKeyed},
 		{"non-event hook route", "/rpc/hooks.otel/v1/logs", map[string]string{"Gram-Key": "k"}, ""},
+		{"transcript upload", "/transcript", map[string]string{"Gram-Key": "k", "X-Gram-Device-Binary-Version": "1.2.3"}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
