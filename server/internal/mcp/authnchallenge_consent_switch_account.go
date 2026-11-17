@@ -104,9 +104,18 @@ func sameAccountSwitch(consumed, checked AuthnChallengeState) bool {
 // sign in again, without reusing it, for this same authorization request. The
 // action endpoint has already checked method, endpoint, browser, CSRF,
 // resolution and a gateway's custom-domain lockdown.
-func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
+func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (err error) {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(state.FlowID))
+	// A refused switch still names the client the page showed.
+	defer func() {
+		if err == nil {
+			return
+		}
+		if name := s.switchClientName(ctx, logger, endpoint, state.ClientID); name != "" {
+			err = oops.WithBrowserClient(err, name)
+		}
+	}()
 
 	focusServer := r.PostForm.Get("server")
 	if focusServer != "" {
@@ -158,10 +167,7 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	}
 
 	// The display name the consent page showed, for the old page's message.
-	clientName := ""
-	if client, cerr := s.resolveUserSessionClient(ctx, logger, endpoint, consumed.ClientID, lookupClientOnly); cerr == nil {
-		clientName = client.ClientName
-	}
+	clientName := s.switchClientName(ctx, logger, endpoint, consumed.ClientID)
 
 	next := consumed
 	next.Subject = nil
@@ -233,6 +239,15 @@ func (s *Service) switchedConsentError(ctx context.Context, logger *slog.Logger,
 		page = oops.WithBrowserClient(page, marker.ClientName)
 	}
 	return fmt.Errorf("load consent challenge: %w", page)
+}
+
+// switchClientName is the display name the consent page showed for clientID, empty when it can't be found.
+func (s *Service) switchClientName(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) string {
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
+	if err != nil {
+		return ""
+	}
+	return client.ClientName
 }
 
 // switchRefused shows a refused switch's one-sentence reason on the page.

@@ -338,6 +338,8 @@ func requireRefusedSwitchPage(t *testing.T, fx *switchFixture, sentence string) 
 	page := refusedSwitchPage(t, fx)
 	require.Contains(t, page, "Couldn't start a new sign-in")
 	require.Contains(t, page, `<p class="text-sm text-foreground" data-what-happened> `+sentence+` </p>`, "the reason is the page's one sentence")
+	require.Contains(t, page, "Routability Client", "the page names the client the consent page showed")
+	require.NotContains(t, page, "Your MCP client")
 	require.NotContains(t, page, "close this tab")
 }
 
