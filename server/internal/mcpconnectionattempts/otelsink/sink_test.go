@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/log"
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	collectormetricsv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	"google.golang.org/protobuf/proto"
@@ -24,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/oteltest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -175,8 +179,71 @@ func TestTestSource_SendsThroughTheRouteTester(t *testing.T) {
 	require.Equal(t, "speakeasy.test_event", record.GetEventName())
 	attrs := otlpAttributes(record.GetAttributes())
 	require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
-	require.Equal(t, testEventID, attrs["speakeasy.test_event.id"].GetStringValue())
+	require.Equal(t, testEventID, attrs["speakeasy.test_event_id"].GetStringValue())
 	// The destination excludes sensitive data, and the test message is still the body.
 	require.Equal(t, otelsvc.TestEventMessage, record.GetBody().GetStringValue())
 	require.Equal(t, otelsvc.TestEventMessage, attrs["speakeasy.mcp_connection.user_message"].GetStringValue())
+}
+
+// testEventKeyCollisionsExempt lists known dotted-prefix keys on real records, each with why it is not fixed here.
+var testEventKeyCollisionsExempt = map[string]string{}
+
+func TestTestEvents_NoAttributeKeyIsADottedPrefixOfAnother(t *testing.T) {
+	t.Parallel()
+
+	type captured struct {
+		path string
+		body []byte
+	}
+	var mu sync.Mutex
+	var bodies []captured
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		mu.Lock()
+		bodies = append(bodies, captured{path: r.URL.Path, body: body})
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	// Unsafe so the test can reach an httptest server on loopback.
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	tester, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), newTestSource(t))...)
+	require.NoError(t, err)
+
+	for _, source := range dataexports.Sources() {
+		for _, includeSensitiveData := range []bool{false, true} {
+			mu.Lock()
+			bodies = nil
+			mu.Unlock()
+			destination := testEventDestination(includeSensitiveData)
+			destination.EndpointURL = server.URL
+			_, err := tester.SendTest(t.Context(), source.Name, destination, testEventID)
+			require.NoError(t, err)
+
+			mu.Lock()
+			sent := bodies
+			mu.Unlock()
+			require.Len(t, sent, len(source.Signals), source.Name)
+			for _, item := range sent {
+				var request proto.Message
+				switch item.path {
+				case "/v1/logs":
+					request = &collectorlogsv1.ExportLogsServiceRequest{}
+				case "/v1/traces":
+					request = &collectortracev1.ExportTraceServiceRequest{}
+				case "/v1/metrics":
+					request = &collectormetricsv1.ExportMetricsServiceRequest{}
+				default:
+					t.Fatalf("unexpected path %s", item.path)
+				}
+				require.NoError(t, proto.Unmarshal(item.body, request))
+				collisions, err := oteltest.DottedPrefixCollisions(request, testEventKeyCollisionsExempt)
+				require.NoError(t, err)
+				require.Empty(t, collisions, "%s %s", source.Name, item.path)
+			}
+		}
+	}
 }

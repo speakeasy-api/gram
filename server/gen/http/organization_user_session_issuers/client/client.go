@@ -38,6 +38,10 @@ type Client struct {
 	// listMcpServers endpoint.
 	ListMcpServersDoer goahttp.Doer
 
+	// ListRemoteSessionClientBindings Doer is the HTTP client used to make
+	// requests to the listRemoteSessionClientBindings endpoint.
+	ListRemoteSessionClientBindingsDoer goahttp.Doer
+
 	// GetAuthenticationHostImpact Doer is the HTTP client used to make requests to
 	// the getAuthenticationHostImpact endpoint.
 	GetAuthenticationHostImpactDoer goahttp.Doer
@@ -103,27 +107,28 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateIssuerDoer:                doer,
-		ListIssuersDoer:                 doer,
-		GetIssuerDoer:                   doer,
-		UpdateIssuerDoer:                doer,
-		ListMcpServersDoer:              doer,
-		GetAuthenticationHostImpactDoer: doer,
-		SetAuthenticationHostDoer:       doer,
-		GetIssuerDeletePreflightDoer:    doer,
-		DeleteIssuerDoer:                doer,
-		MoveIssuerDoer:                  doer,
-		GetIssuerMigratePreflightDoer:   doer,
-		MigrateIssuerDoer:               doer,
-		CreateCimdClientDoer:            doer,
-		ListCimdClientsDoer:             doer,
-		GetCimdClientDoer:               doer,
-		DeleteCimdClientDoer:            doer,
-		RestoreResponseBody:             restoreBody,
-		scheme:                          scheme,
-		host:                            host,
-		decoder:                         dec,
-		encoder:                         enc,
+		CreateIssuerDoer:                    doer,
+		ListIssuersDoer:                     doer,
+		GetIssuerDoer:                       doer,
+		UpdateIssuerDoer:                    doer,
+		ListMcpServersDoer:                  doer,
+		ListRemoteSessionClientBindingsDoer: doer,
+		GetAuthenticationHostImpactDoer:     doer,
+		SetAuthenticationHostDoer:           doer,
+		GetIssuerDeletePreflightDoer:        doer,
+		DeleteIssuerDoer:                    doer,
+		MoveIssuerDoer:                      doer,
+		GetIssuerMigratePreflightDoer:       doer,
+		MigrateIssuerDoer:                   doer,
+		CreateCimdClientDoer:                doer,
+		ListCimdClientsDoer:                 doer,
+		GetCimdClientDoer:                   doer,
+		DeleteCimdClientDoer:                doer,
+		RestoreResponseBody:                 restoreBody,
+		scheme:                              scheme,
+		host:                                host,
+		decoder:                             dec,
+		encoder:                             enc,
 	}
 }
 
@@ -242,6 +247,31 @@ func (c *Client) ListMcpServers() goa.Endpoint {
 		resp, err := c.ListMcpServersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "listMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRemoteSessionClientBindings returns an endpoint that makes HTTP requests
+// to the organizationUserSessionIssuers service
+// listRemoteSessionClientBindings server.
+func (c *Client) ListRemoteSessionClientBindings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRemoteSessionClientBindingsRequest(c.encoder)
+		decodeResponse = DecodeListRemoteSessionClientBindingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRemoteSessionClientBindingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRemoteSessionClientBindingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "listRemoteSessionClientBindings", err)
 		}
 		return decodeResponse(resp)
 	}

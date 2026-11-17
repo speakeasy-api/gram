@@ -16,22 +16,23 @@ import (
 
 // Endpoints wraps the "organizationUserSessionIssuers" service endpoints.
 type Endpoints struct {
-	CreateIssuer                goa.Endpoint
-	ListIssuers                 goa.Endpoint
-	GetIssuer                   goa.Endpoint
-	UpdateIssuer                goa.Endpoint
-	ListMcpServers              goa.Endpoint
-	GetAuthenticationHostImpact goa.Endpoint
-	SetAuthenticationHost       goa.Endpoint
-	GetIssuerDeletePreflight    goa.Endpoint
-	DeleteIssuer                goa.Endpoint
-	MoveIssuer                  goa.Endpoint
-	GetIssuerMigratePreflight   goa.Endpoint
-	MigrateIssuer               goa.Endpoint
-	CreateCimdClient            goa.Endpoint
-	ListCimdClients             goa.Endpoint
-	GetCimdClient               goa.Endpoint
-	DeleteCimdClient            goa.Endpoint
+	CreateIssuer                    goa.Endpoint
+	ListIssuers                     goa.Endpoint
+	GetIssuer                       goa.Endpoint
+	UpdateIssuer                    goa.Endpoint
+	ListMcpServers                  goa.Endpoint
+	ListRemoteSessionClientBindings goa.Endpoint
+	GetAuthenticationHostImpact     goa.Endpoint
+	SetAuthenticationHost           goa.Endpoint
+	GetIssuerDeletePreflight        goa.Endpoint
+	DeleteIssuer                    goa.Endpoint
+	MoveIssuer                      goa.Endpoint
+	GetIssuerMigratePreflight       goa.Endpoint
+	MigrateIssuer                   goa.Endpoint
+	CreateCimdClient                goa.Endpoint
+	ListCimdClients                 goa.Endpoint
+	GetCimdClient                   goa.Endpoint
+	DeleteCimdClient                goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizationUserSessionIssuers"
@@ -40,22 +41,23 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateIssuer:                NewCreateIssuerEndpoint(s, a.APIKeyAuth),
-		ListIssuers:                 NewListIssuersEndpoint(s, a.APIKeyAuth),
-		GetIssuer:                   NewGetIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateIssuer:                NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
-		ListMcpServers:              NewListMcpServersEndpoint(s, a.APIKeyAuth),
-		GetAuthenticationHostImpact: NewGetAuthenticationHostImpactEndpoint(s, a.APIKeyAuth),
-		SetAuthenticationHost:       NewSetAuthenticationHostEndpoint(s, a.APIKeyAuth),
-		GetIssuerDeletePreflight:    NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
-		DeleteIssuer:                NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
-		MoveIssuer:                  NewMoveIssuerEndpoint(s, a.APIKeyAuth),
-		GetIssuerMigratePreflight:   NewGetIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
-		MigrateIssuer:               NewMigrateIssuerEndpoint(s, a.APIKeyAuth),
-		CreateCimdClient:            NewCreateCimdClientEndpoint(s, a.APIKeyAuth),
-		ListCimdClients:             NewListCimdClientsEndpoint(s, a.APIKeyAuth),
-		GetCimdClient:               NewGetCimdClientEndpoint(s, a.APIKeyAuth),
-		DeleteCimdClient:            NewDeleteCimdClientEndpoint(s, a.APIKeyAuth),
+		CreateIssuer:                    NewCreateIssuerEndpoint(s, a.APIKeyAuth),
+		ListIssuers:                     NewListIssuersEndpoint(s, a.APIKeyAuth),
+		GetIssuer:                       NewGetIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateIssuer:                    NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
+		ListMcpServers:                  NewListMcpServersEndpoint(s, a.APIKeyAuth),
+		ListRemoteSessionClientBindings: NewListRemoteSessionClientBindingsEndpoint(s, a.APIKeyAuth),
+		GetAuthenticationHostImpact:     NewGetAuthenticationHostImpactEndpoint(s, a.APIKeyAuth),
+		SetAuthenticationHost:           NewSetAuthenticationHostEndpoint(s, a.APIKeyAuth),
+		GetIssuerDeletePreflight:        NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
+		DeleteIssuer:                    NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
+		MoveIssuer:                      NewMoveIssuerEndpoint(s, a.APIKeyAuth),
+		GetIssuerMigratePreflight:       NewGetIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
+		MigrateIssuer:                   NewMigrateIssuerEndpoint(s, a.APIKeyAuth),
+		CreateCimdClient:                NewCreateCimdClientEndpoint(s, a.APIKeyAuth),
+		ListCimdClients:                 NewListCimdClientsEndpoint(s, a.APIKeyAuth),
+		GetCimdClient:                   NewGetCimdClientEndpoint(s, a.APIKeyAuth),
+		DeleteCimdClient:                NewDeleteCimdClientEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -67,6 +69,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetIssuer = m(e.GetIssuer)
 	e.UpdateIssuer = m(e.UpdateIssuer)
 	e.ListMcpServers = m(e.ListMcpServers)
+	e.ListRemoteSessionClientBindings = m(e.ListRemoteSessionClientBindings)
 	e.GetAuthenticationHostImpact = m(e.GetAuthenticationHostImpact)
 	e.SetAuthenticationHost = m(e.SetAuthenticationHost)
 	e.GetIssuerDeletePreflight = m(e.GetIssuerDeletePreflight)
@@ -192,6 +195,30 @@ func NewListMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.ListMcpServers(ctx, p)
+	}
+}
+
+// NewListRemoteSessionClientBindingsEndpoint returns an endpoint function that
+// calls the method "listRemoteSessionClientBindings" of service
+// "organizationUserSessionIssuers".
+func NewListRemoteSessionClientBindingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRemoteSessionClientBindingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRemoteSessionClientBindings(ctx, p)
 	}
 }
 

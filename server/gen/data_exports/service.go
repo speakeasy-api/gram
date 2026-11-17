@@ -252,7 +252,7 @@ type TestDataExportRouteResult struct {
 	Message string
 	// One result for each signal the route's data source exports.
 	Signals []*TestDataExportRouteSignalResult
-	// The speakeasy.test_event.id this test's logs and traces carry, to find them
+	// The speakeasy.test_event_id this test's logs and traces carry, to find them
 	// in the destination. Metrics carry only speakeasy.test_event=true.
 	TestEventID string
 }

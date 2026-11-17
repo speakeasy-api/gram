@@ -462,6 +462,12 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_DEVIDP_BACKEND"},
 			Hidden:  true,
 		},
+		&cli.StringFlag{
+			Name:    "demoseed-fixture-devidp-url",
+			Usage:   "Local dev-idp URL whose tokens the demo seed MCP fixture's Enterprise Sign-In endpoint takes (empty: not served)",
+			EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
+			Hidden:  true,
+		},
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
 			Usage:   "Enable OpenTelemetry traces",
@@ -1545,6 +1551,13 @@ func newStartCommand() *cli.Command {
 			// The demo seed's MCP fixture: a self-contained OAuth and MCP server
 			// with fake data that the seeded demo servers reach, so they work in
 			// every environment (internal/demoseed/fixture).
+			// Empty or "unset" leaves the fixture's Enterprise Managed
+			// Authorization endpoint unserved; anything else must be a valid
+			// dev-idp origin.
+			fixtureDevIDPURL, err := parseDevIDPURL(c.String("demoseed-fixture-devidp-url"))
+			if err != nil {
+				return fmt.Errorf("GRAM_DEVIDP_EXTERNAL_URL: %w", err)
+			}
 			// Metadata document fetches must not hold a sign-in open.
 			fixtureHTTPClient := guardianPolicy.PooledClient()
 			fixtureHTTPClient.Timeout = 10 * time.Second
@@ -1554,6 +1567,7 @@ func newStartCommand() *cli.Command {
 				SuggestedEmails:     []string{"alex@fixture.test", "sam@fixture.test"},
 				HTTPClient:          fixtureHTTPClient,
 				Logger:              logger.With(attr.SlogComponent("demoseed-fixture")),
+				DevIDPURL:           fixtureDevIDPURL,
 				NoMetadataDocuments: false,
 				// Sign-ins only ever go back to Speakeasy's own callbacks.
 				RedirectOrigins: fixtureRedirectOrigins(serverURL, callbackOrigins),
@@ -1677,6 +1691,7 @@ func newStartCommand() *cli.Command {
 				cache.NewRedisCacheAdapter(redisClient),
 				authzProvisioner,
 				productfeatures.SeedOrganizationDefaultsTx,
+				productfeatures.SeedNewOrganizationDefaultsTx,
 				productfeatures.SeedEnterpriseTrialBundleTx,
 				auditLogger,
 				trialEmailNotifier,

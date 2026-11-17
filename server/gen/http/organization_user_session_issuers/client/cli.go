@@ -245,6 +245,32 @@ func BuildListMcpServersPayload(organizationUserSessionIssuersListMcpServersUser
 	return v, nil
 }
 
+// BuildListRemoteSessionClientBindingsPayload builds the payload for the
+// organizationUserSessionIssuers listRemoteSessionClientBindings endpoint from
+// CLI flags.
+func BuildListRemoteSessionClientBindingsPayload(organizationUserSessionIssuersListRemoteSessionClientBindingsUserSessionIssuerID string, organizationUserSessionIssuersListRemoteSessionClientBindingsSessionToken string) (*organizationusersessionissuers.ListRemoteSessionClientBindingsPayload, error) {
+	var err error
+	var userSessionIssuerID string
+	{
+		userSessionIssuerID = organizationUserSessionIssuersListRemoteSessionClientBindingsUserSessionIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersListRemoteSessionClientBindingsSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersListRemoteSessionClientBindingsSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.ListRemoteSessionClientBindingsPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetAuthenticationHostImpactPayload builds the payload for the
 // organizationUserSessionIssuers getAuthenticationHostImpact endpoint from CLI
 // flags.

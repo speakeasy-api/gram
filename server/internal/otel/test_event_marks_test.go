@@ -23,7 +23,7 @@ import (
 func spoofedMarks() []*commonv1.KeyValue {
 	return []*commonv1.KeyValue{
 		{Key: "speakeasy.test_event", Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_BoolValue{BoolValue: true}}, KeyStrindex: 0},
-		{Key: "speakeasy.test_event.id", Value: otlpStringValue("spoofed"), KeyStrindex: 0},
+		{Key: "speakeasy.test_event_id", Value: otlpStringValue("spoofed"), KeyStrindex: 0},
 		{Key: "kept", Value: otlpStringValue("yes"), KeyStrindex: 0},
 	}
 }
@@ -39,7 +39,7 @@ func requireNoTestMarks[KV interface{ GetKey() string }](t *testing.T, attribute
 		keys[i] = kv.GetKey()
 	}
 	require.NotContains(t, keys, "speakeasy.test_event")
-	require.NotContains(t, keys, "speakeasy.test_event.id")
+	require.NotContains(t, keys, "speakeasy.test_event_id")
 	require.Contains(t, keys, "kept")
 }
 
