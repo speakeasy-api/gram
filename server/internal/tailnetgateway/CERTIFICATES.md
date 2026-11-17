@@ -82,8 +82,9 @@ TLS with only the certificate its tracker holds (`serviceMode`,
 Certificate work is bounded to 8 concurrent requests per pod.
 
 **State machine** (`certchart.go`). One `sc` statechart instance per node,
-driven by the node's heartbeat: each poll fires the timers that are due, and
-the chart starts at most one request at a time on its own goroutine.
+driven by the node's heartbeat. The chart has no timers: it decides on each
+poll, at the poll's time, and again as soon as a request completes, and runs
+at most one request at a time on its own goroutine.
 
 | State             | Meaning                                                     |
 | ----------------- | ----------------------------------------------------------- |
@@ -97,8 +98,10 @@ the chart starts at most one request at a time on its own goroutine.
 | `renew_backoff`   | The last renewal failed; still serving the held certificate |
 | `stopped`         | The node is closing                                         |
 
-From `serving`, three deadlines lead out: the store refresh, the window
-check and the renewal point, in that order when due together. A renewal is
+From `serving`, three steps lead out: re-read the store, read the window,
+renew. When several are due, the first in that order wins, so a node reads
+before it acts: it adopts another slot's renewal without taking the lease,
+and renews only on a current window. A renewal is
 adopted only if it is later than the held certificate. Expiry is not a
 state; `certStatus` works it out from the clock. A slot without a valid
 certificate reports `awaiting_certificate`, and the ingress shows

@@ -158,9 +158,9 @@ type certificateTracker struct {
 	// window request.
 	events func(ctx context.Context, operation CertificateOperation, result CertificateResult)
 
-	// inst runs the chart. Its timers fire only when the tracker polls, so
-	// a node does no certificate work between heartbeats; its requests run
-	// on goroutines of their own, one at a time since each has its own
+	// inst runs the chart. The chart decides only when the tracker polls,
+	// so a node does no certificate work between heartbeats; its requests
+	// run on goroutines of their own, one at a time since each has its own
 	// state.
 	inst *sc.Instance[certState, certContext]
 
@@ -186,7 +186,6 @@ func newCertificateTracker(
 	t := &certificateTracker{domain: domain, logger: logger, now: now, events: events, inst: nil, closeOnce: sync.Once{}}
 	opts := []sc.RunOption{
 		sc.WithClock(now),
-		sc.ManualTimers(),
 		sc.WithHooks(&sc.Hooks[certState, certContext]{Transition: t.observe, Ignored: nil, EffectStarted: nil, EffectFinished: nil}),
 	}
 	if requests != nil {

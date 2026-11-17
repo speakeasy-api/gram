@@ -343,6 +343,12 @@ func TestChartKeepsItsShareOfTheRules(t *testing.T) {
 	report, err := certificateChart.Explore(certContext{refreshEvery: 2 * time.Hour}, sc.Exploration[certState, certContext]{
 		Start:  stateNow,
 		Events: []any{certPoll{}, certStop{}},
+		// The chart has no timers: time passes between polls. Every
+		// stored time is on a half-hour grid (the start, the refresh
+		// and window intervals, the renewal window, the certificates'
+		// lifetimes), so waits on the same grid keep the explored
+		// states few. A wait of half an hour is past every retry.
+		Waits: []time.Duration{30 * time.Minute, 2 * time.Hour},
 		Outcomes: map[string][]sc.Outcome{
 			serviceObtain: {sc.Succeeds(first), sc.Fails(errCertificateIssuing), sc.Fails(refused), sc.Fails(reset)},
 			// Once a certificate is held, failures are refusals that
@@ -400,6 +406,19 @@ func TestChartKeepsItsShareOfTheRules(t *testing.T) {
 				Holds: func(st certStep) bool {
 					for _, e := range requests(st, serviceRenew) {
 						if e.Context.renewAt.IsZero() || st.At.Before(e.Context.renewAt) {
+							return false
+						}
+					}
+					return true
+				},
+			},
+			{
+				// Read before acting: a renewal waits for every read
+				// that is due, as the gateway did before the chart.
+				Name: "a renewal never starts while a store read or window read is due",
+				Holds: func(st certStep) bool {
+					for _, e := range requests(st, serviceRenew) {
+						if !st.At.Before(e.Context.refreshAt) || !st.At.Before(e.Context.windowCheckAt) {
 							return false
 						}
 					}
