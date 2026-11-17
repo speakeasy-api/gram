@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -738,6 +739,7 @@ func newStreamsCommand() *cli.Command {
 			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
 			approvalSlackHandler := slackapproval.NewEventHandler(logger, &background.TemporalRiskApprovalSlackScheduler{TemporalEnv: temporalEnv})
+			accessRequestSlackHandler := slackrequests.NewEventHandler(logger, &background.TemporalAccessRequestSlackScheduler{TemporalEnv: temporalEnv})
 
 			var siteURL *url.URL
 			if raw := c.String("site-url"); raw != "" {
@@ -774,6 +776,9 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := approvalSlackHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("send approval requests to Slack: %w", err))
+				}
+				if err := accessRequestSlackHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("send access requests to Slack: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})

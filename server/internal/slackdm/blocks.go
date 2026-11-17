@@ -54,9 +54,10 @@ type TextObject struct {
 	Text string `json:"text"`
 }
 
-// Element is a button in an actions block, or a text in a context block.
+// Element is a button or static_select in an actions block, or a text in a
+// context block.
 type Element struct {
-	// Type is button, plain_text or mrkdwn.
+	// Type is button, static_select, plain_text or mrkdwn.
 	Type string `json:"type"`
 
 	// Text is a button's label. Context elements carry their text in
@@ -81,6 +82,24 @@ type Element struct {
 
 	// Confirm asks before the click is sent.
 	Confirm *ConfirmDialog `json:"confirm,omitempty"`
+
+	// Placeholder is a static_select's prompt before anything is chosen.
+	Placeholder *TextObject `json:"placeholder,omitempty"`
+
+	// Options are a static_select's choices.
+	Options []Option `json:"options,omitempty"`
+
+	// InitialOption is a static_select's choice before anyone picks one.
+	InitialOption *Option `json:"initial_option,omitempty"`
+}
+
+// Option is one choice in a static_select.
+type Option struct {
+	// Text is what the menu shows.
+	Text TextObject `json:"text"`
+
+	// Value comes back in the click payload as selected_option.value.
+	Value string `json:"value"`
 }
 
 // MarshalJSON writes a context element as a text object and a button as a
@@ -126,7 +145,7 @@ func MrkdwnSection(text string) Block {
 
 // ContextBlock is a context block with one mrkdwn text.
 func ContextBlock(text string) Block {
-	return Block{Type: "context", BlockID: "", Text: nil, Fields: nil, Elements: []Element{{Type: "mrkdwn", Text: nil, TextValue: text, ActionID: "", Value: "", URL: "", Style: "", Confirm: nil}}}
+	return Block{Type: "context", BlockID: "", Text: nil, Fields: nil, Elements: []Element{{Type: "mrkdwn", Text: nil, TextValue: text, ActionID: "", Value: "", URL: "", Style: "", Confirm: nil, Placeholder: nil, Options: nil, InitialOption: nil}}}
 }
 
 // PlainText is a plain_text text object, as buttons and dialogs take.

@@ -60,6 +60,38 @@ type AccessRequest struct {
 	Deleted bool
 }
 
+// Notifications sent for an access request, such as one Slack DM per admin.
+type AccessRequestMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	AccessRequestID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	RecipientUserID string
+	// @access: confidential
+	SlackTeamID pgtype.Text
+	// @access: confidential
+	SlackUserID pgtype.Text
+	// @access: confidential
+	SlackChannelID pgtype.Text
+	// @access: confidential
+	SlackMessageTs pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
 type AuthzChallengeResolution struct {
 	// @access: confidential
