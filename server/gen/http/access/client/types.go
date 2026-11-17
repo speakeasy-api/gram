@@ -680,6 +680,10 @@ type ExplainResourceAccessResponseBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The decision for use, view and manage, in that order.
 	Levels []*ExplainedAccessLevelResponseBody `form:"levels,omitempty" json:"levels,omitempty" xml:"levels,omitempty"`
+	// For each upstream credential the server offers, whether the member may use
+	// it. A caller needs both use access to the server and one usable credential
+	// to reach an upstream that requires sign-in.
+	Credentials []*ExplainedCredentialAccessResponseBody `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
 }
 
 // RequestAccessResponseBody is the type of the "access" service
@@ -9996,6 +10000,49 @@ type ExplainedAccessDirectorySourceResponseBody struct {
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
 }
 
+// ExplainedCredentialAccessResponseBody is used to define fields on response
+// body types.
+type ExplainedCredentialAccessResponseBody struct {
+	// The credential's auth client ID.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// The credential's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The kind of credential.
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Whether the credential is turned on. A turned-off credential is unusable
+	// whatever the rules say.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Whether the member's rules let them use it, with their own connection for a
+	// personal credential.
+	Allowed *bool `form:"allowed,omitempty" json:"allowed,omitempty" xml:"allowed,omitempty"`
+	// Every rule matching this use, deciding rules first.
+	Rules []*ExplainedCredentialRuleResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+}
+
+// ExplainedCredentialRuleResponseBody is used to define fields on response
+// body types.
+type ExplainedCredentialRuleResponseBody struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// What the principal identifies.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Human-readable name for the principal.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Whether the rule names this credential (credential), every credential of its
+	// kind (credential_type), or every credential (all_credentials).
+	AppliesTo *string `form:"applies_to,omitempty" json:"applies_to,omitempty" xml:"applies_to,omitempty"`
+	// Whether the rule applies only on servers in this server's project.
+	ProjectBound *bool `form:"project_bound,omitempty" json:"project_bound,omitempty" xml:"project_bound,omitempty"`
+	// How the rule shaped the decision: allows, overrides, overridden, blocks or
+	// blocked, with the same meanings as an access rule's effect.
+	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	// Why a blocked rule made directly to the member did not override the block:
+	// wildcard_direct_grant, narrower_direct_grant or own_exclusion.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping *bool `form:"via_directory_mapping,omitempty" json:"via_directory_mapping,omitempty" xml:"via_directory_mapping,omitempty"`
+}
+
 // AuthzChallengeResponseBody is used to define fields on response body types.
 type AuthzChallengeResponseBody struct {
 	// Unique challenge identifier.
@@ -16517,6 +16564,14 @@ func NewExplainResourceAccessResultOK(body *ExplainResourceAccessResponseBody) *
 		}
 		v.Levels[i] = unmarshalExplainedAccessLevelResponseBodyToAccessExplainedAccessLevel(val)
 	}
+	v.Credentials = make([]*access.ExplainedCredentialAccess, len(body.Credentials))
+	for i, val := range body.Credentials {
+		if val == nil {
+			v.Credentials[i] = nil
+			continue
+		}
+		v.Credentials[i] = unmarshalExplainedCredentialAccessResponseBodyToAccessExplainedCredentialAccess(val)
+	}
 
 	return v
 }
@@ -19040,6 +19095,9 @@ func ValidateExplainResourceAccessResponseBody(body *ExplainResourceAccessRespon
 	if body.Levels == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("levels", "body"))
 	}
+	if body.Credentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credentials", "body"))
+	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "public" || *body.Visibility == "private" || *body.Visibility == "disabled") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"public", "private", "disabled"}))
@@ -19048,6 +19106,13 @@ func ValidateExplainResourceAccessResponseBody(body *ExplainResourceAccessRespon
 	for _, e := range body.Levels {
 		if e != nil {
 			if err2 := ValidateExplainedAccessLevelResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Credentials {
+		if e != nil {
+			if err2 := ValidateExplainedCredentialAccessResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -31490,6 +31555,74 @@ func ValidateExplainedAccessDirectorySourceResponseBody(body *ExplainedAccessDir
 	if body.SourceKind != nil {
 		if !(*body.SourceKind == "group" || *body.SourceKind == "attribute") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", *body.SourceKind, []any{"group", "attribute"}))
+		}
+	}
+	return
+}
+
+// ValidateExplainedCredentialAccessResponseBody runs the validations defined
+// on ExplainedCredentialAccessResponseBody
+func ValidateExplainedCredentialAccessResponseBody(body *ExplainedCredentialAccessResponseBody) (err error) {
+	if body.AuthClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_client_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ClientType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_type", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Allowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("allowed", "body"))
+	}
+	if body.Rules == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+		}
+	}
+	for _, e := range body.Rules {
+		if e != nil {
+			if err2 := ValidateExplainedCredentialRuleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateExplainedCredentialRuleResponseBody runs the validations defined on
+// ExplainedCredentialRuleResponseBody
+func ValidateExplainedCredentialRuleResponseBody(body *ExplainedCredentialRuleResponseBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.AppliesTo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applies_to", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.ViaDirectoryMapping == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("via_directory_mapping", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "unknown"}))
 		}
 	}
 	return

@@ -7,6 +7,8 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { ExplainedAccessLevel } from "@gram/client/models/components/explainedaccesslevel.js";
 import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
+import type { ExplainedCredentialAccess } from "@gram/client/models/components/explainedcredentialaccess.js";
+import { clientTypeLabel } from "@/lib/auth-clients";
 import { useExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState, type JSX } from "react";
@@ -135,7 +137,179 @@ export function CheckAccessResult({
           onToggleRules={() => setShowRules((shown) => !shown)}
         />
       )}
+
+      {data.credentials.length > 0 && (
+        <CredentialsWhy
+          credentials={data.credentials}
+          canConnect={!!explainedLevel(data, "use")?.allowed}
+          memberName={memberName}
+        />
+      )}
     </div>
+  );
+}
+
+type CredentialDecision = "usable" | "off" | "blocked" | "none";
+
+function credentialDecision(
+  credential: ExplainedCredentialAccess,
+): CredentialDecision {
+  if (!credential.enabled) return "off";
+  if (credential.allowed) return "usable";
+  return credential.rules.some((rule) => rule.effect === "blocks")
+    ? "blocked"
+    : "none";
+}
+
+const CREDENTIAL_DECISION: Record<
+  CredentialDecision,
+  { label: string; tone: AccessTone }
+> = {
+  usable: { label: "Can use", tone: "allowed" },
+  off: { label: "Turned off", tone: "none" },
+  blocked: { label: "Blocked", tone: "blocked" },
+  none: { label: "No rule allows it", tone: "none" },
+};
+
+const APPLIES_TO_LABEL: Record<string, string> = {
+  credential: "this credential",
+  credential_type: "every credential of this kind",
+  all_credentials: "every credential",
+};
+
+/**
+ * Which of the server's upstream credentials the person may sign in with.
+ * Connecting to the server and signing in upstream are decided separately:
+ * someone who can connect but use no credential still cannot reach an
+ * upstream that needs sign-in.
+ */
+function CredentialsWhy({
+  credentials,
+  canConnect,
+  memberName,
+}: {
+  credentials: ExplainedCredentialAccess[];
+  canConnect: boolean;
+  memberName: string;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const usable = credentials.filter(
+    (credential) => credentialDecision(credential) === "usable",
+  ).length;
+  const sentence =
+    usable === 0
+      ? canConnect
+        ? `${memberName} can connect but has no credential to sign in upstream with.`
+        : `${memberName} has no credential to sign in upstream with.`
+      : usable === credentials.length
+        ? `${memberName} can sign in upstream with ${credentials.length === 1 ? "the server's credential" : `any of its ${credentials.length} credentials`}.`
+        : `${memberName} can sign in upstream with ${usable} of its ${credentials.length} credentials.`;
+  const columns: Column<ExplainedCredentialAccess>[] = [
+    {
+      key: "credential",
+      header: "Credential",
+      width: "1fr",
+      render: (credential) => (
+        <div className="min-w-0 self-start">
+          <Text variant="body" className="truncate text-sm font-medium">
+            {credential.name}
+          </Text>
+          <Text muted small>
+            {clientTypeLabel(credential.clientType)}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      key: "decision",
+      header: "Decision",
+      width: "180px",
+      render: (credential) => {
+        const decision = CREDENTIAL_DECISION[credentialDecision(credential)];
+        return (
+          <span className="flex items-center gap-2 self-start text-sm">
+            <ToneMark tone={decision.tone} />
+            {decision.label}
+          </span>
+        );
+      },
+    },
+    {
+      key: "rule",
+      header: "Deciding rule",
+      width: "1.5fr",
+      render: (credential) => {
+        const rule = credential.rules[0];
+        if (!rule) {
+          return (
+            <Text muted small className="self-start">
+              No role or grant names it
+            </Text>
+          );
+        }
+        return (
+          <div className="min-w-0 space-y-1 self-start">
+            <div className="flex items-center gap-2">
+              <PrincipalBadge kind={rule.kind} />
+              <Text variant="body" className="truncate text-sm">
+                {rule.kind === "role" ? (
+                  <RoleLink principalUrn={rule.principalUrn}>
+                    {rule.displayName}
+                  </RoleLink>
+                ) : (
+                  rule.displayName
+                )}
+              </Text>
+            </div>
+            <Text muted small className="break-words">
+              {rule.effect === "blocks" ? "Blocks" : "Allows"}{" "}
+              {APPLIES_TO_LABEL[rule.appliesTo] ?? "this credential"}
+              {rule.projectBound ? " in this project" : ""}
+              {rule.viaDirectoryMapping ? " · through the directory" : ""}
+            </Text>
+          </div>
+        );
+      },
+    },
+  ];
+  return (
+    <>
+      <div className="bg-background flex items-center gap-6 border-t px-6 py-4">
+        <span className="text-eyebrow flex w-32 shrink-0 items-center gap-2">
+          <ToneMark
+            tone={usable === 0 ? (canConnect ? "blocked" : "none") : "allowed"}
+          />
+          Sign-in
+        </span>
+        <Text variant="body" className="flex-1 text-sm">
+          {sentence}
+        </Text>
+        <Button variant="secondary" size="sm" onClick={() => setOpen(!open)}>
+          <Button.Text>
+            {open
+              ? "Hide credentials"
+              : `Show ${credentials.length} credential${credentials.length === 1 ? "" : "s"}`}
+          </Button.Text>
+          <Button.RightIcon>
+            {open ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </Button.RightIcon>
+        </Button>
+      </div>
+      {open && (
+        <div className="border-t">
+          <Table
+            columns={columns}
+            data={credentials}
+            rowKey={(credential) => credential.authClientId}
+            className="border-0 [--cell-padding-inline:1.5rem]"
+          />
+        </div>
+      )}
+    </>
   );
 }
 

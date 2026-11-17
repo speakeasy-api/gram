@@ -684,6 +684,10 @@ type ExplainResourceAccessResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The decision for use, view and manage, in that order.
 	Levels []*ExplainedAccessLevelResponseBody `form:"levels" json:"levels" xml:"levels"`
+	// For each upstream credential the server offers, whether the member may use
+	// it. A caller needs both use access to the server and one usable credential
+	// to reach an upstream that requires sign-in.
+	Credentials []*ExplainedCredentialAccessResponseBody `form:"credentials" json:"credentials" xml:"credentials"`
 }
 
 // RequestAccessResponseBody is the type of the "access" service
@@ -9911,6 +9915,49 @@ type ExplainedAccessDirectorySourceResponseBody struct {
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
 }
 
+// ExplainedCredentialAccessResponseBody is used to define fields on response
+// body types.
+type ExplainedCredentialAccessResponseBody struct {
+	// The credential's auth client ID.
+	AuthClientID string `form:"auth_client_id" json:"auth_client_id" xml:"auth_client_id"`
+	// The credential's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The kind of credential.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// Whether the credential is turned on. A turned-off credential is unusable
+	// whatever the rules say.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether the member's rules let them use it, with their own connection for a
+	// personal credential.
+	Allowed bool `form:"allowed" json:"allowed" xml:"allowed"`
+	// Every rule matching this use, deciding rules first.
+	Rules []*ExplainedCredentialRuleResponseBody `form:"rules" json:"rules" xml:"rules"`
+}
+
+// ExplainedCredentialRuleResponseBody is used to define fields on response
+// body types.
+type ExplainedCredentialRuleResponseBody struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// What the principal identifies.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Human-readable name for the principal.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// Whether the rule names this credential (credential), every credential of its
+	// kind (credential_type), or every credential (all_credentials).
+	AppliesTo string `form:"applies_to" json:"applies_to" xml:"applies_to"`
+	// Whether the rule applies only on servers in this server's project.
+	ProjectBound *bool `form:"project_bound,omitempty" json:"project_bound,omitempty" xml:"project_bound,omitempty"`
+	// How the rule shaped the decision: allows, overrides, overridden, blocks or
+	// blocked, with the same meanings as an access rule's effect.
+	Effect string `form:"effect" json:"effect" xml:"effect"`
+	// Why a blocked rule made directly to the member did not override the block:
+	// wildcard_direct_grant, narrower_direct_grant or own_exclusion.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool `form:"via_directory_mapping" json:"via_directory_mapping" xml:"via_directory_mapping"`
+}
+
 // AuthzChallengeResponseBody is used to define fields on response body types.
 type AuthzChallengeResponseBody struct {
 	// Unique challenge identifier.
@@ -11065,6 +11112,18 @@ func NewExplainResourceAccessResponseBody(res *access.ExplainResourceAccessResul
 		}
 	} else {
 		body.Levels = []*ExplainedAccessLevelResponseBody{}
+	}
+	if res.Credentials != nil {
+		body.Credentials = make([]*ExplainedCredentialAccessResponseBody, len(res.Credentials))
+		for i, val := range res.Credentials {
+			if val == nil {
+				body.Credentials[i] = nil
+				continue
+			}
+			body.Credentials[i] = marshalAccessExplainedCredentialAccessToExplainedCredentialAccessResponseBody(val)
+		}
+	} else {
+		body.Credentials = []*ExplainedCredentialAccessResponseBody{}
 	}
 	return body
 }

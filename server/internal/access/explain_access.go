@@ -14,6 +14,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -385,8 +386,9 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 		sources:    sources,
 	}
 	result := &gen.ExplainResourceAccessResult{
-		Visibility: resource.Visibility,
-		Levels:     make([]*gen.ExplainedAccessLevel, 0, len(explainedAccessLevels)),
+		Visibility:  resource.Visibility,
+		Levels:      make([]*gen.ExplainedAccessLevel, 0, len(explainedAccessLevels)),
+		Credentials: nil,
 	}
 	for _, level := range explainedAccessLevels {
 		explained, err := explainAccessLevel(grants, level.level, authz.MCPCheck(level.scope, payload.ResourceID, projectID), describe)
@@ -394,6 +396,69 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 			return nil, oops.E(oops.CodeUnexpected, err, "explain access").LogError(ctx, logger)
 		}
 		result.Levels = append(result.Levels, explained)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "parse resource project").LogError(ctx, logger)
+	}
+	clients, err := authclientsrepo.New(s.db).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{
+		McpServerID:    resourceID,
+		ProjectID:      projectUUID,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list server credentials").LogError(ctx, logger)
+	}
+	result.Credentials, err = explainCredentials(grants, clients, projectID, payload.UserID, describe)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "explain credential access").LogError(ctx, logger)
+	}
+	return result, nil
+}
+
+// explainCredentials explains, for each credential a server offers, whether
+// the member may use it acting as themselves: a personal credential with
+// their own connection. Server access is explained separately; reaching an
+// upstream that needs sign-in takes both.
+func explainCredentials(grants []authz.Grant, clients []authclientsrepo.McpAuthClient, projectID, userID string, describe explainedRuleDescriber) ([]*gen.ExplainedCredentialAccess, error) {
+	result := make([]*gen.ExplainedCredentialAccess, 0, len(clients))
+	for _, client := range clients {
+		dims := authz.MCPAuthClientDimensions{
+			ClientType:      client.ClientType,
+			ProjectID:       projectID,
+			ConnectionOwner: "",
+			UpstreamClient:  "",
+		}
+		if client.ClientType == authz.AuthClientTypeRemoteSession {
+			dims.ConnectionOwner = userID
+			if client.RemoteSessionClientID.Valid {
+				dims.UpstreamClient = client.RemoteSessionClientID.UUID.String()
+			}
+		}
+		explanation, err := authz.ExplainAuthClientUse(grants, client.ID.String(), dims, userID)
+		if err != nil {
+			return nil, fmt.Errorf("explain credential %s: %w", client.ID, err)
+		}
+		rules := make([]*gen.ExplainedCredentialRule, 0, len(explanation.Contributions))
+		for _, contribution := range explanation.Contributions {
+			rules = append(rules, describe.credentialRule(contribution.Grant, client.ID.String(), string(contribution.Effect), contribution.Reason))
+		}
+		sort.SliceStable(rules, func(i, j int) bool {
+			left, right := slices.Index(explainedEffectOrder, rules[i].Effect), slices.Index(explainedEffectOrder, rules[j].Effect)
+			if left != right {
+				return left < right
+			}
+			return rules[i].DisplayName < rules[j].DisplayName
+		})
+		result = append(result, &gen.ExplainedCredentialAccess{
+			AuthClientID: client.ID.String(),
+			Name:         client.Name,
+			ClientType:   client.ClientType,
+			Enabled:      client.Enabled,
+			Allowed:      explanation.Allowed,
+			Rules:        rules,
+		})
 	}
 	return result, nil
 }
@@ -693,5 +758,28 @@ func (d explainedRuleDescriber) rule(grant authz.Grant, effect string, reason au
 		Reason:              reasonValue,
 		ViaDirectoryMapping: source.mappedOnly,
 		DirectorySources:    source.mappings,
+	}
+}
+
+// credentialRule renders a grant matching a member's use of clientID.
+func (d explainedRuleDescriber) credentialRule(grant authz.Grant, clientID, effect string, reason authz.BlockedReason) *gen.ExplainedCredentialRule {
+	base := d.rule(grant, effect, reason)
+	appliesTo := "all_credentials"
+	switch {
+	case grant.Selector.ResourceID() == clientID:
+		appliesTo = "credential"
+	case grant.Selector[authz.SelectorKeyClientType] != "" && grant.Selector[authz.SelectorKeyClientType] != authz.WildcardResource:
+		appliesTo = "credential_type"
+	}
+	projectBound := grant.Selector[authz.SelectorKeyProjectID] != "" && grant.Selector[authz.SelectorKeyProjectID] != authz.WildcardResource
+	return &gen.ExplainedCredentialRule{
+		PrincipalUrn:        base.PrincipalUrn,
+		Kind:                base.Kind,
+		DisplayName:         base.DisplayName,
+		AppliesTo:           appliesTo,
+		ProjectBound:        &projectBound,
+		Effect:              effect,
+		Reason:              base.Reason,
+		ViaDirectoryMapping: base.ViaDirectoryMapping,
 	}
 }

@@ -12,6 +12,10 @@ import {
   ExplainedAccessLevel,
   ExplainedAccessLevel$inboundSchema,
 } from "./explainedaccesslevel.js";
+import {
+  ExplainedCredentialAccess,
+  ExplainedCredentialAccess$inboundSchema,
+} from "./explainedcredentialaccess.js";
 
 /**
  * Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.
@@ -27,6 +31,10 @@ export const Visibility = {
 export type Visibility = OpenEnum<typeof Visibility>;
 
 export type ExplainResourceAccessResult = {
+  /**
+   * For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.
+   */
+  credentials: Array<ExplainedCredentialAccess>;
   /**
    * The decision for use, view and manage, in that order.
    */
@@ -46,6 +54,7 @@ export const ExplainResourceAccessResult$inboundSchema: z.ZodMiniType<
   ExplainResourceAccessResult,
   unknown
 > = z.object({
+  credentials: z.array(ExplainedCredentialAccess$inboundSchema),
   levels: z.array(ExplainedAccessLevel$inboundSchema),
   visibility: Visibility$inboundSchema,
 });

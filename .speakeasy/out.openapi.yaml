@@ -98559,6 +98559,11 @@ components:
     ExplainResourceAccessResult:
       type: object
       properties:
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplainedCredentialAccess'
+          description: For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.
         levels:
           type: array
           items:
@@ -98574,6 +98579,7 @@ components:
       required:
         - visibility
         - levels
+        - credentials
     ExplainedAccessDirectorySource:
       type: object
       properties:
@@ -98703,6 +98709,82 @@ components:
         - kind
         - display_name
         - level
+        - applies_to
+        - effect
+        - via_directory_mapping
+    ExplainedCredentialAccess:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the member's rules let them use it, with their own connection for a personal credential.
+        auth_client_id:
+          type: string
+          description: The credential's auth client ID.
+          format: uuid
+        client_type:
+          type: string
+          description: The kind of credential.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+        enabled:
+          type: boolean
+          description: Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.
+        name:
+          type: string
+          description: The credential's name.
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplainedCredentialRule'
+          description: Every rule matching this use, deciding rules first.
+      required:
+        - auth_client_id
+        - name
+        - client_type
+        - enabled
+        - allowed
+        - rules
+    ExplainedCredentialRule:
+      type: object
+      properties:
+        applies_to:
+          type: string
+          description: Whether the rule names this credential (credential), every credential of its kind (credential_type), or every credential (all_credentials).
+        display_name:
+          type: string
+          description: Human-readable name for the principal.
+        effect:
+          type: string
+          description: 'How the rule shaped the decision: allows, overrides, overridden, blocks or blocked, with the same meanings as an access rule''s effect.'
+        kind:
+          type: string
+          description: What the principal identifies.
+          enum:
+            - everyone
+            - role
+            - user
+            - unknown
+        principal_urn:
+          type: string
+          description: Canonical principal URN holding the rule.
+        project_bound:
+          type: boolean
+          description: Whether the rule applies only on servers in this server's project.
+        reason:
+          type: string
+          description: 'Why a blocked rule made directly to the member did not override the block: wildcard_direct_grant, narrower_direct_grant or own_exclusion.'
+        via_directory_mapping:
+          type: boolean
+          description: Whether the member holds this role only through a directory role mapping.
+      required:
+        - principal_urn
+        - kind
+        - display_name
         - applies_to
         - effect
         - via_directory_mapping

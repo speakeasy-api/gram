@@ -178,3 +178,13 @@ func blockedReason(grant Grant, check Check, exclusions []Grant) BlockedReason {
 	}
 	return BlockedReasonNone
 }
+
+// ExplainAuthClientUse explains whether grants let userID use clientID, acting
+// as themselves. A personal credential is explained for userID's own
+// connection: dims.ConnectionOwner must be userID. The result only describes
+// a decision; nothing authorizes on it.
+func ExplainAuthClientUse(grants []Grant, clientID string, dims MCPAuthClientDimensions, userID string) (GrantCheckExplanation, error) {
+	check := MCPAuthClientCheck(clientID, dims)
+	check.representedUser = userID
+	return ExplainGrantCheck(grants, check)
+}

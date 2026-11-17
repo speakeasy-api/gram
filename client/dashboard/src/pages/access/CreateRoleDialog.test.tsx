@@ -16,6 +16,13 @@ import type { Role } from "@gram/client/models/components/role.js";
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
+  authClients: [] as {
+    id: string;
+    name: string;
+    clientType: string;
+    enabled: boolean;
+    servers: { id: string; projectId: string; name?: string }[];
+  }[],
   create: vi.fn(),
   update: vi.fn(),
   refetchScopes: vi.fn(),
@@ -52,6 +59,13 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   queryKeyAgents: () => ["agents"],
+}));
+vi.mock("@/lib/useAllAuthClients", () => ({
+  useAllAuthClients: () => ({
+    data: mocks.authClients,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: mocks.list } }),
@@ -1165,20 +1179,21 @@ describe("a role read again while the editor is open", () => {
     { resourceKind: "mcp", resourceId: "server-b" },
   ];
 
-  /** One credential type's control, named by the credential it decides. */
+  /** The use cell of one credentials row, named by what the row covers. */
   function credential(label: string) {
-    return within(
-      screen.getByRole("group", { name: `${label} for this role` }),
-    );
+    return screen.getByRole("button", {
+      name: (name) =>
+        name === `Use ${label}` || name === `Use ${label}, blocked`,
+    });
   }
-  function choose(label: string, option: string) {
-    fireEvent.click(credential(label).getByRole("button", { name: option }));
+  function toggleCredential(label: string) {
+    fireEvent.click(credential(label));
   }
-  function chosen(label: string): string[] {
-    return credential(label)
-      .getAllByRole("button")
-      .filter((button) => button.getAttribute("aria-pressed") === "true")
-      .map((button) => button.textContent ?? "");
+  function chosen(label: string): "Can use" | "Blocked" | "Not set" {
+    const cell = credential(label);
+    if (cell.getAttribute("aria-label")?.endsWith(", blocked"))
+      return "Blocked";
+    return cell.getAttribute("aria-pressed") === "true" ? "Can use" : "Not set";
   }
   function rename() {
     fireEvent.change(screen.getByDisplayValue("Test role"), {
@@ -1210,7 +1225,7 @@ describe("a role read again while the editor is open", () => {
     const { reread } = renderEditor(role);
     reread({ ...role, grants: [personalAuth] });
 
-    expect(chosen("Each person's own account")).toEqual(["Can use"]);
+    expect(chosen("Each person's own account")).toBe("Can use");
   });
 
   it("keeps a credential rule the editor started with", () => {
@@ -1235,7 +1250,7 @@ describe("a role read again while the editor is open", () => {
     const { reread } = renderEditor({ ...role, grants: [personalAuth] });
     reread({ ...role, grants: [personalAuth, blockedAuth] });
 
-    expect(chosen("Service account")).toEqual(["Blocked"]);
+    expect(chosen("Service account")).toBe("Blocked");
   });
 
   it("does not revoke a permission the role gained while the editor was open", () => {
@@ -1262,21 +1277,59 @@ describe("a role read again while the editor is open", () => {
 
   it("keeps the credential the person chose and the rule the role gained", () => {
     const { reread } = renderEditor(role);
-    choose("Each person's own account", "Can use");
+    toggleCredential("Each person's own account");
     reread({ ...role, grants: [blockedAuth] });
+    expect(chosen("Each person's own account")).toBe("Can use");
+    expect(chosen("Service account")).toBe("Blocked");
 
-    const form = savedForm("direct");
+    // Giving a credential is reviewed like a permission.
+    const form = savedForm("reviewed");
     expect(form.addGrants).toEqual([personalAuth]);
     expect(form.removeGrants ?? []).toEqual([]);
-    expect(chosen("Each person's own account")).toEqual(["Can use"]);
-    expect(chosen("Service account")).toEqual(["Blocked"]);
+  });
+
+  it("narrows a grant on every credential to all but the one unticked", () => {
+    const allAuth: Grant = {
+      scope: "mcp:auth",
+      selectors: [{ resourceKind: "mcp_auth_client", resourceId: "*" }],
+    };
+    mocks.authClients = [
+      {
+        id: "sa-1",
+        name: "Reporting bot",
+        clientType: "service_account",
+        enabled: true,
+        servers: [{ id: "server-a", projectId: "project-a", name: "GitHub" }],
+      },
+    ];
+    try {
+      renderEditor({ ...role, grants: [allAuth] });
+      fireEvent.click(screen.getByRole("button", { name: /^Service account/ }));
+      expect(chosen("Reporting bot")).toBe("Can use");
+      toggleCredential("Reporting bot");
+
+      // Taking access away needs no review.
+      const form = savedForm("direct");
+      expect(form.removeGrants).toEqual([allAuth]);
+      const added = (form.addGrants ?? []).flatMap(
+        (grant: Grant) => grant.selectors ?? [],
+      );
+      expect(added.map((s: { clientType?: string }) => s.clientType)).toEqual([
+        "remote_session",
+        "static_credential",
+        "pass_through",
+        "ema",
+      ]);
+    } finally {
+      mocks.authClients = [];
+    }
   });
 
   it("takes away the stored rule the person switched off", () => {
     // Turning a credential off is an explicit edit, and its removal has to
     // name the selector the role stores so the server matches it.
     renderEditor({ ...role, grants: [personalAuth] });
-    choose("Each person's own account", "Not set");
+    toggleCredential("Each person's own account");
     const form = savedForm("direct");
     expect(form.removeGrants).toEqual([personalAuth]);
     expect(form.addGrants ?? []).toEqual([]);

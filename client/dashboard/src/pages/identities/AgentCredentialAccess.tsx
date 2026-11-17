@@ -3,9 +3,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
@@ -14,14 +12,24 @@ import { collectPageItems } from "@/components/sessions/collectPageItems";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
-import { CLIENT_TYPES, clientTypeLabel } from "@/lib/auth-clients";
 import { useAllAuthClients } from "@/lib/useAllAuthClients";
+import { CredentialAccessTable } from "@/pages/access/CredentialAccessTable";
+import {
+  credentialHolderCopy,
+  type CredentialRule,
+  credentialRuleChanges,
+  credentialRuleKey,
+  rebaseCredentialRules,
+  REPRESENTED_USER,
+} from "@/pages/access/credentialAccessModel";
 import {
   AGENT_CREDENTIAL_BLOCK_SCOPE,
   invalidateAgentPolicy,
+  isAgentCredentialScope,
 } from "@/pages/agents/agent-policy-grants";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
-import type { AgentPolicySelectorClientType } from "@gram/client/models/components/agentpolicyselector.js";
+import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { invalidateAllAgentConnectionBlocks } from "@gram/client/react-query/agentConnectionBlocks.js";
 import { invalidateAllAgentsListPolicyGrants } from "@gram/client/react-query/agentsListPolicyGrants.js";
@@ -29,192 +37,182 @@ import { useBlockAgentOnConnectionMutation } from "@gram/client/react-query/bloc
 import { useRemoveAgentConnectionBlockMutation } from "@gram/client/react-query/removeAgentConnectionBlock.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { authGrantParts } from "./auth-grant-label";
+import { AuthGrantLabel } from "./AuthGrantLabel";
+import { useAuthGrantNames } from "./useAuthGrantNames";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { useAgentPolicyGrants } from "./useAgentPolicyGrants";
 
-const TYPE_PREFIX = "type:";
-
 /**
- * The upstream credentials this agent may not use. An agent manager blocks a
- * kind of credential or one credential everywhere it is used; anyone blocks
- * the agent from their own connections, which needs no say over the agent.
- * Both only take access away, so neither asks what the agent may do.
+ * Which upstream credentials this agent may use. An agent manager sets that
+ * the same way a role does; anyone can block the agent from their own
+ * connections, which needs no say over the agent.
  */
-export function AgentCredentialRestrictions({
+export function AgentCredentialAccess({
   agent,
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
   return (
     <>
-      {agent.permissions.write ? <ManagerRestrictions agent={agent} /> : null}
+      {agent.permissions.write ? <ManagerCredentials agent={agent} /> : null}
       <OwnConnectionBlocks agent={agent} />
     </>
   );
 }
 
-function ManagerRestrictions({ agent }: { agent: ManagedAgent }): JSX.Element {
+type StoredCredentialRule = CredentialRule & { id: string };
+
+/** A block a person put on their own connection: only they can lift it. */
+function isOwnerBlock(grant: AgentPolicyGrant): boolean {
+  const owner = grant.selector.connectionOwner;
+  return (
+    grant.scope === AGENT_CREDENTIAL_BLOCK_SCOPE &&
+    !!owner &&
+    owner !== REPRESENTED_USER
+  );
+}
+
+function ManagerCredentials({ agent }: { agent: ManagedAgent }): JSX.Element {
   const organization = useOrganization();
   const { user } = useSession();
   const sdk = useSdkClient();
   const queryClient = useQueryClient();
   const { hasScope } = useRBAC();
-  const [adding, setAdding] = useState(false);
-  const [choice, setChoice] = useState("");
   const grants = useAgentPolicyGrants(agent);
   // Naming one credential needs the organization's list; without it, kinds
-  // of credential can still be blocked.
+  // of credential can still be set.
   const clients = useAllAuthClients({ enabled: hasScope("org:read") });
-  const names = new Map(
-    (clients.data ?? []).map((client) => [client.id, client]),
+  const policy = grants.data ?? [];
+  const stored: StoredCredentialRule[] = useMemo(
+    () =>
+      (grants.data ?? [])
+        .filter((grant) => isAgentCredentialScope(grant.scope))
+        .filter((grant) => !isOwnerBlock(grant))
+        .map((grant) => ({
+          id: grant.id,
+          scope: grant.scope as CredentialRule["scope"],
+          selector: grant.selector,
+        })),
+    [grants.data],
   );
-  const restrictions = (grants.data ?? []).filter(
-    (grant) => grant.scope === AGENT_CREDENTIAL_BLOCK_SCOPE,
-  );
-  const refresh = () =>
-    Promise.all([
-      invalidateAgentPolicy(queryClient, organization.id, user.id, agent.id),
-      invalidateAllAgentsListPolicyGrants(queryClient),
-    ]);
-  const add = useMutation({
-    mutationFn: (value: string) =>
-      sdk.agents.createPolicyGrant({
-        createAgentPolicyGrantForm: {
-          agentId: agent.id,
-          effect: "allow",
-          scope: AGENT_CREDENTIAL_BLOCK_SCOPE,
-          selector: value.startsWith(TYPE_PREFIX)
-            ? {
-                resourceKind: "mcp_auth_client",
-                resourceId: "*",
-                clientType: value.slice(
-                  TYPE_PREFIX.length,
-                ) as AgentPolicySelectorClientType,
-              }
-            : { resourceKind: "mcp_auth_client", resourceId: value },
-        },
-      }),
-    onSuccess: () => {
-      setAdding(false);
-      setChoice("");
-      toast.success(`${agent.name} can no longer use it`);
-      void refresh();
-    },
-    onError: () =>
-      toast.error("The restriction could not be saved. Try again."),
-  });
-  const remove = useMutation({
-    mutationFn: (grant: AgentPolicyGrant) =>
-      sdk.agents.deletePolicyGrant({
-        deleteAgentPolicyGrantForm: { agentId: agent.id, grantId: grant.id },
-      }),
-    onSuccess: () => {
-      toast.success("Restriction removed");
-      void refresh();
-    },
-    onError: () =>
-      toast.error("The restriction could not be removed. Try again."),
-  });
+  const ownerBlocks = policy.filter(isOwnerBlock).length;
+  const names = useAuthGrantNames(stored);
+  // What the manager changed, against the rules as they read when they
+  // started. Everything they did not touch follows the stored policy.
+  const [edit, setEdit] = useState<{
+    baseline: CredentialRule[];
+    current: CredentialRule[];
+  } | null>(null);
+  const rules = edit
+    ? rebaseCredentialRules({ ...edit, stored })
+    : (stored as CredentialRule[]);
+  const changes = credentialRuleChanges(stored, rules);
+  const dirty = changes.add.length + changes.remove.length > 0;
 
-  const describe = (grant: AgentPolicyGrant) => {
-    const { selector } = grant;
-    if (selector.connectionOwner) return "A person's own connection";
-    if (selector.resourceId === "*") {
-      return selector.clientType
-        ? `${clientTypeLabel(selector.clientType)} · every credential of this kind`
-        : "Every upstream credential";
-    }
-    return names.get(selector.resourceId)?.name ?? "One credential";
-  };
+  const save = useMutation({
+    mutationFn: async () => {
+      // Additions first, so taking a wide rule apart never leaves a gap.
+      for (const rule of changes.add) {
+        await sdk.agents.createPolicyGrant({
+          createAgentPolicyGrantForm: {
+            agentId: agent.id,
+            effect: "allow",
+            scope: rule.scope,
+            selector: rule.selector as AgentPolicySelector,
+          },
+        });
+      }
+      const removing = new Set(changes.remove.map(credentialRuleKey));
+      for (const rule of stored) {
+        if (!removing.has(credentialRuleKey(rule))) continue;
+        await sdk.agents.deletePolicyGrant({
+          deleteAgentPolicyGrantForm: { agentId: agent.id, grantId: rule.id },
+        });
+      }
+    },
+    onSuccess: () => {
+      setEdit(null);
+      toast.success("Credentials saved");
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof GramError && error.statusCode === 403
+          ? "Some changes weren't saved: an agent can only be given credentials both you and its owner can use."
+          : "Some changes weren't saved. Try again.",
+      ),
+    onSettled: () =>
+      Promise.all([
+        invalidateAgentPolicy(queryClient, organization.id, user.id, agent.id),
+        invalidateAllAgentsListPolicyGrants(queryClient),
+      ]),
+  });
 
   return (
     <IdentityPanel
-      title="Credentials this agent can't use"
+      title="Upstream credentials"
       action={
-        <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Block a credential</Button.Text>
-        </Button>
+        dirty ? (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={save.isPending}
+              onClick={() => setEdit(null)}
+            >
+              <Button.Text>Discard</Button.Text>
+            </Button>
+            <Button
+              size="sm"
+              disabled={save.isPending}
+              onClick={() => save.mutate()}
+            >
+              <Button.Text>{save.isPending ? "Saving…" : "Save"}</Button.Text>
+            </Button>
+          </div>
+        ) : undefined
       }
       loading={grants.isLoading}
       error={grants.isError}
       onRetry={() => void grants.refetch()}
-      footer="A block applies on every server that offers the credential, even if the agent's keys would allow it."
+      footer={
+        ownerBlocks > 0
+          ? `${ownerBlocks} ${ownerBlocks === 1 ? "person has" : "people have"} also blocked this agent from their own connection. Only they can lift that.`
+          : "A block wins over every other rule, whatever the agent's keys allow."
+      }
+      contentClassName="p-4"
     >
-      {restrictions.length === 0 ? (
-        <IdentityPanelEmpty>
-          This agent may use any credential its keys and owner allow.
-        </IdentityPanelEmpty>
-      ) : (
-        <ul className="divide-y">
-          {restrictions.map((grant) => (
-            <li
-              key={grant.id}
-              className="flex items-center justify-between gap-3 px-4 py-3"
-            >
-              <Text small>{describe(grant)}</Text>
-              {grant.selector.connectionOwner ? (
-                <Text small muted>
-                  Only that person can lift it
-                </Text>
-              ) : (
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  aria-label={`Remove restriction on ${describe(grant)}`}
-                  disabled={remove.isPending}
-                  onClick={() => remove.mutate(grant)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+      <div className="space-y-3">
+        <Text muted small className="block">
+          {credentialHolderCopy("agent").description}
+        </Text>
+        <CredentialAccessTable
+          holder="agent"
+          bare
+          rules={rules}
+          onChange={(next) =>
+            setEdit((prev) => ({
+              baseline: prev?.baseline ?? stored,
+              current: next,
+            }))
+          }
+          clients={clients.data ?? (clients.isError ? [] : null)}
+          clientsError={clients.isError}
+          onRetry={() => void clients.refetch()}
+          projects={organization.projects}
+          disabled={save.isPending}
+          renderOtherRule={(rule) => (
+            <AuthGrantLabel
+              parts={authGrantParts(
+                rule.selector as AgentPolicySelector,
+                names,
               )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <ConfirmDialog
-        open={adding}
-        onOpenChange={(open) => {
-          setAdding(open);
-          if (!open) setChoice("");
-        }}
-        title={`Block ${agent.name} from a credential`}
-        description="The agent can no longer use it on any server, whatever its keys allow."
-        confirmLabel="Block"
-        isPending={add.isPending}
-        confirmDisabled={!choice}
-        onConfirm={() => add.mutate(choice)}
-      >
-        <Select value={choice} onValueChange={setChoice}>
-          <SelectTrigger aria-label="Credential to block" className="w-full">
-            <SelectValue placeholder="Choose what to block" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>A kind of credential</SelectLabel>
-              {CLIENT_TYPES.map((type) => (
-                <SelectItem key={type} value={`${TYPE_PREFIX}${type}`}>
-                  {clientTypeLabel(type)}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-            {names.size > 0 ? (
-              <SelectGroup>
-                <SelectLabel>One credential</SelectLabel>
-                {[...names.values()].map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ) : null}
-          </SelectContent>
-        </Select>
-      </ConfirmDialog>
+            />
+          )}
+        />
+      </div>
     </IdentityPanel>
   );
 }

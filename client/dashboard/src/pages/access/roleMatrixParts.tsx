@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
-import { Ban, Check, ChevronDown } from "lucide-react";
+import { Ban, Check, ChevronDown, ChevronRight } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 
 import type { RoleGrant } from "./types";
@@ -186,5 +186,55 @@ export function EditorSection({
       </div>
       {children}
     </section>
+  );
+}
+
+/** A row's name, which opens and closes what sits under it. */
+export function RowToggle({
+  name,
+  detail,
+  label,
+  strong = false,
+  open,
+  disabled,
+  onToggle,
+}: {
+  name: string;
+  detail?: string;
+  /** Names the control when the row's name alone would not say what opens. */
+  label?: string;
+  strong?: boolean;
+  open: boolean;
+  /** A search shows every match, so projects stay open while it runs. */
+  disabled: boolean;
+  onToggle: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onToggle}
+      aria-expanded={open}
+      aria-label={label}
+      className={cn(
+        "-ml-1 flex max-w-full items-start gap-1 text-left",
+        disabled ? "cursor-default" : "cursor-pointer",
+      )}
+    >
+      <ChevronRight
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 size-4 shrink-0 transition-transform",
+          open && "rotate-90",
+        )}
+      />
+      <span className="min-w-0">
+        <span className={cn("block truncate", strong && "font-medium")}>
+          {name}
+        </span>
+        {detail && (
+          <span className="text-muted-foreground block text-xs">{detail}</span>
+        )}
+      </span>
+    </button>
   );
 }

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
+import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
@@ -31,7 +32,7 @@ import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import type { ListRolesResult } from "@gram/client/models/components/listrolesresult.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { RoleAuthClientTypesField } from "./RoleAuthClientTypesField";
+import { CredentialAccessTable } from "./CredentialAccessTable";
 import { ReviewGrantsStep } from "./ReviewGrantsStep";
 import {
   addedPermissions,
@@ -42,12 +43,17 @@ import {
 } from "./reviewGrants";
 import { scopeCatalogue } from "./scopeCatalogue";
 import {
-  clientTypeGrantChanges,
-  clientTypeRulesFromRole,
-  clientTypeRulesKey,
-  rebaseClientTypeRules,
-  type ClientTypeRules,
-} from "./roleAuthClientTypes";
+  type CredentialChangeLine,
+  credentialChangeLines,
+  credentialChangesGiveAccess,
+  type CredentialRule,
+  credentialRulesKey,
+  rebaseCredentialRules,
+} from "./credentialAccessModel";
+import {
+  credentialGrantChanges,
+  credentialRulesFromRole,
+} from "./roleCredentialRules";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
@@ -71,6 +77,8 @@ import {
 import { RoleTemplatePicker } from "./RoleTemplatePicker";
 import { roleTemplates, type RoleTemplate } from "./roleTemplates";
 import { useOrgMcpServers } from "./useOrgMcpServers";
+
+const CREDENTIALS_SECTION_ID = "role-upstream-credentials";
 import { RoleDirectorySources } from "./RoleDirectorySources";
 import type {
   RoleGrant as SdkRoleGrant,
@@ -282,11 +290,12 @@ export function CreateRoleDialog({
   const [initialGrants, setInitialGrants] = useState<Record<string, RoleGrant>>(
     {},
   );
-  const [clientTypeRules, setClientTypeRules] = useState<ClientTypeRules>(() =>
-    clientTypeRulesFromRole(undefined),
+  const [credentialRules, setCredentialRules] = useState<CredentialRule[]>(() =>
+    credentialRulesFromRole(undefined),
   );
-  const [savedClientTypeRules, setSavedClientTypeRules] =
-    useState<ClientTypeRules>(() => clientTypeRulesFromRole(undefined));
+  const [savedCredentialRules, setSavedCredentialRules] = useState<
+    CredentialRule[]
+  >(() => credentialRulesFromRole(undefined));
   // The starting point the form still matches. A role pre-filled from an
   // access request starts as its own.
   const [template, setTemplate] = useState<string | null>(
@@ -304,6 +313,8 @@ export function CreateRoleDialog({
   // when the review is confirmed.
   const [review, setReview] = useState<{
     grants: SdkRoleGrant[];
+    credentials: CredentialRule[];
+    credentialChanges: CredentialChangeLine[];
     added: AddedPermission[];
     newHolders: NewHolders | null;
     confirmed: boolean;
@@ -363,6 +374,13 @@ export function CreateRoleDialog({
   );
 
   const mcpInventory = useOrgMcpServers(open);
+  const authClients = useAllAuthClients({ enabled: open });
+  // The server whose credentials the credentials table is narrowed to, after
+  // its cell in the server grid was clicked.
+  const [credentialServer, setCredentialServer] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const projectList = useMemo(
     () =>
@@ -393,8 +411,8 @@ export function CreateRoleDialog({
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
     setInitialGrants(storedGrants);
-    setClientTypeRules(clientTypeRulesFromRole(editingRole));
-    setSavedClientTypeRules(clientTypeRulesFromRole(editingRole));
+    setCredentialRules(credentialRulesFromRole(editingRole));
+    setSavedCredentialRules(credentialRulesFromRole(editingRole));
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
@@ -428,19 +446,19 @@ export function CreateRoleDialog({
       );
       setInitialGrants(storedGrants);
     }
-    const storedClientTypes = clientTypeRulesFromRole(editingRole);
+    const storedCredentials = credentialRulesFromRole(editingRole);
     if (
-      clientTypeRulesKey(storedClientTypes) !==
-      clientTypeRulesKey(savedClientTypeRules)
+      credentialRulesKey(storedCredentials) !==
+      credentialRulesKey(savedCredentialRules)
     ) {
-      setClientTypeRules((current) =>
-        rebaseClientTypeRules({
+      setCredentialRules((current) =>
+        rebaseCredentialRules({
           current,
-          baseline: savedClientTypeRules,
-          stored: storedClientTypes,
+          baseline: savedCredentialRules,
+          stored: storedCredentials,
         }),
       );
-      setSavedClientTypeRules(storedClientTypes);
+      setSavedCredentialRules(storedCredentials);
     }
   }
 
@@ -458,7 +476,7 @@ export function CreateRoleDialog({
   });
 
   const submitted = useRef<{
-    clientTypeRules: ClientTypeRules;
+    credentialRules: CredentialRule[];
     name: string;
     description: string;
     formGrants: Record<string, RoleGrant>;
@@ -497,14 +515,14 @@ export function CreateRoleDialog({
         !saved ||
         !scopeDefinitions ||
         roleHoldsGrants(role, saved.grants, scopeDefinitions);
-      // Credential type rules are left out of the form's grants, so check
+      // Credential rules are left out of the form's grants, so check
       // them on their own against what the role stores.
-      const storedClientTypeRules = clientTypeRulesFromRole(role);
-      const clientTypesStored =
+      const storedCredentialRules = credentialRulesFromRole(role);
+      const credentialsStored =
         !saved ||
-        clientTypeRulesKey(storedClientTypeRules) ===
-          clientTypeRulesKey(saved.clientTypeRules);
-      const allStored = grantsStored && clientTypesStored;
+        credentialRulesKey(storedCredentialRules) ===
+          credentialRulesKey(saved.credentialRules);
+      const allStored = grantsStored && credentialsStored;
       if (!allStored) {
         toast.error(
           "Some permission changes weren't saved. Check the role and save again.",
@@ -521,7 +539,7 @@ export function CreateRoleDialog({
         if (grantsStored) setInitialGrants(saved.formGrants);
         setInitialMembers(saved.members);
         setInitialAgents(saved.agents);
-        setSavedClientTypeRules(storedClientTypeRules);
+        setSavedCredentialRules(storedCredentialRules);
         if (allStored) toast.success("Role saved");
         return;
       }
@@ -538,9 +556,9 @@ export function CreateRoleDialog({
       isMutating,
       isEditing,
       isSystemRole,
-      clientTypesChanged:
-        clientTypeRulesKey(clientTypeRules) !==
-        clientTypeRulesKey(savedClientTypeRules),
+      credentialsChanged:
+        credentialRulesKey(credentialRules) !==
+        credentialRulesKey(savedCredentialRules),
       name,
       description,
       grants,
@@ -616,9 +634,9 @@ export function CreateRoleDialog({
       (grants[scope]?.rules ?? []).some((rule) => rule.effect === "deny"),
     );
 
-  const clientTypesChanged =
-    clientTypeRulesKey(clientTypeRules) !==
-    clientTypeRulesKey(savedClientTypeRules);
+  const credentialsChanged =
+    credentialRulesKey(credentialRules) !==
+    credentialRulesKey(savedCredentialRules);
   const sameSet = (a: Set<string>, b: Set<string>) =>
     a.size === b.size && [...a].every((id) => b.has(id));
   // Whether an existing role differs from what is stored, so it can be put
@@ -629,14 +647,14 @@ export function CreateRoleDialog({
     (name !== initialName ||
       description !== initialDescription ||
       grantKeysStringFn(grants) !== grantKeysStringFn(initialGrants) ||
-      clientTypesChanged ||
+      credentialsChanged ||
       !sameSet(selectedMembers, initialMembers) ||
       !sameSet(selectedAgents, initialAgents));
   const resetToSaved = () => {
     setName(initialName);
     setDescription(initialDescription);
     setGrants(initialGrants);
-    setClientTypeRules(savedClientTypeRules);
+    setCredentialRules(savedCredentialRules);
     setSelectedMembers(new Set(initialMembers));
     setSelectedAgents(new Set(initialAgents));
     setAssignmentConfirmed(false);
@@ -802,7 +820,9 @@ export function CreateRoleDialog({
   if (
     review &&
     dialogStep === "review" &&
-    JSON.stringify(pendingGrants) !== JSON.stringify(review.grants)
+    (JSON.stringify(pendingGrants) !== JSON.stringify(review.grants) ||
+      credentialRulesKey(credentialRules) !==
+        credentialRulesKey(review.credentials))
   ) {
     setReview(null);
     setDialogStep("form");
@@ -815,7 +835,7 @@ export function CreateRoleDialog({
     if (!scopeDefinitions) return;
 
     if (dialogStep === "review") {
-      if (review) commitSave(review.grants);
+      if (review) commitSave(review.grants, review.credentials);
       return;
     }
 
@@ -849,12 +869,31 @@ export function CreateRoleDialog({
       }
     }
     const added = addedPermissions(addGrants, catalogue);
-    if (added.length > 0 || newHolders) {
-      setReview({ grants: sdkGrants, added, newHolders, confirmed: false });
+    const credentialChanges = credentialChangeLines(
+      credentialRulesFromRole(editingRole ?? undefined),
+      credentialRules,
+      new Map((authClients.data ?? []).map((c) => [c.id, c])),
+      new Map(projectList.map((p) => [p.id, p.name])),
+    );
+    // A credential change that gives access is reviewed like a permission.
+    const credentialsGiven = credentialChangesGiveAccess(
+      credentialRulesFromRole(editingRole ?? undefined),
+      credentialRules,
+      authClients.data ?? [],
+    );
+    if (added.length > 0 || newHolders || credentialsGiven) {
+      setReview({
+        grants: sdkGrants,
+        credentials: credentialRules,
+        credentialChanges,
+        added,
+        newHolders,
+        confirmed: false,
+      });
       setDialogStep("review");
       return;
     }
-    commitSave(sdkGrants);
+    commitSave(sdkGrants, credentialRules);
   };
 
   const needsReviewConfirmation =
@@ -870,7 +909,10 @@ export function CreateRoleDialog({
     setDialogStep("form");
   };
 
-  const commitSave = (sdkGrants: SdkRoleGrant[]) => {
+  const commitSave = (
+    sdkGrants: SdkRoleGrant[],
+    credentials: CredentialRule[],
+  ) => {
     if (!scopeDefinitions) return;
 
     if (isEditing) {
@@ -880,14 +922,20 @@ export function CreateRoleDialog({
       );
       // Removals use the role's stored selectors, so only the credential
       // types whose rule changed are rewritten.
-      const typeChanges = clientTypeGrantChanges(editingRole, clientTypeRules);
-      const addGrants = [...scopeChanges.addGrants, ...typeChanges.addGrants];
+      const credentialChanges = credentialGrantChanges(
+        editingRole,
+        credentials,
+      );
+      const addGrants = [
+        ...scopeChanges.addGrants,
+        ...credentialChanges.addGrants,
+      ];
       const removeGrants = [
         ...scopeChanges.removeGrants,
-        ...typeChanges.removeGrants,
+        ...credentialChanges.removeGrants,
       ];
       submitted.current = {
-        clientTypeRules,
+        credentialRules: credentials,
         name,
         description,
         formGrants: grants,
@@ -923,7 +971,7 @@ export function CreateRoleDialog({
             description: description.trim() || undefined,
             grants: [
               ...sdkGrants,
-              ...clientTypeGrantChanges(undefined, clientTypeRules).addGrants,
+              ...credentialGrantChanges(undefined, credentials).addGrants,
             ],
             memberIds:
               selectedMembers.size > 0
@@ -944,8 +992,8 @@ export function CreateRoleDialog({
     setName("");
     setDescription("");
     setGrants({});
-    setClientTypeRules(clientTypeRulesFromRole(undefined));
-    setSavedClientTypeRules(clientTypeRulesFromRole(undefined));
+    setCredentialRules(credentialRulesFromRole(undefined));
+    setSavedCredentialRules(credentialRulesFromRole(undefined));
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
     setSelectedAgents(new Set());
@@ -1141,13 +1189,31 @@ export function CreateRoleDialog({
               memberCount={selectedMembers.size}
               onEditRule={openRuleEditor}
               onRemoveRule={removeRule}
+              credentials={{
+                rules: credentialRules,
+                clients: authClients.data ?? null,
+                onShow: (server) => {
+                  setCredentialServer(server);
+                  document
+                    .getElementById(CREDENTIALS_SECTION_ID)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                },
+              }}
             />
-            <RoleAuthClientTypesField
-              value={clientTypeRules}
+            <CredentialAccessTable
+              holder="role"
+              sectionId={CREDENTIALS_SECTION_ID}
+              rules={credentialRules}
               onChange={(next) => {
                 setAssignmentConfirmed(false);
-                setClientTypeRules(next);
+                setCredentialRules(next);
               }}
+              clients={authClients.data ?? null}
+              clientsError={authClients.isError}
+              onRetry={() => void authClients.refetch()}
+              projects={projectList}
+              serverFilter={credentialServer}
+              onClearServerFilter={() => setCredentialServer(null)}
               disabled={isEditing && !initialized}
             />
 
@@ -1434,14 +1500,17 @@ export function CreateRoleDialog({
               Review changes to &ldquo;{name.trim() || "this role"}&rdquo;
             </Dialog.Title>
             <Dialog.Description>
-              {review && review.added.length === 0
-                ? "The members and agents added to this role gain its sensitive permissions when it is saved."
-                : "These permissions are added when the role is saved."}
+              {review && review.added.length > 0
+                ? "These permissions are added when the role is saved."
+                : review && review.credentialChanges.length > 0
+                  ? "These credential changes apply when the role is saved."
+                  : "The members and agents added to this role gain its sensitive permissions when it is saved."}
             </Dialog.Description>
           </Dialog.Header>
           {review && (
             <ReviewGrantsStep
               added={review.added}
+              credentialChanges={review.credentialChanges}
               newHolders={review.newHolders}
               holdersNote={holdersNote}
               confirmed={review.confirmed}

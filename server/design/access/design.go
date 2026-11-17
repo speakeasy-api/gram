@@ -1646,13 +1646,46 @@ var ExplainedAccessLevelModel = Type("ExplainedAccessLevel", func() {
 	Attribute("rules", ArrayOf(ExplainedAccessRuleModel), "Every rule matching this access, deciding rules first.")
 })
 
+// One loaded grant that matched a member's use of one upstream credential.
+var ExplainedCredentialRuleModel = Type("ExplainedCredentialRule", func() {
+	Required("principal_urn", "kind", "display_name", "applies_to", "effect", "via_directory_mapping")
+
+	Attribute("principal_urn", String, "Canonical principal URN holding the rule.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("applies_to", String, "Whether the rule names this credential (credential), every credential of its kind (credential_type), or every credential (all_credentials).")
+	Attribute("project_bound", Boolean, "Whether the rule applies only on servers in this server's project.")
+	Attribute("effect", String, "How the rule shaped the decision: allows, overrides, overridden, blocks or blocked, with the same meanings as an access rule's effect.")
+	Attribute("reason", String, "Why a blocked rule made directly to the member did not override the block: wildcard_direct_grant, narrower_direct_grant or own_exclusion.")
+	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
+})
+
+// Whether a member may use one upstream credential the server offers.
+var ExplainedCredentialAccessModel = Type("ExplainedCredentialAccess", func() {
+	Required("auth_client_id", "name", "client_type", "enabled", "allowed", "rules")
+
+	Attribute("auth_client_id", String, "The credential's auth client ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The credential's name.")
+	Attribute("client_type", String, "The kind of credential.", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	})
+	Attribute("enabled", Boolean, "Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.")
+	Attribute("allowed", Boolean, "Whether the member's rules let them use it, with their own connection for a personal credential.")
+	Attribute("rules", ArrayOf(ExplainedCredentialRuleModel), "Every rule matching this use, deciding rules first.")
+})
+
 var ExplainResourceAccessResult = Type("ExplainResourceAccessResult", func() {
-	Required("visibility", "levels")
+	Required("visibility", "levels", "credentials")
 
 	Attribute("visibility", String, "Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.", func() {
 		Enum("public", "private", "disabled")
 	})
 	Attribute("levels", ArrayOf(ExplainedAccessLevelModel), "The decision for use, view and manage, in that order.")
+	Attribute("credentials", ArrayOf(ExplainedCredentialAccessModel), "For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.")
 })
 
 var MemberModel = Type("AccessMember", func() {

@@ -682,7 +682,11 @@ describe("Provisioning a new agent", () => {
 
     fireEvent.focus(screen.getByText("Call its servers"));
     expect(
-      (await screen.findAllByText("mcp:auth on all auth clients")).length,
+      (
+        await screen.findAllByText(
+          "mcp:auth on all upstream credentials (narrow them on the agent's Permissions page)",
+        )
+      ).length,
     ).toBeGreaterThan(0);
     expect(
       screen.getAllByText("mcp:connect on the selected servers").length,

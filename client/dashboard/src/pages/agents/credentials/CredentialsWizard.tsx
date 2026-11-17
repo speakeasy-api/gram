@@ -149,11 +149,10 @@ const KEY_LIFETIME_DAYS = 90;
 // The session cookie authenticates the dashboard; the header is a placeholder.
 const keysSecurity = { sessionHeaderGramSession: "" };
 
-// Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
-// them without mcp:auth, and nothing here can choose auth clients yet, so it is
-// given all of them. Replace this with an auth client selector, made an
-// explicit choice when the agent is created, and grant only the clients chosen
-// there.
+// An agent that may connect to servers cannot sign in to them without
+// mcp:auth, so it starts with every upstream credential. Its Permissions page
+// narrows that afterwards: per kind or per credential, splitting this grant
+// without a gap.
 const AUTH_GRANT = {
   effect: "allow",
   scope: "mcp:auth",
@@ -1917,7 +1916,9 @@ export function CredentialsWizard({
                           ? `${CONNECT_SCOPE} on all servers in the project`
                           : `${CONNECT_SCOPE} on the selected servers`,
                         ...(includeAuthGrant
-                          ? [`${AUTH_GRANT.scope} on all auth clients`]
+                          ? [
+                              `${AUTH_GRANT.scope} on all upstream credentials (narrow them on the agent's Permissions page)`,
+                            ]
                           : []),
                         ...(recordsSessions ? [HOOKS_INGEST_SCOPE] : []),
                         // What the platform's runtime needs beyond the

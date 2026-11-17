@@ -17,7 +17,7 @@ import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { SignInPath } from "@/pages/agents/credentials/SignInPath";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
-import { AgentCredentialRestrictions } from "./AgentCredentialRestrictions";
+import { AgentCredentialAccess } from "./AgentCredentialAccess";
 import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
@@ -94,7 +94,7 @@ export function AgentIdentityProfile({
           meta="What this agent's keys may be narrowed to"
         >
           <AgentIdentityPermissions agent={agent} />
-          <AgentCredentialRestrictions agent={agent} />
+          <AgentCredentialAccess agent={agent} />
           <AgentIdentityChallenges agent={agent} />
         </IdentitySection>
       );

@@ -53,8 +53,7 @@ export function agentPolicyUnrestrictedLabel(kind: string | undefined): string {
  * The resource kind a scope's selectors must carry. Mirrors
  * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
  * from the scope; `ValidateSelector` rejects a selector that disagrees.
- * mcp:auth grants are deliberately unrepresentable here until the auth client
- * editor exists, so stored ones are preserved and locked.
+ * mcp:auth grants are edited in the agent's credentials panel, not here.
  */
 const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   string,
@@ -332,10 +331,18 @@ export interface AgentPolicyView {
 }
 
 /**
- * Credential restrictions share the policy but are listed and edited in their
- * own panel, so the permission editor neither shows nor rewrites them.
+ * Which upstream credentials the agent may use shares the policy but is
+ * listed and edited in its own panel, so the permission editor neither shows
+ * nor rewrites it.
  */
 export const AGENT_CREDENTIAL_BLOCK_SCOPE = "mcp:blocked_auth";
+export const AGENT_CREDENTIAL_SCOPE = "mcp:auth";
+
+export function isAgentCredentialScope(scope: string): boolean {
+  return (
+    scope === AGENT_CREDENTIAL_SCOPE || scope === AGENT_CREDENTIAL_BLOCK_SCOPE
+  );
+}
 
 /**
  * The servers an agent reaches are chosen in its own setup flow, beside the
@@ -343,15 +350,15 @@ export const AGENT_CREDENTIAL_BLOCK_SCOPE = "mcp:blocked_auth";
  * permission editor neither shows nor rewrites them.
  */
 export function isAgentPolicyEditorScope(scope: string): boolean {
-  return scope !== AGENT_CREDENTIAL_BLOCK_SCOPE && scope !== CONNECT_SCOPE;
+  return !isAgentCredentialScope(scope) && scope !== CONNECT_SCOPE;
 }
 
 /**
  * Split the stored ceiling into what the editor may rewrite and what it must
  * leave alone. A scope with even one unrepresentable grant is locked whole:
  * editing half of one would let a save drop the constrained grant and re-add a
- * broader one under the same scope. Credential restrictions and MCP server
- * grants are left out of both; the fingerprint of the full ceiling still
+ * broader one under the same scope. Credential rules and MCP server grants
+ * are left out of both; the fingerprint of the full ceiling still
  * covers them.
  */
 export function agentPolicyViewFromGrants(

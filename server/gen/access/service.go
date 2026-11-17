@@ -832,6 +832,10 @@ type ExplainResourceAccessResult struct {
 	Visibility string
 	// The decision for use, view and manage, in that order.
 	Levels []*ExplainedAccessLevel
+	// For each upstream credential the server offers, whether the member may use
+	// it. A caller needs both use access to the server and one usable credential
+	// to reach an upstream that requires sign-in.
+	Credentials []*ExplainedCredentialAccess
 }
 
 type ExplainedAccessDirectorySource struct {
@@ -891,6 +895,45 @@ type ExplainedAccessRule struct {
 	// also hold it directly. Returned only to organization administrators, because
 	// attribute values can carry personal data.
 	DirectorySources []*ExplainedAccessDirectorySource
+}
+
+type ExplainedCredentialAccess struct {
+	// The credential's auth client ID.
+	AuthClientID string
+	// The credential's name.
+	Name string
+	// The kind of credential.
+	ClientType string
+	// Whether the credential is turned on. A turned-off credential is unusable
+	// whatever the rules say.
+	Enabled bool
+	// Whether the member's rules let them use it, with their own connection for a
+	// personal credential.
+	Allowed bool
+	// Every rule matching this use, deciding rules first.
+	Rules []*ExplainedCredentialRule
+}
+
+type ExplainedCredentialRule struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Whether the rule names this credential (credential), every credential of its
+	// kind (credential_type), or every credential (all_credentials).
+	AppliesTo string
+	// Whether the rule applies only on servers in this server's project.
+	ProjectBound *bool
+	// How the rule shaped the decision: allows, overrides, overridden, blocks or
+	// blocked, with the same meanings as an access rule's effect.
+	Effect string
+	// Why a blocked rule made directly to the member did not override the block:
+	// wildcard_direct_grant, narrower_direct_grant or own_exclusion.
+	Reason *string
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool
 }
 
 // GetDirectoryReviewSettingsPayload is the payload type of the access service

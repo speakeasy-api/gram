@@ -757,11 +757,15 @@ describe("loading an agent's grants exactly as stored", () => {
     expect(rule("assistant:read").textContent).toBe("1 assistant");
     expect(screen.queryByText("mcp:connect")).toBeNull();
     expect(screen.getByText(/Kept as they are/)).toBeTruthy();
-    for (const slug of ["mcp:auth", "org:hooks_ingest", "environment:read"]) {
+    for (const slug of ["org:hooks_ingest", "environment:read"]) {
       expect(
         screen.getByRole("button", { name: `Remove ${slug}` }),
       ).toBeTruthy();
     }
+    // Credential rules are edited in their own panel.
+    expect(
+      screen.queryByRole("button", { name: "Remove mcp:auth" }),
+    ).toBeNull();
   });
 
   it("lists a kept scope's removal before saving, and removes all its grants", async () => {
@@ -790,8 +794,12 @@ describe("loading an agent's grants exactly as stored", () => {
 
   it("keeps a kept scope again when its removal is undone", () => {
     setup(agentGrants);
-    fireEvent.click(screen.getByRole("button", { name: "Remove mcp:auth" }));
-    fireEvent.click(screen.getByRole("button", { name: "Keep mcp:auth" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove org:hooks_ingest" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep org:hooks_ingest" }),
+    );
     expect(
       screen.queryByRole("region", { name: "Changes to save" }),
     ).toBeNull();

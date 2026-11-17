@@ -9,7 +9,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
-import { ChevronRight, Info, MoreHorizontal, X } from "lucide-react";
+import { Info, MoreHorizontal, X } from "lucide-react";
 import { Fragment, useMemo, useState, type JSX, type ReactNode } from "react";
 
 import {
@@ -52,6 +52,7 @@ import {
 import {
   Cell,
   type CellState,
+  RowToggle,
   DeniedBadge,
   type DenyTarget,
   EditorSection,
@@ -59,6 +60,12 @@ import {
   type Grants,
   type ProjectRef,
 } from "./roleMatrixParts";
+import {
+  credentialUsable,
+  type CredentialRef,
+  type CredentialRule,
+  serverCredentials,
+} from "./credentialAccessModel";
 import { RolePlatformCards } from "./RolePlatformCards";
 import type { OrgMcpServers } from "./useOrgMcpServers";
 import { useServerTools } from "./useServerTools";
@@ -94,6 +101,7 @@ export function RoleAccessMatrix({
   memberCount,
   onEditRule,
   onRemoveRule,
+  credentials,
 }: {
   grants: Grants;
   onChange: (change: (prev: Grants) => Grants) => void;
@@ -110,6 +118,8 @@ export function RoleAccessMatrix({
   onEditRule: (scope: Scope, ruleIndex: number) => void;
   /** Take back one rule of a platform permission. */
   onRemoveRule: (scope: Scope, ruleIndex: number) => void;
+  /** The role's credential rules, summarized per server. */
+  credentials?: CredentialSummary;
 }): JSX.Element {
   const [denyTarget, setDenyTarget] = useState<DenyTarget | null>(null);
   const areas = useMemo(() => platformAreas(scopes), [scopes]);
@@ -141,6 +151,7 @@ export function RoleAccessMatrix({
             inventory={inventory}
             rowViews={rowViews}
             onDeny={setDenyTarget}
+            credentials={credentials}
           />
           <RolePlatformCards
             grants={grants}
@@ -192,8 +203,8 @@ function Legend(): JSX.Element {
 // Eyebrow carries its own colour; a text colour beside it would merge it away.
 const TH = "text-eyebrow px-2 py-3 text-center";
 const TD = "px-2 py-2 text-center align-middle";
-/** Name, three levels, tools, the row menu. */
-const COLUMN_COUNT = 6;
+/** Name, three levels, tools, credentials, the row menu. */
+const COLUMN_COUNT = 7;
 
 function MatrixSkeleton(): JSX.Element {
   return (
@@ -260,6 +271,7 @@ function McpMatrix({
   inventory,
   rowViews,
   onDeny,
+  credentials,
 }: {
   grants: Grants;
   onChange: (change: (prev: Grants) => Grants) => void;
@@ -268,6 +280,7 @@ function McpMatrix({
   inventory: OrgMcpServers;
   rowViews: McpRowView[];
   onDeny: (target: DenyTarget) => void;
+  credentials?: CredentialSummary;
 }): JSX.Element {
   // What each level includes is the server's to say (sub_scopes), so the
   // column hints follow the catalogue rather than restate it.
@@ -794,6 +807,7 @@ function McpMatrix({
                 <col key={column.level} className="w-[12%]" />
               ))}
               <col />
+              <col className="w-[13%]" />
               <col className="w-12" />
             </colgroup>
             <thead>
@@ -817,6 +831,18 @@ function McpMatrix({
                 ))}
                 <th scope="col" className={cn(TH, "text-left")}>
                   Tools
+                </th>
+                <th scope="col" className={cn(TH, "text-left")}>
+                  <SimpleTooltip tooltip={CREDENTIALS_HINT}>
+                    <span
+                      tabIndex={0}
+                      aria-label={`Credentials: ${CREDENTIALS_HINT}`}
+                      className="inline-flex cursor-default items-center gap-1"
+                    >
+                      Credentials
+                      <Info aria-hidden="true" className="size-3" />
+                    </span>
+                  </SimpleTooltip>
                 </th>
                 <th scope="col" className={TH}>
                   <span className="sr-only">More</span>
@@ -911,6 +937,19 @@ function McpMatrix({
                       <td className="truncate py-2 pr-2 pl-2 text-left">
                         {toolsCell(view)}
                       </td>
+                      <td className="truncate py-2 pr-2 pl-2 text-left">
+                        {row.kind === "server" && credentials && (
+                          <CredentialsCell
+                            summary={credentials}
+                            serverId={row.serverId}
+                            projectId={row.projectId}
+                            serverName={view.name}
+                            connects={["on", "inherited"].includes(
+                              cellState(view, "use").state,
+                            )}
+                          />
+                        )}
+                      </td>
                       <td className={TD}>
                         {actions.length > 0 && (
                           <MoreActions
@@ -991,56 +1030,6 @@ function McpMatrix({
         later.
       </Text>
     </EditorSection>
-  );
-}
-
-/** A row's name, which opens and closes what sits under it. */
-function RowToggle({
-  name,
-  detail,
-  label,
-  strong = false,
-  open,
-  disabled,
-  onToggle,
-}: {
-  name: string;
-  detail?: string;
-  /** Names the control when the row's name alone would not say what opens. */
-  label?: string;
-  strong?: boolean;
-  open: boolean;
-  /** A search shows every match, so projects stay open while it runs. */
-  disabled: boolean;
-  onToggle: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={disabled ? undefined : onToggle}
-      aria-expanded={open}
-      aria-label={label}
-      className={cn(
-        "-ml-1 flex max-w-full items-start gap-1 text-left",
-        disabled ? "cursor-default" : "cursor-pointer",
-      )}
-    >
-      <ChevronRight
-        aria-hidden="true"
-        className={cn(
-          "mt-0.5 size-4 shrink-0 transition-transform",
-          open && "rotate-90",
-        )}
-      />
-      <span className="min-w-0">
-        <span className={cn("block truncate", strong && "font-medium")}>
-          {name}
-        </span>
-        {detail && (
-          <span className="text-muted-foreground block text-xs">{detail}</span>
-        )}
-      </span>
-    </button>
   );
 }
 
@@ -1322,5 +1311,81 @@ function OtherMcpRules({ items }: { items: OtherRuleItem[] }): JSX.Element {
         })}
       </ul>
     </div>
+  );
+}
+
+const CREDENTIALS_HINT =
+  "How many of the server's credentials this role lets people sign in with. Set them under Upstream credentials.";
+
+/** What the server grid needs to summarize the role's credential rules. */
+export interface CredentialSummary {
+  rules: CredentialRule[];
+  /** The organization's credentials, or null while they load. */
+  clients: CredentialRef[] | null;
+  /** Narrow the credentials table to one server's credentials. */
+  onShow: (server: { id: string; name: string }) => void;
+}
+
+/**
+ * How many of a server's credentials the role can use, from this role's own
+ * rules. A server the role connects to but has no credential for is the one
+ * worth flagging: people would reach it and then fail to sign in upstream.
+ */
+function CredentialsCell({
+  summary,
+  serverId,
+  projectId,
+  serverName,
+  connects,
+}: {
+  summary: CredentialSummary;
+  serverId: string;
+  projectId: string;
+  serverName: string;
+  connects: boolean;
+}): JSX.Element | null {
+  if (summary.clients === null) return null;
+  const offered = serverCredentials(summary.clients, serverId);
+  if (offered.length === 0) {
+    return (
+      <SimpleTooltip tooltip="This server offers no credential: its upstream needs none, or none is set up and turned on yet.">
+        <span
+          tabIndex={0}
+          aria-label={`${serverName} offers no credential`}
+          className="text-muted-foreground cursor-default"
+        >
+          —
+        </span>
+      </SimpleTooltip>
+    );
+  }
+  const usable = offered.filter(
+    (client) =>
+      credentialUsable(summary.rules, client, projectId) === "allowed",
+  ).length;
+  const text =
+    usable === offered.length
+      ? offered.length === 1
+        ? "Can use"
+        : `All ${offered.length}`
+      : usable === 0
+        ? connects
+          ? "No usable credential"
+          : "None"
+        : `${usable} of ${offered.length}`;
+  return (
+    <button
+      type="button"
+      onClick={() => summary.onShow({ id: serverId, name: serverName })}
+      aria-label={`Credentials for ${serverName}: ${text}. Show them.`}
+      className={cn(
+        "max-w-full cursor-pointer truncate text-left underline decoration-dotted underline-offset-4",
+        usable === 0 && connects
+          ? "text-destructive"
+          : usable === 0 && "text-muted-foreground",
+      )}
+    >
+      {text}
+    </button>
   );
 }

@@ -10861,6 +10861,51 @@ func marshalAccessExplainedAccessDirectorySourceToExplainedAccessDirectorySource
 	return res
 }
 
+// marshalAccessExplainedCredentialAccessToExplainedCredentialAccessResponseBody
+// builds a value of type *ExplainedCredentialAccessResponseBody from a value
+// of type *access.ExplainedCredentialAccess.
+func marshalAccessExplainedCredentialAccessToExplainedCredentialAccessResponseBody(v *access.ExplainedCredentialAccess) *ExplainedCredentialAccessResponseBody {
+	res := &ExplainedCredentialAccessResponseBody{
+		AuthClientID: v.AuthClientID,
+		Name:         v.Name,
+		ClientType:   v.ClientType,
+		Enabled:      v.Enabled,
+		Allowed:      v.Allowed,
+	}
+	if v.Rules != nil {
+		res.Rules = make([]*ExplainedCredentialRuleResponseBody, len(v.Rules))
+		for i, val := range v.Rules {
+			if val == nil {
+				res.Rules[i] = nil
+				continue
+			}
+			res.Rules[i] = marshalAccessExplainedCredentialRuleToExplainedCredentialRuleResponseBody(val)
+		}
+	} else {
+		res.Rules = []*ExplainedCredentialRuleResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAccessExplainedCredentialRuleToExplainedCredentialRuleResponseBody
+// builds a value of type *ExplainedCredentialRuleResponseBody from a value of
+// type *access.ExplainedCredentialRule.
+func marshalAccessExplainedCredentialRuleToExplainedCredentialRuleResponseBody(v *access.ExplainedCredentialRule) *ExplainedCredentialRuleResponseBody {
+	res := &ExplainedCredentialRuleResponseBody{
+		PrincipalUrn:        v.PrincipalUrn,
+		Kind:                v.Kind,
+		DisplayName:         v.DisplayName,
+		AppliesTo:           v.AppliesTo,
+		ProjectBound:        v.ProjectBound,
+		Effect:              v.Effect,
+		Reason:              v.Reason,
+		ViaDirectoryMapping: v.ViaDirectoryMapping,
+	}
+
+	return res
+}
+
 // marshalAccessAuthzChallengeToAuthzChallengeResponseBody builds a value of
 // type *AuthzChallengeResponseBody from a value of type *access.AuthzChallenge.
 func marshalAccessAuthzChallengeToAuthzChallengeResponseBody(v *access.AuthzChallenge) *AuthzChallengeResponseBody {

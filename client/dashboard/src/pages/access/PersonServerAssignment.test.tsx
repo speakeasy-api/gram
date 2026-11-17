@@ -44,6 +44,7 @@ it("explains a role grant suppressed by a different role's block", () => {
         server={server}
         explanation={{
           visibility: "private",
+          credentials: [],
           levels: [
             {
               level: "use",
@@ -78,6 +79,7 @@ it("explains a direct grant overriding a role block", () => {
         server={server}
         explanation={{
           visibility: "private",
+          credentials: [],
           levels: [
             {
               level: "use",
@@ -116,6 +118,7 @@ it("shows role blocks on public servers without implying public access is preven
         server={server}
         explanation={{
           visibility: "public",
+          credentials: [],
           levels: [
             {
               level: "use",
@@ -155,6 +158,7 @@ it.each(["role", "user", "everyone"] as const)(
           server={server}
           explanation={{
             visibility: "public",
+            credentials: [],
             levels: [
               {
                 level: "use",
@@ -193,6 +197,7 @@ it("does not present an overridden block's tool scope as an active restriction",
         server={server}
         explanation={{
           visibility: "private",
+          credentials: [],
           levels: [
             {
               level: "use",
