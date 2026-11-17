@@ -2730,7 +2730,8 @@ WHERE b.id = @id;
 -- Reads the resource of the typed auth client the local seed records for the
 -- Enterprise Sign-In (ID-JAG) Server's client.
 SELECT resource FROM mcp_auth_client_emas
-WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+WHERE remote_session_client_id = @remote_session_client_id
+  AND organization_id = @organization_id AND deleted IS FALSE;
 
 -- name: SetCustomDomainHealthWithoutDNSObservation :exec
 -- Models a worker that does not write the independent DNS observation columns.

@@ -278,7 +278,7 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 		// The server exists only locally, so the local fixtures record its
 		// typed auth client on the fixture's endpoint and leave no
 		// association for the backfill to decide.
-		typedResource, err := q.GetLocalEMATypedAuthClientResourceFixture(ctx, s.det("ema-client-tracker"))
+		typedResource, err := q.GetLocalEMATypedAuthClientResourceFixture(ctx, testrepo.GetLocalEMATypedAuthClientResourceFixtureParams{RemoteSessionClientID: s.det("ema-client-tracker"), OrganizationID: spec.OrgID})
 		require.NoError(t, err)
 		require.Equal(t, resource, typedResource)
 		associations, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
