@@ -25,7 +25,7 @@ func mcpToolCallCheck(toolsetID string, dims mcpToolCallDimensions) Check {
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID
 	}
-	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationToolCall}
+	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationToolCall}
 }
 
 // mcpCheck is scope on resourceID, with projectID as a dimension when it is
@@ -35,7 +35,7 @@ func mcpCheck(scope Scope, resourceID, projectID string) Check {
 	if projectID != "" {
 		dimensions = map[string]string{SelectorKeyProjectID: projectID}
 	}
-	check := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	check := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 	if isConnectScope(scope) {
 		return check.asConnection()
 	}
@@ -44,5 +44,5 @@ func mcpCheck(scope Scope, resourceID, projectID string) Check {
 
 // assistantCheck is scope on resourceID in projectID.
 func assistantCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }

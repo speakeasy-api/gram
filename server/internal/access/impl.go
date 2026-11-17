@@ -1615,14 +1615,14 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 				}
 			}
 			check := authz.RecordedCheck(authz.Scope(challenge.Scope), challenge.ResourceKind, challenge.ResourceID, dimensions)
-			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
+			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check)
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)
 			}
 			if !roleAllows {
 				return oops.E(oops.CodeBadRequest, nil, "selected role does not grant the challenged access").LogError(ctx, s.logger)
 			}
-			resultAllows, authorizeErr := authz.GrantsAuthorize(resultingGrants, check.WithStrictSelectorMatch())
+			resultAllows, authorizeErr := authz.GrantsAuthorize(resultingGrants, check)
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "resulting access cannot be evaluated").LogError(ctx, s.logger)
 			}

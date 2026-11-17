@@ -169,6 +169,8 @@ func (r Registry) Validate() error {
 				}
 			}
 
+			validateOpenKeys(fail, owner, p, func(key string) bool { return dimKeys[key] || permissionDimKeys[key] })
+
 			for _, implied := range p.Implies {
 				target, ok := actions[implied]
 				if !ok {
@@ -311,20 +313,56 @@ func camelAction(action Action) string {
 	return b.String()
 }
 
-// validateParentDimension requires a type that can be bounded to its parent
-// (mcp grants by project_id) to mark that dimension Required. A check that
-// left the parent out would match no bounded grant, and a probe would match
-// one bounded to any parent, so the check is refused as invalid instead.
-// Strictly matched types are left out: no exception lets them omit a key,
-// and they validate their own dimensions.
+// validateParentDimension requires a type that opens its parent key (mcp
+// grants bounded by project_id, which a probe may leave out) to mark that key
+// Required. Only a probe then leaves the parent out: every other check is
+// refused as invalid without it. A parent key nothing opens may stay
+// optional, since a check without it matches no grant bounded on it.
 func validateParentDimension(fail func(string, ...any), t ResourceType) {
-	if t.Parent == "" || t.Match != MatchStandard {
+	if t.Parent == "" {
 		return
 	}
 	key := string(t.Parent) + "_id"
+	opened := false
+	for _, p := range t.Permissions {
+		for _, open := range p.Open {
+			opened = opened || slices.Contains(open.Keys, key)
+		}
+	}
 	for _, d := range t.Dimensions {
-		if d.Key == key && !d.Required {
-			fail("%s: dimension %q names the parent %s, so it must be Required", t.Kind, key, t.Parent)
+		if d.Key == key && !d.Required && opened {
+			fail("%s: dimension %q names the parent %s and a check may leave it out, so it must be Required", t.Kind, key, t.Parent)
+		}
+	}
+}
+
+// validateOpenKeys checks a permission's open keys: each kind of check at
+// most once, with at least one key, and every key a dimension of the
+// permission or its type. Only a permission with dimension sets has a
+// connection, the plain form of its ref that leaves the set out.
+func validateOpenKeys(fail func(string, ...any), owner string, p Permission, declared func(string) bool) {
+	seen := map[OpenOn]bool{}
+	for _, open := range p.Open {
+		switch open.On {
+		case OpenOnProbe, OpenOnPolicyAudience:
+		case OpenOnConnection:
+			if len(p.DimensionSets) == 0 {
+				fail("%s: only a permission with dimension sets has a connection to open keys on", owner)
+			}
+		default:
+			fail("%s: open keys on an unknown kind of check, %s", owner, open.On)
+		}
+		if seen[open.On] {
+			fail("%s: open keys on a %s are declared twice", owner, open.On)
+		}
+		seen[open.On] = true
+		if len(open.Keys) == 0 {
+			fail("%s: open keys on a %s list no key", owner, open.On)
+		}
+		for _, key := range open.Keys {
+			if !declared(key) {
+				fail("%s: open key %q is not a dimension of the permission or its type", owner, key)
+			}
 		}
 	}
 }
