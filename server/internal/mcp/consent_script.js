@@ -648,6 +648,48 @@
     return services ? services.getAttribute("data-action-url") : "";
   })();
 
+  // "your own <service> account", from the card's service name.
+  function ownAccount(card) {
+    var service = card.getAttribute("data-remote-display") || "";
+    return service ? "your own " + service + " account" : "your own account";
+  }
+
+  // Labels a card's own-account link with the service's name when fits
+  // allows it, and "Use your own account" otherwise.
+  function labelOwnAccount(card, link, fits) {
+    var chevron = document.createElement("span");
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "\u203a";
+    link.textContent = "Use " + ownAccount(card);
+    link.appendChild(chevron);
+    if (card.getAttribute("data-remote-display") && !fits(link)) {
+      link.textContent = "Use your own account";
+      link.appendChild(chevron);
+    }
+  }
+
+  // Beside the card's text a long service name would crowd it, so the link
+  // keeps it within half the card; under the text, within the card's width.
+  // The card's title already names the service.
+  Array.prototype.forEach.call(
+    document.querySelectorAll("button[data-connect-fallback]"),
+    function (link) {
+      var card = link.closest("[data-remote-client]");
+      if (!card) {
+        return;
+      }
+      var row = card.querySelector("[data-card-row]");
+      var actions = card.querySelector("[data-card-actions]");
+      var besideText =
+        !row || window.getComputedStyle(row).flexDirection === "row";
+      labelOwnAccount(card, link, function (button) {
+        return besideText || !actions
+          ? button.offsetWidth <= card.offsetWidth / 2
+          : button.offsetWidth <= actions.clientWidth;
+      });
+    },
+  );
+
   function settleChainCheck(status, card, result) {
     var state = result ? result.status : "";
     if (state !== "connected" && state !== "rejected") {
@@ -670,27 +712,12 @@
       return;
     }
     if (state === "rejected") {
-      var service = card.getAttribute("data-remote-display") || "";
-      var ownAccount = service
-        ? "your own " + service + " account"
-        : "your own account";
       status.className = "text-xs text-default-warning";
       status.textContent =
         result.message ||
         "Your identity provider sign-in wasn't accepted. Use " +
-          ownAccount +
+          ownAccount(card) +
           ".";
-      var fallback = card.querySelector("button[data-connect-fallback]");
-      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
-        fallback.className =
-          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm";
-        fallback.removeAttribute("data-connect-fallback");
-        fallback.textContent = "Use " + ownAccount;
-        // A long service name would crowd the text; the card's title already names it.
-        if (service && fallback.offsetWidth > card.offsetWidth / 2) {
-          fallback.textContent = "Use your own account";
-        }
-      }
       signalChainRejected();
       return;
     }

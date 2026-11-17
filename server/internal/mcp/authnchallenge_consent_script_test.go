@@ -77,8 +77,9 @@ const element = (attrs = {}) => ({
   removeAttribute(name) { delete this.attrs[name]; },
   appendChild(child) { this.children.push(child); },
 });
-const fallbackClass = 'text-muted-foreground interact:text-foreground';
+const fallbackClass = 'text-foreground interact:underline';
 const cards = {};
+const fallbacks = [];
 const statuses = ['connected', 'rejected', 'ready', 'error', 'offline', 'wide'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
@@ -93,6 +94,8 @@ const statuses = ['connected', 'rejected', 'ready', 'error', 'offline', 'wide'].
     'button[data-connect-fallback]': fallback,
   })[selector] || null;
   status.closest = (selector) => (selector === '[data-remote-client]' ? card : null);
+  fallback.closest = status.closest;
+  fallbacks.push(fallback);
   cards[id] = { status, fallback };
   return status;
 });
@@ -125,10 +128,17 @@ vm.runInNewContext(source, {
       if (selector === '[data-service-connections]') return element({ 'data-action-url': '/mcp/x/connect/remote-session' });
       return null;
     },
-    querySelectorAll: (selector) => (selector === '[data-chain-check="pending"]' ? statuses : []),
+    querySelectorAll: (selector) => (selector === '[data-chain-check="pending"]' ? statuses : selector === 'button[data-connect-fallback]' ? fallbacks : []),
   },
   window: { setTimeout: () => {}, location: { reload: () => {} } },
 });
+
+const label = (fallback) => fallback.textContent + ' ' + fallback.children[fallback.children.length - 1].textContent;
+for (const id of ['connected', 'rejected', 'ready', 'error', 'offline']) {
+  assert.equal(label(cards[id].fallback), 'Use your own Example account \u203a', id + ': one label in every state');
+  assert.equal(cards[id].fallback.children[0].attrs['aria-hidden'], 'true', id + ': the chevron is decoration');
+}
+assert.equal(label(cards.wide.fallback), 'Use your own account \u203a', 'a label wider than half the card drops the service name');
 
 for (const status of statuses) {
   assert.equal(status.children.length, 2, 'checking shows a spinner and label');
@@ -144,28 +154,24 @@ setTimeout(() => {
   assert.equal(ok.status.getAttribute('data-chain-check'), 'connected');
   assert.equal(ok.status.className, 'text-xs text-default-success');
   assert.equal(ok.status.textContent, 'Service connected through your identity provider');
-  assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the quiet fallback');
+  assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the same link');
   assert.equal(summary.textContent, '2 of 5 connected');
 
   const ready = cards.ready;
   assert.equal(ready.status.getAttribute('data-chain-check'), 'unknown', 'an unrecognized status reads neutral');
   assert.equal(ready.status.textContent, 'Managed by your identity provider');
-  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps separate OAuth optional');
+  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps the same link');
   assert.equal(summary.textContent, '2 of 5 connected', 'a neutral card does not claim a downstream token');
 
   const no = cards.rejected;
   assert.equal(no.status.getAttribute('data-chain-check'), 'rejected');
   assert.equal(no.status.className, 'text-xs text-default-warning');
   assert.equal(no.status.textContent, 'Example refused.');
-  assert.match(no.fallback.className, /\bbg-primary\b/);
-  assert.match(no.fallback.className, /\bwhitespace-nowrap\b/, 'the label stays on one line beside long card text');
-  assert.equal(no.fallback.textContent, 'Use your own Example account');
-  assert.equal(no.fallback.getAttribute('data-connect-fallback'), null);
+  assert.equal(no.fallback.className, fallbackClass, 'a refusal keeps the same link, not a filled button');
+  assert.equal(label(no.fallback), 'Use your own Example account \u203a');
   assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');
   assert.deepEqual(dispatched, ['gram:consent-chain-rejected', 'gram:consent-chain-rejected'], 'each refusal signals it');
 
-  const wide = cards.wide;
-  assert.equal(wide.fallback.textContent, 'Use your own account', 'a label wider than half the card drops the service name');
 
   for (const id of ['error', 'offline']) {
     const c = cards[id];

@@ -349,7 +349,7 @@
             {{range .RemoteSessionCards}}
 
             <li data-remote-client="{{.ClientID}}" data-remote-display="{{.IssuerDisplay}}" data-connected-as="{{.ConnectedAs}}" class="flex flex-col px-4 py-3 not-first:border-t">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-card-row>
               <div class="flex min-w-0 items-start gap-3">
 
                 {{if .IssuerLogoURL}}<img
@@ -445,6 +445,7 @@
                 method="POST"
                 action="{{$.ConsentPath}}/remote-session"
                 class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"
+                data-card-actions
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
                 <input
@@ -481,16 +482,18 @@
                   Verify
                 </button>
                 {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
-                {{if and .Chained (ne .ChainCheck "rejected")}}
+                {{if .Chained}}
+                {{/* The row action every company sign-in card offers in every state: a
+                foreground link in the gateway rows' "Manage ›" form. */}}
                 <button
                   type="submit"
                   name="action"
                   value="connect"
-                  class="text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center px-1 text-xs underline-offset-2"
+                  class="text-foreground interact:underline focus-visible:outline-2 focus-visible:outline-offset-2 flex h-8 cursor-pointer items-center gap-1 whitespace-nowrap text-xs underline-offset-2"
                   data-connect-link
                   data-connect-fallback
                 >
-                  Use your own {{.IssuerDisplay}} account instead
+                  Use your own {{.IssuerDisplay}} account <span aria-hidden="true">&rsaquo;</span>
                 </button>
                 {{else}}
                 <button
