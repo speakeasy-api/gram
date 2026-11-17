@@ -275,6 +275,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		AuthorizerImpersonated:   nil,
 		SignInID:                 nil,
 		FreshLoginForced:         false,
+		AccountSwitches:          0,
 		AgentAuthorizationTarget: agentTarget,
 		Endpoint:                 endpointRef,
 		ClientID:                 req.ClientID,

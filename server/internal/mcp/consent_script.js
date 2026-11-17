@@ -638,6 +638,7 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
   guardActionButtons("button[data-validate-link]", "Checking…");
+  guardActionButtons("button[data-switch-account]", "Opening sign-in…");
 
   // Identity-chained cards render neutral, so they read right without script.
   // Check each exchange in the background and settle the card in place; any
@@ -675,7 +676,34 @@
         result.message ||
         "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
       var fallback = card.querySelector("button[data-connect-fallback]");
-      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
+      var switchAccount =
+        result.action === "switch_account"
+          ? card.querySelector("button[data-switch-account]")
+          : null;
+      if (switchAccount) {
+        // The actions stack under the text at every width, so the text keeps
+        // the card's full width; the separate sign-in stays quiet.
+        switchAccount.removeAttribute("hidden");
+        var note = card.querySelector("[data-switch-account-note]");
+        if (note) {
+          note.removeAttribute("hidden");
+        }
+        var row = card.querySelector("[data-card-row]");
+        if (row) {
+          row.className = "flex flex-col gap-3";
+        }
+        var actions = card.querySelector("[data-card-actions]");
+        if (actions) {
+          actions.className = "flex flex-col items-start gap-1.5";
+        }
+        if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
+          fallback.removeAttribute("data-connect-fallback");
+          fallback.textContent = "Use a separate sign-in";
+        }
+      } else if (
+        fallback &&
+        fallback.getAttribute("aria-disabled") !== "true"
+      ) {
         fallback.className =
           "bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm";
         fallback.removeAttribute("data-connect-fallback");

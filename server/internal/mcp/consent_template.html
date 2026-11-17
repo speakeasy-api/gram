@@ -349,7 +349,7 @@
             {{range .RemoteSessionCards}}
 
             <li data-remote-client="{{.ClientID}}" data-remote-display="{{.IssuerDisplay}}" data-connected-as="{{.ConnectedAs}}" class="flex flex-col px-4 py-3 not-first:border-t">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-card-row>
               <div class="flex min-w-0 items-start gap-3">
 
                 {{if .IssuerLogoURL}}<img
@@ -445,6 +445,7 @@
                 method="POST"
                 action="{{$.ConsentPath}}/remote-session"
                 class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"
+                data-card-actions
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
                 <input
@@ -482,6 +483,20 @@
                 </button>
                 {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if and .Chained (ne .ChainCheck "rejected")}}
+                {{/* Shown by the page script only when the check offers it. */}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="switch_account"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm"
+                  data-switch-account
+                  hidden
+                >
+                  Sign in with your company account
+                </button>
+                <span class="text-xs text-muted-foreground" data-switch-account-note hidden
+                  >You'll sign in to Speakeasy again on this browser.</span
+                >
                 <button
                   type="submit"
                   name="action"

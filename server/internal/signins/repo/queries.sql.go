@@ -400,6 +400,28 @@ func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibi
 	return i, err
 }
 
+const getSignInWorkOSSession = `-- name: GetSignInWorkOSSession :one
+SELECT workos_session_id
+FROM sign_ins
+WHERE id = $1
+  AND organization_id = $2
+  AND user_id = $3
+`
+
+type GetSignInWorkOSSessionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+// The WorkOS session behind one of a user's sign-ins in an organization.
+func (q *Queries) GetSignInWorkOSSession(ctx context.Context, arg GetSignInWorkOSSessionParams) (string, error) {
+	row := q.db.QueryRow(ctx, getSignInWorkOSSession, arg.ID, arg.OrganizationID, arg.UserID)
+	var workos_session_id string
+	err := row.Scan(&workos_session_id)
+	return workos_session_id, err
+}
+
 const listSignInOrganizationsForUser = `-- name: ListSignInOrganizationsForUser :many
 SELECT DISTINCT organization_id
 FROM sign_ins

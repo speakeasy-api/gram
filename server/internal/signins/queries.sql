@@ -133,6 +133,14 @@ WHERE organization_id = @organization_id
   AND user_id = @user_id
   AND workos_session_id = @workos_session_id;
 
+-- name: GetSignInWorkOSSession :one
+-- The WorkOS session behind one of a user's sign-ins in an organization.
+SELECT workos_session_id
+FROM sign_ins
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND user_id = @user_id;
+
 -- name: GetLiveSignInBySession :one
 SELECT id
 FROM sign_ins

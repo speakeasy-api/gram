@@ -45,7 +45,11 @@ func chainCheckResult(t *testing.T, w *httptest.ResponseRecorder) map[string]str
 	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Len(t, body, 2, "only status and message leave the server")
+	extra := 0
+	if _, ok := body["action"]; ok {
+		extra = 1
+	}
+	require.Len(t, body, 2+extra, "only status, message and an offered action leave the server")
 	return body
 }
 

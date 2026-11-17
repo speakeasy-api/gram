@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
 	"slices"
@@ -281,6 +282,11 @@ var RemoteSessionUnavailableError = remoteSessionUnavailableError
 // SetAuthzEngine swaps the authorization engine, to make it fail.
 func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine
+}
+
+// SetSessionManager swaps the manager that ends identity provider sessions, to make it fail.
+func (s *Service) SetSessionManager(manager *sessions.Manager) {
+	s.sessions = manager
 }
 
 // SetChatSessionsManager swaps the store revocation checks read, to take it down.

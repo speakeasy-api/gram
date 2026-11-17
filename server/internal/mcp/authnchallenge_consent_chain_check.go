@@ -28,8 +28,8 @@ const (
 )
 
 var (
-	chainCheckConnectedResult = consentChainCheckResult{Status: chainCheckConnected, Message: "Connected through your identity provider"}
-	chainCheckUnknownResult   = consentChainCheckResult{Status: chainCheckUnknown, Message: "Managed by your identity provider"}
+	chainCheckConnectedResult = consentChainCheckResult{Status: chainCheckConnected, Message: "Connected through your identity provider", Action: ""}
+	chainCheckUnknownResult   = consentChainCheckResult{Status: chainCheckUnknown, Message: "Managed by your identity provider", Action: ""}
 )
 
 // consentChainCheckTimeout bounds the page's background exchange; a slower
@@ -41,6 +41,8 @@ const consentChainCheckTimeout = 5 * time.Second
 type consentChainCheckResult struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
+	// Action names the consent action a rejected card offers besides a separate sign-in.
+	Action string `json:"action,omitempty"`
 }
 
 // consentSessionRouting loads the subject's connection state and the routing
@@ -129,6 +131,9 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		signInID = *challengeState.SignInID
 	}
 	result, outcome := s.checkIdentityChaining(ctx, requests, display, signInID)
+	if result.Status == chainCheckRejected && outcome.Reason == identitychaining.ReasonUnmanagedAccount && accountSwitchAllowed(challengeState) {
+		result.Action = consentActionSwitchAccount
+	}
 	logger.InfoContext(ctx, "identity chaining consent check",
 		attr.SlogOutcome(result.Status),
 		attr.SlogReason(string(outcome.Reason)),
@@ -255,7 +260,7 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		return chainCheckUnknownResult
 	}
 	rejected := func(format string) consentChainCheckResult {
-		return consentChainCheckResult{Status: chainCheckRejected, Message: fmt.Sprintf(format, service)}
+		return consentChainCheckResult{Status: chainCheckRejected, Message: fmt.Sprintf(format, service), Action: ""}
 	}
 	switch outcome.Reason {
 	case identitychaining.ReasonSuccess:

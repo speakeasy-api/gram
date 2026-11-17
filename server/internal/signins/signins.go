@@ -228,6 +228,26 @@ func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID,
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
+// WorkOSSessionForSignIn returns the WorkOS session behind a user's sign-in in
+// an organization, or "" when that user has no such sign-in there.
+func WorkOSSessionForSignIn(ctx context.Context, db repo.DBTX, organizationID, userID string, signInID uuid.UUID) (string, error) {
+	if organizationID == "" || userID == "" || signInID == uuid.Nil {
+		return "", nil
+	}
+	sessionID, err := repo.New(db).GetSignInWorkOSSession(ctx, repo.GetSignInWorkOSSessionParams{
+		ID:             signInID,
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	case err != nil:
+		return "", fmt.Errorf("get sign-in workos session: %w", err)
+	}
+	return sessionID, nil
+}
+
 // CheckSignInIdentity judges whether an MCP grant traces to a current sign-in
 // whose user Speakeasy may vouch for in organizationID. The sign-in's tier sets
 // how old it may be; a positive maxAge can only shorten that. A grant without a

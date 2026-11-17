@@ -175,6 +175,110 @@ setTimeout(() => {
 	require.NoError(t, err, "consent script chain checks: %s", out)
 }
 
+func TestConsentScriptOffersAccountSwitch(t *testing.T) {
+	t.Parallel()
+
+	node, err := exec.LookPath("node")
+	require.NoError(t, err, "node is required to exercise the consent script")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, "-e", `
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const source = require('node:fs').readFileSync(0, 'utf8');
+const element = (attrs = {}) => ({
+  attrs, className: '', textContent: '', children: [], listeners: {},
+  getAttribute(name) { return name in this.attrs ? this.attrs[name] : null; },
+  setAttribute(name, value) { this.attrs[name] = value; },
+  removeAttribute(name) { delete this.attrs[name]; },
+  appendChild(child) { this.children.push(child); },
+  addEventListener(type, listener) { this.listeners[type] = listener; },
+});
+const quiet = 'text-muted-foreground interact:text-foreground';
+const rowClass = 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between';
+const actionsClass = 'flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end';
+const cards = {};
+const switches = [];
+const statuses = ['personal', 'admin'].map((id) => {
+  const status = element({ 'data-chain-check': 'pending' });
+  const fallback = element({ 'data-connect-fallback': '' });
+  fallback.className = quiet;
+  const switchAccount = element({ 'data-switch-account': '', hidden: '' });
+  switches.push(switchAccount);
+  const note = element({ 'data-switch-account-note': '', hidden: '' });
+  const row = element({ 'data-card-row': '' });
+  row.className = rowClass;
+  const actions = element({ 'data-card-actions': '' });
+  actions.className = actionsClass;
+  const card = element({ 'data-remote-client': id });
+  card.querySelector = (selector) => ({
+    'input[name="state"]': { value: 'state-1' },
+    'input[name="csrf_token"]': { value: 'csrf-1' },
+    'button[data-connect-fallback]': fallback,
+    'button[data-switch-account]': switchAccount,
+    '[data-card-row]': row,
+    '[data-card-actions]': actions,
+    '[data-switch-account-note]': note,
+  })[selector] || null;
+  status.closest = (selector) => (selector === '[data-remote-client]' ? card : null);
+  cards[id] = { status, fallback, switchAccount, note, row, actions };
+  return status;
+});
+vm.runInNewContext(source, {
+  URLSearchParams, Number, String,
+  CustomEvent: class { constructor(type) { this.type = type; } },
+  fetch(url, init) {
+    const id = new URLSearchParams(init.body).get('client_id');
+    const result = id === 'personal'
+      ? { status: 'rejected', message: 'Personal account.', action: 'switch_account' }
+      : { status: 'rejected', message: 'Ask your administrator.' };
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(result) });
+  },
+  document: {
+    body: { hasAttribute: () => false },
+    documentElement: element(),
+    dispatchEvent() {},
+    createElement: () => element(),
+    createTextNode: (text) => ({ text }),
+    querySelector(selector) {
+      if (selector === '[data-service-connections]') return element({ 'data-action-url': '/mcp/x/connect/remote-session' });
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === '[data-chain-check="pending"]') return statuses;
+      if (selector === 'button[data-switch-account]') return switches;
+      return [];
+    },
+  },
+  window: { setTimeout: (fn) => fn(), location: { reload: () => {} } },
+});
+
+setTimeout(() => {
+  const personal = cards.personal;
+  assert.equal(personal.status.textContent, 'Personal account.');
+  assert.equal(personal.switchAccount.getAttribute('hidden'), null, 'the switch is shown');
+  assert.equal(personal.row.className, 'flex flex-col gap-3', 'two actions sit under the text at every width');
+  assert.equal(personal.note.getAttribute('hidden'), null, 'the sign-out note shows with it');
+  assert.equal(personal.actions.className, 'flex flex-col items-start gap-1.5', 'button, its note, then the quiet link');
+  assert.equal(personal.fallback.className, quiet, 'the separate sign-in stays quiet');
+  assert.equal(personal.fallback.textContent, 'Use a separate sign-in');
+
+  const admin = cards.admin;
+  assert.equal(admin.switchAccount.getAttribute('hidden'), '', 'no switch for an administrator refusal');
+  assert.equal(admin.note.getAttribute('hidden'), '');
+  assert.equal(admin.row.className, rowClass);
+  assert.equal(admin.actions.className, actionsClass);
+  assert.match(admin.fallback.className, /\bbg-primary\b/);
+
+  personal.switchAccount.listeners.click({ preventDefault() {} });
+  assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'a second click does nothing');
+}, 50);
+`)
+	cmd.Stdin = bytes.NewReader(consentScriptData)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "consent script account switch: %s", out)
+}
+
 func TestConsentScriptPreservesDiscoveryChoice(t *testing.T) {
 	t.Parallel()
 	node, err := exec.LookPath("node")
