@@ -801,6 +801,7 @@ sql:
     queries:
       - ../internal/remotesessions/queries.sql
       - ../internal/remotesessions/clientsecret_queries.sql
+      - ../internal/remotesessions/upstreamtoken_queries.sql
       - ../internal/remotesessions/preparation_fixture_queries.sql
       - ../internal/remotesessions/locking_fixture_queries.sql
     engine: postgresql
