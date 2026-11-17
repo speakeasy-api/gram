@@ -82,7 +82,7 @@ func requireTestMarks(t *testing.T, attributes []*commonv1.KeyValue) {
 	t.Helper()
 	attrs := otlpAttributeMap(attributes)
 	require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
-	require.Equal(t, routeTestEventID, attrs["speakeasy.test_event.id"].GetStringValue())
+	require.Equal(t, routeTestEventID, attrs["speakeasy.test_event_id"].GetStringValue())
 }
 
 func otlpAttributeMap(kvs []*commonv1.KeyValue) map[string]*commonv1.AnyValue {
@@ -111,7 +111,7 @@ func requireNoSourceTestMarks(t *testing.T, attributes []*commonv1.KeyValue) {
 	t.Helper()
 	attrs := otlpAttributeMap(attributes)
 	require.NotContains(t, attrs, "speakeasy.test_event")
-	require.NotContains(t, attrs, "speakeasy.test_event.id")
+	require.NotContains(t, attrs, "speakeasy.test_event_id")
 }
 
 func singleTestLog(t *testing.T, request proto.Message) (*logsv1.ResourceLogs, *logsv1.ScopeLogs, *logsv1.LogRecord) {
@@ -445,7 +445,7 @@ func TestRouteTester_MarksEveryRequestOfEverySource(t *testing.T) {
 					item := requireOne(t, requireOne(t, resourceMetrics.GetScopeMetrics()).GetMetrics())
 					pointAttrs := otlpAttributeMap(requireOne(t, item.GetGauge().GetDataPoints()).GetAttributes())
 					require.True(t, pointAttrs["speakeasy.test_event"].GetBoolValue())
-					require.NotContains(t, pointAttrs, "speakeasy.test_event.id")
+					require.NotContains(t, pointAttrs, "speakeasy.test_event_id")
 				default:
 					t.Fatalf("unexpected path %s", path)
 				}
@@ -522,13 +522,13 @@ func TestStampTestRequest_MarksEveryRecordAndKeepsIDsOffMetrics(t *testing.T) {
 	t.Parallel()
 
 	spoofed := func() []*commonv1.KeyValue {
-		return []*commonv1.KeyValue{{Key: "speakeasy.test_event.id", Value: otlpStringValue("spoofed"), KeyStrindex: 0}}
+		return []*commonv1.KeyValue{{Key: "speakeasy.test_event_id", Value: otlpStringValue("spoofed"), KeyStrindex: 0}}
 	}
 	requireMarker := func(t *testing.T, attributes []*commonv1.KeyValue) {
 		t.Helper()
 		attrs := otlpAttributeMap(attributes)
 		require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
-		require.NotContains(t, attrs, "speakeasy.test_event.id")
+		require.NotContains(t, attrs, "speakeasy.test_event_id")
 	}
 
 	t.Run("logs", func(t *testing.T) {
