@@ -286,8 +286,8 @@ export function DecideAccessSheet({
         <SheetHeader>
           <SheetTitle>Decide access</SheetTitle>
           <SheetDescription>
-            The decision is recorded with its rationale and enforced across
-            every blocking policy in this project.
+            The decision is recorded with its rationale and enforced in this
+            project, whether servers are allowed or blocked by default.
           </SheetDescription>
         </SheetHeader>
 
