@@ -129,6 +129,46 @@ var (
 	ErrMissing = errors.New("orgencryption: stored value is not set")
 )
 
+// keyProblems are the errors that mean an organization key could not be used:
+// an unreachable, revoked, suspended, disabled or misconfigured key, a process
+// without organization encryption serving an enrolled organization, or
+// transition state that kept moving under a write.
+var keyProblems = []error{
+	ErrKeyUnavailable,
+	ErrSuspended,
+	ErrNotProvisioned,
+	ErrInvalidKey,
+	ErrInvalidState,
+	ErrPlatformCredentialUnusable,
+	ErrOrganizationEncryptionUnavailable,
+	ErrConcurrentChange,
+	ErrFenced,
+	ErrDecisionExpired,
+}
+
+// IsUnreadable reports whether err from opening a value means the stored
+// value itself is missing or does not decrypt, so retrying cannot help and
+// the value must be replaced. Every other error from opening one, including
+// key problems and database failures, may clear on its own: callers treat it
+// as retryable and never as a reason to replace the value or sign in again.
+func IsUnreadable(err error) bool {
+	return errors.Is(err, ErrUnreadable) || errors.Is(err, ErrMissing)
+}
+
+// IsKeyProblem reports whether err from opening, sealing or storing a value,
+// or from a usability check, is a problem with the organization key rather
+// than with the value or the database. Callers use it to say so in their
+// messages; deciding whether an error is retryable is IsUnreadable's job.
+func IsKeyProblem(err error) bool {
+	for _, problem := range keyProblems {
+		if errors.Is(err, problem) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // requireUsableState fails closed unless a configuration in state may encrypt
 // and decrypt: active and switching may, suspended may not, and any other
 // value is refused rather than trusted.

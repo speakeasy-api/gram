@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -932,7 +933,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 			return nil, oops.E(oops.CodeGatewayError, err, "failed to re-register the client with the identity provider").LogError(ctx, logger)
 		case errors.Is(err, clientsecrets.ErrUnattributed):
 			return nil, oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first").LogWarn(ctx, logger)
-		case clientsecrets.IsKeyProblem(err):
+		case orgencryption.IsKeyProblem(err):
 			return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client could not be rotated; try again shortly").LogError(ctx, logger)
 		default:
 			return nil, oops.E(oops.CodeUnexpected, err, "rotate remote session client registration").LogError(ctx, logger)

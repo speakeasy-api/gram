@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -153,7 +154,7 @@ func (m *ChallengeManager) BindTokenEndpoint(ctx context.Context, reg TokenEndpo
 		var err error
 		secret, err = m.secrets.Open(ctx, nil, clientsecrets.OwnerOf(conv.ToPGTextEmpty(reg.OrganizationID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}), reg.ClientSecret)
 		switch {
-		case clientsecrets.IsUnreadable(err):
+		case orgencryption.IsUnreadable(err):
 			return nil, ErrTokenEndpointConfiguration
 		case err != nil:
 			return nil, fmt.Errorf("open client secret: %w", err)

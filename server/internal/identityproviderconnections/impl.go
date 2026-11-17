@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
@@ -827,7 +828,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		return nil, oops.E(oops.CodeConflict, err, "this client id is already registered against the Okta org")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to bind the client id to")
-	case clientsecrets.IsKeyProblem(err):
+	case orgencryption.IsKeyProblem(err):
 		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "record client id").LogError(ctx, logger)
@@ -922,7 +923,7 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 		return nil, oops.E(oops.CodeBadRequest, err, "only connections installed from the Okta Integration Network use a client secret")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to replace")
-	case clientsecrets.IsKeyProblem(err):
+	case orgencryption.IsKeyProblem(err):
 		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "replace client secret").LogError(ctx, logger)

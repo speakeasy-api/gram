@@ -65,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
@@ -1926,7 +1927,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		decoded, derr := m.secrets.Open(ctx, nil, clientOwner(client), stored)
 		switch {
-		case clientsecrets.IsUnreadable(derr):
+		case orgencryption.IsUnreadable(derr):
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return none, oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
 		case derr != nil:

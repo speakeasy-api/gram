@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -1387,7 +1388,7 @@ func (s *RefreshService) refreshSessionTokens(
 	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		clientSecret, err = s.secrets.Open(ctx, nil, clientsecrets.OwnerOf(client.ClientOrganizationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), stored)
 		switch {
-		case clientsecrets.IsUnreadable(err):
+		case orgencryption.IsUnreadable(err):
 			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err, refreshRemedyAdministrator)
 		case err != nil:
 			// The grant is intact; the client secret only could not be opened

@@ -124,9 +124,9 @@ func (l *lease) ClientSecret(ctx context.Context) (string, error) {
 	owner := clientsecrets.OwnerOf(conv.ToPGText(l.org), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	secret, err := l.secrets.Open(ctx, l.tx, owner, l.secret)
 	switch {
-	case clientsecrets.IsUnreadable(err):
+	case orgencryption.IsUnreadable(err):
 		return "", fmt.Errorf("%w: %w", okta.ErrClientSecretUndecryptable, err)
-	case clientsecrets.IsKeyProblem(err):
+	case orgencryption.IsKeyProblem(err):
 		return "", fmt.Errorf("%w: %w", okta.ErrClientSecretKeyUnavailable, err)
 	case err != nil:
 		return "", fmt.Errorf("open okta client secret: %w", err)

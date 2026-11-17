@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -531,7 +532,7 @@ func (m *ChallengeManager) federatedTokenClient(ctx context.Context, p *Federate
 		var err error
 		secret, err = m.secrets.Open(ctx, nil, clientsecrets.OwnerOf(p.client.OrganizationID, p.client.ProjectID), stored)
 		switch {
-		case clientsecrets.IsUnreadable(err):
+		case orgencryption.IsUnreadable(err):
 			return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 		case err != nil:
 			return nil, TokenEndpointClientAuth{}, fmt.Errorf("%w: open client secret: %w", ErrFederatedUnavailable, err)
