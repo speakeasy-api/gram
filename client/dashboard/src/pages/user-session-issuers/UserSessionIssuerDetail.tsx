@@ -35,6 +35,7 @@ import { AuthenticationHostDialog } from "./AuthenticationHostDialog";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
 import { ClientAccessSection } from "./ClientAccessSection";
+import { ClientDriftWarning } from "./ClientDriftWarning";
 import { SessionLengthSection } from "./SessionLengthSection";
 import {
   authorizationServerModeLabel,
@@ -355,7 +356,14 @@ function McpServersSection({
     );
   }
 
-  return <InfoSection title="MCP servers">{body}</InfoSection>;
+  return (
+    <InfoSection
+      title="MCP servers"
+      adornment={<ClientDriftWarning issuerId={issuer.id} />}
+    >
+      {body}
+    </InfoSection>
+  );
 }
 
 function ActionsSection({
