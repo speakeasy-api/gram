@@ -18,6 +18,8 @@
 //     REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md. It defaults to a dry run.
 //   - mcp-grant-limits: PostgreSQL application-data rewrite; see
 //     MCP_GRANT_LIMITS_REWRITE.md. It defaults to a dry run.
+//   - mcp-unannotated-grants: PostgreSQL application-data backfill; see
+//     MCP_UNANNOTATED_GRANTS_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -113,9 +115,11 @@ func run() int {
 		return runRemoteSessionsOrganization(args, os.Stdout, os.Getenv)
 	case mcpGrantLimitsCommand:
 		return runMCPGrantLimits(args, os.Stdout, os.Getenv)
+	case mcpUnannotatedGrantsCommand:
+		return runMCPUnannotatedGrants(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, mcp-grant-limits)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, mcp-grant-limits, mcp-unannotated-grants)")
 		return 2
 	}
 }

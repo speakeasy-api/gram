@@ -534,6 +534,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../cmd/tools/migrations/mcpunannotatedgrants/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "mcpunannotatedgrants"
+        out: "../cmd/tools/migrations/mcpunannotatedgrants"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../cmd/tools/migrations/openrouterdisablecauses/queries.sql
     engine: postgresql
     gen:
