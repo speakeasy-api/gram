@@ -14,27 +14,33 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/signins"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const (
 	switchClientState   = "client-state-switch"
 	switchCodeChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-	switchNoteCopy      = "You'll sign in to Speakeasy again on this browser."
+	switchWorkDomain    = "example.test"
+	switchAgainCopy     = "That account is personal too, so Speakeasy can't sign you in to "
 )
 
-// recordingRevoker records the identity provider sessions ended, failing with err.
+// recordingRevoker records the identity provider sessions it ends. Like
+// WorkOS, ending one already ended answers not found.
 type recordingRevoker struct {
 	mu    sync.Mutex
 	ended []string
@@ -47,6 +53,11 @@ func (r *recordingRevoker) RevokeSession(_ context.Context, sessionID string) er
 	if r.err != nil {
 		return r.err
 	}
+	for _, ended := range r.ended {
+		if ended == sessionID {
+			return fmt.Errorf("revoke: %w", workos_errors.HTTPError{Code: http.StatusNotFound, Status: "404 Not Found", RequestID: "", Message: "session not found", ErrorCode: "", Errors: nil, FieldErrors: nil, ErrorDescription: ""})
+		}
+	}
 	r.ended = append(r.ended, sessionID)
 	return nil
 }
@@ -57,6 +68,42 @@ func (r *recordingRevoker) sessions() []string {
 	return append([]string(nil), r.ended...)
 }
 
+func (r *recordingRevoker) fail(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.err = err
+}
+
+// challengeStoreFault fails the next store of a challenge other than keep, once armed.
+type challengeStoreFault struct {
+	cache.Cache
+	mu    sync.Mutex
+	armed bool
+	keep  string
+}
+
+func (c *challengeStoreFault) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	c.mu.Lock()
+	fail := c.armed && strings.HasPrefix(key, "authnChallenge:") && key != "authnChallenge:"+c.keep
+	if fail {
+		c.armed = false
+	}
+	c.mu.Unlock()
+	if fail {
+		return errors.New("cache unavailable")
+	}
+	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set: %w", err)
+	}
+	return nil
+}
+
+func (c *challengeStoreFault) arm(keep string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.armed, c.keep = true, keep
+}
+
 type switchFixture struct {
 	consentActionFixture
 	ctx      context.Context //nolint:containedctx // the fixture's test context, like the other consent fixtures
@@ -65,16 +112,20 @@ type switchFixture struct {
 	governor *consentGovernor
 	// managed are the sign-ins the governor vouches for; any other is a personal account.
 	managed map[uuid.UUID]bool
-	// session is the WorkOS session behind the consent's current sign-in.
+	// session is the WorkOS session behind the consent's first sign-in.
 	session string
+	// workosOrganization is the organization's WorkOS id.
+	workosOrganization string
 }
 
-// seedSwitchConsent: a chained consent whose person signed in to Speakeasy with a personal Google account.
-func seedSwitchConsent(t *testing.T, tag string) *switchFixture {
+// seedSwitchConsent: a chained consent whose person signed in to Speakeasy with a personal Google account on the work domain.
+func seedSwitchConsent(t *testing.T, tag string, wrap func(cache.Cache) cache.Cache) *switchFixture {
 	t.Helper()
 
 	mock := &mockIdentityResolver{hasAccessOK: true, buildAuthURLResult: &url.URL{Scheme: "https", Host: "idp.example.com", Path: "/authorize"}}
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), mock, mcp.TunnelPublicConfig{
+		SessionTTL: 0, LiveSessionCap: 0, InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0,
+	}, wrap)
 	projectID, orgID := consentTestTenant(t, ctx)
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	slug := tag + "-" + uuid.NewString()[:8]
@@ -86,14 +137,31 @@ func seedSwitchConsent(t *testing.T, tag string) *switchFixture {
 		consentActionFixture: consentActionFixture{ti: ti, endpoint: endpoint, stateID: stateID, projectID: projectID, orgID: orgID, shared: issuerID, subject: subject, clientA: uuid.Nil, clientB: uuid.Nil, clientC: uuid.Nil, clientD: uuid.Nil, server: ""},
 		ctx:                  ctx,
 		mock:                 mock,
-		revoker:              &recordingRevoker{mu: sync.Mutex{}, ended: nil, err: nil},
+		revoker:              nil,
 		governor:             nil,
 		managed:              map[uuid.UUID]bool{},
-		session:              "session_" + uuid.NewString(),
+		session:              "",
+		workosOrganization:   "",
 	}
 	registerPageClient(t, ctx, fx.consentActionFixture)
 	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
-	fx.governor = setConsentGovernor(t, fx.consentActionFixture, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA), consentChainedUpstream)
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug,
+	})
+	require.NoError(t, err)
+	armSwitch(t, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA), consentChainedUpstream, func(s *mcp.AuthnChallengeState) {
+		s.Endpoint.McpServerID = conv.ToNullUUID(serverID)
+	})
+	return fx
+}
+
+// armSwitch gives a consent fixture a personal sign-in, a governor that refuses it, and a recording session revoker.
+func armSwitch(t *testing.T, fx *switchFixture, remoteIssuer uuid.UUID, upstream string, edit func(*mcp.AuthnChallengeState)) {
+	t.Helper()
+	ti := fx.ti
+	fx.revoker = &recordingRevoker{mu: sync.Mutex{}, ended: nil, err: nil}
+	fx.session = "session_" + uuid.NewString()
+	fx.governor = setConsentGovernor(t, fx.consentActionFixture, remoteIssuer, upstream)
 	fx.governor.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
 		fx.governor.mu.Lock()
 		checked := fx.governor.checkedSignIns
@@ -104,27 +172,42 @@ func seedSwitchConsent(t *testing.T, tag string) *switchFixture {
 		}
 		return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonUnmanagedAccount, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
 	}
-	ti.service.SetSessionManager(sessions.NewManager(ti.logger, ti.tracerProvider, ti.conn, nil, cache.Suffix("switch-test"), fx.revoker, nil, nil))
-	signins.EnableForTests(ti.features, orgID)
-	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug,
+	ti.service.SetIdentityResolver(fx.mock)
+	ti.service.SetIDPSessionRevoker(fx.revoker)
+	signins.EnableForTests(ti.features, fx.orgID)
+	setSwitchVerifiedDomains(t, fx, switchWorkDomain)
+	fx.workosOrganization = workOSOrganizationID(t, fx.ctx, ti, fx.orgID)
+
+	signInID := recordPersonalSignIn(t, fx, fx.subject.ID, fx.session)
+	impersonated := false
+	fx.store(t, func(state *mcp.AuthnChallengeState) {
+		state.FlowID = uuid.NewString()
+		state.CreatedAt = time.Now()
+		state.State = switchClientState
+		state.CodeChallenge = switchCodeChallenge
+		state.CodeChallengeMethod = "S256"
+		state.AuthorizerUserID = fx.subject.ID
+		state.AuthorizerImpersonated = &impersonated
+		state.SignInID = &signInID
+		if edit != nil {
+			edit(state)
+		}
+	})
+}
+
+func setSwitchVerifiedDomains(t *testing.T, fx *switchFixture, domains ...string) {
+	t.Helper()
+	org, err := orgrepo.New(fx.ti.conn).GetOrganizationMetadata(fx.ctx, fx.orgID)
+	require.NoError(t, err)
+	_, err = orgrepo.New(fx.ti.conn).UpdateOrganizationMetadataFromWorkOS(fx.ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
+		Name:              org.Name,
+		WorkosID:          org.WorkosID,
+		WorkosUpdatedAt:   pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		WorkosLastEventID: conv.ToPGText("event_" + uuid.NewString()),
+		VerifiedDomains:   domains,
+		ID:                fx.orgID,
 	})
 	require.NoError(t, err)
-
-	signInID := recordPersonalSignIn(t, fx, subject.ID, fx.session)
-	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
-	require.NoError(t, err)
-	impersonated := false
-	state.Endpoint.McpServerID = conv.ToNullUUID(serverID)
-	state.FlowID = uuid.NewString()
-	state.State = switchClientState
-	state.CodeChallenge = switchCodeChallenge
-	state.CodeChallengeMethod = "S256"
-	state.AuthorizerUserID = subject.ID
-	state.AuthorizerImpersonated = &impersonated
-	state.SignInID = &signInID
-	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
-	return fx
 }
 
 // recordPersonalSignIn records a Google sign-in that answered with no Workspace domain.
@@ -135,7 +218,7 @@ func recordPersonalSignIn(t *testing.T, fx *switchFixture, userID, workosSession
 		UserID:               userID,
 		WorkOSSessionID:      workosSessionID,
 		AuthenticationMethod: signins.MethodGoogleOAuth,
-		Evidence:             signins.Evidence{HostedDomain: "", HostedDomainChecked: true, TenantID: "", VerifiedEmail: userID + "@example.test", IDPAuthenticatedAt: time.Now()},
+		Evidence:             signins.Evidence{HostedDomain: "", HostedDomainChecked: true, TenantID: "", VerifiedEmail: userID + "@" + switchWorkDomain, IDPAuthenticatedAt: time.Now()},
 		AuthenticatedAt:      time.Now(),
 	})
 	require.NoError(t, err)
@@ -160,6 +243,9 @@ func (fx *switchFixture) store(t *testing.T, edit func(*mcp.AuthnChallengeState)
 func postSwitchAccount(t *testing.T, fx *switchFixture, edit func(url.Values)) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"switch_account"}, "client_id": {fx.clientA.String()}}
+	if fx.server != "" {
+		form.Set("server", fx.server)
+	}
 	if edit != nil {
 		edit(form)
 	}
@@ -185,15 +271,15 @@ func switchAccount(t *testing.T, fx *switchFixture) mcp.AuthnChallengeState {
 	return restarted
 }
 
-// signInAs completes the identity provider callback for a restarted challenge and returns the consent challenge.
-func signInAs(t *testing.T, fx *switchFixture, stateID, userID, workosSessionID, method string, evidence identity.SignInEvidence) mcp.AuthnChallengeState {
+// signInAs completes the identity provider callback for a restarted challenge and returns the response.
+func signInAs(t *testing.T, fx *switchFixture, stateID, userID, workosSessionID, method string, evidence identity.SignInEvidence) *httptest.ResponseRecorder {
 	t.Helper()
 	fx.mock.upsertResult = userID
 	fx.mock.exchangeResult = &identity.IDPUserInfo{
 		Sub:                  "workos-" + userID,
-		Email:                userID + "@example.test",
+		Email:                userID + "@" + switchWorkDomain,
 		Name:                 "Test User",
-		OrganizationID:       workOSOrganizationID(t, fx.ctx, fx.ti, fx.orgID),
+		OrganizationID:       fx.workosOrganization,
 		WorkOSSessionID:      workosSessionID,
 		AuthenticationMethod: method,
 		Evidence:             evidence,
@@ -205,86 +291,112 @@ func signInAs(t *testing.T, fx *switchFixture, stateID, userID, workosSessionID,
 	w := httptest.NewRecorder()
 	require.NoError(t, fx.ti.service.HandleIDPCallback(w, req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))))
 	require.Equal(t, http.StatusFound, w.Code)
+	return w
+}
+
+// signInTo completes the callback and moves the fixture to the consent page it lands on.
+func signInTo(t *testing.T, fx *switchFixture, stateID, userID, workosSessionID, method string, evidence identity.SignInEvidence) mcp.AuthnChallengeState {
+	t.Helper()
+	w := signInAs(t, fx, stateID, userID, workosSessionID, method, evidence)
 	consentURL, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
 	fx.stateID = consentURL.Query().Get("state")
 	return fx.state(t)
 }
 
-func requireSwitchRefused(t *testing.T, err error, code oops.Code) {
+func personalEvidence(userID string) identity.SignInEvidence {
+	return identity.SignInEvidence{HostedDomain: "", HostedDomainChecked: true, TenantID: "", VerifiedEmail: userID + "@" + switchWorkDomain, AuthenticatedAt: time.Now()}
+}
+
+func requireSwitchRefused(t *testing.T, err error, code oops.Code, message string) {
 	t.Helper()
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, code, shareable.Code)
+	if message != "" {
+		require.Equal(t, message, shareable.Error())
+	}
 }
 
-// The check offers the switch only for a personal account, while switches remain.
+func checkCard(t *testing.T, fx *switchFixture) map[string]string {
+	t.Helper()
+	w, err := postChainCheck(t, fx.consentActionFixture, nil)
+	require.NoError(t, err)
+	return chainCheckResult(t, w)
+}
+
+// The check offers the switch only for a personal account, while switches and time remain.
 func TestConsentSwitchAccount_OfferedOnlyForAPersonalAccount(t *testing.T) {
 	t.Parallel()
 
-	fx := seedSwitchConsent(t, "aim852-offer")
-	w, err := postChainCheck(t, fx.consentActionFixture, nil)
-	require.NoError(t, err)
-	body := chainCheckResult(t, w)
+	fx := seedSwitchConsent(t, "aim852-offer", nil)
+	body := checkCard(t, fx)
 	require.Equal(t, "rejected", body["status"])
 	require.Equal(t, "switch_account", body["action"])
 	offered := body["message"]
 	require.True(t, strings.HasPrefix(offered, "You're signed in to Speakeasy with a personal account"), offered)
 
-	for name, edit := range map[string]func(*mcp.AuthnChallengeState){
-		"switches used up":  func(s *mcp.AuthnChallengeState) { s.AccountSwitches = 3 },
-		"dashboard connect": func(s *mcp.AuthnChallengeState) { s.FirstParty = true },
-		"support session":   func(s *mcp.AuthnChallengeState) { yes := true; s.AuthorizerImpersonated = &yes },
+	reset := func(s *mcp.AuthnChallengeState) {
+		no := false
+		s.AccountSwitches, s.FirstParty, s.AuthorizerImpersonated, s.CreatedAt = 0, false, &no, time.Now()
+	}
+	for name, tc := range map[string]struct {
+		edit    func(*mcp.AuthnChallengeState)
+		refusal string
+	}{
+		"switches used up":  {func(s *mcp.AuthnChallengeState) { s.AccountSwitches = 3 }, "This page can't start a new sign-in. Go back and use a separate sign-in."},
+		"dashboard connect": {func(s *mcp.AuthnChallengeState) { s.FirstParty = true }, ""},
+		"support session":   {func(s *mcp.AuthnChallengeState) { yes := true; s.AuthorizerImpersonated = &yes }, "This page can't start a new sign-in. Go back and use a separate sign-in."},
+		"too old to finish": {func(s *mcp.AuthnChallengeState) { s.CreatedAt = time.Now().Add(-9 * time.Minute) }, "This page expired; start connecting again."},
 	} {
-		fx.store(t, func(s *mcp.AuthnChallengeState) {
-			no := false
-			s.AccountSwitches, s.FirstParty, s.AuthorizerImpersonated = 0, false, &no
-			edit(s)
-		})
-		w, err := postChainCheck(t, fx.consentActionFixture, nil)
-		require.NoError(t, err, name)
-		body := chainCheckResult(t, w)
+		fx.store(t, func(s *mcp.AuthnChallengeState) { reset(s); tc.edit(s) })
+		body := checkCard(t, fx)
 		require.Equal(t, "rejected", body["status"], name)
 		require.NotContains(t, body, "action", name)
-		require.Equal(t, offered, body["message"], "the buttons carry the actions, not the text")
-		_, err = postSwitchAccount(t, fx, nil)
-		requireSwitchRefused(t, err, oops.CodeBadRequest)
+		_, err := postSwitchAccount(t, fx, nil)
+		requireSwitchRefused(t, err, oops.CodeBadRequest, tc.refusal)
 	}
 	require.Empty(t, fx.revoker.sessions())
 
+	fx.store(t, reset)
 	for _, reason := range []identitychaining.Reason{identitychaining.ReasonIneligibleIdentity, identitychaining.ReasonAccessDenied} {
 		fx.governor.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
 			return identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
 		}
-		fx.store(t, func(s *mcp.AuthnChallengeState) {
-			no := false
-			s.AccountSwitches, s.FirstParty, s.AuthorizerImpersonated = 0, false, &no
-		})
-		w, err := postChainCheck(t, fx.consentActionFixture, nil)
-		require.NoError(t, err)
-		body := chainCheckResult(t, w)
+		body := checkCard(t, fx)
 		require.Equal(t, "rejected", body["status"], reason)
 		require.NotContains(t, body, "action", "an administrator's refusal isn't fixed by switching accounts")
 	}
 	fx.governor.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
 		return identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonProviderUnavailable, Confidence: identitychaining.ConfidenceUnknown, Retryable: true, Cached: false, Provider: ""}
 	}
-	w, err = postChainCheck(t, fx.consentActionFixture, nil)
-	require.NoError(t, err)
-	require.NotContains(t, chainCheckResult(t, w), "action", "unknown evidence offers nothing")
+	require.NotContains(t, checkCard(t, fx), "action", "unknown evidence offers nothing")
 }
 
-// The action ends only this person's own session and restarts this same request.
+// The action ends only this person's own session, restarts this same request and steers the new sign-in.
 func TestConsentSwitchAccount_RestartsTheSameAuthorizationRequest(t *testing.T) {
 	t.Parallel()
 
-	fx := seedSwitchConsent(t, "aim852-restart")
+	fx := seedSwitchConsent(t, "aim852-restart", nil)
 	before := fx.state(t)
 	restarted := switchAccount(t, fx)
 
 	require.Equal(t, []string{fx.session}, fx.revoker.sessions(), "exactly the consent's own sign-in session is ended")
-	_, err := fx.ti.authnChallengeCache.Get(fx.ctx, "authnChallenge:"+fx.stateID)
+	_, err := fx.ti.authnChallengeCache.Get(fx.ctx, "authnChallenge:"+before.ID)
 	require.Error(t, err, "the consent challenge is spent")
+
+	sent := fx.mock.buildAuthURLParams
+	require.NotEmpty(t, sent.CallbackURL)
+	require.Equal(t, identity.AuthorizationURLParams{
+		CallbackURL:     sent.CallbackURL,
+		Scope:           "",
+		State:           restarted.ID,
+		ScopesSupported: nil,
+		LoginHint:       fx.subject.ID + "@" + switchWorkDomain,
+		ScreenHint:      "",
+		Prompt:          "login",
+		OrganizationID:  fx.workosOrganization,
+	}, sent, "a fresh login, in this organization, for the work email")
 
 	want := before
 	want.ID = restarted.ID
@@ -292,32 +404,46 @@ func TestConsentSwitchAccount_RestartsTheSameAuthorizationRequest(t *testing.T) 
 	want.AuthorizerUserID = ""
 	want.AuthorizerImpersonated = nil
 	want.SignInID = nil
-	want.FreshLoginForced = true
 	want.AccountSwitches = 1
 	require.NotEqual(t, before.ID, restarted.ID)
 	require.Equal(t, want, restarted, "client, redirect URI, PKCE, state, endpoint and flow survive unchanged")
-	require.Equal(t, switchClientState, restarted.State)
-	require.Equal(t, switchCodeChallenge, restarted.CodeChallenge)
-	require.Equal(t, before.FlowID, restarted.FlowID, "the same attempt")
+	require.False(t, restarted.FreshLoginForced, "a revoked sign-in later still gets its one restart")
 
 	_, err = postSwitchAccount(t, fx, nil)
-	requireSwitchRefused(t, err, oops.CodeBadRequest)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
 	require.Len(t, fx.revoker.sessions(), 1, "a replay ends nothing")
 }
 
-// The action is bound to the attempt's anti-forgery token and to the person's own sign-in.
+// A personal email off the organization's verified domains is never pre-filled.
+func TestConsentSwitchAccount_HintsOnlyAWorkEmail(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-hint", nil)
+	setSwitchVerifiedDomains(t, fx, "elsewhere.test")
+	switchAccount(t, fx)
+	require.Empty(t, fx.mock.buildAuthURLParams.LoginHint)
+	require.Equal(t, fx.workosOrganization, fx.mock.buildAuthURLParams.OrganizationID)
+}
+
+// The action is bound to the attempt's anti-forgery token, a chained card of this page, and the person's own sign-in.
 func TestConsentSwitchAccount_RefusesForgedAndForeignRequests(t *testing.T) {
 	t.Parallel()
 
-	fx := seedSwitchConsent(t, "aim852-forged")
+	fx := seedSwitchConsent(t, "aim852-forged", nil)
 	before := fx.state(t)
 
 	_, err := postSwitchAccount(t, fx, func(f url.Values) { f.Set("csrf_token", "forged") })
-	requireSwitchRefused(t, err, oops.CodeBadRequest)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Del("csrf_token") })
-	requireSwitchRefused(t, err, oops.CodeBadRequest)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
 	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("state", uuid.NewString()) })
 	require.Error(t, err)
+	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("client_id", uuid.NewString()) })
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
+	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Del("client_id") })
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
+	_, err = postSwitchAccount(t, fx, func(f url.Values) { f.Set("server", "not-a-gateway-server") })
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "This page changed. Go back, reload it, and try again.")
 
 	// A sign-in of someone else: the check is against the consent's own person.
 	other := createTestUser(t, fx.ctx, fx.ti, "aim852-other-"+uuid.NewString())
@@ -325,7 +451,7 @@ func TestConsentSwitchAccount_RefusesForgedAndForeignRequests(t *testing.T) {
 	othersSignIn := recordPersonalSignIn(t, fx, other.ID, othersSession)
 	fx.store(t, func(s *mcp.AuthnChallengeState) { s.SignInID = &othersSignIn })
 	_, err = postSwitchAccount(t, fx, nil)
-	requireSwitchRefused(t, err, oops.CodeBadRequest)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "")
 	require.Empty(t, fx.revoker.sessions(), "nothing is ended for a forged or foreign request")
 
 	fx.store(t, func(s *mcp.AuthnChallengeState) { s.SignInID = before.SignInID })
@@ -342,46 +468,68 @@ func TestConsentSwitchAccount_RefusesForgedAndForeignRequests(t *testing.T) {
 func TestConsentSwitchAccount_EndingTheSessionFailsCleanly(t *testing.T) {
 	t.Parallel()
 
-	fx := seedSwitchConsent(t, "aim852-fail")
+	fx := seedSwitchConsent(t, "aim852-fail", nil)
 	before := fx.state(t)
-	fx.revoker.err = errors.New("identity provider unavailable")
+	fx.revoker.fail(errors.New("identity provider unavailable"))
 
 	_, err := postSwitchAccount(t, fx, nil)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeUnavailable, shareable.Code)
-	require.Equal(t, "Speakeasy couldn't sign you out; try again.", shareable.Error())
+	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Try again.")
 	require.Equal(t, before, fx.state(t), "the consent page keeps working")
 	require.Empty(t, fx.mock.buildAuthURLParams.State, "no sign-in was started")
 
-	fx.revoker.err = nil
-	restarted := switchAccount(t, fx)
-	require.Equal(t, 1, restarted.AccountSwitches, "a retry works")
+	fx.revoker.fail(nil)
+	require.Equal(t, 1, switchAccount(t, fx).AccountSwitches, "a retry works")
+}
+
+// A session WorkOS already ended is what the switch wanted.
+func TestConsentSwitchAccount_AlreadyEndedSessionProceeds(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-gone", nil)
+	require.NoError(t, fx.revoker.RevokeSession(fx.ctx, fx.session))
+	require.Equal(t, 1, switchAccount(t, fx).AccountSwitches)
+}
+
+// Once the session has ended, a failure to save the restart leaves the page able to try again.
+func TestConsentSwitchAccount_StoreFailureLeavesARetry(t *testing.T) {
+	t.Parallel()
+
+	fault := &challengeStoreFault{Cache: nil, mu: sync.Mutex{}, armed: false, keep: ""}
+	fx := seedSwitchConsent(t, "aim852-store", func(inner cache.Cache) cache.Cache {
+		fault.Cache = inner
+		return fault
+	})
+	before := fx.state(t)
+	fault.arm(before.ID)
+
+	_, err := postSwitchAccount(t, fx, nil)
+	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Try again.")
+	require.Equal(t, []string{fx.session}, fx.revoker.sessions(), "the session did end")
+	require.Equal(t, before, fx.state(t), "the page is put back")
+
+	require.Equal(t, 1, switchAccount(t, fx).AccountSwitches, "the retry finds the session already ended and goes on")
 }
 
 // A company account connects and completes the attempt; another personal account is refused again, and the person is never stranded.
 func TestConsentSwitchAccount_FreshSignInIsCheckedAgain(t *testing.T) {
 	t.Parallel()
 
-	fx := seedSwitchConsent(t, "aim852-again")
+	fx := seedSwitchConsent(t, "aim852-again", nil)
 	rec := recordConnections(t, fx.ti)
 	before := fx.state(t)
-	w, err := postChainCheck(t, fx.consentActionFixture, nil)
-	require.NoError(t, err)
-	require.Equal(t, "switch_account", chainCheckResult(t, w)["action"])
+	require.Equal(t, "switch_account", checkCard(t, fx)["action"])
 
 	// Picks another personal account.
 	restarted := switchAccount(t, fx)
 	second := createTestUser(t, fx.ctx, fx.ti, "aim852-second-"+uuid.NewString())
-	consent := signInAs(t, fx, restarted.ID, second.ID, "session_"+uuid.NewString(), signins.MethodGoogleOAuth, identity.SignInEvidence{HostedDomain: "", HostedDomainChecked: true, TenantID: "", VerifiedEmail: second.ID + "@example.test", AuthenticatedAt: time.Now()})
+	consent := signInTo(t, fx, restarted.ID, second.ID, "session_"+uuid.NewString(), signins.MethodGoogleOAuth, personalEvidence(second.ID))
 	require.Equal(t, second, *consent.Subject)
 	require.NotNil(t, consent.SignInID)
 	require.NotEqual(t, *before.SignInID, *consent.SignInID)
 	require.Equal(t, before.FlowID, consent.FlowID)
-	w, err = postChainCheck(t, fx.consentActionFixture, nil)
-	require.NoError(t, err)
-	body := chainCheckResult(t, w)
+	body := checkCard(t, fx)
 	require.Equal(t, "rejected", body["status"])
+	require.True(t, strings.HasPrefix(body["message"], switchAgainCopy), body["message"])
 	require.Equal(t, "switch_account", body["action"], "the person can try again")
 	require.Equal(t, *consent.SignInID, fx.governor.checkedSignIns[len(fx.governor.checkedSignIns)-1], "judged against the new sign-in")
 
@@ -389,13 +537,10 @@ func TestConsentSwitchAccount_FreshSignInIsCheckedAgain(t *testing.T) {
 	restarted = switchAccount(t, fx)
 	require.Equal(t, 2, restarted.AccountSwitches)
 	company := createTestUser(t, fx.ctx, fx.ti, "aim852-company-"+uuid.NewString())
-	companySession := "session_" + uuid.NewString()
-	consent = signInAs(t, fx, restarted.ID, company.ID, companySession, signins.MethodSSO, identity.SignInEvidence{HostedDomain: "", HostedDomainChecked: false, TenantID: "", VerifiedEmail: company.ID + "@example.test", AuthenticatedAt: time.Now()})
+	consent = signInTo(t, fx, restarted.ID, company.ID, "session_"+uuid.NewString(), signins.MethodSSO, identity.SignInEvidence{HostedDomain: "", HostedDomainChecked: false, TenantID: "", VerifiedEmail: company.ID + "@" + switchWorkDomain, AuthenticatedAt: time.Now()})
 	require.Equal(t, company, *consent.Subject)
 	fx.managed[*consent.SignInID] = true
-	w, err = postChainCheck(t, fx.consentActionFixture, nil)
-	require.NoError(t, err)
-	require.Equal(t, map[string]string{"status": "connected", "message": "Connected through your identity provider"}, chainCheckResult(t, w))
+	require.Equal(t, map[string]string{"status": "connected", "message": "Connected through your identity provider"}, checkCard(t, fx))
 
 	loc := postConsentAction(t, fx.ctx, fx.ti, fx.endpoint.Slug, fx.stateID, "approve")
 	require.Equal(t, "example.com", loc.Host)
@@ -412,27 +557,46 @@ func TestConsentSwitchAccount_FreshSignInIsCheckedAgain(t *testing.T) {
 			refusals++
 		}
 	}
-	require.Equal(t, 1, refusals, "one personal-account row per attempt")
+	require.Equal(t, 2, refusals, "one personal-account row per sign-in")
+}
+
+// A sign-in that comes back revoked after a switch still gets its one restart.
+func TestConsentSwitchAccount_RevokedSignInAfterASwitchStillRestarts(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-revoked", nil)
+	restarted := switchAccount(t, fx)
+	next := createTestUser(t, fx.ctx, fx.ti, "aim852-revoked-"+uuid.NewString())
+	revokedSession := "session_" + uuid.NewString()
+	_, err := signins.RevokeSession(fx.ctx, fx.ti.conn, []string{fx.orgID}, next.ID, revokedSession)
+	require.NoError(t, err)
+
+	fx.mock.buildAuthURLParams = identity.AuthorizationURLParams{CallbackURL: "", Scope: "", State: "", ScopesSupported: nil, LoginHint: "", ScreenHint: "", Prompt: "", OrganizationID: ""}
+	w := signInAs(t, fx, restarted.ID, next.ID, revokedSession, signins.MethodSSO, personalEvidence(next.ID))
+	require.Equal(t, "https://idp.example.com/authorize", w.Header().Get("Location"), "back to the identity provider, not an error")
+	require.Equal(t, "login", fx.mock.buildAuthURLParams.Prompt)
+	again, err := fx.ti.authnChallengeCache.Get(fx.ctx, "authnChallenge:"+fx.mock.buildAuthURLParams.State)
+	require.NoError(t, err)
+	require.True(t, again.FreshLoginForced)
+	require.Equal(t, 1, again.AccountSwitches)
 }
 
 // Switches are bounded per attempt, and the last refusal still offers a separate sign-in.
 func TestConsentSwitchAccount_BoundedPerAttempt(t *testing.T) {
 	t.Parallel()
 
-	fx := seedSwitchConsent(t, "aim852-bound")
+	fx := seedSwitchConsent(t, "aim852-bound", nil)
 	for i := 1; i <= 3; i++ {
 		restarted := switchAccount(t, fx)
 		require.Equal(t, i, restarted.AccountSwitches)
 		next := createTestUser(t, fx.ctx, fx.ti, "aim852-bound-"+uuid.NewString())
-		signInAs(t, fx, restarted.ID, next.ID, "session_"+uuid.NewString(), signins.MethodGoogleOAuth, identity.SignInEvidence{HostedDomain: "", HostedDomainChecked: true, TenantID: "", VerifiedEmail: next.ID + "@example.test", AuthenticatedAt: time.Now()})
+		signInTo(t, fx, restarted.ID, next.ID, "session_"+uuid.NewString(), signins.MethodGoogleOAuth, personalEvidence(next.ID))
 	}
-	w, err := postChainCheck(t, fx.consentActionFixture, nil)
-	require.NoError(t, err)
-	body := chainCheckResult(t, w)
+	body := checkCard(t, fx)
 	require.Equal(t, "rejected", body["status"])
 	require.NotContains(t, body, "action")
-	_, err = postSwitchAccount(t, fx, nil)
-	requireSwitchRefused(t, err, oops.CodeBadRequest)
+	_, err := postSwitchAccount(t, fx, nil)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "This page can't start a new sign-in. Go back and use a separate sign-in.")
 	require.Len(t, fx.revoker.sessions(), 3)
 
 	code, page, _ := render(t, fx.consentActionFixture)
@@ -440,16 +604,88 @@ func TestConsentSwitchAccount_BoundedPerAttempt(t *testing.T) {
 	require.Contains(t, page, "Use a separate sign-in instead", "the separate sign-in is still there")
 }
 
-// The page carries the switch button hidden until the check offers it.
+// Back to the spent consent page goes on to the fresh sign-in instead of an error.
+func TestConsentSwitchAccount_OldConsentURLGoesOnToTheNewSignIn(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-back", nil)
+	old := fx.consentActionFixture
+	switchAccount(t, fx)
+
+	code, _, loc := render(t, old)
+	require.Equal(t, http.StatusFound, code)
+	require.NotNil(t, loc)
+	require.Equal(t, "https://idp.example.com/authorize", loc.String())
+
+	other := old
+	other.endpoint = &mcp.ResolvedMcpEndpoint{}
+	*other.endpoint = *old.endpoint
+	other.endpoint.Slug = "another-" + uuid.NewString()[:8]
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+other.endpoint.Slug+"/connect?state="+url.QueryEscape(old.stateID), nil)
+	require.Error(t, fx.ti.service.ServeConsent(httptest.NewRecorder(), req, other.endpoint), "only this server's page follows it")
+}
+
+// On a gateway server's page, the fresh sign-in returns to that server's page.
+func TestConsentSwitchAccount_KeepsTheGatewayServerPage(t *testing.T) {
+	t.Parallel()
+
+	ctx, base, metaID, clientID, issuerID := metaConsent(t, "aim852-gw")
+	const upstream = "https://aim852-gw.example.com/mcp"
+	createMetaMember(t, ctx, base.ti.conn, base.projectID, metaID, "aim852-gw-member", upstream, conv.ToNullUUID(issuerID), 0)
+	base.server = "aim852-gw-member"
+	base.clientA = clientID
+	fx := &switchFixture{
+		consentActionFixture: base,
+		ctx:                  ctx,
+		mock:                 &mockIdentityResolver{hasAccessOK: true, buildAuthURLResult: &url.URL{Scheme: "https", Host: "idp.example.com", Path: "/authorize"}},
+		revoker:              nil,
+		governor:             nil,
+		managed:              map[uuid.UUID]bool{},
+		session:              "",
+		workosOrganization:   "",
+	}
+	armSwitch(t, fx, issuerID, upstream, nil)
+
+	_, err := postSwitchAccount(t, fx, func(f url.Values) { f.Set("server", "aim852-not-a-member") })
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "This page changed. Go back, reload it, and try again.")
+	require.Empty(t, fx.revoker.sessions())
+
+	restarted := switchAccount(t, fx)
+	require.Equal(t, "aim852-gw-member", restarted.FocusServer, "the consent page after sign-in is this server's")
+}
+
+// The page carries the switch button and its note hidden until the check offers them.
 func TestConsentSwitchAccount_PageCarriesHiddenAction(t *testing.T) {
 	t.Parallel()
 
-	fx := seedSwitchConsent(t, "aim852-page")
+	fx := seedSwitchConsent(t, "aim852-page", nil)
 	code, page, _ := render(t, fx.consentActionFixture)
 	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, page, `data-switch-account-group hidden`)
 	require.Contains(t, page, `value="switch_account"`)
-	require.Contains(t, page, "data-switch-account hidden")
+	require.Contains(t, page, `aria-describedby="switch-note-`+fx.clientA.String()+`"`)
+	require.Contains(t, page, `id="switch-note-`+fx.clientA.String()+`"`)
 	require.Contains(t, page, "Sign in with your company account")
-	require.Contains(t, page, "data-switch-account-note hidden >"+switchNoteCopy)
-	require.Less(t, strings.Index(page, "data-switch-account"), strings.Index(page, "data-connect-fallback"), "the company account comes first")
+	require.Contains(t, page, "You'll be asked to sign in again.")
+	require.Less(t, strings.Index(page, "data-switch-account-group"), strings.Index(page, "data-connect-fallback"), "the company account comes first")
+}
+
+// The session lookup answers only for the sign-in's own person and organization.
+func TestSessionForSignIn_ScopedToPersonAndOrganization(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-scope", nil)
+	signInID := *fx.state(t).SignInID
+	own, err := signins.SessionForSignIn(fx.ctx, fx.ti.conn, fx.orgID, fx.subject.ID, signInID)
+	require.NoError(t, err)
+	require.Equal(t, signins.SignInSession{WorkOSSessionID: fx.session, WorkEmail: fx.subject.ID + "@" + switchWorkDomain, WorkOSOrganizationID: fx.workosOrganization}, own)
+
+	none := signins.SignInSession{WorkOSSessionID: "", WorkEmail: "", WorkOSOrganizationID: ""}
+	other, err := signins.SessionForSignIn(fx.ctx, fx.ti.conn, fx.orgID, "someone-else", signInID)
+	require.NoError(t, err)
+	require.Equal(t, none, other, "another user")
+	otherOrg, _ := seedWorkOSOrganization(t, fx.ctx, fx.ti)
+	elsewhere, err := signins.SessionForSignIn(fx.ctx, fx.ti.conn, otherOrg, fx.subject.ID, signInID)
+	require.NoError(t, err)
+	require.Equal(t, none, elsewhere, "another organization")
 }

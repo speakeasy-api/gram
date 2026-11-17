@@ -41,6 +41,7 @@ for (const skew of [-60000, 0, 60000]) {
       },
       window: {
         setTimeout: (callback, delay) => timers.push({ callback, delay }),
+        addEventListener() {},
         location: { reload: () => reloads++ },
       },
     });
@@ -124,7 +125,7 @@ vm.runInNewContext(source, {
     },
     querySelectorAll: (selector) => (selector === '[data-chain-check="pending"]' ? statuses : []),
   },
-  window: { setTimeout: () => {}, location: { reload: () => {} } },
+  window: { setTimeout: () => {}, addEventListener() {}, location: { reload: () => {} } },
 });
 
 for (const status of statuses) {
@@ -199,13 +200,15 @@ const rowClass = 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-bet
 const actionsClass = 'flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end';
 const cards = {};
 const switches = [];
+const windowListeners = {};
+let reloads = 0;
 const statuses = ['personal', 'admin'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = quiet;
-  const switchAccount = element({ 'data-switch-account': '', hidden: '' });
+  const group = element({ 'data-switch-account-group': '', hidden: '' });
+  const switchAccount = element({ 'data-switch-account': '' });
   switches.push(switchAccount);
-  const note = element({ 'data-switch-account-note': '', hidden: '' });
   const row = element({ 'data-card-row': '' });
   row.className = rowClass;
   const actions = element({ 'data-card-actions': '' });
@@ -215,13 +218,12 @@ const statuses = ['personal', 'admin'].map((id) => {
     'input[name="state"]': { value: 'state-1' },
     'input[name="csrf_token"]': { value: 'csrf-1' },
     'button[data-connect-fallback]': fallback,
-    'button[data-switch-account]': switchAccount,
+    '[data-switch-account-group]': group,
     '[data-card-row]': row,
     '[data-card-actions]': actions,
-    '[data-switch-account-note]': note,
   })[selector] || null;
   status.closest = (selector) => (selector === '[data-remote-client]' ? card : null);
-  cards[id] = { status, fallback, switchAccount, note, row, actions };
+  cards[id] = { status, fallback, group, switchAccount, row, actions };
   return status;
 });
 vm.runInNewContext(source, {
@@ -250,28 +252,31 @@ vm.runInNewContext(source, {
       return [];
     },
   },
-  window: { setTimeout: (fn) => fn(), location: { reload: () => {} } },
+  window: { setTimeout: (fn) => fn(), addEventListener(type, fn) { windowListeners[type] = fn; }, location: { reload: () => { reloads++; } } },
 });
 
 setTimeout(() => {
   const personal = cards.personal;
   assert.equal(personal.status.textContent, 'Personal account.');
-  assert.equal(personal.switchAccount.getAttribute('hidden'), null, 'the switch is shown');
-  assert.equal(personal.row.className, 'flex flex-col gap-3', 'two actions sit under the text at every width');
-  assert.equal(personal.note.getAttribute('hidden'), null, 'the sign-out note shows with it');
-  assert.equal(personal.actions.className, 'flex flex-col items-start gap-1.5', 'button, its note, then the quiet link');
+  assert.equal(personal.group.getAttribute('hidden'), null, 'the switch and its note are shown together');
+  assert.equal(personal.row.className, 'flex flex-col gap-3', 'the actions sit under the text at every width');
+  assert.equal(personal.actions.className, 'flex flex-col items-start gap-3', 'a larger gap before the quiet link');
   assert.equal(personal.fallback.className, quiet, 'the separate sign-in stays quiet');
   assert.equal(personal.fallback.textContent, 'Use a separate sign-in');
 
   const admin = cards.admin;
-  assert.equal(admin.switchAccount.getAttribute('hidden'), '', 'no switch for an administrator refusal');
-  assert.equal(admin.note.getAttribute('hidden'), '');
+  assert.equal(admin.group.getAttribute('hidden'), '', 'no switch for an administrator refusal');
   assert.equal(admin.row.className, rowClass);
   assert.equal(admin.actions.className, actionsClass);
   assert.match(admin.fallback.className, /\bbg-primary\b/);
 
   personal.switchAccount.listeners.click({ preventDefault() {} });
   assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'a second click does nothing');
+
+  windowListeners.pageshow({ persisted: false });
+  assert.equal(reloads, 0);
+  windowListeners.pageshow({ persisted: true });
+  assert.equal(reloads, 1, 'Back from the sign-in reloads a restored page');
 }, 50);
 `)
 	cmd.Stdin = bytes.NewReader(consentScriptData)
@@ -300,7 +305,7 @@ function render(state) {
       if (selector === 'select[name="discovery_mode"]') return select;
       return null;
     } },
-    window: {},
+    window: { addEventListener() {} },
   });
   return select;
 }

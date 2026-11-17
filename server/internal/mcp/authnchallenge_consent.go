@@ -611,6 +611,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) && s.followAccountSwitch(w, r, endpoint, stateID) {
+			return nil
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {

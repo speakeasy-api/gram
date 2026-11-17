@@ -228,24 +228,39 @@ func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID,
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
-// WorkOSSessionForSignIn returns the WorkOS session behind a user's sign-in in
-// an organization, or "" when that user has no such sign-in there.
-func WorkOSSessionForSignIn(ctx context.Context, db repo.DBTX, organizationID, userID string, signInID uuid.UUID) (string, error) {
+// SignInSession is the WorkOS session behind a sign-in and what steers a new
+// sign-in toward the same organization and work email.
+type SignInSession struct {
+	WorkOSSessionID string
+	// WorkEmail is the sign-in's verified email when it is on one of the
+	// organization's verified domains, otherwise empty.
+	WorkEmail            string
+	WorkOSOrganizationID string
+}
+
+// SessionForSignIn returns the WorkOS session behind a user's sign-in in an
+// organization, or a zero value when that user has no such sign-in there.
+func SessionForSignIn(ctx context.Context, db repo.DBTX, organizationID, userID string, signInID uuid.UUID) (SignInSession, error) {
+	var none SignInSession
 	if organizationID == "" || userID == "" || signInID == uuid.Nil {
-		return "", nil
+		return none, nil
 	}
-	sessionID, err := repo.New(db).GetSignInWorkOSSession(ctx, repo.GetSignInWorkOSSessionParams{
+	row, err := repo.New(db).GetSignInWorkOSSession(ctx, repo.GetSignInWorkOSSessionParams{
 		ID:             signInID,
 		OrganizationID: organizationID,
 		UserID:         userID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil
+		return none, nil
 	case err != nil:
-		return "", fmt.Errorf("get sign-in workos session: %w", err)
+		return none, fmt.Errorf("get sign-in workos session: %w", err)
 	}
-	return sessionID, nil
+	workEmail := conv.NormalizeEmail(row.VerifiedEmail.String)
+	if !emailOnDomain(workEmail, row.VerifiedDomains) {
+		workEmail = ""
+	}
+	return SignInSession{WorkOSSessionID: row.WorkosSessionID, WorkEmail: workEmail, WorkOSOrganizationID: row.WorkosOrganizationID.String}, nil
 }
 
 // CheckSignInIdentity judges whether an MCP grant traces to a current sign-in

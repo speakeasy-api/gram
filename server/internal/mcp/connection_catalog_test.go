@@ -1132,7 +1132,7 @@ func TestGatewayConsentLockdownPreventsCaptureAndApproval(t *testing.T) {
 	require.Contains(t, page, `href="https://consent.example.test/mcp/`+slug+`"`)
 	require.NotContains(t, page, `id="consent-tools-root"`)
 	require.Zero(t, upstream.requests.Load(), "lockdown prohibits discovery on this origin")
-	for _, action := range []string{"identity_chaining_check", "validate"} {
+	for _, action := range []string{"identity_chaining_check", "validate", "switch_account"} {
 		form := url.Values{"state": {stateID}, "csrf_token": {csrf}, "action": {action}}
 		req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

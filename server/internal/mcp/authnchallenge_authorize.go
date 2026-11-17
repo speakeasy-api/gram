@@ -350,6 +350,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			LoginHint:       "",
 			ScreenHint:      "",
 			Prompt:          "",
+			OrganizationID:  "",
 		})
 		if err != nil {
 			// A failure to build the IDP authorization URL typically means the

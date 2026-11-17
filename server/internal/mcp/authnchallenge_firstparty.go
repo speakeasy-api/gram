@@ -254,6 +254,7 @@ func (s *Service) firstPartyIDPAuthorizationURL(ctx context.Context, endpoint *R
 		LoginHint:       "",
 		ScreenHint:      "",
 		Prompt:          prompt,
+		OrganizationID:  "",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("identity resolver: %w", err)

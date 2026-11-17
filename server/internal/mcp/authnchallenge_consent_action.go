@@ -118,7 +118,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	action := r.PostForm.Get("action")
-	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate") {
+	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate" || action == consentActionSwitchAccount) {
 		lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
 		if err != nil {
 			return err

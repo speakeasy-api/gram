@@ -47,6 +47,7 @@ func TestBuildAuthorizationURL_WorkOS(t *testing.T) {
 		LoginHint:       "someone@example.com",
 		ScreenHint:      "sign-up",
 		Prompt:          "",
+		OrganizationID:  "",
 	})
 	require.NoError(t, err)
 
@@ -79,11 +80,40 @@ func TestBuildAuthorizationURL_WorkOSOmitsEmptyHints(t *testing.T) {
 		LoginHint:       "",
 		ScreenHint:      "",
 		Prompt:          "",
+		OrganizationID:  "",
 	})
 	require.NoError(t, err)
 
 	q := u.Query()
 	require.False(t, q.Has("login_hint"))
+	require.False(t, q.Has("screen_hint"))
+	require.False(t, q.Has("prompt"))
+	require.False(t, q.Has("organization_id"))
+}
+
+func TestBuildAuthorizationURL_WorkOSSelectsOrganizationForAFreshLogin(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	r := newURLResolver(t, "https://unused.example.com", "client_test123")
+
+	u, err := r.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
+		CallbackURL:     "https://app.example.com/mcp/idp_callback",
+		Scope:           "",
+		State:           "state-value",
+		ScopesSupported: nil,
+		LoginHint:       "someone@example.com",
+		ScreenHint:      "",
+		Prompt:          "login",
+		OrganizationID:  "org_workos_1",
+	})
+	require.NoError(t, err)
+
+	q := u.Query()
+	require.Equal(t, "authkit", q.Get("provider"))
+	require.Equal(t, "login", q.Get("prompt"))
+	require.Equal(t, "org_workos_1", q.Get("organization_id"))
+	require.Equal(t, "someone@example.com", q.Get("login_hint"))
 	require.False(t, q.Has("screen_hint"))
 }
 
@@ -101,6 +131,7 @@ func TestBuildAuthorizationURL_DevIDP(t *testing.T) {
 		LoginHint:       "someone@example.com",
 		ScreenHint:      "sign-up",
 		Prompt:          "",
+		OrganizationID:  "",
 	})
 	require.NoError(t, err)
 

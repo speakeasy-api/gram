@@ -284,9 +284,14 @@ func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine
 }
 
-// SetSessionManager swaps the manager that ends identity provider sessions, to make it fail.
-func (s *Service) SetSessionManager(manager *sessions.Manager) {
-	s.sessions = manager
+// SetIDPSessionRevoker swaps what ends identity provider sessions, to observe or fail it.
+func (s *Service) SetIDPSessionRevoker(revoker sessions.SessionRevoker) {
+	s.idpSessions = revoker
+}
+
+// SetIdentityResolver swaps the identity provider client, to observe the sign-ins it starts.
+func (s *Service) SetIdentityResolver(resolver IdentityResolver) {
+	s.identityResolver = resolver
 }
 
 // SetChatSessionsManager swaps the store revocation checks read, to take it down.

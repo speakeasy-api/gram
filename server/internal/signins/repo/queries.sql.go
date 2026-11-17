@@ -401,11 +401,12 @@ func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibi
 }
 
 const getSignInWorkOSSession = `-- name: GetSignInWorkOSSession :one
-SELECT workos_session_id
-FROM sign_ins
-WHERE id = $1
-  AND organization_id = $2
-  AND user_id = $3
+SELECT si.workos_session_id, si.verified_email, om.workos_id AS workos_organization_id, om.verified_domains
+FROM sign_ins AS si
+JOIN organization_metadata AS om ON om.id = si.organization_id
+WHERE si.id = $1
+  AND si.organization_id = $2
+  AND si.user_id = $3
 `
 
 type GetSignInWorkOSSessionParams struct {
@@ -414,12 +415,25 @@ type GetSignInWorkOSSessionParams struct {
 	UserID         string
 }
 
-// The WorkOS session behind one of a user's sign-ins in an organization.
-func (q *Queries) GetSignInWorkOSSession(ctx context.Context, arg GetSignInWorkOSSessionParams) (string, error) {
+type GetSignInWorkOSSessionRow struct {
+	WorkosSessionID      string
+	VerifiedEmail        pgtype.Text
+	WorkosOrganizationID pgtype.Text
+	VerifiedDomains      []string
+}
+
+// The WorkOS session behind one of a user's sign-ins in an organization, with
+// the email it verified and the organization's WorkOS id and verified domains.
+func (q *Queries) GetSignInWorkOSSession(ctx context.Context, arg GetSignInWorkOSSessionParams) (GetSignInWorkOSSessionRow, error) {
 	row := q.db.QueryRow(ctx, getSignInWorkOSSession, arg.ID, arg.OrganizationID, arg.UserID)
-	var workos_session_id string
-	err := row.Scan(&workos_session_id)
-	return workos_session_id, err
+	var i GetSignInWorkOSSessionRow
+	err := row.Scan(
+		&i.WorkosSessionID,
+		&i.VerifiedEmail,
+		&i.WorkosOrganizationID,
+		&i.VerifiedDomains,
+	)
+	return i, err
 }
 
 const listSignInOrganizationsForUser = `-- name: ListSignInOrganizationsForUser :many
