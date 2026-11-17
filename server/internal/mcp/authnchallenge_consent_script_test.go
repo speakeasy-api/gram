@@ -155,6 +155,7 @@ setTimeout(() => {
   assert.equal(no.status.className, 'text-xs text-default-warning');
   assert.equal(no.status.textContent, 'Example refused.');
   assert.match(no.fallback.className, /\bbg-primary\b/);
+  assert.match(no.fallback.className, /\bwhitespace-nowrap\b/, 'the label stays on one line beside long card text');
   assert.equal(no.fallback.textContent, 'Use a separate sign-in');
   assert.equal(no.fallback.getAttribute('data-connect-fallback'), null);
   assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');

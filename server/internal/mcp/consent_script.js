@@ -677,7 +677,7 @@
       var fallback = card.querySelector("button[data-connect-fallback]");
       if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
         fallback.className =
-          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
+          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm";
         fallback.removeAttribute("data-connect-fallback");
         fallback.textContent = "Use a separate sign-in";
       }

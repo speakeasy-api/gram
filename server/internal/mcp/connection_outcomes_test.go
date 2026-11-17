@@ -833,7 +833,7 @@ func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
 		reason identitychaining.Reason
 		says   string
 	}{
-		{identitychaining.ReasonUnmanagedAccount, "Speakeasy can't connect you to %s with this account, because your company doesn't manage it. A personal Google account doesn't count, even if it uses your work email. You can use a separate sign-in instead."},
+		{identitychaining.ReasonUnmanagedAccount, "Speakeasy can't connect you to %s with this account, because your company doesn't manage it. A personal Google or Microsoft account doesn't count, even if it uses your work email. You can use a separate sign-in instead."},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
