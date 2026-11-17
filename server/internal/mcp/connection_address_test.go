@@ -186,7 +186,7 @@ func TestServeConsent_SignInProviderAddressCard(t *testing.T) {
 	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotAllowed, time.Minute))
 
 	_, page, _ := render(t, fx)
-	require.Contains(t, html.UnescapeString(page), "Can't connect · This sign-in's address is private or internal. Ask your administrator to fix it.")
+	require.Contains(t, html.UnescapeString(page), "Can't connect · This sign-in's address is private. Ask your administrator.")
 	require.Contains(t, page, "0 of 1 connected", "a down connection is not counted")
 	require.NotContains(t, page, "Unavailable · try again shortly")
 	require.NotContains(t, page, "> Reconnect </button>")
@@ -236,12 +236,12 @@ func TestServeConsent_GatewayListSaysTheSignInProviderAddress(t *testing.T) {
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "unavailable", outcomes[0].Status)
-	require.Equal(t, "Can't connect · This server's sign-in address doesn't exist. Ask your administrator to fix it.", outcomes[0].Label)
+	require.Equal(t, "Can't connect · This server's sign-in address doesn't exist. Ask your administrator.", outcomes[0].Label)
 	require.Equal(t, []string{mcpconnectionattempts.CodeAddressNotFound.String()}, discoveryReasons(rec), "the row agrees with the card")
 	require.Contains(t, normalizeSpaces(page), `class="text-xs text-default-warning" data-gateway-server-status="unavailable"`, "styled as needing attention")
 
 	_, focus, _ := render(t, fx)
-	require.Contains(t, html.UnescapeString(normalizeSpaces(focus)), "can't connect: its sign-in address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's sign-in address.")
+	require.Contains(t, html.UnescapeString(normalizeSpaces(focus)), "can't connect: its sign-in address doesn't exist. Ask your administrator to fix it.")
 	requirePlainEndUserText(t, outcomes[0].Label)
 	require.NotContains(t, focus, "Try again shortly")
 	require.NotContains(t, focus, "needs no sign-in")
@@ -292,8 +292,8 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 		label  string
 		reason mcpconnectionattempts.Code
 	}{
-		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address is private or internal. Ask your administrator to fix it.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
-		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · This server's address doesn't exist. Ask your administrator to fix it.", reason: mcpconnectionattempts.CodeAddressNotFound},
+		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address is private. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · This server's address doesn't exist. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotFound},
 		{name: "broken server", url: broken.URL, label: "Unavailable · This server ran into an error. Try again in a few minutes.", reason: mcpconnectionattempts.CodeProviderServerError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

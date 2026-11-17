@@ -208,7 +208,7 @@ func (g gatewayServer) AddressNotice() string {
 	if g.Status != gatewayServerUnavailable || g.address == guardian.AddressFine {
 		return ""
 	}
-	return g.address.EndUserMessage(g.Name, g.addressOwner())
+	return g.address.FooterNotice(g.Name, g.addressOwner())
 }
 
 // ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.
