@@ -598,20 +598,24 @@ open their effective assignments; the dropdown always offers compact member sear
       administrator misconfiguration error.
 
 30. **Enterprise Managed Authorization**
-    - Open **Team → IDP and SSO → Identity providers**. The Services table
-      lists Acme Tracker (default order, "Each server's own identity
-      provider", Not accepted yet) and Acme Wiki (saved order: Acme
-      Identity, Not accepted yet), one server each.
+    - Open **Team → IDP and SSO → Identity providers**. In the demo org the
+      Services table lists one service, Acme Wiki (saved order: Acme
+      Identity, Not accepted yet). Locally it also lists the Enterprise
+      Sign-In (ID-JAG) Server (default order).
     - Open Acme Wiki's page. It shows Acme Identity's issuer URL
       `https://login.acme-identity.example` to copy, and the saved order with
       **Use default**.
+    - The Enterprise Sign-In (ID-JAG) Server exists only in the local org.
+      There it has its own organization sign-in (`enterprise-sign-in`) that
+      federates through Acme Identity, a ready binding to its authorization
+      server ("Enterprise Sign-In Authorization Server") and that server's
+      one client; the dev-idp plays Acme Identity (see the `enterprise-sign-in`
+      sign-in below). The demo org
+      has no such server, sign-in or binding.
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
-      it (GitHub, the organization gateway) keeps working, and the trust
-      changes nothing outbound: **MCP → Acme Tracker → Settings** still has no
-      Enterprise Managed Authorization section, and Acme Identity is not
-      offered as a provider a service can accept on the strength of this
-      trust.
+      it (the organization gateway) stays on the
+      organization's own login.
     - Call the Platform MCP `get_inbound_ema_trust` tool. It must report:
       - `acme-workforce` trusting Acme Identity: `issuer_url`
         `https://login.acme-identity.example`, and a `key_set_url` that is a
@@ -625,14 +629,15 @@ open their effective assignments; the dropdown always offers compact member sear
         step 31).
       - `directory.resolvable_directory_users` greater than zero and
         `directory.synced` true.
-    - Both servers are seeded disabled. Connect through the organization
-      gateway: its consent page must not list Acme Tracker or Acme Wiki.
+    - Locally, after the `enterprise-sign-in` sign-in below, the server's binding reads as
+      accepted and `remote_session_ema_credentials` holds one row for the
+      developer.
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (the
       toolset's canonical wrapper), Example OAuth and Example Shared
-      Credential, plus Linear and Notion: five in all (Acme Tracker and Acme
-      Wiki are seeded disabled). No server is named for a vendor it does not
-      reach.
+      Credential, plus Linear and Notion: five in all in the demo org (Acme
+      Wiki is seeded disabled). Locally the Enterprise Sign-In (ID-JAG)
+      Server makes six. No server is named for a vendor it does not reach.
     - Locally, with the stack running and after `mise run seed`, connect an MCP
       client to each `GRAM_SERVER_URL/mcp/<org>-<slug>` endpoint and call a
       tool. The fixture-backed servers reach the MCP fixture every Speakeasy
@@ -651,6 +656,13 @@ open their effective assignments; the dropdown always offers compact member sear
         `auth: oauth`.
       - `example-shared-credential` (`whoami`): returns
         `shared-service-account` with `auth: shared-token`.
+      - `enterprise-sign-in` (`whoami`): Speakeasy's sign-in goes to the
+        dev-idp (the company identity provider); the consent page shows the
+        service as handled by enterprise sign-in, with nothing to connect.
+        After **Give access**, `whoami` returns the developer's email with
+        `auth: ema`: Speakeasy got the upstream token through the ID-JAG
+        exchange. The fixture serves `/rpc/demoseed/mcp/ema` only when
+        `GRAM_DEVIDP_EXTERNAL_URL` is set.
       - `linear` and `notion` (each needs your own vendor account and internet
         access): the seed log says it registered the seeded server's client
         with the vendor (cached in `local/cache/demoseed-linear-client.json`

@@ -159,6 +159,7 @@ type Service struct {
 	orgRepo              *orgRepo.Queries
 	authzProvisioner     *authz.Provisioner
 	organizationSeeder   OrganizationFeatureSeeder
+	newOrgSeeder         OrganizationFeatureSeeder
 	trialBundleSeeder    EnterpriseTrialBundleSeeder
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
@@ -189,6 +190,7 @@ func NewService(
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
 	organizationSeeder OrganizationFeatureSeeder,
+	newOrgSeeder OrganizationFeatureSeeder,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
 	trialNotifier trialemails.Notifier,
@@ -222,6 +224,7 @@ func NewService(
 		orgRepo:              orgRepo.New(db),
 		authzProvisioner:     authzProvisioner,
 		organizationSeeder:   organizationSeeder,
+		newOrgSeeder:         newOrgSeeder,
 		trialBundleSeeder:    trialBundleSeeder,
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
@@ -1675,10 +1678,10 @@ func (s *Service) persistProvisionedOrganization(
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
 	}
 
-	if s.organizationSeeder == nil {
-		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
+	if s.newOrgSeeder == nil {
+		return orgRepo.OrganizationMetadatum{}, errors.New("new organization feature seeder is not configured")
 	}
-	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
+	if err := s.newOrgSeeder(ctx, tx, org.ID); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
 

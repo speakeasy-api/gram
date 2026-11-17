@@ -138,8 +138,9 @@ needs and the shared demo org must never have:
   demo org never gets a functions deployment production would have to run.
 - **Working upstream servers.** The seed has five working MCP servers: three
   named for the configuration they test, plus Linear and Notion, real
-  vendors. (Acme Tracker and Acme Wiki, the Enterprise Managed Authorization
-  examples, are seeded disabled.) Most
+  vendors. (The local fixtures add an Enterprise Sign-In (ID-JAG) Server,
+  below; it does not exist in the public demo org. Acme Wiki, a display-only
+  Enterprise Managed Authorization example, is seeded disabled in both.) Most
   of the setup is shared, so the same servers work in the public demo org and
   in the local org right after `mise run seed`; the local fixtures add only
   what needs the developer's machine (below).
@@ -150,7 +151,7 @@ needs and the shared demo org must never have:
   It holds fake data only (notes) and offers: an OAuth 2.1 server (sign in by
   picking an email; dynamic registration, client ID metadata documents, PKCE,
   refresh rotation, tokens bound to the requested resource), MCP endpoints
-  `/mcp/oauth` and `/mcp/shared`, and a stub of the demo API at `/acme-api`.
+  `/mcp/oauth`, `/mcp/shared` and (locally) `/mcp/ema`, and a stub of the demo API at `/acme-api`.
   It also serves endpoints the seed does not use: a DCR-only authorization
   server at `/dcr`, `/mcp/own-token`, `/mcp/open` and a token page at
   `/tokens`.
@@ -159,13 +160,14 @@ needs and the shared demo org must never have:
   (`fixture_servers.go`) points the servers at it and gives every live seeded
   sign-in real fixture tokens:
 
-  | Server                    | Slug                        | Tests                                                                                                                    | Reaches                                                                                                                                        |
-  | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-  | OpenAPI Server            | `openapi-server`            | A public server generated from an OpenAPI document; callers bring an OAuth token from the API's own authorization server | The fixture's API stub (`ACME_SERVER_URL` system environment); its external OAuth server (slug `openapi-server`) is the fixture's              |
-  | Example OAuth             | `example-oauth`             | Each person signs in upstream: expiry, refresh, scope pins, agent connections                                            | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens; also offers the "Shared service token" client |
-  | Example Shared Credential | `example-shared-credential` | One static shared credential for every caller                                                                            | `/mcp/shared` with the checked-in example shared token as a static Authorization header (not sensitive)                                        |
-  | Linear                    | `linear`                    | A real vendor; each person signs in to their own Linear account                                                          | `https://mcp.linear.app/mcp` (below)                                                                                                           |
-  | Notion                    | `notion`                    | A real vendor; each person signs in to their own Notion account                                                          | `https://mcp.notion.com/mcp` (below)                                                                                                           |
+  | Server                             | Slug                        | Tests                                                                                                                    | Reaches                                                                                                                                        |
+  | ---------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+  | OpenAPI Server                     | `openapi-server`            | A public server generated from an OpenAPI document; callers bring an OAuth token from the API's own authorization server | The fixture's API stub (`ACME_SERVER_URL` system environment); its external OAuth server (slug `openapi-server`) is the fixture's              |
+  | Example OAuth                      | `example-oauth`             | Each person signs in upstream: expiry, refresh, scope pins, agent connections                                            | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens; also offers the "Shared service token" client |
+  | Example Shared Credential          | `example-shared-credential` | One static shared credential for every caller                                                                            | `/mcp/shared` with the checked-in example shared token as a static Authorization header (not sensitive)                                        |
+  | Enterprise Sign-In (ID-JAG) Server | `enterprise-sign-in`        | Sign-in through the company identity provider, exchanged for an ID-JAG                                                   | Local org only: `/mcp/ema` through the dev-idp (below); not seeded in the public demo org                                                      |
+  | Linear                             | `linear`                    | A real vendor; each person signs in to their own Linear account                                                          | `https://mcp.linear.app/mcp` (below)                                                                                                           |
+  | Notion                             | `notion`                    | A real vendor; each person signs in to their own Notion account                                                          | `https://mcp.notion.com/mcp` (below)                                                                                                           |
 
   Each server's endpoint is `<org>-<slug>`. The OpenAPI document
   (`server/internal/demoseed/openapi.yaml`) declares two security schemes,
@@ -175,6 +177,20 @@ needs and the shared demo org must never have:
   use one auth method, and the OpenAPI Server uses the upstream OAuth one: it
   needs no Speakeasy sign-in, and its tools forward the caller's fixture
   token to the API stub.
+
+  The Enterprise Sign-In (ID-JAG) Server is added by `local_ema.go`, in the
+  local org only, and only when the dev-idp is reachable. The dev-idp plays the company identity provider: the seed
+  creates its EMA app, resource, trust rule and the developer's assignment
+  over the dev-idp's control RPC, and provisions the developer in the org's
+  directory (federated sign-in admits only directory-provisioned people). The
+  server's own organization sign-in federates through the dev-idp; Speakeasy
+  then exchanges the developer's ID token for an ID-JAG at the dev-idp and
+  redeems it at the dev-idp's `/resource-as/<slug>` authorization server,
+  whose access token the fixture's `/mcp/ema` checks by introspection. One
+  client id (`GRAM_IDP_CLIENT_ID`) serves all three legs, with a checked-in
+  local secret. A dev-idp that cannot be reached leaves the server
+  display-only, as it is in the public demo org, where no identity provider
+  issues ID-JAGs.
 
   Linear and Notion (`vendor_apps.go`) are set up in every org as an admin's
   Auto-Configure would: the vendor's authorization server, a client ID

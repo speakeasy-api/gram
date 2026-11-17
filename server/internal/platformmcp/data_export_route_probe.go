@@ -47,7 +47,7 @@ type SendDataExportTestEventOutput struct {
 	StatusCode    int                             `json:"status_code,omitempty" jsonschema:"HTTP status of the signal that set the outcome; omitted when it did not answer"`
 	Message       string                          `json:"message" jsonschema:"what happened, in plain language, to show the user"`
 	Signals       []SendDataExportTestEventSignal `json:"signals" jsonschema:"one result for each signal the route's data source exports"`
-	TestEventID   string                          `json:"test_event_id" jsonschema:"the speakeasy.test_event.id this test's logs and traces carry; the user can search the destination for it. Metrics carry only speakeasy.test_event=true"`
+	TestEventID   string                          `json:"test_event_id" jsonschema:"the speakeasy.test_event_id this test's logs and traces carry; the user can search the destination for it. Metrics carry only speakeasy.test_event=true"`
 	ProjectID     string                          `json:"project_id"`
 	RouteID       string                          `json:"route_id"`
 	DataSource    string                          `json:"data_source"`

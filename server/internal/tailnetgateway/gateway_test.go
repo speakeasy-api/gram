@@ -258,7 +258,7 @@ func newGatewayFixtureWithMeter(t *testing.T, name string, ordinal int32, meterP
 		Ordinal: ordinal, PodName: "gram-tailnet-gateway-0", Shard: tailnetgateway.DefaultShard, StateDir: t.TempDir(),
 		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
 		PollInterval: tailnetgateway.DefaultPollInterval, DrainTimeout: time.Second, StartTimeout: 5 * time.Second,
-		MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
+		ApprovalGrace: 0, MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
 	}
 	for _, apply := range configure {
 		apply(&cfg, runtime)
@@ -688,6 +688,32 @@ func TestGatewayReportsHostsAwaitingACertificate(t *testing.T) {
 	row = f.slotRow(t, ingressID, orgID, 0)
 	require.Equal(t, string(tailnetgateway.NodeStatusOnline), row.Status)
 	require.Equal(t, 2, wakes(), "coming online wakes the reconciler")
+}
+
+func TestGatewayWaitsForApprovalWithinTheGracePeriod(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayapprovalgrace", 0, func(cfg *tailnetgateway.Config, _ *fakeRuntime) {
+		cfg.ApprovalGrace = time.Hour
+	})
+	ingressID, orgID := seedIngress(t, f.db, "gateway-approval-grace")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	node := f.runtime.started()[0]
+
+	// Connected and not approved yet, as in the seconds before an
+	// auto-approval arrives.
+	node.setOnline("nWAITING")
+	node.setApproved(false)
+	f.gateway.Poll(ctx)
+	row := f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusStarting), row.Status, "a node that just started is still expected to be approved")
+	require.Contains(t, row.LastError.String, "waiting for the tailnet to approve")
+	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+	require.NoError(t, err)
+	require.Empty(t, messages, "waiting for approval within the grace period does not wake the reconciler")
 }
 
 func TestGatewayReportsHostsAwaitingApproval(t *testing.T) {

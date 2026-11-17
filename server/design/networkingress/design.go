@@ -21,6 +21,7 @@ var NetworkIngress = Type("NetworkIngress", func() {
 	Attribute("status", String, "Latest redacted lifecycle status")
 	Attribute("dns_name", String, "Observed private DNS name")
 	Attribute("last_error", String, "Latest redacted error code")
+	Attribute("status_detail", String, "The gateway's explanation of last_error when it is provider_certificate_unavailable: why the TLS certificate request failed, such as a Let's Encrypt rate limit, and when the gateway retries. Returned by getIngress only.")
 	Attribute("health_checked_at", String, func() { Format(FormatDateTime) })
 	Attribute("connected_since", String, func() { Format(FormatDateTime) })
 	Attribute("created_at", String, func() { Format(FormatDateTime) })

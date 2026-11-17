@@ -28,6 +28,7 @@ func BuildNetworkIngressView(ingress networkingressrepo.NetworkIngress) *gen.Net
 		Status:                ingress.Status,
 		DNSName:               conv.FromPGText[string](ingress.DnsName),
 		LastError:             conv.FromPGText[string](ingress.LastError),
+		StatusDetail:          nil,
 		HealthCheckedAt:       conv.PtrEmpty(conv.FromPGTimestamptz(ingress.HealthCheckedAt)),
 		ConnectedSince:        conv.PtrEmpty(conv.FromPGTimestamptz(ingress.ConnectedSince)),
 		CreatedAt:             ingress.CreatedAt.Time.Format(time.RFC3339),

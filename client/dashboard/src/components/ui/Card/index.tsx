@@ -7,7 +7,7 @@ import { Stack } from "../Stack";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
 import { Skeleton, SkeletonParagraph } from "../Skeleton";
-import type { iconNames } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 import { Children } from "react";
 
 type RightElement = {
@@ -17,7 +17,7 @@ type RightElement = {
 };
 
 type IconProps = {
-  name: (typeof iconNames)[number];
+  name: IconName;
   size?: "small" | "medium" | "large";
 };
 

@@ -4034,6 +4034,46 @@ func BuildStartMemoryEvalRunPayload(adminStartMemoryEvalRunBody string, adminSta
 	return v, nil
 }
 
+// BuildListAssistantOrganizationsPayload builds the payload for the admin
+// listAssistantOrganizations endpoint from CLI flags.
+func BuildListAssistantOrganizationsPayload(adminListAssistantOrganizationsAdminSessionToken string) (*admin.ListAssistantOrganizationsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListAssistantOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListAssistantOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListAssistantOrganizationsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRepairOrganizationAssistantAgentNamesPayload builds the payload for the
+// admin repairOrganizationAssistantAgentNames endpoint from CLI flags.
+func BuildRepairOrganizationAssistantAgentNamesPayload(adminRepairOrganizationAssistantAgentNamesBody string, adminRepairOrganizationAssistantAgentNamesAdminSessionToken string) (*admin.RepairOrganizationAssistantAgentNamesPayload, error) {
+	var err error
+	var body RepairOrganizationAssistantAgentNamesRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRepairOrganizationAssistantAgentNamesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRepairOrganizationAssistantAgentNamesAdminSessionToken != "" {
+			adminSessionToken = &adminRepairOrganizationAssistantAgentNamesAdminSessionToken
+		}
+	}
+	v := &admin.RepairOrganizationAssistantAgentNamesPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationAssistantsPayload builds the payload for the admin
 // listOrganizationAssistants endpoint from CLI flags.
 func BuildListOrganizationAssistantsPayload(adminListOrganizationAssistantsOrganizationID string, adminListOrganizationAssistantsAdminSessionToken string) (*admin.ListOrganizationAssistantsPayload, error) {

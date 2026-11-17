@@ -56,6 +56,8 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"UpdateGcpIamPlatformCredential":         "POST /admin/externalCredentials.updateGcpIam",
 		"VerifyGcpIamPlatformCredential":         "POST /admin/externalCredentials.verifyGcpIam",
 		"DeleteGcpIamPlatformCredential":         "POST /admin/externalCredentials.deleteGcpIam",
+		"ListAssistantOrganizations":             "GET /admin/assistants.organizations",
+		"RepairOrganizationAssistantAgentNames":  "POST /admin/organization.repairAssistantAgentNames",
 		"ListOrganizationAssistants":             "GET /admin/organization.assistants",
 		"MigrateOrganizationAssistantIdentities": "POST /admin/organization.migrateAssistantIdentities",
 		"MigrateOrganizationAssistantsToKit":     "POST /admin/organization.migrateAssistantsToKit",
@@ -115,6 +117,8 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	unauthenticatedHandler := handler
 
 	for name, request := range map[string]*http.Request{
+		"assistant organizations":           httptest.NewRequest(http.MethodGet, "/admin/assistants.organizations", nil),
+		"repair assistant names":            httptest.NewRequest(http.MethodPost, "/admin/organization.repairAssistantAgentNames", bytes.NewBufferString(`{`)),
 		"session":                           httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
 		"features get":                      httptest.NewRequest(http.MethodGet, "/admin/organization.features", nil),
 		"provider setup":                    httptest.NewRequest(http.MethodPost, "/admin/organization.providerSetup", bytes.NewBufferString(`{`)),
