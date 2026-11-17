@@ -1,3 +1,4 @@
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailable";
 import { Spinner } from "@/components/ui/Spinner";
 import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
@@ -33,6 +34,7 @@ const VISIBLE_SOURCE_LIMIT = 10;
  */
 export default function CreateFromSource(): JSX.Element {
   const flow = useGatewayCreation();
+  const { available: functionsAvailable } = useFunctionsAvailable();
   const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
   const client = useSdkClient();
@@ -163,7 +165,11 @@ export default function CreateFromSource(): JSX.Element {
       scope="mcp:write"
       width="wide"
       title="New MCP server from a source"
-      description="Pick an OpenAPI document or function already in this project. Its tools become the server's tools."
+      description={
+        functionsAvailable
+          ? "Pick an OpenAPI document or function already in this project. Its tools become the server's tools."
+          : "Pick an OpenAPI document already in this project. Its tools become the server's tools."
+      }
     >
       <form
         onSubmit={(e) => {
@@ -184,8 +190,9 @@ export default function CreateFromSource(): JSX.Element {
               )}
               {!isLoading && sources.length === 0 && (
                 <Alert variant="warning" dismissible={false}>
-                  This project has no OpenAPI documents or functions yet. Add
-                  one from the Advanced section first.
+                  {functionsAvailable
+                    ? "This project has no OpenAPI documents or functions yet. Add one from the Advanced section first."
+                    : "This project has no OpenAPI documents yet. Add one from the Advanced section first."}
                 </Alert>
               )}
               {sources.length > 0 && (

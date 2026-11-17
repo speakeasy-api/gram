@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestService_GetSignedAssetURL_Success(t *testing.T) {
@@ -280,4 +281,35 @@ func TestService_GetSignedAssetURL_CrossProjectAccess(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+// A deployment that runs with the disabled Functions provider has no Tigris
+// store. An authenticated runner learns that Functions are unavailable, and an
+// unauthenticated caller still gets unauthorized, not the deployment's
+// configuration.
+func TestService_GetSignedAssetURL_FunctionsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestFunctionsService(t)
+	dep := createFunctionsDeployment(t, ctx, ti)
+	require.NotEmpty(t, dep.Deployment.FunctionsAssets, "expected functions assets in deployment")
+	funcAsset := dep.Deployment.FunctionsAssets[0]
+
+	disabled := functions.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, testenv.NewEncryptionClient(t), nil)
+	payload := &gen.GetSignedAssetURLPayload{AssetID: funcAsset.AssetID}
+
+	_, err := disabled.GetSignedAssetURL(t.Context(), payload)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	runnerCtx := functions.PushRunnerAuthContext(ctx, &functions.RunnerAuthContext{
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+		FunctionID:   uuid.MustParse(funcAsset.ID),
+	})
+	_, err = disabled.GetSignedAssetURL(runnerCtx, payload)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotImplemented, oopsErr.Code)
+	require.ErrorIs(t, err, functions.ErrFunctionsDisabled)
 }

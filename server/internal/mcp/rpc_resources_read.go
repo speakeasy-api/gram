@@ -259,6 +259,12 @@ func handleResourcesRead(
 			rw.body.Reset()
 			return nil, interruption.Response
 		}
+		// Resource reads have no error result to carry the reason, so a
+		// disabled deployment answers as a missing resource with the reason as
+		// its message, logged at warn because nothing is broken.
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			return nil, oops.E(oops.CodeNotFound, err, "%s", functions.ErrFunctionsDisabled.Error()).LogWarn(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)
 	}
 

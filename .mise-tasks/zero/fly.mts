@@ -49,8 +49,9 @@ function isExistingConfigComplete(): boolean {
   const content = readFileSync(configPath, "utf-8");
   const functionsProvider = configValue(content, "GRAM_FUNCTIONS_PROVIDER");
 
-  // Skip was chosen previously — local functions provider needs nothing else.
-  if (functionsProvider === "local") {
+  // The local provider (chosen by skipping) and the disabled provider need
+  // no Fly.io or Tigris settings.
+  if (functionsProvider === "local" || functionsProvider === "disabled") {
     return true;
   }
 

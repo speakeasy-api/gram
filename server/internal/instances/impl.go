@@ -426,6 +426,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 		Credentials: nil,
 	}, plan, attrRecorder)
+	if errors.Is(err, functions.ErrFunctionsDisabled) {
+		return oops.E(oops.CodeNotImplemented, err, "%s", functions.ErrFunctionsDisabled.Error()).LogWarn(ctx, logger)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}

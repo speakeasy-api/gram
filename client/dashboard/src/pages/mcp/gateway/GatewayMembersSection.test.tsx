@@ -13,6 +13,13 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailable", () => ({
+  useFunctionsAvailable: () => ({
+    status: functionsAvailability.available ? "available" : "unavailable",
+    available: functionsAvailability.available,
+  }),
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const permissions = vi.hoisted(() => ({
@@ -47,6 +54,7 @@ vi.mock("@/contexts/Sdk", () => ({
 import { AddServersSheet } from "./GatewayMembersSection";
 
 afterEach(() => {
+  functionsAvailability.available = true;
   cleanup();
   vi.clearAllMocks();
   permissions.scopes = new Set([
@@ -667,6 +675,25 @@ describe("Add servers sheet", () => {
       screen.getByRole("menuitem", { name: /^Write custom code/ }),
     ).toBeTruthy();
     expect(screen.getAllByRole("menuitem")).toHaveLength(6);
+  });
+
+  it("hides function creation on a deployment without Functions", () => {
+    functionsAvailability.available = false;
+    setup();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    expect(
+      screen.queryByRole("menuitem", { name: /^Write custom code/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("menuitem", {
+        name: /^From an existing source.*OpenAPI document this project/,
+      }),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("menuitem")).toHaveLength(5);
   });
 
   it("guards rapid duplicate submits while a batch is pending", async () => {

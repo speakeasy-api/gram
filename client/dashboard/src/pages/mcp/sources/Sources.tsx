@@ -1,3 +1,4 @@
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailable";
 import { ResourceListPage } from "@/components/page-templates";
 import {
   RemoveSourceDialog,
@@ -73,6 +74,7 @@ function toolSourceId(tool: Tool): string | undefined {
  */
 export default function Sources(): JSX.Element {
   const routes = useRoutes();
+  const { available: functionsAvailable } = useFunctionsAvailable();
   const project = useProject();
   const { sources, isLoading, assetsLoading, assetsUnavailable } =
     useProjectSources();
@@ -187,8 +189,9 @@ export default function Sources(): JSX.Element {
       empty={{
         icon: "file-code",
         heading: "No sources yet",
-        description:
-          "Push an OpenAPI document or a function, from the CLI or the add flow, and it shows up here.",
+        description: functionsAvailable
+          ? "Push an OpenAPI document or a function, from the CLI or the add flow, and it shows up here."
+          : "Push an OpenAPI document, from the CLI or the add flow, and it shows up here.",
         action: (
           <Button variant="primary" asChild>
             <routes.mcp.add.Link>
