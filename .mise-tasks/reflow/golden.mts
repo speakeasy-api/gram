@@ -127,13 +127,17 @@ async function ciRun(
     await fs.readFile(resultFile, "utf8").catch(() => "{}"),
   ) as CiRunResult;
   const applyError = result.apply?.error;
+  // ci run refuses an oversized selection before apply, with a top-level error
+  // and "Golden selection exceeds 20 flows" on its output, so check those too.
+  const refusal = `${ran.stdout}\n${ran.stderr}\n${JSON.stringify(result.error ?? "")}`;
   return {
     id: result.ci_run_id,
     exitCode: ran.exitCode,
-    // Reflow refused to run this many flows at once (apply --json reason).
+    // Reflow refused to run this many flows at once.
     tooLarge:
       applyError?.reason === "plan_too_large" ||
-      /more than 20/i.test(applyError?.message ?? ""),
+      /more than 20/i.test(applyError?.message ?? "") ||
+      /plan_too_large|more than 20|exceeds 20/i.test(refusal),
   };
 }
 
