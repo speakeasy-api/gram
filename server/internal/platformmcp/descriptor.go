@@ -364,8 +364,24 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 			if scope != authz.ScopeMCPConnect {
 				continue
 			}
-			check = authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID])).ToolCall(dimensions[authz.SelectorKeyTool], dimensions[authz.SelectorKeyDisposition])
-		} else if scope == authz.ScopeMCPConnect {
+			server := authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID]))
+			// A grant that names a tool but no disposition reaches that tool
+			// whatever its annotations. A call with no disposition meets
+			// every block limited to one, so probe each disposition the tool
+			// could have: the grant counts when any of them passes.
+			dispositions := []string{dimensions[authz.SelectorKeyDisposition]}
+			if !hasDisposition {
+				dispositions = authz.Dispositions()
+			}
+			for _, disposition := range dispositions {
+				allowed, err := authz.GrantsAuthorize(grants, server.ToolCall(dimensions[authz.SelectorKeyTool], disposition))
+				if err == nil && allowed {
+					return true
+				}
+			}
+			continue
+		}
+		if scope == authz.ScopeMCPConnect {
 			// Probe connect as a connection, which may leave the tool and
 			// disposition out, so a grant whose tool or disposition is a
 			// wildcard still matches.
