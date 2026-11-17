@@ -300,14 +300,7 @@ var scopeSelectorKeys = map[Scope]map[string]bool{
 // on them: the Open keys each permission declares. Every other check, and
 // every block or exemption, must carry each key a grant names.
 var scopeOpenKeys = map[Scope]openKeys{
-	"assistant:read":       {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
-	"assistant:write":      {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
-	"environment:read":     {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
-	"environment:write":    {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
-	"inference:execute":    {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
-	"mcp:connect":          {Probe: []string{"project_id", "tool", "disposition"}, Connection: []string{"tool", "disposition"}, PolicyAudience: nil},
-	"mcp:read":             {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
-	"mcp:write":            {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
+	"mcp:connect":          {Probe: []string{"tool", "disposition"}, Connection: []string{"tool", "disposition"}, PolicyAudience: nil},
 	"org:hooks_ingest":     {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
 	"risk_policy:block":    {Probe: []string{"server_url", "server_identity"}, Connection: nil, PolicyAudience: nil},
 	"risk_policy:bypass":   {Probe: []string{"server_url", "server_identity"}, Connection: nil, PolicyAudience: nil},
