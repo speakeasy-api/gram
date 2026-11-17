@@ -42,6 +42,10 @@ type RotateCredentialsRequestBody struct {
 // "getIngress" endpoint HTTP response body.
 type GetIngressResponseBody struct {
 	Ingress *NetworkIngressResponseBody `form:"ingress,omitempty" json:"ingress,omitempty" xml:"ingress,omitempty"`
+	// Tailscale tag this environment's gateway nodes and services carry. The
+	// organization's tailnet policy must own it, auto-approve the connection's
+	// service for it, and the OAuth client must be scoped to it.
+	GatewayTag string `form:"gateway_tag" json:"gateway_tag" xml:"gateway_tag"`
 }
 
 // CreateIngressResponseBody is the type of the "networkIngress" service
@@ -1597,7 +1601,9 @@ type NetworkIngressResponseBody struct {
 // NewGetIngressResponseBody builds the HTTP response body from the result of
 // the "getIngress" endpoint of the "networkIngress" service.
 func NewGetIngressResponseBody(res *networkingress.NetworkIngressResult) *GetIngressResponseBody {
-	body := &GetIngressResponseBody{}
+	body := &GetIngressResponseBody{
+		GatewayTag: res.GatewayTag,
+	}
 	if res.Ingress != nil {
 		body.Ingress = marshalNetworkingressNetworkIngressToNetworkIngressResponseBody(res.Ingress)
 	}

@@ -174,11 +174,14 @@ function PrivateNetworkCleanup({
 
 function ConfiguredPrivateNetwork({
   ingress,
+  gatewayTag,
   entitled,
   enterprise,
   onShowSetup,
 }: {
   ingress: NetworkIngress;
+  // The Tailscale tag this environment's gateway carries.
+  gatewayTag: string;
   entitled: boolean;
   enterprise: boolean;
   onShowSetup: () => void;
@@ -300,8 +303,7 @@ function ConfiguredPrivateNetwork({
                 it yet. Approve the <code>speakeasy-gw</code> hosts on the
                 service&apos;s page in the Tailscale admin console, or add{" "}
                 <code>
-                  &quot;svc:{ingress.hostname}&quot;:
-                  [&quot;tag:speakeasy&quot;]
+                  &quot;svc:{ingress.hostname}&quot;: [&quot;{gatewayTag}&quot;]
                 </code>{" "}
                 to <code>autoApprovers.services</code> in your tailnet policy.
                 This page updates on its own once the hosts are approved.
@@ -518,6 +520,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
     },
   });
   const ingress = ingressResult.data?.ingress;
+  const gatewayTag = ingressResult.data?.gatewayTag;
   const unsupportedProvider = ingress && ingress.provider !== "tailscale";
   const [setupOpen, setSetupOpen] = useState(false);
 
@@ -567,6 +570,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
       ) : ingress ? (
         <ConfiguredPrivateNetwork
           ingress={ingress}
+          gatewayTag={gatewayTag ?? ""}
           entitled={entitled}
           enterprise={enterprise}
           onShowSetup={() => setSetupOpen(true)}
@@ -609,12 +613,14 @@ export function PrivateNetworkSection(): JSX.Element | null {
           shows the steps for the connection, including the one it just
           created. */}
       {!unsupportedProvider &&
+        gatewayTag &&
         ingress?.status !== "deleting" &&
         (ingress ? setupOpen : entitled) && (
           <PrivateNetworkSetupSheet
             open={setupOpen}
             onOpenChange={setSetupOpen}
             ingress={ingress}
+            gatewayTag={gatewayTag}
           />
         )}
     </SettingsSection>

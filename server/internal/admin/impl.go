@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -140,7 +141,7 @@ type Service struct {
 	*HookClientsCache
 
 	hookFleet         HookFleetReader
-	hookFleetVersions HookFleetVersions
+	hookFleetVersions hookversions.Policy
 
 	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
 	// CNAME targets. Empty leaves targets out of listCustomDomains.
@@ -308,7 +309,7 @@ func NewService(
 		mcpServerHealth:          mcpServerHealth,
 		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
 		hookFleet:                nil,
-		hookFleetVersions:        HookFleetVersions{Latest: nil, Minimum: nil},
+		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
 		customDomainTargetSuffix: "",
 	}
 }
