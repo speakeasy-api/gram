@@ -388,7 +388,7 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpSer
 // in the caller's organization binds, and those its live MCP servers are
 // associated with.
 func (s *Service) ListRemoteSessionClientBindings(ctx context.Context, payload *orggen.ListRemoteSessionClientBindingsPayload) (*orggen.UserSessionIssuerRemoteSessionClientBindings, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
