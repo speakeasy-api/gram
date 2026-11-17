@@ -912,7 +912,9 @@ function PolicyCenterContent() {
     {
       key: "actions",
       header: "",
-      width: "0.3fr",
+      // Fixed so the trigger is never clipped: cells hide overflow, and a
+      // fractional track shrinks below the button on narrower screens.
+      width: "72px",
       render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
@@ -989,7 +991,7 @@ function PolicyCenterContent() {
     {
       key: "actions",
       header: "",
-      width: "0.4fr",
+      width: "120px",
       render: (row) => (
         <Button
           variant="tertiary"
