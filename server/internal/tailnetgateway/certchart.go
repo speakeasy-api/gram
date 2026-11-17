@@ -59,8 +59,8 @@ const (
 	serviceRenew       = "renew"
 )
 
-// certPoll is the heartbeat's poll: it starts the first request, and like any
-// event fires the timers that are due first.
+// certPoll is the heartbeat's poll: it starts the first request, and is when
+// the chart checks which retry or deadline has come due.
 type certPoll struct{}
 
 // certStop closes the chart.
@@ -231,10 +231,8 @@ func failed(c certContext, err error, now time.Time) certContext {
 
 // bindCertificates gives the chart's services their implementations.
 //
-// Each request bounds itself in wall time. A Within budget on the chart's
-// states would not do: the chart's timers fire only when the node polls, and
-// a state entered by a timer that fell due before the poll counts its budget
-// from the due time, so a request started late would find it spent.
+// Each request bounds itself in wall time with its own timeout, as the
+// gateway's requests did before the chart.
 func bindCertificates(source certificateSource, windows renewalWindows, now func() time.Time) (*sc.Machine[certState, certContext], error) {
 	m, err := certificateChart.Bind(func(b *sc.Binder[certState, certContext]) {
 		b.Service(serviceObtain, func(ctx context.Context, _ *sc.Run, _ certContext) (*tls.Certificate, error) {

@@ -101,7 +101,8 @@ at most one request at a time on its own goroutine.
 From `serving`, three steps lead out: re-read the store, read the window,
 renew. When several are due, the first in that order wins, so a node reads
 before it acts: it adopts another slot's renewal without taking the lease,
-and renews only on a current window. A renewal is
+and never renews while a window check is due. (When the window cannot be
+read, it renews two thirds through the certificate's lifetime.) A renewal is
 adopted only if it is later than the held certificate. Expiry is not a
 state; `certStatus` works it out from the clock. A slot without a valid
 certificate reports `awaiting_certificate`, and the ingress shows

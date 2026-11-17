@@ -343,11 +343,12 @@ func TestChartKeepsItsShareOfTheRules(t *testing.T) {
 	report, err := certificateChart.Explore(certContext{refreshEvery: 2 * time.Hour}, sc.Exploration[certState, certContext]{
 		Start:  stateNow,
 		Events: []any{certPoll{}, certStop{}},
-		// The chart has no timers: time passes between polls. Every
-		// stored time is on a half-hour grid (the start, the refresh
-		// and window intervals, the renewal window, the certificates'
-		// lifetimes), so waits on the same grid keep the explored
-		// states few. A wait of half an hour is past every retry.
+		// The chart has no timers: time passes between polls. Once a
+		// certificate is held, every stored time is on a half-hour grid
+		// (the refresh and window intervals, the renewal window, the
+		// certificates' lifetimes, the half-hour refusals), so waits on
+		// the same grid keep the explored states few. Retries before
+		// then are 5 to 30 seconds, and half an hour is past each.
 		Waits: []time.Duration{30 * time.Minute, 2 * time.Hour},
 		Outcomes: map[string][]sc.Outcome{
 			serviceObtain: {sc.Succeeds(first), sc.Fails(errCertificateIssuing), sc.Fails(refused), sc.Fails(reset)},
