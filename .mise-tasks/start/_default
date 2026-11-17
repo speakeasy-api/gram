@@ -64,7 +64,7 @@ if [ "${GRAM_TLS_PROVIDER:-mkcert}" = tailscale ]; then
 fi
 pitchfork start --group default
 case "${GRAM_PYSTREAMS_STUB:-}" in
-  1 | true | TRUE | True) ;;
+  1 | t | T | true | TRUE | True) ;;
   *) pitchfork start pystreams-multi ;;
 esac
 
