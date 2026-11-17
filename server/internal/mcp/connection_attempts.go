@@ -414,8 +414,8 @@ func chainingRefusalCode(reason identitychaining.Reason) (mcpconnectionattempts.
 	switch reason {
 	case identitychaining.ReasonIneligibleIdentity:
 		return mcpconnectionattempts.CodeIneligibleIdentity, true
-	case identitychaining.ReasonUnmanagedAccount, identitychaining.ReasonUnverifiedEmail:
-		return mcpconnectionattempts.CodeUnverifiedIdentity, true
+	case identitychaining.ReasonUnmanagedAccount:
+		return mcpconnectionattempts.CodeUnmanagedAccount, true
 	default:
 		return mcpconnectionattempts.Code{}, false
 	}
@@ -878,7 +878,7 @@ func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
 		return mcpconnectionattempts.Code{}, false
 	}
-	if failure, ok := errors.AsType[memberConnectionError](err); ok && (failure.code == mcpconnectionattempts.CodeIneligibleIdentity || failure.code == mcpconnectionattempts.CodeUnverifiedIdentity) {
+	if failure, ok := errors.AsType[memberConnectionError](err); ok && refusedSignIn(err) {
 		return failure.code, true
 	}
 	if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {

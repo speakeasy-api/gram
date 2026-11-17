@@ -20,6 +20,22 @@ var sessionCreated = time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 type evidenceSetup struct {
 	googleHD string
 	disabled bool
+	// sessionDelay and userInfoDelay slow each lookup's answer.
+	sessionDelay  time.Duration
+	userInfoDelay time.Duration
+}
+
+// delay holds a fake answer back, ending early when the caller gives up.
+func delay(r *http.Request, d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-r.Context().Done():
+	}
 }
 
 func evidenceAdapter(t *testing.T, setup evidenceSetup) *WorkOSAdapter {
@@ -28,8 +44,10 @@ func evidenceAdapter(t *testing.T, setup evidenceSetup) *WorkOSAdapter {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/user_management/users/user_1/sessions":
+			delay(r, setup.sessionDelay)
 			_, _ = w.Write([]byte(`{"data":[{"object":"session","id":"session_0","created_at":"2026-10-02T09:00:00Z"},{"object":"session","id":"` + testSessionID + `","created_at":"` + sessionCreated.Format(time.RFC3339) + `"}],"list_metadata":{}}`))
 		case "/userinfo":
+			delay(r, setup.userInfoDelay)
 			if r.Header.Get("Authorization") != "Bearer google-token" {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
@@ -80,7 +98,14 @@ func unsignedJWT(t *testing.T, claims map[string]string) string {
 }
 
 func want(hostedDomain, tenantID string) SignInEvidence {
-	return SignInEvidence{HostedDomain: hostedDomain, TenantID: tenantID, VerifiedEmail: "jane@example.com", AuthenticatedAt: sessionCreated}
+	return SignInEvidence{HostedDomain: hostedDomain, HostedDomainChecked: false, TenantID: tenantID, VerifiedEmail: "jane@example.com", AuthenticatedAt: sessionCreated}
+}
+
+// wantChecked is a Google lookup that answered hostedDomain.
+func wantChecked(hostedDomain string) SignInEvidence {
+	ev := want(hostedDomain, "")
+	ev.HostedDomainChecked = true
+	return ev
 }
 
 func TestSignInEvidence(t *testing.T) {
@@ -100,11 +125,11 @@ func TestSignInEvidence(t *testing.T) {
 		{name: "google workspace account", setup: evidenceSetup{googleHD: "Example.com", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "google-token")
-		}, want: want("example.com", "")},
+		}, want: wantChecked("example.com")},
 		{name: "personal google account", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "google-token")
-		}, want: want("", "")},
+		}, want: wantChecked("")},
 		{name: "google without provider tokens", setup: evidenceSetup{googleHD: "example.com", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "")
@@ -155,4 +180,21 @@ func TestSignInEvidence(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// A slow session listing doesn't use up the hosted-domain lookup's time.
+func TestSignInEvidence_LookupsHaveSeparateBudgets(t *testing.T) {
+	t.Parallel()
+	adapter := evidenceAdapter(t, evidenceSetup{googleHD: "example.com", disabled: false, sessionDelay: 300 * time.Millisecond, userInfoDelay: 300 * time.Millisecond})
+	adapter.evidence.timeout = 500 * time.Millisecond
+	got := adapter.signInEvidence(context.Background(), authResponse(t, usermanagement.GoogleOAuth, "google-token"))
+	require.Equal(t, "example.com", got.HostedDomain)
+	require.True(t, got.HostedDomainChecked)
+	require.True(t, sessionCreated.Equal(got.AuthenticatedAt))
+
+	adapter = evidenceAdapter(t, evidenceSetup{googleHD: "example.com", disabled: false, sessionDelay: 0, userInfoDelay: 300 * time.Millisecond})
+	adapter.evidence.timeout = 100 * time.Millisecond
+	got = adapter.signInEvidence(context.Background(), authResponse(t, usermanagement.GoogleOAuth, "google-token"))
+	require.Empty(t, got.HostedDomain)
+	require.False(t, got.HostedDomainChecked, "a lookup that timed out is unknown, never a personal account")
 }

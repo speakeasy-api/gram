@@ -242,23 +242,34 @@ func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 		}},
 		{name: "personal google account on the company email", want: signins.ReasonUnmanagedAccount, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
 			t.Helper()
+			ev := evidence("", "", time.Now())
+			ev.HostedDomainChecked = true
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodGoogleOAuth, ev, time.Now()).ID
+		}},
+		{name: "google sign-in whose lookup never answered", want: signins.ReasonAccountEvidenceUnavailable, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
+			t.Helper()
 			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodGoogleOAuth, evidence("", "", time.Now()), time.Now()).ID
+		}},
+		{name: "google workspace of a domain the organization hasn't verified", want: signins.ReasonAccountDomainNotVerified, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
+			t.Helper()
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodGoogleOAuth, evidence("other.test", "", time.Now()), time.Now()).ID
+		}},
+		{name: "personal google account where google sign-in isn't allowed", want: signins.ReasonMethodNotAllowed, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
+			t.Helper()
+			f.limitSignInMethods(t, ctx, signins.TierSSO)
+			ev := evidence("", "", time.Now())
+			ev.HostedDomainChecked = true
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodGoogleOAuth, ev, time.Now()).ID
 		}},
 		{name: "microsoft tenant the organization never pinned", want: signins.ReasonTenantNotAllowed, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
 			t.Helper()
 			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodMicrosoftOAuth, evidence("example.com", workTenant, time.Now()), time.Now()).ID
 		}},
-		{name: "email single sign-on did not verify", want: signins.ReasonSSOEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
+		{name: "email the identity provider did not verify", want: signins.ReasonEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
 			t.Helper()
 			ev := evidence("", "", time.Now())
 			ev.VerifiedEmail = ""
 			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodSSO, ev, time.Now()).ID
-		}},
-		{name: "email not verified at password sign-in", want: signins.ReasonEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
-			t.Helper()
-			ev := evidence("", "", time.Now())
-			ev.VerifiedEmail = ""
-			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodPassword, ev, time.Now()).ID
 		}},
 		{name: "profile email changed after sign-in", want: signins.ReasonEmailChanged, prepare: func(t *testing.T, ctx context.Context, f signInFixture) (string, uuid.UUID) {
 			t.Helper()
@@ -672,20 +683,43 @@ func TestRecordSignIn_FillsEvidenceAMissedLookupLeftOut(t *testing.T) {
 	first, err := signins.Record(ctx, f.ti.conn, missed)
 	require.NoError(t, err)
 	session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), first.ID)
-	require.Equal(t, signins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason)
+	require.Equal(t, signins.ReasonAccountEvidenceUnavailable, f.check(t, ctx, f.orgID, session.ID).Reason)
 
 	other := missed
 	other.AuthenticationMethod = signins.MethodMicrosoftOAuth
 	other.Evidence.HostedDomain = "example.com"
 	_, err = signins.Record(ctx, f.ti.conn, other)
 	require.NoError(t, err)
-	require.Equal(t, signins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason, "another method's evidence never lands")
+	require.Equal(t, signins.ReasonAccountEvidenceUnavailable, f.check(t, ctx, f.orgID, session.ID).Reason, "another method's evidence never lands")
 
 	found := missed
 	found.Evidence.HostedDomain = "example.com"
 	_, err = signins.Record(ctx, f.ti.conn, found)
 	require.NoError(t, err)
 	require.True(t, f.check(t, ctx, f.orgID, session.ID).Eligible(), "a later exchange of the same method fills the gap")
+}
+
+// A lookup that answered with no domain fills unknown evidence, and unknown evidence never erases it.
+func TestRecordSignIn_AnsweredLookupWithNoDomainFillsUnknownEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	missed := f.signInParams("session_"+uuid.NewString(), time.Now())
+	missed.AuthenticationMethod = signins.MethodGoogleOAuth
+	first, err := signins.Record(ctx, f.ti.conn, missed)
+	require.NoError(t, err)
+	session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), first.ID)
+	require.Equal(t, signins.ReasonAccountEvidenceUnavailable, f.check(t, ctx, f.orgID, session.ID).Reason)
+
+	answered := missed
+	answered.Evidence.HostedDomainChecked = true
+	_, err = signins.Record(ctx, f.ti.conn, answered)
+	require.NoError(t, err)
+	require.Equal(t, signins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason, "the answer replaces unknown")
+
+	_, err = signins.Record(ctx, f.ti.conn, missed)
+	require.NoError(t, err)
+	require.Equal(t, signins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason, "unknown never erases an answer")
 }
 
 func TestRecord_WaitsForAConcurrentRevocation(t *testing.T) {

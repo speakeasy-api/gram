@@ -679,7 +679,7 @@
         fallback.className =
           "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
         fallback.removeAttribute("data-connect-fallback");
-        fallback.textContent = "Connect";
+        fallback.textContent = "Use a separate sign-in";
       }
       signalChainRejected();
       return;

@@ -782,7 +782,7 @@ func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 	ctx, fx, state := seedRefusedChainCheck(t, "attempt-inelig-", identitychaining.ReasonIneligibleIdentity)
 	rec := recordConnections(t, fx.ti)
 	for range 3 {
-		requireRefusedChainCheck(t, fx)
+		require.Contains(t, requireRefusedChainCheck(t, fx), "Ask your administrator, or use a separate sign-in.")
 	}
 
 	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
@@ -825,7 +825,7 @@ func TestConnectionOutcome_ChainCheckExportsIneligibleIdentityOnce(t *testing.T)
 	require.Equal(t, mcpconnectionattempts.CodeIneligibleIdentity.String(), code)
 }
 
-// A personal account or unverified email is the person's to fix: the page says what to fix, and each attempt records one row.
+// An account the company doesn't manage is the person's to fix: the page says why, and each attempt records one row.
 func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
 	t.Parallel()
 
@@ -833,8 +833,7 @@ func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
 		reason identitychaining.Reason
 		says   string
 	}{
-		{identitychaining.ReasonUnmanagedAccount, "Speakeasy couldn't confirm that you signed in with your work account, so it can't connect you to %s. Sign in to Speakeasy with your work account, then connect again. If you already did, ask your administrator. You can also use a separate sign-in."},
-		{identitychaining.ReasonUnverifiedEmail, "Your email address wasn't verified when you signed in to Speakeasy, so it can't connect you to %s. Verify your email, sign in to Speakeasy again, then connect again. You can also use a separate sign-in."},
+		{identitychaining.ReasonUnmanagedAccount, "Speakeasy can't connect you to %s with this account, because your company doesn't manage it. A personal Google account doesn't count, even if it uses your work email. You can use a separate sign-in instead."},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -851,7 +850,7 @@ func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
 
 			require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
 			require.Len(t, rec.Rows(), 1, "reloading the page writes no more rows")
-			row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeUnverifiedIdentity)
+			row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeUnmanagedAccount)
 			require.Equal(t, state.FlowID, row.AttemptID.String())
 			require.Equal(t, fx.clientA.String(), row.RemoteSessionClientID)
 			require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
@@ -1251,6 +1250,10 @@ func (c *refusingConsentChainer) CheckConsent(context.Context, identitychaining.
 	return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: c.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
 }
 
+func (c *refusingConsentChainer) AcquireConsent(ctx context.Context, req identitychaining.Request, signInID uuid.UUID) (identitychaining.Token, identitychaining.Outcome) {
+	return identitychaining.Token{}, c.CheckConsent(ctx, req, signInID)
+}
+
 // A gateway's consent page names who fixes a refused sign-in and records it once per attempt, like a direct server's.
 func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 	t.Parallel()
@@ -1261,8 +1264,7 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 		who    mcpconnectionattempts.WhoFixes
 		says   string
 	}{
-		{identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnverifiedIdentity, mcpconnectionattempts.WhoPerson, "Sign in to Speakeasy with your work account, then connect again."},
-		{identitychaining.ReasonUnverifiedEmail, mcpconnectionattempts.CodeUnverifiedIdentity, mcpconnectionattempts.WhoPerson, "Verify your email, sign in to Speakeasy again, then connect again."},
+		{identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "your company doesn't manage it"},
 		{identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Ask your administrator"},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
@@ -1306,6 +1308,35 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 			require.Equal(t, state.FlowID, row.AttemptID.String())
 			require.Equal(t, upstreamClient.String(), row.RemoteSessionClientID)
 			require.Equal(t, string(tc.who), row.WhoFixes)
+		})
+	}
+}
+
+// A member whose company sign-in was refused doesn't read as an outage beside the card that explains it.
+func TestGatewayConsentRefusedMemberIsNotUnavailable(t *testing.T) {
+	t.Parallel()
+
+	for _, reason := range []identitychaining.Reason{identitychaining.ReasonUnmanagedAccount, identitychaining.ReasonIneligibleIdentity} {
+		t.Run(string(reason), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "gateway-refused-member-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			upstream := "https://chained.example.test/mcp"
+			memberSlug := "chained-" + uuid.NewString()[:8]
+			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Chained", memberSlug, 1, upstream)
+			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
+			require.NoError(t, err)
+			ti.service.SetIdentityChainer(&refusingConsentChainer{singleUpstreamChainer: &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream}, reason: reason})
+
+			stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+			outcomes := gatewayOutcomesFromPage(consentGetPageWithContext(t, ctx, ti, slug, stateID))
+			require.Len(t, outcomes, 1)
+			require.Equal(t, memberSlug, outcomes[0].Slug)
+			require.Equal(t, "chain_pending", outcomes[0].Status)
 		})
 	}
 }

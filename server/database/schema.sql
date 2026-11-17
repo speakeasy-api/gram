@@ -5707,6 +5707,8 @@ CREATE TABLE IF NOT EXISTS sign_ins (
   authentication_method TEXT NOT NULL,
   -- Domain the social identity provider vouches the account belongs to: the
   -- Google Workspace hosted domain, or a Microsoft work account's UPN domain.
+  -- NULL: no lookup answered (unknown). Empty string: Google answered with no
+  -- Workspace domain (a personal account). Otherwise: the domain.
   idp_hosted_domain TEXT,
   -- Microsoft Entra tenant of a work or school account.
   idp_tenant_id TEXT,

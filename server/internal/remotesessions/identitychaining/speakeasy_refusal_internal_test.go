@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// A new sign-in fixes some refusals, the person fixes their own account or email, and the administrator fixes the rest.
+// A new sign-in fixes some refusals, the person fixes a confirmed personal account, and the administrator fixes the rest.
 func TestSignInRefusalReason(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -32,9 +32,9 @@ func TestSignInRefusalReason(t *testing.T) {
 		{signins.ReasonOrganizationDisabled, ReasonIneligibleIdentity},
 		{signins.ReasonNotMember, ReasonIneligibleIdentity},
 		{signins.ReasonDeprovisioned, ReasonIneligibleIdentity},
-		{signins.ReasonEmailNotVerified, ReasonUnverifiedEmail},
-		{signins.ReasonSSOEmailNotVerified, ReasonIneligibleIdentity},
+		{signins.ReasonEmailNotVerified, ReasonIneligibleIdentity},
 		{signins.ReasonAccountDomainNotVerified, ReasonIneligibleIdentity},
+		{signins.ReasonAccountEvidenceUnavailable, ReasonIneligibleIdentity},
 		{signins.ReasonEmailDomain, ReasonIneligibleIdentity},
 	} {
 		require.Equal(t, tc.want, signInRefusalReason(tc.reason), tc.reason)
@@ -61,8 +61,9 @@ func TestSpeakeasyAuthorizeIdentityJudgesEligibilityOnTheConsentSignIn(t *testin
 		{runtime, signins.ReasonUnmanagedAccount, ReasonReauthenticationRequired},
 		{runtime, signins.ReasonEmailNotVerified, ReasonReauthenticationRequired},
 		{consent, signins.ReasonUnmanagedAccount, ReasonUnmanagedAccount},
-		{consent, signins.ReasonEmailNotVerified, ReasonUnverifiedEmail},
+		{consent, signins.ReasonEmailNotVerified, ReasonIneligibleIdentity},
 		{consent, signins.ReasonAccountDomainNotVerified, ReasonIneligibleIdentity},
+		{consent, signins.ReasonAccountEvidenceUnavailable, ReasonIneligibleIdentity},
 	} {
 		outcome := source.authorizeIdentity(t.Context(), testenv.NewLogger(t), tc.req, &selection{}, signins.Result{Reason: tc.reason, Identity: nil})
 		require.Equal(t, tc.want, outcome.Reason, "%s consent=%v", tc.reason, tc.req.consent())

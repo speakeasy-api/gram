@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-When Speakeasy won't vouch for a company sign-in because the person used a personal account or an unverified email, they are now told what to fix themselves instead of being sent to their administrator, and connection health records it as theirs to fix.
+When someone connects with a personal account their company doesn't manage, the connect page now tells them so and offers a separate sign-in, instead of sending them to their administrator.

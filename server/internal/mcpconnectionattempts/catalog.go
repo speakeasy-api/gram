@@ -253,7 +253,7 @@ var (
 	CodeProviderTransientFailure = define("provider_transient_failure", OutcomeFailed, WhoProvider, "The service had a temporary problem.", "Try again in a few minutes.")
 	CodeReauthenticationRequired = define("reauthentication_required", OutcomeFailed, WhoPerson, "Your company sign-in is missing or has expired.", "Sign in again.")
 	CodeIneligibleIdentity       = define("ineligible_identity", OutcomeBlocked, WhoAdmin, "This account cannot be used for company-managed sign-in here.", "Use an allowed account, or ask your admin to allow this one.")
-	CodeUnverifiedIdentity       = define("unverified_identity", OutcomeBlocked, WhoPerson, "Speakeasy couldn't confirm a work account or a verified email for this sign-in.", "Sign in to Speakeasy with your work account and a verified email, then reconnect.")
+	CodeUnmanagedAccount         = define("unmanaged_account", OutcomeBlocked, WhoPerson, "You signed in to Speakeasy with an account your company doesn't manage.", "Use a separate sign-in, or sign in to Speakeasy with your company account.")
 
 	// Every MCP request.
 	CodeToolPermissionDenied       = define("tool_permission_denied", OutcomeBlocked, WhoAdmin, "This person is not allowed to use this tool.", "Ask for permission to use the tool.")
