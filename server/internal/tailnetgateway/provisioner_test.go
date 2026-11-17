@@ -54,7 +54,7 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 	require.NoError(t, err)
 	resources.Runtime = networkingress.RuntimeGateway
 	provisioner, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), db, orgEncryption(t, db).Service, orgEncryption(t, db).Provisioner, api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	// seedIngress creates a gateway ingress; tests of the operator path
@@ -161,7 +161,7 @@ func TestProvisionerScaleDownPurgesRetiredSlotsAfterHostsStop(t *testing.T) {
 	f.heartbeat(t, 2, tailnetgateway.NodeStatusOnline, "nTHREE")
 
 	smaller, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 2, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 2, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	_, err = smaller.Apply(ctx, f.desired(t))
@@ -268,7 +268,7 @@ func TestProvisionerObserveFollowsHeartbeats(t *testing.T) {
 	// Heartbeats older than the staleness window mean the gateway is gone.
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
 	stale, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: 2 * time.Minute,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: 2 * time.Minute,
 		Now: func() time.Time { return time.Now().Add(time.Hour) },
 	})
 	require.NoError(t, err)
@@ -658,7 +658,7 @@ func TestProvisionerApplyRequiresOrganizationEncryption(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovnoenc")
 	unconfigured, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, nil, nil, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 
@@ -672,7 +672,7 @@ func TestProvisionerLogsTheCauseOfAFailedApply(t *testing.T) {
 	f := newProvisionerFixture(t, "tailnetprovlogs")
 	var logs bytes.Buffer
 	provisioner, err := tailnetgateway.NewProvisioner(slog.New(slog.NewJSONHandler(&logs, nil)), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	f.api.Reject = errors.New("upsert service: when updating a service, addrs must contain 2 elements (400)")
@@ -692,7 +692,7 @@ func TestProvisionerLogsTheOrganizationOfAFailedTeardown(t *testing.T) {
 	require.NoError(t, err)
 	var logs bytes.Buffer
 	provisioner, err := tailnetgateway.NewProvisioner(slog.New(slog.NewJSONHandler(&logs, nil)), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	f.api.Reject = fmt.Errorf("%w: delete service", tailscaleapi.ErrRateLimited)
@@ -844,7 +844,7 @@ func TestLocalProvisionerRefusesHostnamesItDoesNotOwn(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovlocalrefuse")
 	local, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 
@@ -859,7 +859,7 @@ func TestLocalProvisionerNamesItsArtifacts(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovlocalnames")
 	local, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	desired := f.desired(t)
@@ -884,7 +884,7 @@ func TestLocalProvisionerTeardownLeavesServicesItDoesNotOwn(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, f.api.Services(), "svc:private")
 	local, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: localTestNamer(t), Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: localTestNamer(t), Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 
@@ -896,7 +896,7 @@ func TestProvisionerRequiresANamer(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovnonamer")
 	_, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, nil, nil, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: nil, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: nil, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.ErrorContains(t, err, "namer")
 }

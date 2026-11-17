@@ -48,6 +48,23 @@ func TestGetIngressReturnsEmptyResultWhenNotConfigured(t *testing.T) {
 	result, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
 	require.NoError(t, err)
 	require.Nil(t, result.Ingress)
+	require.Equal(t, networkingress.DefaultGatewayTag, result.GatewayTag, "the setup steps show the default tag before any connection exists")
+}
+
+func TestGetIngressReturnsTheConfiguredGatewayTag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.service.UseGateway(networkingress.GatewayRuntimeConfig{Tag: "tag:speakeasy-dev"})
+
+	empty, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "tag:speakeasy-dev", empty.GatewayTag)
+
+	ti.create(t, ctx)
+	configured, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, configured.Ingress)
+	require.Equal(t, "tag:speakeasy-dev", configured.GatewayTag)
 }
 
 func TestCreateIngressEncryptsCredentialsAndPinsResources(t *testing.T) {
@@ -308,7 +325,7 @@ func TestLocalNamerPrefixesCreatedAndRenamedHostnames(t *testing.T) {
 	ctx, ti := newTestService(t)
 	namer, err := networkingress.NewLocalNamer("ab12")
 	require.NoError(t, err)
-	ti.service.UseNamer(namer)
+	ti.service.UseGateway(networkingress.GatewayRuntimeConfig{Namer: namer})
 
 	created, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: nil, OauthClientID: "client", OauthClientSecret: "secret"})
 	require.NoError(t, err)

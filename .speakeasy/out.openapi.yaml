@@ -107633,9 +107633,15 @@ components:
     NetworkIngressResult:
       type: object
       properties:
+        gateway_tag:
+          type: string
+          description: Tailscale tag this environment's gateway nodes and services carry. The organization's tailnet policy must own it, auto-approve the connection's service for it, and the OAuth client must be scoped to it.
+          example: tag:speakeasy
         ingress:
           $ref: '#/components/schemas/NetworkIngress'
       description: The organization's active private network ingress, when configured.
+      required:
+        - gateway_tag
     NewClientCallbackURLResult:
       type: object
       properties:
