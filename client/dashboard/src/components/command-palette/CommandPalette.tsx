@@ -503,9 +503,11 @@ export function CommandPalette(): JSX.Element {
       )}
       <CommandInput
         placeholder={
-          inProject
-            ? "Ask AI or search resources and pages…"
-            : "Search projects and pages…"
+          !inProject
+            ? "Search projects and pages…"
+            : assistantsAvailable
+              ? "Ask AI or search resources and pages…"
+              : "Search resources and pages…"
         }
         value={query}
         onValueChange={(value) => {

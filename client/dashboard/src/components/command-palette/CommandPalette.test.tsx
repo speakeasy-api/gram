@@ -281,7 +281,11 @@ describe("CommandPalette", () => {
     mocks.assistantsAvailable = false;
     render(<CommandPalette />);
 
-    await userEvent.type(input(), "zzzzznomatch");
+    // The placeholder drops "Ask AI" along with the assistant row.
+    await userEvent.type(
+      screen.getByPlaceholderText("Search resources and pages…"),
+      "zzzzznomatch",
+    );
 
     expect(
       screen.queryByRole("option", { name: /Ask Project Assistant/ }),

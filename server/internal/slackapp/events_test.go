@@ -139,7 +139,7 @@ func TestEventsTellsLinkedSenderAssistantsAreUnavailable(t *testing.T) {
 	}}}
 	dispatcher := &fakeDispatcher{}
 	poster := &fakePoster{}
-	// The refusal comes before any database read or trigger creation.
+	// The refusal comes before managed-assistant lookup or trigger creation.
 	events := newTestEvents(t, router, dispatcher, poster, "user-1").WithAssistantsDisabled(true)
 	rec := httptest.NewRecorder()
 	events.ServeHTTP(rec, signedRequest(t, mentionBody, testSecret))

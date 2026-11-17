@@ -1434,6 +1434,23 @@ describe("useRecentCandidates", () => {
     expect(byKind(result.current, "recent")).toHaveLength(0);
   });
 
+  it("does not offer stored Chat or Assistants visits on a deployment without assistants", () => {
+    mocks.assistantsAvailable = false;
+    mocks.recents = [
+      { label: "Chat", href: "/acme/projects/default/chat", visitedAt: 1 },
+      {
+        label: "Support assistant",
+        href: "/acme/projects/default/assistants/assistant-a",
+        visitedAt: 2,
+      },
+      { label: "Slack", href: "/acme/mcp/slack", visitedAt: 3 },
+    ];
+    const { result } = renderCandidates();
+    expect(byKind(result.current, "recent").map((c) => c.title)).toEqual([
+      "Slack",
+    ]);
+  });
+
   // The stored entries are keyed per user, and until the session resolves
   // whatever the hook last read belongs to somebody else's key.
   it("yields nothing, and does not read, until the user id has resolved", () => {

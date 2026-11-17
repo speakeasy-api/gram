@@ -326,10 +326,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
-	// The event stays pending on a deployment without assistants, ready if
-	// they are turned back on; signalling would only start a coordinator that
-	// admits nothing.
-	if eventCreated && s.core.RuntimeAvailable() {
+	if eventCreated {
 		if err := s.signaler.SignalCoordinator(ctx, assistantID); err != nil {
 			return fmt.Errorf("signal assistant coordinator: %w", err)
 		}

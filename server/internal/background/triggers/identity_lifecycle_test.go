@@ -141,9 +141,22 @@ func TestTriggerResumeRefusedWhenTargetUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, triggers.StatusPaused, stored.Status)
 
-	// Pausing stays allowed so triggers can be wound down.
-	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusPaused)
+}
+
+func TestTriggerPauseAllowedWhenTargetUnavailable(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	params := f.createParams()
+	params.Status = triggers.StatusActive
+	item, err := f.app.Create(t.Context(), params)
 	require.NoError(t, err)
+
+	f.app.RegisterDispatcher(unavailableAssistantDispatcher{})
+
+	// Pausing stays allowed so triggers can be wound down.
+	paused, err := f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusPaused)
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusPaused, paused.Status)
 }
 
 func TestRootTriggerCreateCompensationWithdrawsIdentity(t *testing.T) {

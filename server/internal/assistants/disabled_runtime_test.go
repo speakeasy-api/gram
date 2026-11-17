@@ -125,6 +125,10 @@ func TestDisabledRuntimeAllowsConfigurationChanges(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Renamed", updated.Name)
 
+	// Keeping the expected version is not a switch.
+	_, err = svc.UpdateAssistant(ctx, &gen.UpdateAssistantPayload{ID: created.ID, RuntimeVersion: new(updated.RuntimeVersion), ExpectedRuntimeVersion: new(updated.RuntimeVersion)})
+	require.NoError(t, err)
+
 	_, err = svc.UpdateAssistant(ctx, &gen.UpdateAssistantPayload{ID: created.ID, RuntimeVersion: new(3), ExpectedRuntimeVersion: new(updated.RuntimeVersion)})
 	requireOopsCode(t, err, oops.CodeNotImplemented)
 }
@@ -161,7 +165,7 @@ func TestDisabledRuntimeSkipsBackgroundWork(t *testing.T) {
 	require.False(t, svc.TargetAvailable())
 }
 
-func TestDisabledRuntimeWithConfiguredBackendKeepsSweeps(t *testing.T) {
+func TestDisabledRuntimeWithConfiguredBackendReportsBackends(t *testing.T) {
 	t.Parallel()
 
 	router, err := newDisabledRuntimeBackend(map[string]RuntimeBackend{runtimeBackendGKE: &stubRuntimeBackend{name: runtimeBackendGKE}})
@@ -169,8 +173,8 @@ func TestDisabledRuntimeWithConfiguredBackendKeepsSweeps(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, router, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, nil))
 
-	// New runtimes are refused, but rows on the still-configured backends
-	// drain through the reaper and janitor.
+	// New runtimes are refused, while the still-configured backend keeps the
+	// reaper and janitor registered.
 	require.False(t, core.RuntimeAvailable())
 	require.True(t, core.RuntimeHasBackends())
 }

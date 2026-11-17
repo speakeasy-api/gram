@@ -227,8 +227,9 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		return nil, err
 	}
 	// Switching runtime versions stops and retires the current runtime, which
-	// needs a backend. Other updates only change stored configuration.
-	if payload.RuntimeVersion != nil {
+	// needs a backend. Other updates, including one that keeps the expected
+	// version, only change stored configuration.
+	if payload.RuntimeVersion != nil && payload.ExpectedRuntimeVersion != nil && *payload.RuntimeVersion != *payload.ExpectedRuntimeVersion {
 		if err := s.requireRuntimeAvailable(ctx); err != nil {
 			return nil, err
 		}

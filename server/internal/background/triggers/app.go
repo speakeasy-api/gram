@@ -563,6 +563,9 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 	if params.AssistantID == uuid.Nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: assistant_id is required", ErrBadRequest)
 	}
+	if err := a.requireTargetAvailable(TargetKindAssistant); err != nil {
+		return triggerrepo.TriggerInstance{}, err
+	}
 	if strings.TrimSpace(params.CorrelationID) == "" {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: correlation_id is required", ErrBadRequest)
 	}
