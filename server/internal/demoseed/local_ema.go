@@ -34,6 +34,30 @@ const devIDPOAuth21Prefix = "/oauth2-1"
 // dev-idp plays it.
 const localEMAProviderName = "Acme Identity (local dev-idp)"
 
+// provisionLocalEMA sets up the dev-idp side of the Enterprise Sign-In
+// (ID-JAG) Server: the EMA app, its resource and the trust rule. It runs
+// before the local fixtures' transaction opens, so a slow dev-idp never holds
+// its locks, and reports whether wireLocalEMA should point the seeded rows at
+// the dev-idp.
+func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstreamOptions) bool {
+	if opts.ServerURL == nil || opts.DevIDPURL == "" || opts.DevIDPURL == "unset" || opts.DevIDPClientID == "" || opts.DevIDPClientID == "unset" {
+		logger.InfoContext(ctx, "the server URL, dev-idp URL or login client id is not set; the Enterprise Sign-In (ID-JAG) Server stays display-only")
+		return false
+	}
+	if opts.HTTPClient == nil {
+		logger.WarnContext(ctx, "no HTTP client to reach the dev-idp; the Enterprise Sign-In (ID-JAG) Server stays display-only")
+		return false
+	}
+	devIDP := strings.TrimRight(opts.DevIDPURL, "/")
+	resource := fixtureauth.Resource(fixtureauth.BaseURL(opts.ServerURL), fixtureauth.PathEMAMCP)
+	idp := devIDPControl{base: devIDP, client: opts.HTTPClient}
+	if err := idp.provisionEMA(ctx, opts.DevIDPClientID, resource, devIDP+devIDPOAuth21Prefix); err != nil {
+		logger.WarnContext(ctx, "could not set up the dev-idp for the Enterprise Sign-In (ID-JAG) Server; it stays display-only", attr.SlogError(err))
+		return false
+	}
+	return true
+}
+
 // wireLocalEMA makes the Enterprise Sign-In (ID-JAG) Server work end to end
 // in the local org:
 //
@@ -58,28 +82,8 @@ const localEMAProviderName = "Acme Identity (local dev-idp)"
 //
 // A dev-idp that cannot be reached leaves the server display-only.
 //
-// provisionLocalEMA makes the dev-idp calls and runs before the local
-// fixtures' transaction opens, so a slow dev-idp never holds its locks;
-// wireLocalEMA then points the seeded rows at it inside the transaction.
-func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstreamOptions) bool {
-	if opts.ServerURL == nil || opts.DevIDPURL == "" || opts.DevIDPURL == "unset" || opts.DevIDPClientID == "" || opts.DevIDPClientID == "unset" {
-		logger.InfoContext(ctx, "the server URL, dev-idp URL or login client id is not set; the Enterprise Sign-In (ID-JAG) Server stays display-only")
-		return false
-	}
-	if opts.HTTPClient == nil {
-		logger.WarnContext(ctx, "no HTTP client to reach the dev-idp; the Enterprise Sign-In (ID-JAG) Server stays display-only")
-		return false
-	}
-	devIDP := strings.TrimRight(opts.DevIDPURL, "/")
-	resource := fixtureauth.Resource(fixtureauth.BaseURL(opts.ServerURL), fixtureauth.PathEMAMCP)
-	idp := devIDPControl{base: devIDP, client: opts.HTTPClient}
-	if err := idp.provisionEMA(ctx, opts.DevIDPClientID, resource, devIDP+devIDPOAuth21Prefix); err != nil {
-		logger.WarnContext(ctx, "could not set up the dev-idp for the Enterprise Sign-In (ID-JAG) Server; it stays display-only", attr.SlogError(err))
-		return false
-	}
-	return true
-}
-
+// wireLocalEMA runs inside the local fixtures' transaction, after
+// provisionLocalEMA has made the dev-idp calls.
 func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions, base string, provisioned bool) error {
 	if !provisioned {
 		return nil

@@ -171,10 +171,21 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 		require.Equal(t, fixtureauth.EMAAuthorizationServer(devIDP.URL), wiring.AuthorizationServer)
 		require.Equal(t, fixtureauth.EMAAuthorizationServer(devIDP.URL)+"/token", wiring.AuthorizationServerTokenEndpoint.String)
 		require.Equal(t, clientID, wiring.AuthorizationServerClientID, "the dev-idp's resource authorization server requires the client the ID-JAG names")
-	}
 
-	// The dev-idp holds one app with the shared secret, one resource for the
-	// fixture's endpoint, one trust rule and the developer's assignment.
+		// After every run, including the one after the edits, the dev-idp
+		// holds one app with the shared secret, one resource for the
+		// fixture's endpoint, one trust rule and the developer's assignment.
+		assertDevIDPWired(t, idp, clientID, resource, devIDP.URL)
+	}
+}
+
+// assertDevIDPWired checks the dev-idp state the local seed sets up. The trust
+// rule is what lets the resource authorization server redeem the dev-idp's
+// ID-JAGs for this client.
+func assertDevIDPWired(t *testing.T, idp *fakeDevIDP, clientID, resource, devIDPURL string) {
+	t.Helper()
+	idp.mu.Lock()
+	defer idp.mu.Unlock()
 	require.Len(t, idp.apps, 1)
 	for _, app := range idp.apps {
 		require.Equal(t, clientID, app["client_id"])
@@ -186,11 +197,9 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 		require.Equal(t, fixtureauth.EMAResourceSlug, res["slug"])
 		require.Equal(t, resource, res["resource_identifier"])
 	}
-	// The trust rule is what lets the resource authorization server redeem
-	// the dev-idp's ID-JAGs for this client.
 	require.Len(t, idp.rules, 1)
 	for _, rule := range idp.rules {
-		require.Equal(t, devIDP.URL+devIDPOAuth21Prefix, rule["trusted_issuer"])
+		require.Equal(t, devIDPURL+devIDPOAuth21Prefix, rule["trusted_issuer"])
 		require.Equal(t, `["`+clientID+`"]`, rule["allowed_client_ids"])
 		require.Equal(t, fixtureauth.EMAScope, rule["allowed_scopes"])
 		require.Equal(t, true, rule["enabled"])
