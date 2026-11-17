@@ -49,3 +49,21 @@ func TestGrantsAuthorizeAnyResourceProbesEveryDispositionOfANamedTool(t *testing
 	limited[authz.SelectorKeyDisposition] = authz.DispositionDestructive
 	require.False(t, grantsAuthorizeAnyResource([]authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, limited), block(authz.DispositionDestructive)}, "org-1", authz.ScopeMCPConnect))
 }
+
+func TestGrantsAuthorizeAnyResourceProbesADispositionGrantWithAnUnnamedTool(t *testing.T) {
+	t.Parallel()
+
+	connect := authz.NewSelector(authz.ScopeMCPConnect, "server-1")
+	connect[authz.SelectorKeyProjectID] = "project-1"
+	connect[authz.SelectorKeyDisposition] = authz.DispositionReadOnly
+	blockSelector := authz.NewSelector(authz.ScopeMCPBlockedConnect, authz.WildcardResource)
+	blockSelector[authz.SelectorKeyTool] = "delete_everything"
+	grants := []authz.Grant{
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, connect),
+		authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, blockSelector),
+	}
+
+	// The grant reaches every read-only tool but the blocked one, so connect
+	// tools stay discoverable.
+	require.True(t, grantsAuthorizeAnyResource(grants, "org-1", authz.ScopeMCPConnect))
+}

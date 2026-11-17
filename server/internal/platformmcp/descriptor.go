@@ -365,16 +365,22 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 				continue
 			}
 			server := authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID]))
-			// A grant that names a tool but no disposition reaches that tool
-			// whatever its annotations. A call with no disposition meets
-			// every block limited to one, so probe each disposition the tool
-			// could have: the grant counts when any of them passes.
+			// A call that leaves the tool or the disposition out meets every
+			// block limited to one, so the probe names both. A grant that
+			// names no tool reaches tools no block names, so it is probed
+			// with a placeholder tool. A grant that names no disposition
+			// reaches its tools whatever their annotations, so each
+			// disposition is tried: the grant counts when any of them passes.
+			tool := dimensions[authz.SelectorKeyTool]
+			if !hasTool {
+				tool = "platform-mcp-catalogue-probe"
+			}
 			dispositions := []string{dimensions[authz.SelectorKeyDisposition]}
 			if !hasDisposition {
 				dispositions = authz.Dispositions()
 			}
 			for _, disposition := range dispositions {
-				allowed, err := authz.GrantsAuthorize(grants, server.ToolCall(dimensions[authz.SelectorKeyTool], disposition))
+				allowed, err := authz.GrantsAuthorize(grants, server.ToolCall(tool, disposition))
 				if err == nil && allowed {
 					return true
 				}
