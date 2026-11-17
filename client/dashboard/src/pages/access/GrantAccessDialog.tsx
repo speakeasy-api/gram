@@ -23,6 +23,8 @@ import {
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import type { AccessRequest } from "@gram/client/models/components/accessrequest.js";
+import { AccessRequestDecision } from "./AccessRequestDecision";
 import { ConfirmSensitiveAccess } from "./ConfirmSensitiveAccess";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { permissionsAddedByRoles } from "./reviewGrants";
@@ -44,6 +46,11 @@ interface GrantAccessDialogProps {
   resourceId?: string;
   /** Project containing an MCP resource, when known. */
   projectId?: string;
+  /**
+   * The stored request this grant answers (?request=<id>), when access
+   * requests are on. A pending one can be approved for a fixed window here.
+   */
+  request?: AccessRequest;
   onClose: () => void;
 }
 
@@ -69,6 +76,7 @@ export function GrantAccessDialog({
   scope,
   resourceId,
   projectId,
+  request,
   onClose,
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
@@ -279,6 +287,19 @@ export function GrantAccessDialog({
                 </Text>
               </div>
             </div>
+
+            {request?.message && (
+              <Text muted small>
+                “{request.message}”
+              </Text>
+            )}
+
+            {request?.status === "pending" && !granted && (
+              <AccessRequestDecision
+                request={request}
+                requesterName={member.name}
+              />
+            )}
 
             {granted ? (
               <div className="flex flex-col items-center gap-1 py-2">

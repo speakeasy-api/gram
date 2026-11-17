@@ -3,8 +3,17 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mutateAsync = vi.hoisted(() =>
-  vi.fn(() => Promise.resolve({ sentToCount: 1 })),
+  vi.fn((): Promise<{ sentToCount: number; request?: { id: string } }> =>
+    Promise.resolve({ sentToCount: 1 }),
+  ),
 );
+// The access requests rollout, the scopes the catalogue says can be given
+// temporarily, and the viewer's own pending requests.
+const accessRequests = vi.hoisted(() => ({
+  on: false,
+  grantable: new Set<string>(),
+  pending: [] as { scope: string; selector: { resourceId: string } }[],
+}));
 
 vi.mock("@/components/page-header", () => {
   const Header = ({ children }: { children: ReactNode }) => (
@@ -24,7 +33,26 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 vi.mock("@/hooks/useScopeCatalogue", () => ({
-  useScopeCatalogue: () => ({ catalogue: new Map(), tasks: [] }),
+  useScopeCatalogue: () => ({
+    catalogue: {
+      get: (slug: string) =>
+        accessRequests.grantable.has(slug)
+          ? { label: slug, temporaryGrantable: true }
+          : undefined,
+    },
+    tasks: [],
+  }),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({
+    status: accessRequests.on ? "enabled" : "disabled",
+  }),
+}));
+vi.mock("@gram/client/react-query/accessRequests.js", () => ({
+  useAccessRequests: () => ({
+    data: { requests: accessRequests.pending },
+    refetch: () => Promise.resolve(),
+  }),
 }));
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
   useRequestAccessMutation: () => ({ mutateAsync, isPending: false }),
@@ -36,7 +64,13 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
 import { Page } from "./page-layout";
 import { RequestScopeAccess, RequireScope } from "./require-scope";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  accessRequests.on = false;
+  accessRequests.grantable = new Set();
+  accessRequests.pending = [];
+  mutateAsync.mockClear();
+});
 
 describe("RequireScope page level", () => {
   it("keeps the page header when the gate sits outside a Page", () => {
@@ -90,5 +124,38 @@ describe("RequestScopeAccess", () => {
 
     expect(screen.getByRole("button", { name: "Request Access" })).toBeTruthy();
     expect(screen.queryByText("Request sent")).toBeNull();
+  });
+
+  it("shows a stored request as pending", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request pending")).toBeTruthy();
+  });
+
+  it("shows a request made earlier as pending without asking again", () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    accessRequests.pending = [
+      { scope: "log:read", selector: { resourceId: "project-1" } },
+    ];
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    expect(screen.getByText("Request pending")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Request Access" })).toBeNull();
+  });
+
+  it("sends people to an admin for access that cannot be requested", () => {
+    accessRequests.on = true;
+    render(<RequestScopeAccess scopes={["org:admin"]} />);
+
+    expect(screen.queryByRole("button", { name: "Request Access" })).toBeNull();
+    expect(screen.getByText(/Ask an organization administrator/)).toBeTruthy();
   });
 });

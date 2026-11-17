@@ -9,6 +9,10 @@ import {
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import type { AccessRequest } from "@gram/client/models/components/accessrequest.js";
+import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   Link,
@@ -17,6 +21,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { AccessRequestsTab } from "./AccessRequestsTab";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
 import { MCPAssignments } from "./MCPAssignments";
@@ -28,12 +33,14 @@ const tabFromPath: Record<string, string> = {
   roles: "roles",
   assignments: "assignments",
   challenges: "challenges",
+  requests: "requests",
 };
 
 const tabDisplayNames: Record<string, string> = {
   roles: "Roles & Permissions",
   assignments: "Roles & Permissions",
   challenges: "Roles & Permissions",
+  requests: "Roles & Permissions",
 };
 
 export default function Access(): JSX.Element {
@@ -80,6 +87,21 @@ function AccessInner() {
   const grantScope = searchParams.get("scope");
   const grantResourceId = searchParams.get("resource_id") || undefined;
   const grantProjectId = searchParams.get("project_id") || undefined;
+  const grantRequestId = searchParams.get("request");
+
+  // Stored access requests, while the rollout is on. Emails and Slack DMs
+  // add ?request=<id>, so the grant dialog can approve that request for a
+  // fixed window.
+  const accessRequestsFlag = useFeatureFlag(FEATURE_FLAGS.accessRequests);
+  const accessRequestsOn = accessRequestsFlag.status === "enabled";
+  const pendingRequests = useAccessRequests({ status: "pending" }, undefined, {
+    enabled: accessRequestsOn,
+    throwOnError: false,
+  });
+  const pendingCount = pendingRequests.data?.requests.length;
+  const grantRequest = grantRequestId
+    ? pendingRequests.data?.requests.find((r) => r.id === grantRequestId)
+    : undefined;
 
   const closeGrantDialog = () => {
     const next = new URLSearchParams(searchParams);
@@ -87,6 +109,17 @@ function AccessInner() {
     next.delete("scope");
     next.delete("resource_id");
     next.delete("project_id");
+    next.delete("request");
+    setSearchParams(next, { replace: true });
+  };
+  const reviewRequest = (request: AccessRequest) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("grant_user", request.requesterUserId);
+    next.set("scope", request.scope);
+    if (request.selector.resourceId && request.selector.resourceId !== "*") {
+      next.set("resource_id", request.selector.resourceId);
+    }
+    next.set("request", request.id);
     setSearchParams(next, { replace: true });
   };
   const organization = useOrganization();
@@ -141,6 +174,11 @@ function AccessInner() {
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
+            {accessRequestsOn && (
+              <PageTabsTrigger value="requests">
+                Access Requests{pendingCount ? ` (${pendingCount})` : ""}
+              </PageTabsTrigger>
+            )}
           </PageTabsList>
         </div>
 
@@ -155,6 +193,12 @@ function AccessInner() {
         <TabsContent value="challenges" className="mt-6">
           <ChallengesTab />
         </TabsContent>
+
+        {accessRequestsOn && (
+          <TabsContent value="requests" className="mt-6">
+            <AccessRequestsTab onReview={reviewRequest} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {grantUserId && grantScope && (
@@ -163,6 +207,7 @@ function AccessInner() {
           scope={grantScope}
           resourceId={grantResourceId}
           projectId={grantProjectId}
+          request={grantRequest}
           onClose={closeGrantDialog}
         />
       )}

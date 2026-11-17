@@ -3,6 +3,9 @@ import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
+import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -309,24 +312,93 @@ export function RequestScopeAccess(
   );
 }
 
-function RequestScopeAccessForm({
+function RequestScopeAccessForm(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  // With stored access requests, an approval is a temporary grant, so only
+  // scopes that can be given temporarily can be asked for, and a request made
+  // earlier shows as pending.
+  const accessRequestsOn =
+    useFeatureFlag(FEATURE_FLAGS.accessRequests).status === "enabled";
+  if (accessRequestsOn) return <StoredRequestScopeAccess {...props} />;
+  return (
+    <RequestScopeAccessButton
+      {...props}
+      accessRequestsOn={false}
+      pending={NO_PENDING_REQUESTS}
+      onRequested={undefined}
+    />
+  );
+}
+
+const NO_PENDING_REQUESTS: PendingRequest[] = [];
+
+type PendingRequest = { scope: string; selector: { resourceId: string } };
+
+function StoredRequestScopeAccess(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  const myPending = useAccessRequests(
+    { status: "pending", mine: true },
+    undefined,
+    { throwOnError: false },
+  );
+  return (
+    <RequestScopeAccessButton
+      {...props}
+      accessRequestsOn
+      pending={myPending.data?.requests ?? NO_PENDING_REQUESTS}
+      onRequested={() => void myPending.refetch()}
+    />
+  );
+}
+
+function RequestScopeAccessButton({
   scopes,
   all = false,
   resourceId,
   projectId,
   className,
-}: RequestScopeAccessProps): React.JSX.Element | null {
+  accessRequestsOn,
+  pending,
+  onRequested,
+}: RequestScopeAccessProps & {
+  accessRequestsOn: boolean;
+  pending: PendingRequest[];
+  onRequested: (() => void) | undefined;
+}): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
-    "idle" | "sending" | "sent" | "no-admin" | "error"
+    "idle" | "sending" | "sent" | "pending" | "no-admin" | "error"
   >("idle");
   const { hasScope } = useRBAC();
-  const requestAccessMutation = useRequestAccessMutation();
+  const { catalogue } = useScopeCatalogue();
+  const requestAccessMutation = useRequestAccessMutation({
+    onSuccess: () => onRequested?.(),
+  });
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
-  const requestableScopes = getRequestableScopes(scopes).filter(
+  const missingScopes = getRequestableScopes(scopes).filter(
     (s) => !hasScope(s, resourceId, projectId),
   );
-  if (requestableScopes.length === 0) return null;
+  const requestableScopes = accessRequestsOn
+    ? missingScopes.filter((s) => catalogue.get(s)?.temporaryGrantable)
+    : missingScopes;
+  if (missingScopes.length === 0) return null;
+  if (requestableScopes.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        This access can't be requested here. Ask an organization administrator
+        to give it to you.
+      </p>
+    );
+  }
+  // A pending request for this access, from an earlier visit, shows as
+  // pending instead of offering to ask again.
+  const alreadyPending = pending.some(
+    (request) =>
+      requestableScopes.includes(request.scope as RequestAccessFormScope) &&
+      request.selector.resourceId === (resourceId ?? "*"),
+  );
 
   const handleRequestAccess = async () => {
     setRequestState("sending");
@@ -347,6 +419,13 @@ function RequestScopeAccessForm({
         }),
       ),
     );
+    const stored = results.some(
+      (r) => r.status === "fulfilled" && r.value.request !== undefined,
+    );
+    if (stored) {
+      setRequestState("pending");
+      return;
+    }
     const notified = results.some(
       (r) => r.status === "fulfilled" && r.value.sentToCount > 0,
     );
@@ -358,7 +437,22 @@ function RequestScopeAccessForm({
     setRequestState(reachedServer ? "no-admin" : "error");
   };
 
-  switch (requestState) {
+  const state =
+    requestState === "idle" && alreadyPending ? "pending" : requestState;
+  switch (state) {
+    case "pending":
+      return (
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+            <Icon name="check" className="size-4" />
+            Request pending
+          </div>
+          <p className="text-muted-foreground text-xs">
+            An organization admin can approve it in Speakeasy or Slack. It
+            lapses after 24 hours.
+          </p>
+        </div>
+      );
     case "idle":
       return (
         <Button
