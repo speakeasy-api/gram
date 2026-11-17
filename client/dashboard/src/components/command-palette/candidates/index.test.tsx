@@ -2,6 +2,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  assistantsAvailable: true,
   scopes: [] as string[],
   grants: [] as unknown[],
   gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
@@ -59,6 +60,10 @@ const mocks = vi.hoisted(() => ({
   // Every SDK list hook records the options it was called with so the test can
   // prove nothing fetches while the palette is closed.
   calls: {} as Record<string, unknown[]>,
+}));
+
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => mocks.assistantsAvailable,
 }));
 
 vi.mock("./useResourceSearchCandidates", () => ({
@@ -463,6 +468,7 @@ function acme(projects: ReturnType<typeof project>[]) {
 }
 
 beforeEach(() => {
+  mocks.assistantsAvailable = true;
   mocks.scopes = [];
   mocks.grants = [];
   mocks.indexFallback = true;
@@ -1724,6 +1730,28 @@ describe("useLauncherCandidates", () => {
       false,
     );
     expect(optionsOf(mocks.calls.useMcpServers?.at(-1)).enabled).toBe(true);
+  });
+
+  it("offers no assistants on a deployment without assistants", () => {
+    mocks.assistantsAvailable = false;
+    mocks.indexFallback = false;
+    mocks.failedKinds = ["assistant"];
+    mocks.scopes = ["assistant:read"];
+    mocks.indexCandidates = [
+      {
+        id: "assistant:assistant-a",
+        kind: "assistant",
+        title: "Support Assistant",
+        group: "Assistants",
+        run: vi.fn(),
+      },
+    ];
+    const { result } = renderCandidates();
+
+    expect(optionsOf(mocks.calls.useAssistantsList?.at(-1)).enabled).toBe(
+      false,
+    );
+    expect(byKind(result.current, "assistant")).toHaveLength(0);
   });
 
   it("deduplicates remote MCP open rows in favor of specialized local rows", () => {

@@ -1004,12 +1004,18 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add memory digests schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
-	}
+	// A deployment with the disabled runtime provider and no backend has no
+	// runtime to reap, so its namespace never gets these schedules. One
+	// switched to disabled keeps any it already has; the sweeps then return
+	// without work.
+	if opts.AssistantsCore == nil || opts.AssistantsCore.RuntimeHasBackends() {
+		if err := AddAssistantReaperSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
+		}
 
-	if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+		if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+		}
 	}
 
 	// One image recycle sweep per deployed runtime image: a new worker build

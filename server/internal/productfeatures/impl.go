@@ -39,6 +39,11 @@ type Service struct {
 	authz         *authz.Engine
 	featureClient *Client
 	mutator       *Mutator
+
+	// assistantsAvailable is whether this deployment can run assistants. It
+	// comes from the assistant runtime provider, so it is the same for every
+	// organization.
+	assistantsAvailable bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -51,6 +56,7 @@ func NewService(
 	redisClient *redis.Client,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	assistantsAvailable bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
@@ -64,6 +70,8 @@ func NewService(
 		authz:         authzEngine,
 		featureClient: featureClient,
 		mutator:       NewMutator(featureClient, auditLogger),
+
+		assistantsAvailable: assistantsAvailable,
 	}
 }
 
@@ -272,6 +280,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
+		AssistantsAvailable:                     new(s.assistantsAvailable),
 		UpstreamAuthEnforced:                    upstreamAuthEnforced,
 	}, nil
 }

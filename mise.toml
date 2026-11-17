@@ -357,8 +357,9 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ## Speakeasy Assistant runtime settings ##
 ########################################
 ## Where assistant runtimes run.
-## Allowed values: local, gke. The server flag defaults to gke; local setup
-## writes local as described below.
+## Allowed values: local, gke, disabled. The server flag defaults to gke; local
+## setup writes local as described below. disabled turns assistants off: the
+## dashboard hides them and assistant APIs answer that they are unavailable.
 ## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
 ## configured" from an intentional override in mise.local.toml or the
 ## environment. When unset, that task writes local defaults:

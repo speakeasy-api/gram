@@ -113,6 +113,57 @@ func TestAppCreateRejectsDirectIngressDefinition(t *testing.T) {
 	require.ErrorContains(t, err, "system-managed")
 }
 
+// unavailableDispatcher reports its target kind as turned off for the
+// deployment, as the assistants service does with the disabled runtime.
+type unavailableDispatcher struct {
+	fakeDispatcher
+}
+
+func (*unavailableDispatcher) TargetAvailable() bool { return false }
+
+func TestAppCreateRejectsUnavailableTarget(t *testing.T) {
+	t.Parallel()
+
+	// The guard fires before any DB access.
+	dispatcher := &unavailableDispatcher{fakeDispatcher: fakeDispatcher{kind: TargetKindAssistant}}
+	app := &App{dispatchers: map[string]Dispatcher{dispatcher.kind: dispatcher}}
+
+	_, err := app.Create(t.Context(), CreateParams{
+		DefinitionSlug: "cron",
+		Name:           "x",
+		TargetKind:     TargetKindAssistant,
+		TargetRef:      "assistant-ref",
+	})
+
+	require.ErrorIs(t, err, ErrTargetUnavailable)
+	require.NotErrorIs(t, err, ErrBadRequest)
+}
+
+func TestAppUpdateRejectsUnavailableTarget(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := &unavailableDispatcher{fakeDispatcher: fakeDispatcher{kind: TargetKindAssistant}}
+	app := &App{dispatchers: map[string]Dispatcher{dispatcher.kind: dispatcher}}
+
+	_, err := app.Update(t.Context(), UpdateParams{
+		DefinitionSlug: "cron",
+		Name:           "x",
+		TargetKind:     TargetKindAssistant,
+		TargetRef:      "assistant-ref",
+	})
+
+	require.ErrorIs(t, err, ErrTargetUnavailable)
+}
+
+func TestAppRequireTargetAvailableAcceptsAvailableOrUnregisteredKinds(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := &fakeDispatcher{kind: TargetKindAssistant}
+	app := &App{dispatchers: map[string]Dispatcher{dispatcher.kind: dispatcher}}
+	require.NoError(t, app.requireTargetAvailable(TargetKindAssistant))
+	require.NoError(t, app.requireTargetAvailable(TargetKindNoop))
+}
+
 func TestLogTriggerDeliveryStampsTraceContext(t *testing.T) {
 	t.Parallel()
 

@@ -809,7 +809,7 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
 				return err
 			}
 			assistantsCore.SetAssetStorage(assetStorage)

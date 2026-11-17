@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  assistantsAvailable: true,
   canRead: true,
   canWrite: false,
   data: undefined as { id: string } | undefined,
@@ -27,6 +28,9 @@ vi.mock("@/hooks/useRBAC", () => ({
       scope === "assistant:read" ? state.canRead : state.canWrite,
     isLoading: false,
   }),
+}));
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => state.assistantsAvailable,
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => state.client,
@@ -79,6 +83,7 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   queryClient = new QueryClient();
+  state.assistantsAvailable = true;
   state.canRead = true;
   state.canWrite = false;
   state.data = { id: "assistant-a" };
@@ -194,6 +199,23 @@ describe("managed assistant authorization", () => {
       { wrapper },
     );
     expect(result.current.ready).toBe(false);
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+  it("neither reads nor provisions the assistant on a deployment without assistants", () => {
+    state.assistantsAvailable = false;
+    state.data = undefined;
+    state.error = 404;
+    state.canWrite = true;
+    const { result } = renderHook(
+      () => useServerAssistantTransport("example", true),
+      { wrapper },
+    );
+    expect(result.current).toMatchObject({
+      allowed: false,
+      ready: false,
+      needsAdmin: false,
+    });
+    expect(state.getManaged.mock.lastCall?.[2].enabled).toBe(false);
     expect(state.mutateAsync).not.toHaveBeenCalled();
   });
 });

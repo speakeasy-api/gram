@@ -5,6 +5,7 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { AppRoute } from "@/routes";
 import { useRoutes } from "@/routes";
+import { useAssistantsAvailable } from "./useAssistantsAvailability";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
@@ -49,6 +50,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
+  // Assistants are off for the whole deployment when its runtime is disabled;
+  // the pages stay hidden until that is confirmed either way.
+  const isAssistantsAvailable = useAssistantsAvailable();
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
@@ -67,11 +71,15 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
-      {
-        route: routes.chat,
-        scope: ["assistant:read"],
-        projectId,
-      },
+      ...(isAssistantsAvailable
+        ? [
+            {
+              route: routes.chat,
+              scope: ["assistant:read"] as Scope[],
+              projectId,
+            },
+          ]
+        : []),
       // Two rosters, two entries: a person arrives from the identity
       // provider, an agent is registered here. The bare identities URL
       // redirects to the people.
@@ -94,11 +102,15 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       // Channels is deliberately absent: while it is hidden it is reachable
       // only by direct URL, so neither the sidebar nor Command K offers it.
-      {
-        route: routes.assistants,
-        scope: ["assistant:read"],
-        projectId,
-      },
+      ...(isAssistantsAvailable
+        ? [
+            {
+              route: routes.assistants,
+              scope: ["assistant:read"] as Scope[],
+              projectId,
+            },
+          ]
+        : []),
       {
         route: routes.skills,
         scope: ["skill:read"],
@@ -136,6 +148,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   }, [
     routes,
     projectId,
+    isAssistantsAvailable,
     isExploreEnabled,
     isOrgMemoryEnabled,
     isSignalsIntelligenceEnabled,

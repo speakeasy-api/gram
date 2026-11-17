@@ -2,6 +2,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => true,
+}));
 vi.mock("@/components/project/ProjectDashboard", () => ({
   ProjectDashboard: () => <div data-testid="project-dashboard" />,
 }));

@@ -139,6 +139,9 @@ func assistantRuntimeToolResult(err error) (*mcp.CallToolResult, bool) {
 			result.Code, result.Message = "not_found", "That assistant or project is not available to you."
 		case oops.CodeConflict:
 			result.Code, result.Message = "conflict", "The runtime version changed or assistant work is not settled. Read the assistant again and reconfirm before retrying."
+		case oops.CodeNotImplemented:
+			// The deployment runs with assistants turned off; retrying cannot help.
+			result.Message = "Assistants are not available on this deployment, so the runtime cannot be changed."
 		default:
 			// Unknown failures retain the bounded unavailable response.
 		}
