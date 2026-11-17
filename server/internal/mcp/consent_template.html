@@ -349,7 +349,7 @@
             {{range .RemoteSessionCards}}
 
             <li data-remote-client="{{.ClientID}}" data-remote-display="{{.IssuerDisplay}}" data-connected-as="{{.ConnectedAs}}" class="flex flex-col px-4 py-3 not-first:border-t">
-              <div class="flex items-center justify-between gap-3">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex min-w-0 items-start gap-3">
 
                 {{if .IssuerLogoURL}}<img
@@ -444,7 +444,7 @@
               <form
                 method="POST"
                 action="{{$.ConsentPath}}/remote-session"
-                class="flex flex-wrap items-center justify-end gap-1.5"
+                class="flex flex-wrap items-center justify-start gap-1.5 sm:justify-end"
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
                 <input

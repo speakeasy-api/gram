@@ -447,8 +447,8 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
 }
 
-// Each service card centres its buttons against its text, however many lines the status takes.
-func TestConsentTemplate_ServiceCardCentresItsButtons(t *testing.T) {
+// Each service card stacks its buttons under its text on narrow screens and centres them beside it on wider ones.
+func TestConsentTemplate_ServiceCardStacksOnNarrowScreens(t *testing.T) {
 	t.Parallel()
 
 	cards := []remoteSessionCard{
@@ -459,6 +459,6 @@ func TestConsentTemplate_ServiceCardCentresItsButtons(t *testing.T) {
 	page := renderGatewayConsent(t, gatewayTemplateData(nil, cards))
 
 	for _, card := range cards {
-		require.Regexp(t, `data-remote-client="`+card.ClientID+`"[^>]*> <div class="flex items-center justify-between gap-3">`, page, card.ClientID)
+		require.Regexp(t, `data-remote-client="`+card.ClientID+`"[^>]*> <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">`, page, card.ClientID)
 	}
 }
