@@ -192,15 +192,29 @@ func organizationAssistants(ctx context.Context, db repo.DBTX, organizationID st
 		}
 		maps.Copy(states, projectStates)
 	}
+	names, err := repo.New(db).AdminListAssistantAgentNames(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("read assistant agent names: %w", err)
+	}
+	namesByAssistant := make(map[uuid.UUID]repo.AdminListAssistantAgentNamesRow, len(names))
+	for _, name := range names {
+		namesByAssistant[name.AssistantID] = name
+	}
 	assistants := make([]*gen.AdminOrganizationAssistant, 0, len(rows))
 	for _, row := range rows {
 		state := states[row.ID]
+		repairState := "not_needed"
+		var agentName *string
+		if name, ok := namesByAssistant[row.ID]; ok {
+			repairState = name.RepairState
+			agentName = new(name.AgentName)
+		}
 		var agentID *string
 		if state.AgentID != nil {
 			agentID = new(state.AgentID.String())
 		}
 		assistants = append(assistants, &gen.AdminOrganizationAssistant{
-			ID: row.ID.String(), Name: row.Name,
+			ID: row.ID.String(), Name: row.Name, AgentName: agentName, AgentNameRepairState: repairState,
 			ProjectID: row.ProjectID.String(), ProjectSlug: row.ProjectSlug, ProjectName: row.ProjectName,
 			Status: row.Status, IdentityState: string(state.State), AgentID: agentID, RuntimeVersion: int(row.RuntimeVersion),
 			CreatedByUserID: conv.FromPGText[string](row.CreatedByUserID), CreatedByUserEmail: conv.FromPGText[string](row.CreatedByUserEmail),

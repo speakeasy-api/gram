@@ -96,8 +96,8 @@ func expectedSeedAuthGrants() []string {
 	shared("user mateo", "shared_client", sharedClients...)
 	shared("user priya", "shared_client", "Static credential")
 
-	personal("agent Identity-bound assistant agent")
-	shared("agent Identity-bound assistant agent", "shared_client", sharedClients...)
+	personal("agent Identity-bound assistant")
+	shared("agent Identity-bound assistant", "shared_client", sharedClients...)
 	for _, agent := range []struct{ name, owner string }{
 		{"Release assistant", demoUsers[0].handle},
 		{"Release notes assistant", demoUsers[1].handle},
