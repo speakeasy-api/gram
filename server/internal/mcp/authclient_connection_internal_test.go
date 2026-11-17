@@ -65,6 +65,18 @@ func enforcedShadowService(t *testing.T, f *authClientFixture) *sdkmetric.Manual
 // outcome and reason.
 func authClientShadowOutcomes(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
 	t.Helper()
+	return authClientShadowDecisions(t, reader, false)
+}
+
+// authClientShadowSources counts recorded auth client shadow decisions by
+// outcome, reason and policy source.
+func authClientShadowSources(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+	t.Helper()
+	return authClientShadowDecisions(t, reader, true)
+}
+
+func authClientShadowDecisions(t *testing.T, reader *sdkmetric.ManualReader, withSource bool) map[string]int64 {
+	t.Helper()
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
 	out := map[string]int64{}
@@ -82,7 +94,12 @@ func authClientShadowOutcomes(t *testing.T, reader *sdkmetric.ManualReader) map[
 				}
 				outcome, _ := dp.Attributes.Value("gram.authz.mandatory.outcome")
 				reason, _ := dp.Attributes.Value("gram.authz.mandatory.reason")
-				out[outcome.AsString()+"/"+reason.AsString()] += dp.Value
+				key := outcome.AsString() + "/" + reason.AsString()
+				if withSource {
+					source, _ := dp.Attributes.Value("gram.authz.mandatory.source")
+					key += "/" + source.AsString()
+				}
+				out[key] += dp.Value
 			}
 		}
 	}
@@ -238,10 +255,10 @@ func TestAnonymousAuthClientUseFollowsServerVisibility(t *testing.T) {
 		outcome    authClientOutcome
 		shadow     string
 	}{
-		{"a public server serves the caller's own connection", mcpservers.VisibilityPublic, authClientTypeRemoteSession, authClientResolved, "allow/none"},
-		{"a public server serves its shared client", mcpservers.VisibilityPublic, authClientTypeServiceAccount, authClientResolved, "allow/none"},
-		{"a private server refuses the caller's connection", mcpservers.VisibilityPrivate, authClientTypeRemoteSession, authClientNoAccess, "deny/unauthenticated"},
-		{"a private server refuses its shared client", mcpservers.VisibilityPrivate, authClientTypeServiceAccount, authClientNoAccess, "deny/unauthenticated"},
+		{"a public server serves the caller's own connection", mcpservers.VisibilityPublic, authClientTypeRemoteSession, authClientResolved, "allow/none/visibility"},
+		{"a public server serves its shared client", mcpservers.VisibilityPublic, authClientTypeServiceAccount, authClientResolved, "allow/none/visibility"},
+		{"a private server refuses the caller's connection", mcpservers.VisibilityPrivate, authClientTypeRemoteSession, authClientNoAccess, "deny/unauthenticated/none"},
+		{"a private server refuses its shared client", mcpservers.VisibilityPrivate, authClientTypeServiceAccount, authClientNoAccess, "deny/unauthenticated/none"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -257,7 +274,7 @@ func TestAnonymousAuthClientUseFollowsServerVisibility(t *testing.T) {
 			require.NoError(t, err, "an anonymous caller is decided, never failed")
 			require.Equal(t, tc.outcome, res.outcome)
 			require.Empty(t, res.connectionOwner, "an anonymous caller is never recorded as a user")
-			require.Equal(t, map[string]int64{tc.shadow: 1}, authClientShadowOutcomes(t, reader))
+			require.Equal(t, map[string]int64{tc.shadow: 1}, authClientShadowSources(t, reader), "a public admission comes from visibility, never a policy")
 		})
 	}
 }

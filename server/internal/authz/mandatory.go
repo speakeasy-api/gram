@@ -47,9 +47,11 @@ const (
 )
 
 // MandatoryDecision is the outcome of a mandatory check. Allowed is true when
-// a policy allowed every check, or DecideServerAdmission explicitly admitted an
-// anonymous caller to a public server. Source distinguishes policy evaluation
-// from public visibility admission, which grants only mcp:connect.
+// a policy allowed every check, or DecideServerAdmission or
+// DecideAuthClientAdmission explicitly admitted an anonymous caller to a public
+// server or to the auth client it resolved. Source distinguishes policy
+// evaluation from public visibility admission, which grants only mcp:connect
+// and mcp:auth on that server.
 type MandatoryDecision struct {
 	Allowed bool
 	Source  MandatoryPolicySource
@@ -222,7 +224,8 @@ const (
 )
 
 // MandatoryPolicySourceVisibility is a public server admitting a caller that
-// presents no credential. It is not a policy and grants nothing else.
+// presents no credential, to the server and to the auth client it resolved.
+// It is not a policy and grants nothing else.
 const MandatoryPolicySourceVisibility MandatoryPolicySource = "visibility"
 
 // DecideServerAdmission decides mcp:connect on a server in organizationID

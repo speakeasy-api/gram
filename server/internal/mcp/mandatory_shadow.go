@@ -188,7 +188,11 @@ func (s *Service) shadowAuthClientUse(ctx context.Context, legacyAllowed bool, p
 	}
 	use := mandatoryAuthClientCheck(permit.ProjectID, permit.ClientID, permit.RegistrationID, permit.ClientType, permit.connectionOwner())
 	m.recordDecision(ctx, mandatorySurfaceAuthClient, legacyAllowed, use, func() (authz.MandatoryDecision, error) {
-		return decideAuthClientUse(ctx, m.authorization, permit, s.mandatoryServerVisibility)
+		// The visibility read is bounded like the shadow's admission, so the
+		// shadow never adds unbounded latency to the request it observes.
+		decideCtx, cancel := context.WithTimeout(ctx, mandatoryShadowTimeout)
+		defer cancel()
+		return decideAuthClientUse(decideCtx, m.authorization, permit, s.mandatoryServerVisibility)
 	})
 }
 
