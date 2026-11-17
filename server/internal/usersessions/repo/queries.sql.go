@@ -1821,7 +1821,7 @@ JOIN user_session_clients AS c ON c.id = us.user_session_client_id
 WHERE COALESCE(us.credential_id, us.id) = $1::uuid
   AND us.user_session_issuer_id = $2::uuid
   AND us.organization_id = $3::text
-  AND us.project_id IS NOT DISTINCT FROM $4::uuid
+  AND (us.project_id IS NULL OR us.project_id = $4::uuid)
   AND c.user_session_issuer_id = us.user_session_issuer_id
   AND us.subject_urn = $5
   AND c.client_id = $6::text
@@ -1844,6 +1844,8 @@ type GetReconnectSessionPolicyParams struct {
 
 // Resolve the original credential across refresh rotation, without reviving
 // revoked/expired connections or borrowing another client's catalogue.
+// Sessions from an organization-wide issuer have no project and may reconnect
+// through any project's gateway in that organization.
 func (q *Queries) GetReconnectSessionPolicy(ctx context.Context, arg GetReconnectSessionPolicyParams) ([]byte, error) {
 	row := q.db.QueryRow(ctx, getReconnectSessionPolicy,
 		arg.CredentialID,
@@ -8106,7 +8108,7 @@ UPDATE user_sessions AS us SET tool_selection = $1, updated_at = clock_timestamp
 WHERE COALESCE(us.credential_id, us.id) = $2::uuid
   AND us.user_session_issuer_id = $3::uuid
   AND us.organization_id = $4::text
-  AND us.project_id IS NOT DISTINCT FROM $5::uuid
+  AND (us.project_id IS NULL OR us.project_id = $5::uuid)
   AND us.subject_urn = $6
   AND us.tool_selection -> 'catalog' ->> 'id' = $7::text
   AND EXISTS (SELECT 1 FROM user_session_clients AS c
