@@ -122,6 +122,9 @@ func (c Check) keysRefusingGrant(grant Selector) (missing []string, matched bool
 	for key, grantVal := range grant {
 		checkVal, ok := carried[key]
 		if !ok {
+			if c.unknownMeetsBlock(key) {
+				continue
+			}
 			if !c.mayOmit(key) {
 				missing = append(missing, key)
 			}
@@ -132,6 +135,16 @@ func (c Check) keysRefusingGrant(grant Selector) (missing []string, matched bool
 		}
 	}
 	return missing, len(missing) == 0
+}
+
+// unknownMeetsBlock reports whether a block's limit on key applies to a tool
+// call that does not carry key. A tool call leaves the disposition out when
+// the tool's annotations are unknown, and an unknown value may be any of them,
+// so a block limited to a tool or a disposition takes the call away. Allows
+// never match a value the call does not carry (absence is not permission), so
+// an unknown value is refused either way.
+func (c Check) unknownMeetsBlock(key string) bool {
+	return (key == SelectorKeyDisposition || key == SelectorKeyTool) && c.isToolCall() && IsBlocklistScope(c.Scope)
 }
 
 // mayOmit reports whether the check may leave out a key that a grant of its
