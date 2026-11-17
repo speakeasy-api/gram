@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { shadowMCPModeOf } from "./shadowMCPMode";
+import { shadowMCPAudienceSummary, shadowMCPModeOf } from "./shadowMCPMode";
 import { isShadowMCPModePolicy } from "@/pages/security/policy-type";
 
 function policy(overrides: Partial<RiskPolicy>): RiskPolicy {
@@ -59,5 +59,42 @@ describe("isShadowMCPModePolicy", () => {
     expect(
       isShadowMCPModePolicy(policy({ sources: ["shadow_mcp", "gitleaks"] })),
     ).toBe(false);
+  });
+});
+
+describe("shadowMCPAudienceSummary", () => {
+  const groups = [
+    { options: [{ label: "Contractors", value: "role:contractors" }] },
+    { options: [{ label: "Priya", value: "user:priya" }] },
+  ];
+
+  it("names everyone, one person or role, or counts them", () => {
+    expect(shadowMCPAudienceSummary(undefined, groups)).toBe(
+      "Applies to everyone",
+    );
+    expect(
+      shadowMCPAudienceSummary(
+        { audienceType: "everyone", audiencePrincipalUrns: [] },
+        groups,
+      ),
+    ).toBe("Applies to everyone");
+    expect(
+      shadowMCPAudienceSummary(
+        {
+          audienceType: "targeted",
+          audiencePrincipalUrns: ["role:contractors"],
+        },
+        groups,
+      ),
+    ).toBe("Applies to Contractors");
+    expect(
+      shadowMCPAudienceSummary(
+        {
+          audienceType: "targeted",
+          audiencePrincipalUrns: ["role:a", "user:b", "user:c"],
+        },
+        groups,
+      ),
+    ).toBe("Applies to 1 role and 2 people");
   });
 });

@@ -28,6 +28,7 @@ import { useRecordMcpApprovalDecisionMutation } from "@gram/client/react-query/r
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { invalidateAllShadowMCPInventoryServer } from "@gram/client/react-query/shadowMCPInventoryServer.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { audienceGroups } from "./audienceGroups";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -64,41 +65,6 @@ export type AccessDecision = "approved" | "denied";
  */
 export const POLICIES_UNAVAILABLE_REASON =
   "Policy data could not be loaded — deciding now would not be enforced";
-
-type AudienceGroup = {
-  heading: string;
-  options: { label: string; value: string }[];
-};
-
-/**
- * The grouped role/member options an approval audience is picked from. Values
- * are principal URNs — exactly what recordDecision's granted_principal_urns
- * accepts.
- */
-function audienceGroups(
-  members: AccessMember[],
-  roles: Role[],
-): AudienceGroup[] {
-  return [
-    {
-      heading: "Roles",
-      options: roles.map((role) => ({
-        label: role.name,
-        value: role.principalUrn,
-      })),
-    },
-    {
-      heading: "Members",
-      options: members.map((member) => ({
-        label:
-          member.name && member.name !== member.email
-            ? `${member.name} (${member.email})`
-            : member.email,
-        value: member.principalUrn,
-      })),
-    },
-  ].filter((group) => group.options.length > 0);
-}
 
 const RATIONALE_PREFILL: Record<AccessDecision, string> = {
   approved: "Approved for use in this project.",

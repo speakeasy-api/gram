@@ -45,3 +45,35 @@ export const SHADOW_MCP_BLOCKED_BY_DEFAULT_POLICY = {
   score: 8,
   shadowMcpDisposition: "block_all",
 } as const;
+
+/**
+ * Who "blocked by default" applies to, in a few words for the page header:
+ * everyone, or the people and roles it was narrowed to.
+ */
+export function shadowMCPAudienceSummary(
+  policy:
+    | Pick<RiskPolicy, "audienceType" | "audiencePrincipalUrns">
+    | undefined,
+  groups: ReadonlyArray<{
+    options: ReadonlyArray<{ label: string; value: string }>;
+  }>,
+): string {
+  if (!policy || policy.audienceType !== "targeted") {
+    return "Applies to everyone";
+  }
+  const urns = policy.audiencePrincipalUrns;
+  if (urns.length === 0) return "Applies to nobody";
+  if (urns.length === 1) {
+    const label = groups
+      .flatMap((group) => group.options)
+      .find((option) => option.value === urns[0])?.label;
+    if (label) return `Applies to ${label}`;
+  }
+  const roles = urns.filter((urn) => urn.startsWith("role:")).length;
+  const people = urns.length - roles;
+  const parts = [
+    roles > 0 ? `${roles} ${roles === 1 ? "role" : "roles"}` : "",
+    people > 0 ? `${people} ${people === 1 ? "person" : "people"}` : "",
+  ].filter(Boolean);
+  return `Applies to ${parts.join(" and ")}`;
+}
