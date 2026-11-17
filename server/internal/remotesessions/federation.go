@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -179,7 +180,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	}
 	// Check authentication using secret presence only. Decrypt just at exchange.
 	secret := ""
-	if client.ClientSecretEncrypted.Valid && client.ClientSecretEncrypted.String != "" {
+	if hasNonEmptyClientSecret(client) {
 		secret = "present"
 	}
 	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)
@@ -316,7 +317,7 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
 		return nil, err
 	}
-	doer, clientAuth, err := m.federatedTokenClient(p)
+	doer, clientAuth, err := m.federatedTokenClient(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -524,13 +525,16 @@ func classifyFederatedExchangeError(err error) error {
 	return ErrFederatedIdentity
 }
 
-func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer, TokenEndpointClientAuth, error) {
+func (m *ChallengeManager) federatedTokenClient(ctx context.Context, p *FederatedProvider) (httpDoer, TokenEndpointClientAuth, error) {
 	secret := ""
-	if p.client.ClientSecretEncrypted.Valid && p.client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+	if stored := clientsecrets.Stored(p.client.ClientSecretEncrypted, p.client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && p.client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		var err error
-		secret, err = m.enc.Decrypt(p.client.ClientSecretEncrypted.String)
-		if err != nil {
+		secret, err = m.secrets.Open(ctx, nil, clientsecrets.OwnerOf(p.client.OrganizationID, p.client.ProjectID), stored)
+		switch {
+		case clientsecrets.IsUnreadable(err):
 			return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
+		case err != nil:
+			return nil, TokenEndpointClientAuth{}, fmt.Errorf("%w: open client secret: %w", ErrFederatedUnavailable, err)
 		}
 	}
 	method, err := ResolveTokenEndpointAuthMethod(p.client.TokenEndpointAuthMethod.String, secret)

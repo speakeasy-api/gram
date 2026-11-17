@@ -72,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -210,6 +211,7 @@ func NewActivities(
 	tunnelHTTPClient *tunnelrouting.HTTPClient,
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
+	clientSecrets *clientsecrets.Secrets,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
@@ -326,6 +328,7 @@ func NewActivities(
 				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
 				remotesessions.WithRefreshConnectionRecorder(connections),
 				remotesessions.WithRefreshFeatureFlags(features),
+				remotesessions.WithRefreshClientSecrets(clientSecrets),
 			),
 		)
 	}

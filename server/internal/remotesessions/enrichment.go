@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -151,8 +152,12 @@ type enrichmentTarget struct {
 	// resourceIndicatorUnsupported is the issuer's explicit false: the resource never reached it.
 	resourceIndicatorUnsupported bool
 
-	clientSecretEncrypted string
-	tokenEndpointAuth     string
+	// clientSecret opens the client's secret for introspection, which
+	// authenticates the way the token endpoint does. It returns "" for a
+	// client without one.
+	clientSecret func(context.Context) (string, error)
+
+	tokenEndpointAuth string
 
 	// issuerUse is the issuer row snapshot a reactive metadata refresh plans from.
 	issuerUse IssuerMetadataUse
@@ -164,7 +169,9 @@ type enrichmentTarget struct {
 	tunneledMcpServerID uuid.NullUUID
 }
 
-func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, organizationID string) enrichmentTarget {
+func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, organizationID string, secrets *clientsecrets.Secrets) enrichmentTarget {
+	stored := clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted)
+	owner := clientsecrets.OwnerOf(row.ClientOrganizationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	return enrichmentTarget{
 		issuerID:                     row.RemoteSessionIssuerID,
 		issuerURL:                    row.IssuerUrl,
@@ -176,10 +183,16 @@ func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWi
 		externalClientID:             row.ExternalClientID,
 		resource:                     "",
 		resourceIndicatorUnsupported: row.ResourceIndicatorSupported.Valid && !row.ResourceIndicatorSupported.Bool,
-		clientSecretEncrypted:        conv.FromPGTextOrEmpty[string](row.ClientSecretEncrypted),
-		tokenEndpointAuth:            conv.FromPGTextOrEmpty[string](row.TokenEndpointAuthMethod),
-		issuerUse:                    issuerUseFromClientRow(row),
-		tunneledMcpServerID:          row.TunneledMcpServerID,
+		clientSecret: func(ctx context.Context) (string, error) {
+			// A private_key_jwt client signs instead, as on the token endpoint.
+			if !clientsecrets.Has(stored) || row.TokenEndpointAuthMethod.String == string(TokenEndpointAuthMethodPrivateKeyJWT) {
+				return "", nil
+			}
+			return secrets.Open(ctx, nil, owner, stored)
+		},
+		tokenEndpointAuth:   conv.FromPGTextOrEmpty[string](row.TokenEndpointAuthMethod),
+		issuerUse:           issuerUseFromClientRow(row),
+		tunneledMcpServerID: row.TunneledMcpServerID,
 	}
 }
 
@@ -606,10 +619,10 @@ func (e *SessionEnricher) rejectJWTForOtherSubject(ctx context.Context, target e
 func (e *SessionEnricher) introspect(ctx context.Context, target enrichmentTarget, token string, hint string) introspectionResult {
 	answer, res := e.run(ctx, target, IdentitySourceIntrospection, target.introspectionEndpoint, func(ctx context.Context) (*http.Request, error) {
 		var clientSecret string
-		if target.clientSecretEncrypted != "" {
-			plain, err := e.enc.Decrypt(target.clientSecretEncrypted)
+		if target.clientSecret != nil {
+			plain, err := target.clientSecret(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("decrypt client secret: %w", err)
+				return nil, fmt.Errorf("open client secret: %w", err)
 			}
 			clientSecret = plain
 		}
@@ -779,7 +792,7 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 	if err != nil {
 		return none, fmt.Errorf("load issuer for enrichment: %w", err)
 	}
-	target := enrichmentTargetFromClient(client, ref.OrganizationID)
+	target := enrichmentTargetFromClient(client, ref.OrganizationID, m.secrets)
 	target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
 	if sess.IdentitySource.Valid && !slices.Contains(overwritableIdentitySources(IdentitySourceUserinfo), sess.IdentitySource.String) {
 		target.userinfoEndpoint = ""

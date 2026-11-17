@@ -894,6 +894,7 @@ func newWorkerCommand() *cli.Command {
 				TunnelHTTPClient:               tunnelHTTPClient,
 				DB:                             db,
 				EncryptionClient:               encryptionClient,
+				ClientSecrets:                  orgEncryption.ClientSecrets(logger, encryptionClient),
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,

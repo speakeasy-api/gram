@@ -289,3 +289,165 @@ func TestCopyStoreCountsUnreadableSecrets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1}, counts)
 }
+
+// otherProcessSecrets is Secrets in another process: same database and keys,
+// its own transition state cache.
+func (ti *testInstance) otherProcessSecrets(t *testing.T) *clientsecrets.Secrets {
+	t.Helper()
+
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	return clientsecrets.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), ti.platform, ti.fixture.Service, transitions), ti.platform)
+}
+
+func TestSetWithAStaleDualWriteDecisionWritesNoPlatformCopyAfterFinalize(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	owner := ti.organizationOwner()
+	client := ti.createClient(t, owner)
+	ti.enroll(t)
+
+	// Another process caches dual_write, then this one finalizes.
+	stale := ti.otherProcessSecrets(t)
+	require.NoError(t, stale.RequireUsable(t.Context(), ti.conn, owner))
+	ti.finalize(t)
+
+	row, err := stale.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
+	require.NoError(t, err)
+	require.False(t, row.ClientSecretEncrypted.Valid, "a writer that decided under dual_write never writes a platform-key copy after finalize")
+	require.True(t, row.ClientSecretOrgEncrypted.Valid)
+}
+
+func TestSetInsideATransactionSealsAgainAfterTheTransitionMoves(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	owner := ti.organizationOwner()
+	client := ti.createClient(t, owner)
+
+	require.NoError(t, ti.secrets.RequireUsable(t.Context(), ti.conn, owner))
+	_, err := ti.otherProcessTransitions(t).Enroll(t.Context(), ti.orgID, orgencryption.UseCaseOAuthClientSecrets, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, t.Context(), ti.conn)
+	row, err := ti.secrets.Set(t.Context(), tx, client.ID, owner, []byte("s3cret"), noExpiry())
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+	require.True(t, row.ClientSecretEncrypted.Valid)
+	require.True(t, row.ClientSecretOrgEncrypted.Valid, "the fenced write sealed again under dual_write inside the transaction")
+
+	stored := ti.stored(t, client.ID)
+	require.Equal(t, row.ClientSecretOrgEncrypted, stored.ClientSecretOrgEncrypted)
+}
+
+// otherProcessTransitions is transition state in another process.
+func (ti *testInstance) otherProcessTransitions(t *testing.T) *orgencryption.Transitions {
+	t.Helper()
+
+	return orgencryption.NewTransitions(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+}
+
+func TestOpenFailsClosedWhenTheOrganizationKeyIsSuspended(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.enroll(t)
+	owner := ti.organizationOwner()
+	client := ti.createClient(t, owner)
+	row, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
+	require.NoError(t, err)
+	require.NoError(t, ti.fixture.Provisioner.Suspend(t.Context(), ti.orgID, "customer disabled the key", orgencryption.SystemActor()))
+
+	_, err = ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
+	require.Error(t, err, "nothing falls back to the platform-key copy")
+	require.False(t, clientsecrets.IsUnreadable(err), "a suspended key is retryable, not a broken secret: %v", err)
+	require.True(t, clientsecrets.IsKeyProblem(err))
+}
+
+func TestCopyOpensTheSourceAndSealsForTheTarget(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	global := clientsecrets.OwnerOf(pgtype.Text{String: "", Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	source := ti.createClient(t, global)
+	sourceRow, err := ti.secrets.Set(t.Context(), ti.conn, source.ID, global, []byte("s3cret"), noExpiry())
+	require.NoError(t, err)
+
+	ti.enroll(t)
+	owner := ti.organizationOwner()
+	target := ti.createClient(t, owner)
+	row, copied, err := ti.secrets.Copy(t.Context(), ti.conn, global, clientsecrets.Stored(sourceRow.ClientSecretEncrypted, sourceRow.ClientSecretOrgEncrypted), target.ID, owner, noExpiry())
+	require.NoError(t, err)
+	require.True(t, copied)
+	require.True(t, row.ClientSecretOrgEncrypted.Valid, "a global client's secret is sealed again for the organization")
+	require.NotEqual(t, sourceRow.ClientSecretEncrypted, row.ClientSecretEncrypted, "a ciphertext is never copied as stored")
+
+	opened, err := ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
+	require.NoError(t, err)
+	require.Equal(t, "s3cret", opened)
+
+	_, copied, err = ti.secrets.Copy(t.Context(), ti.conn, global, clientsecrets.Stored(pgtype.Text{}, pgtype.Text{}), target.ID, owner, noExpiry())
+	require.NoError(t, err)
+	require.False(t, copied, "a source without a secret copies nothing")
+}
+
+func TestCopyStorePagesWaitingSecretsByID(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	owner := ti.organizationOwner()
+	for range 3 {
+		client := ti.createClient(t, owner)
+		_, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
+		require.NoError(t, err)
+	}
+
+	store := clientsecrets.NewCopyStore(ti.conn)
+	first, err := store.ListWaiting(t.Context(), ti.orgID, "", 2)
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+	rest, err := store.ListWaiting(t.Context(), ti.orgID, first[1].RowID, 2)
+	require.NoError(t, err)
+	require.Len(t, rest, 1)
+	require.NotContains(t, []string{first[0].RowID, first[1].RowID}, rest[0].RowID)
+}
+
+func TestCopyStoreSealWaitingLandsOnlyOnTheCopyItRead(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	owner := ti.organizationOwner()
+	client := ti.createClient(t, owner)
+	_, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("old"), noExpiry())
+	require.NoError(t, err)
+
+	store := clientsecrets.NewCopyStore(ti.conn)
+	waiting, err := store.ListWaiting(t.Context(), ti.orgID, "", 10)
+	require.NoError(t, err)
+	require.Len(t, waiting, 1)
+
+	// The secret is replaced between the backfill's read and its write.
+	_, err = ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("new"), noExpiry())
+	require.NoError(t, err)
+
+	landed, err := store.SealWaiting(t.Context(), ti.orgID, 0, waiting[0], "organization-copy")
+	require.NoError(t, err)
+	require.False(t, landed, "a seal of a replaced platform-key copy never lands")
+	require.False(t, ti.stored(t, client.ID).ClientSecretOrgEncrypted.Valid)
+}
+
+func TestCopyStoreClearPlatformCopiesIsFencedOnGeneration(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	owner := ti.organizationOwner()
+	client := ti.createClient(t, owner)
+	ti.enroll(t)
+	_, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
+	require.NoError(t, err)
+
+	cleared, err := clientsecrets.NewCopyStore(ti.conn).ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+	require.NoError(t, err)
+	require.Zero(t, cleared, "a clear decided under a stale generation changes nothing")
+	require.True(t, ti.stored(t, client.ID).ClientSecretEncrypted.Valid)
+}

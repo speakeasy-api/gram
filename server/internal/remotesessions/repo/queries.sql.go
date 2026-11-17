@@ -3642,6 +3642,7 @@ SELECT
     c.organization_id                      AS organization_id,
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
+    c.client_secret_org_encrypted          AS client_secret_org_encrypted,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
@@ -3690,6 +3691,7 @@ type GetClientCredentialsGrantClientRow struct {
 	OrganizationID                  pgtype.Text
 	ExternalClientID                string
 	ClientSecretEncrypted           pgtype.Text
+	ClientSecretOrgEncrypted        pgtype.Text
 	ClientSecretExpiresAt           pgtype.Timestamptz
 	TokenEndpointAuthMethod         pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
@@ -3720,6 +3722,7 @@ func (q *Queries) GetClientCredentialsGrantClient(ctx context.Context, arg GetCl
 		&i.OrganizationID,
 		&i.ExternalClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
 		&i.TokenEndpointAuthAudienceFormat,
@@ -5097,7 +5100,6 @@ SELECT
     c.id                                   AS client_id,
     c.project_id                           AS client_project_id,
     c.client_id                            AS external_client_id,
-    c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
@@ -5171,7 +5173,6 @@ type GetReachableRemoteSessionClientRow struct {
 	ClientID                                   uuid.UUID
 	ClientProjectID                            uuid.NullUUID
 	ExternalClientID                           string
-	ClientSecretEncrypted                      pgtype.Text
 	TokenEndpointAuthMethod                    pgtype.Text
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
@@ -5227,7 +5228,6 @@ func (q *Queries) GetReachableRemoteSessionClient(ctx context.Context, arg GetRe
 		&i.ClientID,
 		&i.ClientProjectID,
 		&i.ExternalClientID,
-		&i.ClientSecretEncrypted,
 		&i.TokenEndpointAuthMethod,
 		&i.ClientScope,
 		&i.ClientAudience,
@@ -5668,6 +5668,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.organization_id                      AS client_organization_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
+    c.client_secret_org_encrypted          AS client_secret_org_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
@@ -5687,6 +5688,7 @@ type GetRemoteSessionClientRevocationTargetByIDRow struct {
 	ExternalClientID                string
 	ClientOrganizationID            pgtype.Text
 	ClientSecretEncrypted           pgtype.Text
+	ClientSecretOrgEncrypted        pgtype.Text
 	TokenEndpointAuthMethod         pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	JsonWebKeySetID                 uuid.NullUUID
@@ -5716,6 +5718,7 @@ func (q *Queries) GetRemoteSessionClientRevocationTargetByID(ctx context.Context
 		&i.ExternalClientID,
 		&i.ClientOrganizationID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
 		&i.TokenEndpointAuthMethod,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.JsonWebKeySetID,
@@ -5754,6 +5757,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.organization_id                     AS client_organization_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
+    c.client_secret_org_encrypted          AS client_secret_org_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
@@ -5817,6 +5821,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ExternalClientID                          string
 	ClientOrganizationID                      pgtype.Text
 	ClientSecretEncrypted                     pgtype.Text
+	ClientSecretOrgEncrypted                  pgtype.Text
 	TokenEndpointAuthMethod                   pgtype.Text
 	TokenEndpointAuthAudienceFormat           pgtype.Text
 	JsonWebKeySetID                           uuid.NullUUID
@@ -5872,6 +5877,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ExternalClientID,
 		&i.ClientOrganizationID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
 		&i.TokenEndpointAuthMethod,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.JsonWebKeySetID,
@@ -10574,7 +10580,6 @@ SELECT
     c.id                                   AS client_id,
     c.project_id                           AS client_project_id,
     c.client_id                            AS external_client_id,
-    c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
@@ -10649,7 +10654,6 @@ type ListReachableRemoteSessionClientsRow struct {
 	ClientID                                   uuid.UUID
 	ClientProjectID                            uuid.NullUUID
 	ExternalClientID                           string
-	ClientSecretEncrypted                      pgtype.Text
 	TokenEndpointAuthMethod                    pgtype.Text
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
@@ -10708,7 +10712,6 @@ func (q *Queries) ListReachableRemoteSessionClients(ctx context.Context, arg Lis
 			&i.ClientID,
 			&i.ClientProjectID,
 			&i.ExternalClientID,
-			&i.ClientSecretEncrypted,
 			&i.TokenEndpointAuthMethod,
 			&i.ClientScope,
 			&i.ClientAudience,
@@ -11116,7 +11119,6 @@ SELECT
     c.id                                   AS client_id,
     c.project_id                           AS client_project_id,
     c.client_id                            AS external_client_id,
-    c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
@@ -11205,7 +11207,6 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientID                                   uuid.UUID
 	ClientProjectID                            uuid.NullUUID
 	ExternalClientID                           string
-	ClientSecretEncrypted                      pgtype.Text
 	TokenEndpointAuthMethod                    pgtype.Text
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
@@ -11280,7 +11281,6 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ClientID,
 			&i.ClientProjectID,
 			&i.ExternalClientID,
-			&i.ClientSecretEncrypted,
 			&i.TokenEndpointAuthMethod,
 			&i.ClientScope,
 			&i.ClientAudience,

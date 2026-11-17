@@ -124,7 +124,7 @@ var (
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, secrets *clientsecrets.Secrets, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client, protectedResources *protectedresource.Prober) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
-	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
+	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, secrets, policy, tunnels, refresher.assertions)
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
 
 	return &Service{

@@ -406,7 +406,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		if err := revalidateRotationSnapshot(ctx, q, row); err != nil {
 			return zero, err
 		}
-		recognized, err := r.upstreamRecognizesClient(ctx, row)
+		recognized, err := r.upstreamRecognizesClient(ctx, conn, row)
 		if err != nil {
 			return zero, fmt.Errorf("probe issuer for client registration: %w", err)
 		}
@@ -679,7 +679,7 @@ func (r *ClientRotator) awaitRotation(ctx context.Context, clientID uuid.UUID, s
 // already gone, leaving the client reconnecting with the dead client_id until
 // its next rejection; so an issuer having a bad minute neither rotates nor
 // exonerates the client.
-func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.GetRemoteSessionClientForRotationRow) (bool, error) {
+func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, db repo.DBTX, row repo.GetRemoteSessionClientForRotationRow) (bool, error) {
 	client := row.RemoteSessionClient
 	tokenEndpoint := row.IssuerTokenEndpoint.String
 	if tokenEndpoint == "" {
@@ -687,10 +687,10 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 	}
 
 	clientSecret := ""
-	if client.ClientSecretEncrypted.Valid {
-		secret, err := r.enc.Decrypt(client.ClientSecretEncrypted.String)
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) {
+		secret, err := r.secrets.Open(ctx, db, clientOwner(client), stored)
 		if err != nil {
-			return false, fmt.Errorf("decrypt stored client secret: %w", err)
+			return false, fmt.Errorf("open stored client secret: %w", err)
 		}
 		clientSecret = secret
 	}
@@ -806,7 +806,6 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 	}
 
 	client.ExternalClientID = rotated.ClientID
-	client.ClientSecretEncrypted = conv.FromPGText[string](rotated.ClientSecretEncrypted)
 	client.LegacyCallbackUrl = rotated.LegacyCallbackUrl
 	client.ClientSecretExpiresAt = timestampPtr(rotated.ClientSecretExpiresAt)
 	client.UpstreamRejectedAt = timestampPtr(rotated.UpstreamRejectedAt)
