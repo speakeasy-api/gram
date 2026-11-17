@@ -276,6 +276,10 @@ GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
 ## Raise on blocking code detected on the pystreams event loop (aiocop). On by
 ## default locally; unset in production. Set to "" in mise.local.toml to disable.
 GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
+## Skip pystreams locally: `gram streams` acknowledges its subscriptions and
+## answers Presidio enforcement with no findings. Set to "false" in
+## mise.local.toml to run the real Python consumers (pystreams-multi daemon).
+GRAM_PYSTREAMS_STUB = "true"
 
 ##########################
 ## Observability config ##

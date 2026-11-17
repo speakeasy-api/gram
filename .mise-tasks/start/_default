@@ -63,6 +63,10 @@ if [ "${GRAM_TLS_PROVIDER:-mkcert}" = tailscale ]; then
   pitchfork start tailscale-cert
 fi
 pitchfork start --group default
+case "${GRAM_PYSTREAMS_STUB:-}" in
+  1 | true | TRUE | True) ;;
+  *) pitchfork start pystreams-multi ;;
+esac
 
 gum style \
   --foreground 10 --border-foreground 10 --border rounded \
