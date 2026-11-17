@@ -15,23 +15,32 @@ func TestOpenKeys_Golden(t *testing.T) {
 
 	project := []string{SelectorKeyProjectID}
 	server := []string{SelectorKeyServerURL, SelectorKeyServerIdentity}
-	want := map[Scope]openKeys{
-		ScopeAssistantRead:      {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeAssistantWrite:     {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeEnvironmentRead:    {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeEnvironmentWrite:   {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeInferenceExecute:   {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeMCPRead:            {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeMCPWrite:           {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeOrgHooksIngest:     {Probe: project, Connection: nil, PolicyAudience: nil},
-		ScopeRiskPolicyBlock:    {Probe: server, Connection: nil, PolicyAudience: nil},
-		ScopeRiskPolicyBypass:   {Probe: server, Connection: nil, PolicyAudience: nil},
-		ScopeRiskPolicyEvaluate: {Probe: server, Connection: nil, PolicyAudience: server},
-		ScopeMCPConnect: {
+	// A list of entries, not a map literal, so the list names only the
+	// scopes that open a key.
+	entries := []struct {
+		scope Scope
+		keys  openKeys
+	}{
+		{ScopeAssistantRead, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeAssistantWrite, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeEnvironmentRead, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeEnvironmentWrite, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeInferenceExecute, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeMCPRead, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeMCPWrite, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeOrgHooksIngest, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
+		{ScopeRiskPolicyBlock, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
+		{ScopeRiskPolicyBypass, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
+		{ScopeRiskPolicyEvaluate, openKeys{Probe: server, Connection: nil, PolicyAudience: server}},
+		{ScopeMCPConnect, openKeys{
 			Probe:          []string{SelectorKeyProjectID, SelectorKeyTool, SelectorKeyDisposition},
 			Connection:     []string{SelectorKeyTool, SelectorKeyDisposition},
 			PolicyAudience: nil,
-		},
+		}},
+	}
+	want := make(map[Scope]openKeys, len(entries))
+	for _, e := range entries {
+		want[e.scope] = e.keys
 	}
 	require.Equal(t, want, scopeOpenKeys)
 }
