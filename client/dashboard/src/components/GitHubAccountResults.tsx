@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { JSX, ReactNode } from "react";
 import type { GithubUserResult } from "@/hooks/useGitHubAccountSearch";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -22,7 +22,7 @@ export function GitHubAccountResults({
   onSelect,
   loading,
   emptyMessage,
-}: GitHubAccountResultsProps) {
+}: GitHubAccountResultsProps): JSX.Element {
   return (
     <div className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto border p-1 shadow-lg">
       {results.length > 0 ? (
