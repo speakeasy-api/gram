@@ -78,13 +78,14 @@ const element = (attrs = {}) => ({
   removeAttribute(name) { delete this.attrs[name]; },
   appendChild(child) { this.children.push(child); },
 });
-const fallbackClass = 'text-foreground interact:underline';
+const fallbackClass = 'interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm';
 const cards = {};
 const fallbacks = [];
 const statuses = ['connected', 'rejected', 'ready', 'error', 'offline', 'wide'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = fallbackClass;
+  fallback.textContent = 'Use your own account';
   const card = element({ 'data-remote-client': id, 'data-remote-display': id === 'wide' ? 'A Very Long Service Name Workspace' : 'Example' });
   card.offsetWidth = id === 'wide' ? 400 : 600;
   // The label's width follows its text, as it does on the page.
@@ -134,12 +135,10 @@ vm.runInNewContext(source, {
   window: { setTimeout: () => {}, addEventListener() {}, location: { reload: () => {} } },
 });
 
-const label = (fallback) => fallback.textContent + ' ' + fallback.children[fallback.children.length - 1].textContent;
 for (const id of ['connected', 'rejected', 'ready', 'error', 'offline']) {
-  assert.equal(label(cards[id].fallback), 'Use your own Example account \u203a', id + ': one label in every state');
-  assert.equal(cards[id].fallback.children[0].attrs['aria-hidden'], 'true', id + ': the chevron is decoration');
+  assert.equal(cards[id].fallback.textContent, 'Use your own Example account', id + ': the page names the service when it fits, one label in every state');
 }
-assert.equal(label(cards.wide.fallback), 'Use your own account \u203a', 'a label wider than half the card drops the service name');
+assert.equal(cards.wide.fallback.textContent, 'Use your own account', 'a label wider than half the card keeps the short label');
 
 for (const status of statuses) {
   assert.equal(status.children.length, 2, 'checking shows a spinner and label');
@@ -155,21 +154,21 @@ setTimeout(() => {
   assert.equal(ok.status.getAttribute('data-chain-check'), 'connected');
   assert.equal(ok.status.className, 'text-xs text-default-success');
   assert.equal(ok.status.textContent, 'Service connected through your identity provider');
-  assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the same link');
+  assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the same button');
   assert.equal(summary.textContent, '2 of 5 connected');
 
   const ready = cards.ready;
   assert.equal(ready.status.getAttribute('data-chain-check'), 'unknown', 'an unrecognized status reads neutral');
   assert.equal(ready.status.textContent, 'Managed by your identity provider');
-  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps the same link');
+  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps the same button');
   assert.equal(summary.textContent, '2 of 5 connected', 'a neutral card does not claim a downstream token');
 
   const no = cards.rejected;
   assert.equal(no.status.getAttribute('data-chain-check'), 'rejected');
   assert.equal(no.status.className, 'text-xs text-default-warning');
   assert.equal(no.status.textContent, 'Example refused.');
-  assert.equal(no.fallback.className, fallbackClass, 'a refusal keeps the same link, not a filled button');
-  assert.equal(label(no.fallback), 'Use your own Example account \u203a');
+  assert.equal(no.fallback.className, fallbackClass, 'a refusal keeps the same outlined button');
+  assert.equal(no.fallback.textContent, 'Use your own Example account');
   assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');
   assert.deepEqual(dispatched, ['gram:consent-chain-rejected', 'gram:consent-chain-rejected'], 'each refusal signals it');
 
@@ -209,7 +208,7 @@ const element = (attrs = {}) => ({
 });
 const rowClass = 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between';
 const actionsClass = 'flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end';
-const linkClass = 'text-foreground interact:underline flex h-8 items-center gap-1 whitespace-nowrap text-xs';
+const linkClass = 'interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm';
 const cards = {};
 const switches = [];
 const fallbacks = [];
@@ -278,20 +277,19 @@ vm.runInNewContext(source, {
 });
 
 setTimeout(() => {
-  const label = (link) => link.textContent + ' ' + link.children[link.children.length - 1].textContent;
   const personal = cards.personal;
   assert.equal(personal.status.textContent, 'Personal account.');
   assert.equal(personal.switchAccount.getAttribute('hidden'), null, 'the company sign-in is shown');
   assert.equal(personal.row.className, rowClass, 'the card keeps the row every card uses');
-  assert.equal(personal.actions.className, 'flex flex-col items-start sm:items-end', 'the link sits under the company sign-in');
-  assert.equal(personal.fallback.className, linkClass, 'the same row link as every other state');
-  assert.equal(label(personal.fallback), 'Use your own Example account \u203a');
+  assert.equal(personal.actions.className, 'flex shrink-0 flex-col items-start gap-1.5 sm:items-stretch', 'the own-account button sits under the company sign-in at one width');
+  assert.equal(personal.fallback.className, linkClass + ' justify-center', 'the same outlined button, its label centred at the shared width');
+  assert.equal(personal.fallback.textContent, 'Use your own Example account');
 
   const admin = cards.admin;
   assert.equal(admin.switchAccount.getAttribute('hidden'), '', 'no switch for an administrator refusal');
   assert.equal(admin.actions.className, actionsClass);
   assert.equal(admin.fallback.className, linkClass);
-  assert.equal(label(admin.fallback), 'Use your own Example account \u203a');
+  assert.equal(admin.fallback.textContent, 'Use your own Example account');
 
   personal.switchAccount.listeners.click({ preventDefault() {} });
   assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'the first click marks the switch busy');

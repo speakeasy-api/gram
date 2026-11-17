@@ -221,7 +221,7 @@ func TestConsentPage_CachedChainedCredentialRendersConnected(t *testing.T) {
 	require.Contains(t, page, "Service connected through your identity provider")
 	require.Contains(t, page, `data-chain-check="connected"`)
 	require.Contains(t, page, "1 of 1 connected")
-	require.Contains(t, page, "Use your own aim480-check-cached-rsi account <span aria-hidden=\"true\">&rsaquo;</span>")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
 	require.Empty(t, g.acquired, "rendering reads stored credentials only")
 }
 
@@ -239,7 +239,7 @@ func TestConsentChainCheck_UnknownAllowsAuthorizationWithoutPersonalOAuth(t *tes
 	require.Equal(t, http.StatusOK, code)
 	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")
 	require.Contains(t, page, `data-consent-enabled="true"`)
-	require.Contains(t, page, "Use your own ema-consent-unknown-rsi account <span aria-hidden=\"true\">&rsaquo;</span>")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
 	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))

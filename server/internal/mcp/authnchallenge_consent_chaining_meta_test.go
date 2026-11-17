@@ -24,7 +24,7 @@ func TestConsentPage_MetaGovernedRemoteMemberIsManaged(t *testing.T) {
 	require.Contains(t, page, consentManagedCopy)
 	require.Contains(t, page, "0 of 1 connected", "a chained service counts once its check connects")
 	require.Contains(t, page, `data-chain-check="pending"`)
-	require.Contains(t, page, "Use your own aim61-meta-chained-rsi account <span aria-hidden=\"true\">&rsaquo;</span>")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
 
 	reqs := g.seen()
 	require.NotEmpty(t, reqs)
