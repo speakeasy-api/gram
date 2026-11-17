@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -69,6 +70,45 @@ func TestConsentValidationVerifiesAnAssociatedGatewayMemberBesideAnotherProvider
 
 	requireValidated(t, fx)
 	requireProbe(t, fx.member.drain(), "token-validate-associated-meta", true, true)
+}
+
+// Where upstream auth is enforced, a gateway member's typed auth client
+// decides its credential, so a card that client offers verifies even when the
+// sign-in also binds another client of the same authorization server, with
+// its own grant for the member's upstream.
+func TestConsentValidationVerifiesATypedOfferBesideASameProviderClientUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedMetaValidationFixture(t, "validate-typed-meta")
+	projectID, orgID := consentTestTenant(t, ctx)
+	_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	fx.ti.service.SetAuthClientPermission(func() bool { return true })
+
+	member, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpservers_repo.GetMCPServerBySlugParams{Slug: conv.ToPGText("validate-typed-meta-member"), ProjectID: projectID})
+	require.NoError(t, err)
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(fx.clientID)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: member.ID, AuthClientID: authClientID, Source: "admin"}))
+
+	q := remotesessionsrepo.New(fx.ti.conn)
+	duplicate, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(orgID),
+		RemoteSessionIssuerID: clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, fx.clientID),
+		ClientID:              "validate-typed-meta-duplicate-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: duplicate.ID,
+		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
+	}))
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-typed-duplicate", fx.member.url)
+
+	requireValidated(t, fx)
+	requireProbe(t, fx.member.drain(), "token-validate-typed-meta", true, true)
 }
 
 // A standalone server verifies the card's own client with that client's

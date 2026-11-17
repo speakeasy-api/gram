@@ -350,8 +350,12 @@ func (s *Service) probeRemoteSession(
 	// The target resolver proves that this card is the credential selected for
 	// the target. A gateway member's dispatch routes from the member's own
 	// credential set, so the check reads the same set to refuse what dispatch
-	// would refuse.
+	// would refuse. A card a typed auth client offers already resolved to its
+	// one registration, which is what an enforcing dispatch routes from.
 	memberTokens := func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		if offer {
+			return tokens, nil
+		}
 		if resolvesByAssociation(member) {
 			return s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
 		}
