@@ -50,10 +50,12 @@ type shadowMCPRequestLink struct {
 func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
 	server := conv.PtrValOr(redactedObservedName(params.Evidence, params.ToolName), "")
 	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason, params.PolicyName, server)
-	// A server with an official version is not something to ask access to:
-	// the answer is to use the official one. No request link is minted and no
-	// block effect is set, so nothing downstream offers "request access".
-	if official, ok := s.shadowMCPOfficialServer(ctx, params.OrganizationID, params.ProjectID, params.Evidence.FullURL); ok {
+	// A server linked to an official version is not something to ask access
+	// to: the answer is to use the official one. No request link is minted and
+	// no block effect is set, so nothing downstream offers "request access".
+	// A switched-off link leaves the ordinary rules in charge, so a block then
+	// reads like any other and offers the request link.
+	if official, ok := s.shadowMCPOfficialServer(ctx, params.OrganizationID, params.ProjectID, params.Evidence.FullURL); ok && !official.DirectAccessAllowed {
 		return strings.TrimSpace(message) + "\n\n" + shadowMCPOfficialServerRedirect(official)
 	}
 	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)

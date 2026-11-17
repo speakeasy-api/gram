@@ -320,6 +320,22 @@ func TestEnforceShadowMCPToolAccess_KeptDirectAccessFollowsOrdinaryRules(t *test
 	require.True(t, denied)
 	require.Contains(t, detail, "not Speakeasy-hosted")
 	require.NotContains(t, detail, "official version")
+
+	// The message an agent reads does not send it to the official server
+	// either: with the link off, that server is not the answer yet.
+	reason := ti.service.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       authCtx.ProjectID.String(),
+		RequesterUserID: authCtx.UserID,
+		UserMessage:     nil,
+		AuditReason:     "Speakeasy blocked this tool call",
+		Evidence:        shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "testing"},
+		ToolName:        "search",
+		ToolInput:       nil,
+		RiskPolicyID:    uuid.NewString(),
+		PolicyName:      "Shadow MCP Block",
+	})
+	require.NotContains(t, reason, "official version")
 }
 
 func TestRenderShadowMCPUserBlockReason_SendsAgentToChosenServer(t *testing.T) {
