@@ -341,7 +341,7 @@ func validateParentDimension(fail func(string, ...any), t ResourceType) {
 // permission or its type. Only a permission with dimension sets has a
 // connection, the plain form of its ref that leaves the set out.
 func validateOpenKeys(fail func(string, ...any), owner string, p Permission, declared func(string) bool) {
-	seen := map[OpenOn]bool{}
+	seen := make(map[OpenOn]bool, len(p.Open))
 	for _, open := range p.Open {
 		switch open.On {
 		case OpenOnProbe, OpenOnPolicyAudience:
