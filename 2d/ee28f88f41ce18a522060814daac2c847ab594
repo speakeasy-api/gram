@@ -1,0 +1,29 @@
+server/migrations/20261117155156_chat-messages-autoanalyze-cadence.sql
+  s_5d8afeea7d7532::t_4a83e6c90f96a3 1-3,5-8
+server/database/schema.sql
+  s_5d8afeea7d7532::t_38b7458a726998 7186-7193,7274-7279,7483-7486
+  s_5d8afeea7d7532::t_f3d1635fc5024d 7487
+server/internal/chat/queries.sql
+  s_5d8afeea7d7532::t_622c859370f9a1 1992-2036
+server/internal/chat/get_chat_metrics_summary_test.go
+  s_5d8afeea7d7532::t_aff084ee1a4d58 174-175,177,179-185
+  s_5d8afeea7d7532::t_b34c8fafe38e36 77-173,176,178,186-187
+server/internal/chat/repo/queries.sql.go
+  s_5d8afeea7d7532::t_6782bfdc33010b 1165,1167-1171,1174,1176-1183,1187-1188,1190,1192-1199,1216-1221,4383-4443
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2dee28f88f41ce18a522060814daac2c847ab594",
+  "prompts": {},
+  "sessions": {
+    "s_5d8afeea7d7532": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f553444d-a6f3-494d-8475-5cd56f07da4c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
