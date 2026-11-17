@@ -312,6 +312,12 @@ func NewActivities(
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
 	}
 
+	// Workers wired without the process's client secret seam (test workers)
+	// open client secrets as a process without organization encryption.
+	if clientSecrets == nil {
+		clientSecrets = clientsecrets.WithoutOrganizationEncryption(logger, db, encryption)
+	}
+
 	// The scheduled refresh shares the remotesessions single-flight primitive,
 	// which needs the Redis lock cache; workers wired without one (e.g.
 	// deployment-processing test workers) get a nil activity and the wrapper
@@ -403,9 +409,9 @@ func NewActivities(
 	// build their client and their applications sync is recorded as failed.
 	var oktaClients okta.ClientFactory
 	if guardianPolicy != nil {
-		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner, encryption)
+		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner)
 	}
-	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients)
+	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients, clientSecrets)
 
 	return &Activities{
 		db:                               db,

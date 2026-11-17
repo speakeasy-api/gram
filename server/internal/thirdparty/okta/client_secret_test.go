@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -49,7 +50,9 @@ func TestClient_ClientSecretBasic_EncodesCredentialsAndOmitsAssertion(t *testing
 		}
 	}
 	require.Equal(t, 0, tc.signer.Calls())
-	require.Equal(t, 2, tc.decrypter.Calls(), "the secret is decrypted per token request")
+	credentials, ok := tc.client.cfg.Credentials.(*fakeCredentials)
+	require.True(t, ok)
+	require.EqualValues(t, 1, credentials.opens.Load(), "the secret is opened once per token exchange")
 }
 
 func TestClient_ClientSecretBasic_DPoPTokenWithNonceRetry(t *testing.T) {
@@ -122,16 +125,24 @@ func TestClient_ClientSecretBasic_WrongSecretIsInvalidClient(t *testing.T) {
 	require.NotContains(t, err.Error(), "stub-secret")
 }
 
-func TestClient_ClientSecretBasic_DecryptFailureSendsNothing(t *testing.T) {
+func TestClient_ClientSecretBasic_OpenFailureSendsNothing(t *testing.T) {
 	t.Parallel()
-	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), basicTestConfig("stub-secret"))
-	tc.decrypter.setErr(errors.New("cipher: message authentication failed"))
+	for _, sentinel := range []error{ErrClientSecretUndecryptable, ErrClientSecretKeyUnavailable} {
+		t.Run(sentinel.Error(), func(t *testing.T) {
+			t.Parallel()
+			cfg := basicTestConfig("stub-secret")
+			credentials, ok := cfg.Credentials.(*fakeCredentials)
+			require.True(t, ok)
+			failure := fmt.Errorf("%w: cipher: message authentication failed", sentinel)
+			credentials.secretErr.Store(&failure)
+			tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), cfg)
 
-	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0, MaxPages: 0})
-	require.ErrorIs(t, err, ErrClientSecretUndecryptable)
-	require.NotContains(t, err.Error(), "stub-secret")
-	require.NotContains(t, err.Error(), stubCiphertextPrefix)
-	require.Equal(t, 0, tc.stub.counts().tokenRequests)
+			_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0, MaxPages: 0})
+			require.ErrorIs(t, err, sentinel)
+			require.NotContains(t, err.Error(), "stub-secret")
+			require.Equal(t, 0, tc.stub.counts().tokenRequests)
+		})
+	}
 }
 
 func TestClient_ClientSecretBasic_NeverLogsOrTracesSecret(t *testing.T) {
@@ -171,8 +182,6 @@ func TestNewClient_ValidatesPerAuthMethod(t *testing.T) {
 	require.NoError(t, err)
 	httpClient := policy.PooledClient()
 	signer := &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}
-	decrypter := &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0}
-
 	base := testConfig()
 	base.OrgURL = "https://example.okta.com"
 	base.ClientID = stubClientID
@@ -184,30 +193,28 @@ func TestNewClient_ValidatesPerAuthMethod(t *testing.T) {
 
 	noKeySet := base
 	noKeySet.JSONWebKeySetID = uuid.Nil
-	noSecret := basic
-	noSecret.ClientSecretEncrypted = ""
+	noCredentials := basic
+	noCredentials.Credentials = nil
 	post := basic
 	post.AuthMethod = remotesessions.TokenEndpointAuthMethodPost
 
 	cases := []struct {
-		name      string
-		cfg       Config
-		signer    remotesessions.TokenEndpointAssertionSigner
-		decrypter SecretDecrypter
-		wantErr   string
+		name    string
+		cfg     Config
+		signer  remotesessions.TokenEndpointAssertionSigner
+		wantErr string
 	}{
-		{name: "private_key_jwt by default", cfg: base, signer: signer, decrypter: nil, wantErr: ""},
-		{name: "private_key_jwt without signer", cfg: base, signer: nil, decrypter: decrypter, wantErr: "okta: private_key_jwt requires an assertion signer"},
-		{name: "private_key_jwt without key set", cfg: noKeySet, signer: signer, decrypter: decrypter, wantErr: "okta: private_key_jwt requires a key set"},
-		{name: "client_secret_basic without signer or key set", cfg: basic, signer: nil, decrypter: decrypter, wantErr: ""},
-		{name: "client_secret_basic without secret", cfg: noSecret, signer: signer, decrypter: decrypter, wantErr: "okta: client_secret_basic requires a client secret"},
-		{name: "client_secret_basic without decrypter", cfg: basic, signer: signer, decrypter: nil, wantErr: "okta: client_secret_basic requires a secret decrypter"},
-		{name: "client_secret_post unsupported", cfg: post, signer: signer, decrypter: decrypter, wantErr: `okta: unsupported token endpoint auth method "client_secret_post"`},
+		{name: "private_key_jwt by default", cfg: base, signer: signer, wantErr: ""},
+		{name: "private_key_jwt without signer", cfg: base, signer: nil, wantErr: "okta: private_key_jwt requires an assertion signer"},
+		{name: "private_key_jwt without key set", cfg: noKeySet, signer: signer, wantErr: "okta: private_key_jwt requires a key set"},
+		{name: "client_secret_basic without signer or key set", cfg: basic, signer: nil, wantErr: ""},
+		{name: "client_secret_basic without credential provider", cfg: noCredentials, signer: signer, wantErr: "okta: client_secret_basic requires a credential provider"},
+		{name: "client_secret_post unsupported", cfg: post, signer: signer, wantErr: `okta: unsupported token endpoint auth method "client_secret_post"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NewClient(testenv.NewLogger(t), httpClient, tc.signer, tc.decrypter, tc.cfg)
+			_, err := NewClient(testenv.NewLogger(t), httpClient, tc.signer, tc.cfg)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
 				return
@@ -222,7 +229,7 @@ func TestClientFactory_RebuildsOnConfigChange(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, nil, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, nil)
 
 	cfg := basicTestConfig("stub-secret")
 	cfg.OrgURL = "https://example.okta.com"
@@ -237,7 +244,7 @@ func TestClientFactory_RebuildsOnConfigChange(t *testing.T) {
 	require.Same(t, a, same)
 
 	replaced := cfg
-	replaced.ClientSecretEncrypted = stubCiphertextPrefix + "replaced-secret"
+	replaced.Credentials = newFakeCredentials("replaced-secret")
 	b, err := factory.Client(replaced)
 	require.NoError(t, err)
 	require.NotSame(t, a, b)
@@ -252,7 +259,7 @@ func TestClientFactory_RebuildsOnConfigChange(t *testing.T) {
 	require.NotSame(t, b, c)
 
 	invalid := reissued
-	invalid.ClientSecretEncrypted = ""
+	invalid.Credentials = nil
 	_, err = factory.Client(invalid)
 	require.Error(t, err)
 	d, err := factory.Client(reissued)
@@ -265,7 +272,7 @@ func TestFake_RequireClientSecret(t *testing.T) {
 	const orgURL = "https://a.okta.com"
 	factory := NewFakeFactory(map[string]Fixtures{orgURL: {Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: []string{"okta.apps.read"}}})
 	fake := factory.Fake(orgURL)
-	fake.RequireClientSecret("stub-secret", &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
+	fake.RequireClientSecret("stub-secret")
 
 	cfg := basicTestConfig("stub-secret")
 	cfg.OrgURL = orgURL
@@ -275,7 +282,7 @@ func TestFake_RequireClientSecret(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.TokenEndpointAuthMethodBasic, fake.LastAuthMethod())
 
-	cfg.ClientSecretEncrypted = stubCiphertextPrefix + "wrong-secret"
+	cfg.Credentials = newFakeCredentials("wrong-secret")
 	client, err = factory.Client(cfg)
 	require.NoError(t, err)
 	_, err = client.VerifyScopes(t.Context(), []string{"okta.apps.read"})
@@ -297,14 +304,14 @@ func TestFakeFactory_ClientsKeepTheirOwnConfig(t *testing.T) {
 	t.Parallel()
 	const orgURL = "https://a.okta.com"
 	factory := NewFakeFactory(map[string]Fixtures{orgURL: {Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: []string{"okta.apps.read"}}})
-	factory.Fake(orgURL).RequireClientSecret("stub-secret", &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
+	factory.Fake(orgURL).RequireClientSecret("stub-secret")
 
 	good := basicTestConfig("stub-secret")
 	good.OrgURL = orgURL
 	goodClient, err := factory.Client(good)
 	require.NoError(t, err)
 	bad := good
-	bad.ClientSecretEncrypted = stubCiphertextPrefix + "wrong-secret"
+	bad.Credentials = newFakeCredentials("wrong-secret")
 	badClient, err := factory.Client(bad)
 	require.NoError(t, err)
 
@@ -342,10 +349,17 @@ func TestClient_ClientSecretBasic_LatchesDPoPAfterTokenExpiry(t *testing.T) {
 // outcome the test controls, standing in for the durable connection record.
 type fakeCredentials struct {
 	secret     string
+	secretErr  atomic.Pointer[error]
+	opens      atomic.Int32
 	pinned     atomic.Bool
 	observeErr atomic.Pointer[error]
 	mu         sync.Mutex
 	observed   []bool
+}
+
+// newFakeCredentials is a credential provider whose lease opens to secret.
+func newFakeCredentials(secret string) *fakeCredentials {
+	return &fakeCredentials{secret: secret, secretErr: atomic.Pointer[error]{}, opens: atomic.Int32{}, pinned: atomic.Bool{}, observeErr: atomic.Pointer[error]{}, mu: sync.Mutex{}, observed: nil}
 }
 
 func (f *fakeCredentials) Acquire(context.Context, Config) (CredentialLease, error) {
@@ -364,9 +378,15 @@ func (f *fakeCredentials) observations() []bool {
 
 type fakeLease struct{ provider *fakeCredentials }
 
-func (l fakeLease) EncryptedSecret() string { return l.provider.secret }
-func (l fakeLease) RequireDPoP() bool       { return l.provider.pinned.Load() }
-func (l fakeLease) Close()                  {}
+func (l fakeLease) ClientSecret(context.Context) (string, error) {
+	l.provider.opens.Add(1)
+	if err := l.provider.secretErr.Load(); err != nil {
+		return "", *err
+	}
+	return l.provider.secret, nil
+}
+func (l fakeLease) RequireDPoP() bool { return l.provider.pinned.Load() }
+func (l fakeLease) Close()            {}
 func (l fakeLease) Observe(_ context.Context, bound bool) error {
 	if err := l.provider.observeErr.Load(); err != nil {
 		return *err
@@ -382,7 +402,7 @@ func (l fakeLease) Observe(_ context.Context, bound bool) error {
 
 func TestClient_ClientSecretBasic_CachedBearerStopsAtConcurrentPin(t *testing.T) {
 	t.Parallel()
-	credentials := &fakeCredentials{secret: stubCiphertextPrefix + "stub-secret", pinned: atomic.Bool{}, observeErr: atomic.Pointer[error]{}, mu: sync.Mutex{}, observed: nil}
+	credentials := newFakeCredentials("stub-secret")
 	cfg := basicTestConfig("stub-secret")
 	cfg.Credentials = credentials
 	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), cfg)
@@ -407,7 +427,7 @@ func TestClient_ClientSecretBasic_CachedBearerStopsAtConcurrentPin(t *testing.T)
 
 func TestClient_ClientSecretBasic_ObserveFailureDiscardsTokenWithoutLatching(t *testing.T) {
 	t.Parallel()
-	credentials := &fakeCredentials{secret: stubCiphertextPrefix + "stub-secret", pinned: atomic.Bool{}, observeErr: atomic.Pointer[error]{}, mu: sync.Mutex{}, observed: nil}
+	credentials := newFakeCredentials("stub-secret")
 	cfg := basicTestConfig("stub-secret")
 	cfg.Credentials = credentials
 	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), cfg)

@@ -1095,7 +1095,7 @@ func (q *Queries) LockOktaIdentityProviderConnection(ctx context.Context, arg Lo
 }
 
 const lockOktaTokenCredential = `-- name: LockOktaTokenCredential :one
-SELECT client_secret_encrypted, client_id
+SELECT client_secret_encrypted, client_secret_org_encrypted, client_id
 FROM remote_session_clients
 WHERE id = $1 AND organization_id = $2
   AND identity_provider_connection_id = $3
@@ -1110,8 +1110,9 @@ type LockOktaTokenCredentialParams struct {
 }
 
 type LockOktaTokenCredentialRow struct {
-	ClientSecretEncrypted pgtype.Text
-	ClientID              string
+	ClientSecretEncrypted    pgtype.Text
+	ClientSecretOrgEncrypted pgtype.Text
+	ClientID                 string
 }
 
 // Token acquisition holds the connection lock before this lock; revoking a
@@ -1119,7 +1120,7 @@ type LockOktaTokenCredentialRow struct {
 func (q *Queries) LockOktaTokenCredential(ctx context.Context, arg LockOktaTokenCredentialParams) (LockOktaTokenCredentialRow, error) {
 	row := q.db.QueryRow(ctx, lockOktaTokenCredential, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
 	var i LockOktaTokenCredentialRow
-	err := row.Scan(&i.ClientSecretEncrypted, &i.ClientID)
+	err := row.Scan(&i.ClientSecretEncrypted, &i.ClientSecretOrgEncrypted, &i.ClientID)
 	return i, err
 }
 

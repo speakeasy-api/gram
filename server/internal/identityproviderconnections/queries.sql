@@ -461,7 +461,7 @@ WHERE id = @id
 -- Token acquisition holds the connection lock before this lock; revoking a
 -- secret updates this same row, so it cannot commit during an exchange.
 -- name: LockOktaTokenCredential :one
-SELECT client_secret_encrypted, client_id
+SELECT client_secret_encrypted, client_secret_org_encrypted, client_id
 FROM remote_session_clients
 WHERE id = @id AND organization_id = @organization_id
   AND identity_provider_connection_id = @identity_provider_connection_id

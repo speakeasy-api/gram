@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
@@ -209,7 +210,7 @@ func newTestServiceWithClientFactory(t *testing.T, maxConns int32, wrap func(okt
 			audit.NewLogger(),
 			provisioner,
 			clients,
-			enc,
+			clientsecretstest.New(t, ti.conn, enc),
 			discovery.discover,
 			ratelimit.NewRedisStore(redisClient),
 			syncTrigger,

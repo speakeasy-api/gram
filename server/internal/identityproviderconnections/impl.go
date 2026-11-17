@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
@@ -122,7 +121,7 @@ type Service struct {
 	audit         *audit.Logger
 	provisioner   *Provisioner
 	oktaClients   okta.ClientFactory
-	enc           *encryption.Client
+	secrets       *clientsecrets.Secrets
 	discover      Discoverer
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
@@ -172,7 +171,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	provisioner *Provisioner,
 	oktaClients okta.ClientFactory,
-	enc *encryption.Client,
+	secrets *clientsecrets.Secrets,
 	discover Discoverer,
 	limitStore ratelimit.Store,
 	syncTrigger ApplicationSyncTrigger,
@@ -187,7 +186,7 @@ func NewService(
 		audit:       auditLogger,
 		provisioner: provisioner,
 		oktaClients: oktaClients,
-		enc:         enc,
+		secrets:     secrets,
 		discover:    discover,
 		verifyLimiter: ratelimit.New(limitStore, "identity-provider-connection-verify",
 			ratelimit.PerMinute(verifyRatePerMinute),
@@ -1097,7 +1096,7 @@ func (s *Service) verificationCredentials(ctx context.Context, logger *slog.Logg
 		return nil, func() {}
 	}
 	observed := &atomic.Bool{}
-	provider := oktacredentials.Provider{DB: nil, Tx: tx, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
+	provider := oktacredentials.Provider{DB: nil, Tx: tx, Secrets: s.secrets, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
 	return provider, func() {
 		if !observed.Load() {
 			return
@@ -1123,7 +1122,6 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, cred
 		OrganizationID:        rows.Connection.OrganizationID,
 		AuthMethod:            rows.Managed.AuthMethod,
 		JSONWebKeySetID:       rows.Managed.JSONWebKeySetID.UUID,
-		ClientSecretEncrypted: rows.Managed.ClientSecretEncrypted,
 		Credentials:           credentials,
 		RequireDPoP:           dpopPinned,
 		MaxPages:              verifyMaxPages,
@@ -1149,6 +1147,13 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, cred
 // the attempt locked: a concurrent run that committed in between wins. A
 // rejected credential degrades a verified connection.
 func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, rows *connectionRows, cause error, submittedClientID bool) {
+	// A key outage says nothing about Okta or the credential, and clears on
+	// its own: the connection's state and last error are left as they were.
+	if errors.Is(cause, okta.ErrClientSecretKeyUnavailable) {
+		s.metrics.recordVerify(ctx, ProviderOkta, verifyOutcomeKeyUnavailable)
+		return
+	}
+
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 	defer cancel()
 
@@ -1207,6 +1212,9 @@ func (s *Service) mapVerificationError(ctx context.Context, logger *slog.Logger,
 	}
 	if errors.Is(err, okta.ErrClientSecretUndecryptable) {
 		return oops.E(oops.CodeUnexpected, err, "the stored client secret could not be read; replace it").LogError(ctx, logger)
+	}
+	if errors.Is(err, okta.ErrClientSecretKeyUnavailable) {
+		return oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the connection could not be verified; try again shortly").LogError(ctx, logger)
 	}
 	return oops.E(oops.CodeUnavailable, err, "Okta could not be reached to verify the connection").LogError(ctx, logger)
 }

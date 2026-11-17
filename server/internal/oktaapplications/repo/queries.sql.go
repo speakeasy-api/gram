@@ -436,7 +436,6 @@ SELECT
   , rc.client_id
   , rc.json_web_key_set_id
   , rc.token_endpoint_auth_method
-  , rc.client_secret_encrypted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -463,7 +462,6 @@ type GetSyncTargetRow struct {
 	ClientID                string
 	JsonWebKeySetID         uuid.NullUUID
 	TokenEndpointAuthMethod pgtype.Text
-	ClientSecretEncrypted   pgtype.Text
 }
 
 // The credential configuration a run needs; the managed client is the
@@ -481,7 +479,6 @@ func (q *Queries) GetSyncTarget(ctx context.Context, connectionID uuid.UUID) (Ge
 		&i.ClientID,
 		&i.JsonWebKeySetID,
 		&i.TokenEndpointAuthMethod,
-		&i.ClientSecretEncrypted,
 	)
 	return i, err
 }

@@ -128,9 +128,9 @@ func TestSyncerRunsClientSecretBasicConnection(t *testing.T) {
 
 	bc := newBasicConnection(t, ctx)
 	fakes := basicFakes()
-	fakes.Fake(basicOrgURL).RequireClientSecret(clientSecret, bc.enc)
+	fakes.Fake(basicOrgURL).RequireClientSecret(clientSecret)
 
-	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes)
+	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes, clientsecretstest.New(t, bc.conn, bc.enc))
 	require.NoError(t, syncer.Run(ctx, bc.connectionID, false))
 
 	run, err := oktaapplications.LatestRun(ctx, bc.conn, bc.orgID, bc.connectionID)
@@ -150,9 +150,9 @@ func TestSyncerRecordsRejectedClientSecret(t *testing.T) {
 
 	bc := newBasicConnection(t, ctx)
 	fakes := basicFakes()
-	fakes.Fake(basicOrgURL).RequireClientSecret("a-different-secret", bc.enc)
+	fakes.Fake(basicOrgURL).RequireClientSecret("a-different-secret")
 
-	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes)
+	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes, clientsecretstest.New(t, bc.conn, bc.enc))
 	require.NoError(t, syncer.Run(ctx, bc.connectionID, false))
 
 	run, err := oktaapplications.LatestRun(ctx, bc.conn, bc.orgID, bc.connectionID)

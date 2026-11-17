@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
 
@@ -104,17 +105,19 @@ type Syncer struct {
 	db      *pgxpool.Pool
 	repo    *repo.Queries
 	clients okta.ClientFactory
+	secrets *clientsecrets.Secrets
 	metrics *syncMetrics
 }
 
 // NewSyncer builds a Syncer. A nil client factory records every run as failed.
-func NewSyncer(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, clients okta.ClientFactory) *Syncer {
+func NewSyncer(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, clients okta.ClientFactory, secrets *clientsecrets.Secrets) *Syncer {
 	logger = logger.With(attr.SlogComponent("oktaapplications.sync"))
 	return &Syncer{
 		logger:  logger,
 		db:      db,
 		repo:    repo.New(db),
 		clients: clients,
+		secrets: secrets,
 		metrics: newSyncMetrics(logger, meterProvider),
 	}
 }
@@ -360,7 +363,7 @@ func (s *Syncer) client(target repo.GetSyncTargetRow) (okta.Client, error) {
 	}
 	var credentials okta.CredentialProvider
 	if remotesessions.TokenEndpointAuthMethod(target.TokenEndpointAuthMethod.String) == remotesessions.TokenEndpointAuthMethodBasic {
-		credentials = oktacredentials.Provider{DB: s.db, Tx: nil, ConnectionID: target.ConnectionID, ObservedDPoP: nil}
+		credentials = oktacredentials.Provider{DB: s.db, Tx: nil, Secrets: s.secrets, ConnectionID: target.ConnectionID, ObservedDPoP: nil}
 	}
 	client, err := s.clients.Client(okta.Config{
 		OrgURL:                target.OrgUrl,
@@ -370,7 +373,6 @@ func (s *Syncer) client(target repo.GetSyncTargetRow) (okta.Client, error) {
 		OrganizationID:        target.OrganizationID,
 		AuthMethod:            remotesessions.TokenEndpointAuthMethod(target.TokenEndpointAuthMethod.String),
 		JSONWebKeySetID:       target.JsonWebKeySetID.UUID,
-		ClientSecretEncrypted: target.ClientSecretEncrypted.String,
 		Credentials:           credentials,
 		RequireDPoP:           target.DpopRequired,
 		MaxPages:              maxAssignmentPages,
@@ -450,6 +452,14 @@ func clampInt32(n int) int32 {
 // Credential rejection is deterministic; everything else (rate limit, Okta
 // 5xx, transport, signer) is retried.
 func classify(err error) (string, bool) {
+	switch {
+	case errors.Is(err, okta.ErrClientSecretUndecryptable):
+		// The stored secret has to be replaced; retrying cannot help.
+		return reasonClientUnavailable, false
+	case errors.Is(err, okta.ErrClientSecretKeyUnavailable):
+		// The organization's key clears on its own; Okta was never asked.
+		return reasonClientUnavailable, true
+	}
 	if apiErr, ok := errors.AsType[*okta.APIError](err); ok {
 		switch apiErr.StatusCode {
 		case http.StatusTooManyRequests:

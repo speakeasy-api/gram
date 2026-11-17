@@ -105,7 +105,6 @@ func TestProvisionClient_SecretClientHasNoKeyMaterial(t *testing.T) {
 	require.False(t, fx.client.ExternalKeyID.Valid)
 	require.False(t, fx.client.ActiveKeyID.Valid)
 	require.Empty(t, fx.client.JSONWebKeySetURL)
-	require.Empty(t, fx.client.ClientSecretEncrypted)
 	require.Zero(t, fx.kms.Opened(), "a secret client never touches KMS")
 	require.Empty(t, fx.kms.Created())
 
@@ -184,7 +183,6 @@ func TestSetClientID_SecretClientRequiresSecret(t *testing.T) {
 	managed, err := setClientID(t, ctx, ti, fx, "secret-1")
 	require.NoError(t, err)
 	require.Equal(t, testClientID, managed.ClientID)
-	require.Equal(t, "secret-1", decryptSecret(t, managed.ClientSecretEncrypted))
 	require.Equal(t, remotesessions.TokenEndpointAuthMethodBasic, managed.AuthMethod)
 
 	stored, ok := storedSecret(t, ctx, ti, fx.connectionID)
@@ -225,7 +223,6 @@ func TestReplaceClientSecret_SwapsSecret(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, dbtx.Commit(ctx))
-	require.Equal(t, "secret-2", decryptSecret(t, managed.ClientSecretEncrypted))
 	require.Equal(t, testClientID, managed.ClientID)
 
 	stored, ok := storedSecret(t, ctx, ti, fx.connectionID)
