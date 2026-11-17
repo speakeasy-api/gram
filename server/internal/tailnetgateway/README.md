@@ -44,9 +44,11 @@ per-ingress attestor pods.
   approved it to host `svc:<label>`, which control signals through the
   node's `service-host` capability. Advertising alone is not enough: a node
   whose service is unapproved, missing or misnamed connects without error but
-  gets no traffic. Such a slot reports `awaiting_approval`, and the ingress
-  shows `provider_service_not_approved` until the customer approves the host
-  or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
+  gets no traffic. Auto-approval takes a few seconds, so for the first minute
+  after its node is up (`ApprovalGrace`) an unapproved slot still reports
+  `starting` and the ingress stays pending. After that the slot reports
+  `awaiting_approval`, and the ingress shows `provider_service_not_approved`
+  until the customer approves the host or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
   approving or revoking a host takes effect without a restart.
 - An approved slot is `online` only once it also holds the TLS certificate
   for `svc:<label>`: without it every client handshake fails. Tailscale gets
@@ -60,9 +62,13 @@ per-ingress attestor pods.
   before one is stored, outside the lease below, so each slot a client
   reached would spend one; `issuancetest` reproduces that against a real
   tsnet node and a Pebble ACME server.
-  Until it is issued the slot reports `awaiting_certificate`: its message says
-  the request is in progress or, after a refusal, why and when it retries.
-  The ingress shows `provider_certificate_unavailable`. A slot reuses a
+  While the first request runs, or waits for another slot's lease or for
+  control to list the service name, the slot reports `starting` with a
+  message saying so, and the ingress stays pending. Once a request is refused
+  or fails, the slot reports `awaiting_certificate` with why and when it
+  retries, and the ingress shows `provider_certificate_unavailable`; the API
+  returns that slot's message as `status_detail` so the dashboard can show
+  the cause. A slot reuses a
   stored certificate directly; to request a missing one it first claims a
   short lease row in `network_ingress_certificate_states`, so slots of one
   connection take turns and the one that waited finds the certificate

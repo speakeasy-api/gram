@@ -10,4 +10,9 @@ if [ -z "${GRAM_DEVIDP_EXTERNAL_URL:-}" ]; then
   exit 1
 fi
 
+# This server keeps about 85 MB of live heap.
+# shellcheck source=.mise-tasks/start/_vite-memory.sh
+source "${BASH_SOURCE[0]%/*}/_vite-memory.sh"
+vite_memory_limits 640
+
 exec aube run --filter ./dev-idp-dashboard dev

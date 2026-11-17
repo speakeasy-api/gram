@@ -107591,6 +107591,9 @@ components:
         status:
           type: string
           description: Latest redacted lifecycle status
+        status_detail:
+          type: string
+          description: 'The gateway''s explanation of last_error when it is provider_certificate_unavailable: why the TLS certificate request failed, such as a Let''s Encrypt rate limit, and when the gateway retries. Returned by getIngress only.'
         updated_at:
           type: string
           format: date-time
@@ -120080,7 +120083,7 @@ components:
           format: int64
         test_event_id:
           type: string
-          description: The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.
+          description: The speakeasy.test_event_id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.
       description: What the destination answered to a route's test events. Header values and the response body are never returned.
       required:
         - outcome

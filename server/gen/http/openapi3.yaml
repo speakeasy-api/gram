@@ -198,6 +198,79 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: uploadPlatformImage
+    /admin/assistants.organizations:
+        get:
+            description: Lists live organizations with live assistants in live projects.
+            operationId: adminListAssistantOrganizations
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminAssistantOrganizations'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listAssistantOrganizations admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listAssistantOrganizations
+            x-speakeasy-react-hook:
+                name: AdminListAssistantOrganizations
     /admin/auth.callback:
         get:
             tags:
@@ -4460,6 +4533,85 @@ paths:
                 - admin
             x-speakeasy-react-hook:
                 name: SetAdminOrganizationProviderSetup
+    /admin/organization.repairAssistantAgentNames:
+        post:
+            description: Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.
+            operationId: adminRepairOrganizationAssistantAgentNames
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RepairOrganizationAssistantAgentNamesRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminAssistantAgentNameRepairRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: repairOrganizationAssistantAgentNames admin
+            tags:
+                - admin
+            x-speakeasy-name-override: repairOrganizationAssistantAgentNames
+            x-speakeasy-react-hook:
+                name: AdminRepairOrganizationAssistantAgentNames
     /admin/organization.repairInferenceKey:
         post:
             tags:
@@ -98915,6 +99067,50 @@ components:
             description: Result of a strictly additive tool metadata batch insert.
             required:
                 - tools
+        AdminAssistantAgentNameRepairResult:
+            type: object
+            properties:
+                assistant_id:
+                    type: string
+                name:
+                    type: string
+                outcome:
+                    type: string
+                    enum:
+                        - repaired
+                        - conflict
+                        - failed
+                project_id:
+                    type: string
+            required:
+                - assistant_id
+                - project_id
+                - name
+                - outcome
+        AdminAssistantAgentNameRepairRun:
+            type: object
+            properties:
+                conflicts:
+                    type: integer
+                    format: int64
+                failed:
+                    type: integer
+                    format: int64
+                organization_id:
+                    type: string
+                repaired:
+                    type: integer
+                    format: int64
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminAssistantAgentNameRepairResult'
+            required:
+                - organization_id
+                - repaired
+                - conflicts
+                - failed
+                - results
         AdminAssistantIdentityMigrationResult:
             type: object
             properties:
@@ -99053,6 +99249,32 @@ components:
                 - busy
                 - failed
                 - results
+        AdminAssistantOrganization:
+            type: object
+            properties:
+                assistants:
+                    type: integer
+                    format: int64
+                id:
+                    type: string
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - id
+                - name
+                - slug
+                - assistants
+        AdminAssistantOrganizations:
+            type: object
+            properties:
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminAssistantOrganization'
+            required:
+                - organizations
         AdminAuditLog:
             type: object
             properties:
@@ -101129,6 +101351,16 @@ components:
                     type: string
                     description: The dedicated agent, when the assistant has one.
                     format: uuid
+                agent_name:
+                    type: string
+                    description: The live bound agent name, when available.
+                agent_name_repair_state:
+                    type: string
+                    description: Whether the exact legacy generated agent name needs repair.
+                    enum:
+                        - not_needed
+                        - pending
+                        - conflict
                 created_at:
                     type: string
                     description: When the assistant was created.
@@ -101175,6 +101407,7 @@ components:
                     description: The assistant status.
             description: One live assistant of an organization, with where it stands in the move to agent identity.
             required:
+                - agent_name_repair_state
                 - id
                 - name
                 - project_id
@@ -121626,6 +121859,9 @@ components:
                 status:
                     type: string
                     description: Latest redacted lifecycle status
+                status_detail:
+                    type: string
+                    description: 'The gateway''s explanation of last_error when it is provider_certificate_unavailable: why the TLS certificate request failed, such as a Let''s Encrypt rate limit, and when the gateway retries. Returned by getIngress only.'
                 updated_at:
                     type: string
                     format: date-time
@@ -126595,6 +126831,13 @@ components:
                 - remove_causes
                 - confirmation
                 - reason
+        RepairOrganizationAssistantAgentNamesRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         ReplaceIdentityProviderConnectionClientSecretRequestBody:
             type: object
             properties:
@@ -135090,7 +135333,7 @@ components:
                     format: int64
                 test_event_id:
                     type: string
-                    description: The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.
+                    description: The speakeasy.test_event_id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.
             description: What the destination answered to a route's test events. Header values and the response body are never returned.
             required:
                 - outcome

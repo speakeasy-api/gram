@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
+	gatewayrepo "github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -157,6 +158,39 @@ func TestIdentityRequiredUpdateMarksIngressPendingAndClearsError(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "pending", result.Status)
 	require.Nil(t, result.LastError)
+}
+
+func TestGetIngressExplainsAMissingCertificate(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := ti.create(t, ctx)
+	ingressID := uuid.MustParse(created.ID)
+	refusal := "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC"
+	gateway := gatewayrepo.New(ti.conn)
+	for slot, beat := range []struct{ status, message string }{
+		{status: "awaiting_certificate", message: refusal},
+		{status: "starting", message: "obtaining a TLS certificate"},
+	} {
+		require.NoError(t, gateway.EnsureNetworkIngressNodeSlot(ctx, gatewayrepo.EnsureNetworkIngressNodeSlotParams{NetworkIngressID: ingressID, OrganizationID: ti.orgID, Slot: int32(slot)}))
+		_, err := gateway.HeartbeatNetworkIngressNode(ctx, gatewayrepo.HeartbeatNetworkIngressNodeParams{
+			PodName: pgtype.Text{String: "gram-tailnet-gateway-0", Valid: true}, Status: beat.status, NodeID: pgtype.Text{}, DnsName: pgtype.Text{},
+			LastError:        pgtype.Text{String: beat.message, Valid: true},
+			NetworkIngressID: ingressID, OrganizationID: ti.orgID, Slot: int32(slot),
+		})
+		require.NoError(t, err)
+	}
+
+	result, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Nil(t, result.Ingress.StatusDetail, "only a certificate error carries the gateway's explanation")
+
+	require.NoError(t, testrepo.New(ti.conn).SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{
+		Status: "error", LastError: pgtype.Text{String: "provider_certificate_unavailable", Valid: true}, OrganizationID: ti.orgID,
+	}))
+	result, err = ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, result.Ingress.StatusDetail)
+	require.Equal(t, refusal, *result.Ingress.StatusDetail, "the refused slot's message names the cause")
 }
 
 func TestDisableAndDeleteRemainAvailableAfterGateRemoval(t *testing.T) {

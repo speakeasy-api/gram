@@ -173,7 +173,7 @@ export function ExclusionsTab({
     {
       key: "actions",
       header: "",
-      width: "0.3fr",
+      width: "72px",
       render: (exclusion) => (
         <div onClick={(e) => e.stopPropagation()}>
           <ExclusionActionsMenu actions={exclusionActions(exclusion)} />
