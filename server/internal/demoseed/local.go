@@ -276,6 +276,18 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return fmt.Errorf("commit local fixtures: %w", err)
 	}
 
+	if emaProvisioned {
+		// The Enterprise Sign-In (ID-JAG) Server is added after the seed
+		// recorded the organization's typed upstream auth, so record it again
+		// for the new server. The seed's readiness check is not repeated: the
+		// local Inspect tab servers deliberately leave choices undecided.
+		if err := withSeedLock(ctx, logger, db, func(*pgxpool.Conn) error {
+			return recordTypedUpstreamAuth(ctx, logger, db, spec.OrgID)
+		}); err != nil {
+			return fmt.Errorf("local fixture %q: %w", "enterprise sign-in upstream auth", err)
+		}
+	}
+
 	if opts.ClickHouse != nil && opts.MockMCPURL != "" {
 		// Under the seed lock, so a concurrent seed cannot purge or insert the
 		// same rows between the existence check and the insert.

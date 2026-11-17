@@ -463,62 +463,6 @@ func (q *Queries) ServersInsertDirectGatewayIssuer(ctx context.Context, arg Serv
 	return err
 }
 
-const serversInsertEMABinding = `-- name: ServersInsertEMABinding :exec
-INSERT INTO remote_session_ema_bindings
-  (id, project_id, organization_id, user_session_issuer_id,
-   remote_session_issuer_id, resource, remote_session_client_id, generation,
-   state, grant_source, created_at, updated_at)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   $4::uuid, $5::uuid,
-   'https://mcp-fixture.example.com/mcp/ema', $6::uuid, 1,
-   'ready', 'administrator_declared',
-   now() - interval '6 days', now() - interval '6 days')
-`
-
-type ServersInsertEMABindingParams struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	OrgID               string
-	UserSessionIssuerID uuid.UUID
-	IssuerID            uuid.UUID
-	ClientID            uuid.UUID
-}
-
-func (q *Queries) ServersInsertEMABinding(ctx context.Context, arg ServersInsertEMABindingParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMABinding,
-		arg.ID,
-		arg.ProjectID,
-		arg.OrgID,
-		arg.UserSessionIssuerID,
-		arg.IssuerID,
-		arg.ClientID,
-	)
-	return err
-}
-
-const serversInsertEMAEndpoint = `-- name: ServersInsertEMAEndpoint :exec
-INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
-  ($1::uuid, $2::uuid, NULL, $3::uuid, $4::text)
-`
-
-type ServersInsertEMAEndpointParams struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	McpServerID uuid.UUID
-	Slug        string
-}
-
-func (q *Queries) ServersInsertEMAEndpoint(ctx context.Context, arg ServersInsertEMAEndpointParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMAEndpoint,
-		arg.ID,
-		arg.ProjectID,
-		arg.McpServerID,
-		arg.Slug,
-	)
-	return err
-}
-
 const serversInsertEMAIdentityProvider = `-- name: ServersInsertEMAIdentityProvider :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, authorization_endpoint,
@@ -543,17 +487,13 @@ type ServersInsertEMAIdentityProviderParams struct {
 }
 
 // Enterprise Managed Authorization (EMA). Acme Identity is a fictional
-// company identity provider. The Enterprise Sign-In (ID-JAG) Server has a
-// sign-in of its own that federates through it: a caller signs in at the
-// company provider, and Speakeasy exchanges that identity for an ID-JAG and
-// redeems it at the server's authorization server for the upstream token.
-// The shared workforce sign-in only trusts the provider for inbound EMA, so
-// the other servers' sign-in is unaffected. No caller has signed in yet, so
-// there is no delegation or cached credential. Speakeasy's own issuer is not
-// seeded: it needs a KMS signing key. Reserved example hosts and invalid
-// ciphertext keep every row inert in the demo org; the local seed points them
-// at the dev-idp and the MCP fixture (local_ema.go). The server is added
-// after role distribution, so plugins skip it.
+// company identity provider. The shared workforce sign-in only trusts it for
+// inbound EMA, so the other servers' sign-in is unaffected. Speakeasy's own
+// issuer is not seeded: it needs a KMS signing key. Reserved example hosts
+// and invalid ciphertext keep every row inert. Locally, the Enterprise
+// Sign-In (ID-JAG) Server signs in through it, and the local fixtures point
+// it at the dev-idp (local_ema.go). The servers are added after role
+// distribution, so plugins skip them.
 func (q *Queries) ServersInsertEMAIdentityProvider(ctx context.Context, arg ServersInsertEMAIdentityProviderParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAIdentityProvider, arg.ID, arg.OrgID)
 	return err
@@ -576,58 +516,10 @@ type ServersInsertEMAIdentityProviderClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 }
 
-// Speakeasy's registration at the company provider. Only the Enterprise
-// Sign-In issuer signs in through it.
+// Speakeasy's registration at the company provider. Only the local
+// Enterprise Sign-In issuer signs in through it.
 func (q *Queries) ServersInsertEMAIdentityProviderClient(ctx context.Context, arg ServersInsertEMAIdentityProviderClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAIdentityProviderClient, arg.ID, arg.OrgID, arg.RemoteSessionIssuerID)
-	return err
-}
-
-const serversInsertEMAMCPServer = `-- name: ServersInsertEMAMCPServer :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         remote_mcp_server_id, user_session_issuer_id,
-                         visibility) VALUES
-  ($1::uuid, $2::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
-   NULL, $3::uuid, $4::uuid, 'private')
-`
-
-type ServersInsertEMAMCPServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	RemoteID  uuid.UUID
-	IssuerID  uuid.UUID
-}
-
-func (q *Queries) ServersInsertEMAMCPServer(ctx context.Context, arg ServersInsertEMAMCPServerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMAMCPServer,
-		arg.ID,
-		arg.ProjectID,
-		arg.RemoteID,
-		arg.IssuerID,
-	)
-	return err
-}
-
-const serversInsertEMAProtectedResource = `-- name: ServersInsertEMAProtectedResource :exec
-INSERT INTO remote_protected_resources
-  (id, project_id, organization_id, resource_identifier, metadata_url,
-   authorization_servers, scopes_supported, metadata_fetched_at)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   'https://mcp-fixture.example.com/mcp/ema',
-   'https://mcp-fixture.example.com/.well-known/oauth-protected-resource/mcp/ema',
-   ARRAY['https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture'], ARRAY['notes:read'],
-   now() - interval '2 hours')
-`
-
-type ServersInsertEMAProtectedResourceParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	OrgID     string
-}
-
-func (q *Queries) ServersInsertEMAProtectedResource(ctx context.Context, arg ServersInsertEMAProtectedResourceParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMAProtectedResource, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
 }
 
@@ -648,113 +540,6 @@ type ServersInsertEMAProviderOrderParams struct {
 // A saved order for Acme Wiki, so its service page shows "Use default".
 func (q *Queries) ServersInsertEMAProviderOrder(ctx context.Context, arg ServersInsertEMAProviderOrderParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAProviderOrder, arg.ID, arg.OrgID, arg.RemoteSessionIssuerID)
-	return err
-}
-
-const serversInsertEMARemoteMCPServer = `-- name: ServersInsertEMARemoteMCPServer :exec
-INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  ($1::uuid, $2::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/ema')
-`
-
-type ServersInsertEMARemoteMCPServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) ServersInsertEMARemoteMCPServer(ctx context.Context, arg ServersInsertEMARemoteMCPServerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMARemoteMCPServer, arg.ID, arg.ProjectID)
-	return err
-}
-
-const serversInsertEMAUserSessionIssuer = `-- name: ServersInsertEMAUserSessionIssuer :exec
-INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
-                                  authn_challenge_mode, session_duration,
-                                  authorization_server_mode,
-                                  trusted_remote_session_issuer_id,
-                                  trusted_remote_session_client_id) VALUES
-  ($1::uuid, NULL, $2::text, 'enterprise-sign-in',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
-   $3::uuid, $4::uuid)
-`
-
-type ServersInsertEMAUserSessionIssuerParams struct {
-	ID              uuid.UUID
-	OrgID           string
-	TrustedIssuerID uuid.UUID
-	TrustedClientID uuid.UUID
-}
-
-// The Enterprise Sign-In (ID-JAG) Server's own organization sign-in, federated
-// through the company provider: its trusted client is the one the caller
-// signs in with, and the ID token it returns is what Speakeasy exchanges.
-func (q *Queries) ServersInsertEMAUserSessionIssuer(ctx context.Context, arg ServersInsertEMAUserSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMAUserSessionIssuer,
-		arg.ID,
-		arg.OrgID,
-		arg.TrustedIssuerID,
-		arg.TrustedClientID,
-	)
-	return err
-}
-
-const serversInsertEMAVendorClient = `-- name: ServersInsertEMAVendorClient :exec
-INSERT INTO remote_session_clients
-  (id, project_id, organization_id, remote_session_issuer_id, client_id,
-   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   $4::uuid, 'demo-enterprise-sign-in-client',
-   'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_post',
-   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
-   ARRAY['notes:read'])
-`
-
-type ServersInsertEMAVendorClientParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	OrgID     string
-	IssuerID  uuid.UUID
-}
-
-func (q *Queries) ServersInsertEMAVendorClient(ctx context.Context, arg ServersInsertEMAVendorClientParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMAVendorClient,
-		arg.ID,
-		arg.ProjectID,
-		arg.OrgID,
-		arg.IssuerID,
-	)
-	return err
-}
-
-const serversInsertEMAVendorIssuer = `-- name: ServersInsertEMAVendorIssuer :exec
-INSERT INTO remote_session_issuers
-  (id, project_id, organization_id, slug, issuer, token_endpoint, name,
-   grant_types_supported, authorization_grant_profiles_supported,
-   token_endpoint_auth_methods_supported, metadata_fetched_at)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   'enterprise-sign-in-auth', 'https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture',
-   'https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture/token',
-   'Enterprise Sign-In Authorization Server',
-   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
-   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-   ARRAY['client_secret_post'], now() - interval '2 hours')
-`
-
-type ServersInsertEMAVendorIssuerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	OrgID     string
-}
-
-// The server's authorization server accepts ID-JAGs from a confidential client.
-// Identity chaining trusts its JWT-bearer and ID-JAG support only from a
-// discovered document, so the row records when that document was read;
-// without it the binding reads as incomplete metadata and the consent page
-// offers an interactive sign-in the server does not have.
-func (q *Queries) ServersInsertEMAVendorIssuer(ctx context.Context, arg ServersInsertEMAVendorIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMAVendorIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
 }
 
@@ -797,23 +582,17 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
   ($1::uuid, $2::uuid, 'Acme Wiki', 'acme-wiki',
-   NULL, $3::uuid, $4::uuid, 'disabled')
+   NULL, $3::uuid, NULL, 'disabled')
 `
 
 type ServersInsertEMAWikiMCPServerParams struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	RemoteID            uuid.UUID
-	UserSessionIssuerID uuid.UUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	RemoteID  uuid.UUID
 }
 
 func (q *Queries) ServersInsertEMAWikiMCPServer(ctx context.Context, arg ServersInsertEMAWikiMCPServerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertEMAWikiMCPServer,
-		arg.ID,
-		arg.ProjectID,
-		arg.RemoteID,
-		arg.UserSessionIssuerID,
-	)
+	_, err := q.db.Exec(ctx, serversInsertEMAWikiMCPServer, arg.ID, arg.ProjectID, arg.RemoteID)
 	return err
 }
 
@@ -851,10 +630,12 @@ type ServersInsertEMAWikiRemoteMCPServerParams struct {
 	ProjectID uuid.UUID
 }
 
-// Acme Wiki: a second EMA service behind the same enterprise sign-in, seeded
-// disabled and display-only in every org. Its service has not accepted a
-// provider yet, and it carries a saved provider order. Reserved example hosts
-// and invalid ciphertext keep every row inert.
+// Acme Wiki: an EMA service the workforce sign-in has a binding for, seeded
+// disabled and display-only in every org. The server has no sign-in of its
+// own: on the workforce issuer it would be that issuer's only consumer, and so
+// owed every client bound there. Its service has not accepted a provider yet,
+// and it carries a saved provider order. Reserved example hosts and invalid
+// ciphertext keep every row inert.
 func (q *Queries) ServersInsertEMAWikiRemoteMCPServer(ctx context.Context, arg ServersInsertEMAWikiRemoteMCPServerParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAWikiRemoteMCPServer, arg.ID, arg.ProjectID)
 	return err

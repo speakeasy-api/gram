@@ -434,17 +434,16 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 	// Organization authorizations include Example OAuth, Example Shared
-	// Credential, the Enterprise Sign-In (ID-JAG) Server, Acme Wiki, Linear
-	// and Notion, including on the expired history row. An organization sign-in reaches
+	// Credential, Acme Wiki, Linear and Notion, including on the expired
+	// history row (the local fixtures add the Enterprise Sign-In (ID-JAG)
+	// Server's). An organization sign-in reaches
 	// every server in the organization, including one with a sign-in of its own.
 	for i := 1; i <= 3; i++ {
-		for _, server := range []string{"linear", "slack", "ema-tracker", "ema-wiki", "linear-app", "notion-app"} {
+		for _, server := range []string{"linear", "slack", "ema-wiki", "linear-app", "notion-app"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			switch server {
 			case "linear":
 				client = uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}
-			case "ema-tracker":
-				client = uuid.NullUUID{UUID: s.det("ema-client-tracker"), Valid: true}
 			case "ema-wiki":
 				client = uuid.NullUUID{UUID: s.det("ema-client-wiki"), Valid: true}
 			case "linear-app", "notion-app":
@@ -720,17 +719,14 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 }
 
 // seedServersEMA: Enterprise Managed Authorization. Acme Identity is a
-// fictional company identity provider. The Enterprise Sign-In (ID-JAG)
-// Server signs callers in through it on an organization sign-in of its own,
-// and reaches its upstream with the token Speakeasy obtains by exchanging
-// that identity for an ID-JAG. The workforce issuer trusts the provider for
+// fictional company identity provider. The workforce issuer trusts it for
 // inbound EMA (ID-JAGs) only, so the other servers' sign-in is unaffected.
-// Runs after role distribution, so plugins skip the server.
+// The working Enterprise Sign-In (ID-JAG) Server that signs in through it is
+// local-only (seedLocalEnterpriseSignIn). Runs after role distribution, so
+// plugins skip Acme Wiki.
 func (s *seeder) seedServersEMA(ctx context.Context) error {
 	org := s.orgID()
-	proj := s.projectID()
 	workforce := s.det("issuer-workforce")
-	issuer := s.det("issuer-ema-tracker")
 
 	if err := s.q.ServersInsertEMAIdentityProvider(ctx, repo.ServersInsertEMAIdentityProviderParams{
 		ID:    s.det("ema-idp"),
@@ -756,108 +752,18 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 	if linked != 1 {
 		return fmt.Errorf("trust demo ema identity provider for inbound ema: updated %d workforce issuers", linked)
 	}
-	if err := s.q.ServersInsertEMAUserSessionIssuer(ctx, repo.ServersInsertEMAUserSessionIssuerParams{
-		ID:              issuer,
-		OrgID:           org,
-		TrustedIssuerID: s.det("ema-idp"),
-		TrustedClientID: s.det("ema-idp-client"),
-	}); err != nil {
-		return fmt.Errorf("insert demo enterprise sign-in issuer: %w", err)
-	}
-	if err := s.q.ServersInsertEMARemoteMCPServer(ctx, repo.ServersInsertEMARemoteMCPServerParams{
-		ID:        s.det("remotemcp-ema-tracker"),
-		ProjectID: proj,
-	}); err != nil {
-		return fmt.Errorf("insert demo ema remote mcp server: %w", err)
-	}
-	if err := s.q.ServersInsertEMAMCPServer(ctx, repo.ServersInsertEMAMCPServerParams{
-		ID:        s.det("mcpserver-ema-tracker"),
-		ProjectID: proj,
-		RemoteID:  s.det("remotemcp-ema-tracker"),
-		IssuerID:  issuer,
-	}); err != nil {
-		return fmt.Errorf("insert demo ema mcp server: %w", err)
-	}
-	if err := s.q.ServersInsertEMAEndpoint(ctx, repo.ServersInsertEMAEndpointParams{
-		ID:          s.det("endpoint-ema-tracker"),
-		ProjectID:   proj,
-		McpServerID: s.det("mcpserver-ema-tracker"),
-		Slug:        s.spec.OrgSlug + "-enterprise-sign-in",
-	}); err != nil {
-		return fmt.Errorf("insert demo ema endpoint: %w", err)
-	}
-	if err := s.q.ServersInsertEMAVendorIssuer(ctx, repo.ServersInsertEMAVendorIssuerParams{
-		ID:        s.det("ema-vendor-tracker"),
-		ProjectID: proj,
-		OrgID:     org,
-	}); err != nil {
-		return fmt.Errorf("insert demo ema vendor issuer: %w", err)
-	}
-	if err := s.q.ServersInsertEMAVendorClient(ctx, repo.ServersInsertEMAVendorClientParams{
-		ID:        s.det("ema-client-tracker"),
-		ProjectID: proj,
-		OrgID:     org,
-		IssuerID:  s.det("ema-vendor-tracker"),
-	}); err != nil {
-		return fmt.Errorf("insert demo ema vendor client: %w", err)
-	}
-	// Both organization sign-ins reach the server, so its client is bound to
-	// each: its own federated sign-in, and the workforce sign-in.
-	for _, usi := range []uuid.UUID{issuer, workforce} {
-		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-			RemoteSessionClientID: s.det("ema-client-tracker"),
-			UserSessionIssuerID:   usi,
-		}); err != nil {
-			return fmt.Errorf("bind demo ema vendor client to issuer %s: %w", usi, err)
-		}
-	}
-	// The server is associated with the one client of the authorization
-	// server its protected resource names.
-	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-		ID:                    s.det("server-client-association-ema-tracker"),
-		ProjectID:             proj,
-		OrgID:                 org,
-		McpServerID:           s.det("mcpserver-ema-tracker"),
-		RemoteSessionClientID: s.det("ema-client-tracker"),
-	}); err != nil {
-		return fmt.Errorf("associate demo ema server with its client: %w", err)
-	}
-	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
-		RemoteSessionIssuerID: s.det("ema-vendor-tracker"),
-		McpServerID:           s.det("mcpserver-ema-tracker"),
-		ProjectID:             proj,
-	}); err != nil {
-		return fmt.Errorf("stamp demo ema remote session issuer: %w", err)
-	}
-	if err := s.q.ServersInsertEMAProtectedResource(ctx, repo.ServersInsertEMAProtectedResourceParams{
-		ID:        s.det("protected-resource-ema-tracker"),
-		ProjectID: proj,
-		OrgID:     org,
-	}); err != nil {
-		return fmt.Errorf("insert demo ema protected resource: %w", err)
-	}
-	if err := s.q.ServersInsertEMABinding(ctx, repo.ServersInsertEMABindingParams{
-		ID:                  s.det("ema-binding-tracker"),
-		ProjectID:           proj,
-		OrgID:               org,
-		UserSessionIssuerID: issuer,
-		IssuerID:            s.det("ema-vendor-tracker"),
-		ClientID:            s.det("ema-client-tracker"),
-	}); err != nil {
-		return fmt.Errorf("insert demo ema binding: %w", err)
-	}
-	return s.seedServersEMAWiki(ctx, issuer)
+	return s.seedServersEMAWiki(ctx)
 }
 
-// seedServersEMAWiki: Acme Wiki, a second EMA service behind the same
-// enterprise sign-in, seeded disabled so it stays display-only in every org.
-// Its service has not accepted a provider yet and carries a saved provider
-// order. Sharing the sign-in, each server is associated with its own
-// authorization server's client.
-func (s *seeder) seedServersEMAWiki(ctx context.Context, issuer uuid.UUID) error {
+// seedServersEMAWiki: Acme Wiki, an EMA service the workforce sign-in has a
+// binding for, seeded disabled so it stays display-only in every org. The
+// server has no sign-in of its own (see the query). Its service has not
+// accepted a provider yet and carries a saved provider order. It is associated
+// with its own authorization server's client.
+func (s *seeder) seedServersEMAWiki(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
-	workforce := s.det("issuer-workforce")
+	issuer := s.det("issuer-workforce")
 
 	if err := s.q.ServersInsertEMAWikiRemoteMCPServer(ctx, repo.ServersInsertEMAWikiRemoteMCPServerParams{
 		ID:        s.det("remotemcp-ema-wiki"),
@@ -866,10 +772,9 @@ func (s *seeder) seedServersEMAWiki(ctx context.Context, issuer uuid.UUID) error
 		return fmt.Errorf("insert demo acme wiki remote mcp server: %w", err)
 	}
 	if err := s.q.ServersInsertEMAWikiMCPServer(ctx, repo.ServersInsertEMAWikiMCPServerParams{
-		ID:                  s.det("mcpserver-ema-wiki"),
-		ProjectID:           proj,
-		RemoteID:            s.det("remotemcp-ema-wiki"),
-		UserSessionIssuerID: issuer,
+		ID:        s.det("mcpserver-ema-wiki"),
+		ProjectID: proj,
+		RemoteID:  s.det("remotemcp-ema-wiki"),
 	}); err != nil {
 		return fmt.Errorf("insert demo acme wiki mcp server: %w", err)
 	}
@@ -888,15 +793,14 @@ func (s *seeder) seedServersEMAWiki(ctx context.Context, issuer uuid.UUID) error
 	}); err != nil {
 		return fmt.Errorf("insert demo acme wiki vendor client: %w", err)
 	}
-	// Like the Enterprise Sign-In (ID-JAG) Server's client, it is bound to
-	// both organization sign-ins: the enterprise sign-in and the workforce one.
-	for _, usi := range []uuid.UUID{issuer, workforce} {
-		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-			RemoteSessionClientID: s.det("ema-client-wiki"),
-			UserSessionIssuerID:   usi,
-		}); err != nil {
-			return fmt.Errorf("bind demo acme wiki client to issuer %s: %w", usi, err)
-		}
+	// The client is bound to the workforce sign-in, so organization
+	// sign-ins, which reach every server in the organization, reach the
+	// server through it.
+	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+		RemoteSessionClientID: s.det("ema-client-wiki"),
+		UserSessionIssuerID:   issuer,
+	}); err != nil {
+		return fmt.Errorf("bind demo acme wiki client to the workforce issuer: %w", err)
 	}
 	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
 		ID:                    s.det("server-client-association-ema-wiki"),

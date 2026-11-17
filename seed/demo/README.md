@@ -138,9 +138,9 @@ needs and the shared demo org must never have:
   demo org never gets a functions deployment production would have to run.
 - **Working upstream servers.** The seed has five working MCP servers: three
   named for the configuration they test, plus Linear and Notion, real
-  vendors. (The Enterprise Sign-In (ID-JAG) Server works locally only, below;
-  Acme Wiki, a second Enterprise Managed Authorization example, is seeded
-  disabled.) Most
+  vendors. (The local fixtures add an Enterprise Sign-In (ID-JAG) Server,
+  below; it does not exist in the public demo org. Acme Wiki, a display-only
+  Enterprise Managed Authorization example, is seeded disabled in both.) Most
   of the setup is shared, so the same servers work in the public demo org and
   in the local org right after `mise run seed`; the local fixtures add only
   what needs the developer's machine (below).
@@ -165,7 +165,7 @@ needs and the shared demo org must never have:
   | OpenAPI Server                     | `openapi-server`            | A public server generated from an OpenAPI document; callers bring an OAuth token from the API's own authorization server | The fixture's API stub (`ACME_SERVER_URL` system environment); its external OAuth server (slug `openapi-server`) is the fixture's              |
   | Example OAuth                      | `example-oauth`             | Each person signs in upstream: expiry, refresh, scope pins, agent connections                                            | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens; also offers the "Shared service token" client |
   | Example Shared Credential          | `example-shared-credential` | One static shared credential for every caller                                                                            | `/mcp/shared` with the checked-in example shared token as a static Authorization header (not sensitive)                                        |
-  | Enterprise Sign-In (ID-JAG) Server | `enterprise-sign-in`        | Sign-in through the company identity provider, exchanged for an ID-JAG                                                   | Locally, `/mcp/ema` through the dev-idp (below); display-only in the public demo org                                                           |
+  | Enterprise Sign-In (ID-JAG) Server | `enterprise-sign-in`        | Sign-in through the company identity provider, exchanged for an ID-JAG                                                   | Local org only: `/mcp/ema` through the dev-idp (below); not seeded in the public demo org                                                      |
   | Linear                             | `linear`                    | A real vendor; each person signs in to their own Linear account                                                          | `https://mcp.linear.app/mcp` (below)                                                                                                           |
   | Notion                             | `notion`                    | A real vendor; each person signs in to their own Notion account                                                          | `https://mcp.notion.com/mcp` (below)                                                                                                           |
 
@@ -178,8 +178,8 @@ needs and the shared demo org must never have:
   needs no Speakeasy sign-in, and its tools forward the caller's fixture
   token to the API stub.
 
-  The Enterprise Sign-In (ID-JAG) Server is wired by `local_ema.go`, in the
-  local org only. The dev-idp plays the company identity provider: the seed
+  The Enterprise Sign-In (ID-JAG) Server is added by `local_ema.go`, in the
+  local org only, and only when the dev-idp is reachable. The dev-idp plays the company identity provider: the seed
   creates its EMA app, resource, trust rule and the developer's assignment
   over the dev-idp's control RPC, and provisions the developer in the org's
   directory (federated sign-in admits only directory-provisioned people). The

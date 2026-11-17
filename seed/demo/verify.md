@@ -598,19 +598,19 @@ open their effective assignments; the dropdown always offers compact member sear
       administrator misconfiguration error.
 
 30. **Enterprise Managed Authorization**
-    - Open **Team → IDP and SSO → Identity providers**. The Services table
-      lists two services, one server each: the Enterprise Sign-In (ID-JAG)
-      Server (default order, Not accepted yet in the demo org) and Acme Wiki
-      (saved order: Acme Identity, Not accepted yet).
+    - Open **Team → IDP and SSO → Identity providers**. In the demo org the
+      Services table lists one service, Acme Wiki (saved order: Acme
+      Identity, Not accepted yet). Locally it also lists the Enterprise
+      Sign-In (ID-JAG) Server (default order).
     - Open Acme Wiki's page. It shows Acme Identity's issuer URL
       `https://login.acme-identity.example` to copy, and the saved order with
       **Use default**.
-    - The Enterprise Sign-In (ID-JAG) Server has its own organization
-      sign-in (`enterprise-sign-in`) that federates through Acme Identity, a
-      ready binding to its authorization server ("Enterprise Sign-In
-      Authorization Server") and that server's one client. In the demo org
-      the hosts are reserved placeholders, so a sign-in there fails by
-      design; locally the dev-idp plays Acme Identity (check 36).
+    - The Enterprise Sign-In (ID-JAG) Server exists only in the local org.
+      There it has its own organization sign-in (`enterprise-sign-in`) that
+      federates through Acme Identity, a ready binding to its authorization
+      server ("Enterprise Sign-In Authorization Server") and that server's
+      one client; the dev-idp plays Acme Identity (check 36). The demo org
+      has no such server, sign-in or binding.
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
       it (the organization gateway) stays on the
@@ -634,9 +634,9 @@ open their effective assignments; the dropdown always offers compact member sear
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (the
       toolset's canonical wrapper), Example OAuth and Example Shared
-      Credential, the Enterprise Sign-In (ID-JAG) Server, plus Linear and
-      Notion: six in all (Acme Wiki is seeded disabled). No server is named
-      for a vendor it does not reach.
+      Credential, plus Linear and Notion: five in all in the demo org (Acme
+      Wiki is seeded disabled). Locally the Enterprise Sign-In (ID-JAG)
+      Server makes six. No server is named for a vendor it does not reach.
     - Locally, with the stack running and after `mise run seed`, connect an MCP
       client to each `GRAM_SERVER_URL/mcp/<org>-<slug>` endpoint and call a
       tool. The fixture-backed servers reach the MCP fixture every Speakeasy

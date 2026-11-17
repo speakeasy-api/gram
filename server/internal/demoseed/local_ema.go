@@ -9,15 +9,18 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 )
 
 // localEMAClientSecret is the client secret Speakeasy presents at the dev-idp
@@ -37,39 +40,43 @@ const localEMAProviderName = "Acme Identity (local dev-idp)"
 // provisionLocalEMA sets up the dev-idp side of the Enterprise Sign-In
 // (ID-JAG) Server: the EMA app, its resource and the trust rule. It runs
 // before the local fixtures' transaction opens, so a slow dev-idp never holds
-// its locks, and reports whether wireLocalEMA should point the seeded rows at
-// the dev-idp.
+// its locks, and reports whether wireLocalEMA should add the server.
 func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstreamOptions) bool {
 	if opts.ServerURL == nil || opts.DevIDPURL == "" || opts.DevIDPURL == "unset" || opts.DevIDPClientID == "" || opts.DevIDPClientID == "unset" {
-		logger.InfoContext(ctx, "the server URL, dev-idp URL or login client id is not set; the Enterprise Sign-In (ID-JAG) Server stays display-only")
+		logger.InfoContext(ctx, "the server URL, dev-idp URL or login client id is not set; skipping the Enterprise Sign-In (ID-JAG) Server")
 		return false
 	}
 	if opts.HTTPClient == nil {
-		logger.WarnContext(ctx, "no HTTP client to reach the dev-idp; the Enterprise Sign-In (ID-JAG) Server stays display-only")
+		logger.WarnContext(ctx, "no HTTP client to reach the dev-idp; skipping the Enterprise Sign-In (ID-JAG) Server")
 		return false
 	}
 	devIDP := strings.TrimRight(opts.DevIDPURL, "/")
 	resource := fixtureauth.Resource(fixtureauth.BaseURL(opts.ServerURL), fixtureauth.PathEMAMCP)
 	idp := devIDPControl{base: devIDP, client: opts.HTTPClient}
 	if err := idp.provisionEMA(ctx, opts.DevIDPClientID, resource, devIDP+devIDPOAuth21Prefix); err != nil {
-		logger.WarnContext(ctx, "could not set up the dev-idp for the Enterprise Sign-In (ID-JAG) Server; it stays display-only", attr.SlogError(err))
+		logger.WarnContext(ctx, "could not set up the dev-idp for the Enterprise Sign-In (ID-JAG) Server; skipping it", attr.SlogError(err))
 		return false
 	}
 	return true
 }
 
-// wireLocalEMA makes the Enterprise Sign-In (ID-JAG) Server work end to end
-// in the local org:
+// wireLocalEMA adds the Enterprise Sign-In (ID-JAG) Server to the local org
+// and makes it work end to end. The server exists only locally: the demo org
+// has no dev-idp or MCP fixture for it to reach.
 //
 //   - at the dev-idp, Speakeasy's client is an EMA app the developer is
 //     assigned to, for a resource whose authorization server trusts the
 //     dev-idp's ID-JAGs and guards the fixture's /mcp/ema endpoint;
-//   - the server's company identity provider (Acme Identity in the shared
-//     seed) becomes the dev-idp, and its sign-in client the dev-idp's static
-//     login client, which accepts Speakeasy's per-client federated callback;
-//   - the server's URL, authorization server, client, protected resource,
-//     binding and typed auth client move from the shared seed's placeholder
-//     hosts to the fixture and the dev-idp.
+//   - the company identity provider (Acme Identity in the shared seed)
+//     becomes the dev-idp, and its sign-in client the dev-idp's static login
+//     client, which accepts Speakeasy's per-client federated callback;
+//   - the server gets an organization sign-in of its own that federates
+//     through that provider, and its URL, authorization server, client,
+//     protected resource and binding point at the fixture and the dev-idp.
+//
+// A caller signs in at the company provider, and Speakeasy exchanges that
+// identity for an ID-JAG and redeems it at the server's authorization server
+// for the upstream token.
 //
 // One client_id serves all three legs: the dev-idp names the requesting app
 // as the ID-JAG's client_id, and its resource authorization server requires
@@ -80,10 +87,11 @@ func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstr
 // client every run. The login client is exempt from the redirect check and
 // is fixed.
 //
-// A dev-idp that cannot be reached leaves the server display-only.
+// A dev-idp that cannot be reached leaves the server out.
 //
 // wireLocalEMA runs inside the local fixtures' transaction, after
-// provisionLocalEMA has made the dev-idp calls.
+// provisionLocalEMA has made the dev-idp calls. It reports whether it added
+// the server, so the caller records its typed upstream auth.
 func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalUpstreamOptions, base string, provisioned bool) error {
 	if !provisioned {
 		return nil
@@ -106,7 +114,7 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 		return fmt.Errorf("wire local ema: encrypt client secret: %w", err)
 	}
 
-	steps := []struct {
+	points := []struct {
 		what string
 		run  func() (int64, error)
 	}{
@@ -116,29 +124,8 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 		{"point the sign-in client", func() (int64, error) {
 			return q.LocalEMAPointIdentityProviderClient(ctx, repo.LocalEMAPointIdentityProviderClientParams{ClientID: clientID, ClientSecretEncrypted: secret, CallbackBaseUrl: serverURL, ID: s.det("ema-idp-client"), OrganizationID: org})
 		}},
-		{"point the remote server", func() (int64, error) {
-			return q.FixturePointRemoteServer(ctx, repo.FixturePointRemoteServerParams{Url: resource, ID: s.det("remotemcp-ema-tracker"), ProjectID: proj})
-		}},
-		{"point the authorization server", func() (int64, error) {
-			return q.LocalEMAPointVendorIssuer(ctx, repo.LocalEMAPointVendorIssuerParams{Issuer: authServer, Scopes: scopes, ID: s.det("ema-vendor-tracker"), ProjectID: proj})
-		}},
-		{"point the authorization server client", func() (int64, error) {
-			return q.LocalEMAPointVendorClient(ctx, repo.LocalEMAPointVendorClientParams{ClientID: clientID, ClientSecretEncrypted: secret, Scopes: scopes, ID: s.det("ema-client-tracker"), ProjectID: proj})
-		}},
-		{"point the protected resource", func() (int64, error) {
-			return q.LocalEMAPointProtectedResource(ctx, repo.LocalEMAPointProtectedResourceParams{
-				Resource: resource, MetadataUrl: base + "/.well-known/oauth-protected-resource" + fixtureauth.PathEMAMCP,
-				Issuer: authServer, Scopes: scopes, ID: s.det("protected-resource-ema-tracker"), ProjectID: proj,
-			})
-		}},
-		{"point the binding", func() (int64, error) {
-			return q.LocalEMAPointBinding(ctx, repo.LocalEMAPointBindingParams{Resource: resource, ID: s.det("ema-binding-tracker"), ProjectID: proj})
-		}},
-		{"point the typed auth client", func() (int64, error) {
-			return q.LocalEMAPointAuthClient(ctx, repo.LocalEMAPointAuthClientParams{Resource: resource, RemoteSessionClientID: s.det("ema-client-tracker"), OrganizationID: org})
-		}},
 	}
-	for _, step := range steps {
+	for _, step := range points {
 		n, err := step.run()
 		if err != nil {
 			return fmt.Errorf("wire local ema: %s: %w", step.what, err)
@@ -148,7 +135,77 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 		}
 	}
 
-	logger.InfoContext(ctx, "pointed the Enterprise Sign-In (ID-JAG) Server at the dev-idp and the local MCP fixture", attr.SlogURLOriginal(resource))
+	issuer := s.det("issuer-ema-tracker")
+	server := s.det("mcpserver-ema-tracker")
+	vendor := s.det("ema-vendor-tracker")
+	client := s.det("ema-client-tracker")
+	inserts := []struct {
+		what string
+		run  func() error
+	}{
+		{"insert the organization sign-in", func() error {
+			return q.LocalEMAInsertUserSessionIssuer(ctx, repo.LocalEMAInsertUserSessionIssuerParams{ID: issuer, OrgID: org, TrustedIssuerID: s.det("ema-idp"), TrustedClientID: s.det("ema-idp-client")})
+		}},
+		{"insert the remote server", func() error {
+			return q.LocalEMAInsertRemoteMCPServer(ctx, repo.LocalEMAInsertRemoteMCPServerParams{ID: s.det("remotemcp-ema-tracker"), ProjectID: proj, Url: resource})
+		}},
+		{"insert the server", func() error {
+			return q.LocalEMAInsertMCPServer(ctx, repo.LocalEMAInsertMCPServerParams{ID: server, ProjectID: proj, RemoteID: s.det("remotemcp-ema-tracker"), IssuerID: issuer})
+		}},
+		{"insert the endpoint", func() error {
+			return q.LocalEMAInsertEndpoint(ctx, repo.LocalEMAInsertEndpointParams{ID: s.det("endpoint-ema-tracker"), ProjectID: proj, McpServerID: server, Slug: spec.OrgSlug + "-enterprise-sign-in"})
+		}},
+		{"insert the authorization server", func() error {
+			return q.LocalEMAInsertVendorIssuer(ctx, repo.LocalEMAInsertVendorIssuerParams{ID: vendor, ProjectID: proj, OrgID: org, Issuer: authServer, Scopes: scopes})
+		}},
+		{"insert the authorization server client", func() error {
+			return q.LocalEMAInsertVendorClient(ctx, repo.LocalEMAInsertVendorClientParams{ID: client, ProjectID: proj, OrgID: org, IssuerID: vendor, ClientID: clientID, ClientSecretEncrypted: secret, Scopes: scopes})
+		}},
+		// The client is bound to both organization sign-ins that reach the
+		// server: its own federated sign-in, and the workforce sign-in. The
+		// server is associated with it: the one client of the authorization
+		// server its protected resource names.
+		{"bind the client to the sign-in", func() error {
+			return q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer})
+		}},
+		{"bind the client to the workforce sign-in", func() error {
+			return q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{RemoteSessionClientID: client, UserSessionIssuerID: s.det("issuer-workforce")})
+		}},
+		{"associate the server with its client", func() error {
+			return q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{ID: s.det("server-client-association-ema-tracker"), ProjectID: proj, OrgID: org, McpServerID: server, RemoteSessionClientID: client})
+		}},
+		{"stamp the authorization server", func() error {
+			return q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{RemoteSessionIssuerID: vendor, McpServerID: server, ProjectID: proj})
+		}},
+		{"insert the protected resource", func() error {
+			return q.LocalEMAInsertProtectedResource(ctx, repo.LocalEMAInsertProtectedResourceParams{
+				ID: s.det("protected-resource-ema-tracker"), ProjectID: proj, OrgID: org, Resource: resource,
+				MetadataUrl: base + "/.well-known/oauth-protected-resource" + fixtureauth.PathEMAMCP, Issuer: authServer, Scopes: scopes,
+			})
+		}},
+		{"insert the binding", func() error {
+			return q.LocalEMAInsertBinding(ctx, repo.LocalEMAInsertBindingParams{ID: s.det("ema-binding-tracker"), ProjectID: proj, OrgID: org, UserSessionIssuerID: issuer, IssuerID: vendor, Resource: resource, ClientID: client})
+		}},
+	}
+	for _, step := range inserts {
+		if err := step.run(); err != nil {
+			return fmt.Errorf("wire local ema: %s: %w", step.what, err)
+		}
+	}
+	// An organization sign-in reaches every server in the organization, so
+	// each seeded one, the expired history row included, chose the server's
+	// client, as the shared seed's do for the other servers.
+	for i := 1; i <= 3; i++ {
+		if err := q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
+			ID: s.det("org-gateway-choice-" + strconv.Itoa(i) + "-ema-tracker"), ProjectID: proj, OrgID: org,
+			CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: s.det("org-gateway-session-" + strconv.Itoa(i)),
+			McpServerID: server, RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true}, Source: upstreamclients.SelectionSourceIssuance,
+		}); err != nil {
+			return fmt.Errorf("wire local ema: record organization sign-in %d's client choice: %w", i, err)
+		}
+	}
+
+	logger.InfoContext(ctx, "added the Enterprise Sign-In (ID-JAG) Server, signing in at the dev-idp and reaching the local MCP fixture", attr.SlogURLOriginal(resource))
 	return nil
 }
 

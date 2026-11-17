@@ -252,49 +252,91 @@ SET client_id = @client_id::text,
     updated_at = clock_timestamp()
 WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
 
--- The server's authorization server: the dev-idp resource authorization
--- server for the fixture's /mcp/ema endpoint.
--- name: LocalEMAPointVendorIssuer :execrows
-UPDATE remote_session_issuers
-SET issuer = @issuer::text,
-    token_endpoint = @issuer::text || '/token',
-    introspection_endpoint = @issuer::text || '/introspect',
-    jwks_uri = @issuer::text || '/.well-known/jwks.json',
-    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
-    scopes_supported = @scopes::text[],
-    updated_at = clock_timestamp()
-WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+-- The Enterprise Sign-In (ID-JAG) Server exists only in the local org: it
+-- needs the dev-idp and the MCP fixture, which the demo org does not have.
+-- Its rows sit in the seeded project (the project delete cascades them away)
+-- except its organization sign-in, which the org-scoped user session issuer
+-- delete removes on every reseed. Its organization sign-in federates through
+-- the company provider: its trusted client is the one the caller signs in
+-- with, and the ID token it returns is what Speakeasy exchanges for an ID-JAG.
+-- name: LocalEMAInsertUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode,
+                                  trusted_remote_session_issuer_id,
+                                  trusted_remote_session_client_id) VALUES
+  (@id::uuid, NULL, @org_id::text, 'enterprise-sign-in',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   @trusted_issuer_id::uuid, @trusted_client_id::uuid);
 
--- name: LocalEMAPointVendorClient :execrows
-UPDATE remote_session_clients
-SET client_id = @client_id::text,
-    client_secret_encrypted = @client_secret_encrypted::text,
-    scope = @scopes::text[],
-    updated_at = clock_timestamp()
-WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+-- name: LocalEMAInsertRemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   'streamable-http', @url::text);
 
--- The protected resource, its binding and the typed auth client move from the
--- shared seed's placeholder to the running fixture's /mcp/ema endpoint.
--- name: LocalEMAPointProtectedResource :execrows
-UPDATE remote_protected_resources
-SET resource_identifier = @resource::text,
-    metadata_url = @metadata_url::text,
-    authorization_servers = ARRAY[@issuer::text],
-    scopes_supported = @scopes::text[],
-    metadata_fetched_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+-- name: LocalEMAInsertMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   NULL, @remote_id::uuid, @issuer_id::uuid, 'private');
 
--- name: LocalEMAPointBinding :execrows
-UPDATE remote_session_ema_bindings
-SET resource = @resource::text, updated_at = clock_timestamp()
-WHERE id = @id::uuid AND project_id = @project_id::uuid;
+-- name: LocalEMAInsertEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, NULL, @mcp_server_id::uuid, @slug::text);
 
--- name: LocalEMAPointAuthClient :execrows
-UPDATE mcp_auth_client_emas
-SET resource = @resource::text, updated_at = clock_timestamp()
-WHERE remote_session_client_id = @remote_session_client_id::uuid
-  AND organization_id = @organization_id::text AND deleted IS FALSE;
+-- The server's authorization server is the dev-idp resource authorization
+-- server for the fixture's /mcp/ema endpoint, which accepts ID-JAGs from a
+-- confidential client. Identity chaining trusts its JWT-bearer and ID-JAG
+-- support only from a discovered document, so the row records when that
+-- document was read; without it the binding reads as incomplete metadata and
+-- the consent page offers an interactive sign-in the server does not have.
+-- name: LocalEMAInsertVendorIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, token_endpoint,
+   introspection_endpoint, jwks_uri, name, scopes_supported,
+   grant_types_supported, authorization_grant_profiles_supported,
+   token_endpoint_auth_methods_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   'enterprise-sign-in-auth', @issuer::text, @issuer::text || '/token',
+   @issuer::text || '/introspect', @issuer::text || '/.well-known/jwks.json',
+   'Enterprise Sign-In Authorization Server', @scopes::text[],
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+   ARRAY['client_secret_post'], clock_timestamp());
+
+-- name: LocalEMAInsertVendorClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @issuer_id::uuid, @client_id::text,
+   @client_secret_encrypted::text, 'client_secret_post',
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   @scopes::text[]);
+
+-- name: LocalEMAInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @resource::text,
+   @metadata_url::text, ARRAY[@issuer::text], @scopes::text[],
+   clock_timestamp());
+
+-- name: LocalEMAInsertBinding :exec
+INSERT INTO remote_session_ema_bindings
+  (id, project_id, organization_id, user_session_issuer_id,
+   remote_session_issuer_id, resource, remote_session_client_id, generation,
+   state, grant_source, created_at, updated_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @user_session_issuer_id::uuid, @issuer_id::uuid,
+   @resource::text, @client_id::uuid, 1,
+   'ready', 'administrator_declared',
+   now() - interval '6 days', now() - interval '6 days');
 
 -- Locally a vendor (Linear, Notion) cannot fetch a client ID metadata
 -- document from localhost, so the shared seed's metadata document client

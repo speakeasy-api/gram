@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -171,6 +172,16 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 		require.Equal(t, fixtureauth.EMAAuthorizationServer(devIDP.URL), wiring.AuthorizationServer)
 		require.Equal(t, fixtureauth.EMAAuthorizationServer(devIDP.URL)+"/token", wiring.AuthorizationServerTokenEndpoint.String)
 		require.Equal(t, clientID, wiring.AuthorizationServerClientID, "the dev-idp's resource authorization server requires the client the ID-JAG names")
+
+		// The server exists only locally, so the local fixtures record its
+		// typed auth client on the fixture's endpoint and leave no
+		// association for the backfill to decide.
+		var typedResource string
+		require.NoError(t, db.QueryRow(ctx, "SELECT resource FROM mcp_auth_client_emas WHERE remote_session_client_id = $1 AND deleted IS FALSE", s.det("ema-client-tracker")).Scan(&typedResource))
+		require.Equal(t, resource, typedResource)
+		associations, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
+		require.NoError(t, err)
+		require.Zero(t, associations.Decided)
 
 		// After every run, including the one after the edits, the dev-idp
 		// holds one app with the shared secret, one resource for the
