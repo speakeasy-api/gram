@@ -45,7 +45,7 @@ per-ingress attestor pods.
   node's `service-host` capability. Advertising alone is not enough: a node
   whose service is unapproved, missing or misnamed connects without error but
   gets no traffic. Auto-approval takes a few seconds, so for the first minute
-  after its node starts (`ApprovalGrace`) an unapproved slot still reports
+  after its node is up (`ApprovalGrace`) an unapproved slot still reports
   `starting` and the ingress stays pending. After that the slot reports
   `awaiting_approval`, and the ingress shows `provider_service_not_approved`
   until the customer approves the host or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so

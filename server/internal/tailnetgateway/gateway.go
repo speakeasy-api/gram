@@ -189,7 +189,7 @@ type desiredIngress struct {
 //     the service.
 //   - starting | online -> awaiting_approval: the node is up but the tailnet
 //     has not approved it, or revoked its approval; -> online once approved.
-//     For ApprovalGrace after the node starts, an unapproved node stays
+//     For ApprovalGrace after the node is up, an unapproved node stays
 //     starting, since auto-approval takes a few seconds.
 //   - starting | awaiting_approval -> awaiting_certificate: the node is
 //     approved but a request for its TLS certificate failed; -> online once
@@ -229,8 +229,8 @@ type slot struct {
 	nodeID  string
 	dnsName string
 
-	// startedAt is when the running node's start began; the approval grace
-	// is measured from it.
+	// startedAt is when the running node finished starting; the approval
+	// grace is measured from it, so a slow registration does not use it up.
 	startedAt time.Time
 
 	// authKeyCleared is set once the one-shot key has been removed from the
@@ -768,7 +768,7 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 		return
 	}
 	s.node = node
-	s.startedAt = startedAt
+	s.startedAt = g.now()
 	s.nodeID = ""
 	s.dnsName = state.FQDN
 	// The key row is the source of truth: a restart after a failed clear

@@ -321,10 +321,10 @@ function ConfiguredPrivateNetwork({
           <Alert variant="error" dismissible={false}>
             <div className="space-y-2">
               <Text small>
-                Speakeasy&apos;s gateway is approved, but its request for an
-                HTTPS certificate for <code>{ingress.hostname}</code> was
-                refused, so devices can&apos;t connect yet. Speakeasy retries on
-                its own and this page updates once the certificate is issued.
+                Speakeasy&apos;s gateway is approved, but it couldn&apos;t get a
+                valid HTTPS certificate for <code>{ingress.hostname}</code>, so
+                devices can&apos;t connect yet. Speakeasy retries on its own and
+                this page updates once the certificate is issued.
               </Text>
               {ingress.statusDetail && (
                 <Text small muted>

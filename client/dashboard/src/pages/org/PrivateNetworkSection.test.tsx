@@ -800,7 +800,7 @@ describe("PrivateNetworkSection", () => {
     render(<PrivateNetworkSection />);
 
     expect(
-      screen.getByText(/request for an\s+HTTPS certificate for/),
+      screen.getByText(/couldn.t get\s+a valid HTTPS certificate for/),
     ).toBeTruthy();
     expect(screen.queryByText(/Latest attempt:/)).toBeNull();
     expect(screen.queryByText(/Latest check:/)).toBeNull();

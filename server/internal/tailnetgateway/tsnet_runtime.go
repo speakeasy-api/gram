@@ -511,15 +511,15 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 		// Fail closed, but report why rather than as a plain approval wait.
 		return NodeState{Online: false, BackendState: st.BackendState, NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", CertificateExpiresAt: time.Time{}, NodeID: "", FQDN: n.fqdn}, err
 	}
-	certified, uncertified, certificateStatus := false, false, ""
+	certified, certificateFailed, certificateStatus := false, false, ""
 	if running && approved {
-		certified, uncertified, certificateStatus = n.cert.Poll()
+		certified, certificateFailed, certificateStatus = n.cert.Poll()
 	}
 	state := NodeState{
 		Online: running && approved && certified, BackendState: st.BackendState,
 		NeedsLogin:           st.BackendState == ipn.NeedsLogin.String(),
 		AwaitingApproval:     running && !approved,
-		AwaitingCertificate:  running && approved && uncertified,
+		AwaitingCertificate:  running && approved && certificateFailed,
 		CertificateStatus:    certificateStatus,
 		CertificateExpiresAt: n.cert.ExpiresAt(),
 		NodeID:               "", FQDN: n.fqdn,
