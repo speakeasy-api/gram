@@ -446,3 +446,19 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
 }
+
+// Each service card centres its buttons against its text, however many lines the status takes.
+func TestConsentTemplate_ServiceCardCentresItsButtons(t *testing.T) {
+	t.Parallel()
+
+	cards := []remoteSessionCard{
+		{ClientID: "connected", IssuerDisplay: "GitHub", Connected: true, CanRefresh: true},
+		{ClientID: "not-connected", IssuerDisplay: "Linear"},
+		{ClientID: "refused", IssuerDisplay: "Google", Chained: true, ChainCheck: chainCheckRejected, ChainMessage: "A long refusal that wraps onto several lines of the card."},
+	}
+	page := renderGatewayConsent(t, gatewayTemplateData(nil, cards))
+
+	for _, card := range cards {
+		require.Regexp(t, `data-remote-client="`+card.ClientID+`"[^>]*> <div class="flex items-center justify-between gap-3">`, page, card.ClientID)
+	}
+}
