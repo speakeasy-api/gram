@@ -32,6 +32,10 @@ var NetworkIngress = Type("NetworkIngress", func() {
 var GetResult = Type("NetworkIngressResult", func() {
 	Description("The organization's active private network ingress, when configured.")
 	Attribute("ingress", NetworkIngress)
+	Attribute("gateway_tag", String, "Tailscale tag this environment's gateway nodes and services carry. The organization's tailnet policy must own it, auto-approve the connection's service for it, and the OAuth client must be scoped to it.", func() {
+		Example("tag:speakeasy")
+	})
+	Required("gateway_tag")
 })
 
 var DeleteImpact = Type("NetworkIngressDeleteImpact", func() {

@@ -81,11 +81,11 @@ func NewAgentSubject(id uuid.UUID) SessionSubject {
 	return s
 }
 
-// NewAnonymousSubject constructs an `anonymous:<mcp-session-id>` session
-// subject. The id segment is the same value the MCP handler injects into the
-// user_session_issuer per goal #11 of the RFC.
-func NewAnonymousSubject(mcpSessionID string) SessionSubject {
-	s := SessionSubject{Kind: SessionSubjectKindAnonymous, ID: mcpSessionID, checked: false, err: nil}
+// NewAnonymousSubject constructs an `anonymous:<id>` session subject for a
+// caller that connected to a public server without signing in. The id is
+// opaque and names nothing outside its own connection.
+func NewAnonymousSubject(id string) SessionSubject {
+	s := SessionSubject{Kind: SessionSubjectKindAnonymous, ID: id, checked: false, err: nil}
 	_ = s.validate()
 	return s
 }

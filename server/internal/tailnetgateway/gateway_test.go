@@ -256,7 +256,7 @@ func newGatewayFixtureWithMeter(t *testing.T, name string, ordinal int32, meterP
 	runtime := &fakeRuntime{mu: sync.Mutex{}, nodes: nil, failStart: nil, writePartial: false, writeLogin: false, closeDelay: 0}
 	cfg := tailnetgateway.Config{
 		Ordinal: ordinal, PodName: "gram-tailnet-gateway-0", Shard: tailnetgateway.DefaultShard, StateDir: t.TempDir(),
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
 		PollInterval: tailnetgateway.DefaultPollInterval, DrainTimeout: time.Second, StartTimeout: 5 * time.Second,
 		ApprovalGrace: 0, MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
 	}
