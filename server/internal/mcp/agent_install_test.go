@@ -218,6 +218,24 @@ func TestAgentInstall_CustomDomainMintKeepsHooksOnThePlatform(t *testing.T) {
 	require.Equal(t, "https://app.example.test", serverURL)
 }
 
+// A code minted on a custom domain points hooks at the platform server URL,
+// which must meet the same HTTPS rule as the origin the script comes from.
+func TestAgentInstall_CustomDomainMintRefusesPlaintextHooksOrigin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	r := httptest.NewRequest(http.MethodPost, "/agent-mcp/"+fx.agent.ID.String()+"/install-code", nil)
+	r.Header.Set("Authorization", "Bearer "+fx.token)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("agentID", fx.agent.ID.String())
+	r = r.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	r = r.WithContext(requestorigin.WithContext(r.Context(), requestorigin.Origin{Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://mcp.example.com"}))
+
+	err := ti.service.HandleAgentInstallCode(httptest.NewRecorder(), r)
+	requireAgentGatewayCode(t, err, oops.CodeBadRequest)
+}
+
 // seedAllowlistedDomain gives the caller's organization a custom domain with an
 // IP allowlist, serving or not, and returns its host.
 func seedAllowlistedDomain(t *testing.T, ctx context.Context, ti *testInstance, serving bool) string {

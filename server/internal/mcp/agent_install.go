@@ -134,6 +134,11 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfaceCustomDomain {
 		hooksServerURL = strings.TrimSuffix(s.serverURL.String(), "/")
 	}
+	// The hooks report with the agent key, so their origin needs the same
+	// transport guarantee as the one the script is fetched from.
+	if base, err := url.Parse(hooksServerURL); err != nil || base.Scheme != "https" {
+		return oops.E(oops.CodeBadRequest, nil, "install commands require an HTTPS server URL")
+	}
 
 	code, err := newInstallCode()
 	if err != nil {
