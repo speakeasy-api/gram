@@ -310,3 +310,40 @@ func TestService_ReadShadowMCPInventoryTarget_BuiltInBlocklist(t *testing.T) {
 	require.Equal(t, shadowMCPInventoryAccessBlocked, server.Access)
 	require.Equal(t, shadowMCPAccessStateBlocked, server.AccessSummary.State)
 }
+
+// A blocked-by-default policy for some people leaves everyone else in the
+// built-in blocklist. An unreviewed server is blocked for the audience only,
+// so it reads restricted; a denied server is blocked for the audience by the
+// policy and for everyone else by the denial, so it reads blocked.
+func TestService_ReadShadowMCPInventoryTarget_TargetedPolicyAndBuiltInBlocklist(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+	createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      authCtx.ProjectID.String(),
+		Name:           "Shadow MCP",
+		Action:         "block",
+		Disposition:    "block_all",
+		AudienceType:   "targeted",
+	})
+	read := func() *gen.ShadowMCPInventoryServer {
+		server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			TargetKind:     shadowMCPTargetKindServerURL,
+			TargetKey:      "https://github.example.com/mcp",
+		})
+		require.NoError(t, err)
+		return server
+	}
+
+	require.Equal(t, shadowMCPInventoryAccessRestricted, read().Access)
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://github.example.com/mcp", "denied", 0)
+	seedApprovalDecisionRow(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, request.ID, "denied", []string{"user:all"})
+
+	require.Equal(t, shadowMCPInventoryAccessBlocked, read().Access)
+}

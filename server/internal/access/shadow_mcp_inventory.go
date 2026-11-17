@@ -1318,11 +1318,17 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	}
 
 	blockingPolicyIDs := make(map[string]struct{}, len(policies))
+	// Whether a blocking policy covers every user. Without one, the people no
+	// policy covers are in the built-in blocklist, as the hooks enforce.
+	hasEveryoneBlockingPolicy := false
 	for _, policy := range policies {
 		if policy.Action != "block" {
 			continue
 		}
 		state.hasBlockingPolicy = true
+		if policy.AudienceType == shadowMCPInventoryAudienceEveryone {
+			hasEveryoneBlockingPolicy = true
+		}
 		policyID := policy.ID.String()
 		blockingPolicyIDs[policyID] = struct{}{}
 
@@ -1404,16 +1410,20 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			principals[grant.PrincipalUrn] = struct{}{}
 		}
 	}
-	if len(blockingPolicyIDs) == 0 {
-		// No blocking policy: the project is in the built-in blocklist mode.
-		// Every server connects except those whose standing decision is a
-		// denial, which are blocked for everyone, as the hooks enforce.
-		state.hasBlockingPolicy = true
+	if !hasEveryoneBlockingPolicy {
+		// The built-in blocklist covers everyone no blocking policy covers:
+		// every server connects for them except those whose standing decision
+		// is a denial. A targeted policy blocks a denied server for its own
+		// audience too, so a denial is a block for everyone.
 		for serverURL, approval := range state.approvalsByURL {
 			if approval.StandingDecision != nil && *approval.StandingDecision == shadowMCPInventoryBypassStatusDenied {
 				state.everyoneBlockedURLs[serverURL] = struct{}{}
 			}
 		}
+	}
+	if len(blockingPolicyIDs) == 0 {
+		// No blocking policy: the project is in the built-in blocklist mode.
+		state.hasBlockingPolicy = true
 		return state, nil
 	}
 
