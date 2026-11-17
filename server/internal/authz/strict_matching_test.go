@@ -47,7 +47,7 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 			Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: server.String(),
 			Dimensions: map[string]string{SelectorKeyProjectID: project.String()},
 		},
-		"connection matched exactly": ref.Connect().WithStrictSelectorMatch(),
+		"connection matched exactly": func() Check { c := ref.Connect(); c.exact = true; return c }(),
 	} {
 		allowed, err := GrantsAuthorize(grants, check)
 		require.NoError(t, err, name)

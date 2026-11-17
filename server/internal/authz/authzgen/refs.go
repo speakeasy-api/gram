@@ -216,10 +216,6 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 			b.WriteString("\t}\n}\n\n")
 		}
 
-		match := "MatchStandard"
-		if t.Match == registry.MatchStrict {
-			match = "MatchStrict"
-		}
 		for _, p := range t.Permissions {
 			method := ActionMethodName(p.Action)
 			var extra []registry.Dimension
@@ -234,22 +230,22 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 				mparams = append(mparams, paramName(d.Key)+" "+paramType(r, d.Key))
 			}
 			fmt.Fprintf(&b, "func (r %sRef) %s(%s) Check {\n", name, method, strings.Join(mparams, ", "))
-			// A permission with dimension sets has a plain form that leaves
-			// them out: connecting to a server names no tool. That form is
-			// stamped, so the matcher knows the omission is meant.
+			// A permission that opens keys on a connection has a plain form
+			// that leaves them out: connecting to a server names no tool.
+			// That form is stamped, so the matcher opens those keys.
 			stamp := ""
-			if len(p.DimensionSets) > 0 {
+			if slices.ContainsFunc(p.Open, func(o registry.OpenKeys) bool { return o.On == registry.OpenOnConnection }) {
 				stamp = ".asConnection()"
 			}
 			if len(extra) == 0 {
-				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), r.dimensions(), %s)%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match, stamp)
+				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), r.dimensions())%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), stamp)
 				continue
 			}
 			b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 			for _, d := range extra {
 				fmt.Fprintf(&b, "\tdimensions[%q] = %s.String()\n", d.Key, paramName(d.Key))
 			}
-			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match, stamp)
+			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), dimensions)%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), stamp)
 		}
 		for _, p := range t.Permissions {
 			for _, set := range p.DimensionSets {
@@ -258,7 +254,7 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 						return nil, fmt.Errorf("%s:%s dimension set %s uses %q, which the ref already fills in from its constructor", t.Kind, p.Action, set.Method, key)
 					}
 				}
-				renderDimensionSet(&b, name, ScopeConstantName(t.ScopeFor(p)), match, set)
+				renderDimensionSet(&b, name, ScopeConstantName(t.ScopeFor(p)), set)
 			}
 		}
 	}
@@ -285,7 +281,7 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 // renderDimensionSet writes the ref method for one dimension set: the
 // permission's check plus the set's dimensions as arguments, an empty one left
 // out.
-func renderDimensionSet(b *strings.Builder, ref, scope, match string, set registry.DimensionSet) {
+func renderDimensionSet(b *strings.Builder, ref, scope string, set registry.DimensionSet) {
 	params := make([]string, 0, len(set.Keys))
 	for _, key := range set.Keys {
 		params = append(params, paramName(key))
@@ -298,7 +294,7 @@ func renderDimensionSet(b *strings.Builder, ref, scope, match string, set regist
 	for i, key := range set.Keys {
 		fmt.Fprintf(b, "\tif %s != \"\" {\n\t\tdimensions[%q] = %s\n\t}\n", params[i], key, params[i])
 	}
-	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s).asToolCall()\n}\n\n", scope, match)
+	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions).asToolCall()\n}\n\n", scope)
 }
 
 // renderIDs writes one id type per kind that has a generated ref. Each can

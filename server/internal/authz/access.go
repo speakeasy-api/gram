@@ -14,10 +14,10 @@ type Check struct {
 	ResourceKind string
 	ResourceID   string
 	Dimensions   map[string]string
-	// selectorMatch controls how allow grant selectors are matched. The zero
-	// value lets a check leave a grant key out only in the cases mayOmit
-	// names; selectorMatchStrict allows none of them.
-	selectorMatch selectorMatchMode
+	// exact refuses every grant key the check leaves out, even one its
+	// scope opens. Blocks, exemptions, containment and direct overrides of a
+	// tool call are matched exactly; only the engine sets it.
+	exact bool
 	// representedUser binds $represented_user; only the engine sets it.
 	representedUser string
 	// probe marks a check that asks whether the caller could act on some
@@ -68,22 +68,6 @@ func (c Check) asConnection() Check {
 	return c
 }
 
-type selectorMatchMode int
-
-const (
-	selectorMatchNormal selectorMatchMode = iota
-	selectorMatchStrict
-)
-
-// WithStrictSelectorMatch returns a copy that only accepts grants whose every
-// selector constraint is represented by this check, with none of the named
-// omissions of mayOmit. Use it for blocks, and when proving that requested
-// authority is no broader than a live grant.
-func (c Check) WithStrictSelectorMatch() Check {
-	c.selectorMatch = selectorMatchStrict
-	return c
-}
-
 // Probe marks the check as a discovery question: could the caller act on
 // some resource matching it. A grant key the check leaves out matches any
 // value the grant names. Can and Filter accept a probe; Require refuses one,
@@ -111,7 +95,7 @@ func AnyOf(alternatives ...Check) Check {
 		ResourceKind:    first.ResourceKind,
 		ResourceID:      first.ResourceID,
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 		probe:           false,
 		anyOf:           append([]Check{}, alternatives...),
@@ -149,35 +133,36 @@ func (c Check) keysRefusingGrant(grant Selector) (missing []string, matched bool
 	return missing, len(missing) == 0
 }
 
-// mayOmit reports whether the check may leave out a key that a grant names
-// and still match the grant. These are the only cases:
+// mayOmit reports whether the check may leave out a key that a grant of its
+// scope names and still match the grant. The registry declares these open
+// keys per permission (scopeOpenKeys), for three kinds of check only:
 //
 //   - a probe, which asks about some resource and not a concrete one;
 //   - a connection, which names no tool, against a tool or disposition limit;
 //   - a risk policy audience question, which names no server, against a
 //     server limit. Matching there places the caller under the policy.
 //
-// A strictly matched check and an auth-client check may omit nothing.
+// An exact check may omit nothing. Every other check opens no key.
 func (c Check) mayOmit(key string) bool {
-	if c.selectorMatch == selectorMatchStrict || c.isAuthClientCheck() {
+	if c.exact {
 		return false
 	}
-	if c.probe {
+	open := scopeOpenKeys[c.Scope]
+	if c.probe && slices.Contains(open.Probe, key) {
 		return true
 	}
 	switch c.operation {
 	case operationConnection:
-		return key == SelectorKeyTool || key == SelectorKeyDisposition
+		return slices.Contains(open.Connection, key)
 	case operationPolicyAudience:
-		return key == SelectorKeyServerURL || key == SelectorKeyServerIdentity
+		return slices.Contains(open.PolicyAudience, key)
 	case operationDefault, operationToolCall:
 		return false
 	}
 	return false
 }
 
-// isAuthClientCheck reports whether c targets an auth client. Those checks
-// may omit nothing, even as a probe.
+// isAuthClientCheck reports whether c targets an auth client.
 func (c Check) isAuthClientCheck() bool {
 	return c.ResourceKind == ResourceKindMCPAuthClient || ResourceKindForScope(c.Scope) == ResourceKindMCPAuthClient
 }
@@ -218,7 +203,7 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault}
+	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, exact: true, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -229,12 +214,12 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 // matches any check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
-		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
-		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
+		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
+		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
 	}
 	// Additional scopes that also satisfy this check.
 	for _, s := range scopeExpansions[c.Scope] {
-		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation})
+		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation})
 	}
 	// Root administers everything but uses no auth client.
 	if c.isAuthClientCheck() {

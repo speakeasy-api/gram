@@ -20,6 +20,7 @@ func validTestPermission(action Action) Permission {
 		Dimensions:    nil,
 		Source:        GrantSourceRoles,
 		DimensionSets: nil,
+		Open:          nil,
 		Category:      "",
 		Label:         "Label",
 		Description:   "Description.",
@@ -33,7 +34,6 @@ func validTestType(kind Kind, permissions ...Permission) ResourceType {
 		Kind:        kind,
 		Parent:      "",
 		Category:    ScopeCategoryProject,
-		Match:       MatchStandard,
 		Dimensions:  nil,
 		Permissions: permissions,
 	}
@@ -59,6 +59,10 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 		p.DimensionSets = append(p.DimensionSets, DimensionSet{Method: method, Keys: keys})
 		return p
 	}
+	withOpen := func(p Permission, on OpenOn, keys ...string) Permission {
+		p.Open = append(p.Open, OpenKeys{On: on, Keys: keys})
+		return p
+	}
 	withDims := func(t ResourceType, keys ...string) ResourceType {
 		for _, key := range keys {
 			t.Dimensions = append(t.Dimensions, Dimension{Key: key, Values: nil, Required: false})
@@ -71,6 +75,26 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 		model Registry
 		want  string
 	}{
+		{
+			name:  "open key that is not a dimension",
+			model: validTestRegistry(validTestType("thing", withOpen(validTestPermission("read"), OpenOnProbe, "part"))),
+			want:  `thing.read: open key "part" is not a dimension of the permission or its type`,
+		},
+		{
+			name:  "open keys with no key",
+			model: validTestRegistry(validTestType("thing", withOpen(validTestPermission("read"), OpenOnProbe))),
+			want:  `thing.read: open keys on a probe list no key`,
+		},
+		{
+			name:  "open keys declared twice for one kind of check",
+			model: validTestRegistry(withDims(validTestType("thing", withOpen(withOpen(validTestPermission("read"), OpenOnProbe, "part"), OpenOnProbe, "part")), "part")),
+			want:  `thing.read: open keys on a probe are declared twice`,
+		},
+		{
+			name:  "connection opened without a dimension set",
+			model: validTestRegistry(withDims(validTestType("thing", withOpen(validTestPermission("read"), OpenOnConnection, "part")), "part")),
+			want:  `thing.read: only a permission with dimension sets has a connection to open keys on`,
+		},
 		{
 			name:  "dimension set with an undeclared key",
 			model: validTestRegistry(validTestType("thing", withSet(validTestPermission("read"), "ReadPart", "part"))),
@@ -323,27 +347,30 @@ func withTestScope(p Permission, s Scope) Permission {
 	return p
 }
 
-// A loosely matched type inside a project must require project_id, so a check
-// cannot leave the project out and pass a grant bounded to another project.
-// Strictly matched types fail closed on a missing key and may leave it optional.
+// A type inside a project that lets a check leave project_id out must require
+// it, so only a probe can leave the project out. A type that opens nothing
+// fails closed on a missing key and may leave it optional.
 func TestRegistryValidate_RequiresParentDimension(t *testing.T) {
 	t.Parallel()
 
-	inProject := func(match MatchMode, required bool) ResourceType {
-		thing := validTestType("thing", validTestPermission("read"))
+	inProject := func(opened bool, required bool) ResourceType {
+		read := validTestPermission("read")
+		if opened {
+			read.Open = []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}}
+		}
+		thing := validTestType("thing", read)
 		thing.Parent = "project"
-		thing.Match = match
 		thing.Dimensions = []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: required}}
 		return thing
 	}
 	project := validTestType("project", validTestPermission("read"))
 
-	err := validTestRegistry(project, inProject(MatchStandard, false)).Validate()
+	err := validTestRegistry(project, inProject(true, false)).Validate()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), `thing: dimension "project_id" names the parent project, so it must be Required`)
+	require.Contains(t, err.Error(), `thing: dimension "project_id" names the parent project and a check may leave it out, so it must be Required`)
 
-	require.NoError(t, validTestRegistry(project, inProject(MatchStandard, true)).Validate())
-	require.NoError(t, validTestRegistry(project, inProject(MatchStrict, false)).Validate())
+	require.NoError(t, validTestRegistry(project, inProject(true, true)).Validate())
+	require.NoError(t, validTestRegistry(project, inProject(false, false)).Validate())
 }
 
 // The member role is seeded with a subset of the admin role.

@@ -21,7 +21,6 @@ var Definitions = Registry{
 			Kind:       "org",
 			Parent:     "",
 			Category:   ScopeCategoryOrg,
-			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -31,6 +30,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(7), "organization read access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View organization",
@@ -45,6 +45,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(7), "organization admin access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage organization",
@@ -59,6 +60,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Sync device agent plugins",
@@ -74,6 +76,7 @@ var Definitions = Registry{
 					// R6 (parked): the one org permission checked per project.
 					Dimensions:    []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Send hook events",
@@ -93,7 +96,6 @@ var Definitions = Registry{
 			Kind:       "chat",
 			Parent:     "project",
 			Category:   ScopeCategorySession,
-			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -103,6 +105,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View agent sessions",
@@ -117,6 +120,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage agent sessions",
@@ -130,7 +134,6 @@ var Definitions = Registry{
 			Kind:       "project",
 			Parent:     "org",
 			Category:   ScopeCategoryProject,
-			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -143,6 +146,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Connect to Channels",
@@ -158,6 +162,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage Channels",
@@ -175,6 +180,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Read all Channels messages",
@@ -189,6 +195,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "project read access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View projects",
@@ -203,6 +210,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "project write access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage projects",
@@ -218,6 +226,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(AgentUnsafe(), "plugin write access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      ScopeCategoryPlugin,
 					Label:         "Publish plugins",
@@ -234,6 +243,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      ScopeCategoryLog,
 					Label:         "View tool logs",
@@ -249,6 +259,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      ScopeCategorySession,
 					Label:         "Team memory",
@@ -264,6 +275,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      ScopeCategorySession,
 					Label:         "Team memos",
@@ -281,7 +293,6 @@ var Definitions = Registry{
 			Kind:     "mcp",
 			Parent:   "project",
 			Category: ScopeCategoryMCP,
-			Match:    MatchStandard,
 			Dimensions: []Dimension{
 				// Required since the hotfix: a project-bounded grant must
 				// never match a check that does not name its project.
@@ -295,6 +306,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "MCP read access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View MCP servers",
@@ -309,6 +321,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "MCP write access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage MCP servers",
@@ -331,6 +344,10 @@ var Definitions = Registry{
 						{Key: SelectorKeyDisposition, Values: []string{DispositionReadOnly, DispositionDestructive, DispositionIdempotent, DispositionOpenWorld, DispositionUnannotated}, Required: false},
 					},
 					Source: GrantSourceRoles,
+					Open: []OpenKeys{
+						{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID, SelectorKeyTool, SelectorKeyDisposition}},
+						{On: OpenOnConnection, Keys: []string{SelectorKeyTool, SelectorKeyDisposition}},
+					},
 					// ToolCall carries the tool and its disposition; plain
 					// Connect() asks about the server as a whole.
 					DimensionSets: []DimensionSet{
@@ -351,7 +368,6 @@ var Definitions = Registry{
 			Kind:     "mcp_auth_client",
 			Parent:   "project",
 			Category: ScopeCategoryMCPAuthClient,
-			Match:    MatchStrict,
 			Dimensions: []Dimension{
 				{Key: SelectorKeyClientType, Values: []string{AuthClientTypeRemoteSession, AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough, AuthClientTypeEMA}, Required: false},
 				{Key: SelectorKeyProjectID, Values: nil, Required: false},
@@ -366,6 +382,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(5), "auth client use"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Use shared auth clients",
@@ -384,7 +401,6 @@ var Definitions = Registry{
 			Kind:       "environment",
 			Parent:     "project",
 			Category:   ScopeCategoryEnvironment,
-			Match:      MatchStandard,
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
@@ -394,6 +410,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "environment read access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View environments",
@@ -408,6 +425,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "environment write access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage environments",
@@ -421,7 +439,6 @@ var Definitions = Registry{
 			Kind:       "skill",
 			Parent:     "project",
 			Category:   ScopeCategorySkill,
-			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -431,6 +448,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "skill read access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View skills",
@@ -445,6 +463,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "skill write access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage skills",
@@ -458,7 +477,6 @@ var Definitions = Registry{
 			Kind:       "assistant",
 			Parent:     "project",
 			Category:   ScopeCategoryAssistant,
-			Match:      MatchStandard,
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
@@ -468,6 +486,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "assistant read access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View assistants",
@@ -482,6 +501,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(SafeSince(4), "assistant write access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage assistants",
@@ -495,7 +515,6 @@ var Definitions = Registry{
 			Kind:     "risk_policy",
 			Parent:   "org",
 			Category: ScopeCategoryRiskPolicy,
-			Match:    MatchStandard,
 			Dimensions: []Dimension{
 				{Key: SelectorKeyServerURL, Values: nil, Required: false},
 				{Key: SelectorKeyServerIdentity, Values: nil, Required: false},
@@ -507,9 +526,13 @@ var Definitions = Registry{
 					Implies:     nil,
 					// An exemption, not a block: direct grants never cancel a
 					// bypass.
-					Exclusions:    []Exclusion{{Kind: ExclusionExemption, Action: ActionBypass, Agent: AgentUnsafe(), Subject: ""}},
-					Dimensions:    nil,
-					Source:        GrantSourceRiskPolicy,
+					Exclusions: []Exclusion{{Kind: ExclusionExemption, Action: ActionBypass, Agent: AgentUnsafe(), Subject: ""}},
+					Dimensions: nil,
+					Source:     GrantSourceRiskPolicy,
+					Open: []OpenKeys{
+						{On: OpenOnProbe, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}},
+						{On: OpenOnPolicyAudience, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}},
+					},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Evaluate risk policies",
@@ -524,6 +547,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRiskPolicy,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Bypass risk policies",
@@ -538,6 +562,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRiskPolicy,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Block shadow MCP servers",
@@ -551,7 +576,6 @@ var Definitions = Registry{
 			Kind:       "inference",
 			Parent:     "project",
 			Category:   ScopeCategoryInference,
-			Match:      MatchStandard,
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
@@ -561,6 +585,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Run inference",
@@ -574,7 +599,6 @@ var Definitions = Registry{
 			Kind:       "agent",
 			Parent:     "org",
 			Category:   ScopeCategoryAgent,
-			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -584,6 +608,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View agents",
@@ -598,6 +623,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage agents",
@@ -612,6 +638,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Authorize agent credentials",
@@ -626,6 +653,7 @@ var Definitions = Registry{
 					Exclusions:    nil,
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Transfer agent ownership",
@@ -642,7 +670,6 @@ var Definitions = Registry{
 			Kind:       "workload",
 			Parent:     "org",
 			Category:   ScopeCategoryWorkload,
-			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -652,6 +679,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(AgentUnsafe(), "workload read access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "View workload identities",
@@ -666,6 +694,7 @@ var Definitions = Registry{
 					Exclusions:    Blocked(AgentUnsafe(), "workload write access"),
 					Dimensions:    nil,
 					Source:        GrantSourceRoles,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Manage workload identities",
