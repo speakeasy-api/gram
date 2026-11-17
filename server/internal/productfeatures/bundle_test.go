@@ -33,6 +33,78 @@ func TestSeedOrganizationDefaultsTx_EnablesLoggingBundle(t *testing.T) {
 	}
 }
 
+func TestSeedNewOrganizationDefaultsTx_EnablesEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	for _, feature := range slices.Concat(productfeatures.OrganizationDefaultFeatures, productfeatures.NewOrganizationFeatures) {
+		enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Truef(t, enabled, "feature %s should be enabled for a new organization", feature)
+	}
+	require.Contains(t, productfeatures.NewOrganizationFeatures, productfeatures.FeatureUpstreamAuthEnforced)
+}
+
+func TestSeedOrganizationDefaultsTx_LeavesEnforcementOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := featurerepo.New(ti.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "seeding defaults onto an existing organization must not enable enforcement")
+}
+
+func TestSeedNewOrganizationDefaultsTx_LeavesDisabledEnforcementDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "replaying new organization defaults must not undo an enforcement rollback")
+}
+
 func TestSeedOrganizationDefaultsTx_LeavesADisabledDefaultDisabled(t *testing.T) {
 	t.Parallel()
 
