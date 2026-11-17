@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -162,7 +163,7 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	if focusServer != "" {
 		next.FocusServer = focusServer
 	}
-	location, err := s.restartSignIn(w, r, logger, endpoint, next, signInRestart{
+	err = s.restartSignIn(w, r, logger, endpoint, next, signInRestart{
 		WorkOSSessionID:      session.WorkOSSessionID,
 		Stage:                mcpmetrics.OAuthFlowStageConsent,
 		MustEnd:              true,
@@ -173,10 +174,10 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 		s.restoreConsentChallenge(r, logger, consumed)
 		return err
 	}
-	// The old page's URL, reached again with Back, goes on to the new sign-in.
-	pointer := accountSwitchPointer{ID: consumed.ID, McpSlug: endpoint.Slug, Location: location}
-	if err := s.accountSwitchCache.Store(context.WithoutCancel(ctx), pointer); err != nil {
-		logger.WarnContext(ctx, "remember account switch for the old consent page", attr.SlogError(err))
+	// The old page's URL, reached again with Back, says why instead of "expired".
+	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug}
+	if err := s.accountSwitchCache.Store(context.WithoutCancel(ctx), marker); err != nil {
+		logger.WarnContext(ctx, "mark consent challenge as switched", attr.SlogError(err))
 	}
 	return nil
 }
@@ -190,35 +191,31 @@ func (s *Service) restoreConsentChallenge(r *http.Request, logger *slog.Logger, 
 	}
 }
 
-// accountSwitchPointer sends a consent page whose challenge an account switch
-// spent on to that switch's fresh sign-in. The page's own URL already grants
-// everything the pointer reaches, so it adds no capability.
-type accountSwitchPointer struct {
-	ID       string `json:"id"`
-	McpSlug  string `json:"mcp_slug"`
-	Location string `json:"location"`
+// accountSwitchMarker records only that an account switch spent a consent
+// challenge. It holds nothing about the new sign-in, so presenting the old
+// consent URL reveals and grants nothing.
+type accountSwitchMarker struct {
+	ID      string `json:"id"`
+	McpSlug string `json:"mcp_slug"`
 }
 
-var _ cache.CacheableObject[accountSwitchPointer] = (*accountSwitchPointer)(nil)
+var _ cache.CacheableObject[accountSwitchMarker] = (*accountSwitchMarker)(nil)
 
 // CacheKey implements cache.CacheableObject.
-func (p accountSwitchPointer) CacheKey() string { return "authnChallengeSwitched:" + p.ID }
+func (m accountSwitchMarker) CacheKey() string { return "authnChallengeSwitched:" + m.ID }
 
 // TTL implements cache.CacheableObject.
-func (p accountSwitchPointer) TTL() time.Duration {
+func (m accountSwitchMarker) TTL() time.Duration {
 	var challenge AuthnChallengeState
 	return challenge.TTL()
 }
 
-// followAccountSwitch redirects a consent page whose challenge an account
-// switch spent to that switch's sign-in, reporting whether it did.
-func (s *Service) followAccountSwitch(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, stateID string) bool {
-	pointer, err := s.accountSwitchCache.Get(r.Context(), "authnChallengeSwitched:"+stateID)
-	if err != nil || pointer.McpSlug != endpoint.Slug || pointer.Location == "" {
-		return false
+// switchedConsentError explains a consent page an account switch spent, or
+// returns nil when no switch did.
+func (s *Service) switchedConsentError(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, stateID string) error {
+	marker, err := s.accountSwitchCache.Get(ctx, "authnChallengeSwitched:"+stateID)
+	if err != nil || marker.McpSlug != endpoint.Slug {
+		return nil
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	http.Redirect(w, r, pointer.Location, http.StatusFound)
-	return true
+	return fmt.Errorf("load consent challenge: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this consent page started a new sign-in").LogInfo(ctx, logger), oauthui.ReasonSignInRestarted))
 }

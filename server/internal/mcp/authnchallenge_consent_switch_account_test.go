@@ -604,25 +604,58 @@ func TestConsentSwitchAccount_BoundedPerAttempt(t *testing.T) {
 	require.Contains(t, page, "Use a separate sign-in instead", "the separate sign-in is still there")
 }
 
-// Back to the spent consent page goes on to the fresh sign-in instead of an error.
-func TestConsentSwitchAccount_OldConsentURLGoesOnToTheNewSignIn(t *testing.T) {
+// renderSpent GETs a consent page through the browser error handler, as a person sees it.
+func renderSpent(t *testing.T, fx consentActionFixture) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+fx.endpoint.Slug+"/connect?state="+url.QueryEscape(fx.stateID), nil)
+	w := httptest.NewRecorder()
+	oops.BrowserErrHandle(fx.ti.logger, func(w http.ResponseWriter, r *http.Request) error {
+		return fx.ti.service.ServeConsent(w, r, fx.endpoint)
+	}).ServeHTTP(w, req)
+	return w
+}
+
+// requireSwitchedPage asserts the spent consent page explains the switch and reveals nothing about the new sign-in.
+func requireSwitchedPage(t *testing.T, fx *switchFixture, old consentActionFixture, secrets ...string) {
+	t.Helper()
+	w := renderSpent(t, old)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Empty(t, w.Header().Get("Location"), "it never redirects")
+	page := strings.Join(strings.Fields(w.Body.String()), " ")
+	require.Contains(t, page, "You started a new sign-in for this connection.")
+	require.Contains(t, page, "Go forward to continue signing in, or start connecting again from")
+	for _, secret := range append([]string{"idp.example.com", fx.workosOrganization, fx.subject.ID + "@" + switchWorkDomain}, secrets...) {
+		require.NotContains(t, page, secret)
+	}
+}
+
+// Back to the spent consent page says what happened, without redirecting or revealing the new sign-in.
+func TestConsentSwitchAccount_SpentConsentURLExplainsTheSwitch(t *testing.T) {
 	t.Parallel()
 
 	fx := seedSwitchConsent(t, "aim852-back", nil)
 	old := fx.consentActionFixture
-	switchAccount(t, fx)
+	first := switchAccount(t, fx)
+	requireSwitchedPage(t, fx, old, first.ID)
 
-	code, _, loc := render(t, old)
-	require.Equal(t, http.StatusFound, code)
-	require.NotNil(t, loc)
-	require.Equal(t, "https://idp.example.com/authorize", loc.String())
+	// After the new sign-in lands on its consent page.
+	second := createTestUser(t, fx.ctx, fx.ti, "aim852-back-"+uuid.NewString())
+	consent := signInTo(t, fx, first.ID, second.ID, "session_"+uuid.NewString(), signins.MethodGoogleOAuth, personalEvidence(second.ID))
+	requireSwitchedPage(t, fx, old, first.ID, consent.ID)
+
+	// And after a second switch, from both spent pages.
+	middle := fx.consentActionFixture
+	again := switchAccount(t, fx)
+	requireSwitchedPage(t, fx, old, again.ID)
+	requireSwitchedPage(t, fx, middle, again.ID)
 
 	other := old
 	other.endpoint = &mcp.ResolvedMcpEndpoint{}
 	*other.endpoint = *old.endpoint
 	other.endpoint.Slug = "another-" + uuid.NewString()[:8]
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+other.endpoint.Slug+"/connect?state="+url.QueryEscape(old.stateID), nil)
-	require.Error(t, fx.ti.service.ServeConsent(httptest.NewRecorder(), req, other.endpoint), "only this server's page follows it")
+	page := renderSpent(t, other).Body.String()
+	require.NotContains(t, page, "You started a new sign-in", "another server's page keeps the plain expiry")
+	require.Contains(t, page, "expired or was already used")
 }
 
 // On a gateway server's page, the fresh sign-in returns to that server's page.

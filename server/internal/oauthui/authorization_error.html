@@ -51,6 +51,8 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             Sign-in was canceled. The connection was not completed.
             {{else if eq .Kind "organization-blocked"}}
             Your organization doesn't allow {{template "client" .}} to connect to {{template "server" .}}.
+            {{else if eq .Kind "sign-in-restarted"}}
+            You started a new sign-in for this connection.
             {{else if eq .Kind "expired"}}
             This connection link expired or was already used.
             {{else if eq .Kind "session-changed"}}
@@ -115,6 +117,8 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{else if eq .Kind "organization-blocked"}}
           Ask your organization's administrators to review this connection.
           Share the technical details below with them.
+          {{else if eq .Kind "sign-in-restarted"}}
+          Go forward to continue signing in, or start connecting again from {{template "client" .}}.
           {{else if or (eq .Kind "expired") (eq .Kind "session-changed") (eq .Kind "invalid-link") (eq .Kind "canceled")}}
           {{if .Recovery}}
           Use the button below to return to {{template "client" .}} and start connecting again.

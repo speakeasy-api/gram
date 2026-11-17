@@ -244,8 +244,8 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	// accountSwitchCache sends a consent page an account switch spent on to its fresh sign-in.
-	accountSwitchCache cache.TypedCacheObject[accountSwitchPointer]
+	// accountSwitchCache marks consent challenges an account switch spent.
+	accountSwitchCache cache.TypedCacheObject[accountSwitchMarker]
 	// Short-lived install codes. Holds a live agent key, so it is
 	// cache-only and never written to the database.
 	agentInstallCache cache.TypedCacheObject[agentInstallCode]
@@ -698,7 +698,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		accountSwitchCache: cache.NewTypedObjectCache[accountSwitchPointer](
+		accountSwitchCache: cache.NewTypedObjectCache[accountSwitchMarker](
 			logger.With(attr.SlogCacheNamespace("account_switch")),
 			cacheImpl,
 			cache.SuffixNone,
