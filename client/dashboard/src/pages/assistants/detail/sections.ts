@@ -43,3 +43,36 @@ export function setSection(
   if (head.length === 0) return block;
   return `${head}\n\n${block}`;
 }
+
+export type InstructionParts = {
+  /** Text before the first known heading: older or hand-written prompts. */
+  preamble: string;
+  Personality: string;
+  Behavior: string;
+  Tasks: string;
+};
+
+/** Splits instructions into the sections the editor shows. */
+export function splitInstructions(text: string): InstructionParts {
+  const ranges = findSections(text);
+  const parts: InstructionParts = {
+    preamble: text.slice(0, ranges[0]?.start ?? text.length).trim(),
+    Personality: "",
+    Behavior: "",
+    Tasks: "",
+  };
+  for (const r of ranges) {
+    parts[r.name] = text.slice(r.contentStart, r.end).trim();
+  }
+  return parts;
+}
+
+/** Joins edited sections back, in a fixed order, skipping empty ones. */
+export function joinInstructions(parts: InstructionParts): string {
+  const blocks = [parts.preamble.trim()];
+  for (const name of ["Personality", "Tasks", "Behavior"] as const) {
+    const body = parts[name].trim();
+    if (body) blocks.push(`# ${name}\n${body}`);
+  }
+  return blocks.filter((b) => b.length > 0).join("\n\n");
+}

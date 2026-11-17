@@ -23,10 +23,14 @@ import type { AssistantToolsetRef } from "@gram/client/models/components/assista
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { SLACK_TOOL_URN_PREFIX } from "./slackManifest";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { ASSISTANT_MCP_SERVERS_SECTION_ID } from "./sectionIds";
+import { Section } from "./PanelSection";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -91,6 +95,21 @@ export function AssistantMCPServersSection({
   const [addOpen, setAddOpen] = useState(false);
 
   const attached = attachedRefs(assistant);
+  // The assistant's own Slack toolset is managed on the Channels tab, so it
+  // is left out here; saves still send it, since they replace the whole list.
+  const { data: toolsetsResult } = useListToolsets(undefined, undefined, {
+    throwOnError: false,
+  });
+  const slackToolsetSlugs = new Set(
+    (toolsetsResult?.toolsets ?? [])
+      .filter((t) =>
+        t.tools.some((tool) => tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX)),
+      )
+      .map((t) => t.slug),
+  );
+  const shown = attached.filter(
+    (ref) => !(ref.kind === "toolset" && slackToolsetSlugs.has(ref.slug)),
+  );
 
   const gramProject = useProjectSlugForRequests();
   const { data: environmentsResult } = useListEnvironments(
@@ -154,9 +173,11 @@ export function AssistantMCPServersSection({
   };
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-eyebrow">MCP Servers ({attached.length})</div>
+    <Section
+      id={ASSISTANT_MCP_SERVERS_SECTION_ID}
+      title="MCP servers"
+
+      action={
         <RequireScope
           scope="assistant:write"
           resourceId={assistant.id}
@@ -173,18 +194,18 @@ export function AssistantMCPServersSection({
             <Button.LeftIcon>
               <Icon name="plus" className="h-3 w-3" />
             </Button.LeftIcon>
-            <Button.Text>Add</Button.Text>
+            <Button.Text>Add MCP server</Button.Text>
           </Button>
         </RequireScope>
-      </div>
-
-      {attached.length === 0 ? (
+      }
+    >
+      {shown.length === 0 ? (
         <Text small muted>
-          No MCP servers attached.
+          No MCP servers.
         </Text>
       ) : (
         <Stack gap={2}>
-          {attached.map((ref) => (
+          {shown.map((ref) => (
             <AttachedServerRow
               key={`${ref.kind}:${ref.slug}`}
               assistantId={assistant.id}
@@ -207,7 +228,7 @@ export function AssistantMCPServersSection({
         saving={update.isPending}
         onAdd={addRefs}
       />
-    </div>
+    </Section>
   );
 }
 

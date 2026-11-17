@@ -1,32 +1,29 @@
 import { Page } from "@/components/page-layout";
 import { TabbedPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
-import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
-import { AssistantOwner } from "@/components/assistants/assistant-owner";
-import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
-import {
-  BRAND_MESH_SURFACE_CLASS,
-  BrandMeshLayers,
-} from "@/components/brand-mesh";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import type { Action } from "@/components/ui/MoreActions";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Text } from "@/components/ui/Text";
-import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
-import type { Assistant } from "@gram/client/models/components/assistant.js";
+import {
+  AssistantStatus,
+  type Assistant,
+} from "@gram/client/models/components/assistant.js";
+import { AVAILABLE_MODELS } from "@/lib/models";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import {
   invalidateAllAssistantsList,
   useAssistantsList,
 } from "@gram/client/react-query/assistantsList.js";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Boxes, Cpu, Plus } from "lucide-react";
+import { ArrowRight, Bot, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import type { MouseEvent } from "react";
 import { useMemo, useState } from "react";
@@ -63,31 +60,27 @@ function AssistantsEmptyState({
   projectId: string;
 }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center">
-        <Icon name="bot" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Text variant="subheading" className="mb-1">
-        No assistants yet
-      </Text>
-      <Text small muted className="mb-4 max-w-md text-center">
-        Create an assistant to wire a model up to your MCP servers.
-      </Text>
-      <RequireScope
-        scope="assistant:write"
-        resourceId={projectId}
-        projectId={projectId}
-        level="component"
-        reason="You don't have permission to create assistants."
-      >
-        <Button onClick={onCreate}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Create Assistant</Button.Text>
-        </Button>
-      </RequireScope>
-    </div>
+    <InlineEmptyState
+      icon="bot"
+      heading="No assistants yet"
+      description="Give a model your MCP servers and skills, then put it to work in Slack or on a schedule."
+      action={
+        <RequireScope
+          scope="assistant:write"
+          resourceId={projectId}
+          projectId={projectId}
+          level="component"
+          reason="You don't have permission to create assistants."
+        >
+          <Button onClick={onCreate}>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New assistant</Button.Text>
+          </Button>
+        </RequireScope>
+      }
+    />
   );
 }
 
@@ -156,7 +149,7 @@ export default function AssistantsIndex(): JSX.Element {
               <Button.LeftIcon>
                 <Plus className="h-4 w-4" />
               </Button.LeftIcon>
-              <Button.Text>New Assistant</Button.Text>
+              <Button.Text>New assistant</Button.Text>
             </Button>
           </RequireScope>
         </Page.Section.CTA>
@@ -219,8 +212,8 @@ function AssistantsBody({
         aria-label="Loading assistants"
         className="grid grid-cols-1 gap-6 xl:grid-cols-2"
       >
-        <Skeleton className="h-48 w-full" />
-        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-[156px] w-full" />
+        <Skeleton className="h-[156px] w-full" />
       </div>
     );
   }
@@ -242,50 +235,14 @@ function AssistantsBody({
   );
 }
 
-function AssistantIcon() {
-  return (
-    <div className="border-border bg-surface-secondary-default flex h-12 w-12 items-center justify-center border">
-      <Bot className="text-muted-foreground h-7 w-7" />
-    </div>
-  );
-}
-
-const MAX_VISIBLE_TOOLSETS = 3;
-
-function AssistantToolsets({ assistant }: { assistant: Assistant }) {
-  const slugs = assistantAttachedServerSlugs(assistant);
-  if (slugs.length === 0) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
-        <Text muted small>
-          No MCP servers
-        </Text>
-      </div>
-    );
-  }
-
-  const visible = slugs.slice(0, MAX_VISIBLE_TOOLSETS);
-  const overflow = slugs.length - visible.length;
-
-  return (
-    <div className="flex min-w-0 items-center gap-1.5">
-      <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
-        {visible.map((slug, index) => (
-          <Badge
-            key={`${index}:${slug}`}
-            variant="neutral"
-            className="max-w-[10rem]"
-            title={slug}
-          >
-            <span className="min-w-0 truncate">{slug}</span>
-          </Badge>
-        ))}
-        {overflow > 0 && <Badge variant="neutral">+{overflow}</Badge>}
-      </div>
-    </div>
-  );
+/** "Claude Sonnet 4.6 · 2 MCP servers": what it runs on and with. */
+function assistantSummary(assistant: Assistant): string {
+  const model =
+    AVAILABLE_MODELS.find((m) => m.value === assistant.model)?.label ??
+    assistant.model;
+  const servers = assistantAttachedServerSlugs(assistant).length;
+  if (servers === 0) return `${model} · No MCP servers`;
+  return `${model} · ${servers} MCP server${servers === 1 ? "" : "s"}`;
 }
 
 function AssistantCard({ assistant }: { assistant: Assistant }) {
@@ -295,80 +252,84 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
   const canWrite = hasScope("assistant:write", assistant.id, project.id);
   const queryClient = useQueryClient();
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const deleteAssistant = useAssistantsDeleteMutation({
     onSuccess: () => {
+      setConfirmingDelete(false);
       void invalidateAllAssistantsList(queryClient);
     },
   });
 
+  const paused = assistant.status === AssistantStatus.Paused;
   const actions: Action[] = canWrite
     ? [
         {
           label: "Delete",
           destructive: true,
           icon: "trash",
-          onClick: () => {
-            if (confirm(`Delete assistant "${assistant.name}"?`)) {
-              deleteAssistant.mutate({ request: { id: assistant.id } });
-            }
-          },
+          onClick: () => setConfirmingDelete(true),
         },
       ]
     : [];
 
   return (
-    <CardContextMenu actions={actions}>
-      <routes.assistants.detail.Link
-        params={[assistant.id]}
-        className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-      >
-        <Card.Entity
-          icon={<AssistantIcon />}
-          iconRailClassName={BRAND_MESH_SURFACE_CLASS}
-          overlay={<BrandMeshLayers seed={assistant.id} />}
+    <>
+      <CardContextMenu actions={actions}>
+        <routes.assistants.detail.Link
+          params={[assistant.id]}
+          className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
-          {/* Header row: name + actions */}
-          <div className="mb-3 flex items-start justify-between gap-2">
-            <Text
-              variant="subheading"
-              as="div"
-              className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
-              title={assistant.name}
-            >
-              {assistant.name}
-            </Text>
-            {canWrite && (
-              <div onClick={stopLinkNavigation}>
-                <MoreActions actions={actions} />
-              </div>
-            )}
-          </div>
-
-          {/* Metadata: model + MCP servers */}
-          <div className="mb-3 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5">
-              <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
-              <Text muted small className="truncate" title={assistant.model}>
-                {assistant.model}
+          <McpEntityCard
+            icon={<Bot className="text-muted-foreground size-8" />}
+          >
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <Text
+                variant="subheading"
+                as="div"
+                className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
+                title={assistant.name}
+              >
+                {assistant.name}
               </Text>
+              {canWrite && (
+                <div onClick={stopLinkNavigation}>
+                  <MoreActions actions={actions} />
+                </div>
+              )}
             </div>
-            <AssistantToolsets assistant={assistant} />
-            <AssistantOwner
-              createdByUserId={assistant.createdByUserId}
-              variant="card"
-            />
-          </div>
-
-          {/* Footer row: status toggle + activity sparkline + last updated */}
-          <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
-            <AssistantStatusToggle assistant={assistant} canWrite={canWrite} />
-            <div className="flex items-center gap-2">
-              <AssistantActivitySparkline assistantId={assistant.id} />
-              <UpdatedAt date={new Date(assistant.updatedAt)} />
+            <Text small muted className="mt-1 truncate">
+              {assistantSummary(assistant)}
+            </Text>
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
+              <Badge variant={paused ? "warning" : "neutral"}>
+                <Badge.Text>{paused ? "Paused" : "On"}</Badge.Text>
+              </Badge>
+              <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+                <span>Open</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </div>
             </div>
-          </div>
-        </Card.Entity>
-      </routes.assistants.detail.Link>
-    </CardContextMenu>
+          </McpEntityCard>
+        </routes.assistants.detail.Link>
+      </CardContextMenu>
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title={`Delete ${assistant.name}?`}
+        description="It stops replying everywhere it runs. This can't be undone."
+        confirmLabel="Delete assistant"
+        pendingLabel="Deleting…"
+        confirmVariant="destructive-primary"
+        isPending={deleteAssistant.isPending}
+        error={
+          deleteAssistant.error
+            ? "Couldn't delete the assistant. Try again."
+            : undefined
+        }
+        onConfirm={() =>
+          deleteAssistant.mutate({ request: { id: assistant.id } })
+        }
+      />
+    </>
   );
 }

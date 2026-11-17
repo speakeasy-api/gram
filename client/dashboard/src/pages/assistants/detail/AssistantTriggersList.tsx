@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -49,8 +50,13 @@ function eventStatusVariant(status: TriggerEventStatus): BadgeVariant {
  */
 export function AssistantTriggersList({
   triggers,
+  onEdit,
+  emptyText = "Nothing starts it yet.",
 }: {
   triggers: TriggerInstance[];
+  emptyText?: string;
+  /** Opens the trigger's editor; rows without it are read-only. */
+  onEdit?: (trigger: TriggerInstance) => void;
 }): JSX.Element {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { openChat, sheet } = useChatDetailSheet();
@@ -58,7 +64,7 @@ export function AssistantTriggersList({
   if (triggers.length === 0) {
     return (
       <Text small muted>
-        No triggers wired up.
+        {emptyText}
       </Text>
     );
   }
@@ -75,6 +81,11 @@ export function AssistantTriggersList({
               setExpandedId(expandedId === trigger.id ? null : trigger.id)
             }
             onOpenChat={openChat}
+            onEdit={
+              onEdit && trigger.definitionSlug !== "slack"
+                ? () => onEdit(trigger)
+                : undefined
+            }
           />
         ))}
       </Stack>
@@ -89,11 +100,13 @@ function TriggerRow({
   expanded,
   onToggle,
   onOpenChat,
+  onEdit,
 }: {
   trigger: TriggerInstance;
   expanded: boolean;
   onToggle: () => void;
   onOpenChat: (chatId: string) => void;
+  onEdit?: () => void;
 }): JSX.Element {
   const replyMode =
     trigger.definitionSlug === "slack"
@@ -101,40 +114,52 @@ function TriggerRow({
       : undefined;
   return (
     <div className="border-border border">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        className="hover:bg-muted/50 flex w-full items-start justify-between gap-2 px-3 py-2 text-left transition-colors"
-      >
-        <Stack gap={1} className="min-w-0">
-          <Stack direction="horizontal" gap={2} align="center">
-            <Icon
-              name={expanded ? "chevron-down" : "chevron-right"}
-              className="text-muted-foreground h-3 w-3 shrink-0"
-            />
-            <Text small className="font-medium">
-              {trigger.name}
-            </Text>
-            <Badge size="sm" variant="neutral">
-              {trigger.definitionSlug}
-            </Badge>
+      <div className="hover:bg-muted/50 flex items-start gap-2 pr-2 transition-colors">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-start justify-between gap-2 px-3 py-2 text-left"
+        >
+          <Stack gap={1} className="min-w-0">
+            <Stack direction="horizontal" gap={2} align="center">
+              <Icon
+                name={expanded ? "chevron-down" : "chevron-right"}
+                className="text-muted-foreground h-3 w-3 shrink-0"
+              />
+              <Text small className="font-medium">
+                {trigger.name}
+              </Text>
+              <Badge size="sm" variant="neutral">
+                {trigger.definitionSlug}
+              </Badge>
+            </Stack>
+            {replyMode && (
+              <Text small muted className="pl-5">
+                Replies {replyMode.toLowerCase()}
+              </Text>
+            )}
+            {trigger.webhookUrl && (
+              <code className="text-muted-foreground truncate pl-5 text-[10px]">
+                {trigger.webhookUrl}
+              </code>
+            )}
           </Stack>
-          {replyMode && (
-            <Text small muted className="pl-5">
-              Replies {replyMode.toLowerCase()}
-            </Text>
-          )}
-          {trigger.webhookUrl && (
-            <code className="text-muted-foreground truncate pl-5 text-[10px]">
-              {trigger.webhookUrl}
-            </code>
-          )}
-        </Stack>
-        <Badge size="sm" variant="neutral">
-          {triggerStatusLabel(trigger.status)}
-        </Badge>
-      </button>
+          <Badge size="sm" variant="neutral">
+            {triggerStatusLabel(trigger.status)}
+          </Badge>
+        </button>
+        {onEdit ? (
+          <Button
+            variant="tertiary"
+            size="sm"
+            className="mt-1"
+            onClick={onEdit}
+          >
+            Edit
+          </Button>
+        ) : null}
+      </div>
 
       {expanded && (
         <TriggerTraffic triggerId={trigger.id} onOpenChat={onOpenChat} />

@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { useMemo, useState } from "react";
+import { ASSISTANT_SKILLS_SECTION_ID } from "./sectionIds";
+import { Section } from "./PanelSection";
 import { toast } from "sonner";
 import {
   SkillPickerDialog,
@@ -139,11 +141,11 @@ export function AssistantSkillsSection(): JSX.Element {
   };
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <Text variant="body" className="text-xs font-semibold uppercase">
-          Skills ({attached.length})
-        </Text>
+    <Section
+      id={ASSISTANT_SKILLS_SECTION_ID}
+      title="Skills"
+
+      action={
         <RequireScope
           scope="assistant:write"
           resourceId={draft.assistantId ?? project.id}
@@ -167,12 +169,12 @@ export function AssistantSkillsSection(): JSX.Element {
               <Button.LeftIcon>
                 <Icon name="plus" className="h-3 w-3" />
               </Button.LeftIcon>
-              <Button.Text>Add</Button.Text>
+              <Button.Text>Add skill</Button.Text>
             </Button>
           </RequireScope>
         </RequireScope>
-      </div>
-
+      }
+    >
       {shouldWarnAboutSkillIndex(attached.length) && (
         <div className="mb-3">
           <SkillIndexWarning />
@@ -181,7 +183,7 @@ export function AssistantSkillsSection(): JSX.Element {
 
       {attached.length === 0 ? (
         <Text small muted>
-          No skills attached.
+          No skills.
         </Text>
       ) : (
         <Stack gap={2}>
@@ -216,7 +218,7 @@ export function AssistantSkillsSection(): JSX.Element {
           onBatchComplete={handleAddSkillsComplete}
         />
       )}
-    </div>
+    </Section>
   );
 }
 

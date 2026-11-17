@@ -19,6 +19,7 @@ import {
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useSetAssistantExecutionProfileChoiceMutation } from "@gram/client/react-query/setAssistantExecutionProfileChoice.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { ASSISTANT_UPSTREAM_SECTION_ID } from "./sectionIds";
 import { toast } from "sonner";
 import { Section } from "./PanelSection";
 
@@ -69,7 +70,7 @@ export function AssistantUpstreamCredentials({
 
   if (profiles.isError) {
     return (
-      <Section title="Upstream credentials">
+      <Section id={ASSISTANT_UPSTREAM_SECTION_ID} title="Upstream credentials">
         <Text small muted>
           The upstream credentials could not be loaded. Refresh the page to try
           again.
@@ -80,6 +81,7 @@ export function AssistantUpstreamCredentials({
 
   return (
     <Section
+      id={ASSISTANT_UPSTREAM_SECTION_ID}
       title="Upstream credentials"
       isEmpty={!profiles.isLoading && shown.length === 0}
       empty="This assistant reaches no MCP server that signs in upstream."

@@ -8,7 +8,7 @@ export type Personality = {
   instructions: string;
 };
 
-export const PERSONALITIES: Personality[] = [
+const PERSONALITIES: Personality[] = [
   {
     slug: "nolan",
     title: "Nolan",
@@ -742,7 +742,3 @@ export const TEAM_PERSONALITIES = PERSONALITIES.filter(
 export const GENERIC_PERSONALITIES = PERSONALITIES.filter(
   (p) => p.group === "generic",
 );
-
-export function getPersonality(slug: string): Personality | undefined {
-  return PERSONALITIES.find((p) => p.slug === slug);
-}
