@@ -4064,13 +4064,15 @@ WHERE organization_id = @organization_id AND project_id IS NULL AND deleted IS F
 -- name: GetReconnectSessionPolicy :one
 -- Resolve the original credential across refresh rotation, without reviving
 -- revoked/expired connections or borrowing another client's catalogue.
+-- Sessions from an organization-wide issuer have no project and may reconnect
+-- through any project's gateway in that organization.
 SELECT us.tool_selection
 FROM user_sessions AS us
 JOIN user_session_clients AS c ON c.id = us.user_session_client_id
 WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
   AND us.user_session_issuer_id = @user_session_issuer_id::uuid
   AND us.organization_id = @organization_id::text
-  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND (us.project_id IS NULL OR us.project_id = sqlc.narg('project_id')::uuid)
   AND c.user_session_issuer_id = us.user_session_issuer_id
   AND us.subject_urn = @subject_urn
   AND c.client_id = @client_id::text
@@ -4096,7 +4098,7 @@ UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = cl
 WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
   AND us.user_session_issuer_id = @user_session_issuer_id::uuid
   AND us.organization_id = @organization_id::text
-  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND (us.project_id IS NULL OR us.project_id = sqlc.narg('project_id')::uuid)
   AND us.subject_urn = @subject_urn
   AND us.tool_selection -> 'catalog' ->> 'id' = @catalog_id::text
   AND EXISTS (SELECT 1 FROM user_session_clients AS c
