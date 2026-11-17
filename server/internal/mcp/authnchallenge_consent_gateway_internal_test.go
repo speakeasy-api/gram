@@ -460,5 +460,6 @@ func TestConsentTemplate_ServiceCardStacksOnNarrowScreens(t *testing.T) {
 
 	for _, card := range cards {
 		require.Regexp(t, `data-remote-client="`+card.ClientID+`"[^>]*> <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">`, page, card.ClientID)
+		require.Regexp(t, `(?s)data-remote-client="`+card.ClientID+`".*?<form method="POST" action="[^"]*/remote-session" class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"`, page, card.ClientID)
 	}
 }
