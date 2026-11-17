@@ -1,0 +1,24 @@
+server/database/schema.sql
+  s_5d8afeea7d7532::t_5086ce35755703 7186-7193,7274-7279,7483-7486
+  s_5d8afeea7d7532::t_861ab8c283ae59 7487
+server/migrations/20261117155156_chat-messages-autoanalyze-cadence.sql
+  s_5d8afeea7d7532::t_421c87aa47a37e 1-8
+server/migrations/atlas.sum
+  s_5d8afeea7d7532::t_cb01dfc8a14e45 1,547
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "97c5b13832583b196eeb2ee7b5fa4f737eb8c755",
+  "prompts": {},
+  "sessions": {
+    "s_5d8afeea7d7532": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f553444d-a6f3-494d-8475-5cd56f07da4c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
