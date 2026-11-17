@@ -53,6 +53,19 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return err
 	}
 
+	if err := recordTypedUpstreamAuth(ctx, logger, db, organizationID); err != nil {
+		return err
+	}
+
+	return upstreamAuthReadiness(ctx, logger, db, organizationID)
+}
+
+// recordTypedUpstreamAuth records the typed auth clients, their server links,
+// header copies, mapped credential choices and default grants, and the
+// assistant execution profiles, with the backfills the admin migration runs,
+// in the same order.
+func recordTypedUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
+	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
 	// The selection backfill reads the organization's enforcement state on its
 	// own; the auth client backfill is told it, as the admin migration does.
 	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
@@ -77,7 +90,7 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.SelectionsMapped, clients.GrantsWritten, profiles.VersionsWritten,
 	), attr.SlogOrganizationID(organizationID))
 
-	return upstreamAuthReadiness(ctx, logger, db, organizationID)
+	return nil
 }
 
 // checkLegacyUpstreamAuth fails when the seed left an association or a
