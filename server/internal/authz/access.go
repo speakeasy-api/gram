@@ -17,7 +17,10 @@ type Check struct {
 	// exact refuses every grant key the check leaves out, even one its
 	// scope opens. Blocks, exemptions, containment, direct overrides of a
 	// tool call, auth client checks and risk policy bypass checks are matched
-	// exactly. Only authz constructors and engine paths set it.
+	// exactly. One exception: a block limited to a tool or a disposition
+	// still matches a tool call that leaves that key out, because an unknown
+	// value may be the one blocked (unknownMeetsBlock). Only authz
+	// constructors and engine paths set it.
 	exact bool
 	// representedUser binds $represented_user; only the engine sets it.
 	representedUser string
