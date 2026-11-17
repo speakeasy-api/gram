@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -345,10 +346,16 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 	}
 
 	// MCP servers are served on the server URL's host, whichever host their
-	// issuer's authorization server is on.
+	// issuer's authorization server is on, unless the organization pins MCP
+	// traffic to its custom domain with an IP allowlist: the platform host then
+	// refuses it, so the domain is the host a platform must call.
 	serverURL, err := url.Parse(s.sharedHosts.ServerURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read the server URL").LogError(ctx, s.logger)
+	}
+	mcpHost, err := s.mcpHost(ctx, t.organizationID, serverURL.Host)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]*types.WorkloadTokenEndpoint, 0, len(rows))
@@ -364,10 +371,24 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build token endpoint").LogError(ctx, s.logger)
 		}
-		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, serverURL.Host))
+		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, mcpHost))
 	}
 
 	return &types.WorkloadTokenEndpoints{Items: items}, nil
+}
+
+// mcpHost is the host an organization's MCP servers are reached on: its
+// custom domain when that domain carries an IP allowlist and is serving, since
+// the allowlist locks the platform host out, and platformHost otherwise.
+func (s *Service) mcpHost(ctx context.Context, organizationID string, platformHost string) (string, error) {
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organizationID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to read the organization's custom domain").LogError(ctx, s.logger)
+	}
+	if lockdown.ServingHost == "" {
+		return platformHost, nil
+	}
+	return lockdown.ServingHost, nil
 }
 
 // requireTrustDomain enforces the WIMSE identifier draft's guidance that a trust
