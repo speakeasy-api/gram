@@ -137,22 +137,15 @@ func defineCertificateChart(b *sc.Builder[certState, certContext]) {
 	// are due, it re-reads the store first (another slot may have renewed,
 	// and adopting that renewal takes no lease), then reads the window (it
 	// may have moved later), and renews only when neither read is due. The
-	// steps are tried on every poll and again as soon as a request
-	// completes, the first due one wins.
+	// steps are tried in this order as soon as a request completes (Always)
+	// and on every poll; the first due one wins.
 	serving := b.State(certServing)
-	for _, next := range []struct {
-		name string
-		due  func(c certContext, now time.Time) bool
-		to   certState
-	}{
-		{"refreshDue", func(c certContext, now time.Time) bool { return !now.Before(c.refreshAt) }, certCheckingStore},
-		{"windowCheckDue", func(c certContext, now time.Time) bool { return !now.Before(c.windowCheckAt) }, certFetchingWindow},
-		// A zero renewAt means the window has not been read yet.
-		{"renewDue", func(c certContext, now time.Time) bool { return !c.renewAt.IsZero() && !now.Before(c.renewAt) }, certRenewing},
-	} {
-		serving.Always().WhenAt(next.name, func(c certContext, _ struct{}, now time.Time) bool { return next.due(c, now) }).To(next.to)
-		serving.On[certPoll]().WhenAt(next.name, func(c certContext, _ certPoll, now time.Time) bool { return next.due(c, now) }).To(next.to)
-	}
+	serving.Always().WhenAt("refreshDue", refreshDue[struct{}]).To(certCheckingStore)
+	serving.Always().WhenAt("windowCheckDue", windowCheckDue[struct{}]).To(certFetchingWindow)
+	serving.Always().WhenAt("renewDue", renewDue[struct{}]).To(certRenewing)
+	serving.On[certPoll]().WhenAt("refreshDue", refreshDue[certPoll]).To(certCheckingStore)
+	serving.On[certPoll]().WhenAt("windowCheckDue", windowCheckDue[certPoll]).To(certFetchingWindow)
+	serving.On[certPoll]().WhenAt("renewDue", renewDue[certPoll]).To(certRenewing)
 
 	checking := b.State(certCheckingStore)
 	check := checking.Requires[*tls.Certificate](serviceCheckStore)
@@ -195,6 +188,17 @@ func defineCertificateChart(b *sc.Builder[certState, certContext]) {
 }
 
 func retryDue[Ev any](c certContext, _ Ev, now time.Time) bool { return !now.Before(c.retryAt) }
+
+func refreshDue[Ev any](c certContext, _ Ev, now time.Time) bool { return !now.Before(c.refreshAt) }
+
+func windowCheckDue[Ev any](c certContext, _ Ev, now time.Time) bool {
+	return !now.Before(c.windowCheckAt)
+}
+
+// renewDue is false until the window has been read: a zero renewAt.
+func renewDue[Ev any](c certContext, _ Ev, now time.Time) bool {
+	return !c.renewAt.IsZero() && !now.Before(c.renewAt)
+}
 
 // serve holds the certificate a request returned with nothing failing; its
 // window is asked for at once.
