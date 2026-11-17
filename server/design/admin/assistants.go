@@ -8,7 +8,7 @@ import (
 
 var AdminOrganizationAssistant = Type("AdminOrganizationAssistant", func() {
 	Description("One live assistant of an organization, with where it stands in the move to agent identity.")
-	Required("id", "name", "project_id", "project_slug", "project_name", "status", "identity_state", "runtime_version", "creator_active", "created_at")
+	Required("agent_name_repair_state", "id", "name", "project_id", "project_slug", "project_name", "status", "identity_state", "runtime_version", "creator_active", "created_at")
 
 	Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The assistant name.")
@@ -19,6 +19,8 @@ var AdminOrganizationAssistant = Type("AdminOrganizationAssistant", func() {
 	Attribute("identity_state", String, "NEVER_CONFIGURED when the assistant has no dedicated agent and still runs as its owner, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted.", func() {
 		Enum("NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE")
 	})
+	Attribute("agent_name", String, "The live bound agent name, when available.")
+	Attribute("agent_name_repair_state", String, "Whether the exact legacy generated agent name needs repair.", func() { Enum("not_needed", "pending", "conflict") })
 	Attribute("agent_id", String, "The dedicated agent, when the assistant has one.", func() { Format(FormatUUID) })
 	Attribute("runtime_version", Int, "The assistant's selected runtime: 2 for the default runtime, 3 for Kit.")
 	Attribute("created_by_user_id", String, "The user who created the assistant, when known.")
@@ -85,6 +87,29 @@ var AdminAssistantKitMigrationRun = Type("AdminAssistantKitMigrationRun", func()
 })
 
 func assistantMethods() {
+	Method("listAssistantOrganizations", func() {
+		Description("Lists live organizations with live assistants in live projects.")
+		Payload(func() { security.AdminAuthPayload() })
+		Result(AdminAssistantOrganizations)
+		HTTP(func() { GET("/admin/assistants.organizations"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminListAssistantOrganizations")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAssistantOrganizations")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminListAssistantOrganizations"}`)
+	})
+	Method("repairOrganizationAssistantAgentNames", func() {
+		Description("Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Meta("openapi:typename", "RepairOrganizationAssistantAgentNamesRequestBody")
+		})
+		Result(AdminAssistantAgentNameRepairRun)
+		HTTP(func() { POST("/admin/organization.repairAssistantAgentNames"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminRepairOrganizationAssistantAgentNames")
+		Meta("openapi:extension:x-speakeasy-name-override", "repairOrganizationAssistantAgentNames")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminRepairOrganizationAssistantAgentNames"}`)
+	})
 	Method("listOrganizationAssistants", func() {
 		Description("Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.")
 
@@ -163,3 +188,30 @@ func assistantMethods() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminMigrateOrganizationAssistantsToKit"}`)
 	})
 }
+
+var AdminAssistantOrganization = Type("AdminAssistantOrganization", func() {
+	Required("id", "name", "slug", "assistants")
+	Attribute("id", String)
+	Attribute("name", String)
+	Attribute("slug", String)
+	Attribute("assistants", Int64)
+})
+var AdminAssistantOrganizations = Type("AdminAssistantOrganizations", func() {
+	Required("organizations")
+	Attribute("organizations", ArrayOf(AdminAssistantOrganization))
+})
+var AdminAssistantAgentNameRepairResult = Type("AdminAssistantAgentNameRepairResult", func() {
+	Required("assistant_id", "project_id", "name", "outcome")
+	Attribute("assistant_id", String)
+	Attribute("project_id", String)
+	Attribute("name", String)
+	Attribute("outcome", String, func() { Enum("repaired", "conflict", "failed") })
+})
+var AdminAssistantAgentNameRepairRun = Type("AdminAssistantAgentNameRepairRun", func() {
+	Required("organization_id", "repaired", "conflicts", "failed", "results")
+	Attribute("organization_id", String)
+	Attribute("repaired", Int64)
+	Attribute("conflicts", Int64)
+	Attribute("failed", Int64)
+	Attribute("results", ArrayOf(AdminAssistantAgentNameRepairResult))
+})

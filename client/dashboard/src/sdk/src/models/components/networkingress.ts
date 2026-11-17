@@ -101,6 +101,10 @@ export type NetworkIngress = {
    * Latest redacted lifecycle status
    */
   status: string;
+  /**
+   * The gateway's explanation of last_error when it is provider_certificate_unavailable: why the TLS certificate request failed, such as a Let's Encrypt rate limit, and when the gateway retries. Returned by getIngress only.
+   */
+  statusDetail?: string | undefined;
   updatedAt: Date;
 };
 
@@ -149,6 +153,7 @@ export const NetworkIngress$inboundSchema: z.ZodMiniType<
     provider: NetworkIngressProvider$inboundSchema,
     runtime: Runtime$inboundSchema,
     status: z.string(),
+    status_detail: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -166,6 +171,7 @@ export const NetworkIngress$inboundSchema: z.ZodMiniType<
       "identity_required": "identityRequired",
       "last_error": "lastError",
       "organization_id": "organizationId",
+      "status_detail": "statusDetail",
       "updated_at": "updatedAt",
     });
   }),

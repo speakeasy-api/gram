@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -145,15 +144,21 @@ func (s *Service) endpointCustomDomainLockdown(ctx context.Context, logger *slog
 // project only to read the organization off it — so surfaces that know their
 // organization directly can ask at that scope.
 func (s *Service) organizationCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (bool, error) {
-	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, organizationID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return false, nil
-	case err != nil:
-		return false, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+	lockdown, err := s.organizationLockdown(ctx, logger, organizationID)
+	if err != nil {
+		return false, err
 	}
+	return lockdown.LockedDown, nil
+}
 
-	return len(domain.IpAllowlist) > 0, nil
+// organizationLockdown reads the organization's custom-domain lockdown,
+// including the host its traffic must use once the domain is serving.
+func (s *Service) organizationLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (customdomains.Lockdown, error) {
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organizationID)
+	if err != nil {
+		return customdomains.Lockdown{}, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+	}
+	return lockdown, nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,

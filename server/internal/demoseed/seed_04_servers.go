@@ -434,17 +434,16 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 	// Organization authorizations include Example OAuth, Example Shared
-	// Credential, both EMA servers, Linear and Notion, including on the
-	// expired history row. An organization sign-in reaches
+	// Credential, Acme Wiki, Linear and Notion, including on the expired
+	// history row (the local fixtures add the Enterprise Sign-In (ID-JAG)
+	// Server's). An organization sign-in reaches
 	// every server in the organization, including one with a sign-in of its own.
 	for i := 1; i <= 3; i++ {
-		for _, server := range []string{"linear", "slack", "ema-tracker", "ema-wiki", "linear-app", "notion-app"} {
+		for _, server := range []string{"linear", "slack", "ema-wiki", "linear-app", "notion-app"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			switch server {
 			case "linear":
 				client = uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}
-			case "ema-tracker":
-				client = uuid.NullUUID{UUID: s.det("ema-client-tracker"), Valid: true}
 			case "ema-wiki":
 				client = uuid.NullUUID{UUID: s.det("ema-client-wiki"), Valid: true}
 			case "linear-app", "notion-app":
@@ -720,14 +719,13 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 }
 
 // seedServersEMA: Enterprise Managed Authorization. Acme Identity is a
-// fictional identity provider for two fictional services behind workforce
-// servers. The workforce issuer trusts it for inbound EMA (ID-JAGs) only;
-// interactive sign-in is not federated through it, so demo sign-in is
-// unaffected. Neither service has accepted a provider yet. Runs after role
-// distribution, so plugins skip these servers.
+// fictional company identity provider. The workforce issuer trusts it for
+// inbound EMA (ID-JAGs) only, so the other servers' sign-in is unaffected.
+// The working Enterprise Sign-In (ID-JAG) Server that signs in through it is
+// local-only (seedLocalEnterpriseSignIn). Runs after role distribution, so
+// plugins skip Acme Wiki.
 func (s *seeder) seedServersEMA(ctx context.Context) error {
 	org := s.orgID()
-	proj := s.projectID()
 	workforce := s.det("issuer-workforce")
 
 	if err := s.q.ServersInsertEMAIdentityProvider(ctx, repo.ServersInsertEMAIdentityProviderParams{
@@ -754,97 +752,95 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 	if linked != 1 {
 		return fmt.Errorf("trust demo ema identity provider for inbound ema: updated %d workforce issuers", linked)
 	}
-	if err := s.q.ServersInsertEMARemoteMCPServers(ctx, repo.ServersInsertEMARemoteMCPServersParams{
-		TrackerID: s.det("remotemcp-ema-tracker"),
+	return s.seedServersEMAWiki(ctx)
+}
+
+// seedServersEMAWiki: Acme Wiki, an EMA service the workforce sign-in has a
+// binding for, seeded disabled so it stays display-only in every org. The
+// server has no sign-in of its own (see the query). Its service has not
+// accepted a provider yet and carries a saved provider order. It is associated
+// with its own authorization server's client.
+func (s *seeder) seedServersEMAWiki(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+	issuer := s.det("issuer-workforce")
+
+	if err := s.q.ServersInsertEMAWikiRemoteMCPServer(ctx, repo.ServersInsertEMAWikiRemoteMCPServerParams{
+		ID:        s.det("remotemcp-ema-wiki"),
 		ProjectID: proj,
-		WikiID:    s.det("remotemcp-ema-wiki"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema remote mcp servers: %w", err)
+		return fmt.Errorf("insert demo acme wiki remote mcp server: %w", err)
 	}
-	if err := s.q.ServersInsertEMAMCPServers(ctx, repo.ServersInsertEMAMCPServersParams{
-		TrackerID:         s.det("mcpserver-ema-tracker"),
-		ProjectID:         proj,
-		RemoteTrackerID:   s.det("remotemcp-ema-tracker"),
-		IssuerWorkforceID: workforce,
-		WikiID:            s.det("mcpserver-ema-wiki"),
-		RemoteWikiID:      s.det("remotemcp-ema-wiki"),
-	}); err != nil {
-		return fmt.Errorf("insert demo ema mcp servers: %w", err)
-	}
-	if err := s.q.ServersInsertEMAVendorIssuers(ctx, repo.ServersInsertEMAVendorIssuersParams{
-		TrackerID: s.det("ema-vendor-tracker"),
+	if err := s.q.ServersInsertEMAWikiMCPServer(ctx, repo.ServersInsertEMAWikiMCPServerParams{
+		ID:        s.det("mcpserver-ema-wiki"),
 		ProjectID: proj,
-		OrgID:     org,
-		WikiID:    s.det("ema-vendor-wiki"),
+		RemoteID:  s.det("remotemcp-ema-wiki"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema vendor issuers: %w", err)
+		return fmt.Errorf("insert demo acme wiki mcp server: %w", err)
 	}
-	if err := s.q.ServersInsertEMAVendorClients(ctx, repo.ServersInsertEMAVendorClientsParams{
-		TrackerID:       s.det("ema-client-tracker"),
-		ProjectID:       proj,
-		OrgID:           org,
-		TrackerIssuerID: s.det("ema-vendor-tracker"),
-		WikiID:          s.det("ema-client-wiki"),
-		WikiIssuerID:    s.det("ema-vendor-wiki"),
-	}); err != nil {
-		return fmt.Errorf("insert demo ema vendor clients: %w", err)
-	}
-	for _, client := range []string{"ema-client-tracker", "ema-client-wiki"} {
-		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-			RemoteSessionClientID: s.det(client),
-			UserSessionIssuerID:   workforce,
-		}); err != nil {
-			return fmt.Errorf("bind demo %s: %w", client, err)
-		}
-	}
-	// The workforce issuer is shared, so each service's server is associated
-	// with the one client of the authorization server its protected resource
-	// names. GitHub, on the same issuer, uses neither client.
-	for _, service := range []string{"tracker", "wiki"} {
-		if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-			ID:                    s.det("server-client-association-ema-" + service),
-			ProjectID:             proj,
-			OrgID:                 org,
-			McpServerID:           s.det("mcpserver-ema-" + service),
-			RemoteSessionClientID: s.det("ema-client-" + service),
-		}); err != nil {
-			return fmt.Errorf("associate demo ema %s server with its client: %w", service, err)
-		}
-		if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
-			RemoteSessionIssuerID: s.det("ema-vendor-" + service),
-			McpServerID:           s.det("mcpserver-ema-" + service),
-			ProjectID:             proj,
-		}); err != nil {
-			return fmt.Errorf("stamp demo ema %s remote session issuer: %w", service, err)
-		}
-	}
-	if err := s.q.ServersInsertEMAProtectedResources(ctx, repo.ServersInsertEMAProtectedResourcesParams{
-		TrackerID: s.det("protected-resource-ema-tracker"),
+	if err := s.q.ServersInsertEMAWikiVendorIssuer(ctx, repo.ServersInsertEMAWikiVendorIssuerParams{
+		ID:        s.det("ema-vendor-wiki"),
 		ProjectID: proj,
 		OrgID:     org,
-		WikiID:    s.det("protected-resource-ema-wiki"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema protected resources: %w", err)
+		return fmt.Errorf("insert demo acme wiki vendor issuer: %w", err)
 	}
-	if err := s.q.ServersInsertEMABindings(ctx, repo.ServersInsertEMABindingsParams{
-		TrackerID:         s.det("ema-binding-tracker"),
-		ProjectID:         proj,
-		OrgID:             org,
-		IssuerWorkforceID: workforce,
-		TrackerIssuerID:   s.det("ema-vendor-tracker"),
-		TrackerClientID:   s.det("ema-client-tracker"),
-		WikiID:            s.det("ema-binding-wiki"),
-		WikiIssuerID:      s.det("ema-vendor-wiki"),
-		WikiClientID:      s.det("ema-client-wiki"),
+	if err := s.q.ServersInsertEMAWikiVendorClient(ctx, repo.ServersInsertEMAWikiVendorClientParams{
+		ID:        s.det("ema-client-wiki"),
+		ProjectID: proj,
+		OrgID:     org,
+		IssuerID:  s.det("ema-vendor-wiki"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema bindings: %w", err)
+		return fmt.Errorf("insert demo acme wiki vendor client: %w", err)
+	}
+	// The client is bound to the workforce sign-in, so organization
+	// sign-ins, which reach every server in the organization, reach the
+	// server through it.
+	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+		RemoteSessionClientID: s.det("ema-client-wiki"),
+		UserSessionIssuerID:   issuer,
+	}); err != nil {
+		return fmt.Errorf("bind demo acme wiki client to the workforce issuer: %w", err)
+	}
+	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
+		ID:                    s.det("server-client-association-ema-wiki"),
+		ProjectID:             proj,
+		OrgID:                 org,
+		McpServerID:           s.det("mcpserver-ema-wiki"),
+		RemoteSessionClientID: s.det("ema-client-wiki"),
+	}); err != nil {
+		return fmt.Errorf("associate demo acme wiki server with its client: %w", err)
+	}
+	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: s.det("ema-vendor-wiki"),
+		McpServerID:           s.det("mcpserver-ema-wiki"),
+		ProjectID:             proj,
+	}); err != nil {
+		return fmt.Errorf("stamp demo acme wiki remote session issuer: %w", err)
+	}
+	if err := s.q.ServersInsertEMAWikiProtectedResource(ctx, repo.ServersInsertEMAWikiProtectedResourceParams{
+		ID:        s.det("protected-resource-ema-wiki"),
+		ProjectID: proj,
+		OrgID:     org,
+	}); err != nil {
+		return fmt.Errorf("insert demo acme wiki protected resource: %w", err)
+	}
+	if err := s.q.ServersInsertEMAWikiBinding(ctx, repo.ServersInsertEMAWikiBindingParams{
+		ID:                  s.det("ema-binding-wiki"),
+		ProjectID:           proj,
+		OrgID:               org,
+		UserSessionIssuerID: issuer,
+		IssuerID:            s.det("ema-vendor-wiki"),
+		ClientID:            s.det("ema-client-wiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo acme wiki binding: %w", err)
 	}
 	if err := s.q.ServersInsertEMAProviderOrder(ctx, repo.ServersInsertEMAProviderOrderParams{
 		ID:                    s.det("ema-order-wiki"),
 		OrgID:                 org,
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema provider order: %w", err)
+		return fmt.Errorf("insert demo acme wiki provider order: %w", err)
 	}
 	return nil
 }

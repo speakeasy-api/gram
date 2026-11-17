@@ -336,6 +336,7 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		PollInterval:       c.Duration("poll-interval"),
 		DrainTimeout:       c.Duration("drain-timeout"),
 		StartTimeout:       c.Duration("start-timeout"),
+		ApprovalGrace:      tailnetgateway.DefaultApprovalGrace,
 		MaxHosts:           c.Int("max-hosts"),
 		ReconcileTaskQueue: c.String(networkIngressQueueFlag),
 		ControlURL:         c.String("control-url"),
