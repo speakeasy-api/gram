@@ -175,27 +175,6 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 	}
 }
 
-// A view rule saved with a tool limit, from before limits moved to connect,
-// is offered as the plain view rule it already takes effect as. The form it
-// produces is one the policy API accepts.
-func TestListDelegableGrantsOffersStoredLimitedViewAsPlainView(t *testing.T) {
-	t.Parallel()
-	f := newDelegableFixture(t)
-	for _, principal := range []string{"agent", "owner", "caller"} {
-		selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
-		selector[authz.SelectorKeyTool] = "tool-one"
-		f.grant(t, principal, authz.ScopeMCPRead, selector)
-	}
-	result := f.list(t, "caller")
-	require.NotEmpty(t, result)
-	for _, grant := range result {
-		require.Equal(t, string(authz.ScopeMCPRead), grant.Scope)
-		require.Equal(t, "server-one", grant.Selector.ResourceID)
-		require.Nil(t, grant.Selector.Tool)
-		require.Nil(t, grant.Selector.Disposition)
-	}
-}
-
 func TestListDelegableGrantsWithoutResourceRightsIsEmpty(t *testing.T) {
 	t.Parallel()
 	f := newDelegableFixture(t)

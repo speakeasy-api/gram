@@ -337,12 +337,6 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 		if err != nil {
 			return nil, err
 		}
-		// Listed as the effect it has, so a surface that reads these rules
-		// and saves them back never sends a limit that is no longer accepted.
-		selector, inEffect := StoredSelectorInEffect(Scope(row.Scope), selector)
-		if !inEffect {
-			continue
-		}
 		grants = append(grants, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
@@ -388,12 +382,6 @@ func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID 
 		selector, err := SelectorFromRow(row.Selectors)
 		if err != nil {
 			return nil, err
-		}
-		// Listed as the effect it has, so a surface that reads these rules
-		// and saves them back never sends a limit that is no longer accepted.
-		selector, inEffect := StoredSelectorInEffect(Scope(row.Scope), selector)
-		if !inEffect {
-			continue
 		}
 		grants = append(grants, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
