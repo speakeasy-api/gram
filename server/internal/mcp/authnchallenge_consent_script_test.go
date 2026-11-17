@@ -206,8 +206,7 @@ const statuses = ['personal', 'admin'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = quiet;
-  const group = element({ 'data-switch-account-group': '', hidden: '' });
-  const switchAccount = element({ 'data-switch-account': '' });
+  const switchAccount = element({ 'data-switch-account': '', hidden: '' });
   switches.push(switchAccount);
   const row = element({ 'data-card-row': '' });
   row.className = rowClass;
@@ -218,12 +217,12 @@ const statuses = ['personal', 'admin'].map((id) => {
     'input[name="state"]': { value: 'state-1' },
     'input[name="csrf_token"]': { value: 'csrf-1' },
     'button[data-connect-fallback]': fallback,
-    '[data-switch-account-group]': group,
+    'button[data-switch-account]': switchAccount,
     '[data-card-row]': row,
     '[data-card-actions]': actions,
   })[selector] || null;
   status.closest = (selector) => (selector === '[data-remote-client]' ? card : null);
-  cards[id] = { status, fallback, group, switchAccount, row, actions };
+  cards[id] = { status, fallback, switchAccount, row, actions };
   return status;
 });
 vm.runInNewContext(source, {
@@ -258,15 +257,14 @@ vm.runInNewContext(source, {
 setTimeout(() => {
   const personal = cards.personal;
   assert.equal(personal.status.textContent, 'Personal account.');
-  assert.equal(personal.group.getAttribute('hidden'), null, 'the switch and its note are shown together');
-  assert.equal(personal.row.className, 'flex flex-col gap-3', 'the actions sit under the text at every width');
-  assert.equal(personal.actions.className, 'flex flex-col items-start gap-3', 'a larger gap before the quiet link');
-  assert.equal(personal.fallback.className, 'text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center text-xs underline-offset-2', 'the separate sign-in stays quiet');
-  assert.doesNotMatch(personal.fallback.className, /\bpx-/, 'its text shares the button and note left edge');
+  assert.equal(personal.switchAccount.getAttribute('hidden'), null, 'the company sign-in is shown');
+  assert.equal(personal.row.className, 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between', 'text left, actions right, like every card, once two buttons fit');
+  assert.equal(personal.actions.className, 'flex flex-wrap items-center justify-start gap-1.5 md:justify-end');
+  assert.equal(personal.fallback.className, 'bg-card interact:bg-accent flex min-h-8 max-w-full shrink-0 items-center whitespace-normal border px-3 py-1 text-left text-sm sm:whitespace-nowrap', 'the separate sign-in is a real secondary button');
   assert.equal(personal.fallback.textContent, 'Use a separate sign-in');
 
   const admin = cards.admin;
-  assert.equal(admin.group.getAttribute('hidden'), '', 'no switch for an administrator refusal');
+  assert.equal(admin.switchAccount.getAttribute('hidden'), '', 'no switch for an administrator refusal');
   assert.equal(admin.row.className, rowClass);
   assert.equal(admin.actions.className, actionsClass);
   assert.match(admin.fallback.className, /\bbg-primary\b/);

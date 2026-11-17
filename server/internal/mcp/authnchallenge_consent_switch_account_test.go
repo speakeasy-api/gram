@@ -723,20 +723,19 @@ func TestConsentSwitchAccount_KeepsTheGatewayServerPage(t *testing.T) {
 	require.Equal(t, "aim852-gw-member", restarted.FocusServer, "the consent page after sign-in is this server's")
 }
 
-// The page carries the switch button and its note hidden until the check offers them.
+// The page carries the switch button hidden until the check offers it, before the separate sign-in.
 func TestConsentSwitchAccount_PageCarriesHiddenAction(t *testing.T) {
 	t.Parallel()
 
 	fx := seedSwitchConsent(t, "aim852-page", nil)
 	code, page, _ := render(t, fx.consentActionFixture)
 	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, page, `data-switch-account-group hidden`)
 	require.Contains(t, page, `value="switch_account"`)
-	require.Contains(t, page, `aria-describedby="switch-note-`+fx.clientA.String()+`"`)
-	require.Contains(t, page, `id="switch-note-`+fx.clientA.String()+`"`)
+	require.Contains(t, page, `data-switch-account hidden`)
 	require.Contains(t, page, "Sign in with your company account")
-	require.Contains(t, page, "You'll be asked to sign in again.")
-	require.Less(t, strings.Index(page, "data-switch-account-group"), strings.Index(page, "data-connect-fallback"), "the company account comes first")
+	require.NotContains(t, page, "asked to sign in again")
+	require.NotContains(t, page, "aria-describedby=\"switch-note")
+	require.Less(t, strings.Index(page, "data-switch-account"), strings.Index(page, "data-connect-fallback"), "the company account comes first")
 }
 
 // The session lookup answers only for the sign-in's own person and organization.

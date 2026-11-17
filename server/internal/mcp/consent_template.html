@@ -484,21 +484,16 @@
                 {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if and .Chained (ne .ChainCheck "rejected")}}
                 {{/* Shown by the page script only when the check offers it. */}}
-                <div class="flex flex-col items-start gap-1" data-switch-account-group hidden>
-                  <button
-                    type="submit"
-                    name="action"
-                    value="switch_account"
-                    class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm"
-                    aria-describedby="switch-note-{{.ClientID}}"
-                    data-switch-account
-                  >
-                    Sign in with your company account
-                  </button>
-                  <span id="switch-note-{{.ClientID}}" class="text-xs text-muted-foreground"
-                    >You'll be asked to sign in again.</span
-                  >
-                </div>
+                <button
+                  type="submit"
+                  name="action"
+                  value="switch_account"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex min-h-8 max-w-full shrink-0 items-center whitespace-normal px-3 py-1 text-left text-sm sm:whitespace-nowrap"
+                  data-switch-account
+                  hidden
+                >
+                  Sign in with your company account
+                </button>
                 <button
                   type="submit"
                   name="action"
