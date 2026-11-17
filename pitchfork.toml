@@ -54,7 +54,6 @@ daemons = [
   "server",
   "worker",
   "streams",
-  "pystreams-multi",
   "dashboard",
   "assistant-runtime",
   "assistant-relay",
@@ -132,6 +131,8 @@ depends = ["assistant-relay"]
 run = "mise run start:streams"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+# Not in the default group: `gram streams` stubs its subscriptions unless
+# GRAM_PYSTREAMS_STUB is false, and start/_default starts it only then.
 [daemons.pystreams-multi]
 run = "mise run start:pystreams-multi"
 ready_cmd = "mise run check:daemon --name {{name}}"
