@@ -145,7 +145,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	// The dev-idp calls happen before the transaction opens, so a slow
 	// dev-idp never holds the transaction's locks.
-	emaProvisioned := provisionLocalEMA(ctx, logger, opts.Upstreams)
+	emaProvisioned := provisionLocalEMA(ctx, logger, opts.Upstreams, dev)
 
 	tx, err := db.Begin(ctx)
 	if err != nil {

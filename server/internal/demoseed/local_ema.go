@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +42,7 @@ const localEMAProviderName = "Acme Identity (local dev-idp)"
 // (ID-JAG) Server: the EMA app, its resource and the trust rule. It runs
 // before the local fixtures' transaction opens, so a slow dev-idp never holds
 // its locks, and reports whether wireLocalEMA should add the server.
-func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstreamOptions) bool {
+func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstreamOptions, dev developer) bool {
 	if opts.ServerURL == nil || opts.DevIDPURL == "" || opts.DevIDPURL == "unset" || opts.DevIDPClientID == "" || opts.DevIDPClientID == "unset" {
 		logger.InfoContext(ctx, "the server URL, dev-idp URL or login client id is not set; skipping the Enterprise Sign-In (ID-JAG) Server")
 		return false
@@ -53,7 +54,7 @@ func provisionLocalEMA(ctx context.Context, logger *slog.Logger, opts LocalUpstr
 	devIDP := strings.TrimRight(opts.DevIDPURL, "/")
 	resource := fixtureauth.Resource(fixtureauth.BaseURL(opts.ServerURL), fixtureauth.PathEMAMCP)
 	idp := devIDPControl{base: devIDP, client: opts.HTTPClient}
-	if err := idp.provisionEMA(ctx, opts.DevIDPClientID, resource, devIDP+devIDPOAuth21Prefix); err != nil {
+	if err := idp.provisionEMA(ctx, opts.DevIDPClientID, resource, devIDP+devIDPOAuth21Prefix, dev); err != nil {
 		logger.WarnContext(ctx, "could not set up the dev-idp for the Enterprise Sign-In (ID-JAG) Server; skipping it", attr.SlogError(err))
 		return false
 	}
@@ -236,16 +237,12 @@ type devIDPEMAResource struct {
 
 // provisionEMA registers, idempotently, what the dev-idp needs to mint and
 // redeem ID-JAGs for the fixture's /mcp/ema endpoint on behalf of the
-// developer (the dev-idp's current OAuth 2.1 user).
-func (c devIDPControl) provisionEMA(ctx context.Context, clientID, resource, identityProvider string) error {
-	var current struct {
-		User *devIDPUser `json:"user"`
-	}
-	if err := c.call(ctx, "devIdp.getCurrentUser", map[string]any{"mode": "oauth2-1"}, &current); err != nil {
+// developer: the dev-idp's current OAuth 2.1 user, or, on a dev-idp nobody has
+// signed in to yet, the developer's own dev-idp user.
+func (c devIDPControl) provisionEMA(ctx context.Context, clientID, resource, identityProvider string, dev developer) error {
+	userID, err := c.signInUser(ctx, dev)
+	if err != nil {
 		return err
-	}
-	if current.User == nil || current.User.ID == "" {
-		return errors.New("the dev-idp has no current OAuth 2.1 user")
 	}
 
 	app, err := c.ensureApp(ctx, clientID)
@@ -274,26 +271,65 @@ func (c devIDPControl) provisionEMA(ctx context.Context, clientID, resource, ide
 
 	// The assignment is what lets the app act for the developer there.
 	return c.call(ctx, "emaAppAssignments.create", map[string]any{
-		"app_id": app.ID, "user_id": current.User.ID, "resource_id": res.ID, "granted_scopes": fixtureauth.EMAScope,
+		"app_id": app.ID, "user_id": userID, "resource_id": res.ID, "granted_scopes": fixtureauth.EMAScope,
 	}, nil)
 }
 
-func (c devIDPControl) ensureApp(ctx context.Context, clientID string) (devIDPEMAApp, error) {
-	var apps struct {
-		Items []devIDPEMAApp `json:"items"`
+// signInUser returns the dev-idp user who signs in. That is the current OAuth
+// 2.1 user when one is set. A fresh dev-idp has none until its first sign-in,
+// which bootstraps one from the git committer by email; the seed's developer
+// is that same committer, so it finds or creates the developer's user by email
+// and the bootstrap later reuses that row.
+func (c devIDPControl) signInUser(ctx context.Context, dev developer) (string, error) {
+	var current struct {
+		User *devIDPUser `json:"user"`
 	}
-	if err := c.call(ctx, "emaApps.list", map[string]any{"limit": 100}, &apps); err != nil {
+	err := c.call(ctx, "devIdp.getCurrentUser", map[string]any{"mode": "oauth2-1"}, &current)
+	if err == nil && current.User != nil && current.User.ID != "" {
+		return current.User.ID, nil
+	}
+	var status *devIDPStatusError
+	if err != nil && (!errors.As(err, &status) || status.Code != http.StatusNotFound) {
+		return "", err
+	}
+
+	var found string
+	if err := devIDPList(ctx, c, "users.list", func(user devIDPUser) bool {
+		if strings.EqualFold(user.Email, dev.Email) {
+			found = user.ID
+			return true
+		}
+		return false
+	}); err != nil {
+		return "", err
+	}
+	if found != "" {
+		return found, nil
+	}
+	var created devIDPUser
+	if err := c.call(ctx, "users.create", map[string]any{"email": dev.Email, "display_name": dev.Name}, &created); err != nil {
+		return "", err
+	}
+	return created.ID, nil
+}
+
+func (c devIDPControl) ensureApp(ctx context.Context, clientID string) (devIDPEMAApp, error) {
+	var found *devIDPEMAApp
+	if err := devIDPList(ctx, c, "emaApps.list", func(app devIDPEMAApp) bool {
+		if app.ClientID != clientID {
+			return false
+		}
+		found = &app
+		return true
+	}); err != nil {
 		return devIDPEMAApp{}, err
 	}
-	for _, app := range apps.Items {
-		if app.ClientID != clientID {
-			continue
-		}
-		if app.ClientSecret == localEMAClientSecret && app.JWKS == "" && app.Enabled {
-			return app, nil
+	if found != nil {
+		if found.ClientSecret == localEMAClientSecret && found.JWKS == "" && found.Enabled {
+			return *found, nil
 		}
 		var updated devIDPEMAApp
-		err := c.call(ctx, "emaApps.update", map[string]any{"id": app.ID, "client_secret": localEMAClientSecret, "jwks": "", "enabled": true}, &updated)
+		err := c.call(ctx, "emaApps.update", map[string]any{"id": found.ID, "client_secret": localEMAClientSecret, "jwks": "", "enabled": true}, &updated)
 		return updated, err
 	}
 	var created devIDPEMAApp
@@ -304,21 +340,22 @@ func (c devIDPControl) ensureApp(ctx context.Context, clientID string) (devIDPEM
 }
 
 func (c devIDPControl) ensureResource(ctx context.Context, resource string) (devIDPEMAResource, error) {
-	var resources struct {
-		Items []devIDPEMAResource `json:"items"`
-	}
-	if err := c.call(ctx, "emaResources.list", map[string]any{"limit": 100}, &resources); err != nil {
+	var found *devIDPEMAResource
+	if err := devIDPList(ctx, c, "emaResources.list", func(res devIDPEMAResource) bool {
+		if res.Slug != fixtureauth.EMAResourceSlug {
+			return false
+		}
+		found = &res
+		return true
+	}); err != nil {
 		return devIDPEMAResource{}, err
 	}
-	for _, res := range resources.Items {
-		if res.Slug != fixtureauth.EMAResourceSlug {
-			continue
-		}
-		if res.ResourceIdentifier == resource {
-			return res, nil
+	if found != nil {
+		if found.ResourceIdentifier == resource {
+			return *found, nil
 		}
 		var updated devIDPEMAResource
-		err := c.call(ctx, "emaResources.update", map[string]any{"id": res.ID, "resource_identifier": resource}, &updated)
+		err := c.call(ctx, "emaResources.update", map[string]any{"id": found.ID, "resource_identifier": resource}, &updated)
 		return updated, err
 	}
 	var created devIDPEMAResource
@@ -326,6 +363,44 @@ func (c devIDPControl) ensureResource(ctx context.Context, resource string) (dev
 		"slug": fixtureauth.EMAResourceSlug, "name": "Speakeasy MCP fixture", "resource_identifier": resource,
 	}, &created)
 	return created, err
+}
+
+// devIDPList pages through a dev-idp list method until match reports a hit or
+// the pages run out.
+func devIDPList[T any](ctx context.Context, c devIDPControl, method string, match func(T) bool) error {
+	cursor := ""
+	for {
+		payload := map[string]any{"limit": 100}
+		if cursor != "" {
+			payload["cursor"] = cursor
+		}
+		var page struct {
+			Items      []T    `json:"items"`
+			NextCursor string `json:"next_cursor"`
+		}
+		if err := c.call(ctx, method, payload, &page); err != nil {
+			return err
+		}
+		if slices.ContainsFunc(page.Items, match) {
+			return nil
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
+// devIDPStatusError is a dev-idp RPC answered with a non-2xx status.
+type devIDPStatusError struct {
+	Method string
+	Code   int
+	Status string
+	Body   string
+}
+
+func (e *devIDPStatusError) Error() string {
+	return fmt.Sprintf("dev-idp %s: %s: %s", e.Method, e.Status, e.Body)
 }
 
 // call posts payload to the dev-idp RPC method and decodes the result into
@@ -350,7 +425,7 @@ func (c devIDPControl) call(ctx context.Context, method string, payload, out any
 		return fmt.Errorf("dev-idp %s: read response: %w", method, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("dev-idp %s: %s: %s", method, resp.Status, strings.TrimSpace(string(raw)))
+		return &devIDPStatusError{Method: method, Code: resp.StatusCode, Status: resp.Status, Body: strings.TrimSpace(string(raw))}
 	}
 	if out == nil || len(raw) == 0 {
 		return nil

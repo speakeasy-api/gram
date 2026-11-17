@@ -609,7 +609,8 @@ open their effective assignments; the dropdown always offers compact member sear
       There it has its own organization sign-in (`enterprise-sign-in`) that
       federates through Acme Identity, a ready binding to its authorization
       server ("Enterprise Sign-In Authorization Server") and that server's
-      one client; the dev-idp plays Acme Identity (check 36). The demo org
+      one client; the dev-idp plays Acme Identity (see the `enterprise-sign-in`
+      sign-in below). The demo org
       has no such server, sign-in or binding.
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
@@ -628,7 +629,7 @@ open their effective assignments; the dropdown always offers compact member sear
         step 31).
       - `directory.resolvable_directory_users` greater than zero and
         `directory.synced` true.
-    - Locally, after the check 36 sign-in, the server's binding reads as
+    - Locally, after the `enterprise-sign-in` sign-in below, the server's binding reads as
       accepted and `remote_session_ema_credentials` holds one row for the
       developer.
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
