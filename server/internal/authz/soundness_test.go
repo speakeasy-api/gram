@@ -37,7 +37,7 @@ const (
 var (
 	soundPrincipals   = []string{soundUser, soundRole, soundEveryone}
 	soundScopes       = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect, ScopeMCPBlockedRead, ScopeMCPBlockedWrite, ScopeMCPBlockedConnect}
-	soundDispositions = []string{DispositionReadOnly, DispositionDestructive, DispositionUnannotated}
+	soundDispositions = []string{DispositionReadOnly, DispositionDestructive, DispositionIdempotent, DispositionOpenWorld, DispositionUnannotated}
 	soundTools        = []string{"t1", "t2"}
 )
 
@@ -144,6 +144,17 @@ func soundAuthorize(grants []Grant, check Check) soundAnswer {
 	return soundAnswer{allowed: allowed && err == nil, err: err}
 }
 
+// soundAllowed asks a check the world builds, which is always valid, so any
+// error fails the test instead of reading as a refusal.
+func soundAllowed(t *testing.T, grants []Grant, check Check) bool {
+	t.Helper()
+	answer := soundAuthorize(grants, check)
+	if answer.err != nil {
+		t.Fatalf("valid check %+v errored with [%s]: %v", check, describeGrants(grants), answer.err)
+	}
+	return answer.allowed
+}
+
 func describeGrant(g Grant) string {
 	keys := slices.Sorted(maps.Keys(g.Selector))
 	out := fmt.Sprintf("%s %s {", g.PrincipalUrn, g.Scope)
@@ -207,7 +218,7 @@ func TestSoundness_WorldSize(t *testing.T) {
 func TestSoundness_NoGrantsNoAccess(t *testing.T) {
 	t.Parallel()
 	for _, c := range soundAllChecks() {
-		if soundAuthorize(nil, c.check).allowed {
+		if soundAllowed(t, nil, c.check) {
 			t.Errorf("%s on %s allowed with no grants", c.name, c.server.id)
 		}
 	}
@@ -228,8 +239,8 @@ func TestSoundness_AddingGrantsIsMonotonic(t *testing.T) {
 		for i, added := range grants {
 			before := slices.Delete(slices.Clone(grants), i, i+1)
 			for _, c := range checks {
-				was := soundAuthorize(before, c.check).allowed
-				now := soundAuthorize(grants, c.check).allowed
+				was := soundAllowed(t, before, c.check)
+				now := soundAllowed(t, grants, c.check)
 				switch {
 				case IsBlocklistScope(added.Scope) && !was && now:
 					blockGranted.add("P3: adding block %s to [%s] allowed %s on %s", describeGrant(added), describeGrants(before), c.name, c.server.id)
@@ -255,7 +266,7 @@ func TestSoundness_ProjectIsolation(t *testing.T) {
 			}
 		}
 		for _, c := range inB {
-			if soundAuthorize(grants, c.check).allowed {
+			if soundAllowed(t, grants, c.check) {
 				failures.add("P4: [%s] allowed %s on %s in project B", describeGrants(grants), c.name, c.server.id)
 			}
 		}
@@ -273,21 +284,25 @@ func TestSoundness_ImplicationHolds(t *testing.T) {
 			return
 		}
 		for _, server := range soundServers {
-			byScope := map[Scope]soundCheck{}
-			for _, c := range soundServerChecks(server)[:3] {
-				byScope[c.check.Scope] = c
+			serverChecks := soundServerChecks(server)[:3]
+			byScope := func(scope Scope) (soundCheck, bool) {
+				i := slices.IndexFunc(serverChecks, func(c soundCheck) bool { return c.check.Scope == scope })
+				if i < 0 {
+					return soundCheck{}, false
+				}
+				return serverChecks[i], true
 			}
 			for lower, higherScopes := range scopeExpansions {
-				lowerCheck, ok := byScope[lower]
+				lowerCheck, ok := byScope(lower)
 				if !ok {
 					continue
 				}
 				for _, higher := range higherScopes {
-					higherCheck, ok := byScope[higher]
+					higherCheck, ok := byScope(higher)
 					if !ok {
 						continue
 					}
-					if soundAuthorize(grants, higherCheck.check).allowed && !soundAuthorize(grants, lowerCheck.check).allowed {
+					if soundAllowed(t, grants, higherCheck.check) && !soundAllowed(t, grants, lowerCheck.check) {
 						failures.add("P5: [%s] allows %s on %s but not %s", describeGrants(grants), higherCheck.name, server.id, lowerCheck.name)
 					}
 				}
@@ -340,7 +355,7 @@ func TestSoundness_WideningNeverRemovesAccess(t *testing.T) {
 				widened := slices.Clone(grants)
 				widened[i] = wide
 				for _, c := range checks {
-					if soundAuthorize(grants, c.check).allowed && !soundAuthorize(widened, c.check).allowed {
+					if soundAllowed(t, grants, c.check) && !soundAllowed(t, widened, c.check) {
 						failures.add("P6: widening %s to %s in [%s] removed %s on %s", describeGrant(g), describeGrant(wide), describeGrants(grants), c.name, c.server.id)
 					}
 				}
@@ -369,7 +384,7 @@ func TestSoundness_BlockWins(t *testing.T) {
 			for _, holder := range soundPrincipals {
 				block := NewGrant(blockScope, c.server.id)
 				block.PrincipalUrn = holder
-				allowed := soundAuthorize(append(slices.Clone(grants), block), c.check).allowed
+				allowed := soundAllowed(t, append(slices.Clone(grants), block), c.check)
 				if !allowed {
 					continue
 				}
@@ -401,7 +416,7 @@ func TestSoundness_LimitsAreRespected(t *testing.T) {
 			for _, tool := range soundTools {
 				for _, disposition := range append([]string{""}, soundDispositions...) {
 					outside := (hasTool && tool != limitTool) || (hasDisposition && disposition != limitDisposition)
-					if outside && soundAuthorize([]Grant{g}, ref.ToolCall(tool, disposition)).allowed {
+					if outside && soundAllowed(t, []Grant{g}, ref.ToolCall(tool, disposition)) {
 						failures.add("P9: %s allows calling %s (%s) on %s", describeGrant(g), tool, disposition, server.id)
 					}
 				}
