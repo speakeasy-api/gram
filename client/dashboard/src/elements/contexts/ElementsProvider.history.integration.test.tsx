@@ -105,6 +105,8 @@ function installFetch(
   return calls;
 }
 
+// Every limit=200 load counts, including a later before_seq page. That page is
+// another read of the transcript, so a second one fails the once check.
 function fullPageLoads(calls: readonly RpcCall[], chatId: string): RpcCall[] {
   return calls.filter((call) => {
     const url = new URL(call.url);
@@ -322,10 +324,12 @@ describe("Elements history runtime", () => {
         "Server reply",
       );
     });
-    await act(async () => {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
-      });
+    // The title fetch is queued after the send. Wait for it while the stub is
+    // still installed. The two-second pause is collapsed above.
+    await waitFor(() => {
+      expect(
+        calls.some((call) => call.url.includes("/rpc/chat.generateTitle")),
+      ).toBe(true);
     });
     expect(randomUUID).not.toHaveBeenCalled();
   });
@@ -385,6 +389,13 @@ describe("Elements history runtime", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: EDITED_TITLE })).toBeTruthy();
+      expect(
+        calls.some(
+          (call) =>
+            call.url.includes("/rpc/chat.generateTitle") &&
+            call.body?.title === EDITED_TITLE,
+        ),
+      ).toBe(true);
     });
 
     const untitledTitleCalls = () =>
