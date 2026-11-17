@@ -192,21 +192,13 @@ function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
             ? SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]
             : shadowMCPInventoryStatusLabel(status)
         }
-        tone={
-          officialState === "unlinked"
-            ? "warning"
-            : officialState
-              ? "success"
-              : statusTone(status)
-        }
+        tone={officialState ? "success" : statusTone(status)}
         size="xs"
         className={SUMMARY_TILE_CLASS}
         description={
-          officialState === "unlinked"
-            ? "Link off: direct connections work"
-            : officialState
-              ? "Linked to an official server"
-              : shadowMCPInventoryStatusDescription(server)
+          officialState
+            ? "Linked to an official server"
+            : shadowMCPInventoryStatusDescription(server)
         }
       />
       {/* First-seen rides under the call count rather than taking a tile of

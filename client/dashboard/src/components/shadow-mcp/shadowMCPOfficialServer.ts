@@ -45,22 +45,22 @@ export function shadowMCPOfficialServerDescription(
 }
 
 /**
- * The state a linked official version puts a Shadow MCP server in.
- * "unlinked" means the link exists but is switched off, which an admin
- * should not forget about, so it reads differently from "onboarded". A
- * server someone is waiting on keeps its pending state.
+ * Whether a linked official version decides a Shadow MCP server's status. Only
+ * a link that is on does: it blocks direct connections and sends agents to
+ * the official server. A link switched off leaves the policy's ordinary
+ * rules in charge, so the status shows those instead. A server someone is
+ * waiting on keeps its pending state.
  */
 export function shadowMCPOfficialState(
   server: Pick<ShadowMCPInventoryServer, "officialServer">,
   pending: boolean,
-): "onboarded" | "unlinked" | null {
+): "onboarded" | null {
   if (!server.officialServer || pending) return null;
-  return server.officialServer.directAccessAllowed ? "unlinked" : "onboarded";
+  return server.officialServer.directAccessAllowed ? null : "onboarded";
 }
 
 export const SHADOW_MCP_OFFICIAL_STATE_LABEL = {
   onboarded: "Onboarded",
-  unlinked: "Unlinked",
 } as const;
 
 type OnboardCheckState = "pass" | "fail" | "skipped";

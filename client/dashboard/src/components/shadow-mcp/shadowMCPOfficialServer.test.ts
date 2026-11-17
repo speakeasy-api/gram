@@ -215,7 +215,7 @@ describe("shadowMCPOfficialState", () => {
     directAccessAllowed: false,
   };
 
-  it("reads as onboarded, or unlinked while the link is off", () => {
+  it("reads as onboarded only while the link is on", () => {
     expect(shadowMCPOfficialState({ officialServer: official }, false)).toBe(
       "onboarded",
     );
@@ -224,7 +224,7 @@ describe("shadowMCPOfficialState", () => {
         { officialServer: { ...official, directAccessAllowed: true } },
         false,
       ),
-    ).toBe("unlinked");
+    ).toBe(null);
   });
 
   it("leaves a pending request or an unmanaged server alone", () => {

@@ -89,7 +89,7 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
     return (
       <SimpleTooltip tooltip={shadowMCPOfficialServerDescription(server)}>
         <span tabIndex={0} className="inline-flex cursor-help">
-          <Badge variant={officialState === "unlinked" ? "warning" : "success"}>
+          <Badge variant="success">
             <Badge.Text>
               {SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]}
             </Badge.Text>

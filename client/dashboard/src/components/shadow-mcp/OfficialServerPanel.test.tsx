@@ -387,7 +387,7 @@ describe("OfficialServerPanel", () => {
     renderPanel(
       server({ officialServer: { ...official, directAccessAllowed: true } }),
     );
-    expect(screen.getByText("Unlinked")).toBeTruthy();
+    expect(screen.getByText("Link off")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Linked" }));
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenLastCalledWith({

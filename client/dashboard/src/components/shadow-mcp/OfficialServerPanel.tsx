@@ -189,7 +189,7 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
       toast.success(
         next
           ? "Linked. Direct connections are blocked again."
-          : "Unlinked. Direct connections follow the usual rules.",
+          : "Link off. Direct connections follow the usual rules.",
       );
     } catch {
       toast.error("Could not change the link. Try again.");
@@ -225,11 +225,9 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         title="Official server"
         description={shadowMCPOfficialServerDescription(server)}
         badge={
-          <Badge variant={linked ? "success" : "warning"} size="sm">
+          <Badge variant={linked ? "success" : "neutral"} size="sm">
             <Badge.Text>
-              {linked
-                ? SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded
-                : SHADOW_MCP_OFFICIAL_STATE_LABEL.unlinked}
+              {linked ? SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded : "Link off"}
             </Badge.Text>
           </Badge>
         }
