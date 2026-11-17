@@ -83,6 +83,24 @@ type ChatMessage struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	RiskAnalyzedAt pgtype.Timestamptz
+	// The entry before this one in the transcript tree. NULL on a tree root.
+	// @access: confidential
+	ParentMessageID uuid.NullUUID
+	// On a compaction root, the leaf of the old tree it continues. NULL otherwise.
+	// @access: confidential
+	ContinuesMessageID uuid.NullUUID
+	// Hash of role and normalized text, computed by Speakeasy.
+	// @access: confidential
+	ContentKey []byte
+	// Version of the normalization and hash behind content_key.
+	// @access: confidential
+	ContentKeyVersion pgtype.Int2
+	// Hash of the parent path_key and this content_key. Lookup only.
+	// @access: confidential
+	PathKey []byte
+	// Equals content_key while the row has no natural ID, NULL otherwise.
+	// @access: confidential
+	SiblingKey []byte
 }
 
 type ChatUserFeedback struct {

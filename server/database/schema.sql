@@ -7153,6 +7153,35 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- version rescans and backfills are coordinated outside this field.
   risk_analyzed_at timestamptz,
 
+  -- Transcript tree. Each stored entry points at the entry before it, so a
+  -- chat is a tree of branches rather than a flat list. NULL on a tree root.
+  --
+  -- Neither parent_message_id nor continues_message_id has a foreign key, on
+  -- purpose. The transcript merge is their only writer and keeps both ends in
+  -- the same chat. A foreign key would have to be ON DELETE SET NULL (team
+  -- rule), which would turn a deleted parent's children into roots: they could
+  -- collide on the root dedup index below and fail the delete, and their
+  -- path_key values would go stale. Like chat_session_links, integrity is kept
+  -- by the writer, and a deleted parent leaves a gap in the tree.
+  parent_message_id uuid,
+  -- Set only on a compaction root: the leaf of the old tree that this tree
+  -- continues after the conversation was compacted.
+  continues_message_id uuid,
+  -- Hash of role and normalized text, computed by Speakeasy. Identifies an
+  -- entry's content independently of where it sits in the tree.
+  content_key BYTEA,
+  -- Version of the normalization and hash behind content_key, so a later
+  -- change to either can coexist with rows written under the old one.
+  content_key_version SMALLINT,
+  -- Hash of the parent's path_key and this row's content_key. Lookup only:
+  -- finds an entry by its whole path from the root without walking the tree.
+  path_key BYTEA,
+  -- Equals content_key while the row has no natural ID (see
+  -- chat_message_natural_ids), NULL otherwise. Backs the unique index that
+  -- keeps one child per content under a parent for rows that have nothing
+  -- better to deduplicate on.
+  sibling_key BYTEA,
+
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
@@ -7216,6 +7245,18 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.parent_message_id IS 'The entry before this one in the transcript tree. NULL on a tree root.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.continues_message_id IS 'On a compaction root, the leaf of the old tree it continues. NULL otherwise.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.content_key IS 'Hash of role and normalized text, computed by Speakeasy.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.content_key_version IS 'Version of the normalization and hash behind content_key.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.path_key IS 'Hash of the parent path_key and this content_key. Lookup only.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.sibling_key IS 'Equals content_key while the row has no natural ID, NULL otherwise.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
@@ -7282,6 +7323,24 @@ CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
 ON chat_messages (project_id, id)
 WHERE risk_analyzed_at IS NULL;
 
+-- Finds the child of a tree entry that carries given content.
+CREATE INDEX IF NOT EXISTS chat_messages_parent_message_id_content_key_idx
+ON chat_messages (parent_message_id, content_key)
+WHERE parent_message_id IS NOT NULL;
+
+-- Finds an entry in a chat by its whole path from the root.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_path_key_idx
+ON chat_messages (chat_id, path_key)
+WHERE path_key IS NOT NULL;
+
+-- One child per content under a parent, for rows without a natural ID. Makes
+-- a concurrent second writer of the same entry lose the race. chat_id keeps
+-- one chat's roots from colliding with another's, and NULLS NOT DISTINCT makes
+-- roots (NULL parent) dedupe too.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_chat_id_parent_message_id_sibling_key_key
+ON chat_messages (chat_id, parent_message_id, sibling_key) NULLS NOT DISTINCT
+WHERE sibling_key IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS chat_content_parts (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   chat_id uuid NOT NULL,
@@ -7342,6 +7401,67 @@ ON chat_content_parts (project_id, id) WHERE risk_analyzed_at IS NULL;
 -- Read path: attachments for a chat / a parent turn.
 CREATE INDEX IF NOT EXISTS chat_content_parts_chat_id_idx
 ON chat_content_parts (chat_id);
+
+-- IDs minted by a model or a client for a stored entry, never by Speakeasy:
+-- tool-use ids, prompt ids, Claude transcript entry uuids, compliance message
+-- ids. A message can carry none or several. Every capture source that sees
+-- the same entry carries the same natural IDs, so they let a writer recognise
+-- an entry it has already stored, wherever it sits in the tree.
+CREATE TABLE IF NOT EXISTS chat_message_natural_ids (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  chat_id uuid NOT NULL,
+  -- The message the ID names. NULL when the ID stands for the start of the
+  -- chat: a first transcript line that was not stored, which later lines can
+  -- still name as their parent.
+  chat_message_id uuid,
+  -- tool_call, tool_result, prompt, claude_entry or compliance_message.
+  -- Validated in app code.
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  -- Position of the content block that carries the ID, for messages with
+  -- several blocks of the same kind. 0 when the ID names the whole message.
+  block_index SMALLINT NOT NULL DEFAULT 0,
+  -- claude_transcript, anthropic_inference or compliance. Validated in app
+  -- code.
+  source TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_message_natural_ids_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_message_natural_ids_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT chat_message_natural_ids_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_natural_ids_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN chat_message_natural_ids.id IS '@access: confidential';
+COMMENT ON COLUMN chat_message_natural_ids.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_message_natural_ids.chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_message_natural_ids.chat_message_id IS 'The message the ID names. NULL when the ID stands for the start of the chat, a first transcript line that was not stored.
+@access: confidential';
+COMMENT ON COLUMN chat_message_natural_ids.kind IS 'tool_call, tool_result, prompt, claude_entry or compliance_message.
+@access: confidential';
+COMMENT ON COLUMN chat_message_natural_ids.value IS 'ID minted by a model or client, never by Speakeasy.
+@access: opaque-confidential';
+COMMENT ON COLUMN chat_message_natural_ids.block_index IS 'Position of the content block that carries the ID. 0 when it names the whole message.
+@access: confidential';
+COMMENT ON COLUMN chat_message_natural_ids.source IS 'claude_transcript, anthropic_inference or compliance.
+@access: confidential';
+COMMENT ON COLUMN chat_message_natural_ids.created_at IS '@access: confidential';
+
+-- A natural ID names one entry per chat. The writer resolves a batch of IDs
+-- with one lookup per chat, and the unique index makes a concurrent second
+-- writer lose the race. Also serves the cascade from chats.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_message_natural_ids_chat_id_kind_value_block_index_key
+ON chat_message_natural_ids (chat_id, kind, value, block_index);
+
+-- Natural IDs of a message, and the cascade from chat_messages.
+CREATE INDEX IF NOT EXISTS chat_message_natural_ids_chat_message_id_idx
+ON chat_message_natural_ids (chat_message_id);
+
+-- Serves the ON DELETE SET NULL cascade from projects, so a hard project
+-- delete does not scan the table.
+CREATE INDEX IF NOT EXISTS chat_message_natural_ids_project_id_idx
+ON chat_message_natural_ids (project_id);
 
 -- Serves the chat analysis enqueue walk, which pages a project's chats on the
 -- immutable (created_at, id) keyset within a bounded lookback.
