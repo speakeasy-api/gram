@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/semaphore"
 	"tailscale.com/ipn"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -113,25 +114,40 @@ func (farWindows) RenewAt(_ context.Context, _ *x509.Certificate, now time.Time)
 
 func newTestTracker(t *testing.T, fetch func(context.Context) (*tls.Certificate, error), now func() time.Time) *certificateTracker {
 	t.Helper()
-	return newCertificateTracker("private.example.ts.net", fetchSource{fetch: fetch}, farWindows{}, nil, testenv.NewLogger(t), now)
+	return startTestTracker(t, fetchSource{fetch: fetch}, farWindows{}, nil, nil, now)
 }
 
-// settle waits for the request goroutine to finish recording its result.
+// startTestTracker starts a tracker that is closed when the test ends.
+func startTestTracker(
+	t *testing.T,
+	source certificateSource,
+	windows renewalWindows,
+	requests *semaphore.Weighted,
+	events func(context.Context, CertificateOperation, CertificateResult),
+	now func() time.Time,
+) *certificateTracker {
+	t.Helper()
+	tracker, err := newCertificateTracker("private.example.ts.net", source, windows, requests, events, testenv.NewLogger(t), now)
+	require.NoError(t, err)
+	return tracker
+}
+
+// held is the chart context the tracker is in.
+func (t *certificateTracker) held() certContext {
+	return t.inst.Snapshot().Context
+}
+
+// settle waits for the request to finish recording its result.
 func settle(t *testing.T, tracker *certificateTracker) {
 	t.Helper()
-	require.Eventually(t, func() bool {
-		tracker.mu.Lock()
-		defer tracker.mu.Unlock()
-		return !tracker.attempting
-	}, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { return !tracker.busy() }, 5*time.Second, 5*time.Millisecond)
 }
 
 func TestCertificateTrackerWaitsForTheRetryTimeAfterARateLimit(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
+	clock := newTestClock(time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC))
 	fetch := newScriptedFetch(t, errRateLimited)
-	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
-	t.Cleanup(tracker.Close)
+	tracker := newTestTracker(t, fetch.fetch, clock.Now)
 
 	ready, _ := tracker.Poll()
 	require.False(t, ready)
@@ -143,7 +159,7 @@ func TestCertificateTrackerWaitsForTheRetryTimeAfterARateLimit(t *testing.T) {
 	require.Equal(t, "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC", reason)
 	require.Equal(t, 1, fetch.count(), "no new request before Let's Encrypt's retry time")
 
-	now = time.Date(2026, time.November, 12, 22, 53, 33, 0, time.UTC)
+	clock.Set(time.Date(2026, time.November, 12, 22, 53, 33, 0, time.UTC))
 	ready, _ = tracker.Poll()
 	require.False(t, ready)
 	<-fetch.called
@@ -161,7 +177,6 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	t.Parallel()
 	fetch := newScriptedFetch(t)
 	tracker := newTestTracker(t, fetch.fetch, time.Now)
-	t.Cleanup(tracker.Close)
 
 	tracker.Await(t.Context(), time.Minute)
 	ready, _ := tracker.Poll()
@@ -172,7 +187,6 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	// falls after the wait whatever the time of day.
 	before := time.Date(2026, time.November, 12, 21, 53, 0, 0, time.UTC)
 	refused := newTestTracker(t, failing.fetch, func() time.Time { return before })
-	t.Cleanup(refused.Close)
 	started := time.Now()
 	refused.Await(t.Context(), time.Minute)
 	require.Less(t, time.Since(started), 30*time.Second, "a refusal ends the wait instead of holding the start for the full minute")
@@ -182,54 +196,49 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 
 func TestCertificateTrackerWaitsThroughTheShortRetryAfterApproval(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
+	clock := newTestClock(time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC))
 	pending := errors.New(`obtain tailnet service certificate: invalid domain "private.example.ts.net"; must be one of []`)
 	fetch := newScriptedFetch(t, pending, errRateLimited)
-	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
-	t.Cleanup(tracker.Close)
+	tracker := newTestTracker(t, fetch.fetch, clock.Now)
 
 	_, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
-	require.False(t, tracker.nextRequestAfter(now.Add(certificateStartWait)),
+	require.False(t, tracker.nextRequestAfter(clock.Now().Add(certificateStartWait)),
 		"control lists the service name within seconds of approval, so a start keeps waiting")
 
-	now = now.Add(certificateDomainRetry)
+	clock.Advance(certificateDomainRetry)
 	_, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
-	require.True(t, tracker.nextRequestAfter(now.Add(certificateStartWait)),
+	require.True(t, tracker.nextRequestAfter(clock.Now().Add(certificateStartWait)),
 		"a rate limit retries long after the start would have ended, so the start stops waiting")
 }
 
 func TestCertificateTrackerBacksOffOnlyForRealFailures(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
+	clock := newTestClock(time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC))
 	reset := errors.New("acme: connection reset")
 	fetch := newScriptedFetch(t, errRateLimited, reset)
-	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
-	t.Cleanup(tracker.Close)
+	tracker := newTestTracker(t, fetch.fetch, clock.Now)
 
 	_, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
-	now = time.Date(2026, time.November, 12, 22, 54, 0, 0, time.UTC)
+	clock.Set(time.Date(2026, time.November, 12, 22, 54, 0, 0, time.UTC))
 	_, _ = tracker.Poll()
 	<-fetch.called
 	settle(t, tracker)
 
-	tracker.mu.Lock()
-	defer tracker.mu.Unlock()
-	require.Equal(t, 1, tracker.state.failures, "the rate limit named its own retry time and does not inflate the backoff")
-	require.Equal(t, now.Add(certificateRetryMin), tracker.state.retryAt, "the first real failure backs off by the minimum")
+	require.Equal(t, 1, tracker.held().failures, "the rate limit named its own retry time and does not inflate the backoff")
+	require.Equal(t, clock.Now().Add(certificateRetryMin), tracker.held().retryAt, "the first real failure backs off by the minimum")
 }
 
 func TestCertificateTrackerWaitsForAnotherSlotWithoutBackingOff(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 	fetch := newScriptedFetch(t, errCertificateIssuing)
-	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
-	t.Cleanup(tracker.Close)
+	tracker := newTestTracker(t, fetch.fetch, newTestClock(now).Now)
 
 	_, _ = tracker.Poll()
 	<-fetch.called
@@ -239,10 +248,8 @@ func TestCertificateTrackerWaitsForAnotherSlotWithoutBackingOff(t *testing.T) {
 	require.Equal(t, "another gateway slot is obtaining the TLS certificate for private.example.ts.net", reason)
 	require.False(t, tracker.nextRequestAfter(now.Add(certificateStartWait)), "a start waits for the other slot to store the certificate")
 
-	tracker.mu.Lock()
-	defer tracker.mu.Unlock()
-	require.Zero(t, tracker.state.failures, "waiting for another slot is not a failure")
-	require.Equal(t, now.Add(certificateIssuingRetry), tracker.state.retryAt)
+	require.Zero(t, tracker.held().failures, "waiting for another slot is not a failure")
+	require.Equal(t, now.Add(certificateIssuingRetry), tracker.held().retryAt)
 }
 
 func TestNextCertificateRetry(t *testing.T) {
@@ -287,10 +294,8 @@ func TestCertificateLeaseOutlastsALiveRequest(t *testing.T) {
 
 func TestCertificateHandshakeNeverRequestsACertificate(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 	fetch := newScriptedFetch(t)
-	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
-	t.Cleanup(tracker.Close)
+	tracker := newTestTracker(t, fetch.fetch, newTestClock(time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)).Now)
 
 	handshakes := sync.WaitGroup{}
 	for range 16 {
@@ -404,6 +409,16 @@ func (c *testClock) Now() time.Time {
 	return c.now
 }
 
+func newTestClock(now time.Time) *testClock {
+	return &testClock{mu: sync.Mutex{}, now: now}
+}
+
+func (c *testClock) Set(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = now
+}
+
 func (c *testClock) Advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -469,8 +484,7 @@ func newConnection(t *testing.T, slots int) *connection {
 	}
 	for range slots {
 		source := &tsnetCertificateSource{store: issuer, fqdn: "private.example.ts.net", certPair: c.tsnet.certPair, certPairWithValidity: c.tsnet.certPairWithValidity}
-		tracker := newCertificateTracker("private.example.ts.net", source, c.windows, nil, testenv.NewLogger(t), clock.Now)
-		t.Cleanup(tracker.Close)
+		tracker := startTestTracker(t, source, c.windows, nil, nil, clock.Now)
 		c.trackers = append(c.trackers, tracker)
 	}
 	return c
@@ -485,10 +499,9 @@ func (c *connection) pollUntil(t *testing.T, done func(*certificateTracker) bool
 		all, waiting := true, false
 		for _, tracker := range c.trackers {
 			_, _ = tracker.Poll()
-			tracker.mu.Lock()
-			ok := !tracker.attempting && done(tracker)
-			waiting = waiting || (!tracker.attempting && errors.Is(tracker.state.err, errCertificateIssuing))
-			tracker.mu.Unlock()
+			idle := !tracker.busy()
+			ok := idle && done(tracker)
+			waiting = waiting || (idle && errors.Is(tracker.held().err, errCertificateIssuing))
 			all = all && ok
 		}
 		if !all && waiting && !c.issuer.isLeased() {
@@ -500,10 +513,10 @@ func (c *connection) pollUntil(t *testing.T, done func(*certificateTracker) bool
 
 // served is the serial of the certificate a slot serves, or "" for none.
 func served(tracker *certificateTracker) string {
-	if tracker.state.cert == nil {
+	if tracker.held().cert == nil {
 		return ""
 	}
-	return tracker.state.cert.Leaf.SerialNumber.String()
+	return tracker.held().cert.Leaf.SerialNumber.String()
 }
 
 func storedSerial(t *testing.T, issuer *fakeIssuer) string {
@@ -533,7 +546,7 @@ func TestSlotsOfOneConnectionOrderOneCertificate(t *testing.T) {
 	}
 	close(c.tsnet.hold)
 
-	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.state.cert != nil }, "the other slots reuse the stored certificate")
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.held().cert != nil }, "the other slots reuse the stored certificate")
 	require.Equal(t, int32(1), c.tsnet.orders.Load(), "the connection orders exactly one certificate")
 	require.Zero(t, c.tsnet.renewals.Load())
 }
@@ -542,7 +555,7 @@ func TestSlotsOfOneConnectionRenewOncePerCycle(t *testing.T) {
 	t.Parallel()
 	c := newConnection(t, 3)
 	close(c.tsnet.hold)
-	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.state.cert != nil }, "every slot holds the first certificate")
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.held().cert != nil }, "every slot holds the first certificate")
 	first := storedSerial(t, c.issuer)
 
 	// Hourly refreshes before the renewal point read the window once and
@@ -557,7 +570,7 @@ func TestSlotsOfOneConnectionRenewOncePerCycle(t *testing.T) {
 	// The renewal point arrives: all three slots fall due in the same hour.
 	c.clock.Advance(60 * 24 * time.Hour)
 	c.pollUntil(t, func(tracker *certificateTracker) bool {
-		return (served(tracker) != first && tracker.state.err == nil) || errors.Is(tracker.state.err, errCertificateIssuing)
+		return (served(tracker) != first && tracker.held().err == nil) || errors.Is(tracker.held().err, errCertificateIssuing)
 	}, "each slot has renewed or is waiting for the one that is")
 	renewed := storedSerial(t, c.issuer)
 	c.pollUntil(t, func(tracker *certificateTracker) bool { return served(tracker) == renewed }, "every slot serves the renewal")
@@ -569,7 +582,7 @@ func TestSlotRenewsWhenTheWindowMovesEarlier(t *testing.T) {
 	t.Parallel()
 	c := newConnection(t, 1)
 	close(c.tsnet.hold)
-	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.state.cert != nil }, "the slot holds the first certificate")
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.held().cert != nil }, "the slot holds the first certificate")
 	first := storedSerial(t, c.issuer)
 	c.clock.Advance(pastRefresh)
 	c.pollUntil(t, func(*certificateTracker) bool { return true }, "the slot refreshes")
@@ -584,21 +597,22 @@ func TestSlotRenewsWhenTheWindowMovesEarlier(t *testing.T) {
 
 func TestCertificateRequestsShareAPodWideLimit(t *testing.T) {
 	t.Parallel()
-	requests := make(chan struct{}, 1)
-	requests <- struct{}{}
+	requests := semaphore.NewWeighted(1)
+	require.True(t, requests.TryAcquire(1))
 	fetch := newScriptedFetch(t)
-	tracker := newCertificateTracker("private.example.ts.net", fetchSource{fetch: fetch.fetch}, farWindows{}, requests, testenv.NewLogger(t), time.Now)
-	t.Cleanup(tracker.Close)
+	tracker := startTestTracker(t, fetchSource{fetch: fetch.fetch}, farWindows{}, requests, nil, time.Now)
 
-	_, _ = tracker.Poll()
-	require.Zero(t, fetch.count(), "a node whose turn has not come does not start a request")
-	<-requests
-	_, _ = tracker.Poll()
+	ready, reason := tracker.Poll()
+	require.False(t, ready)
+	require.Equal(t, "obtaining a TLS certificate for private.example.ts.net", reason)
+	require.Never(t, func() bool { return fetch.count() > 0 }, 50*time.Millisecond, time.Millisecond,
+		"a node whose turn has not come does not start a request")
+
+	requests.Release(1)
 	<-fetch.called
-	// The request clears attempting before its goroutine returns the slot,
-	// so wait on the slot itself.
-	require.Eventually(t, func() bool { return len(requests) == 0 }, 5*time.Second, time.Millisecond,
-		"the request gives its slot back")
+	settle(t, tracker)
+	require.True(t, requests.TryAcquire(1), "the request gives its turn back")
+	requests.Release(1)
 }
 
 // pastRefresh is long enough for a held certificate's jittered refresh to

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pires/go-proxyproto"
+	"golang.org/x/sync/semaphore"
 	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/ipn"
@@ -83,7 +84,7 @@ type TsnetRuntime struct {
 	// starts: one renewal window client, and one bound on concurrent
 	// certificate work.
 	windows             renewalWindows
-	certificateRequests chan struct{}
+	certificateRequests *semaphore.Weighted
 }
 
 var _ NodeRuntime = (*TsnetRuntime)(nil)
@@ -127,7 +128,7 @@ func NewTsnetRuntime(opts ...TsnetRuntimeOption) *TsnetRuntime {
 		shutdownTimeout:     defaultShutdownTimeout,
 		requestReadTimeout:  defaultRequestReadTimeout,
 		windows:             newARIClient(),
-		certificateRequests: make(chan struct{}, certificateRequestConcurrency),
+		certificateRequests: semaphore.NewWeighted(certificateRequestConcurrency),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -197,8 +198,12 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 
 	fqdn := ln.FQDN
 	source := &tsnetCertificateSource{store: spec.Store, fqdn: fqdn, certPair: lc.CertPair, certPairWithValidity: lc.CertPairWithValidity}
-	cert := newCertificateTracker(fqdn, source, r.windows, r.certificateRequests, hostLogger, time.Now)
-	cert.events = spec.CertificateEvents
+	cert, err := newCertificateTracker(fqdn, source, r.windows, r.certificateRequests, spec.CertificateEvents, hostLogger, time.Now)
+	if err != nil {
+		_ = ln.Close()
+		_ = srv.Close()
+		return nil, err
+	}
 	if approved {
 		cert.Await(ctx, certificateStartWait)
 	}
