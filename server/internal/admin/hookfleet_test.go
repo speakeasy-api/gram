@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -28,8 +29,8 @@ func (s *stubHookFleet) HookInstalls(_ context.Context, organizationID string, s
 	return s.page, s.err
 }
 
-func hookFleetTestVersions(minimum string) HookFleetVersions {
-	versions := HookFleetVersions{Latest: semver.MustParse("0.3.46"), Minimum: nil}
+func hookFleetTestVersions(minimum string) hookversions.Policy {
+	versions := hookversions.Policy{Latest: semver.MustParse("0.3.46"), Minimum: nil}
 	if minimum != "" {
 		versions.Minimum = semver.MustParse(minimum)
 	}
@@ -56,6 +57,7 @@ func TestSummarizeHookFleetClassifiesAndBreaksDown(t *testing.T) {
 		install("b", "v0.3.40", "ingest_binary", "marketplace", now.Add(-time.Hour), map[string]uint64{"ingest_binary": 4, "ingest_script": 2}),
 		install("c", "0.2.0", "ingest_script", "download", now.AddDate(0, 0, -4), map[string]uint64{"ingest_script": 3}),
 		install("d", "", "legacy_keyed", "", now.AddDate(0, 0, -5), map[string]uint64{"legacy_keyed": 7, "legacy_unkeyed": 1}),
+		install("e", "", "ingest_script", "download", now, map[string]uint64{"ingest_script": 1}),
 	}}
 
 	result := summarizeHookFleet(page, hookFleetTestVersions("0.3.0"), now)
@@ -64,7 +66,7 @@ func TestSummarizeHookFleetClassifiesAndBreaksDown(t *testing.T) {
 	require.NotNil(t, result.MinimumVersion)
 	require.Equal(t, "0.3.0", *result.MinimumVersion)
 	require.True(t, result.Truncated)
-	require.Equal(t, int64(4), result.TotalInstalls)
+	require.Equal(t, int64(5), result.TotalInstalls)
 	require.Equal(t, int64(2), result.QuietInstalls)
 	require.Equal(t, int64(8), result.LegacyEvents)
 
@@ -72,25 +74,25 @@ func TestSummarizeHookFleetClassifiesAndBreaksDown(t *testing.T) {
 	for _, i := range result.Installs {
 		statuses[i.Hostname] = i.VersionStatus
 	}
-	require.Equal(t, map[string]string{"a": "current", "b": "behind", "c": "unsupported", "d": "unknown"}, statuses)
+	require.Equal(t, map[string]string{"a": "current", "b": "behind", "c": "unsupported", "d": "unsupported", "e": "unknown"}, statuses)
 	require.False(t, result.Installs[0].Quiet)
 	require.True(t, result.Installs[2].Quiet)
 
 	versions := make([]string, 0, len(result.Versions))
 	for _, v := range result.Versions {
-		versions = append(versions, v.Version)
+		versions = append(versions, v.Version+"/"+v.Status)
 	}
-	require.Equal(t, []string{"0.3.46", "v0.3.40", "0.2.0", ""}, versions)
+	require.Equal(t, []string{"0.3.46/current", "v0.3.40/behind", "0.2.0/unsupported", "/unknown", "/unsupported"}, versions)
 
 	require.Equal(t, []*gen.AdminHookFleetBucket{
+		{Value: "download", Installs: 2, Events: 0},
 		{Value: "marketplace", Installs: 2, Events: 0},
 		{Value: "", Installs: 1, Events: 0},
-		{Value: "download", Installs: 1, Events: 0},
 	}, result.Routes)
 	require.Equal(t, []*gen.AdminHookFleetBucket{
 		{Value: "ingest_binary", Installs: 2, Events: 14},
+		{Value: "ingest_script", Installs: 2, Events: 6},
 		{Value: "legacy_keyed", Installs: 1, Events: 7},
-		{Value: "ingest_script", Installs: 1, Events: 5},
 		{Value: "legacy_unkeyed", Installs: 0, Events: 1},
 	}, result.Generations)
 }
@@ -108,15 +110,6 @@ func TestSummarizeHookFleetWithoutMinimumNeverUnsupported(t *testing.T) {
 	require.Nil(t, result.MinimumVersion)
 	require.Equal(t, "behind", result.Installs[0].VersionStatus)
 	require.Equal(t, "unknown", result.Installs[1].VersionStatus)
-}
-
-func TestClassifyHookVersionBoundaries(t *testing.T) {
-	t.Parallel()
-	versions := hookFleetTestVersions("0.3.0")
-	require.Equal(t, "behind", classifyHookVersion("0.3.0", versions))
-	require.Equal(t, "unsupported", classifyHookVersion("0.2.99", versions))
-	require.Equal(t, "current", classifyHookVersion("0.3.46", versions))
-	require.Equal(t, "current", classifyHookVersion("0.4.0", versions))
 }
 
 func TestGetOrganizationHookFleet(t *testing.T) {

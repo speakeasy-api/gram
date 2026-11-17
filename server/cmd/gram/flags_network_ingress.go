@@ -20,6 +20,8 @@ const (
 	networkIngressMutationFlag = "network-ingress-provider-mutations-enabled"
 	networkIngressQueueFlag    = "network-ingress-reconcile-task-queue"
 	networkIngressDevIDFlag    = "network-ingress-dev-id"
+
+	networkIngressGatewayNameQualifierFlag = "network-ingress-gateway-name-qualifier"
 )
 
 var networkIngressQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
@@ -28,15 +30,26 @@ var networkIngressQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{
 // artifacts on a tailnet. In local development it insists on a development
 // id: without one the stack would use production's names, and could overwrite,
 // host or delete production's services on a tailnet both serve.
-func localDevelopmentNamer(environment, devID string) (networkingress.Namer, error) {
+func localDevelopmentNamer(environment, devID, qualifier string) (networkingress.Namer, error) {
 	if environment == "local" && devID == "" {
 		return nil, errors.New("local development needs GRAM_NETWORK_INGRESS_DEV_ID; run `mise run zero:network-ingress`")
 	}
-	namer, err := networkingress.NewNamer(environment, devID)
+	namer, err := networkingress.NewNamer(environment, devID, qualifier)
 	if err != nil {
-		return nil, fmt.Errorf("network ingress development id: %w", err)
+		return nil, fmt.Errorf("network ingress naming: %w", err)
 	}
 	return namer, nil
+}
+
+// networkIngressGatewayNameQualifierFlagDef is shared by the reconciler, which
+// names auth keys and services with it, and the gateway, which names its
+// machines with it; both must carry the same value.
+func networkIngressGatewayNameQualifierFlagDef() cli.Flag {
+	return &cli.StringFlag{
+		Name:    networkIngressGatewayNameQualifierFlag,
+		Usage:   "Names this environment's gateway machines speakeasy-gw-<qualifier>-<slot> so they stay apart from another environment's on a shared tailnet; empty keeps speakeasy-gw-<slot>",
+		EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_NAME_QUALIFIER"},
+	}
 }
 
 // The reconciliation queue is explicit: preview processes must not implicitly
@@ -154,7 +167,7 @@ func networkIngressProviderFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name: "network-ingress-gateway-tag", Usage: "Tailscale tag carried by gateway auth keys and services",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_TAG"}, Value: tailnetgateway.DefaultTag, Action: validateNetworkIngressTag,
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_TAG"}, Value: networkingress.DefaultGatewayTag, Action: validateNetworkIngressTag,
 		},
 		&cli.IntFlag{
 			Name: "network-ingress-gateway-slots", Usage: "Node identities (gateway pod ordinals) hosting each ingress",
@@ -168,6 +181,7 @@ func networkIngressProviderFlags() []cli.Flag {
 			Name: networkIngressDevIDFlag, Usage: "Local development only: names this stack's hostnames, services and devices local-<id>-... so they stay apart from production's on a shared tailnet",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
 		},
+		networkIngressGatewayNameQualifierFlagDef(),
 		&cli.BoolFlag{
 			Name: "network-ingress-operator-provider-enabled", Usage: "Keep the Tailscale Kubernetes operator provider registered for existing ingresses and their teardown",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_OPERATOR_PROVIDER_ENABLED"}, Value: true,
@@ -200,9 +214,9 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 	if err := validateNetworkIngressPort(c, apiPort); err != nil {
 		return config, err
 	}
-	namer, err := networkingress.NewNamer(c.String("environment"), c.String(networkIngressDevIDFlag))
+	namer, err := networkingress.NewNamer(c.String("environment"), c.String(networkIngressDevIDFlag), c.String(networkIngressGatewayNameQualifierFlag))
 	if err != nil {
-		return config, fmt.Errorf("network ingress development id: %w", err)
+		return config, fmt.Errorf("network ingress naming: %w", err)
 	}
 	backendLabels, err := labels.ConvertSelectorToLabelsMap(c.String("network-ingress-backend-pod-labels"))
 	if err != nil {
