@@ -12,6 +12,25 @@ import (
 type Key = attribute.Key
 
 const (
+	// CommandSearchKindKey identifies one resource kind searched by Command K.
+	CommandSearchKindKey = attribute.Key("gram.command_search.kind")
+	// CommandSearchDurationMSKey records one adapter's elapsed milliseconds.
+	CommandSearchDurationMSKey = attribute.Key("gram.command_search.duration_ms")
+	// CommandSearchItemCountKey counts returned search items.
+	CommandSearchItemCountKey = attribute.Key("gram.command_search.item_count")
+	// CommandSearchFailedKey reports whether one search adapter failed.
+	CommandSearchFailedKey = attribute.Key("gram.command_search.failed")
+	// CommandSearchPayloadEstimateBytesKey estimates the compact response size.
+	CommandSearchPayloadEstimateBytesKey = attribute.Key("gram.command_search.payload_estimate_bytes")
+	// CommandSearchAdapterCountKey counts adapters started for one search.
+	CommandSearchAdapterCountKey = attribute.Key("gram.command_search.adapter_count")
+	// CommandSearchPartialKey reports whether the response omitted unfinished kinds.
+	CommandSearchPartialKey = attribute.Key("gram.command_search.partial")
+	// CommandSearchTimedOutKey reports whether the shared deadline elapsed.
+	CommandSearchTimedOutKey = attribute.Key("gram.command_search.timed_out")
+	// CommandSearchFailedKindCountKey counts resource kinds unfinished at the deadline.
+	CommandSearchFailedKindCountKey = attribute.Key("gram.command_search.failed_kind_count")
+
 	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
 	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
 
@@ -480,6 +499,11 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
+	TailnetGatewaySlotKey               = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayNodeStatusKey         = attribute.Key("gram.tailnet_gateway.node_status")
+	TailnetGatewayOperationKey          = attribute.Key("gram.tailnet_gateway.operation")
+	TailnetGatewayResultKey             = attribute.Key("gram.tailnet_gateway.result")
+	TailnetGatewayIdentityKindKey       = attribute.Key("gram.tailnet_gateway.identity_kind")
 	NetworkIngressDurationKey           = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
@@ -552,21 +576,17 @@ const (
 	// McpKillswitchResourceClassKey is the bounded kill-switch resource
 	// coverage class of a covered MCP tools/call. Never a server identifier.
 	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
-	// McpEntryPointKey is the bounded entry-point dimension on the
-	// mcp.toolset_slug_fallback counter: which public surface resolved a
-	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
-	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
-	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
-	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
-	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
-	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
-	McpURLKey              = attribute.Key("gram.mcp.url")
-	McpSessionSubjectKey   = attribute.Key("gram.mcp.session_subject")
+	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	McpServerIDsKey               = attribute.Key("gram.mcp_server.ids")
+	McpEndpointIDKey              = attribute.Key("gram.mcp_endpoint.id")
+	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
+	McpURLKey                     = attribute.Key("gram.mcp.url")
+	McpSessionSubjectKey          = attribute.Key("gram.mcp.session_subject")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -577,11 +597,6 @@ const (
 	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
 	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
 	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
-
-	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
-	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
-	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
-	McpFallbackToolsetCustomDomainKey = attribute.Key("gram.mcp.fallback.toolset_custom_domain")
 
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
@@ -672,6 +687,26 @@ const (
 	// the encryption key a process holds, so pods with different keys can be
 	// told apart without revealing the key.
 	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
+
+	// OrgEncryptionUseCaseKey is the organization encryption use case a value
+	// or key belongs to, such as oauth-session-tokens.
+	OrgEncryptionUseCaseKey = attribute.Key("gram.orgencryption.use_case")
+
+	// OrgEncryptionTransitionStateKey is an organization's transition state
+	// for one use case: platform_key, dual_write or org_kms.
+	OrgEncryptionTransitionStateKey = attribute.Key("gram.orgencryption.transition_state")
+
+	// OrgEncryptionErrorCodeKey is the ENC-* code of a platform-key
+	// decryption failure. It never carries the value or ciphertext.
+	OrgEncryptionErrorCodeKey = attribute.Key("gram.orgencryption.error_code")
+
+	// OrgEncryptionMismatchedCountKey counts values whose two copies did not
+	// match during verification.
+	OrgEncryptionMismatchedCountKey = attribute.Key("gram.orgencryption.mismatched_count")
+
+	// OrgEncryptionUnopenableCountKey counts organization-key copies that did
+	// not open during verification.
+	OrgEncryptionUnopenableCountKey = attribute.Key("gram.orgencryption.unopenable_count")
 
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
@@ -835,6 +870,11 @@ const (
 	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
 	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
 	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
+
+	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
+	TestEventKey = attribute.Key("speakeasy.test_event")
+	// TestEventIDKey is shared by every record one data export test sends, so a destination can find them.
+	TestEventIDKey = attribute.Key("speakeasy.test_event_id")
 
 	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
@@ -2078,6 +2118,47 @@ func SlogFlyOrgSlug(v string) slog.Attr      { return slog.String(string(FlyOrgS
 func FlyMachineIDs(v []string) attribute.KeyValue { return FlyMachineIDsKey.StringSlice(v) }
 func SlogFlyMachineIDs(v []string) slog.Attr      { return slog.Any(string(FlyMachineIDsKey), v) }
 
+func CommandSearchKind(v string) attribute.KeyValue { return CommandSearchKindKey.String(v) }
+func SlogCommandSearchKind(v string) slog.Attr {
+	return slog.String(string(CommandSearchKindKey), v)
+}
+func CommandSearchDurationMS(v int64) attribute.KeyValue { return CommandSearchDurationMSKey.Int64(v) }
+func SlogCommandSearchDurationMS(v int64) slog.Attr {
+	return slog.Int64(string(CommandSearchDurationMSKey), v)
+}
+func CommandSearchItemCount(v int) attribute.KeyValue { return CommandSearchItemCountKey.Int(v) }
+func SlogCommandSearchItemCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchItemCountKey), v)
+}
+func CommandSearchFailed(v bool) attribute.KeyValue { return CommandSearchFailedKey.Bool(v) }
+func SlogCommandSearchFailed(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchFailedKey), v)
+}
+func CommandSearchPayloadEstimateBytes(v int) attribute.KeyValue {
+	return CommandSearchPayloadEstimateBytesKey.Int(v)
+}
+func SlogCommandSearchPayloadEstimateBytes(v int) slog.Attr {
+	return slog.Int(string(CommandSearchPayloadEstimateBytesKey), v)
+}
+func CommandSearchAdapterCount(v int) attribute.KeyValue { return CommandSearchAdapterCountKey.Int(v) }
+func SlogCommandSearchAdapterCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchAdapterCountKey), v)
+}
+func CommandSearchPartial(v bool) attribute.KeyValue { return CommandSearchPartialKey.Bool(v) }
+func SlogCommandSearchPartial(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchPartialKey), v)
+}
+func CommandSearchTimedOut(v bool) attribute.KeyValue { return CommandSearchTimedOutKey.Bool(v) }
+func SlogCommandSearchTimedOut(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchTimedOutKey), v)
+}
+func CommandSearchFailedKindCount(v int) attribute.KeyValue {
+	return CommandSearchFailedKindCountKey.Int(v)
+}
+func SlogCommandSearchFailedKindCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchFailedKindCountKey), v)
+}
+
 func ValueAny(v any) attribute.KeyValue       { return ValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogValueAny(v any) slog.Attr            { return slog.Any(string(ValueKey), v) }
 func ValueString(v string) attribute.KeyValue { return ValueKey.String(v) }
@@ -2486,6 +2567,38 @@ func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
 }
 
+func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
+func SlogTailnetGatewaySlot(v int32) slog.Attr {
+	return slog.Int(string(TailnetGatewaySlotKey), int(v))
+}
+
+// TailnetGatewayCertificateExpiresAtKey is when a gateway node's TLS
+// certificate expires.
+const TailnetGatewayCertificateExpiresAtKey = attribute.Key("gram.tailnet_gateway.certificate_expires_at")
+
+func SlogTailnetGatewayCertificateExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(TailnetGatewayCertificateExpiresAtKey), v)
+}
+
+func TailnetGatewayNodeStatus[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayNodeStatusKey.String(string(v))
+}
+func SlogTailnetGatewayNodeStatus[V ~string](v V) slog.Attr {
+	return slog.String(string(TailnetGatewayNodeStatusKey), string(v))
+}
+
+func TailnetGatewayOperation[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayOperationKey.String(string(v))
+}
+
+func TailnetGatewayResult[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayResultKey.String(string(v))
+}
+
+func TailnetGatewayIdentityKind[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayIdentityKindKey.String(string(v))
+}
+
 func SlogNetworkIngressDuration(v time.Duration) slog.Attr {
 	return slog.Duration(string(NetworkIngressDurationKey), v)
 }
@@ -2602,6 +2715,34 @@ func OAuthStoredToken[V ~string](v V) attribute.KeyValue {
 
 func SlogEncryptionKeyFingerprint(v string) slog.Attr {
 	return slog.String(string(EncryptionKeyFingerprintKey), v)
+}
+
+func OrgEncryptionUseCase[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionUseCaseKey.String(string(v))
+}
+
+func SlogOrgEncryptionUseCase[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionUseCaseKey), string(v))
+}
+
+func OrgEncryptionTransitionState[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionTransitionStateKey.String(string(v))
+}
+
+func SlogOrgEncryptionTransitionState[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionTransitionStateKey), string(v))
+}
+
+func SlogOrgEncryptionErrorCode(v string) slog.Attr {
+	return slog.String(string(OrgEncryptionErrorCodeKey), v)
+}
+
+func SlogOrgEncryptionMismatchedCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionMismatchedCountKey), v)
+}
+
+func SlogOrgEncryptionUnopenableCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionUnopenableCountKey), v)
 }
 
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
@@ -3224,6 +3365,16 @@ func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
 }
 
+func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }
+func SlogTestEvent(v bool) slog.Attr {
+	return slog.Bool(string(TestEventKey), v)
+}
+
+func TestEventID(v string) attribute.KeyValue { return TestEventIDKey.String(v) }
+func SlogTestEventID(v string) slog.Attr {
+	return slog.String(string(TestEventIDKey), v)
+}
+
 func ExtMcpConnectionUserMessage(v string) attribute.KeyValue {
 	return ExtMcpConnectionUserMessageKey.String(v)
 }
@@ -3844,23 +3995,6 @@ func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
 func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
 func SlogMcpSkillTargetID(v string) slog.Attr {
 	return slog.String(string(McpSkillTargetIDKey), v)
-}
-
-func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
-func SlogMcpEntryPoint[V ~string](v V) slog.Attr {
-	return slog.String(string(McpEntryPointKey), string(v))
-}
-
-func SlogMcpFallbackRequestHost[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackRequestHostKey), string(v))
-}
-
-func SlogMcpFallbackCanonicalWrapper(v bool) slog.Attr {
-	return slog.Bool(string(McpFallbackCanonicalWrapperKey), v)
-}
-
-func SlogMcpFallbackToolsetCustomDomain[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackToolsetCustomDomainKey), string(v))
 }
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {

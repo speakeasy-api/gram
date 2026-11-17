@@ -2984,6 +2984,24 @@ func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid
 	return i, err
 }
 
+const getRemoteSessionOrganizationFixture = `-- name: GetRemoteSessionOrganizationFixture :one
+SELECT organization_id, updated_at FROM remote_sessions WHERE id = $1
+`
+
+type GetRemoteSessionOrganizationFixtureRow struct {
+	OrganizationID pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture: reads a session's organization at any client scope,
+// soft-deleted or not.
+func (q *Queries) GetRemoteSessionOrganizationFixture(ctx context.Context, id uuid.UUID) (GetRemoteSessionOrganizationFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionOrganizationFixture, id)
+	var i GetRemoteSessionOrganizationFixtureRow
+	err := row.Scan(&i.OrganizationID, &i.UpdatedAt)
+	return i, err
+}
+
 const getSessionHandoffLinkFixture = `-- name: GetSessionHandoffLinkFixture :one
 SELECT blob_url, consumed_at, session_id
 FROM session_handoff_links
@@ -3652,7 +3670,8 @@ INSERT INTO network_ingresses (
     'platform',
     true,
     'test-ns',
-    'test-sa',
+    -- Unique per row, so a test can seed several active ingresses.
+    'test-sa-' || CAST(CAST($1 AS uuid) AS text),
     $3
 )
 `
@@ -3669,8 +3688,13 @@ func (q *Queries) InsertNetworkIngressFixture(ctx context.Context, arg InsertNet
 }
 
 const insertOlderRemoteSessionTombstoneFixture = `-- name: InsertOlderRemoteSessionTombstoneFixture :exec
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at)
-SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id, 'unrelated-old-access', src.deleted_at - interval '1 second'
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, deleted_at)
+SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = src.remote_session_client_id),
+  'unrelated-old-access', src.deleted_at - interval '1 second'
 FROM remote_sessions src WHERE src.id = $1::uuid
 `
 
@@ -3980,6 +4004,20 @@ func (q *Queries) IsQueryBlockedByFixture(ctx context.Context, arg IsQueryBlocke
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const lapseNetworkIngressCertificateLease = `-- name: LapseNetworkIngressCertificateLease :exec
+UPDATE network_ingress_certificate_states
+SET updated_at = updated_at - interval '1 hour'
+WHERE network_ingress_id = $1
+  AND state_key = 'issuance-lease'
+`
+
+// Ages a connection's certificate issuance lease past any lease duration, as
+// if its holder died or stalled.
+func (q *Queries) LapseNetworkIngressCertificateLease(ctx context.Context, networkIngressID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lapseNetworkIngressCertificateLease, networkIngressID)
+	return err
 }
 
 const latchAttachmentOwnerFixture = `-- name: LatchAttachmentOwnerFixture :execrows
@@ -7837,6 +7875,23 @@ func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemote
 		arg.ID,
 		arg.OrganizationID,
 	)
+	return err
+}
+
+const setRemoteSessionOrganizationFixture = `-- name: SetRemoteSessionOrganizationFixture :exec
+UPDATE remote_sessions SET organization_id = $1::text WHERE id = $2
+`
+
+type SetRemoteSessionOrganizationFixtureParams struct {
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+}
+
+// Test-only fixture: NULL reproduces a row written before remote_sessions had
+// an organization_id; any other value fakes a row that disagrees with its
+// client.
+func (q *Queries) SetRemoteSessionOrganizationFixture(ctx context.Context, arg SetRemoteSessionOrganizationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionOrganizationFixture, arg.OrganizationID, arg.ID)
 	return err
 }
 

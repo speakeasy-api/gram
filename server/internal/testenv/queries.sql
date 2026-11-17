@@ -17,7 +17,8 @@ INSERT INTO network_ingresses (
     'platform',
     true,
     'test-ns',
-    'test-sa',
+    -- Unique per row, so a test can seed several active ingresses.
+    'test-sa-' || CAST(CAST(@id AS uuid) AS text),
     @dns_name
 );
 
@@ -2611,9 +2612,25 @@ SELECT deleted FROM remote_sessions WHERE id = @id;
 
 -- name: InsertOlderRemoteSessionTombstoneFixture :exec
 -- Test-only fixture: an unrelated tombstone one second older than the source row.
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at)
-SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id, 'unrelated-old-access', src.deleted_at - interval '1 second'
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, deleted_at)
+SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = src.remote_session_client_id),
+  'unrelated-old-access', src.deleted_at - interval '1 second'
 FROM remote_sessions src WHERE src.id = @id::uuid;
+
+-- name: SetRemoteSessionOrganizationFixture :exec
+-- Test-only fixture: NULL reproduces a row written before remote_sessions had
+-- an organization_id; any other value fakes a row that disagrees with its
+-- client.
+UPDATE remote_sessions SET organization_id = sqlc.narg('organization_id')::text WHERE id = @id;
+
+-- name: GetRemoteSessionOrganizationFixture :one
+-- Test-only fixture: reads a session's organization at any client scope,
+-- soft-deleted or not.
+SELECT organization_id, updated_at FROM remote_sessions WHERE id = @id;
 
 -- name: RemoteSessionSharesUserSessionBoundaryFixture :one
 SELECT (r.deleted_at = s.deleted_at)::boolean AS same_boundary
@@ -2729,3 +2746,11 @@ WHERE id = @id;
 -- Test-only fixture: backdates every message in a chat so the team memory
 -- sweep reads the chat's last activity as created_at.
 UPDATE chat_messages SET created_at = @created_at WHERE chat_id = @chat_id;
+
+-- name: LapseNetworkIngressCertificateLease :exec
+-- Ages a connection's certificate issuance lease past any lease duration, as
+-- if its holder died or stalled.
+UPDATE network_ingress_certificate_states
+SET updated_at = updated_at - interval '1 hour'
+WHERE network_ingress_id = @network_ingress_id
+  AND state_key = 'issuance-lease';

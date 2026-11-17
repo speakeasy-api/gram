@@ -62,11 +62,6 @@ func CreateCustomerSessionUsagePath() string {
 	return "/rpc/usage.createCustomerSession"
 }
 
-// CreateCheckoutUsagePath returns the URL path to the usage service createCheckout HTTP endpoint.
-func CreateCheckoutUsagePath() string {
-	return "/rpc/usage.createCheckout"
-}
-
 // GetStripeCheckoutStatusUsagePath returns the URL path to the usage service getStripeCheckoutStatus HTTP endpoint.
 func GetStripeCheckoutStatusUsagePath() string {
 	return "/rpc/usage.getStripeCheckoutStatus"

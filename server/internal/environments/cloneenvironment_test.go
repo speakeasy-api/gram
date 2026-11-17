@@ -327,6 +327,50 @@ func TestEnvironments_RBAC_Clone_AllowedWithEnvironmentWrite(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// A write grant on the source environment alone does not allow cloning it:
+// cloning creates an environment, which needs project-wide environment:write.
+func TestEnvironments_RBAC_Clone_DeniedWithSourceOnlyWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	source, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-clone-src-only-source",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope: authz.ScopeEnvironmentWrite,
+			Selector: authz.Selector{
+				"resource_kind": "environment",
+				"resource_id":   source.ID,
+				"project_id":    authCtx.ProjectID.String(),
+			},
+		},
+	)
+
+	_, err = ti.service.CloneEnvironment(ctx, &gen.CloneEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             source.Slug,
+		NewName:          "rbac-clone-src-only-target",
+		CopyValues:       nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentReadOnly(t *testing.T) {
 	t.Parallel()
 
