@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -292,6 +293,7 @@ type ChallengeManager struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	enc         *encryption.Client
+	secrets     *clientsecrets.Secrets
 	policy      *guardian.Policy
 	tunnels     *tunnelrouting.HTTPClient
 	cache       cache.TypedCacheObject[RemoteLoginState]
@@ -396,6 +398,17 @@ type RemoteLoginResult struct {
 type PrivateAuthorityValidator func(context.Context, RemoteLoginState) error
 
 type ChallengeManagerOption func(*ChallengeManager)
+
+// WithClientSecrets installs the process's client secret seam, which knows
+// the organization encryption configured in the process. Without it the
+// manager seals and opens client secrets as a process without organization
+// encryption: platform_key works and every other transition state fails
+// closed. Production wiring always passes it.
+func WithClientSecrets(secrets *clientsecrets.Secrets) ChallengeManagerOption {
+	return func(m *ChallengeManager) {
+		m.secrets = secrets
+	}
+}
 
 func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) ChallengeManagerOption {
 	return func(m *ChallengeManager) {
@@ -520,6 +533,7 @@ func NewChallengeManager(
 		logger:  logger,
 		db:      db,
 		enc:     enc,
+		secrets: nil,
 		policy:  policy,
 		tunnels: tunnels,
 		cache: cache.NewTypedObjectCache[RemoteLoginState](
@@ -555,13 +569,16 @@ func NewChallengeManager(
 	for _, option := range options {
 		option(manager)
 	}
+	if manager.secrets == nil {
+		manager.secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
+	}
 	manager.revoker.assertions = manager.assertions
 	if manager.enricher == nil {
 		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections), WithRefreshFeatureFlags(manager.features))
-	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
+	manager.rotator = NewClientRotator(logger, db, enc, manager.secrets, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	manager.rotator.origins = manager.origins
 	if manager.clientCredentialBuilder != nil {
 		manager.clientCredentials = manager.clientCredentialBuilder(manager)

@@ -9,11 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
@@ -82,7 +86,7 @@ func TestWorkerTokenCredentialLivenessAndBinding(t *testing.T) {
 	// This client was constructed before withdrawal but has never acquired a token.
 	stale, err := tokenFactory(t, bc).Client(cfg)
 	require.NoError(t, err)
-	_, err = idprepo.New(bc.conn).ClearManagedClientSecret(ctx, idprepo.ClearManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID)})
+	_, err = clientsecretstest.New(t, bc.conn, bc.enc).Clear(ctx, bc.conn, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	require.NoError(t, err)
 	before := exchanges.Load()
 	_, err = stale.ListApps(ctx, okta.ListAppsRequest{})
@@ -133,11 +137,11 @@ func TestTokenCredentialLeaseSerializesWithdrawal(t *testing.T) {
 	defer lease.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	_, err = idprepo.New(bc.conn).ClearManagedClientSecret(ctx, idprepo.ClearManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID)})
+	_, err = clientsecretstest.New(t, bc.conn, bc.enc).Clear(ctx, bc.conn, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	require.Error(t, err, "withdrawal must wait until token exchange finishes")
 	require.NoError(t, lease.Observe(t.Context(), true))
 	lease.Close()
-	_, err = idprepo.New(bc.conn).ClearManagedClientSecret(t.Context(), idprepo.ClearManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID)})
+	_, err = clientsecretstest.New(t, bc.conn, bc.enc).Clear(t.Context(), bc.conn, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	require.NoError(t, err)
 }
 
@@ -149,10 +153,9 @@ func TestTokenCredentialVerificationUsesUncommittedReplacement(t *testing.T) {
 	q := idprepo.New(tx)
 	_, err := q.LockOktaIdentityProviderConnection(t.Context(), idprepo.LockOktaIdentityProviderConnectionParams{ID: bc.connectionID, OrganizationID: bc.orgID})
 	require.NoError(t, err)
-	replacement, err := bc.enc.Encrypt([]byte("replacement-secret"))
+	replaced, err := clientsecretstest.New(t, bc.conn, bc.enc).Set(t.Context(), tx, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}), []byte("replacement-secret"), pgtype.Timestamptz{})
 	require.NoError(t, err)
-	_, err = q.SetManagedClientSecret(t.Context(), idprepo.SetManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID), ClientSecretEncrypted: conv.ToPGText(replacement)})
-	require.NoError(t, err)
+	replacement := replaced.ClientSecretEncrypted.String
 	cfg.Credentials = oktacredentials.Provider{Tx: tx, ConnectionID: bc.connectionID}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()

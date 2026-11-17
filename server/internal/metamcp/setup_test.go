@@ -292,7 +292,7 @@ func seedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Po
 func createRemoteSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, remoteIssuerID uuid.UUID, externalID string) uuid.UUID {
 	t.Helper()
 
-	client, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := remotesessionsrepo.New(conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(projectID),
 		OrganizationID:          conv.ToPGText(organizationID),
 		RemoteSessionIssuerID:   remoteIssuerID,

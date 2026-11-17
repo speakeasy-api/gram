@@ -288,7 +288,6 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 			OrganizationID:                  conv.ToPGText(request.OrganizationID),
 			RemoteSessionIssuerID:           issuerID,
 			ClientID:                        clientID,
-			ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
 			ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
 			ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
 			TokenEndpointAuthMethod:         conv.ToPGText("none"),

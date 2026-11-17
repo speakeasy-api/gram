@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -519,9 +520,9 @@ func listingAuthMethod(listingMode string) remotesessions.TokenEndpointAuthMetho
 	return remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
 }
 
-// encryptClientSecret validates and encrypts an admin-entered secret; messages
-// never echo the value. A nil secret encrypts to "".
-func (s *Service) encryptClientSecret(ctx context.Context, logger *slog.Logger, secret *string) (string, error) {
+// validateClientSecret validates and trims an admin-entered secret; messages
+// never echo the value. A nil secret is "".
+func validateClientSecret(secret *string) (string, error) {
 	if secret == nil {
 		return "", nil
 	}
@@ -534,11 +535,7 @@ func (s *Service) encryptClientSecret(ctx context.Context, logger *slog.Logger, 
 	case strings.ContainsFunc(trimmed, unicode.IsSpace):
 		return "", oops.E(oops.CodeBadRequest, nil, "client_secret must not contain whitespace")
 	}
-	encrypted, err := s.enc.Encrypt([]byte(trimmed))
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encrypt client secret").LogError(ctx, logger)
-	}
-	return encrypted, nil
+	return trimmed, nil
 }
 
 func connectionIssuerSlug(connectionID uuid.UUID) string {
@@ -784,7 +781,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
-	secretEncrypted, err := s.encryptClientSecret(ctx, logger, payload.ClientSecret)
+	secret, err := validateClientSecret(payload.ClientSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -812,13 +809,13 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 
 	managed, err := s.provisioner.SetClientID(ctx, dbtx, SetClientIDParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ConnectionID:          id,
-		Provider:              ProviderOkta,
-		ClientID:              clientID,
-		ClientSecretEncrypted: secretEncrypted,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ConnectionID:     id,
+		Provider:         ProviderOkta,
+		ClientID:         clientID,
+		ClientSecret:     secret,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
 	})
 	switch {
 	case errors.Is(err, ErrClientSecretRequired):
@@ -831,6 +828,8 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		return nil, oops.E(oops.CodeConflict, err, "this client id is already registered against the Okta org")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to bind the client id to")
+	case clientsecrets.IsKeyProblem(err):
+		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "record client id").LogError(ctx, logger)
 	}
@@ -884,7 +883,7 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
-	secretEncrypted, err := s.encryptClientSecret(ctx, logger, &payload.ClientSecret)
+	secret, err := validateClientSecret(&payload.ClientSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -912,18 +911,20 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 	}
 
 	managed, err := s.provisioner.ReplaceClientSecret(ctx, dbtx, ReplaceClientSecretParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ConnectionID:          id,
-		Provider:              ProviderOkta,
-		ClientSecretEncrypted: secretEncrypted,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ConnectionID:     id,
+		Provider:         ProviderOkta,
+		ClientSecret:     secret,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
 	})
 	switch {
 	case errors.Is(err, ErrClientSecretNotAccepted):
 		return nil, oops.E(oops.CodeBadRequest, err, "only connections installed from the Okta Integration Network use a client secret")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to replace")
+	case clientsecrets.IsKeyProblem(err):
+		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "replace client secret").LogError(ctx, logger)
 	}

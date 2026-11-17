@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -35,7 +36,7 @@ func TestIssuerLifecycle_RotationAdoptsEMABoundReplacement(t *testing.T) {
 	require.Equal(t, "ready", prepared.State)
 
 	// Adoption and refusals occur before any upstream or credential work.
-	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, nil, nil, ti.redisCache, nil, nil, nil, nil)
+	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, clientsecretstest.New(t, ti.conn, nil), nil, nil, ti.redisCache, nil, nil, nil, nil)
 	var params remotesessions.RotateClientRegistrationParams
 	params.ClientID = in.ClientID
 	params.ExpectedClientID = "superseded-registration"

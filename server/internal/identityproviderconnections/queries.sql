@@ -328,11 +328,10 @@ RETURNING *;
 
 -- Only the provisioner writes a managed client's client_id, and only while the
 -- provisioning placeholder is still in place. A client-secret client receives
--- its secret in the same write.
+-- its secret through clientsecrets.Secrets in the same transaction.
 -- name: SetManagedClientID :one
 UPDATE remote_session_clients
 SET client_id = @client_id,
-    client_secret_encrypted = sqlc.narg(client_secret_encrypted),
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -343,39 +342,25 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: SetManagedClientSecret :one
-UPDATE remote_session_clients
-SET client_secret_encrypted = @client_secret_encrypted,
-    upstream_rejected_at = NULL,
-    updated_at = clock_timestamp()
+-- Locks a managed client-secret client before its secret is replaced or
+-- revoked through clientsecrets.Secrets in the same transaction.
+-- name: LockManagedSecretClient :one
+SELECT * FROM remote_session_clients
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL
   AND identity_provider_connection_id = @identity_provider_connection_id
   AND token_endpoint_auth_method = 'client_secret_basic'
   AND deleted IS FALSE
-RETURNING *;
+FOR UPDATE;
 
--- Revocation withdraws a client-secret client's credential.
--- name: ClearManagedClientSecret :one
-UPDATE remote_session_clients
-SET client_secret_encrypted = NULL,
-    upstream_rejected_at = NULL,
-    updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND identity_provider_connection_id = @identity_provider_connection_id
-  AND token_endpoint_auth_method = 'client_secret_basic'
-  AND deleted IS FALSE
-RETURNING *;
-
--- Switching methods is allowed only while the client id is still the placeholder.
+-- Switching methods is allowed only while the client id is still the
+-- placeholder. The caller clears any stored secret through
+-- clientsecrets.Secrets in the same transaction.
 -- name: SwitchManagedClientToSecret :one
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = 'client_secret_basic',
     json_web_key_set_id = NULL,
-    client_secret_encrypted = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -390,7 +375,6 @@ RETURNING *;
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = 'private_key_jwt',
     json_web_key_set_id = @json_web_key_set_id,
-    client_secret_encrypted = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id

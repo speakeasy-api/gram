@@ -193,8 +193,9 @@ func newTestServiceWithClientFactory(t *testing.T, maxConns int32, wrap func(okt
 		clients = wrap(clients)
 	}
 	syncTrigger := &fakeSyncTrigger{}
-	enc, err := encryption.NewWithBytes(make([]byte, 32))
-	require.NoError(t, err)
+	// The provisioner seals secrets with the shared test key, so the service
+	// opens them with the same one.
+	enc := testenv.NewEncryptionClient(t)
 
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	build := func(provisioner *identityproviderconnections.Provisioner) *identityproviderconnections.Service {

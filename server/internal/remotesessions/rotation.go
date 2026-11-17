@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -172,6 +173,9 @@ type ClientRotator struct {
 	enc    *encryption.Client
 	policy *guardian.Policy
 
+	// secrets reads the client's stored secret and stores its replacement.
+	secrets *clientsecrets.Secrets
+
 	// tunnels carries the probe and the re-registration for an issuer bound to
 	// a tunneled MCP server. Both endpoints they reach — the token endpoint and
 	// the registration endpoint — are private addresses for such an issuer, so
@@ -195,11 +199,12 @@ type ClientRotator struct {
 
 // NewClientRotator wires a rotator over the same database, encryption key,
 // egress policy, and lease cache the refresh path uses.
-func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger, registrationTelemetry registration.Recorder) *ClientRotator {
+func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, secrets *clientsecrets.Secrets, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger, registrationTelemetry registration.Recorder) *ClientRotator {
 	return &ClientRotator{
 		logger:      logger,
 		db:          db,
 		enc:         enc,
+		secrets:     secrets,
 		policy:      policy,
 		tunnels:     tunnels,
 		origins:     DefaultCallbackOrigins(serverURL),
@@ -432,6 +437,11 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	if err := revalidateRotationSnapshot(ctx, q, row); err != nil {
 		return zero, err
 	}
+	// A registration cannot be undone, so confirm the replacement's secret can
+	// be stored before asking the issuer for one.
+	if err := r.secrets.RequireUsable(ctx, conn, clientOwner(current)); err != nil {
+		return zero, fmt.Errorf("check client secret key before re-registration: %w", err)
+	}
 	// The replacement is registered over whatever transport the issuer names,
 	// so a bound issuer's private registration endpoint is reachable. This is
 	// the rotator's own system path: it re-registers a client an administrator
@@ -454,14 +464,6 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, ErrClientRotationInProgress
 	}
 
-	var secretCiphertext pgtype.Text
-	if registered.ClientSecret != "" {
-		ciphertext, err := r.enc.Encrypt([]byte(registered.ClientSecret))
-		if err != nil {
-			return zero, fmt.Errorf("encrypt re-registered client secret: %w", err)
-		}
-		secretCiphertext = conv.ToPGText(ciphertext)
-	}
 	issuedAt := registered.ClientIDIssuedAt
 	if !issuedAt.Valid {
 		issuedAt = conv.ToPGTimestamptz(time.Now().UTC())
@@ -512,7 +514,6 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 
 	updated, err := txRepo.ReplaceRemoteSessionClientRegistration(ctx, repo.ReplaceRemoteSessionClientRegistrationParams{
 		ClientID:                registered.ClientID,
-		ClientSecretEncrypted:   secretCiphertext,
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   secretExpiresAt,
 		TokenEndpointAuthMethod: conv.ToPGTextEmpty(conv.Default(registered.TokenEndpointAuthMethod, current.TokenEndpointAuthMethod.String)),
@@ -528,6 +529,21 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	}
 	if err != nil {
 		return zero, fmt.Errorf("persist re-registered client: %w", err)
+	}
+	// The replacement's secret, or none for a public registration. A write
+	// fenced by a transition seals the same secret again; the issuer is never
+	// asked to register again.
+	if registered.ClientSecret != "" {
+		updated, err = r.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(registered.ClientSecret), secretExpiresAt)
+	} else {
+		updated, err = r.secrets.Clear(ctx, dbtx, updated.ID, clientOwner(updated))
+	}
+	if err != nil {
+		if errors.Is(err, clientsecrets.ErrClientNotFound) {
+			return zero, ErrRotationSnapshotChanged
+		}
+		logger.ErrorContext(ctx, "store re-registered client secret; the new upstream registration is abandoned", attr.SlogOAuthClientID(registered.ClientID), attr.SlogError(err))
+		return zero, fmt.Errorf("store re-registered client secret: %w", err)
 	}
 
 	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)

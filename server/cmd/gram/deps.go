@@ -88,6 +88,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -1726,7 +1727,7 @@ func newPersistentLocalKMSClient(alg jose.SignatureAlgorithm) (*gcpkms.LocalSign
 // in-process client kmsSigningClients hands the assertion signer, so a revoked
 // key version is refused by both and the signing algorithm agrees; managed keys
 // are RS256, so any other configured local algorithm leaves the feature off.
-func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory, auditLogger *audit.Logger, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
+func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory, auditLogger *audit.Logger, clientSecrets *clientsecrets.Secrets, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
 	rawCredentialID := strings.TrimSpace(c.String(identityProviderSigningCredentialIDFlag))
 	if rawCredentialID == "" {
 		logger.WarnContext(ctx, "identity provider connections are unavailable: no signing credential configured")
@@ -1769,7 +1770,7 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 		}
 	}
 
-	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, identityproviderconnections.Config{
+	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, clientSecrets, identityproviderconnections.Config{
 		KeyRing:               keyRing,
 		SigningCredentialID:   credentialID,
 		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
@@ -2010,6 +2011,12 @@ func newOrgEncryptionTransitions(logger *slog.Logger, db *pgxpool.Pool, auditLog
 // key to organization keys, sharing the process's transition state cache.
 func (d orgEncryptionDeps) Cipher(logger *slog.Logger, platform *encryption.Client) *orgencryption.Cipher {
 	return orgencryption.NewCipher(logger, platform, d.Service, d.Transitions)
+}
+
+// ClientSecrets builds the seal and storage seam for remote session client
+// secrets over the process's organization encryption.
+func (d orgEncryptionDeps) ClientSecrets(logger *slog.Logger, platform *encryption.Client) *clientsecrets.Secrets {
+	return clientsecrets.New(logger, d.Cipher(logger, platform), platform)
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.

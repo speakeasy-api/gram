@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
@@ -85,18 +87,16 @@ func newBasicConnection(t *testing.T, ctx context.Context) *basicConnection {
 	})
 	require.NoError(t, err)
 
-	enc := testenv.NewEncryptionClient(t)
-	encrypted, err := enc.Encrypt([]byte(clientSecret))
-	require.NoError(t, err)
-
 	_, err = q.SetManagedClientID(ctx, idprepo.SetManagedClientIDParams{
 		ClientID:                     "0oabasicclient000001",
-		ClientSecretEncrypted:        conv.ToPGText(encrypted),
 		ID:                           client.ClientRowID,
 		OrganizationID:               conv.ToPGText(orgID),
 		IdentityProviderConnectionID: conv.ToNullUUID(connectionID),
 		PlaceholderClientID:          client.ClientID,
 	})
+	require.NoError(t, err)
+	enc := testenv.NewEncryptionClient(t)
+	_, err = clientsecretstest.New(t, conn, enc).Set(ctx, conn, client.ClientRowID, clientsecrets.OwnerOf(conv.ToPGText(orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}), []byte(clientSecret), pgtype.Timestamptz{})
 	require.NoError(t, err)
 
 	_, err = q.UpdateIdentityProviderConnectionVerification(ctx, idprepo.UpdateIdentityProviderConnectionVerificationParams{

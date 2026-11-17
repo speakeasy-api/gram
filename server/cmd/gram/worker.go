@@ -867,7 +867,7 @@ func newWorkerCommand() *cli.Command {
 			var issuerProvisioner *identityproviderconnections.Provisioner
 			if err != nil {
 				logger.ErrorContext(ctx, "invalid outbound callback origin; internal session issuer key sweep is off", attr.SlogError(err))
-			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, outboundOrigin); err != nil {
+			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, orgEncryption.ClientSecrets(logger, encryptionClient), outboundOrigin); err != nil {
 				// Nil where KMS provisioning is unconfigured, too.
 				logger.ErrorContext(ctx, "identity provider provisioner unavailable; internal session issuer key sweep is off", attr.SlogError(err))
 				issuerProvisioner = nil

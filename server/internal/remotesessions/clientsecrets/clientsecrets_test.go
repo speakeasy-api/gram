@@ -51,7 +51,7 @@ func TestSetInPlatformKeyWritesOnlyThePlatformCopy(t *testing.T) {
 	require.False(t, row.ClientSecretOrgEncrypted.Valid)
 	require.Equal(t, client.ClientSecretGeneration+1, row.ClientSecretGeneration)
 
-	opened, err := ti.secrets.Open(t.Context(), owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
+	opened, err := ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", opened)
 }
@@ -73,7 +73,7 @@ func TestSetInDualWriteWritesBothCopies(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", plaintext, "the platform-key copy stays usable for a rollback")
 
-	opened, err := ti.secrets.Open(t.Context(), owner, clientsecrets.Stored(pgtype.Text{String: "", Valid: false}, row.ClientSecretOrgEncrypted))
+	opened, err := ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(pgtype.Text{String: "", Valid: false}, row.ClientSecretOrgEncrypted))
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", opened, "dual_write reads the organization-key copy")
 }
@@ -92,7 +92,7 @@ func TestSetAfterFinalizeWritesOnlyTheOrganizationCopy(t *testing.T) {
 	require.False(t, row.ClientSecretEncrypted.Valid)
 	require.True(t, row.ClientSecretOrgEncrypted.Valid)
 
-	opened, err := ti.secrets.Open(t.Context(), owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
+	opened, err := ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", opened)
 }
@@ -106,7 +106,7 @@ func TestSetSealsAgainWhenTheTransitionMovesAfterTheDecision(t *testing.T) {
 
 	// Cache platform_key in this process, then enroll through another
 	// process's transition state so the cached decision is stale.
-	require.NoError(t, ti.secrets.RequireUsable(t.Context(), owner))
+	require.NoError(t, ti.secrets.RequireUsable(t.Context(), ti.conn, owner))
 	other := orgencryption.NewTransitions(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
 	_, err := other.Enroll(t.Context(), ti.orgID, orgencryption.UseCaseOAuthClientSecrets, orgencryption.SystemActor())
 	require.NoError(t, err)
@@ -191,39 +191,31 @@ func TestGlobalClientStaysOnThePlatformKey(t *testing.T) {
 	require.True(t, row.ClientSecretEncrypted.Valid)
 	require.False(t, row.ClientSecretOrgEncrypted.Valid)
 
-	opened, err := ti.secrets.Open(t.Context(), owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
+	opened, err := ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", opened)
 }
 
-func TestProjectClientWithoutOrganizationIsUnattributed(t *testing.T) {
+func TestProjectClientWithoutOrganizationStaysOnThePlatformKeyAndBlocksFinalize(t *testing.T) {
 	t.Parallel()
 
 	ti := newTestInstance(t)
+	ti.enroll(t)
 	owner := clientsecrets.OwnerOf(pgtype.Text{String: "", Valid: false}, uuid.NullUUID{UUID: ti.projectID, Valid: true})
 	client := ti.createClient(t, owner)
 
-	_, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
-	require.ErrorIs(t, err, clientsecrets.ErrUnattributed)
-	require.False(t, clientsecrets.IsKeyProblem(err))
+	row, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
+	require.NoError(t, err)
+	require.True(t, row.ClientSecretEncrypted.Valid)
+	require.False(t, row.ClientSecretOrgEncrypted.Valid, "a row without an organization cannot be sealed for one")
 
-	// A secret stored before the organization was required still blocks
-	// finalize for the project's organization.
-	platform, err := ti.platform.Encrypt([]byte("s3cret"))
+	opened, err := ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).SetRemoteSessionClientSecret(t.Context(), repo.SetRemoteSessionClientSecretParams{
-		PlatformCopy:          conv.ToPGText(platform),
-		OrgCopy:               pgtype.Text{String: "", Valid: false},
-		ClientSecretExpiresAt: noExpiry(),
-		ID:                    client.ID,
-		OrganizationID:        pgtype.Text{String: "", Valid: false},
-		DecidedGeneration:     0,
-	})
-	require.NoError(t, err)
+	require.Equal(t, "s3cret", opened)
 
 	counts, err := clientsecrets.NewCopyStore(ti.conn).Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), counts.Unattributed)
+	require.Equal(t, int64(1), counts.Unattributed, "the project's organization cannot finalize past it")
 }
 
 func TestBackfillVerifyAndFinalizeMoveSecretsToTheOrganizationKey(t *testing.T) {
@@ -254,14 +246,16 @@ func TestBackfillVerifyAndFinalizeMoveSecretsToTheOrganizationKey(t *testing.T) 
 	sealed := ti.stored(t, live.ID)
 	require.True(t, sealed.ClientSecretOrgEncrypted.Valid)
 	require.Equal(t, liveRow.ClientSecretGeneration, sealed.ClientSecretGeneration, "sealing the same secret again is not a new revision")
+	require.Equal(t, liveRow.UpdatedAt, sealed.UpdatedAt, "the backfill changes nothing else about the client, so nothing derived from the row moves")
 
 	ti.finalize(t)
 
 	finalized := ti.stored(t, live.ID)
 	require.False(t, finalized.ClientSecretEncrypted.Valid)
 	require.Equal(t, liveRow.ClientSecretGeneration, finalized.ClientSecretGeneration)
+	require.Equal(t, liveRow.UpdatedAt, finalized.UpdatedAt, "clearing the platform-key copies changes nothing else about the client")
 
-	opened, err := ti.secrets.Open(t.Context(), owner, clientsecrets.Stored(finalized.ClientSecretEncrypted, finalized.ClientSecretOrgEncrypted))
+	opened, err := ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(finalized.ClientSecretEncrypted, finalized.ClientSecretOrgEncrypted))
 	require.NoError(t, err)
 	require.Equal(t, "live secret", opened)
 }

@@ -15,10 +15,13 @@
 // that needs to know the secret changed reads it instead of comparing
 // ciphertexts, which change on every seal.
 //
-// A global client, with neither a project nor an organization, always stays
-// on the platform key. A project client must carry its organization: one
-// stored without it cannot be sealed for its organization, so Secrets refuses
-// it with ErrUnattributed.
+// A client row without an organization stays on the platform key: a global
+// client, which has neither a project nor an organization, and a project
+// client stored before project clients carried their organization. Every
+// write fences on the row's own organization column, so a row without one can
+// only be written under generation 0. The CopyStore counts such project
+// clients as unattributed, which keeps their organization from finalizing
+// until their organization_id is backfilled.
 package clientsecrets
 
 import (
@@ -30,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -52,16 +56,9 @@ var Columns = orgencryption.CopyColumns{
 // life, so a third consecutive move means something is wrong.
 const maxWriteAttempts = 3
 
-var (
-	// ErrUnattributed means a project client is stored without its
-	// organization, so its secret cannot be sealed for or opened with the
-	// organization's key.
-	ErrUnattributed = errors.New("clientsecrets: project client is stored without its organization")
-
-	// ErrClientNotFound means the client to write does not exist, is deleted,
-	// or belongs to another organization.
-	ErrClientNotFound = errors.New("clientsecrets: remote session client not found")
-)
+// ErrClientNotFound means the client to write does not exist, is deleted, or
+// belongs to another organization.
+var ErrClientNotFound = errors.New("clientsecrets: remote session client not found")
 
 // Owner is who a client belongs to, which decides the key its secret is
 // sealed with.
@@ -80,19 +77,10 @@ func OwnerOf(organizationID pgtype.Text, projectID uuid.NullUUID) Owner {
 	return Owner{OrganizationID: organizationID, ProjectID: projectID}
 }
 
-// global reports whether the owner is a global client, which always stays
-// on the platform key.
-func (o Owner) global() bool {
-	return !o.OrganizationID.Valid && !o.ProjectID.Valid
-}
-
-// organization returns the organization that seals the secret.
-func (o Owner) organization() (string, error) {
-	if !o.OrganizationID.Valid || o.OrganizationID.String == "" {
-		return "", ErrUnattributed
-	}
-
-	return o.OrganizationID.String, nil
+// platformOnly reports whether the client row carries no organization, so
+// its secret stays on the platform key.
+func (o Owner) platformOnly() bool {
+	return !o.OrganizationID.Valid || o.OrganizationID.String == ""
 }
 
 // Stored returns the copies a client row stores.
@@ -106,20 +94,32 @@ func Has(stored orgencryption.Copies) bool {
 	return stored.Platform.Valid || stored.Org.Valid
 }
 
+// keyProblems are the errors that mean a key could not be used right now:
+// an unreachable, revoked or suspended organization key, a process without
+// organization encryption serving an enrolled organization, or transition
+// state that kept moving under a write. They may clear on their own.
+var keyProblems = []error{
+	orgencryption.ErrKeyUnavailable,
+	orgencryption.ErrSuspended,
+	orgencryption.ErrNotProvisioned,
+	orgencryption.ErrOrganizationEncryptionUnavailable,
+	orgencryption.ErrConcurrentChange,
+	orgencryption.ErrFenced,
+	orgencryption.ErrDecisionExpired,
+}
+
 // IsKeyProblem reports whether err from Open, Set or RequireUsable is a
-// problem with a key that may clear on its own, such as an unreachable or
-// suspended organization key, rather than a missing, unreadable or
-// unattributable secret. Callers report a key problem as retryable and never
-// as a broken client configuration.
+// problem with a key that may clear on its own, rather than a missing or
+// unreadable secret or a database failure. Callers report a
+// key problem as retryable and never as a broken client configuration.
 func IsKeyProblem(err error) bool {
-	if err == nil {
-		return false
+	for _, problem := range keyProblems {
+		if errors.Is(err, problem) {
+			return true
+		}
 	}
 
-	return !errors.Is(err, orgencryption.ErrUnreadable) &&
-		!errors.Is(err, orgencryption.ErrMissing) &&
-		!errors.Is(err, ErrUnattributed) &&
-		!errors.Is(err, ErrClientNotFound)
+	return false
 }
 
 // Secrets is the one seam for client secrets.
@@ -138,9 +138,22 @@ func New(logger *slog.Logger, cipher *orgencryption.Cipher, platform *encryption
 	}
 }
 
-// Open decrypts the copy the owner's transition state reads.
-func (s *Secrets) Open(ctx context.Context, owner Owner, stored orgencryption.Copies) (string, error) {
-	if owner.global() {
+// WithoutOrganizationEncryption builds Secrets for a process without
+// organization encryption, over its own transition state: organizations in
+// platform_key work, and any other transition state fails closed. A process
+// with organization encryption builds Secrets with New over its shared
+// cipher instead.
+func WithoutOrganizationEncryption(logger *slog.Logger, db *pgxpool.Pool, platform *encryption.Client) *Secrets {
+	transitions := orgencryption.NewTransitions(logger, db, nil, nil, orgencryption.TransitionsConfig{ClearSettleDelay: 0})
+
+	return New(logger, orgencryption.NewCipher(logger, platform, nil, transitions), platform)
+}
+
+// Open decrypts the copy the owner's transition state reads. db is whatever
+// the caller already holds (the pool, a connection or a transaction); a cache
+// miss reads transition state through it.
+func (s *Secrets) Open(ctx context.Context, db repo.DBTX, owner Owner, stored orgencryption.Copies) (string, error) {
+	if owner.platformOnly() {
 		if !stored.Platform.Valid {
 			return "", orgencryption.ErrMissing
 		}
@@ -153,12 +166,7 @@ func (s *Secrets) Open(ctx context.Context, owner Owner, stored orgencryption.Co
 		return plaintext, nil
 	}
 
-	organizationID, err := owner.organization()
-	if err != nil {
-		return "", err
-	}
-
-	decision, err := s.cipher.Decide(ctx, organizationID, orgencryption.UseCaseOAuthClientSecrets)
+	decision, err := s.cipher.DecideIn(ctx, db, owner.OrganizationID.String, orgencryption.UseCaseOAuthClientSecrets)
 	if err != nil {
 		return "", fmt.Errorf("decide client secret state: %w", err)
 	}
@@ -174,18 +182,13 @@ func (s *Secrets) Open(ctx context.Context, owner Owner, stored orgencryption.Co
 // RequireUsable checks that a secret could be sealed for the owner now.
 // Callers run it before an irreversible call to a provider whose secret must
 // then be stored, such as a dynamic client registration, and skip the call
-// when it fails.
-func (s *Secrets) RequireUsable(ctx context.Context, owner Owner) error {
-	if owner.global() {
+// when it fails. db is whatever the caller already holds.
+func (s *Secrets) RequireUsable(ctx context.Context, db repo.DBTX, owner Owner) error {
+	if owner.platformOnly() {
 		return nil
 	}
 
-	organizationID, err := owner.organization()
-	if err != nil {
-		return err
-	}
-
-	decision, err := s.cipher.Decide(ctx, organizationID, orgencryption.UseCaseOAuthClientSecrets)
+	decision, err := s.cipher.DecideIn(ctx, db, owner.OrganizationID.String, orgencryption.UseCaseOAuthClientSecrets)
 	if err != nil {
 		return fmt.Errorf("decide client secret state: %w", err)
 	}
@@ -208,7 +211,7 @@ func (s *Secrets) RequireUsable(ctx context.Context, owner Owner) error {
 func (s *Secrets) Set(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID, owner Owner, plaintext []byte, expiresAt pgtype.Timestamptz) (repo.RemoteSessionClient, error) {
 	q := repo.New(dbtx)
 
-	if owner.global() {
+	if owner.platformOnly() {
 		platform, err := s.platform.Encrypt(plaintext)
 		if err != nil {
 			return repo.RemoteSessionClient{}, fmt.Errorf("encrypt client secret with platform key: %w", err)
@@ -232,12 +235,8 @@ func (s *Secrets) Set(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID, o
 		return row, nil
 	}
 
-	organizationID, err := owner.organization()
-	if err != nil {
-		return repo.RemoteSessionClient{}, err
-	}
-
-	decision, err := s.cipher.Decide(ctx, organizationID, orgencryption.UseCaseOAuthClientSecrets)
+	organizationID := owner.OrganizationID.String
+	decision, err := s.cipher.DecideIn(ctx, dbtx, organizationID, orgencryption.UseCaseOAuthClientSecrets)
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("decide client secret state: %w", err)
 	}
@@ -245,7 +244,7 @@ func (s *Secrets) Set(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID, o
 	for range maxWriteAttempts {
 		copies, err := s.cipher.Seal(ctx, decision, Columns, plaintext)
 		if errors.Is(err, orgencryption.ErrDecisionExpired) {
-			decision, err = s.cipher.Redecide(ctx, decision)
+			decision, err = s.cipher.RedecideIn(ctx, dbtx, decision)
 			if err != nil {
 				return repo.RemoteSessionClient{}, fmt.Errorf("decide client secret state again: %w", err)
 			}
@@ -270,7 +269,7 @@ func (s *Secrets) Set(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID, o
 			return repo.RemoteSessionClient{}, fmt.Errorf("store client secret: %w", err)
 		}
 
-		fresh, err := s.cipher.Redecide(ctx, decision)
+		fresh, err := s.cipher.RedecideIn(ctx, dbtx, decision)
 		if err != nil {
 			return repo.RemoteSessionClient{}, fmt.Errorf("decide client secret state again: %w", err)
 		}
@@ -314,7 +313,7 @@ func (s *Secrets) Copy(ctx context.Context, dbtx repo.DBTX, source Owner, stored
 		return repo.RemoteSessionClient{}, false, nil
 	}
 
-	plaintext, err := s.Open(ctx, source, stored)
+	plaintext, err := s.Open(ctx, dbtx, source, stored)
 	if err != nil {
 		return repo.RemoteSessionClient{}, false, fmt.Errorf("open source client secret: %w", err)
 	}

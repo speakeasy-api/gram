@@ -37,14 +37,16 @@ RETURNING *;
 -- name: ClearRemoteSessionClientSecret :one
 -- Removes the secret: both copies, so a removed secret cannot come back from
 -- the other one, and counts a new revision so anything derived from the old
--- secret stops matching.
+-- secret stops matching. Like a replaced secret, it clears the upstream
+-- rejection marker, which belonged to the removed secret. The registration's
+-- expiry is left to the statement that changed the registration.
 -- orgencryption:unfenced erasing both copies is correct under any transition state
 UPDATE remote_session_clients AS c
 SET
     client_secret_encrypted = NULL,
     client_secret_org_encrypted = NULL,
     client_secret_generation = c.client_secret_generation + 1,
-    client_secret_expires_at = NULL,
+    upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
 WHERE c.id = @id
   AND c.organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text

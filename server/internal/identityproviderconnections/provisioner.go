@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
@@ -114,6 +115,7 @@ type Provisioner struct {
 	gcpIdentity *gcpauth.Identity
 	kmsClients  gcpkms.ProvisioningClientFactory
 	audit       *audit.Logger
+	secrets     *clientsecrets.Secrets
 	cfg         Config
 	// emaActivationCheck approves the sweep activating a ready pending issuer
 	// key; without one the sweep never activates.
@@ -128,7 +130,7 @@ type Provisioner struct {
 
 // NewProvisioner wires a provisioner over the shared identity resolver, KMS
 // factory, and audit logger.
-func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.ProvisioningClientFactory, auditLogger *audit.Logger, cfg Config) (*Provisioner, error) {
+func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.ProvisioningClientFactory, auditLogger *audit.Logger, secrets *clientsecrets.Secrets, cfg Config) (*Provisioner, error) {
 	if err := gcpkms.ValidateKeyRingName(cfg.KeyRing); err != nil {
 		return nil, fmt.Errorf("identity provider connections key ring: %w", err)
 	}
@@ -152,6 +154,7 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 		gcpIdentity:        gcpIdentity,
 		kmsClients:         kmsClients,
 		audit:              auditLogger,
+		secrets:            secrets,
 		cfg:                cfg,
 		emaActivationCheck: nil,
 		sweepPage:          sweepOrganizationPage,
@@ -340,7 +343,6 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 		OrganizationID:                  conv.ToPGText(params.OrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,
 		ClientID:                        PlaceholderClientID(params.Provider, params.ConnectionID),
-		ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:                pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod:         conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodBasic)),
@@ -475,7 +477,6 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 		OrganizationID:                  conv.ToPGText(params.OrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,
 		ClientID:                        PlaceholderClientID(params.Provider, params.ConnectionID),
-		ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:                pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod:         conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT)),
@@ -874,8 +875,9 @@ type SetClientIDParams struct {
 	Provider       string
 	ClientID       string
 
-	// ClientSecretEncrypted is required for client-secret clients and refused otherwise.
-	ClientSecretEncrypted string
+	// ClientSecret is the plaintext secret, required for client-secret clients
+	// and refused otherwise.
+	ClientSecret string
 
 	// Actor is the administrator recorded on the client's audit entry.
 	Actor            urn.Principal
@@ -905,7 +907,7 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 	if params.ClientID == placeholder {
 		return nil, fmt.Errorf("%w: placeholder", ErrClientIDRequired)
 	}
-	if err := requireSecretFor(existing.AuthMethod, params.ClientSecretEncrypted); err != nil {
+	if err := requireSecretFor(existing.AuthMethod, params.ClientSecret); err != nil {
 		return nil, err
 	}
 
@@ -928,7 +930,6 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 
 	updated, err := q.SetManagedClientID(ctx, repo.SetManagedClientIDParams{
 		ClientID:                     params.ClientID,
-		ClientSecretEncrypted:        conv.ToPGTextEmpty(params.ClientSecretEncrypted),
 		ID:                           existing.ClientRowID,
 		OrganizationID:               conv.ToPGText(params.OrganizationID),
 		IdentityProviderConnectionID: conv.ToNullUUID(params.ConnectionID),
@@ -939,6 +940,15 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 		return nil, ErrClientIDAlreadySet
 	case err != nil:
 		return nil, fmt.Errorf("set managed client id: %w", err)
+	}
+	switch {
+	case params.ClientSecret != "":
+		updated, err = p.setManagedSecret(ctx, dbtx, updated.ID, params.OrganizationID, params.ClientSecret)
+	case clientsecrets.Has(clientsecrets.Stored(updated.ClientSecretEncrypted, updated.ClientSecretOrgEncrypted)):
+		updated, err = p.clearManagedSecret(ctx, dbtx, updated.ID, params.OrganizationID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store managed client secret: %w", err)
 	}
 
 	if err := p.logClientUpdate(ctx, dbtx, params.OrganizationID, params.Actor, params.ActorDisplayName, row.RemoteSessionClient, updated); err != nil {
@@ -952,12 +962,12 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 }
 
 // requireSecretFor enforces that exactly the client-secret method carries a secret.
-func requireSecretFor(method remotesessions.TokenEndpointAuthMethod, secretEncrypted string) error {
+func requireSecretFor(method remotesessions.TokenEndpointAuthMethod, secret string) error {
 	isSecret := method == remotesessions.TokenEndpointAuthMethodBasic
 	switch {
-	case isSecret && secretEncrypted == "":
+	case isSecret && secret == "":
 		return ErrClientSecretRequired
-	case !isSecret && secretEncrypted != "":
+	case !isSecret && secret != "":
 		return ErrClientSecretNotAccepted
 	}
 	return nil
@@ -965,10 +975,12 @@ func requireSecretFor(method remotesessions.TokenEndpointAuthMethod, secretEncry
 
 // ReplaceClientSecretParams names the client-secret client whose secret is replaced.
 type ReplaceClientSecretParams struct {
-	OrganizationID        string
-	ConnectionID          uuid.UUID
-	Provider              string
-	ClientSecretEncrypted string
+	OrganizationID string
+	ConnectionID   uuid.UUID
+	Provider       string
+
+	// ClientSecret is the plaintext replacement secret.
+	ClientSecret string
 
 	// Actor is the administrator recorded on the client's audit entry.
 	Actor            urn.Principal
@@ -980,7 +992,7 @@ func (p *Provisioner) ReplaceClientSecret(ctx context.Context, dbtx pgx.Tx, para
 	if err := validateProvider(params.Provider); err != nil {
 		return nil, err
 	}
-	if params.ClientSecretEncrypted == "" {
+	if params.ClientSecret == "" {
 		return nil, ErrClientSecretRequired
 	}
 	q := repo.New(dbtx)
@@ -995,17 +1007,19 @@ func (p *Provisioner) ReplaceClientSecret(ctx context.Context, dbtx pgx.Tx, para
 		return nil, ErrClientSecretNotAccepted
 	}
 
-	updated, err := q.SetManagedClientSecret(ctx, repo.SetManagedClientSecretParams{
-		ClientSecretEncrypted:        conv.ToPGText(params.ClientSecretEncrypted),
+	if _, err := q.LockManagedSecretClient(ctx, repo.LockManagedSecretClientParams{
 		ID:                           existing.ClientRowID,
 		OrganizationID:               conv.ToPGText(params.OrganizationID),
 		IdentityProviderConnectionID: conv.ToNullUUID(params.ConnectionID),
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, ErrNotProvisioned
-	case err != nil:
-		return nil, fmt.Errorf("set managed client secret: %w", err)
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotProvisioned
+		}
+		return nil, fmt.Errorf("lock managed client for secret replacement: %w", err)
+	}
+	updated, err := p.setManagedSecret(ctx, dbtx, existing.ClientRowID, params.OrganizationID, params.ClientSecret)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := p.logClientUpdate(ctx, dbtx, params.OrganizationID, params.Actor, params.ActorDisplayName, row.RemoteSessionClient, updated); err != nil {
@@ -1139,6 +1153,9 @@ func (p *Provisioner) switchToSecret(ctx context.Context, params SwitchAuthMetho
 		return nil, ErrClientIDAlreadySet
 	case err != nil:
 		return nil, fmt.Errorf("switch managed client to client secret: %w", err)
+	}
+	if updated, err = p.clearSwitchedClientSecret(ctx, dbtx, params.OrganizationID, updated); err != nil {
+		return nil, err
 	}
 	if err := p.logClientUpdate(ctx, dbtx, params.OrganizationID, params.Actor, params.ActorDisplayName, row.RemoteSessionClient, updated); err != nil {
 		return nil, err
@@ -1278,6 +1295,9 @@ func (p *Provisioner) reattachParkedKeySet(ctx context.Context, params SwitchAut
 		return nil, ErrClientIDAlreadySet
 	case err != nil:
 		return nil, fmt.Errorf("reattach parked key set: %w", err)
+	}
+	if updated, err = p.clearSwitchedClientSecret(ctx, dbtx, params.OrganizationID, updated); err != nil {
+		return nil, err
 	}
 	if err := p.setListingMode(ctx, tq, params); err != nil {
 		return nil, err
@@ -1483,6 +1503,9 @@ func (p *Provisioner) switchToKeySetRows(ctx context.Context, params SwitchAuthM
 	case err != nil:
 		return nil, fmt.Errorf("switch managed client to key set: %w", err)
 	}
+	if updated, err = p.clearSwitchedClientSecret(ctx, dbtx, params.OrganizationID, updated); err != nil {
+		return nil, err
+	}
 	if err := p.setListingMode(ctx, tq, params); err != nil {
 		return nil, err
 	}
@@ -1664,21 +1687,67 @@ func (p *Provisioner) ClearClientSecret(ctx context.Context, dbtx pgx.Tx, organi
 }
 
 func (p *Provisioner) clearClientSecret(ctx context.Context, dbtx pgx.Tx, organizationID string, connectionID uuid.UUID, before repo.RemoteSessionClient) error {
-	if !before.ClientSecretEncrypted.Valid {
+	if !clientsecrets.Has(clientsecrets.Stored(before.ClientSecretEncrypted, before.ClientSecretOrgEncrypted)) {
 		return nil
 	}
-	cleared, err := repo.New(dbtx).ClearManagedClientSecret(ctx, repo.ClearManagedClientSecretParams{
+	if _, err := repo.New(dbtx).LockManagedSecretClient(ctx, repo.LockManagedSecretClientParams{
 		ID:                           before.ID,
 		OrganizationID:               conv.ToPGText(organizationID),
 		IdentityProviderConnectionID: conv.ToNullUUID(connectionID),
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return ErrNotProvisioned
-	case err != nil:
-		return fmt.Errorf("clear managed client secret: %w", err)
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotProvisioned
+		}
+		return fmt.Errorf("lock managed client for secret revocation: %w", err)
+	}
+	cleared, err := p.clearManagedSecret(ctx, dbtx, before.ID, organizationID)
+	if err != nil {
+		return err
 	}
 	return p.logClientUpdate(ctx, dbtx, organizationID, systemActor(), systemActorDisplayName(), before, cleared)
+}
+
+// clearSwitchedClientSecret removes any secret a managed client stored before
+// it switched authentication methods, both copies.
+func (p *Provisioner) clearSwitchedClientSecret(ctx context.Context, dbtx pgx.Tx, organizationID string, switched repo.RemoteSessionClient) (repo.RemoteSessionClient, error) {
+	if !clientsecrets.Has(clientsecrets.Stored(switched.ClientSecretEncrypted, switched.ClientSecretOrgEncrypted)) {
+		return switched, nil
+	}
+	cleared, err := p.clearManagedSecret(ctx, dbtx, switched.ID, organizationID)
+	if err != nil {
+		return repo.RemoteSessionClient{}, err
+	}
+	return cleared, nil
+}
+
+// setManagedSecret stores a managed client's new or replaced secret and
+// returns the updated row. Administrators paste the secret in and the
+// provider reports no expiry for it. A managed client always belongs to its
+// organization and no project.
+func (p *Provisioner) setManagedSecret(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID, organizationID string, secret string) (repo.RemoteSessionClient, error) {
+	row, err := p.secrets.Set(ctx, dbtx, clientID, managedClientOwner(organizationID), []byte(secret), pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
+	if err != nil {
+		return repo.RemoteSessionClient{}, fmt.Errorf("set managed client secret: %w", err)
+	}
+
+	return repo.RemoteSessionClient(row), nil
+}
+
+// clearManagedSecret removes a managed client's secret, both copies, and
+// returns the updated row.
+func (p *Provisioner) clearManagedSecret(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID, organizationID string) (repo.RemoteSessionClient, error) {
+	row, err := p.secrets.Clear(ctx, dbtx, clientID, managedClientOwner(organizationID))
+	if err != nil {
+		return repo.RemoteSessionClient{}, fmt.Errorf("clear managed client secret: %w", err)
+	}
+
+	return repo.RemoteSessionClient(row), nil
+}
+
+// managedClientOwner is the owner of a managed client, which always belongs
+// to its organization and no project.
+func managedClientOwner(organizationID string) clientsecrets.Owner {
+	return clientsecrets.OwnerOf(conv.ToPGText(organizationID), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 }
 
 // retireKeyMaterial disables the KMS version behind each revoked key and
