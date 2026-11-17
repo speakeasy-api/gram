@@ -17,11 +17,14 @@ export function ReasoningEffortSelect({
   onValueChange,
   disabled,
   disabledOff = false,
+  id,
 }: {
   value: ReasoningEffort;
   onValueChange: (value: ReasoningEffort) => void;
   disabled?: boolean;
   disabledOff?: boolean;
+  /** Lets a `<label htmlFor>` point at the trigger. */
+  id?: string;
 }): JSX.Element {
   return (
     <Select
@@ -33,6 +36,7 @@ export function ReasoningEffortSelect({
       disabled={disabled}
     >
       <SelectTrigger
+        id={id}
         aria-label="Reasoning effort"
         title={disabledOff ? KIT_REASONING_EFFORT_HELP : REASONING_EFFORT_HELP}
         className="h-7 w-32 text-xs"

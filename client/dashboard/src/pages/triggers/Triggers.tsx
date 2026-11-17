@@ -34,11 +34,11 @@ import type { TriggerInstance } from "@gram/client/models/components/triggerinst
 import type { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
-import { SlackReplyModeOptions } from "@/pages/assistants/onboarding/SlackReplyModeOptions";
+import { SlackReplyModeOptions } from "@/pages/assistants/detail/SlackReplyModeOptions";
 import {
   SLACK_CONVERSATION_EVENT_TYPES,
   isSlackReplyMode,
-} from "@/pages/assistants/onboarding/slackCapabilities";
+} from "@/pages/assistants/detail/slackCapabilities";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
@@ -508,15 +508,25 @@ function TriggerConfigFields({
   );
 }
 
-function TriggerDialog({
+export function TriggerDialog({
   open,
   onOpenChange,
   editingTrigger,
+  fixedTarget,
+  excludeDefinitions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingTrigger: TriggerInstance | null;
-}) {
+  /** What the trigger starts, when the caller already knows: no target fields. */
+  fixedTarget?: {
+    kind: TriggerTargetKindValue;
+    ref: string;
+    display: string;
+  };
+  /** Trigger types set up elsewhere, left out of the type list. */
+  excludeDefinitions?: readonly string[];
+}): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
   const { data: definitionsData } = useTriggerDefinitions(
@@ -531,7 +541,9 @@ function TriggerDialog({
   const updateMutation = useUpdateTriggerMutation();
   const deleteMutation = useDeleteTriggerMutation();
 
-  const definitions = definitionsData?.definitions ?? [];
+  const definitions = (definitionsData?.definitions ?? []).filter(
+    (d) => !excludeDefinitions?.includes(d.slug),
+  );
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -540,9 +552,13 @@ function TriggerDialog({
   const [definitionSlug, setDefinitionSlug] = useState("");
   const [environmentId, setEnvironmentId] = useState("");
   const [config, setConfig] = useState<TriggerConfig>({});
-  const [targetKind, setTargetKind] = useState<TriggerTargetKindValue>();
-  const [targetDisplay, setTargetDisplay] = useState("");
-  const [targetRef, setTargetRef] = useState("");
+  const [targetKind, setTargetKind] = useState<
+    TriggerTargetKindValue | undefined
+  >(fixedTarget?.kind);
+  const [targetDisplay, setTargetDisplay] = useState(
+    fixedTarget?.display ?? "",
+  );
+  const [targetRef, setTargetRef] = useState(fixedTarget?.ref ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const isEditing = editingTrigger !== null;
@@ -566,9 +582,9 @@ function TriggerDialog({
     setDefinitionSlug("");
     setEnvironmentId("");
     setConfig({});
-    setTargetKind(undefined);
-    setTargetDisplay("");
-    setTargetRef("");
+    setTargetKind(fixedTarget?.kind);
+    setTargetDisplay(fixedTarget?.display ?? "");
+    setTargetRef(fixedTarget?.ref ?? "");
     setConfirmDelete(false);
   };
 
@@ -789,54 +805,60 @@ function TriggerDialog({
               />
             )}
 
-            <div>
-              <Text variant="body" className="mb-1 font-medium">
-                Target Kind
-              </Text>
-              <Select
-                value={targetKind}
-                onValueChange={(value) =>
-                  setTargetKind(isTriggerTargetKind(value) ? value : undefined)
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a target kind..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {triggerTargetKindOptions.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      description={option.description}
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!fixedTarget && (
+              <>
+                <div>
+                  <Text variant="body" className="mb-1 font-medium">
+                    Target Kind
+                  </Text>
+                  <Select
+                    value={targetKind}
+                    onValueChange={(value) =>
+                      setTargetKind(
+                        isTriggerTargetKind(value) ? value : undefined,
+                      )
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a target kind..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {triggerTargetKindOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          description={option.description}
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div>
-              <Text variant="body" className="mb-1 font-medium">
-                Target Display Name
-              </Text>
-              <Input
-                value={targetDisplay}
-                onChange={setTargetDisplay}
-                placeholder="e.g. My Assistant"
-              />
-            </div>
+                <div>
+                  <Text variant="body" className="mb-1 font-medium">
+                    Target Display Name
+                  </Text>
+                  <Input
+                    value={targetDisplay}
+                    onChange={setTargetDisplay}
+                    placeholder="e.g. My Assistant"
+                  />
+                </div>
 
-            <div>
-              <Text variant="body" className="mb-1 font-medium">
-                Target Reference
-              </Text>
-              <Input
-                value={targetRef}
-                onChange={setTargetRef}
-                placeholder="e.g. assistant ID or slug"
-              />
-            </div>
+                <div>
+                  <Text variant="body" className="mb-1 font-medium">
+                    Target Reference
+                  </Text>
+                  <Input
+                    value={targetRef}
+                    onChange={setTargetRef}
+                    placeholder="e.g. assistant ID or slug"
+                  />
+                </div>
+              </>
+            )}
           </Stack>
         </div>
 

@@ -57,11 +57,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 function edit(value = assistant) {
-  const result = render(<AssistantOverviewSettings assistant={value} />);
-  fireEvent.click(
-    screen.getByRole("button", { name: "Edit overview settings" }),
-  );
-  return result;
+  return render(<AssistantOverviewSettings assistant={value} />);
 }
 function select(label: string) {
   fireEvent.pointerDown(
@@ -87,7 +83,10 @@ describe("assistant reasoning effort", () => {
   it("defaults older data to Medium without marking the form dirty", () => {
     edit({ ...assistant, reasoningEffort: undefined } as unknown as Assistant);
     expect(screen.getByRole("combobox").textContent).toContain("Medium");
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
   it.each([
     ["Off", "none"],
@@ -105,8 +104,8 @@ describe("assistant reasoning effort", () => {
   it("discards the draft instead of persisting it", () => {
     edit();
     select("Off");
-    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(screen.getByText("Medium")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("combobox").textContent).toContain("Medium");
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
   it("keeps saved settings read-only without permission", () => {
@@ -116,11 +115,11 @@ describe("assistant reasoning effort", () => {
         assistant={{ ...assistant, reasoningEffort: "none" }}
       />,
     );
-    expect(screen.getByText("Off")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Edit overview settings" }),
-    ).toBeNull();
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByRole("combobox").textContent).toContain("Off");
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
   it("disables selection while saving", () => {
     const { rerender } = edit();
@@ -133,7 +132,7 @@ describe("assistant reasoning effort", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Discard changes",
+          name: "Discard",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);

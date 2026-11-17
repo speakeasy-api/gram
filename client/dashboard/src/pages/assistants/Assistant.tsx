@@ -2,11 +2,11 @@ import { useLocation, useParams } from "react-router";
 import { useAssistantsGet } from "@gram/client/react-query/assistantsGet.js";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { useProject } from "@/contexts/Auth";
-import { EditAssistantOnboarding } from "./onboarding/AssistantOnboarding";
+import { AssistantDetail } from "./detail/AssistantDetail";
 
 export default function AssistantPage(): JSX.Element {
   useRecordAssistantRecent();
-  return <EditAssistantOnboarding />;
+  return <AssistantDetail />;
 }
 
 // Register the assistant's name as this page's command-palette "Recently

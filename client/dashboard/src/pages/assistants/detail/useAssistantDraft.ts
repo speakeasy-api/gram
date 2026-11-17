@@ -1,32 +1,18 @@
 import type { Assistant } from "@gram/client/models/components/assistant.js";
-import type { ReasoningEffort } from "./reasoning-effort";
 import { createContext, useContext } from "react";
 
-type PendingResolver = (result: unknown) => void;
-
-export type AssistantEnv = { id: string; slug: string };
-
 export type DraftContextValue = {
-  reasoningEffort: ReasoningEffort;
-  getReasoningEffort: () => ReasoningEffort;
-  setReasoningEffort: (value: ReasoningEffort) => void;
   assistantId: string | null;
-  setAssistantId: (id: string) => void;
   setAssistant: (assistant: Assistant) => void;
   assistant: Assistant | undefined;
   refetchAssistant: () => Promise<unknown>;
   invalidateAll: () => void;
   invalidateSkillAttachments: () => void;
-  registerPending: (toolCallId: string, resolver: PendingResolver) => void;
-  resolvePending: (toolCallId: string, result: unknown) => boolean;
-  assistantEnv: AssistantEnv | null;
-  setAssistantEnv: (env: AssistantEnv | null) => void;
 };
-
-export type { PendingResolver };
 
 export const AssistantDraftCtx = createContext<DraftContextValue | null>(null);
 
+/** The assistant the detail page shows, and how its sections refresh it. */
 export function useAssistantDraft(): DraftContextValue {
   const v = useContext(AssistantDraftCtx);
   if (!v) {

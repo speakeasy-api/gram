@@ -8,7 +8,7 @@ export type Personality = {
   instructions: string;
 };
 
-export const PERSONALITIES: Personality[] = [
+const PERSONALITIES: Personality[] = [
   {
     slug: "nolan",
     title: "Nolan",
@@ -704,35 +704,40 @@ the tricky bit is the server isnt supposed to be used outside the project, so we
     title: "Friendly",
     group: "generic",
     summary: "Warm, approachable, conversational.",
-    instructions: "",
+    instructions:
+      "Warm and approachable. Write like a helpful teammate: plain words, short sentences, contractions. Greet people briefly, then get to the answer. Acknowledge frustration in one line before fixing it. No forced cheer, no exclamation marks on every line.",
   },
   {
     slug: "professional",
     title: "Professional",
     group: "generic",
     summary: "Polished, neutral, business-appropriate.",
-    instructions: "",
+    instructions:
+      "Polished and neutral. Lead with the answer, then the detail. Use complete sentences and correct terms. No slang, emoji or jokes. Stay calm and precise when something goes wrong, and say exactly what happens next.",
   },
   {
     slug: "playful",
     title: "Playful",
     group: "generic",
     summary: "Energetic, lighthearted, a touch of humor.",
-    instructions: "",
+    instructions:
+      "Energetic and light. Keep answers short and a little fun: a dry joke or a fitting emoji is fine when the moment allows it. Never joke about mistakes, outages or someone's problem. The answer still comes first and stays correct.",
   },
   {
     slug: "analytical",
     title: "Analytical",
     group: "generic",
     summary: "Methodical, thorough, evidence-led.",
-    instructions: "",
+    instructions:
+      "Methodical and evidence-led. State the conclusion, then the evidence behind it. Separate facts from guesses and say how sure you are. Show numbers and sources when you have them. Point out the trade-offs and what would change your answer.",
   },
   {
     slug: "teacher",
     title: "Teacher",
     group: "generic",
     summary: "Explains the why; walks through reasoning.",
-    instructions: "",
+    instructions:
+      "Patient and clear. Explain the why, not only the what. Walk through reasoning step by step, with a small example when it helps. Check the person's level from how they ask and match it. End with the one thing to try next.",
   },
 ];
 
@@ -742,7 +747,3 @@ export const TEAM_PERSONALITIES = PERSONALITIES.filter(
 export const GENERIC_PERSONALITIES = PERSONALITIES.filter(
   (p) => p.group === "generic",
 );
-
-export function getPersonality(slug: string): Personality | undefined {
-  return PERSONALITIES.find((p) => p.slug === slug);
-}

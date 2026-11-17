@@ -15,6 +15,12 @@ export interface McpDetailChrome {
   /** The server's logo, sized by the caller. */
   icon: (className: string) => ReactNode;
   kindLabel: string | undefined;
+  /** The label over the name; "Connect · <kind>" when omitted. */
+  eyebrow?: string;
+  /** A line under the name, for pages with no URL to show. */
+  subtitle?: ReactNode;
+  /** The tab strip's accessible name; "Server sections" when omitted. */
+  navLabel?: string;
   /** The enable switch or visibility dropdown, for the server's kind. */
   statusControl: ReactNode;
   /** The URL clients connect to, when there is one. */

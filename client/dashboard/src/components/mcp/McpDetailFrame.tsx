@@ -84,7 +84,7 @@ export function McpDetailFrame({
         </HeaderBand>
 
         <nav
-          aria-label="Server sections"
+          aria-label={chrome?.navLabel ?? "Server sections"}
           className="border-border bg-card shrink-0 border-b"
         >
           <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-4 sm:px-8">
@@ -188,7 +188,8 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
         {chrome.icon("size-10 shrink-0 object-contain")}
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-eyebrow">
-            {chrome.kindLabel ? `Connect · ${chrome.kindLabel}` : "Connect"}
+            {chrome.eyebrow ??
+              (chrome.kindLabel ? `Connect · ${chrome.kindLabel}` : "Connect")}
           </span>
           {/* Long names wrap rather than run off a narrow screen. */}
           <h1 className="font-display text-[26px] leading-8 font-light tracking-tight break-words sm:text-[34px] sm:leading-9">
@@ -197,6 +198,11 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
         </div>
       </div>
 
+      {chrome.subtitle ? (
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          {chrome.subtitle}
+        </div>
+      ) : null}
       {chrome.primaryUrl || chrome.installLinks.length > 0 ? (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
           {chrome.primaryUrl ? (

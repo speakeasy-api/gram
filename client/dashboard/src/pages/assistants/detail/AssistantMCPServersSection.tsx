@@ -20,13 +20,20 @@ import { useToolsets } from "@/pages/toolsets/useToolsets";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import type { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
 import type { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
-import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import {
+  invalidateAllAssistantsList,
+  useAssistantsList,
+} from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { SLACK_TOOL_URN_PREFIX } from "./slackManifest";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { ASSISTANT_MCP_SERVERS_SECTION_ID } from "./sectionIds";
+import { Section } from "./PanelSection";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -91,8 +98,38 @@ export function AssistantMCPServersSection({
   const [addOpen, setAddOpen] = useState(false);
 
   const attached = attachedRefs(assistant);
-
+  // The assistant's own Slack toolset (Slack tools, attached to no other
+  // assistant) is managed on the Channels tab, so it is left out here; saves
+  // still send it, since they replace the whole list. Until both lists load,
+  // rows wait, so the Slack toolset never shows as removable.
   const gramProject = useProjectSlugForRequests();
+  const toolsetsQuery = useListToolsets({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const assistantsQuery = useAssistantsList({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const classified = toolsetsQuery.isSuccess && assistantsQuery.isSuccess;
+  const sharedSlugs = new Set(
+    (assistantsQuery.data?.assistants ?? [])
+      .filter((other) => other.id !== assistant.id)
+      .flatMap((other) => other.toolsets.map((ref) => ref.toolsetSlug)),
+  );
+  const slackToolsetSlugs = new Set(
+    (toolsetsQuery.data?.toolsets ?? [])
+      .filter(
+        (t) =>
+          !sharedSlugs.has(t.slug) &&
+          t.tools.some((tool) =>
+            tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
+          ),
+      )
+      .map((t) => t.slug),
+  );
+  const shown = attached.filter(
+    (ref) => !(ref.kind === "toolset" && slackToolsetSlugs.has(ref.slug)),
+  );
+
   const { data: environmentsResult } = useListEnvironments(
     { gramProject },
     undefined,
@@ -154,9 +191,10 @@ export function AssistantMCPServersSection({
   };
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-eyebrow">MCP Servers ({attached.length})</div>
+    <Section
+      id={ASSISTANT_MCP_SERVERS_SECTION_ID}
+      title="MCP servers"
+      action={
         <RequireScope
           scope="assistant:write"
           resourceId={assistant.id}
@@ -168,23 +206,29 @@ export function AssistantMCPServersSection({
             variant="tertiary"
             size="sm"
             onClick={() => setAddOpen(true)}
-            disabled={update.isPending}
+            disabled={update.isPending || !classified}
           >
             <Button.LeftIcon>
               <Icon name="plus" className="h-3 w-3" />
             </Button.LeftIcon>
-            <Button.Text>Add</Button.Text>
+            <Button.Text>Add MCP server</Button.Text>
           </Button>
         </RequireScope>
-      </div>
-
-      {attached.length === 0 ? (
+      }
+    >
+      {!classified ? (
         <Text small muted>
-          No MCP servers attached.
+          {toolsetsQuery.isError || assistantsQuery.isError
+            ? "Couldn't load MCP servers. Reload the page to try again."
+            : "Loading…"}
+        </Text>
+      ) : shown.length === 0 ? (
+        <Text small muted>
+          No MCP servers.
         </Text>
       ) : (
         <Stack gap={2}>
-          {attached.map((ref) => (
+          {shown.map((ref) => (
             <AttachedServerRow
               key={`${ref.kind}:${ref.slug}`}
               assistantId={assistant.id}
@@ -207,7 +251,7 @@ export function AssistantMCPServersSection({
         saving={update.isPending}
         onAdd={addRefs}
       />
-    </div>
+    </Section>
   );
 }
 
