@@ -137,7 +137,7 @@ async function ciRun(
     tooLarge:
       applyError?.reason === "plan_too_large" ||
       /more than 20/i.test(applyError?.message ?? "") ||
-      /plan_too_large|more than 20|exceeds 20/i.test(refusal),
+      /Golden selection exceeds 20 flows/.test(refusal),
   };
 }
 
