@@ -1093,6 +1093,98 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 	require.Equal(t, "assistant", msgs[0].Role)
 }
 
+// A subagent's final message answers the parent agent, not the user, and
+// Claude Code runs compaction as a hidden subagent too. Relays send SubagentStop
+// as assistant.responded, so storing its text put subagent results and
+// compaction summaries in the parent session's chat as assistant replies.
+// SubagentStop still feeds MCP attribution; only the chat row is skipped, and
+// the session's own Stop keeps its assistant row.
+func TestIngest_SubagentStopStoresNoChatRow(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		adapter      string
+		subagentStop string
+		stop         string
+	}{
+		{name: "it skips a Claude Code SubagentStop", adapter: "claude", subagentStop: "SubagentStop", stop: "Stop"},
+		{name: "it skips a Copilot subagentStop", adapter: "copilot", subagentStop: "subagentStop", stop: "agentStop"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestHooksService(t)
+			ti.service.productFeatures = alwaysEnabledFeatures{}
+			authCtx := hookAuthContext(t, ctx)
+
+			sessionID := "subagent-stop-" + uuid.NewString()
+			chatID := sessionIDToUUID(sessionID)
+			turnID := "prompt-" + uuid.NewString()
+			requestID := "req_" + uuid.NewString()
+			role := "assistant"
+
+			summary := "Summary of the conversation so far."
+			subagentStop := canonicalIngestPayload(tc.adapter, "assistant.responded", sessionID)
+			subagentStop.Source.RawEventName = &tc.subagentStop
+			subagentStop.Session.TurnID = &turnID
+			subagentStop.Data = &gen.HookIngestData{
+				Message: &gen.HookMessageData{Text: &summary, Role: &role},
+				McpAttribution: []*gen.HookMCPAttributionEntry{{
+					RequestID: requestID,
+					McpServer: new("example-server"),
+					McpTool:   new("example_tool"),
+				}},
+			}
+			// The shape a relay forwards for Claude Code's compaction helper,
+			// which reports an empty agent_type.
+			subagentStop.Raw = map[string]any{
+				"hook_event_name":        tc.subagentStop,
+				"agent_id":               "agent-placeholder",
+				"agent_type":             "",
+				"agent_transcript_path":  "/tmp/example/subagents/agent-placeholder.jsonl",
+				"last_assistant_message": summary,
+			}
+			res, err := ti.service.Ingest(ctx, subagentStop)
+			require.NoError(t, err)
+			require.Equal(t, "allow", res.Decision)
+
+			msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+				ChatID:    chatID,
+				ProjectID: *authCtx.ProjectID,
+			})
+			require.NoError(t, err)
+			require.Empty(t, msgs, "a subagent's final message must not be stored as an assistant reply in the parent chat")
+
+			var tuple telemetry.MCPAttributionTuple
+			require.NoError(t, cache.NewRedisCacheAdapter(ti.redisClient).Get(ctx, telemetry.MCPAttributionTupleKey(authCtx.ActiveOrganizationID, requestID), &tuple),
+				"SubagentStop must still feed transcript-derived MCP attribution")
+			require.Equal(t, telemetry.MCPAttributionTuple{Server: "example-server", Tool: "example_tool"}, tuple)
+
+			reply := "Done: the tests pass."
+			stop := canonicalIngestPayload(tc.adapter, "assistant.responded", sessionID)
+			stop.Source.RawEventName = &tc.stop
+			stop.Session.TurnID = &turnID
+			stop.Data = &gen.HookIngestData{
+				Message: &gen.HookMessageData{Text: &reply, Role: &role},
+			}
+			res, err = ti.service.Ingest(ctx, stop)
+			require.NoError(t, err)
+			require.Equal(t, "allow", res.Decision)
+
+			msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+				ChatID:    chatID,
+				ProjectID: *authCtx.ProjectID,
+			})
+			require.NoError(t, err)
+			require.Len(t, msgs, 1, "the session's own Stop still stores its assistant reply")
+			require.Equal(t, "assistant", msgs[0].Role)
+			require.Equal(t, reply, msgs[0].Content)
+		})
+	}
+}
+
 // TestIngest_NonUUIDSessionIDStampsResolvedChatID pins the cross-store identity
 // invariant: telemetry_logs.chat_id (gen_ai.conversation.id) must be the chats
 // row id, not the raw agent session id. Claude/Codex/Cursor session ids are
@@ -2085,6 +2177,10 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	require.Equal(t, "BeforeMCPExecution", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeMCPExecution")))
 	require.Equal(t, "UserPromptSubmit", telemetryHookEventName(withRaw("claude", "prompt.submitted", "UserPromptSubmit")))
 	require.Equal(t, "PermissionRequest", telemetryHookEventName(withRaw("codex", "tool.requested", "PermissionRequest")))
+	// SubagentStop stores no chat row, but its telemetry row keeps the
+	// provider name rather than the canonical AfterAgentResponse.
+	require.Equal(t, "SubagentStop", telemetryHookEventName(withRaw("claude", "assistant.responded", "SubagentStop")))
+	require.Equal(t, "Stop", telemetryHookEventName(withRaw("claude", "assistant.responded", "Stop")))
 
 	// Copilot's camelCase vocabulary resolves the same way, and a case-variant
 	// adapter slug must reach the same branch as the lowercase one.

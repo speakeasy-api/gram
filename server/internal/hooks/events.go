@@ -1,5 +1,7 @@
 package hooks
 
+import "strings"
+
 type HookEvent string
 
 const (
@@ -21,6 +23,31 @@ const (
 	HookEventBeforeMCPExecution HookEvent = "BeforeMCPExecution"
 	HookEventAfterMCPExecution  HookEvent = "AfterMCPExecution"
 )
+
+// parseProviderHookEvent resolves the raw event name a hook adapter reports
+// (source.raw_event_name) to its canonical HookEvent, in that adapter's own
+// vocabulary. Adapters without a raw vocabulary, and raw names the adapter's
+// vocabulary does not map, resolve to nothing.
+func parseProviderHookEvent(adapter, raw string) (HookEvent, bool) {
+	var parse func(string) (HookEvent, bool)
+	// Lowercased like every other adapter check on the ingest path, so a case
+	// variant resolves the same raw vocabulary.
+	switch strings.ToLower(strings.TrimSpace(adapter)) {
+	case "claude":
+		parse = parseClaudeHookEvent
+	case "cursor":
+		parse = parseCursorHookEvent
+	case "codex":
+		parse = parseCodexHookEvent
+	case "opencode":
+		parse = parseOpencodeHookEvent
+	case "copilot":
+		parse = parseCopilotHookEvent
+	default:
+		return HookEventUnknown, false
+	}
+	return parse(strings.TrimSpace(raw))
+}
 
 func parseClaudeHookEvent(raw string) (HookEvent, bool) {
 	switch raw {

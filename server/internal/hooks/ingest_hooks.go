@@ -1604,29 +1604,8 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 	if isExplicitSkillActivation(payload) {
 		return eventTypeSkillActivated
 	}
-	raw := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
-	if raw != "" {
-		var parse func(string) (HookEvent, bool)
-		// Lowercased like every other adapter check on this path, so a case
-		// variant resolves the same raw vocabulary instead of silently
-		// falling through to the canonical map.
-		switch strings.ToLower(strings.TrimSpace(payload.Source.Adapter)) {
-		case "claude":
-			parse = parseClaudeHookEvent
-		case "cursor":
-			parse = parseCursorHookEvent
-		case "codex":
-			parse = parseCodexHookEvent
-		case "opencode":
-			parse = parseOpencodeHookEvent
-		case "copilot":
-			parse = parseCopilotHookEvent
-		}
-		if parse != nil {
-			if event, ok := parse(raw); ok {
-				return string(event)
-			}
-		}
+	if event, ok := providerHookEvent(payload); ok {
+		return string(event)
 	}
 	switch eventType := strings.TrimSpace(payload.Event.Type); eventType {
 	case "session.started":
@@ -1652,6 +1631,19 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 		// canonical types have no provider-style equivalent; store them as-is.
 		return eventType
 	}
+}
+
+// providerHookEvent resolves the provider hook event a canonical payload was
+// translated from, through the sending adapter's raw event vocabulary.
+func providerHookEvent(payload *gen.IngestPayload) (HookEvent, bool) {
+	return parseProviderHookEvent(payload.Source.Adapter, conv.PtrValOr(payload.Source.RawEventName, ""))
+}
+
+// isSubagentStop reports whether the event is a subagent finishing, which
+// relays forward as assistant.responded with the subagent's final message.
+func isSubagentStop(payload *gen.IngestPayload) bool {
+	event, ok := providerHookEvent(payload)
+	return ok && event == HookEventSubagentStop
 }
 
 // persistCanonicalConversationEvent writes the event's chat row. occurredAt
@@ -1733,6 +1725,15 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		}
 		titleContent = content
 	case "assistant.responded":
+		// A subagent's final message answers the agent that started it, not
+		// the user, and Claude Code runs compaction as a hidden subagent.
+		// Storing it would show subagent results and compaction summaries as
+		// assistant replies in the session's chat; the session's own Stop
+		// carries its reply. Telemetry and MCP attribution are recorded apart
+		// from this row and still see the event.
+		if isSubagentStop(payload) {
+			return false, nil
+		}
 		content := canonicalMessageText(payload)
 		outputToolCalls := authenticatedIngestOptions(ctx).OutputToolCalls
 		if strings.TrimSpace(content) == "" && len(outputToolCalls) == 0 {
