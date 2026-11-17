@@ -83,6 +83,12 @@ function approveSublabel(stdio: boolean, audienceSelectable: boolean): string {
   return "Unblock the server for everyone in the project.";
 }
 
+function denySublabel(stdio: boolean, narrowed: boolean): string {
+  if (stdio) return "Record the denial as the decision of record.";
+  if (narrowed) return "Block the server only for the people or roles below.";
+  return "Block the server for everyone in the project.";
+}
+
 /**
  * Who a decision covers, as sent to the API: nothing means everyone. An
  * approval uses the approval audience and a denial its own.
@@ -329,9 +335,10 @@ export function DecideAccessSheet({
                     <Badge.Text>Deny</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    {stdio
-                      ? "Record the denial as the decision of record."
-                      : "Block the server for everyone in the project."}
+                    {denySublabel(
+                      stdio,
+                      denyAudienceSelectable && denyAudience.length > 0,
+                    )}
                   </Text>
                 </span>
               </label>

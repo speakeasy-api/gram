@@ -377,6 +377,11 @@ describe("DecideAccessSheet", () => {
     expect(screen.queryAllByText("Who the denial covers")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.click(screen.getByTestId("audience-select"));
+    expect(
+      screen.getAllByText(
+        "Block the server only for the people or roles below.",
+      ).length,
+    ).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Deny Server" }));
 
     await waitFor(() => {
