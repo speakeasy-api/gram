@@ -4633,7 +4633,6 @@ func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSumma
 // window, and a page that shows no user facet (an identity's own Tool logs)
 // still paid for the two widest ones on every load.
 func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams, groups ToolUsageFilterOptionGroups) (*ToolUsageFilterOptions, error) {
-	ctx = toolUsageReadContext(ctx)
 	serverArg := arg
 	serverArg.HostedToolsetSlugs = nil
 	serverArg.MCPServerIDs = nil
@@ -5020,7 +5019,6 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummaryParams) (ToolUsageTotalsRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(arg,
 		"count() AS event_count",
 		"sum(success) AS success_count",
@@ -5044,7 +5042,7 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 		return ToolUsageTotalsRow{}, fmt.Errorf("building tool usage totals query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return ToolUsageTotalsRow{}, err
 	}
@@ -5082,7 +5080,6 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetSummaryRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -5108,7 +5105,7 @@ func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		return nil, fmt.Errorf("building tool usage targets query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5269,7 +5266,6 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserSummaryRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(arg,
 		"user_key",
 		"user_label",
@@ -5293,7 +5289,7 @@ func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 		return nil, fmt.Errorf("building tool usage users query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5320,7 +5316,6 @@ func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageClients(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageClientSummaryRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(arg,
 		"client_key",
 		// Group on the folded key alone: a client that reports "Claude Code"
@@ -5346,7 +5341,7 @@ func (q *Queries) GetToolUsageClients(ctx context.Context, arg GetToolUsageSumma
 		return nil, fmt.Errorf("building tool usage clients query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5373,7 +5368,6 @@ func (q *Queries) GetToolUsageClients(ctx context.Context, arg GetToolUsageSumma
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageClientToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageClientToolBreakdownRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(arg,
 		"client_key",
 		"max(client_label) AS client_label",
@@ -5396,7 +5390,7 @@ func (q *Queries) GetToolUsageClientToolBreakdown(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage client tool breakdown query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5418,7 +5412,6 @@ func (q *Queries) GetToolUsageClientToolBreakdown(ctx context.Context, arg GetTo
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
@@ -5444,7 +5437,7 @@ func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 		return nil, fmt.Errorf("building tool usage target time series query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5466,7 +5459,6 @@ func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserTimeSeriesPointRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
@@ -5489,7 +5481,7 @@ func (q *Queries) GetToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 		return nil, fmt.Errorf("building tool usage user time series query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5511,7 +5503,6 @@ func (q *Queries) GetToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageUsersByTarget(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUsersByTargetRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -5536,7 +5527,7 @@ func (q *Queries) GetToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 		return nil, fmt.Errorf("building tool usage users by target query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5558,7 +5549,6 @@ func (q *Queries) GetToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetToolBreakdownRow, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -5583,7 +5573,7 @@ func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage target tool breakdown query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5623,7 +5613,7 @@ func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg
 		return nil, fmt.Errorf("building tool usage hosted server filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5662,7 +5652,7 @@ func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg
 		return nil, fmt.Errorf("building tool usage shadow server filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5701,7 +5691,7 @@ func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetT
 		return nil, fmt.Errorf("building tool usage gateway filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5740,7 +5730,7 @@ func (q *Queries) getToolUsageClientFilterOptions(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage client filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5781,7 +5771,7 @@ func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetTool
 		return nil, fmt.Errorf("building tool usage user filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5819,7 +5809,7 @@ func (q *Queries) getToolUsageAuthorizerFilterOptions(ctx context.Context, arg G
 		return nil, fmt.Errorf("building tool usage authorizer filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -8330,7 +8320,6 @@ func projectOverviewServerFilter(arg GetTopServersParams) GetToolUsageSummaryPar
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([]TopServer, error) {
-	ctx = toolUsageReadContext(ctx)
 	sb, err := toolUsageFilteredSelect(projectOverviewServerFilter(arg),
 		"target_label AS server_name",
 		"count() AS tool_call_count",
@@ -8350,7 +8339,7 @@ func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([
 		return nil, fmt.Errorf("building top servers query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -8658,7 +8647,6 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 // same hosted, proxied, tunneled, gateway, and hook-observed attribution used
 // by GetTopServers without materializing the server list.
 func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopServersParams) (uint64, error) {
-	ctx = toolUsageReadContext(ctx)
 	normalizedSB, err := toolUsageFilteredSelect(projectOverviewServerFilter(arg), "target_type", "target_id")
 	if err != nil {
 		return 0, fmt.Errorf("building active servers source: %w", err)
@@ -8713,7 +8701,7 @@ func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopSer
 	args := make([]any, 0, len(normalizedArgs)+len(proxiedArgs))
 	args = append(args, normalizedArgs...)
 	args = append(args, proxiedArgs...)
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return 0, fmt.Errorf("querying active server count: %w", err)
 	}
