@@ -36,7 +36,7 @@ jobs:
           path: ${{ env.AUBE_STORE_PATH }}
       - name: Install identical dependencies once
         run: aube install --frozen-lockfile
-      - name: Warm each revision and run four balanced pairs
+      - name: Prepare benchmark harness
         run: |
           cat > "$RUNNER_TEMP/grw468-benchmark.mjs" <<'BENCHMARK'
           import { spawnSync } from 'node:child_process';
@@ -44,7 +44,7 @@ jobs:
           import { performance } from 'node:perf_hooks';
           import fs from 'node:fs';
           import path from 'node:path';
-          
+
           const root = process.env.GITHUB_WORKSPACE;
           const app = path.join(root, 'client/dashboard');
           const out = path.join(process.env.RUNNER_TEMP, 'grw468-results');
@@ -80,13 +80,25 @@ jobs:
             nodeOptions: process.env.NODE_OPTIONS,
             compileCacheDisabled: process.env.NODE_DISABLE_COMPILE_CACHE === '1',
             resultCache: false, moduleCache: 'private snapshot warmed with one complete run per revision',
+            caseTitleNormalization: 'Runtime ISO timestamps in two byte-identical test files only',
             fileShuffleSeed: 468, pairs: [['before','after'], ['after','before'], ['after','before'], ['before','after']],
           };
           fs.writeFileSync(path.join(out, 'environment.json'), JSON.stringify(environment, null, 2));
           console.log(JSON.stringify({ type: 'environment', ...environment }));
           if (process.env.GRW468_SETUP_ONLY === '1') { console.log('Setup validated: ' + tests.length + ' base test files'); process.exit(0); }
-          let expectedCases;
-          const results = [];
+          const dynamicTitleFiles = new Set(['src/components/billing/use-billing-state.test.tsx', 'src/lib/trial-status.test.ts']);
+          for (const file of dynamicTitleFiles) {
+            const repoFile = `client/dashboard/${file}`;
+            if (command('git', ['rev-parse', `${revisions.before}:${repoFile}`]) !== command('git', ['rev-parse', `${revisions.after}:${repoFile}`])) {
+              throw new Error(`Runtime-date title normalization is permitted only for unchanged tests: ${file}`);
+            }
+          }
+          const normalizeTitle = (file, title) => dynamicTitleFiles.has(file)
+            ? title.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '<runtime-date>') : title;
+          const casesPath = path.join(out, 'case-inventory.json');
+          let expectedCases = fs.existsSync(casesPath) ? JSON.parse(fs.readFileSync(casesPath, 'utf8')) : undefined;
+          const resultsPath = path.join(out, 'results.json');
+          const results = fs.existsSync(resultsPath) ? JSON.parse(fs.readFileSync(resultsPath, 'utf8')).results : [];
           function countFiles(dir) {
             return fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile()).length;
           }
@@ -120,8 +132,8 @@ jobs:
             const observed = r.testResults.map(file => path.relative(app, file.name)).sort();
             if (JSON.stringify(observed) !== JSON.stringify(tests)) throw new Error(`${label}: test file inventory differs`);
             const cases = r.testResults.flatMap(file => file.assertionResults.map(test =>
-              `${path.relative(app, file.name)}\0${test.fullName}`)).sort();
-            if (!expectedCases) expectedCases = cases;
+              `${path.relative(app, file.name)}\0${normalizeTitle(path.relative(app, file.name), test.fullName)}`)).sort();
+            if (!expectedCases) { expectedCases = cases; fs.writeFileSync(casesPath, JSON.stringify(cases, null, 2)); }
             if (JSON.stringify(cases) !== JSON.stringify(expectedCases)) throw new Error(`${label}: test case inventory differs`);
             if (r.numTotalTests !== 10407 || r.numPassedTests !== 10407 || r.numFailedTests || r.numPendingTests) {
               throw new Error(`${label}: unexpected test totals/pass status`);
@@ -143,11 +155,7 @@ jobs:
               if (!fs.existsSync(path.join(snapshot, '_metadata.json'))) throw new Error(`${variant}: cache metadata missing`);
             }
           }
-          run('before', 'warm-before', false);
-          run('after', 'warm-after', false);
-          for (const [pairIndex, order] of environment.pairs.entries()) {
-            for (const variant of order) run(variant, `pair-${pairIndex + 1}-${variant}`, true);
-          }
+          function summarize() {
           const median = values => {
             const sorted = [...values].sort((a,b) => a-b);
             return (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2;
@@ -165,8 +173,35 @@ jobs:
             Object.entries(summary).filter(([key]) => key !== 'medianReductionPercent').map(([key,value]) =>
               `| ${key} | ${value.n} | ${value.medianSeconds.toFixed(2)} | ${value.minSeconds.toFixed(2)}–${value.maxSeconds.toFixed(2)} |`).join('\n') +
             `\n\nMedian reduction: ${summary.medianReductionPercent.toFixed(1)}%. Small controlled sample; not a population CI estimate. Warmups excluded. Raw logs, JSON reports and environment are attached.\n`);
+
+          }
+          const [variant, label, mode] = process.argv.slice(2);
+          if (variant === 'summary') summarize();
+          else if ((variant === 'before' || variant === 'after') && label && (mode === 'warm' || mode === 'measured')) run(variant, label, mode === 'measured');
+          else throw new Error('Expected variant, label and warm/measured mode, or summary');
           BENCHMARK
-          node "$RUNNER_TEMP/grw468-benchmark.mjs"
+      - name: Warm baseline
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before warm-before warm
+      - name: Warm optimized
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after warm-after warm
+      - name: Pair 1 - baseline
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-1-before measured
+      - name: Pair 1 - optimized
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-1-after measured
+      - name: Pair 2 - optimized
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-2-after measured
+      - name: Pair 2 - baseline
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-2-before measured
+      - name: Pair 3 - optimized
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-3-after measured
+      - name: Pair 3 - baseline
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-3-before measured
+      - name: Pair 4 - baseline
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-4-before measured
+      - name: Pair 4 - optimized
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-4-after measured
+      - name: Summarize matched measurements
+        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" summary
       - name: Upload measurements and raw reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
