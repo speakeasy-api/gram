@@ -7612,7 +7612,7 @@ func (q *Queries) SetPendingDirectoryReviewItemsStateFixture(ctx context.Context
 }
 
 const setPreparationFixtureCIMDURI = `-- name: SetPreparationFixtureCIMDURI :exec
-UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method = 'none' WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureCIMDURIParams struct {
@@ -7642,7 +7642,7 @@ func (q *Queries) SetPreparationFixtureClientGrants(ctx context.Context, arg Set
 }
 
 const setPreparationFixtureClientSecret = `-- name: SetPreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1
 WHERE id = $2 AND project_id = $3
 `
 
@@ -7681,7 +7681,7 @@ WITH issuer AS (
     RETURNING remote_session_issuers.id
 )
 UPDATE remote_session_clients
-SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL,
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1,
     organization_id = $2
 WHERE remote_session_clients.id = $3
   AND remote_session_clients.project_id = $4
@@ -7729,7 +7729,7 @@ func (q *Queries) SetPreparationFixtureDCREndpoint(ctx context.Context, arg SetP
 }
 
 const setPreparationFixtureInteractiveClient = `-- name: SetPreparationFixtureInteractiveClient :exec
-UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureInteractiveClientParams struct {
@@ -7775,7 +7775,7 @@ func (q *Queries) SetPreparationFixtureIssuerPostAuth(ctx context.Context, arg S
 }
 
 const setPreparationFixtureTestClientSecret = `-- name: SetPreparationFixtureTestClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1 WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureTestClientSecretParams struct {

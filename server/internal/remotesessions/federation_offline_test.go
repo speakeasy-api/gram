@@ -77,7 +77,7 @@ func TestFederatedOfflineConfigurationHash(t *testing.T) {
 	p.client.Scope = []string{"openid", "email"}
 	require.NotEqual(t, advertised, p.OfflineConfigurationHash())
 	beforeSecretRotation := p.OfflineConfigurationHash()
-	p.client.ClientSecretEncrypted.String = "rotated-ciphertext"
+	p.client.ClientSecretGeneration++
 	require.NotEqual(t, beforeSecretRotation, p.OfflineConfigurationHash(), "credential replacement must change the revision even within one transaction")
 }
 
@@ -101,7 +101,7 @@ func TestFederatedDelegationConfigurationHash(t *testing.T) {
 		name   string
 		mutate func(*FederatedProvider)
 	}{
-		{"credential", func(p *FederatedProvider) { p.client.ClientSecretEncrypted.String = "rotated" }},
+		{"credential", func(p *FederatedProvider) { p.client.ClientSecretGeneration++ }},
 		{"client", func(p *FederatedProvider) { p.client.ClientID = "another-registration" }},
 		{"issuer", func(p *FederatedProvider) { p.issuer.Issuer += "/other" }},
 		{"jwks", func(p *FederatedProvider) {
@@ -170,4 +170,22 @@ func TestFederatedOfflinePolicyDiscoveryPresence(t *testing.T) {
 			require.Equal(t, policy, fromCache)
 		})
 	}
+}
+
+func TestFederatedDelegationConfigurationHashFollowsSecretGeneration(t *testing.T) {
+	t.Parallel()
+	p := federatedFixture(t)
+	hash := FederatedDelegationConfigurationHash(p.organizationID, p.issuer, p.client)
+	require.NotEmpty(t, hash)
+
+	resealed := p.client
+	resealed.ClientSecretEncrypted = pgtype.Text{}
+	resealed.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+	require.Equal(t, hash, FederatedDelegationConfigurationHash(p.organizationID, p.issuer, resealed),
+		"sealing the same secret again or finalizing keeps retained delegations")
+
+	replaced := p.client
+	replaced.ClientSecretGeneration++
+	require.NotEqual(t, hash, FederatedDelegationConfigurationHash(p.organizationID, p.issuer, replaced),
+		"a replaced secret retires delegations obtained under the old one")
 }
