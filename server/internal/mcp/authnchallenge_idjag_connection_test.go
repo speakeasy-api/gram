@@ -143,20 +143,6 @@ func TestIDJAGExchangeRecordsRefusals(t *testing.T) {
 		detail  string
 		subject bool
 	}{
-		"missing assertion": {
-			granted: true,
-			form:    func(f idJAGOutageFixture, _ string) url.Values { return idJAGForm(f.clientID, "") },
-			status:  http.StatusBadRequest, body: `{"error":"invalid_request","error_description":"assertion is required"}`,
-			what: mcpconnectionattempts.CodeInvalidRequest, who: mcpconnectionattempts.WhoApp,
-		},
-		"resource names another server": {
-			granted: true,
-			form: func(f idJAGOutageFixture, assertion string) url.Values {
-				return idJAGForm(f.clientID, assertion, f.resource, "https://other.example.test/mcp")
-			},
-			status: http.StatusBadRequest,
-			what:   mcpconnectionattempts.CodeResourceMismatch, who: mcpconnectionattempts.WhoApp,
-		},
 		"no resource anywhere": {
 			granted: true,
 			sign: func(t *testing.T, f idJAGOutageFixture, jti string) string {
@@ -257,12 +243,7 @@ func TestIDJAGExchangeRecordsRefusals(t *testing.T) {
 			}
 
 			w := postIDJAGForm(t, ctx, f.ti, f.slug, form)
-			if tc.body == "" {
-				require.Equal(t, tc.status, w.Code, w.Body.String())
-				require.JSONEq(t, `{"error":"invalid_target","error_description":"resource does not identify this MCP server (expected \"`+f.resource+`\")"}`, w.Body.String())
-			} else {
-				requireTokenResponse(t, w, tc.status, tc.body)
-			}
+			requireTokenResponse(t, w, tc.status, tc.body)
 
 			row := requireOneIDJAGRow(t, rec, tc.what, assertion, jti)
 			requireRefusedBy(t, row, tc.who, tc.detail)
@@ -360,6 +341,30 @@ func TestIDJAGExchangeUnverifiedRefusalsWriteNoRow(t *testing.T) {
 	}, refusalsWithoutRow(t, f.reader))
 }
 
+// A public client authenticates with its client_id alone, so junk it posts before any signature is checked writes no row.
+func TestIDJAGExchangePublicClientJunkWritesNoRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newIDJAGOutageFixture(t, true)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	valid := f.signer.sign(t, idJAGOutageIssuer, f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())
+
+	requireTokenResponse(t, postIDJAGForm(t, ctx, f.ti, f.slug, idJAGForm(f.clientID, "")), http.StatusBadRequest,
+		`{"error":"invalid_request","error_description":"assertion is required"}`)
+	requireTokenResponse(t, postIDJAGForm(t, ctx, f.ti, f.slug, idJAGForm(f.clientID, "junk")), http.StatusBadRequest,
+		`{"error":"invalid_grant","error_description":"assertion is invalid"}`)
+	requireTokenResponse(t, postIDJAGForm(t, ctx, f.ti, f.slug, idJAGForm(f.clientID, valid, f.resource, "https://other.example.test/mcp")), http.StatusBadRequest,
+		`{"error":"invalid_target","error_description":"resource does not identify this MCP server (expected \"`+f.resource+`\")"}`)
+
+	rec.RequireNothing()
+	require.Equal(t, map[string]int64{
+		"token_assertion_missing":   1,
+		"token_assertion_malformed": 1,
+		"token_resource_mismatch":   1,
+	}, refusalsWithoutRow(t, f.reader))
+}
+
 // idJAGTrustFixture is a toolset on an organization issuer an app has a client
 // for, recording connection rows and metrics.
 type idJAGTrustFixture struct {
@@ -428,7 +433,7 @@ func TestIDJAGExchangeRecordsTrustLinkWithoutKeys(t *testing.T) {
 	w := postIDJAGForm(t, f.ctx, f.ti, f.slug, idJAGForm(f.clientID, assertion))
 	requireTokenResponse(t, w, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"assertion is invalid"}`)
 
-	row := requireOneIDJAGRow(t, f.rec, mcpconnectionattempts.CodeIssuerNotTrusted, assertion, jti)
+	row := requireOneIDJAGRow(t, f.rec, mcpconnectionattempts.CodeConfigurationRequired, assertion, jti)
 	requireRefusedBy(t, row, mcpconnectionattempts.WhoAdmin, "trusted_issuer_unavailable")
 	require.Empty(t, row.SubjectURN)
 }

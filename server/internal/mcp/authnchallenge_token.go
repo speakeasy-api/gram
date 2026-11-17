@@ -591,7 +591,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request", exchange.reject(mcpmetrics.IDJAGRejectionInvalidRequest, nil)...)
-		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+		s.refusedWithoutRow(ctx, t, "token_assertion_missing")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -602,7 +602,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch", exchange.reject(mcpmetrics.IDJAGRejectionResourceMismatch, nil)...)
-		t.Refuse(ctx, mcpconnectionattempts.CodeResourceMismatch)
+		s.refusedWithoutRow(ctx, t, "token_resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 	// The assertion is addressed to the issuer the authorization server

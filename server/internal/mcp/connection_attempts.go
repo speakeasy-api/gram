@@ -964,7 +964,7 @@ func idJAGAssertionHappened(err error) (mcpconnectionattempts.Code, mcpconnectio
 	case idjag.IsStoreFault(err):
 		return mcpconnectionattempts.CodeInternalError, detail, ""
 	case reason == idjag.ReasonTrustUnavailable:
-		return mcpconnectionattempts.CodeIssuerNotTrusted, detail, ""
+		return mcpconnectionattempts.CodeConfigurationRequired, detail, ""
 	case reason == idjag.ReasonVerifierMisconfigured:
 		return mcpconnectionattempts.CodeAssertionVerifierMisconfigured, detail, ""
 	case reason == idjag.ReasonNotProvisioned:
