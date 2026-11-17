@@ -21,7 +21,7 @@ import (
 // of grants that can be stored.
 //
 // Property numbers follow the typed checks page (step 5). Not covered here:
-// P8 (absent values, added with its own change), P12 (probes), P13 (agents and delegation, which live in runtimepolicy) and
+// P12 (probes), P13 (agents and delegation, which live in runtimepolicy) and
 // P14 (organization isolation, which the grant loader enforces before the
 // evaluator runs).
 
@@ -190,6 +190,33 @@ func TestGrantInvariants_BlockWins(t *testing.T) {
 				}
 				if holder == principalUser || !namesServer {
 					failures.add("P7: [%s] plus %s still allows %s on %s", describeGrants(grants), describeGrant(block), c.name, c.server.id)
+				}
+			}
+		}
+	})
+	failures.done()
+}
+
+// P8: absence never grants. Leaving the tool or disposition out of a tool call
+// never turns a refusal into an allow.
+func TestGrantInvariants_AbsentValueNeverGrants(t *testing.T) {
+	t.Parallel()
+	failures := &failureReport{t: t}
+	forEachGrantSet(storableGrants(), func(grants []Grant) {
+		for _, server := range mcpServers {
+			ref := MCPServer(MCPServerIDFrom(server.id), ProjectIDFrom(server.project))
+			for _, tool := range toolNames {
+				for _, disposition := range allDispositions {
+					full := authorize(grants, ref.ToolCall(tool, disposition)).allowed
+					if full {
+						continue
+					}
+					if authorize(grants, ref.ToolCall(tool, "")).allowed {
+						failures.add("P8: [%s] refuses %s (%s) on %s but allows it with no disposition", describeGrants(grants), tool, disposition, server.id)
+					}
+					if authorize(grants, ref.ToolCall("", disposition)).allowed {
+						failures.add("P8: [%s] refuses %s (%s) on %s but allows it with no tool", describeGrants(grants), tool, disposition, server.id)
+					}
 				}
 			}
 		}
