@@ -123,14 +123,22 @@ var cardSubjects = map[AddressOwner]string{
 	ThisSignInAddress: "This sign-in's address",
 }
 
-// CardStatus is the connect page's status line for f: what is wrong, then what to do.
-func (f AddressFailure) CardStatus(owner AddressOwner) string {
-	subject := cardSubjects[owner]
-	problem := subject + " doesn't exist."
+// cardProblem is the few words a consent page uses for f.
+func (f AddressFailure) cardProblem() string {
 	if f == AddressNotAllowed {
-		problem = subject + " is private or internal."
+		return "is private"
 	}
-	return "Can't connect · " + problem + " Ask your administrator to fix it."
+	return "doesn't exist"
+}
+
+// CardStatus is the connect page's status line for f: what is wrong, then who to ask.
+func (f AddressFailure) CardStatus(owner AddressOwner) string {
+	return "Can't connect · " + cardSubjects[owner] + " " + f.cardProblem() + ". Ask your administrator."
+}
+
+// FooterNotice is the gateway focus page's short notice for f; tool results keep EndUserMessage.
+func (f AddressFailure) FooterNotice(name string, owner AddressOwner) string {
+	return name + " can't connect: " + string(owner) + " " + f.cardProblem() + ". Ask your administrator to fix it."
 }
 
 // redirectHopError is a dial to an address an upstream redirected to, not one configured here.
