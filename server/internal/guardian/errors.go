@@ -126,7 +126,7 @@ var cardSubjects = map[AddressOwner]string{
 // cardProblem is the few words a consent page uses for f.
 func (f AddressFailure) cardProblem() string {
 	if f == AddressNotAllowed {
-		return "is private"
+		return "isn't public"
 	}
 	return "doesn't exist"
 }

@@ -186,7 +186,7 @@ func TestServeConsent_SignInProviderAddressCard(t *testing.T) {
 	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotAllowed, time.Minute))
 
 	_, page, _ := render(t, fx)
-	require.Contains(t, html.UnescapeString(page), "Can't connect · This sign-in's address is private. Ask your administrator.")
+	require.Contains(t, html.UnescapeString(page), "Can't connect · This sign-in's address isn't public. Ask your administrator.")
 	require.Contains(t, page, "0 of 1 connected", "a down connection is not counted")
 	require.NotContains(t, page, "Unavailable · try again shortly")
 	require.NotContains(t, page, "> Reconnect </button>")
@@ -292,7 +292,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 		label  string
 		reason mcpconnectionattempts.Code
 	}{
-		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address is private. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address isn't public. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
 		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · This server's address doesn't exist. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotFound},
 		{name: "broken server", url: broken.URL, label: "Unavailable · The server had an error. Try again shortly.", reason: mcpconnectionattempts.CodeProviderServerError},
 	} {
