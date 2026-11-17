@@ -482,27 +482,29 @@
                   Verify
                 </button>
                 {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
-                {{if and .Chained (ne .ChainCheck "rejected")}}
+                {{if .Chained}}
                 {{/* Shown by the page script only when the check offers it. */}}
                 <button
                   type="submit"
                   name="action"
                   value="switch_account"
-                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm md:justify-center"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm"
                   data-switch-account
                   hidden
                 >
                   Sign in with your company account
                 </button>
+                {{/* The row action every company sign-in card offers in every state: a
+                foreground link in the gateway rows' "Manage ›" form. */}}
                 <button
                   type="submit"
                   name="action"
                   value="connect"
-                  class="text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center px-1 text-xs underline-offset-2"
+                  class="text-foreground interact:underline focus-visible:outline-2 focus-visible:outline-offset-2 flex h-8 cursor-pointer items-center gap-1 whitespace-nowrap text-xs underline-offset-2"
                   data-connect-link
                   data-connect-fallback
                 >
-                  Use your own {{.IssuerDisplay}} account instead
+                  Use your own {{.IssuerDisplay}} account <span aria-hidden="true">&rsaquo;</span>
                 </button>
                 {{else}}
                 <button

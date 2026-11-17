@@ -663,22 +663,41 @@
     return service ? "your own " + service + " account" : "your own account";
   }
 
-  // A button's width at its label's length, even where its group stretches it.
-  function naturalWidth(button) {
-    button.style.alignSelf = "flex-start";
-    var width = button.offsetWidth;
-    button.style.alignSelf = "";
-    return width;
-  }
-
-  // Labels a refused card's own-account button with the service's name when
-  // fits allows it, and "Use your own account" otherwise.
-  function labelOwnAccount(card, button, fits) {
-    button.textContent = "Use " + ownAccount(card);
-    if (card.getAttribute("data-remote-display") && !fits(button)) {
-      button.textContent = "Use your own account";
+  // Labels a card's own-account link with the service's name when fits
+  // allows it, and "Use your own account" otherwise.
+  function labelOwnAccount(card, link, fits) {
+    var chevron = document.createElement("span");
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "\u203a";
+    link.textContent = "Use " + ownAccount(card);
+    link.appendChild(chevron);
+    if (card.getAttribute("data-remote-display") && !fits(link)) {
+      link.textContent = "Use your own account";
+      link.appendChild(chevron);
     }
   }
+
+  // Beside the card's text a long service name would crowd it, so the link
+  // keeps it within half the card; under the text, within the card's width.
+  // The card's title already names the service.
+  Array.prototype.forEach.call(
+    document.querySelectorAll("button[data-connect-fallback]"),
+    function (link) {
+      var card = link.closest("[data-remote-client]");
+      if (!card) {
+        return;
+      }
+      var row = card.querySelector("[data-card-row]");
+      var actions = card.querySelector("[data-card-actions]");
+      var besideText =
+        !row || window.getComputedStyle(row).flexDirection === "row";
+      labelOwnAccount(card, link, function (button) {
+        return besideText || !actions
+          ? button.offsetWidth <= card.offsetWidth / 2
+          : button.offsetWidth <= actions.clientWidth;
+      });
+    },
+  );
 
   function settleChainCheck(status, card, result) {
     var state = result ? result.status : "";
@@ -708,52 +727,18 @@
         "Your identity provider sign-in wasn't accepted. Use " +
           ownAccount(card) +
           ".";
-      var fallback = card.querySelector("button[data-connect-fallback]");
       var switchAccount =
         result.action === "switch_account"
           ? card.querySelector("button[data-switch-account]")
           : null;
       if (switchAccount) {
-        // Two buttons in the card's own row: the company sign-in first, the
-        // own-account sign-in in the page's secondary style. Beside the text
-        // they stack at one width; under it they keep their own widths.
+        // The company sign-in, with the own-account link under it: right of
+        // the text, or under it on a narrow screen.
         switchAccount.removeAttribute("hidden");
-        var row = card.querySelector("[data-card-row]");
-        if (row) {
-          row.className =
-            "flex flex-col gap-3 md:flex-row md:items-center md:justify-between";
-        }
         var actions = card.querySelector("[data-card-actions]");
         if (actions) {
-          actions.className =
-            "flex flex-wrap items-center justify-start gap-1.5 md:flex-col md:flex-nowrap md:items-stretch";
+          actions.className = "flex flex-col items-start sm:items-end";
         }
-        if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
-          fallback.className =
-            "bg-card interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm md:justify-center";
-          fallback.removeAttribute("data-connect-fallback");
-          var besideText =
-            row && window.getComputedStyle(row).flexDirection === "row";
-          labelOwnAccount(card, fallback, function (button) {
-            // Beside the text, no wider than the company button or half the
-            // card; under it, one line across the card.
-            return besideText
-              ? naturalWidth(button) <=
-                  Math.max(naturalWidth(switchAccount), card.offsetWidth / 2)
-              : !actions || naturalWidth(button) <= actions.clientWidth;
-          });
-        }
-      } else if (
-        fallback &&
-        fallback.getAttribute("aria-disabled") !== "true"
-      ) {
-        fallback.className =
-          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm";
-        fallback.removeAttribute("data-connect-fallback");
-        // A long service name would crowd the text; the card's title already names it.
-        labelOwnAccount(card, fallback, function (button) {
-          return button.offsetWidth <= card.offsetWidth / 2;
-        });
       }
       signalChainRejected();
       return;

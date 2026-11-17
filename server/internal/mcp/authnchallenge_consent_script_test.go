@@ -78,8 +78,9 @@ const element = (attrs = {}) => ({
   removeAttribute(name) { delete this.attrs[name]; },
   appendChild(child) { this.children.push(child); },
 });
-const fallbackClass = 'text-muted-foreground interact:text-foreground';
+const fallbackClass = 'text-foreground interact:underline';
 const cards = {};
+const fallbacks = [];
 const statuses = ['connected', 'rejected', 'ready', 'error', 'offline', 'wide'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
@@ -94,6 +95,8 @@ const statuses = ['connected', 'rejected', 'ready', 'error', 'offline', 'wide'].
     'button[data-connect-fallback]': fallback,
   })[selector] || null;
   status.closest = (selector) => (selector === '[data-remote-client]' ? card : null);
+  fallback.closest = status.closest;
+  fallbacks.push(fallback);
   cards[id] = { status, fallback };
   return status;
 });
@@ -126,10 +129,17 @@ vm.runInNewContext(source, {
       if (selector === '[data-service-connections]') return element({ 'data-action-url': '/mcp/x/connect/remote-session' });
       return null;
     },
-    querySelectorAll: (selector) => (selector === '[data-chain-check="pending"]' ? statuses : []),
+    querySelectorAll: (selector) => (selector === '[data-chain-check="pending"]' ? statuses : selector === 'button[data-connect-fallback]' ? fallbacks : []),
   },
   window: { setTimeout: () => {}, addEventListener() {}, location: { reload: () => {} } },
 });
+
+const label = (fallback) => fallback.textContent + ' ' + fallback.children[fallback.children.length - 1].textContent;
+for (const id of ['connected', 'rejected', 'ready', 'error', 'offline']) {
+  assert.equal(label(cards[id].fallback), 'Use your own Example account \u203a', id + ': one label in every state');
+  assert.equal(cards[id].fallback.children[0].attrs['aria-hidden'], 'true', id + ': the chevron is decoration');
+}
+assert.equal(label(cards.wide.fallback), 'Use your own account \u203a', 'a label wider than half the card drops the service name');
 
 for (const status of statuses) {
   assert.equal(status.children.length, 2, 'checking shows a spinner and label');
@@ -145,28 +155,24 @@ setTimeout(() => {
   assert.equal(ok.status.getAttribute('data-chain-check'), 'connected');
   assert.equal(ok.status.className, 'text-xs text-default-success');
   assert.equal(ok.status.textContent, 'Service connected through your identity provider');
-  assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the quiet fallback');
+  assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the same link');
   assert.equal(summary.textContent, '2 of 5 connected');
 
   const ready = cards.ready;
   assert.equal(ready.status.getAttribute('data-chain-check'), 'unknown', 'an unrecognized status reads neutral');
   assert.equal(ready.status.textContent, 'Managed by your identity provider');
-  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps separate OAuth optional');
+  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps the same link');
   assert.equal(summary.textContent, '2 of 5 connected', 'a neutral card does not claim a downstream token');
 
   const no = cards.rejected;
   assert.equal(no.status.getAttribute('data-chain-check'), 'rejected');
   assert.equal(no.status.className, 'text-xs text-default-warning');
   assert.equal(no.status.textContent, 'Example refused.');
-  assert.match(no.fallback.className, /\bbg-primary\b/);
-  assert.match(no.fallback.className, /\bwhitespace-nowrap\b/, 'the label stays on one line beside long card text');
-  assert.equal(no.fallback.textContent, 'Use your own Example account');
-  assert.equal(no.fallback.getAttribute('data-connect-fallback'), null);
+  assert.equal(no.fallback.className, fallbackClass, 'a refusal keeps the same link, not a filled button');
+  assert.equal(label(no.fallback), 'Use your own Example account \u203a');
   assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');
   assert.deepEqual(dispatched, ['gram:consent-chain-rejected', 'gram:consent-chain-rejected'], 'each refusal signals it');
 
-  const wide = cards.wide;
-  assert.equal(wide.fallback.textContent, 'Use your own account', 'a label wider than half the card drops the service name');
 
   for (const id of ['error', 'offline']) {
     const c = cards[id];
@@ -203,37 +209,25 @@ const element = (attrs = {}) => ({
 });
 const rowClass = 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between';
 const actionsClass = 'flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end';
-const quiet = 'text-muted-foreground interact:text-foreground';
-// Each card: the layout its row resolves to, and the widths the script measures.
-const layouts = {
-  'beside-fits': { direction: 'row', card: 730, primary: 247, fallback: 211, actions: 247 },
-  'beside-too-wide': { direction: 'row', card: 730, primary: 247, fallback: 400, actions: 400 },
-  'under-fits': { direction: 'column', card: 330, primary: 247, fallback: 293, actions: 300 },
-  'under-too-wide': { direction: 'column', card: 300, primary: 247, fallback: 293, actions: 270 },
-  admin: { direction: 'row', card: 730, primary: 0, fallback: 180, actions: 180 },
-};
+const linkClass = 'text-foreground interact:underline flex h-8 items-center gap-1 whitespace-nowrap text-xs';
 const cards = {};
 const switches = [];
-const rows = new Map();
+const fallbacks = [];
 const windowListeners = {};
 let reloads = 0;
-const statuses = Object.keys(layouts).map((id) => {
-  const size = layouts[id];
+const statuses = ['personal', 'admin'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
-  fallback.className = quiet;
-  fallback.offsetWidth = size.fallback;
+  fallback.className = linkClass;
+  fallback.offsetWidth = 200;
   const switchAccount = element({ 'data-switch-account': '', hidden: '' });
-  switchAccount.offsetWidth = size.primary;
   switches.push(switchAccount);
   const row = element({ 'data-card-row': '' });
   row.className = rowClass;
-  rows.set(row, size.direction);
   const actions = element({ 'data-card-actions': '' });
   actions.className = actionsClass;
-  actions.clientWidth = size.actions;
   const card = element({ 'data-remote-client': id, 'data-remote-display': 'Example' });
-  card.offsetWidth = size.card;
+  card.offsetWidth = 730;
   card.querySelector = (selector) => ({
     'input[name="state"]': { value: 'state-1' },
     'input[name="csrf_token"]': { value: 'csrf-1' },
@@ -243,6 +237,8 @@ const statuses = Object.keys(layouts).map((id) => {
     '[data-card-actions]': actions,
   })[selector] || null;
   status.closest = (selector) => (selector === '[data-remote-client]' ? card : null);
+  fallback.closest = status.closest;
+  fallbacks.push(fallback);
   cards[id] = { status, fallback, switchAccount, row, actions };
   return status;
 });
@@ -269,41 +265,34 @@ vm.runInNewContext(source, {
     querySelectorAll: (selector) => {
       if (selector === '[data-chain-check="pending"]') return statuses;
       if (selector === 'button[data-switch-account]') return switches;
+      if (selector === 'button[data-connect-fallback]') return fallbacks;
       return [];
     },
   },
   window: {
     setTimeout: (fn) => fn(),
-    getComputedStyle: (el) => ({ flexDirection: rows.get(el) || 'row' }),
+    getComputedStyle: () => ({ flexDirection: 'row' }),
     addEventListener(type, fn) { windowListeners[type] = fn; },
     location: { reload: () => { reloads++; } },
   },
 });
 
 setTimeout(() => {
-  for (const id of ['beside-fits', 'beside-too-wide', 'under-fits', 'under-too-wide']) {
-    const c = cards[id];
-    assert.equal(c.status.textContent, 'Personal account.', id);
-    assert.equal(c.switchAccount.getAttribute('hidden'), null, id + ': the company sign-in is shown');
-    assert.equal(c.row.className, 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between', id + ': text left, actions right, like every card, once two buttons fit');
-    assert.equal(c.actions.className, 'flex flex-wrap items-center justify-start gap-1.5 md:flex-col md:flex-nowrap md:items-stretch', id + ': one width when stacked beside the text');
-    assert.equal(c.fallback.className, 'bg-card interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm md:justify-center', id + ': a real secondary button that never wraps');
-    assert.equal(c.fallback.getAttribute('data-connect-fallback'), null, id);
-    assert.equal(c.fallback.style.alignSelf, '', id + ': measuring leaves no style behind');
-  }
-  assert.equal(cards['beside-fits'].fallback.textContent, 'Use your own Example account');
-  assert.equal(cards['beside-too-wide'].fallback.textContent, 'Use your own account', 'wider than the company button and half the card');
-  assert.equal(cards['under-fits'].fallback.textContent, 'Use your own Example account', 'fits the card on one line');
-  assert.equal(cards['under-too-wide'].fallback.textContent, 'Use your own account', 'rather than two lines');
+  const label = (link) => link.textContent + ' ' + link.children[link.children.length - 1].textContent;
+  const personal = cards.personal;
+  assert.equal(personal.status.textContent, 'Personal account.');
+  assert.equal(personal.switchAccount.getAttribute('hidden'), null, 'the company sign-in is shown');
+  assert.equal(personal.row.className, rowClass, 'the card keeps the row every card uses');
+  assert.equal(personal.actions.className, 'flex flex-col items-start sm:items-end', 'the link sits under the company sign-in');
+  assert.equal(personal.fallback.className, linkClass, 'the same row link as every other state');
+  assert.equal(label(personal.fallback), 'Use your own Example account \u203a');
 
   const admin = cards.admin;
   assert.equal(admin.switchAccount.getAttribute('hidden'), '', 'no switch for an administrator refusal');
-  assert.equal(admin.row.className, rowClass);
   assert.equal(admin.actions.className, actionsClass);
-  assert.match(admin.fallback.className, /\bbg-primary\b/);
-  assert.equal(admin.fallback.textContent, 'Use your own Example account');
+  assert.equal(admin.fallback.className, linkClass);
+  assert.equal(label(admin.fallback), 'Use your own Example account \u203a');
 
-  const personal = cards['beside-fits'];
   personal.switchAccount.listeners.click({ preventDefault() {} });
   assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'the first click marks the switch busy');
   let secondPrevented = false;

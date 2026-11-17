@@ -634,7 +634,7 @@ func TestConsentSwitchAccount_BoundedPerAttempt(t *testing.T) {
 
 	code, page, _ := render(t, fx.consentActionFixture)
 	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, page, "account instead", "the own-account sign-in is still there")
+	require.Contains(t, page, `account <span aria-hidden="true">&rsaquo;</span>`, "the own-account link is still there")
 }
 
 // renderSpent GETs a consent page through the browser error handler, as a person sees it.

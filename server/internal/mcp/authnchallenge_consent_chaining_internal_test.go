@@ -180,9 +180,9 @@ func TestConsentTemplateRendersIdentityChainedServiceWithFallback(t *testing.T) 
 	require.Contains(t, html, "Managed by your identity provider", "pending reads neutral without script")
 	require.Regexp(t, `<span class="text-xs text-muted-foreground" data-card-status data-identity-chained data-chain-check="pending"`, html)
 	require.Contains(t, html, "data-connect-fallback")
-	require.Contains(t, html, "Use your own Example account instead")
-	require.Regexp(t, `<button type="submit" name="action" value="connect" class="[^"]*\btext-muted-foreground\b[^"]*" data-connect-link data-connect-fallback`, html)
-	require.NotRegexp(t, `value="connect" class="[^"]*\b(border|bg-primary)\b[^"]*" data-connect-link data-connect-fallback`, html, "the fallback is a quiet text control")
+	require.Contains(t, html, "Use your own Example account <span aria-hidden=\"true\">&rsaquo;</span>")
+	require.Regexp(t, `<button type="submit" name="action" value="connect" class="text-foreground interact:underline [^"]*" data-connect-link data-connect-fallback`, html)
+	require.NotRegexp(t, `value="connect" class="[^"]*\b(border|bg-primary)\b[^"]*" data-connect-link data-connect-fallback`, html, "the own-account action is a row link, not a button")
 	require.Contains(t, html, `data-connected-summary data-connected-count="0" data-connected-total="1"`)
 	require.Contains(t, html, "0 of 1 connected")
 	require.NotContains(t, html, `aria-label="Disconnect`)
@@ -195,16 +195,16 @@ func TestConsentTemplateRendersCachedChainedServiceConnected(t *testing.T) {
 	html := renderChainedCard(t, chainCheckConnected, "", 1)
 	require.Regexp(t, `<span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected" >Service connected through your identity provider`, html)
 	require.Contains(t, html, "1 of 1 connected")
-	require.Contains(t, html, "Use your own Example account instead", "the fallback stays available once connected")
+	require.Contains(t, html, "Use your own Example account <span aria-hidden=\"true\">&rsaquo;</span>", "the fallback stays available once connected")
 }
 
-func TestConsentTemplateRendersRejectedChainedServiceWithPrimaryConnect(t *testing.T) {
+func TestConsentTemplateRendersRejectedChainedServiceWithOwnAccountLink(t *testing.T) {
 	t.Parallel()
 
 	html := renderChainedCard(t, chainCheckRejected, "Example didn't accept your identity provider sign-in.", 0)
 	require.Regexp(t, `<span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected" >Example didn&#39;t accept your identity provider sign-in.`, html)
-	require.Regexp(t, `value="connect" class="bg-primary text-primary-foreground[^"]*" data-connect-link > Connect </button>`, html)
-	require.NotContains(t, html, "data-connect-fallback")
+	require.Regexp(t, `value="connect" class="text-foreground interact:underline [^"]*" data-connect-link data-connect-fallback > Use your own Example account <span aria-hidden="true">&rsaquo;</span> </button>`, html, "the same row link as every other state")
+	require.NotContains(t, html, "> Connect </button>")
 	require.Contains(t, html, "0 of 1 connected")
 }
 
