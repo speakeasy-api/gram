@@ -34,7 +34,8 @@ export function useGitHubAccountSearch(
   failed: boolean;
 } {
   const term = query.trim();
-  const enabled = term.length >= MIN_GITHUB_SEARCH_LENGTH;
+  const enabled =
+    term.length >= (organizationsOnly ? 1 : MIN_GITHUB_SEARCH_LENGTH);
   const searchQuery = organizationsOnly ? `${term} in:login type:org` : term;
   const [response, setResponse] = useState<{
     query: string;

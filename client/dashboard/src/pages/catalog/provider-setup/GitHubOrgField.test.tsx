@@ -50,7 +50,7 @@ it("searches organizations and selects a suggestion with the keyboard", async ()
   );
   const user = userEvent.setup();
   const input = renderField();
-  await user.type(input, "example");
+  await user.type(input, "e");
   expect(
     await screen.findByRole("option", { name: "example-team" }),
   ).toBeDefined();
@@ -68,6 +68,7 @@ it("keeps manual entry available when GitHub search fails", async () => {
   const input = renderField();
   await user.type(input, "example-org");
   expect(await screen.findByText(/Search unavailable/)).toBeDefined();
+  expect(screen.getByRole("status").closest('[role="listbox"]')).toBeNull();
   await user.tab();
   expect(input.value).toBe("example-org");
 });

@@ -12,10 +12,11 @@ export function GitHubOrgField(): JSX.Element {
   const [activeIndex, setActiveIndex] = useState(-1);
   const listId = useId();
   const query = s.values.org.trim();
-  const canSearch = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,38}$/.test(query);
+  const canSearch = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/.test(query);
   const showResults = open && canSearch;
   const search = useGitHubAccountSearch(showResults ? query : "", true);
   const results = search.results.map((item) => item.login);
+  const listOpen = showResults && results.length > 0;
   const error = s.errors.org;
   const select = (login: string) => {
     live.changeField({ field: "org", value: login });
@@ -40,8 +41,8 @@ export function GitHubOrgField(): JSX.Element {
           noAutofill
           error={!!error}
           aria-autocomplete="list"
-          aria-expanded={showResults}
-          aria-controls={showResults ? listId : undefined}
+          aria-expanded={listOpen}
+          aria-controls={listOpen ? listId : undefined}
           aria-activedescendant={
             showResults && results[activeIndex]
               ? `${listId}-${activeIndex}`
@@ -90,28 +91,26 @@ export function GitHubOrgField(): JSX.Element {
           }}
         />
         {showResults && (
-          <div
-            id={listId}
-            role="listbox"
-            className="bg-popover absolute top-full right-0 left-0 z-50 border p-1 shadow-md"
-            aria-label="GitHub organizations"
-          >
-            {results.map((login, index) => (
-              <Button
-                key={login}
-                id={`${listId}-${index}`}
-                role="option"
-                tabIndex={-1}
-                variant="tertiary"
-                className="w-full justify-start aria-selected:bg-accent"
-                aria-selected={index === activeIndex}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => select(login)}
-              >
-                {login}
-              </Button>
-            ))}
-            {results.length === 0 && (
+          <div className="bg-popover absolute top-full right-0 left-0 z-50 border p-1 shadow-md">
+            {listOpen ? (
+              <div id={listId} role="listbox" aria-label="GitHub organizations">
+                {results.map((login, index) => (
+                  <Button
+                    key={login}
+                    id={`${listId}-${index}`}
+                    role="option"
+                    tabIndex={-1}
+                    variant="tertiary"
+                    className="w-full justify-start aria-selected:bg-accent"
+                    aria-selected={index === activeIndex}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => select(login)}
+                  >
+                    {login}
+                  </Button>
+                ))}
+              </div>
+            ) : (
               <p
                 role="status"
                 className="text-muted-foreground px-2 py-3 text-sm"
