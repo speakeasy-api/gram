@@ -186,9 +186,10 @@ var _ Namer = QualifiedNamer{ProductionNamer: ProductionNamer{}, qualifier: ""}
 // digits and spaces.
 var machineNameQualifierPattern = regexp.MustCompile(`^[a-z0-9]{1,8}$`)
 
-// ErrQualifierWithDevID rejects a machine name qualifier beside a development
-// id: a local stack already qualifies every name with its id.
-var ErrQualifierWithDevID = errors.New("a gateway machine name qualifier cannot be combined with a network ingress development id")
+// ErrQualifierInLocal rejects a machine name qualifier in local development:
+// a local stack qualifies every name, hostnames included, with its
+// development id, and a qualifier would leave its hostnames production's.
+var ErrQualifierInLocal = errors.New("a gateway machine name qualifier is not accepted in local development; use the network ingress development id")
 
 // NewQualifiedNamer returns the namer for an environment's machine name
 // qualifier. Qualifiers starting with local are refused so an environment's
@@ -214,12 +215,12 @@ func (n QualifiedNamer) AuthKeyDescription(_ context.Context, ingressID uuid.UUI
 
 // NewNamer selects the namer for a process: a LocalNamer when a development
 // id is configured, which only local development accepts; a QualifiedNamer
-// when a gateway machine name qualifier is; and the ProductionNamer
-// otherwise.
+// when a gateway machine name qualifier is, which only a deployed environment
+// accepts; and the ProductionNamer otherwise.
 func NewNamer(environment, devID, qualifier string) (Namer, error) {
 	switch {
-	case devID != "" && qualifier != "":
-		return nil, ErrQualifierWithDevID
+	case qualifier != "" && (devID != "" || environment == "local"):
+		return nil, ErrQualifierInLocal
 	case devID != "":
 		if environment != "local" {
 			return nil, ErrDevIDOutsideLocal

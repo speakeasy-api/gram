@@ -74,7 +74,10 @@ func TestNewNamer(t *testing.T) {
 	require.IsType(t, networkingress.QualifiedNamer{}, namer)
 
 	_, err = networkingress.NewNamer("local", "ab12", "dev")
-	require.ErrorIs(t, err, networkingress.ErrQualifierWithDevID)
+	require.ErrorIs(t, err, networkingress.ErrQualifierInLocal)
+
+	_, err = networkingress.NewNamer("local", "", "dev")
+	require.ErrorIs(t, err, networkingress.ErrQualifierInLocal, "the API server, which skips the development id check, still refuses a local qualifier")
 
 	_, err = networkingress.NewNamer("dev", "", "Dev")
 	require.Error(t, err, "an invalid qualifier is refused")
