@@ -134,10 +134,11 @@ certificate reports `awaiting_certificate`, and the ingress shows
   one certificate per connection under concurrent handshakes, and that tsnet
   renews at once and names the replaced certificate.
 - The chart's own rules (`certchart_internal_test.go`): `Machine.Explore`
-  walks every state the chart can reach and checks that a node holding a
-  certificate never obtains one, renews only once the window says so, never
-  stops serving a certificate it holds, and replaces one only with a later
-  one.
+  walks every state the chart reaches under the test's request outcomes,
+  with states merged by the test's key (times kept relative to now), and
+  checks that a node holding a certificate never obtains one, renews only
+  once the window says so, keeps its certificate through failed requests,
+  and replaces one only with a later one.
 - `Certificate.tla` models every slot of a connection together with the
   store, the lease, tsnet and Let's Encrypt, and checks one new order per
   connection, one renewal per certificate, and that every slot converges on
@@ -149,4 +150,6 @@ certificate reports `awaiting_certificate`, and the ingress shows
   ```bash
   java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -metadir "$(mktemp -d)" \
     -workers auto -config Certificate.cfg Certificate.tla
+  java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -metadir "$(mktemp -d)" \
+    -workers auto -config CertificateLarge.cfg Certificate.tla
   ```

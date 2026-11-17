@@ -523,5 +523,8 @@ Converges ==
 \* Nothing stored, or the latest stored certificate due, is always followed
 \* by a newer certificate stored, unless every slot is closed. This covers
 \* the first issuance (nothing stored counts as due) and every renewal.
+\* CyclePasses needs no fairness: TLC checks every behaviour, including each
+\* one in which a cycle passes, and there the due certificate must be
+\* renewed. Dropping the fairness on RenewDue makes this property fail.
 Renews == []<>(dueUpTo < stored \/ AllStopped)
 =============================================================================
