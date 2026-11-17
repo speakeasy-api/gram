@@ -231,8 +231,7 @@ func failed(c certContext, err error, now time.Time) certContext {
 
 // bindCertificates gives the chart's services their implementations.
 //
-// Each request bounds itself in wall time with its own timeout, as the
-// gateway's requests did before the chart.
+// Each request bounds itself in wall time with its own timeout.
 func bindCertificates(source certificateSource, windows renewalWindows, now func() time.Time) (*sc.Machine[certState, certContext], error) {
 	m, err := certificateChart.Bind(func(b *sc.Binder[certState, certContext]) {
 		b.Service(serviceObtain, func(ctx context.Context, _ *sc.Run, _ certContext) (*tls.Certificate, error) {
