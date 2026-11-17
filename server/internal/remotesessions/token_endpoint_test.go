@@ -445,9 +445,4 @@ func TestEnrichmentTarget_OpensTheOrganizationKeyCopy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "resource-secret", secret)
 
-	signed := client.row
-	signed.TokenEndpointAuthMethod = pgtype.Text{String: string(TokenEndpointAuthMethodPrivateKeyJWT), Valid: true}
-	secret, err = enrichmentTargetFromClient(signed, client.organizationID, client.secrets).clientSecret(t.Context())
-	require.NoError(t, err)
-	require.Empty(t, secret, "a private_key_jwt client signs instead of presenting a secret")
 }

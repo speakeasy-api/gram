@@ -149,6 +149,7 @@ func TestCommitServerIdentityConfigurationFromTemplateCreatesIndependentClient(t
 	// The secret was opened and sealed again for the new row, with the
 	// registration's callback and lifecycle stamps.
 	require.Equal(t, templateSecret, decryptTestSecret(t, copied.ClientSecretEncrypted.String))
+	require.NotEqual(t, before.RemoteSessionClient.ClientSecretEncrypted, copied.ClientSecretEncrypted, "a ciphertext is never copied as stored")
 	require.Equal(t, templateCallbackBase, copied.CallbackBaseUrl.String)
 	require.Equal(t, before.RemoteSessionClient.ClientIDIssuedAt, copied.ClientIDIssuedAt)
 	require.Equal(t, before.RemoteSessionClient.ClientSecretExpiresAt, copied.ClientSecretExpiresAt)

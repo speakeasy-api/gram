@@ -76,6 +76,12 @@ type Config struct {
 	// required for private_key_jwt only.
 	JSONWebKeySetID uuid.UUID
 
+	// ClientSecretGeneration is the stored client secret's revision for
+	// client_secret_basic. It changes whenever the secret is set, replaced or
+	// cleared, so a factory keyed on Config builds a new client and never
+	// reuses a token minted under the previous secret.
+	ClientSecretGeneration int64
+
 	// Credentials coordinates live credential reads and binding observations
 	// with revocation, and opens the client secret per token request.
 	// Required for client_secret_basic. Implementations must be comparable

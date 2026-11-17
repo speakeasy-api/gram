@@ -263,6 +263,7 @@ func (s *Secrets) Set(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID, o
 			ClientSecretExpiresAt: expiresAt,
 			ID:                    clientID,
 			OrganizationID:        owner.OrganizationID,
+			ProjectID:             owner.ProjectID,
 			DecidedGeneration:     0,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -300,6 +301,7 @@ func (s *Secrets) Set(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID, o
 			ClientSecretExpiresAt: expiresAt,
 			ID:                    clientID,
 			OrganizationID:        owner.OrganizationID,
+			ProjectID:             owner.ProjectID,
 			DecidedGeneration:     decision.Generation,
 		})
 		switch {
@@ -332,6 +334,7 @@ func (s *Secrets) Clear(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID,
 	row, err := repo.New(dbtx).ClearRemoteSessionClientSecret(ctx, repo.ClearRemoteSessionClientSecretParams{
 		ID:             clientID,
 		OrganizationID: owner.OrganizationID,
+		ProjectID:      owner.ProjectID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return repo.RemoteSessionClient{}, ErrClientNotFound

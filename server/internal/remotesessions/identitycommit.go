@@ -702,9 +702,12 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 		return reg, err
 	}
 	// A registration cannot be undone, so confirm the returned secret can be
-	// stored before asking the provider for one.
-	if err := c.committer.secrets.RequireUsable(ctx, c.committer.db, clientsecrets.OwnerOf(conv.ToPGTextEmpty(c.plan.Scope.OrganizationID), conv.ToNullUUID(c.plan.Scope.ProjectID))); err != nil {
-		return reg, fmt.Errorf("check client secret key before registration: %w", err)
+	// stored before asking the provider for one. A public client asks for no
+	// secret.
+	if conv.PtrValOr(policy.TokenEndpointAuthMethod, "") != string(TokenEndpointAuthMethodNone) {
+		if err := c.committer.secrets.RequireUsable(ctx, c.committer.db, clientsecrets.OwnerOf(conv.ToPGTextEmpty(c.plan.Scope.OrganizationID), conv.ToNullUUID(c.plan.Scope.ProjectID))); err != nil {
+			return reg, fmt.Errorf("check client secret key before registration: %w", err)
+		}
 	}
 	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(callbackBaseURL), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,

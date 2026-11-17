@@ -292,7 +292,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		client, err = s.secrets.Set(saveCtx, tx, client.ID, clientOwner(client), []byte(response.ClientSecret), expires)
 		if err != nil {
 			s.logger.ErrorContext(saveCtx, "store registered client secret; the new upstream registration is abandoned", attr.SlogOAuthClientID(response.ClientID), attr.SlogError(err))
-			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), err
+			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), clientSecretWriteError(saveCtx, s.logger, err)
 		}
 		client, err = q.SetEMAClientGrants(saveCtx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), GrantTypes: response.GrantTypes})
 		if err != nil {

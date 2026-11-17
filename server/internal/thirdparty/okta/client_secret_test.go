@@ -252,6 +252,14 @@ func TestClientFactory_RebuildsOnConfigChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Same(t, b, again)
 
+	// A secret replaced or revoked in another process is a new revision, so
+	// the client and its cached token are not reused.
+	rotated := replaced
+	rotated.ClientSecretGeneration++
+	r, err := factory.Client(rotated)
+	require.NoError(t, err)
+	require.NotSame(t, b, r)
+
 	reissued := replaced
 	reissued.ClientID = "0oa-new-client"
 	c, err := factory.Client(reissued)

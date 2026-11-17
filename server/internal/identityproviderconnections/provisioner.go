@@ -213,6 +213,11 @@ type ManagedClient struct {
 	// JSONWebKeySetID is null for client-secret clients.
 	JSONWebKeySetID uuid.NullUUID
 
+	// ClientSecretGeneration is the stored secret's revision. It changes
+	// whenever the secret is set, replaced or cleared, so Okta client caches
+	// keyed on it stop reusing a token minted under the previous secret.
+	ClientSecretGeneration int64
+
 	// ExternalKeyID is the external key currently backing the set.
 	ExternalKeyID uuid.NullUUID
 
@@ -382,16 +387,17 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 	}
 
 	return &ManagedClient{
-		ClientRowID:      client.ID,
-		ClientID:         client.ClientID,
-		IssuerID:         client.RemoteSessionIssuerID,
-		AuthMethod:       remotesessions.TokenEndpointAuthMethodBasic,
-		JSONWebKeySetID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExternalKeyID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ActiveKeyID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ActiveKid:        "",
-		ActivatedAt:      time.Time{},
-		JSONWebKeySetURL: "",
+		ClientRowID:            client.ID,
+		ClientID:               client.ClientID,
+		IssuerID:               client.RemoteSessionIssuerID,
+		AuthMethod:             remotesessions.TokenEndpointAuthMethodBasic,
+		JSONWebKeySetID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientSecretGeneration: client.ClientSecretGeneration,
+		ExternalKeyID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActiveKeyID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActiveKid:              "",
+		ActivatedAt:            time.Time{},
+		JSONWebKeySetURL:       "",
 	}, nil
 }
 
@@ -532,16 +538,17 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	}
 
 	return &ManagedClient{
-		ClientRowID:      client.ID,
-		ClientID:         client.ClientID,
-		IssuerID:         client.RemoteSessionIssuerID,
-		AuthMethod:       remotesessions.TokenEndpointAuthMethodPrivateKeyJWT,
-		JSONWebKeySetID:  conv.ToNullUUID(set.ID),
-		ExternalKeyID:    conv.ToNullUUID(externalKey.ID),
-		ActiveKeyID:      conv.ToNullUUID(key.ID),
-		ActiveKid:        key.Kid,
-		ActivatedAt:      key.ActivatedAt.Time,
-		JSONWebKeySetURL: remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, client.ID),
+		ClientRowID:            client.ID,
+		ClientID:               client.ClientID,
+		IssuerID:               client.RemoteSessionIssuerID,
+		AuthMethod:             remotesessions.TokenEndpointAuthMethodPrivateKeyJWT,
+		JSONWebKeySetID:        conv.ToNullUUID(set.ID),
+		ClientSecretGeneration: client.ClientSecretGeneration,
+		ExternalKeyID:          conv.ToNullUUID(externalKey.ID),
+		ActiveKeyID:            conv.ToNullUUID(key.ID),
+		ActiveKid:              key.Kid,
+		ActivatedAt:            key.ActivatedAt.Time,
+		JSONWebKeySetURL:       remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, client.ID),
 	}, nil
 }
 
@@ -952,6 +959,7 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 
 	result := *existing
 	result.ClientID = updated.ClientID
+	result.ClientSecretGeneration = updated.ClientSecretGeneration
 	return &result, nil
 }
 
@@ -1021,6 +1029,7 @@ func (p *Provisioner) ReplaceClientSecret(ctx context.Context, dbtx pgx.Tx, para
 	}
 
 	result := *existing
+	result.ClientSecretGeneration = updated.ClientSecretGeneration
 	return &result, nil
 }
 
@@ -1154,16 +1163,17 @@ func (p *Provisioner) switchToSecret(ctx context.Context, params SwitchAuthMetho
 		return nil, err
 	}
 	switched := &ManagedClient{
-		ClientRowID:      updated.ID,
-		ClientID:         updated.ClientID,
-		IssuerID:         updated.RemoteSessionIssuerID,
-		AuthMethod:       remotesessions.TokenEndpointAuthMethodBasic,
-		JSONWebKeySetID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExternalKeyID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ActiveKeyID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ActiveKid:        "",
-		ActivatedAt:      time.Time{},
-		JSONWebKeySetURL: "",
+		ClientRowID:            updated.ID,
+		ClientID:               updated.ClientID,
+		IssuerID:               updated.RemoteSessionIssuerID,
+		AuthMethod:             remotesessions.TokenEndpointAuthMethodBasic,
+		JSONWebKeySetID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientSecretGeneration: updated.ClientSecretGeneration,
+		ExternalKeyID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActiveKeyID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActiveKid:              "",
+		ActivatedAt:            time.Time{},
+		JSONWebKeySetURL:       "",
 	}
 	if err := params.record(ctx, dbtx, switched); err != nil {
 		return nil, err
@@ -1521,16 +1531,17 @@ func (p *Provisioner) switchToKeySetRows(ctx context.Context, params SwitchAuthM
 		return nil, err
 	}
 	switched := &ManagedClient{
-		ClientRowID:      updated.ID,
-		ClientID:         updated.ClientID,
-		IssuerID:         updated.RemoteSessionIssuerID,
-		AuthMethod:       remotesessions.TokenEndpointAuthMethodPrivateKeyJWT,
-		JSONWebKeySetID:  conv.ToNullUUID(set.ID),
-		ExternalKeyID:    conv.ToNullUUID(externalKey.ID),
-		ActiveKeyID:      conv.ToNullUUID(key.ID),
-		ActiveKid:        key.Kid,
-		ActivatedAt:      key.ActivatedAt.Time,
-		JSONWebKeySetURL: remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, updated.ID),
+		ClientRowID:            updated.ID,
+		ClientID:               updated.ClientID,
+		IssuerID:               updated.RemoteSessionIssuerID,
+		AuthMethod:             remotesessions.TokenEndpointAuthMethodPrivateKeyJWT,
+		JSONWebKeySetID:        conv.ToNullUUID(set.ID),
+		ClientSecretGeneration: updated.ClientSecretGeneration,
+		ExternalKeyID:          conv.ToNullUUID(externalKey.ID),
+		ActiveKeyID:            conv.ToNullUUID(key.ID),
+		ActiveKid:              key.Kid,
+		ActivatedAt:            key.ActivatedAt.Time,
+		JSONWebKeySetURL:       remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, updated.ID),
 	}
 	if err := params.record(ctx, dbtx, switched); err != nil {
 		return nil, err
@@ -1898,16 +1909,17 @@ func managedClientFromRow(row repo.GetManagedClientRow, serverURL *url.URL) *Man
 		jwksURL = remotesessions.ClientJSONWebKeySetURL(serverURL, row.RemoteSessionClient.ID)
 	}
 	return &ManagedClient{
-		ClientRowID:      row.RemoteSessionClient.ID,
-		ClientID:         row.RemoteSessionClient.ClientID,
-		IssuerID:         row.RemoteSessionClient.RemoteSessionIssuerID,
-		AuthMethod:       method,
-		JSONWebKeySetID:  row.JsonWebKeySetID,
-		ExternalKeyID:    row.ExternalKeyID,
-		ActiveKeyID:      row.JsonWebKeyID,
-		ActiveKid:        row.Kid.String,
-		ActivatedAt:      row.ActivatedAt.Time,
-		JSONWebKeySetURL: jwksURL,
+		ClientRowID:            row.RemoteSessionClient.ID,
+		ClientID:               row.RemoteSessionClient.ClientID,
+		IssuerID:               row.RemoteSessionClient.RemoteSessionIssuerID,
+		AuthMethod:             method,
+		JSONWebKeySetID:        row.JsonWebKeySetID,
+		ClientSecretGeneration: row.RemoteSessionClient.ClientSecretGeneration,
+		ExternalKeyID:          row.ExternalKeyID,
+		ActiveKeyID:            row.JsonWebKeyID,
+		ActiveKid:              row.Kid.String,
+		ActivatedAt:            row.ActivatedAt.Time,
+		JSONWebKeySetURL:       jwksURL,
 	}
 }
 

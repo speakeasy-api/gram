@@ -366,16 +366,17 @@ func (s *Syncer) client(target repo.GetSyncTargetRow) (okta.Client, error) {
 		credentials = oktacredentials.Provider{DB: s.db, Tx: nil, Secrets: s.secrets, ConnectionID: target.ConnectionID, ObservedDPoP: nil}
 	}
 	client, err := s.clients.Client(okta.Config{
-		OrgURL:                target.OrgUrl,
-		ClientID:              target.ClientID,
-		AudienceFormat:        string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
-		RemoteSessionClientID: target.RemoteSessionClientID,
-		OrganizationID:        target.OrganizationID,
-		AuthMethod:            remotesessions.TokenEndpointAuthMethod(target.TokenEndpointAuthMethod.String),
-		JSONWebKeySetID:       target.JsonWebKeySetID.UUID,
-		Credentials:           credentials,
-		RequireDPoP:           target.DpopRequired,
-		MaxPages:              maxAssignmentPages,
+		OrgURL:                 target.OrgUrl,
+		ClientID:               target.ClientID,
+		AudienceFormat:         string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
+		RemoteSessionClientID:  target.RemoteSessionClientID,
+		OrganizationID:         target.OrganizationID,
+		AuthMethod:             remotesessions.TokenEndpointAuthMethod(target.TokenEndpointAuthMethod.String),
+		JSONWebKeySetID:        target.JsonWebKeySetID.UUID,
+		ClientSecretGeneration: target.ClientSecretGeneration,
+		Credentials:            credentials,
+		RequireDPoP:            target.DpopRequired,
+		MaxPages:               maxAssignmentPages,
 	})
 	if err != nil {
 		s.clients.Forget(target.RemoteSessionClientID)

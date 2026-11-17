@@ -22,6 +22,7 @@ SET
     updated_at = clock_timestamp()
 WHERE c.id = $1
   AND c.organization_id IS NOT DISTINCT FROM $2::text
+  AND c.project_id IS NOT DISTINCT FROM $3::uuid
   AND c.deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
@@ -29,6 +30,7 @@ RETURNING id, project_id, organization_id, attachment_scope, remote_session_issu
 type ClearRemoteSessionClientSecretParams struct {
 	ID             uuid.UUID
 	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
 }
 
 // Removes the secret: both copies, so a removed secret cannot come back from
@@ -38,7 +40,7 @@ type ClearRemoteSessionClientSecretParams struct {
 // expiry is left to the statement that changed the registration.
 // orgencryption:unfenced erasing both copies is correct under any transition state
 func (q *Queries) ClearRemoteSessionClientSecret(ctx context.Context, arg ClearRemoteSessionClientSecretParams) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, clearRemoteSessionClientSecret, arg.ID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, clearRemoteSessionClientSecret, arg.ID, arg.OrganizationID, arg.ProjectID)
 	var i RemoteSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -360,12 +362,13 @@ SET
     updated_at = clock_timestamp()
 WHERE c.id = $4
   AND c.organization_id IS NOT DISTINCT FROM $5::text
+  AND c.project_id IS NOT DISTINCT FROM $6::uuid
   AND c.deleted IS FALSE
   AND COALESCE((
     SELECT t.generation FROM organization_encryption_transitions AS t
     WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'
     FOR KEY SHARE
-  ), 0) = $6
+  ), 0) = $7
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
@@ -375,6 +378,7 @@ type SetRemoteSessionClientSecretParams struct {
 	ClientSecretExpiresAt pgtype.Timestamptz
 	ID                    uuid.UUID
 	OrganizationID        pgtype.Text
+	ProjectID             uuid.NullUUID
 	DecidedGeneration     int64
 }
 
@@ -401,6 +405,7 @@ func (q *Queries) SetRemoteSessionClientSecret(ctx context.Context, arg SetRemot
 		arg.ClientSecretExpiresAt,
 		arg.ID,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.DecidedGeneration,
 	)
 	var i RemoteSessionClient

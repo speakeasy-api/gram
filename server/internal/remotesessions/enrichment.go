@@ -184,8 +184,7 @@ func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWi
 		resource:                     "",
 		resourceIndicatorUnsupported: row.ResourceIndicatorSupported.Valid && !row.ResourceIndicatorSupported.Bool,
 		clientSecret: func(ctx context.Context) (string, error) {
-			// A private_key_jwt client signs instead, as on the token endpoint.
-			if !clientsecrets.Has(stored) || row.TokenEndpointAuthMethod.String == string(TokenEndpointAuthMethodPrivateKeyJWT) {
+			if !clientsecrets.Has(stored) {
 				return "", nil
 			}
 			return secrets.Open(ctx, nil, owner, stored)

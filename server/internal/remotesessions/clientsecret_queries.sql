@@ -26,6 +26,7 @@ SET
     updated_at = clock_timestamp()
 WHERE c.id = @id
   AND c.organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND c.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
   AND c.deleted IS FALSE
   AND COALESCE((
     SELECT t.generation FROM organization_encryption_transitions AS t
@@ -50,6 +51,7 @@ SET
     updated_at = clock_timestamp()
 WHERE c.id = @id
   AND c.organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND c.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
   AND c.deleted IS FALSE
 RETURNING *;
 

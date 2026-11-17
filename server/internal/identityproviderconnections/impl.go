@@ -1115,16 +1115,17 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, cred
 	// A client-secret connection once seen DPoP-bound must stay bound.
 	dpopPinned := rows.Managed.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic && rows.Okta.DpopRequired
 	client, err := s.oktaClients.Client(okta.Config{
-		OrgURL:                rows.Okta.OrgUrl,
-		ClientID:              rows.Managed.ClientID,
-		AudienceFormat:        string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
-		RemoteSessionClientID: rows.Managed.ClientRowID,
-		OrganizationID:        rows.Connection.OrganizationID,
-		AuthMethod:            rows.Managed.AuthMethod,
-		JSONWebKeySetID:       rows.Managed.JSONWebKeySetID.UUID,
-		Credentials:           credentials,
-		RequireDPoP:           dpopPinned,
-		MaxPages:              verifyMaxPages,
+		OrgURL:                 rows.Okta.OrgUrl,
+		ClientID:               rows.Managed.ClientID,
+		AudienceFormat:         string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
+		RemoteSessionClientID:  rows.Managed.ClientRowID,
+		OrganizationID:         rows.Connection.OrganizationID,
+		AuthMethod:             rows.Managed.AuthMethod,
+		JSONWebKeySetID:        rows.Managed.JSONWebKeySetID.UUID,
+		ClientSecretGeneration: rows.Managed.ClientSecretGeneration,
+		Credentials:            credentials,
+		RequireDPoP:            dpopPinned,
+		MaxPages:               verifyMaxPages,
 	})
 	if err != nil {
 		s.oktaClients.Forget(rows.Managed.ClientRowID)
