@@ -42,7 +42,6 @@ import { ConnectionsTab } from "./ConnectionsTab";
 import { ProviderPicker } from "./ProviderPicker";
 import {
   PROVIDER_TABS,
-  providerScopeLabel,
   useLastProvider,
   useProjectProviders,
   type ProviderTab,
@@ -184,15 +183,6 @@ function ProviderHeaderControls({
 }): JSX.Element {
   const duration = splitIntoUnit(provider.sessionDurationHours);
   const rows: DetailHeaderControlRow[] = [
-    {
-      key: "scope",
-      label: "Scope",
-      control: (
-        <span className="text-foreground flex h-8 items-center text-sm font-medium">
-          {providerScopeLabel(provider)}
-        </span>
-      ),
-    },
     {
       key: "session-length",
       label: "Session length",

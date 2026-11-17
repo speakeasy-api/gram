@@ -60,7 +60,7 @@ export default function UserSessionIssuerDetail(): JSX.Element {
   );
 }
 
-export type IssuerDetailLinks = {
+type IssuerDetailLinks = {
   /** Where "not found" sends people back to. */
   listHref: string;
   /** Another MCP Authentication Provider's page, after consolidating into it. */
@@ -73,7 +73,7 @@ export type IssuerDetailLinks = {
  * whose own providers this page may change; organization-wide ones are always
  * changed through the organization.
  */
-export function IssuerDetailContent({
+function IssuerDetailContent({
   listHref,
   detailHref,
   editableProjectId,

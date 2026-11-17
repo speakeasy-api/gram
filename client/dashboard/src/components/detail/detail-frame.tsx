@@ -119,11 +119,7 @@ export function DetailFrame({
  * dissolves to the card color on the left, so the title and controls sit on a
  * clean ground instead of on tiles.
  */
-export function DetailHeaderBand({
-  children,
-}: {
-  children: ReactNode;
-}): JSX.Element {
+function DetailHeaderBand({ children }: { children: ReactNode }): JSX.Element {
   // A slow swell rather than the cards' hover shimmer.
   const { canvasRef, start } = useIconDither({
     speed: 0.18,

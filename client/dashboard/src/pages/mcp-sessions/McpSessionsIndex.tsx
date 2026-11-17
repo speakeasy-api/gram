@@ -11,7 +11,7 @@ import {
   useProjectProviders,
 } from "./providers";
 
-export const MCP_SESSIONS_TITLE = "MCP Sessions";
+const MCP_SESSIONS_TITLE = "MCP Sessions";
 
 /** The filter the old single list used to narrow to one provider. */
 const LEGACY_PROVIDER_PARAM = "issuerId";

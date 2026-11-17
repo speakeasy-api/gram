@@ -125,7 +125,7 @@ function UserSessionIssuersOverview(): JSX.Element {
   );
 }
 
-export function IssuerTable({
+function IssuerTable({
   tier,
   showProject,
   scopeLabel,
