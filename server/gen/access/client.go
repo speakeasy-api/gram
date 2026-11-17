@@ -39,7 +39,6 @@ type Client struct {
 	UpdateMemberRolesEndpoint                    goa.Endpoint
 	ListShadowMCPInventoryEndpoint               goa.Endpoint
 	GetShadowMCPInventoryServerEndpoint          goa.Endpoint
-	FindShadowMCPInventoryServersEndpoint        goa.Endpoint
 	UpdateShadowMCPInventoryServerNameEndpoint   goa.Endpoint
 	SetShadowMCPOfficialServerEndpoint           goa.Endpoint
 	ListShadowMCPInventoryUsersEndpoint          goa.Endpoint
@@ -62,10 +61,13 @@ type Client struct {
 	ListTemporaryGrantsEndpoint                  goa.Endpoint
 	RenewTemporaryGrantEndpoint                  goa.Endpoint
 	RevokeTemporaryGrantEndpoint                 goa.Endpoint
+	ListAccessRequestsEndpoint                   goa.Endpoint
+	DecideAccessRequestEndpoint                  goa.Endpoint
+	WithdrawAccessRequestEndpoint                goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, listDirectoryPeople, syncDirectoryGroups, setDirectoryRoleMapping, setDirectoryRoleMappings, deleteDirectoryRoleMapping, previewDirectoryRoleSetup, applyDirectoryRoleSetup, listDirectoryReviewItems, resolveDirectoryReviewItem, getDirectoryReviewSettings, updateDirectoryReviewSettings, listScopes, listAgentPolicyScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, findShadowMCPInventoryServers, updateShadowMCPInventoryServerName, setShadowMCPOfficialServer, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess, createTemporaryGrant, listTemporaryGrants, renewTemporaryGrant, revokeTemporaryGrant goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, listDirectoryPeople, syncDirectoryGroups, setDirectoryRoleMapping, setDirectoryRoleMappings, deleteDirectoryRoleMapping, previewDirectoryRoleSetup, applyDirectoryRoleSetup, listDirectoryReviewItems, resolveDirectoryReviewItem, getDirectoryReviewSettings, updateDirectoryReviewSettings, listScopes, listAgentPolicyScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, setShadowMCPOfficialServer, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess, createTemporaryGrant, listTemporaryGrants, renewTemporaryGrant, revokeTemporaryGrant, listAccessRequests, decideAccessRequest, withdrawAccessRequest goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -91,7 +93,6 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirec
 		UpdateMemberRolesEndpoint:                    updateMemberRoles,
 		ListShadowMCPInventoryEndpoint:               listShadowMCPInventory,
 		GetShadowMCPInventoryServerEndpoint:          getShadowMCPInventoryServer,
-		FindShadowMCPInventoryServersEndpoint:        findShadowMCPInventoryServers,
 		UpdateShadowMCPInventoryServerNameEndpoint:   updateShadowMCPInventoryServerName,
 		SetShadowMCPOfficialServerEndpoint:           setShadowMCPOfficialServer,
 		ListShadowMCPInventoryUsersEndpoint:          listShadowMCPInventoryUsers,
@@ -114,6 +115,9 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirec
 		ListTemporaryGrantsEndpoint:                  listTemporaryGrants,
 		RenewTemporaryGrantEndpoint:                  renewTemporaryGrant,
 		RevokeTemporaryGrantEndpoint:                 revokeTemporaryGrant,
+		ListAccessRequestsEndpoint:                   listAccessRequests,
+		DecideAccessRequestEndpoint:                  decideAccessRequest,
+		WithdrawAccessRequestEndpoint:                withdrawAccessRequest,
 	}
 }
 
@@ -653,29 +657,6 @@ func (c *Client) GetShadowMCPInventoryServer(ctx context.Context, p *GetShadowMC
 	return ires.(*ShadowMCPInventoryServer), nil
 }
 
-// FindShadowMCPInventoryServers calls the "findShadowMCPInventoryServers"
-// endpoint of the "access" service.
-// FindShadowMCPInventoryServers may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) FindShadowMCPInventoryServers(ctx context.Context, p *FindShadowMCPInventoryServersPayload) (res *FindShadowMCPInventoryServersResult, err error) {
-	var ires any
-	ires, err = c.FindShadowMCPInventoryServersEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*FindShadowMCPInventoryServersResult), nil
-}
-
 // UpdateShadowMCPInventoryServerName calls the
 // "updateShadowMCPInventoryServerName" endpoint of the "access" service.
 // UpdateShadowMCPInventoryServerName may return the following errors:
@@ -1170,4 +1151,73 @@ func (c *Client) RevokeTemporaryGrant(ctx context.Context, p *RevokeTemporaryGra
 		return
 	}
 	return ires.(*TemporaryGrant), nil
+}
+
+// ListAccessRequests calls the "listAccessRequests" endpoint of the "access"
+// service.
+// ListAccessRequests may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAccessRequests(ctx context.Context, p *ListAccessRequestsPayload) (res *ListAccessRequestsResult, err error) {
+	var ires any
+	ires, err = c.ListAccessRequestsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAccessRequestsResult), nil
+}
+
+// DecideAccessRequest calls the "decideAccessRequest" endpoint of the "access"
+// service.
+// DecideAccessRequest may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DecideAccessRequest(ctx context.Context, p *DecideAccessRequestPayload) (res *AccessRequest, err error) {
+	var ires any
+	ires, err = c.DecideAccessRequestEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AccessRequest), nil
+}
+
+// WithdrawAccessRequest calls the "withdrawAccessRequest" endpoint of the
+// "access" service.
+// WithdrawAccessRequest may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) WithdrawAccessRequest(ctx context.Context, p *WithdrawAccessRequestPayload) (res *AccessRequest, err error) {
+	var ires any
+	ires, err = c.WithdrawAccessRequestEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AccessRequest), nil
 }

@@ -2150,3 +2150,107 @@ JOIN agents
 WHERE aab.organization_id = @organization_id
   AND aab.deleted IS FALSE
   AND aab.agent_id = ANY(@agent_ids::uuid[]);
+
+-- name: ExpireLapsedAccessRequest :exec
+-- Marks the requester's pending request for this access expired once its
+-- window has passed, so a new request for the same access can be stored.
+UPDATE access_requests
+SET status = 'expired', updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND requester_user_id = @requester_user_id
+  AND scope = @scope
+  AND selector = @selector
+  AND status = 'pending'
+  AND expires_at <= clock_timestamp()
+  AND deleted IS FALSE;
+
+-- name: InsertAccessRequest :one
+-- Stores a pending request. Returns no row when the requester already has a
+-- pending request for the same access; the caller loads that one instead.
+INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, expires_at)
+VALUES (@organization_id, @requester_user_id, @scope, @selector, sqlc.narg(resource_name), sqlc.narg(message), @challenge_ids, @expires_at)
+ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
+DO NOTHING
+RETURNING *;
+
+-- name: GetPendingAccessRequest :one
+SELECT *
+FROM access_requests
+WHERE organization_id = @organization_id
+  AND requester_user_id = @requester_user_id
+  AND scope = @scope
+  AND selector = @selector
+  AND status = 'pending'
+  AND deleted IS FALSE;
+
+-- name: GetAccessRequest :one
+SELECT sqlc.embed(access_requests), principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = @organization_id
+  AND access_requests.id = @id
+  AND access_requests.deleted IS FALSE;
+
+-- name: GetAccessRequestForUpdate :one
+-- Locks one request so a decision or withdrawal sees the state it changes.
+SELECT *
+FROM access_requests
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: ListAccessRequests :many
+-- Lists an organization's requests, newest first. A pending request whose
+-- window has passed counts as expired for the status filter.
+SELECT sqlc.embed(access_requests), principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = @organization_id
+  AND access_requests.deleted IS FALSE
+  AND (sqlc.narg(requester_user_id)::text IS NULL OR access_requests.requester_user_id = sqlc.narg(requester_user_id)::text)
+  AND (
+    sqlc.narg(status)::text IS NULL
+    OR (CASE
+          WHEN access_requests.status = 'pending' AND access_requests.expires_at <= clock_timestamp() THEN 'expired'
+          ELSE access_requests.status
+        END) = sqlc.narg(status)::text
+  )
+ORDER BY access_requests.created_at DESC, access_requests.id DESC
+LIMIT @max_rows;
+
+-- name: DecideAccessRequest :one
+-- Records a decision on a pending request.
+UPDATE access_requests
+SET
+  status = @status,
+  decided_by_user_id = @decided_by_user_id,
+  decided_via = @decided_via,
+  decided_at = clock_timestamp(),
+  temporary_grant_id = sqlc.narg(temporary_grant_id),
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: WithdrawAccessRequest :one
+UPDATE access_requests
+SET status = 'withdrawn', updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND requester_user_id = @requester_user_id
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListAccessRequestPeople :many
+-- Names the requesters and deciders a list of requests mentions.
+SELECT id, display_name, email
+FROM users
+WHERE id = ANY(@ids::text[]);

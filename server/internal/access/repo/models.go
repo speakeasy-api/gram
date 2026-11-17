@@ -9,6 +9,57 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.
+type AccessRequest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// The Speakeasy user who asked for access.
+	// @access: confidential
+	RequesterUserID string
+	// The scope asked for, e.g. "project:read".
+	// @access: confidential
+	Scope string
+	// Where the scope applies, in the shape of principal_grants.selectors.
+	// @access: opaque-restricted
+	Selector []byte
+	// Name of the resource the request is for, as it was when requested.
+	// @access: opaque-confidential
+	ResourceName pgtype.Text
+	// Free-form note from the requester to the admins.
+	// @access: opaque-restricted
+	Message pgtype.Text
+	// pending, approved, denied, expired or withdrawn.
+	// @access: confidential
+	Status string
+	// The admin who approved or denied the request.
+	// @access: confidential
+	DecidedByUserID pgtype.Text
+	// Where the decision came from: dashboard or slack.
+	// @access: confidential
+	DecidedVia pgtype.Text
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// The principal_grants row an approval created. Soft reference: the grant may be revoked later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
+	// IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
+	// @access: opaque-confidential
+	ChallengeIds []string
+	// When a pending request lapses.
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
 type AuthzChallengeResolution struct {
 	// @access: confidential
