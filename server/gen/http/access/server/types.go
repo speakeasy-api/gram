@@ -21191,8 +21191,8 @@ func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {
@@ -21281,8 +21281,8 @@ func ValidateSetResourceAudienceEntryRequestBody(body *SetResourceAudienceEntryR
 		}
 	}
 	for _, e := range body.Dispositions {
-		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world" || e == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	return

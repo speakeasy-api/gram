@@ -8126,7 +8126,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],
@@ -8193,7 +8193,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],
@@ -8216,7 +8216,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],

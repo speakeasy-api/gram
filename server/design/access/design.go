@@ -1459,7 +1459,7 @@ var SelectorModel = Type("Selector", func() {
 	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
-		Enum("read_only", "destructive", "idempotent", "open_world")
+		Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
 	})
 	Attribute("tool", String, func() {
 		Description("Specific tool name filter (MCP scopes only).")
@@ -1651,7 +1651,7 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	}), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
 	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
 		Elem(func() {
-			Enum("read_only", "destructive", "idempotent", "open_world")
+			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
 		})
 	})
 })
@@ -1683,7 +1683,7 @@ var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
 	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
 	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {
 		Elem(func() {
-			Enum("read_only", "destructive", "idempotent", "open_world")
+			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
 		})
 	})
 })
@@ -1746,7 +1746,7 @@ var ExplainedAccessRuleModel = Type("ExplainedAccessRule", func() {
 	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
 	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
 		Elem(func() {
-			Enum("read_only", "destructive", "idempotent", "open_world")
+			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
 		})
 	})
 	Attribute("effect", String, "How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource's tools.", func() {

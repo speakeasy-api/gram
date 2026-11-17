@@ -75,7 +75,7 @@ type serverTools struct {
 var _ cache.CacheableObject[serverTools] = (*serverTools)(nil)
 
 func cacheKey(projectID, mcpServerID string) string {
-	return fmt.Sprintf("mcpservers:tool_disposition:v3:%s:%s", projectID, mcpServerID)
+	return fmt.Sprintf("mcpservers:tool_disposition:v4:%s:%s", projectID, mcpServerID)
 }
 
 func (s serverTools) CacheKey() string {
