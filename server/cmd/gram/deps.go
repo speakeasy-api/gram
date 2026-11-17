@@ -1916,19 +1916,27 @@ func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Co
 // environment dev and opt out explicitly.
 var orgEncryptionOptionalEnvironments = []string{"local", "test"}
 
-// orgEncryptionDeps is a process's organization encryption. Both fields are nil
-// when organization encryption is off, and every consumer then fails closed.
+// orgEncryptionDeps is a process's organization encryption. Service and
+// Provisioner are nil when organization encryption is off; Transitions is
+// always set, so consumers serve platform_key and fail closed otherwise.
 type orgEncryptionDeps struct {
 	// Service encrypts and decrypts organization data.
 	Service *orgencryption.Service
 
 	// Provisioner mints, switches and retires organization keys.
 	Provisioner *orgencryption.Provisioner
+
+	// Transitions reads each organization's transition state, which decides
+	// whether a use case seals with the platform key or the organization's
+	// key. It is set even when organization encryption is off: the process
+	// then serves organizations in platform_key and fails closed for the rest.
+	Transitions *orgencryption.Transitions
 }
 
-// newOrgEncryption builds the organization encryption service and
-// provisioner. It returns the zero value when organization encryption is off,
-// and an error when it is misconfigured or required but not configured.
+// newOrgEncryption builds the organization encryption service, provisioner
+// and transition state. Service and Provisioner are nil when organization
+// encryption is off, and it returns an error when organization encryption is
+// misconfigured or required but not configured.
 func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (orgEncryptionDeps, error) {
 	environment := c.String("environment")
 	rawCredentialID := strings.TrimSpace(c.String(orgEncryptionCredentialIDFlag))
@@ -1938,7 +1946,7 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 			return orgEncryptionDeps{}, errors.New("organization encryption is disabled but a platform credential is configured: unset GRAM_ORG_ENCRYPTION_DISABLED or GRAM_ORG_ENCRYPTION_CREDENTIAL_ID")
 		}
 		logger.WarnContext(ctx, "organization encryption is disabled by configuration")
-		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
+		return orgEncryptionDeps{Service: nil, Provisioner: nil, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, nil)}, nil
 	}
 
 	if rawCredentialID == "" {
@@ -1946,7 +1954,7 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 			return orgEncryptionDeps{}, fmt.Errorf("organization encryption is required in the %q environment: set GRAM_ORG_ENCRYPTION_CREDENTIAL_ID, or set GRAM_ORG_ENCRYPTION_DISABLED to run without it", environment)
 		}
 		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
-		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
+		return orgEncryptionDeps{Service: nil, Provisioner: nil, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, nil)}, nil
 	}
 
 	credentialID, err := uuid.Parse(rawCredentialID)
@@ -1989,7 +1997,19 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 
 	logger.InfoContext(ctx, "organization encryption is enabled")
 
-	return orgEncryptionDeps{Service: service, Provisioner: provisioner}, nil
+	return orgEncryptionDeps{Service: service, Provisioner: provisioner, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, provisioner)}, nil
+}
+
+// newOrgEncryptionTransitions builds the process's transition state. A nil
+// provisioner leaves the process able to read state but not change it.
+func newOrgEncryptionTransitions(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, provisioner *orgencryption.Provisioner) *orgencryption.Transitions {
+	return orgencryption.NewTransitions(logger, db, auditLogger, provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: 0})
+}
+
+// Cipher builds a cipher that seals and opens values moving from the platform
+// key to organization keys, sharing the process's transition state cache.
+func (d orgEncryptionDeps) Cipher(logger *slog.Logger, platform *encryption.Client) *orgencryption.Cipher {
+	return orgencryption.NewCipher(logger, platform, d.Service, d.Transitions)
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.
