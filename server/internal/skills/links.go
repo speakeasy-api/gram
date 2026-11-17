@@ -217,8 +217,15 @@ func buildSkillLinkAuditSnapshot(link mcpskillsrepo.McpSkillLink) *audit.SkillLi
 }
 
 func (s *Service) Link(ctx context.Context, payload *gen.LinkPayload) (*types.SkillLink, error) {
-	authCtx, logger, err := s.requireSkillReadAccess(ctx, payload.ID)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, payload.ID); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsOverMCP(ctx, authCtx, logger); err != nil {
@@ -387,7 +394,7 @@ func (s *Service) Unlink(ctx context.Context, payload *gen.UnlinkPayload) error 
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "get skill link").LogError(ctx, logger)
 	}
-	if _, _, err := s.requireSkillReadAccess(ctx, current.McpSkillLink.SkillID.String()); err != nil {
+	if err := s.requireSkillReadAccess(ctx, authCtx, current.McpSkillLink.SkillID.String()); err != nil {
 		return err
 	}
 	if err := s.requireStoredLinkTargetWrite(ctx, *authCtx.ProjectID, current.McpSkillLink, current.McpServerToolsetID); err != nil {
@@ -444,8 +451,15 @@ func (s *Service) Unlink(ctx context.Context, payload *gen.UnlinkPayload) error 
 }
 
 func (s *Service) ListLinks(ctx context.Context, payload *gen.ListLinksPayload) (*gen.ListSkillLinksResult, error) {
-	authCtx, logger, err := s.requireSkillReadAccess(ctx, conv.PtrValOr(payload.SkillID, ""))
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, conv.PtrValOr(payload.SkillID, "")); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsOverMCP(ctx, authCtx, logger); err != nil {
