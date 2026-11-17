@@ -207,14 +207,14 @@ func TestGrantInvariants_AbsentValueNeverGrants(t *testing.T) {
 			ref := MCPServer(MCPServerIDFrom(server.id), ProjectIDFrom(server.project))
 			for _, tool := range toolNames {
 				for _, disposition := range allDispositions {
-					full := authorize(grants, ref.ToolCall(tool, disposition)).allowed
+					full := isAllowed(t, grants, ref.ToolCall(tool, disposition))
 					if full {
 						continue
 					}
-					if authorize(grants, ref.ToolCall(tool, "")).allowed {
+					if isAllowed(t, grants, ref.ToolCall(tool, "")) {
 						failures.add("P8: [%s] refuses %s (%s) on %s but allows it with no disposition", describeGrants(grants), tool, disposition, server.id)
 					}
-					if authorize(grants, ref.ToolCall("", disposition)).allowed {
+					if isAllowed(t, grants, ref.ToolCall("", disposition)) {
 						failures.add("P8: [%s] refuses %s (%s) on %s but allows it with no tool", describeGrants(grants), tool, disposition, server.id)
 					}
 				}
