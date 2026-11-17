@@ -1097,8 +1097,9 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 // Claude Code runs compaction as a hidden subagent too. Relays send SubagentStop
 // as assistant.responded, so storing its text put subagent results and
 // compaction summaries in the parent session's chat as assistant replies.
-// SubagentStop still feeds MCP attribution; only the chat row is skipped, and
-// the session's own Stop keeps its assistant row.
+// SubagentStop still feeds MCP attribution and telemetry; only the chat row is
+// skipped, so it names nothing. The session's own Stop keeps its assistant row
+// and schedules the chat title.
 func TestIngest_SubagentStopStoresNoChatRow(t *testing.T) {
 	t.Parallel()
 
@@ -1117,6 +1118,9 @@ func TestIngest_SubagentStopStoresNoChatRow(t *testing.T) {
 
 			ctx, ti := newTestHooksService(t)
 			ti.service.productFeatures = alwaysEnabledFeatures{}
+			chClient := enableHookTelemetryLogger(t, ctx, ti)
+			titles := &recordingTitleGenerator{}
+			ti.service.chatTitleGenerator = titles
 			authCtx := hookAuthContext(t, ctx)
 
 			sessionID := "subagent-stop-" + uuid.NewString()
@@ -1124,6 +1128,26 @@ func TestIngest_SubagentStopStoresNoChatRow(t *testing.T) {
 			turnID := "prompt-" + uuid.NewString()
 			requestID := "req_" + uuid.NewString()
 			role := "assistant"
+			startedAt := time.Now().UTC()
+
+			// Canonical hook rows carry no gram_urn, so the empty URN selects
+			// them; gram.hook.event nests on its dots in the stored JSON.
+			hookEvents := func(count int) []string {
+				logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "", startedAt, count)
+				events := make([]string, 0, len(logs))
+				for _, row := range logs {
+					var stored struct {
+						Gram struct {
+							Hook struct {
+								Event string `json:"event"`
+							} `json:"hook"`
+						} `json:"gram"`
+					}
+					require.NoError(t, json.Unmarshal([]byte(row.Attributes), &stored))
+					events = append(events, stored.Gram.Hook.Event)
+				}
+				return events
+			}
 
 			summary := "Summary of the conversation so far."
 			subagentStop := canonicalIngestPayload(tc.adapter, "assistant.responded", sessionID)
@@ -1162,6 +1186,10 @@ func TestIngest_SubagentStopStoresNoChatRow(t *testing.T) {
 				"SubagentStop must still feed transcript-derived MCP attribution")
 			require.Equal(t, telemetry.MCPAttributionTuple{Server: "example-server", Tool: "example_tool"}, tuple)
 
+			require.Equal(t, []string{string(HookEventSubagentStop)}, hookEvents(1),
+				"SubagentStop must still write its telemetry row under the provider event name")
+			require.Empty(t, titles.scheduled(), "a SubagentStop stores no assistant turn, so it must not schedule a chat title")
+
 			reply := "Done: the tests pass."
 			stop := canonicalIngestPayload(tc.adapter, "assistant.responded", sessionID)
 			stop.Source.RawEventName = &tc.stop
@@ -1181,6 +1209,9 @@ func TestIngest_SubagentStopStoresNoChatRow(t *testing.T) {
 			require.Len(t, msgs, 1, "the session's own Stop still stores its assistant reply")
 			require.Equal(t, "assistant", msgs[0].Role)
 			require.Equal(t, reply, msgs[0].Content)
+
+			require.ElementsMatch(t, []string{string(HookEventSubagentStop), string(HookEventStop)}, hookEvents(2))
+			require.Equal(t, []string{chatID.String()}, titles.scheduled(), "the session's own Stop schedules the chat title")
 		})
 	}
 }
