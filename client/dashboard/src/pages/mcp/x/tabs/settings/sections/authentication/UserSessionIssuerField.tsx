@@ -5,8 +5,6 @@ import { Spinner } from "@/components/ui/Spinner";
 import { FieldError } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -33,9 +31,6 @@ export function UserSessionIssuerField({
   isError: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const mcpAuthenticationPage =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-    "enabled";
   const [draftIssuerId, setDraftIssuerId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const currentIssuerId = target.userSessionIssuerId ?? "";
@@ -98,7 +93,7 @@ export function UserSessionIssuerField({
             disabled={update.isPending}
           />
         </div>
-        {mcpAuthenticationPage && currentIssuerId ? (
+        {currentIssuerId ? (
           <OpenProviderLink issuerId={currentIssuerId} />
         ) : null}
       </div>
@@ -171,7 +166,7 @@ function OpenProviderLink({ issuerId }: { issuerId: string }): JSX.Element {
       asChild
       aria-label="Open MCP Authentication Provider settings"
     >
-      <Link to={routes.mcpSessions.configuration.issuerDetail.href(issuerId)}>
+      <Link to={routes.mcpSessions.provider.settings.href(issuerId)}>
         <Button.LeftIcon>
           <Settings className="size-4" aria-hidden="true" />
         </Button.LeftIcon>

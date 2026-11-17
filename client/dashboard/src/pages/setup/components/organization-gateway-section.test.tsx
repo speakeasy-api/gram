@@ -16,7 +16,6 @@ const state = vi.hoisted(() => ({
   },
   queryOptions: undefined as Record<string, unknown> | undefined,
   refetch: vi.fn(),
-  issuerDashboard: "disabled",
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -31,9 +30,6 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
-}));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: state.issuerDashboard }),
 }));
 vi.mock("@gram/client/react-query/organizationGateway.js", () => ({
   useOrganizationGateway: (
@@ -79,7 +75,6 @@ beforeEach(() => {
   state.gateway = {};
   state.queryOptions = undefined;
   state.refetch.mockClear();
-  state.issuerDashboard = "disabled";
 });
 
 function renderSection() {
@@ -147,8 +142,7 @@ describe("OrganizationGatewayConnectorSection", () => {
     expectNoUrlOrSteps();
   });
 
-  it("links admins to consolidation when the issuer dashboard is on", () => {
-    state.issuerDashboard = "enabled";
+  it("links admins to consolidation", () => {
     unavailable("multiple_organization_issuers");
 
     renderSection();
@@ -199,15 +193,18 @@ describe("OrganizationGatewayConnectorSection", () => {
     ).toBeTruthy();
   });
 
-  it("sends admins to support for a missing sign-in, without a setup link", () => {
+  it("sends admins to make a project's sign-in organization-wide, without a setup link", () => {
     unavailable("no_organization_issuer");
 
     renderSection();
 
     expect(screen.getByText(/doesn't have one/)).toBeTruthy();
-    expect(screen.getByText(/Contact support to set one up/)).toBeTruthy();
+    expect(screen.getByText(/organization-wide in/)).toBeTruthy();
     expect(screen.queryByText(/opening this setup card/)).toBeNull();
-    expect(screen.queryByRole("link")).toBeNull();
+    // Only the way to make a project's provider organization-wide.
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
+      ["MCP Authentication"],
+    );
     expectNoUrlOrSteps();
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     expect(state.refetch).toHaveBeenCalled();
@@ -232,7 +229,10 @@ describe("OrganizationGatewayConnectorSection", () => {
     renderSection();
 
     expect(screen.getByText(/more than one/)).toBeTruthy();
-    expect(screen.queryByRole("link")).toBeNull();
+    // Consolidation, not creation.
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
+      ["MCP Authentication"],
+    );
     expectNoUrlOrSteps();
   });
 

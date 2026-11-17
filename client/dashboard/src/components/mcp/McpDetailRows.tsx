@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { HEADER_CONTROL_BUTTON } from "@/components/mcp/headerControl";
+import { DETAIL_HEADER_CONTROL_BUTTON } from "@/components/detail/detail-frame";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -149,7 +149,10 @@ export function McpServerHeaderStatus({
   if (server.unproxiedMcpServerId) {
     return (
       <span
-        className={cn(HEADER_CONTROL_BUTTON, "hover:bg-card cursor-default")}
+        className={cn(
+          DETAIL_HEADER_CONTROL_BUTTON,
+          "hover:bg-card cursor-default",
+        )}
       >
         <StatusDot tone="success" />
         Always on
@@ -175,7 +178,7 @@ export function McpServerHeaderStatus({
         <DropdownMenuTrigger asChild disabled={!known || !canWrite}>
           <button
             type="button"
-            className={HEADER_CONTROL_BUTTON}
+            className={DETAIL_HEADER_CONTROL_BUTTON}
             aria-busy={updating}
             title={
               known

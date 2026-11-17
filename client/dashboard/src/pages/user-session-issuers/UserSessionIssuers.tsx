@@ -11,17 +11,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Heading } from "@/components/ui/Heading";
-import { SplashScreen } from "@/components/ui/LogoLoader";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { MoreHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Navigate, Outlet } from "react-router";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import {
   authorizationServerModeLabel,
@@ -33,15 +29,6 @@ import {
   useIssuerTier,
   type IssuerTier,
 } from "./useIssuerTier";
-
-/** Route shell: the whole surface waits on its rollout flag. */
-export function UserSessionIssuersRoot(): JSX.Element | null {
-  const flag = useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard);
-  // Hold the splash until flags resolve rather than flashing a redirect.
-  if (flag.status === "loading") return <SplashScreen />;
-  if (flag.status !== "enabled") return <Navigate to=".." replace />;
-  return <Outlet />;
-}
 
 export function UserSessionIssuersPage(): JSX.Element {
   return (
