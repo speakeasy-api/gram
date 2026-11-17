@@ -2,6 +2,15 @@ package authz
 
 import "github.com/google/uuid"
 
+// Chat has no project dimension, and every chat grant the dashboard saves
+// covers every chat (resource_id "*"). So the id in a chat check is a
+// placeholder: Chats(project), OrgChats(org) and UnrestrictedChats() all ask
+// whether the caller holds chat:read on every chat, and differ only in the
+// placeholder they carry. They keep the ids the old ChatReadCheck callers
+// passed, so a grant saved through the API on one specific id still matches
+// exactly what it matched before. Giving chats a project boundary is a
+// separate change.
+
 // OrgChatCollection names every chat of one organization. Chats sit in
 // projects, but an organization-wide chat read grant is stored with the
 // organization's id as the resource, so reading across every project asks
