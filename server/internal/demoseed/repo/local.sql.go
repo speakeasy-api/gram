@@ -400,6 +400,10 @@ const localEMAPointIdentityProviderClient = `-- name: LocalEMAPointIdentityProvi
 UPDATE remote_session_clients
 SET client_id = $1::text,
     client_secret_encrypted = $2::text,
+    -- A replaced secret is a new revision, and the organization-key copy
+    -- would hold the previous secret.
+    client_secret_org_encrypted = NULL,
+    client_secret_generation = client_secret_generation + 1,
     token_endpoint_auth_method = 'client_secret_post',
     grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
     scope = ARRAY['openid', 'email', 'profile'],
