@@ -391,7 +391,7 @@ export function ActionsSection({
   return (
     <RequireScope scope="org:admin" level="section">
       <InfoSection title="Actions">
-        <Stack direction="horizontal" gap={2}>
+        <Stack direction="horizontal" gap={2} wrap="wrap">
           {issuer.projectId !== "" && (
             <Button
               variant="secondary"

@@ -43,7 +43,7 @@ export default function McpSessionsIndex(): JSX.Element {
         title={MCP_SESSIONS_TITLE}
       >
         {isError ? (
-          <Text className="text-destructive">
+          <Text destructive>
             Couldn&apos;t load MCP Authentication Providers. Reload the page to
             try again.
           </Text>

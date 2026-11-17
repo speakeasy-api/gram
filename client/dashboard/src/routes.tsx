@@ -464,8 +464,9 @@ const ROUTE_STRUCTURE = {
     url: "mcp-sessions",
     icon: "users",
     subPages: {
-      // The index opens the provider picked last, else the default one.
       // One MCP Authentication Provider, chosen with the header's picker.
+      // The index opens the one an old `?issuerId=` link names, else the one
+      // picked last, else the organization's default, else the first.
       provider: {
         title: "MCP Authentication Provider",
         url: ":issuerId",

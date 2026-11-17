@@ -15,6 +15,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
+import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { activeDetailTab } from "@/lib/detail-tabs";
 import { splitIntoUnit } from "@/pages/mcp/x/tabs/settings/sections/authentication/sessionSettings";
 import { ClientAccessSection } from "@/pages/user-session-issuers/ClientAccessSection";
@@ -78,6 +79,17 @@ const SCROLLABLE_SETTINGS_IDS = [
  * sign-in through it works.
  */
 export default function McpSessionsProvider(): JSX.Element {
+  const project = useProject();
+  // Gate the reads too, as the single list was: nothing below loads for a
+  // viewer who can't read the project.
+  return (
+    <RequireScope scope="project:read" resourceId={project.id} level="page">
+      <ProviderPage />
+    </RequireScope>
+  );
+}
+
+function ProviderPage(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
   const navigate = useNavigate();
@@ -87,6 +99,8 @@ export default function McpSessionsProvider(): JSX.Element {
   const [, rememberProvider] = useLastProvider();
   const activeTab = activeDetailTab(pathname, PROVIDER_TABS);
   const provider = providers.find((p) => p.id === issuerId);
+  // The frame owns the scroll container; a tab change starts at the top.
+  const contentRef = useTabScrollReset(activeTab);
 
   const tabHref = (tab: ProviderTab, id: string = issuerId) => {
     switch (tab) {
@@ -125,6 +139,7 @@ export default function McpSessionsProvider(): JSX.Element {
       tabsLabel="MCP Authentication Provider sections"
       tabs={tabs}
       activeTab={activeTab}
+      contentRef={contentRef}
       header={
         <DetailHeaderLayout
           title={
@@ -279,13 +294,28 @@ function ProviderUnavailable({ error }: { error: unknown }): JSX.Element {
   );
 }
 
+/** The provider is the organization's; reading more of it needs its scopes. */
+function OrganizationAccessNeeded({ what }: { what: string }): JSX.Element {
+  return (
+    <InlineEmptyState
+      icon="lock"
+      heading="Organization access needed"
+      description={`Ask an organization admin for read access to see ${what}.`}
+    />
+  );
+}
+
 function ProviderMcpServersTab({
   issuerId,
 }: {
   issuerId: string;
 }): JSX.Element {
   return (
-    <RequireScope scope={["org:read", "org:admin"]} level="section">
+    <RequireScope
+      scope={["org:read", "org:admin"]}
+      level="section"
+      fallback={<OrganizationAccessNeeded what="the MCP servers using it" />}
+    >
       <ProviderMcpServers issuerId={issuerId} />
     </RequireScope>
   );
@@ -308,7 +338,11 @@ function ProviderMcpServers({ issuerId }: { issuerId: string }): JSX.Element {
 
 function ProviderSettingsTab({ issuerId }: { issuerId: string }): JSX.Element {
   return (
-    <RequireScope scope={["org:read", "org:admin"]} level="section">
+    <RequireScope
+      scope={["org:read", "org:admin"]}
+      level="section"
+      fallback={<OrganizationAccessNeeded what="its settings" />}
+    >
       <ProviderSettings issuerId={issuerId} />
     </RequireScope>
   );

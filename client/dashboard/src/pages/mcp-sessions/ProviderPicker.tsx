@@ -35,6 +35,12 @@ export function ProviderPicker({
   onSelect: (provider: UserSessionIssuer) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  // Nothing to switch to: the name alone.
+  if (providers.length <= 1) {
+    return (
+      <h1 className={cn(DETAIL_HEADER_NAME, "min-w-0")}>{current.slug}</h1>
+    );
+  }
   const organizationWide = providers.filter((p) => p.projectId === "");
   const projectOwn = providers.filter((p) => p.projectId !== "");
 

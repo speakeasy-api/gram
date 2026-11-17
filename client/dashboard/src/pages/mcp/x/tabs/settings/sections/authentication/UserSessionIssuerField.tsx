@@ -94,7 +94,10 @@ export function UserSessionIssuerField({
           />
         </div>
         {currentIssuerId ? (
-          <OpenProviderLink issuerId={currentIssuerId} />
+          // The provider's settings are the organization's to read.
+          <RequireScope scope={["org:read", "org:admin"]} level="section">
+            <OpenProviderLink issuerId={currentIssuerId} />
+          </RequireScope>
         ) : null}
       </div>
     );
