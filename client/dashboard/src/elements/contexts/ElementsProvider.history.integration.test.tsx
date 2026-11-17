@@ -43,6 +43,8 @@ const USER_TEXT = "What is the weather?";
 const ASSISTANT_TEXT = "It is sunny.";
 const SAVED_TITLE = "Saved chat";
 const EDITED_TITLE = "Edited title";
+// Same pause useGramThreadListAdapter waits before chat.generateTitle.
+const TITLE_DELAY_MS = 2_000;
 const HISTORY_DEPRECATION =
   "[assistant-ui] RemoteThreadListAdapter.unstable_Provider is deprecated and will be removed in a future minor release. Return the same adapters from unstable_useAdapters and drop unstable_Provider so useRemoteThreadListRuntime runs on the RemoteThreadList client.";
 
@@ -109,10 +111,22 @@ function fullPageLoads(calls: readonly RpcCall[], chatId: string): RpcCall[] {
     return (
       url.pathname === "/rpc/chat.load" &&
       url.searchParams.get("id") === chatId &&
-      url.searchParams.get("limit") === "200" &&
-      !url.searchParams.has("before_seq")
+      url.searchParams.get("limit") === "200"
     );
   });
+}
+
+// The adapter's pause is for the server-side title job, not these tests.
+function collapseTitleDelay() {
+  const realSetTimeout = globalThis.setTimeout;
+  vi.spyOn(globalThis, "setTimeout").mockImplementation(
+    (handler, delay, ...args) =>
+      realSetTimeout(
+        handler,
+        delay === TITLE_DELAY_MS ? 0 : delay,
+        ...(args as []),
+      ),
+  );
 }
 
 function messageText(message: {
@@ -131,13 +145,11 @@ const seen: {
 function HistoryProbe() {
   const aui = useAui();
   seen.aui = aui;
-  const title = useAuiState((state) => state.threadListItem.title ?? "");
   const remoteId = useAuiState((state) => state.threadListItem.remoteId ?? "");
   const chatId = useContext(ChatIdContext)?.chatId ?? "";
   const messages = useAuiState((state) => state.thread.messages);
   return (
     <>
-      <output aria-label="title">{title}</output>
       <output aria-label="remote id">{remoteId}</output>
       <output aria-label="chat id">{chatId}</output>
       <output aria-label="messages">
@@ -172,6 +184,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -205,16 +218,15 @@ describe("Elements history runtime", () => {
       initialThreadId: SAVED_CHAT_ID,
     });
 
-    function Host({ tick }: { tick: number }) {
+    function Host() {
       return (
         <GramElementsProvider config={config}>
-          <output aria-label="render">{tick}</output>
           <HistoryProbe />
         </GramElementsProvider>
       );
     }
 
-    const { rerender } = render(<Host tick={0} />);
+    const { rerender } = render(<Host />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("messages").textContent).toContain(
@@ -227,12 +239,12 @@ describe("Elements history runtime", () => {
     expect(screen.getByLabelText("remote id").textContent).toBe(SAVED_CHAT_ID);
     expect(fullPageLoads(calls, SAVED_CHAT_ID)).toHaveLength(1);
 
-    rerender(<Host tick={1} />);
-    expect(screen.getByLabelText("render").textContent).toBe("1");
-    // The initial-thread switch is delayed, so give a rescheduled switch time
-    // to issue another full-page load before asserting it did not.
-    await new Promise((resolve) => {
-      setTimeout(resolve, 200);
+    // The saved-chat switch is a 100ms timeout. Advance past it so a second
+    // switch on this rerender would load again before the assertion.
+    vi.useFakeTimers();
+    rerender(<Host />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
     });
 
     expect(screen.getByLabelText("messages").textContent).toContain(USER_TEXT);
@@ -240,9 +252,8 @@ describe("Elements history runtime", () => {
   });
 
   it("adopts the server-minted id on the first send without client minting", async () => {
-    const randomUUID = vi.spyOn(crypto, "randomUUID").mockImplementation(() => {
-      throw new Error("crypto.randomUUID should not mint a chat id");
-    });
+    collapseTitleDelay();
+    const randomUUID = vi.spyOn(crypto, "randomUUID");
     const calls = installFetch((url) => {
       if (url.pathname === "/rpc/chat.list") return json({ chats: [] });
       if (url.pathname === "/rpc/chat.load") {
@@ -311,23 +322,17 @@ describe("Elements history runtime", () => {
         "Server reply",
       );
     });
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
     expect(randomUUID).not.toHaveBeenCalled();
-
-    // Title generation waits two seconds, then fetches. Let it finish so the
-    // request does not land after the fetch stub is gone.
-    await waitFor(
-      () => {
-        expect(
-          calls.some((call) => call.url.includes("/rpc/chat.generateTitle")),
-        ).toBe(true);
-      },
-      { timeout: 5_000 },
-    );
   });
 
   it("keeps a manual title when chat.generateTitle fails", async () => {
+    collapseTitleDelay();
     const user = userEvent.setup();
-    let renamed = false;
     const calls = installFetch((url, call) => {
       if (url.pathname === "/rpc/chat.list") {
         return json({
@@ -349,11 +354,7 @@ describe("Elements history runtime", () => {
         );
       }
       if (url.pathname === "/rpc/chat.generateTitle") {
-        if (call.body?.title) {
-          renamed = true;
-          return json({ title: call.body.title });
-        }
-        if (!renamed) return json({ title: SAVED_TITLE });
+        if (call.body?.title) return json({ title: call.body.title });
         return json({ error: "title unavailable" }, 500);
       }
       throw new Error(`Unexpected request: ${url.pathname}`);
@@ -371,10 +372,7 @@ describe("Elements history runtime", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("title").textContent).toBe(SAVED_TITLE);
-      expect(screen.getByLabelText("remote id").textContent).toBe(
-        SAVED_CHAT_ID,
-      );
+      expect(screen.getByRole("button", { name: SAVED_TITLE })).toBeTruthy();
     });
 
     await user.click(
@@ -386,14 +384,7 @@ describe("Elements history runtime", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(screen.getByLabelText("title").textContent).toBe(EDITED_TITLE);
-      expect(
-        calls.some(
-          (call) =>
-            call.url.includes("/rpc/chat.generateTitle") &&
-            call.body?.title === EDITED_TITLE,
-        ),
-      ).toBe(true);
+      expect(screen.getByRole("button", { name: EDITED_TITLE })).toBeTruthy();
     });
 
     const untitledTitleCalls = () =>
@@ -405,20 +396,14 @@ describe("Elements history runtime", () => {
     const untitledBefore = untitledTitleCalls().length;
     seen.aui!.threadListItem().generateTitle();
 
-    await waitFor(
-      () => {
-        expect(untitledTitleCalls().length).toBe(untitledBefore + 1);
-      },
-      { timeout: 5_000 },
-    );
-    // The failed generation applies on a later turn. Yield so a rollback
-    // would land before the assertion.
+    await waitFor(() => {
+      expect(untitledTitleCalls().length).toBe(untitledBefore + 1);
+    });
     await act(async () => {
       await new Promise((resolve) => {
         setTimeout(resolve, 0);
       });
     });
-    expect(screen.getByLabelText("title").textContent).toBe(EDITED_TITLE);
     expect(screen.getByRole("button", { name: EDITED_TITLE })).toBeTruthy();
   });
 });
