@@ -44,7 +44,7 @@ const consentChainCheckTimeout = 5 * time.Second
 type consentChainCheckResult struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
-	// Action names the consent action a rejected card offers besides a separate sign-in.
+	// Action names the consent action a rejected card offers besides the own-account sign-in.
 	Action string `json:"action,omitempty"`
 }
 
@@ -292,20 +292,20 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		identitychaining.ReasonInvalidClient, identitychaining.ReasonInvalidTarget, identitychaining.ReasonInsufficientScope:
 		switch outcome.Stage {
 		case identitychaining.StageExchange, identitychaining.StageValidation:
-			return rejected("Your identity provider didn't allow access to %s. Ask your administrator, or use a separate sign-in.")
+			return rejected("Your identity provider didn't allow access to %[1]s. Ask your administrator, or use your own %[1]s account.")
 		case identitychaining.StageSelection, identitychaining.StageAuthorization, identitychaining.StageDelegation,
 			identitychaining.StageRedemption, identitychaining.StagePersistence, identitychaining.StageComplete:
-			return rejected("%s didn't accept your identity provider sign-in. Ask your administrator, or use a separate sign-in.")
+			return rejected("%[1]s didn't accept your identity provider sign-in. Ask your administrator, or use your own %[1]s account.")
 		}
 	case identitychaining.ReasonReauthenticationRequired:
-		return rejected("A current identity provider sign-in for %s is required. Close this page and start connecting again, or use a separate sign-in.")
+		return rejected("A current identity provider sign-in for %[1]s is required. Close this page and start connecting again, or use your own %[1]s account.")
 	case identitychaining.ReasonConfigurationRequired:
 		if outcome.Retained {
-			return rejected("Your saved company sign-in for %s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use a separate sign-in.")
+			return rejected("Your saved company sign-in for %[1]s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use your own %[1]s account.")
 		}
-		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")
+		return rejected("%[1]s isn't set up for identity provider sign-in yet. Ask your administrator, or use your own %[1]s account.")
 	case identitychaining.ReasonIneligibleIdentity:
-		return rejected("Your organization can't vouch for your account to %s, for example because your email isn't on one of its verified domains. Ask your administrator, or use a separate sign-in.")
+		return rejected("Your organization can't vouch for your account to %[1]s, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own %[1]s account.")
 	case identitychaining.ReasonUnmanagedAccount:
 		return rejected("You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal.")
 	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,

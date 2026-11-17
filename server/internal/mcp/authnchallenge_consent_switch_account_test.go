@@ -369,9 +369,9 @@ func TestConsentSwitchAccount_OfferedOnlyForAPersonalAccount(t *testing.T) {
 		edit    func(*mcp.AuthnChallengeState)
 		refusal string
 	}{
-		"switches used up":  {func(s *mcp.AuthnChallengeState) { s.AccountSwitches = 3 }, "This page can't start a new sign-in. Go back and use a separate sign-in."},
+		"switches used up":  {func(s *mcp.AuthnChallengeState) { s.AccountSwitches = 3 }, "This page can't start a new sign-in. Go back and use your own account."},
 		"dashboard connect": {func(s *mcp.AuthnChallengeState) { s.FirstParty = true }, ""},
-		"support session":   {func(s *mcp.AuthnChallengeState) { yes := true; s.AuthorizerImpersonated = &yes }, "This page can't start a new sign-in. Go back and use a separate sign-in."},
+		"support session":   {func(s *mcp.AuthnChallengeState) { yes := true; s.AuthorizerImpersonated = &yes }, "This page can't start a new sign-in. Go back and use your own account."},
 		"too old to finish": {func(s *mcp.AuthnChallengeState) { s.CreatedAt = time.Now().Add(-9 * time.Minute) }, "This page expired; start connecting again."},
 	} {
 		fx.store(t, func(s *mcp.AuthnChallengeState) { reset(s); tc.edit(s) })
@@ -614,7 +614,7 @@ func TestConsentSwitchAccount_RevokedSignInAfterASwitchStillRestarts(t *testing.
 	require.Equal(t, 1, again.AccountSwitches)
 }
 
-// Switches are bounded per attempt, and the last refusal still offers a separate sign-in.
+// Switches are bounded per attempt, and the last refusal still offers the own-account sign-in.
 func TestConsentSwitchAccount_BoundedPerAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -629,12 +629,12 @@ func TestConsentSwitchAccount_BoundedPerAttempt(t *testing.T) {
 	require.Equal(t, "rejected", body["status"])
 	require.NotContains(t, body, "action")
 	_, err := postSwitchAccount(t, fx, nil)
-	requireSwitchRefused(t, err, oops.CodeBadRequest, "This page can't start a new sign-in. Go back and use a separate sign-in.")
+	requireSwitchRefused(t, err, oops.CodeBadRequest, "This page can't start a new sign-in. Go back and use your own account.")
 	require.Len(t, fx.revoker.sessions(), 3)
 
 	code, page, _ := render(t, fx.consentActionFixture)
 	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, page, "Use a separate sign-in instead", "the separate sign-in is still there")
+	require.Contains(t, page, "account instead", "the own-account sign-in is still there")
 }
 
 // renderSpent GETs a consent page through the browser error handler, as a person sees it.
@@ -723,7 +723,7 @@ func TestConsentSwitchAccount_KeepsTheGatewayServerPage(t *testing.T) {
 	require.Equal(t, "aim852-gw-member", restarted.FocusServer, "the consent page after sign-in is this server's")
 }
 
-// The page carries the switch button hidden until the check offers it, before the separate sign-in.
+// The page carries the switch button hidden until the check offers it, before the own-account sign-in.
 func TestConsentSwitchAccount_PageCarriesHiddenAction(t *testing.T) {
 	t.Parallel()
 

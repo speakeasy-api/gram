@@ -84,7 +84,9 @@ const statuses = ['connected', 'rejected', 'ready', 'error', 'offline'].map((id)
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = fallbackClass;
-  const card = element({ 'data-remote-client': id });
+  const card = element({ 'data-remote-client': id, 'data-remote-display': 'Example' });
+  card.offsetWidth = 600;
+  fallback.offsetWidth = 180;
   card.querySelector = (selector) => ({
     'input[name="state"]': { value: 'state-1' },
     'input[name="csrf_token"]': { value: 'csrf-1' },
@@ -157,7 +159,7 @@ setTimeout(() => {
   assert.equal(no.status.textContent, 'Example refused.');
   assert.match(no.fallback.className, /\bbg-primary\b/);
   assert.match(no.fallback.className, /\bwhitespace-nowrap\b/, 'the label stays on one line beside long card text');
-  assert.equal(no.fallback.textContent, 'Use a separate sign-in');
+  assert.equal(no.fallback.textContent, 'Use your own Example account');
   assert.equal(no.fallback.getAttribute('data-connect-fallback'), null);
   assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');
   assert.deepEqual(dispatched, ['gram:consent-chain-rejected']);
@@ -188,31 +190,46 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const source = require('node:fs').readFileSync(0, 'utf8');
 const element = (attrs = {}) => ({
-  attrs, className: '', textContent: '', children: [], listeners: {},
+  attrs, className: '', textContent: '', children: [], listeners: {}, style: {},
   getAttribute(name) { return name in this.attrs ? this.attrs[name] : null; },
   setAttribute(name, value) { this.attrs[name] = value; },
   removeAttribute(name) { delete this.attrs[name]; },
   appendChild(child) { this.children.push(child); },
   addEventListener(type, listener) { this.listeners[type] = listener; },
 });
-const quiet = 'text-muted-foreground interact:text-foreground';
 const rowClass = 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between';
 const actionsClass = 'flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end';
+const quiet = 'text-muted-foreground interact:text-foreground';
+// Each card: the layout its row resolves to, and the widths the script measures.
+const layouts = {
+  'beside-fits': { direction: 'row', card: 730, primary: 247, fallback: 211, actions: 247 },
+  'beside-too-wide': { direction: 'row', card: 730, primary: 247, fallback: 400, actions: 400 },
+  'under-fits': { direction: 'column', card: 330, primary: 247, fallback: 293, actions: 300 },
+  'under-too-wide': { direction: 'column', card: 300, primary: 247, fallback: 293, actions: 270 },
+  admin: { direction: 'row', card: 730, primary: 0, fallback: 180, actions: 180 },
+};
 const cards = {};
 const switches = [];
+const rows = new Map();
 const windowListeners = {};
 let reloads = 0;
-const statuses = ['personal', 'admin'].map((id) => {
+const statuses = Object.keys(layouts).map((id) => {
+  const size = layouts[id];
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = quiet;
+  fallback.offsetWidth = size.fallback;
   const switchAccount = element({ 'data-switch-account': '', hidden: '' });
+  switchAccount.offsetWidth = size.primary;
   switches.push(switchAccount);
   const row = element({ 'data-card-row': '' });
   row.className = rowClass;
+  rows.set(row, size.direction);
   const actions = element({ 'data-card-actions': '' });
   actions.className = actionsClass;
-  const card = element({ 'data-remote-client': id });
+  actions.clientWidth = size.actions;
+  const card = element({ 'data-remote-client': id, 'data-remote-display': 'Example' });
+  card.offsetWidth = size.card;
   card.querySelector = (selector) => ({
     'input[name="state"]': { value: 'state-1' },
     'input[name="csrf_token"]': { value: 'csrf-1' },
@@ -226,13 +243,13 @@ const statuses = ['personal', 'admin'].map((id) => {
   return status;
 });
 vm.runInNewContext(source, {
-  URLSearchParams, Number, String,
+  URLSearchParams, Number, String, Math,
   CustomEvent: class { constructor(type) { this.type = type; } },
   fetch(url, init) {
     const id = new URLSearchParams(init.body).get('client_id');
-    const result = id === 'personal'
-      ? { status: 'rejected', message: 'Personal account.', action: 'switch_account' }
-      : { status: 'rejected', message: 'Ask your administrator.' };
+    const result = id === 'admin'
+      ? { status: 'rejected', message: 'Ask your administrator.' }
+      : { status: 'rejected', message: 'Personal account.', action: 'switch_account' };
     return Promise.resolve({ ok: true, json: () => Promise.resolve(result) });
   },
   document: {
@@ -251,24 +268,38 @@ vm.runInNewContext(source, {
       return [];
     },
   },
-  window: { setTimeout: (fn) => fn(), addEventListener(type, fn) { windowListeners[type] = fn; }, location: { reload: () => { reloads++; } } },
+  window: {
+    setTimeout: (fn) => fn(),
+    getComputedStyle: (el) => ({ flexDirection: rows.get(el) || 'row' }),
+    addEventListener(type, fn) { windowListeners[type] = fn; },
+    location: { reload: () => { reloads++; } },
+  },
 });
 
 setTimeout(() => {
-  const personal = cards.personal;
-  assert.equal(personal.status.textContent, 'Personal account.');
-  assert.equal(personal.switchAccount.getAttribute('hidden'), null, 'the company sign-in is shown');
-  assert.equal(personal.row.className, 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between', 'text left, actions right, like every card, once two buttons fit');
-  assert.equal(personal.actions.className, 'flex flex-wrap items-center justify-start gap-1.5 md:justify-end');
-  assert.equal(personal.fallback.className, 'bg-card interact:bg-accent flex min-h-8 max-w-full shrink-0 items-center whitespace-normal border px-3 py-1 text-left text-sm sm:whitespace-nowrap', 'the separate sign-in is a real secondary button');
-  assert.equal(personal.fallback.textContent, 'Use a separate sign-in');
+  for (const id of ['beside-fits', 'beside-too-wide', 'under-fits', 'under-too-wide']) {
+    const c = cards[id];
+    assert.equal(c.status.textContent, 'Personal account.', id);
+    assert.equal(c.switchAccount.getAttribute('hidden'), null, id + ': the company sign-in is shown');
+    assert.equal(c.row.className, 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between', id + ': text left, actions right, like every card, once two buttons fit');
+    assert.equal(c.actions.className, 'flex flex-wrap items-center justify-start gap-1.5 md:flex-col md:flex-nowrap md:items-stretch', id + ': one width when stacked beside the text');
+    assert.equal(c.fallback.className, 'bg-card interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm md:justify-center', id + ': a real secondary button that never wraps');
+    assert.equal(c.fallback.getAttribute('data-connect-fallback'), null, id);
+    assert.equal(c.fallback.style.alignSelf, '', id + ': measuring leaves no style behind');
+  }
+  assert.equal(cards['beside-fits'].fallback.textContent, 'Use your own Example account');
+  assert.equal(cards['beside-too-wide'].fallback.textContent, 'Use your own account', 'wider than the company button and half the card');
+  assert.equal(cards['under-fits'].fallback.textContent, 'Use your own Example account', 'fits the card on one line');
+  assert.equal(cards['under-too-wide'].fallback.textContent, 'Use your own account', 'rather than two lines');
 
   const admin = cards.admin;
   assert.equal(admin.switchAccount.getAttribute('hidden'), '', 'no switch for an administrator refusal');
   assert.equal(admin.row.className, rowClass);
   assert.equal(admin.actions.className, actionsClass);
   assert.match(admin.fallback.className, /\bbg-primary\b/);
+  assert.equal(admin.fallback.textContent, 'Use your own Example account');
 
+  const personal = cards['beside-fits'];
   personal.switchAccount.listeners.click({ preventDefault() {} });
   assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'the first click marks the switch busy');
   let secondPrevented = false;

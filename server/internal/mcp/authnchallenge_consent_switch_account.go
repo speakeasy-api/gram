@@ -35,7 +35,7 @@ const switchAccountMinRemaining = 2 * time.Minute
 // The switch action's errors: one short sentence each.
 const (
 	switchAccountRetry       = "Speakeasy couldn't start a new sign-in. Try again."
-	switchAccountUnavailable = "This page can't start a new sign-in. Go back and use a separate sign-in."
+	switchAccountUnavailable = "This page can't start a new sign-in. Go back and use your own account."
 	switchAccountExpired     = "This page expired; start connecting again."
 	switchAccountChanged     = "This page changed. Go back, reload it, and try again."
 )
@@ -107,13 +107,18 @@ func sameAccountSwitch(consumed, checked AuthnChallengeState) bool {
 func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (err error) {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(state.FlowID))
+	// The display name the consent page showed, looked up once.
+	clientName, named := "", false
 	// A refused switch still names the client the page showed.
 	defer func() {
 		if err == nil {
 			return
 		}
-		if name := s.switchClientName(ctx, logger, endpoint, state.ClientID); name != "" {
-			err = oops.WithBrowserClient(err, name)
+		if !named {
+			clientName = s.switchClientName(ctx, logger, endpoint, state.ClientID)
+		}
+		if clientName != "" {
+			err = oops.WithBrowserClient(err, clientName)
 		}
 	}()
 
@@ -166,8 +171,8 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
 	}
 
-	// The display name the consent page showed, for the old page's message.
-	clientName := s.switchClientName(ctx, logger, endpoint, consumed.ClientID)
+	// For the old page's message, and for this request's refusal below.
+	clientName, named = s.switchClientName(ctx, logger, endpoint, consumed.ClientID), true
 
 	next := consumed
 	next.Subject = nil

@@ -488,7 +488,7 @@
                   type="submit"
                   name="action"
                   value="switch_account"
-                  class="bg-primary text-primary-foreground interact:bg-foreground flex min-h-8 max-w-full shrink-0 items-center whitespace-normal px-3 py-1 text-left text-sm sm:whitespace-nowrap"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm md:justify-center"
                   data-switch-account
                   hidden
                 >
@@ -502,7 +502,7 @@
                   data-connect-link
                   data-connect-fallback
                 >
-                  Use a separate sign-in instead
+                  Use your own {{.IssuerDisplay}} account instead
                 </button>
                 {{else}}
                 <button

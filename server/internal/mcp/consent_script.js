@@ -650,16 +650,34 @@
 
   // Identity-chained cards render neutral, so they read right without script.
   // Check each exchange in the background and settle the card in place; any
-  // failure keeps the neutral copy and the separate sign-in fallback.
+  // failure keeps the neutral copy and the own-account fallback.
   var connectedSummary = document.querySelector("[data-connected-summary]");
   var chainActionURL = (function () {
     var services = document.querySelector("[data-service-connections]");
     return services ? services.getAttribute("data-action-url") : "";
   })();
 
-  // The label of a refused card's separate sign-in button.
-  function separateSignInLabel() {
-    return "Use a separate sign-in";
+  // "your own <service> account", from the card's service name.
+  function ownAccount(card) {
+    var service = card.getAttribute("data-remote-display") || "";
+    return service ? "your own " + service + " account" : "your own account";
+  }
+
+  // A button's width at its label's length, even where its group stretches it.
+  function naturalWidth(button) {
+    button.style.alignSelf = "flex-start";
+    var width = button.offsetWidth;
+    button.style.alignSelf = "";
+    return width;
+  }
+
+  // Labels a refused card's own-account button with the service's name when
+  // fits allows it, and "Use your own account" otherwise.
+  function labelOwnAccount(card, button, fits) {
+    button.textContent = "Use " + ownAccount(card);
+    if (card.getAttribute("data-remote-display") && !fits(button)) {
+      button.textContent = "Use your own account";
+    }
   }
 
   function settleChainCheck(status, card, result) {
@@ -687,7 +705,9 @@
       status.className = "text-xs text-default-warning";
       status.textContent =
         result.message ||
-        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
+        "Your identity provider sign-in wasn't accepted. Use " +
+          ownAccount(card) +
+          ".";
       var fallback = card.querySelector("button[data-connect-fallback]");
       var switchAccount =
         result.action === "switch_account"
@@ -695,11 +715,9 @@
           : null;
       if (switchAccount) {
         // Two buttons in the card's own row: the company sign-in first, the
-        // separate sign-in beside it in the page's secondary style. A label
-        // wraps only when a narrow screen has no room for it on one line.
+        // own-account sign-in in the page's secondary style. Beside the text
+        // they stack at one width; under it they keep their own widths.
         switchAccount.removeAttribute("hidden");
-        // Two buttons need more room beside the text than one, so this row
-        // stacks below the next breakpoint up.
         var row = card.querySelector("[data-card-row]");
         if (row) {
           row.className =
@@ -708,13 +726,22 @@
         var actions = card.querySelector("[data-card-actions]");
         if (actions) {
           actions.className =
-            "flex flex-wrap items-center justify-start gap-1.5 md:justify-end";
+            "flex flex-wrap items-center justify-start gap-1.5 md:flex-col md:flex-nowrap md:items-stretch";
         }
         if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
           fallback.className =
-            "bg-card interact:bg-accent flex min-h-8 max-w-full shrink-0 items-center whitespace-normal border px-3 py-1 text-left text-sm sm:whitespace-nowrap";
+            "bg-card interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm md:justify-center";
           fallback.removeAttribute("data-connect-fallback");
-          fallback.textContent = separateSignInLabel();
+          var besideText =
+            row && window.getComputedStyle(row).flexDirection === "row";
+          labelOwnAccount(card, fallback, function (button) {
+            // Beside the text, no wider than the company button or half the
+            // card; under it, one line across the card.
+            return besideText
+              ? naturalWidth(button) <=
+                  Math.max(naturalWidth(switchAccount), card.offsetWidth / 2)
+              : !actions || naturalWidth(button) <= actions.clientWidth;
+          });
         }
       } else if (
         fallback &&
@@ -723,7 +750,10 @@
         fallback.className =
           "bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center whitespace-nowrap px-3 text-sm";
         fallback.removeAttribute("data-connect-fallback");
-        fallback.textContent = separateSignInLabel();
+        // A long service name would crowd the text; the card's title already names it.
+        labelOwnAccount(card, fallback, function (button) {
+          return button.offsetWidth <= card.offsetWidth / 2;
+        });
       }
       signalChainRejected();
       return;
