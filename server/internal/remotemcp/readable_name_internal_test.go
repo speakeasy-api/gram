@@ -14,6 +14,8 @@ func TestRemoteMCPDisplayName(t *testing.T) {
 		want string
 	}{
 		{url: "https://mcp.ramp.com/mcp", want: "Ramp"},
+		{url: "https://MCP.Ramp.COM/mcp", want: "Ramp"},
+		{url: "https://mcp.über.example/mcp", want: "Über"},
 		{url: "https://mcp.canva.com./mcp", want: "Canva"},
 		{url: "https://app.asana.com", want: "Asana"},
 		{url: "https://mcp.acme-wiki.example/mcp", want: "Acme Wiki"},

@@ -182,7 +182,7 @@ func readableServiceName(rawURL string) string {
 	if err != nil {
 		return ""
 	}
-	host := strings.TrimSuffix(parsed.Hostname(), ".")
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
 	if host == "" {
 		return ""
 	}
@@ -201,7 +201,8 @@ func readableServiceName(rawURL string) string {
 	}
 	words := strings.FieldsFunc(rest[len(rest)-1], func(r rune) bool { return r == '-' || r == '_' })
 	for i, word := range words {
-		words[i] = strings.ToUpper(word[:1]) + word[1:]
+		runes := []rune(word)
+		words[i] = strings.ToUpper(string(runes[:1])) + string(runes[1:])
 	}
 	return strings.Join(words, " ")
 }
