@@ -1,4 +1,8 @@
-import { pendingAccountProvider } from "@/pages/catalog/account-provider";
+import {
+  accountCatalogProvider,
+  pendingAccountProvider,
+} from "@/pages/catalog/account-provider";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
 import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import {
@@ -45,6 +49,17 @@ export function setupProviderForUrl(
   } catch {
     return null;
   }
+}
+/** Catalog entries whose installed server opens a guided Setup page. */
+export function catalogServerHasGuidedSetup(server: CatalogServer): boolean {
+  return (
+    !!accountCatalogProvider(server) ||
+    !!server.remotes?.some(
+      (remote) =>
+        remote.transportType === "streamable-http" &&
+        !!setupProviderForUrl(remote.url),
+    )
+  );
 }
 export function providerSetupInstallTarget(
   servers: { remotes?: { url: string }[] | undefined }[],

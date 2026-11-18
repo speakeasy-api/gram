@@ -1,13 +1,10 @@
-import {
-  accountCatalogProvider,
-  pendingAccountProvider,
-} from "./account-provider";
+import { pendingAccountProvider } from "./account-provider";
 import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import {
+  catalogServerHasGuidedSetup,
   providerSetupInstallTarget,
-  setupProviderForUrl,
 } from "@/pages/mcp/x/setup/provider-setup";
 import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
 import { useNavigate } from "react-router";
@@ -243,14 +240,7 @@ export function AddServerDialog({
     )
       return undefined;
     const server = enrichedServers[0]!;
-    const hasCustomSetup =
-      !!accountCatalogProvider(server) ||
-      server.remotes?.some(
-        (remote) =>
-          remote.transportType === "streamable-http" &&
-          !!setupProviderForUrl(remote.url),
-      );
-    if (!hasCustomSetup) return undefined;
+    if (!catalogServerHasGuidedSetup(server)) return undefined;
     if (salesforceEntry && salesforceIdentity) return salesforceIdentity;
     return { identityMode: "user" as const };
   }, [
