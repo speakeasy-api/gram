@@ -246,9 +246,7 @@ func TestService_SetShadowMCPOfficialServer_ConcurrentFirstLinksAuditReplacedLin
 	key := "https://github.example.com/mcp"
 
 	// The first writer holds the URL lock and has not saved its link yet.
-	holder, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	holder := testenv.BeginTx(t, ctx, ti.conn)
 	holderQueries := shadowmcprepo.New(holder)
 	require.NoError(t, holderQueries.LockShadowMCPOfficialServerURL(ctx, shadowmcprepo.LockShadowMCPOfficialServerURLParams{ProjectID: *authCtx.ProjectID, ServerUrl: key}))
 
@@ -264,7 +262,7 @@ func TestService_SetShadowMCPOfficialServer_ConcurrentFirstLinksAuditReplacedLin
 	}()
 	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), 1)
 
-	_, err = holderQueries.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
+	_, err := holderQueries.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
 		ProjectID:         *authCtx.ProjectID,
 		ServerUrl:         key,
 		McpServerID:       uuid.NullUUID{UUID: first.ID, Valid: true},
