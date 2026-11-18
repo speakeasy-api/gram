@@ -404,5 +404,8 @@ func NewExportingConnectionRecorder(t *testing.T) (recorder *mcpconnectionattemp
 
 // MarkConsentSwitched marks a consent challenge as spent by an account switch on issuerID.
 func (s *Service) MarkConsentSwitched(ctx context.Context, stateID string, issuerID uuid.UUID, clientName string) error {
-	return s.accountSwitchCache.Store(ctx, accountSwitchMarker{ID: stateID, McpSlug: "", UserSessionIssuerID: issuerID.String(), ClientName: clientName})
+	if err := s.accountSwitchCache.Store(ctx, accountSwitchMarker{ID: stateID, McpSlug: "", UserSessionIssuerID: issuerID.String(), ClientName: clientName}); err != nil {
+		return fmt.Errorf("store switch marker: %w", err)
+	}
+	return nil
 }
