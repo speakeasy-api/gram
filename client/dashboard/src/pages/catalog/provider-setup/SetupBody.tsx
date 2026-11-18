@@ -3,7 +3,6 @@ import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { BookOpen, Check, ExternalLink } from "lucide-react";
 import { SetupGuideLink } from "@/components/setup-guide/SetupGuideLink";
-import { PageEyebrow } from "@/components/page-eyebrow";
 import { useConfettiBurst } from "@/components/icon-confetti";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
@@ -83,12 +82,11 @@ export function SetupBody({
   let content = <ProviderTask serverName={serverName} />;
   if (s.step === "test") content = <ConnectionTask />;
   return (
-    // Inside the server's detail frame: a heading for the current task, then
-    // the task beside its step rail.
+    // On the Setup page, under the server's header: the current task's
+    // heading, then the task beside its step rail.
     <div className="flex flex-col gap-6 [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[var(--border-focus)] [&_button:focus-visible]:outline-solid">
       <div className="grid grid-cols-1 items-end gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(200px,3fr)] lg:gap-8 xl:gap-14">
         <div className="min-w-0">
-          <PageEyebrow area={`${name} Setup`} className="mb-2" />
           <Heading
             variant="h2"
             className="text-[28px] leading-9 tracking-[-.03em]"
