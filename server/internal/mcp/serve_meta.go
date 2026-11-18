@@ -775,7 +775,7 @@ func (s *Service) handleMetaListServersCall(
 	hidden := gate.hiddenMembers
 	if gate.catalog != nil {
 		approvedHidden, unapprovedHidden := gate.catalog.approvedMembers(hidden)
-		hidden = append(catalogSelectedMembers(gate, approvedHidden), unapprovedHidden...)
+		hidden = slices.Concat(catalogSelectedMembers(gate, approvedHidden), unapprovedHidden)
 	}
 	for _, member := range hidden {
 		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
