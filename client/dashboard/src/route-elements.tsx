@@ -49,6 +49,7 @@ export const legacyMcpRedirects = (
       element={<RedirectFromMcpXNamespace />}
     />
     <Route path="playground/*" element={<RedirectToMcp />} />
+    <Route path="sdks" element={<RedirectToMcp />} />
   </>
 );
 

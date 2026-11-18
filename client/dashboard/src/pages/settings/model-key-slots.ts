@@ -22,7 +22,7 @@ export const MODEL_KEY_SLOTS: ModelKeySlot[] = [
     slot: "playground",
     name: "Dashboard chat",
     description:
-      "Completions from the MCP Inspect chat and dashboard AI drafting.",
+      "Completions from the MCP Inspect chat and other dashboard AI features.",
   },
   {
     slot: "assistants",

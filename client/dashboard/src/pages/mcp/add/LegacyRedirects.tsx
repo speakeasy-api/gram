@@ -28,18 +28,20 @@ import {
  * command palette.
  */
 
-// Sources moved under MCP rather than going away: the CLI links here after a
-// push, so the old top-level URL lands on the same shelf.
-// Deployments joined MCP as a tab; the old top-level listing keeps resolving.
-// The deployment *detail* URL is untouched — it is what the CLI prints after a
-// push.
 // The Playground was retired in favor of each server's Inspect tab, which has
-// the same test chat; old links land on the MCP inventory.
+// the same test chat, and the SDKs page with it: toolsets are reached through
+// their MCP server URL. Old links and Command K recents land on the MCP
+// inventory.
 export function RedirectToMcp(): JSX.Element {
   const routes = useRoutes();
   return <Navigate to={routes.mcp.href()} replace />;
 }
 
+// Sources moved under MCP rather than going away: the CLI links here after a
+// push, so the old top-level URL lands on the same shelf.
+// Deployments joined MCP as a tab; the old top-level listing keeps resolving.
+// The deployment *detail* URL is untouched — it is what the CLI prints after a
+// push.
 export function RedirectToDeployments(): JSX.Element {
   const routes = useRoutes();
   return <Navigate to={routes.mcp.deployments.href()} replace />;

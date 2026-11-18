@@ -45,7 +45,7 @@ function mintRequestBody(
 }
 
 /**
- * Mints a user-session JWT scoped to a toolset or a proxied MCP server. The
+ * Mints a user-session JWT scoped to an MCP server or gateway. The
  * minted token is what the dashboard's MCP clients send as
  * `Authorization: Bearer` on the target's MCP surface, so the runtime gateway
  * resolves the dashboard user's stored upstream credentials through the same
