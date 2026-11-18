@@ -36,6 +36,7 @@ func E(code Code, cause error, public string, args ...any) *ShareableError {
 		cause:       cause,
 		private:     "",
 		public:      msg,
+		unpaced:     false,
 	}
 }
 
@@ -52,6 +53,7 @@ func C(code Code) *ShareableError {
 		cause:       nil,
 		private:     "",
 		public:      code.UserMessage(),
+		unpaced:     false,
 	}
 }
 
@@ -70,6 +72,15 @@ type ShareableError struct {
 	// including any deliberate suppression. Outer tracing middleware uses this to
 	// avoid recording the same error on the same span twice.
 	spanHandled bool
+
+	// unpaced: waiting won't fix this 503.
+	unpaced bool
+}
+
+// Unpaced marks a 503 that waiting won't fix: no Retry-After, and not temporary.
+func (e *ShareableError) Unpaced() *ShareableError {
+	e.unpaced = true
+	return e
 }
 
 // SpanHandled reports whether a boundary logging helper has already decided this
@@ -293,7 +304,7 @@ func (e *ShareableError) LogInfo(ctx context.Context, logger *slog.Logger, args 
 }
 
 func (e *ShareableError) IsTemporary(ctx context.Context) bool {
-	return !errors.Is(e.cause, ErrPermanent) && e.effectiveCode(ctx).IsTemporary()
+	return !e.unpaced && !errors.Is(e.cause, ErrPermanent) && e.effectiveCode(ctx).IsTemporary()
 }
 
 // AsGoa converts the ShareableError to a goa.ServiceError, preserving the error

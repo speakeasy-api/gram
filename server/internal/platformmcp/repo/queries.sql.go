@@ -3177,6 +3177,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3241,6 +3242,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -3261,6 +3263,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Description,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.IsDefault,
 		&i.ServerCount,
 		&i.SkillCount,
@@ -6292,6 +6295,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -6360,6 +6364,7 @@ type ListPlatformMCPPluginInventoryRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -6400,6 +6405,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 			&i.Description,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,

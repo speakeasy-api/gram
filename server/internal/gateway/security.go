@@ -445,8 +445,16 @@ func (e *clientCredentialsError) Error() string { return e.err.Error() }
 func (e *clientCredentialsError) Unwrap() error { return e.err }
 
 func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure {
-	if errors.Is(err, guardian.ErrBlockedIP) {
+	switch guardian.AddressFailureOf(err, false) {
+	case guardian.AddressNotAllowed:
 		return toolconfig.ClientGrantBlocked
+	case guardian.AddressNotFound:
+		return toolconfig.ClientGrantAddressNotFound
+	case guardian.AddressFine:
+	}
+	if errors.Is(err, guardian.ErrBlockedIP) {
+		// A redirect to a refused address keeps the reading it had before address codes.
+		return toolconfig.ClientGrantMisconfigured
 	}
 	return toolconfig.ClientGrantUnavailable
 }

@@ -1,7 +1,9 @@
 package idjag
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -101,4 +103,28 @@ func TestIssuerVerificationKeysSelectsStaleKeyByAlgorithm(t *testing.T) {
 	key, err := keys.VerificationKeyForAlgorithm(t.Context(), source, "key-1", jose.ES256)
 	require.NoError(t, err)
 	require.Equal(t, string(jose.ES256), key.Algorithm)
+}
+
+// failingCache is a key store that cannot be read.
+type failingCache struct{ jwks.Cache }
+
+func (failingCache) Get(context.Context, string) (jwks.CacheState, error) {
+	return jwks.CacheState{}, errors.New("key store unreachable")
+}
+
+// Our store failing on the stale-key fallback is marked as ours, but the refusal stays as before.
+func TestIssuerVerificationKeysStaleReadFailureKeepsTheRefusal(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	_, store, _, guard, request := newTestValidator(t, assertion.key)
+	keys, err := NewIssuerVerificationKeys(&testKeys{key: nil, err: jwks.ErrKeySetUnavailable, calls: 0}, failingCache{})
+	require.NoError(t, err)
+	validator, err := NewValidator(keys, guard, store)
+	require.NoError(t, err)
+
+	_, err = validator.Validate(t.Context(), signTestAssertion(t, assertion.signer, validTestClaims(), validTestExtra()), request)
+	require.ErrorIs(t, err, ErrStaleKeysUnreadable)
+	require.Equal(t, ReasonKeyUnusable, ReasonOf(err))
+	require.False(t, IsOutage(err))
+	require.False(t, IsStoreFault(err))
 }

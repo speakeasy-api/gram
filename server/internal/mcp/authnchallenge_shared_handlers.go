@@ -416,6 +416,9 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 				s.recordSharedIDJAGResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, rejection, resources, mcpmetrics.IDJAGRejectionResourceMismatch)
 			default:
 				s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
+				if grantType == oauthwire.GrantTypeJWTBearer {
+					s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_resource_mismatch")
+				}
 			}
 			// A resource claim the request did not name makes the assertion
 			// invalid, not the request's target (RFC 7523 §3.1).

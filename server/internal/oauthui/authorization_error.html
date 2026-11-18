@@ -100,6 +100,14 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{else if eq .Kind "check-needs-admin"}}
             This server's connection isn't set up correctly, so Speakeasy couldn't
             check it.
+            {{else if eq .Kind "sign-in-address"}}
+            {{template "Client" .}} couldn't connect to {{template "server" .}}
+            because its sign-in address is a private or internal one that
+            Speakeasy can't reach. This isn't something you did.
+            {{else if eq .Kind "sign-in-address-missing"}}
+            {{template "Client" .}} couldn't connect to {{template "server" .}}
+            because its sign-in address doesn't exist. This isn't something you
+            did.
             {{else}}
             {{template "Client" .}} couldn't connect to {{template "server" .}}.
             The connection could not be completed.
@@ -170,6 +178,9 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{else if eq .Kind "check-needs-admin"}}
           Ask your IT administrators to check this server's connection settings.
           Share the technical details below with them.
+          {{else if or (eq .Kind "sign-in-address") (eq .Kind "sign-in-address-missing")}}
+          Ask your IT administrators to fix this server's sign-in address. Share
+          the technical details below with them.
           {{else}}
           Try connecting again from {{template "client" .}}. If it still fails,
           share the technical details below with your IT administrators.
@@ -268,6 +279,12 @@ consent page shows, so the person recognizes the flow they started. */ -}}
                 </dd>
                 {{end}}
               </div>
+              {{if .AdminDetail}}
+              <div>
+                <dt class="text-eyebrow">Problem</dt>
+                <dd class="mt-1 ml-0 text-sm break-words" data-admin-detail>{{.AdminDetail}}</dd>
+              </div>
+              {{end}}
               {{if .ClientID}}
               <div>
                 <dt class="text-eyebrow">MCP client ID</dt>

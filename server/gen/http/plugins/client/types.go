@@ -25,6 +25,9 @@ type CreatePluginRequestBody struct {
 	// Defaults to true. When false, the plugin stays out of the marketplace until
 	// someone syncs it by hand.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Defaults to false.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 }
 
 // UpdatePluginRequestBody is the type of the "plugins" service "updatePlugin"
@@ -42,6 +45,10 @@ type UpdatePluginRequestBody struct {
 	// has changes that haven't been synced, and the slug can't change while it is
 	// off.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Omit to keep the current setting. Turning it on adds the MCP
+	// servers its assigned roles can use now, except ones an admin removed before.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 }
 
 // AddPluginServerRequestBody is the type of the "plugins" service
@@ -157,6 +164,10 @@ type GetPluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -193,6 +204,10 @@ type CreatePluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -229,6 +244,10 @@ type UpdatePluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4597,6 +4616,10 @@ type PluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4712,10 +4735,11 @@ type MarketplaceSettingsResultResponseBody struct {
 // the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginRequestBody(p *plugins.CreatePluginPayload) *CreatePluginRequestBody {
 	body := &CreatePluginRequestBody{
-		Name:            p.Name,
-		Slug:            p.Slug,
-		Description:     p.Description,
-		AutoSyncEnabled: p.AutoSyncEnabled,
+		Name:                  p.Name,
+		Slug:                  p.Slug,
+		Description:           p.Description,
+		AutoSyncEnabled:       p.AutoSyncEnabled,
+		AutoAddServersEnabled: p.AutoAddServersEnabled,
 	}
 	return body
 }
@@ -4724,11 +4748,12 @@ func NewCreatePluginRequestBody(p *plugins.CreatePluginPayload) *CreatePluginReq
 // the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginRequestBody(p *plugins.UpdatePluginPayload) *UpdatePluginRequestBody {
 	body := &UpdatePluginRequestBody{
-		ID:              p.ID,
-		Name:            p.Name,
-		Slug:            p.Slug,
-		Description:     p.Description,
-		AutoSyncEnabled: p.AutoSyncEnabled,
+		ID:                    p.ID,
+		Name:                  p.Name,
+		Slug:                  p.Slug,
+		Description:           p.Description,
+		AutoSyncEnabled:       p.AutoSyncEnabled,
+		AutoAddServersEnabled: p.AutoAddServersEnabled,
 	}
 	return body
 }
@@ -5396,6 +5421,7 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		IsDefault:                body.IsDefault,
 		AutoCreated:              *body.AutoCreated,
 		AutoSyncEnabled:          *body.AutoSyncEnabled,
+		AutoAddServersEnabled:    *body.AutoAddServersEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5603,6 +5629,7 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		IsDefault:                body.IsDefault,
 		AutoCreated:              *body.AutoCreated,
 		AutoSyncEnabled:          *body.AutoSyncEnabled,
+		AutoAddServersEnabled:    *body.AutoAddServersEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5810,6 +5837,7 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		IsDefault:                body.IsDefault,
 		AutoCreated:              *body.AutoCreated,
 		AutoSyncEnabled:          *body.AutoSyncEnabled,
+		AutoAddServersEnabled:    *body.AutoAddServersEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -8607,6 +8635,9 @@ func ValidateGetPluginResponseBody(body *GetPluginResponseBody) (err error) {
 	if body.AutoSyncEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
 	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -8660,6 +8691,9 @@ func ValidateCreatePluginResponseBody(body *CreatePluginResponseBody) (err error
 	if body.AutoSyncEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
 	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -8712,6 +8746,9 @@ func ValidateUpdatePluginResponseBody(body *UpdatePluginResponseBody) (err error
 	}
 	if body.AutoSyncEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -14348,6 +14385,9 @@ func ValidatePluginResponseBody(body *PluginResponseBody) (err error) {
 	}
 	if body.AutoSyncEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))

@@ -432,3 +432,8 @@ func (s *Service) ConsentSwitched(ctx context.Context, stateID string) bool {
 	_, err := s.accountSwitchCache.Get(ctx, "authnChallengeSwitched:"+stateID)
 	return err == nil
 }
+
+// AgentConnectionsOutageError is the consent page's answer when an agent's connection is in an outage.
+func AgentConnectionsOutageError(w http.ResponseWriter, err error) error {
+	return agentConnectionsOutage(remoteSessionUnavailableError(w, err), err)
+}

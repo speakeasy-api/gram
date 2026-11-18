@@ -39,7 +39,7 @@ func (m *ChallengeManager) LoadIdentityProviderEndpoint(ctx context.Context, key
 		return nil, err
 	}
 	return &IdentityProviderEndpoint{
-		TokenEndpoint: &TokenEndpoint{endpoint: p.metadata.TokenEndpoint, issuer: p.issuer.Issuer, issuerID: p.issuer.ID, doer: doer, auth: auth},
+		TokenEndpoint: &TokenEndpoint{endpoint: p.metadata.TokenEndpoint, issuer: p.issuer.Issuer, issuerID: p.issuer.ID, doer: doer, auth: auth, tunneled: p.issuer.TunneledMcpServerID.Valid},
 		keys:          keys,
 		jwksURI:       p.metadata.JwksURI,
 		fetchScope:    p.issuer.ID.String(),
