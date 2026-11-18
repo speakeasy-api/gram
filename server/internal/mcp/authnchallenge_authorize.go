@@ -338,10 +338,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		}
 		if endpoint.servingSharedAuthorizationServer() == nil {
 			if err := bindConsentBrowser(w, &challengeState); err != nil {
+				_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 				return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
 			}
 			if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+				_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 				return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 			}

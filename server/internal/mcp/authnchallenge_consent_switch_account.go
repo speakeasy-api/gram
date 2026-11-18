@@ -96,7 +96,7 @@ func (s *Service) accountSwitchOffered(r *http.Request, endpoint *ResolvedMcpEnd
 // action was checked against.
 func sameAccountSwitch(consumed, checked AuthnChallengeState) bool {
 	return consumed.ID == checked.ID && consumed.FlowID == checked.FlowID &&
-		consumed.CSRFToken == checked.CSRFToken &&
+		consumed.CSRFToken == checked.CSRFToken && consumed.ConsentBrowserHash == checked.ConsentBrowserHash &&
 		consumed.AuthorizerUserID == checked.AuthorizerUserID &&
 		consumed.Subject != nil && *consumed.Subject == *checked.Subject &&
 		consumed.SignInID != nil && *consumed.SignInID == *checked.SignInID &&

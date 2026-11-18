@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -412,15 +413,13 @@ func (s *Service) MarkConsentSwitched(ctx context.Context, stateID string, issue
 
 // BindConsentBrowser binds state to a new browser, as authorize does, and returns that browser's cookie.
 func BindConsentBrowser(state *AuthnChallengeState) (*http.Cookie, error) {
-	w := &cookieRecorder{header: http.Header{}}
+	w := httptest.NewRecorder()
 	if err := bindConsentBrowser(w, state); err != nil {
 		return nil, err
 	}
-	cookie, err := http.ParseSetCookie(w.header.Get("Set-Cookie"))
-	if err != nil {
-		return nil, fmt.Errorf("parse consent browser cookie: %w", err)
-	}
-	return cookie, nil
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+	return res.Cookies()[0], nil
 }
 
 // ConsentBrowserMatches reports whether r comes from the browser state is bound to.
@@ -428,8 +427,8 @@ func ConsentBrowserMatches(r *http.Request, state AuthnChallengeState) bool {
 	return consentBrowserMatches(r, state, time.Now())
 }
 
-type cookieRecorder struct{ header http.Header }
-
-func (c *cookieRecorder) Header() http.Header         { return c.header }
-func (c *cookieRecorder) Write(b []byte) (int, error) { return len(b), nil }
-func (c *cookieRecorder) WriteHeader(int)             {}
+// ConsentSwitched reports whether an account switch marked stateID as spent.
+func (s *Service) ConsentSwitched(ctx context.Context, stateID string) bool {
+	_, err := s.accountSwitchCache.Get(ctx, "authnChallengeSwitched:"+stateID)
+	return err == nil
+}

@@ -532,6 +532,7 @@ func TestConsentSwitchAccount_OnlyFromTheStartingBrowser(t *testing.T) {
 		requireRefusedSwitchPage(t, fx, switchExpired)
 		require.Empty(t, fx.revoker.sessions(), name+": the person's session is not ended")
 		require.Equal(t, before, fx.state(t), name+": the page's challenge is untouched")
+		require.False(t, fx.ti.service.ConsentSwitched(fx.ctx, before.ID), name+": the page is not marked as switched")
 		code, _, _ := render(t, fx.consentActionFixture)
 		require.Equal(t, http.StatusOK, code, name+": the page still loads")
 	}
