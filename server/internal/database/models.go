@@ -1552,8 +1552,6 @@ type Chat struct {
 	SummaryRedacted bool
 	// @access: confidential
 	MemoryExcludedAt pgtype.Timestamptz
-	// @access: confidential
-	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
 	InferenceActorKey []byte
 	// @access: confidential
