@@ -61,10 +61,12 @@ type metaGateContext struct {
 	// agent gateway. Treat it as a telemetry grouping key, never as
 	// something to read a row back by.
 	metaServerID uuid.UUID
-	// agentID is set only when this request is an agent gateway, which
-	// derives its members from the caller's delegated policy instead of
-	// stored membership rows.
+	// agentID is the machine caller's effective agent. On the legacy agent
+	// gateway it also identifies the source of derived membership.
 	agentID uuid.UUID
+	// agentMembership selects the legacy agent gateway's derived members.
+	// Machine callers on stored gateways keep the operator's member rows.
+	agentMembership bool
 	// organizationGateway is set only when this request is an organization
 	// gateway, which derives its members from the signed-in user's access
 	// across the organization instead of stored membership rows.
@@ -128,8 +130,8 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
-	// agentFix, on an agent gateway, builds the links someone who can edit
-	// the agent opens to fix a member the agent cannot use; nil elsewhere.
+	// agentFix builds repair links for a machine caller whose agent cannot
+	// use a member; nil for people.
 	agentFix *agentFixLinks
 	// skillsOverMCP memoizes the Skills extension flag for this request once
 	// it is evaluated; see metaSkillsEnabled.
@@ -834,6 +836,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
 	var gateCaller gatewayCaller
+	gateAgentID := membership.agentID
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
 		// Ungated stored gateways still pass through the shared network
@@ -855,6 +858,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		authentication := admission.authentication
 		toolSelection := admission.toolSelection
 		gateCaller = admission.caller
+		gateAgentID = admission.agentID
 		authentication.skippedUpstreams = skipped
 		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
@@ -879,16 +883,17 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		authentication := admission.authentication
 		toolSelection := admission.toolSelection
 		gateCaller = admission.caller
+		gateAgentID = admission.agentID
 		authentication.skippedUpstreams = skipped
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
-		if gateMemberChoices == nil && membership.agentID != uuid.Nil {
+		if gateMemberChoices == nil && gateAgentID != uuid.Nil {
 			// Decided before the token path, so members the key has a choice
 			// for resolve lazily like any other chosen member.
 			agentKeyChoicesRead = true
-			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
+			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, gateAgentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 			if err != nil {
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
 			}
@@ -908,8 +913,8 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		gatePolicy = toolSelection
 		gateAuthentication = authentication
 	}
-	if gateMemberChoices == nil && membership.agentID != uuid.Nil && !agentKeyChoicesRead {
-		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
+	if gateMemberChoices == nil && gateAgentID != uuid.Nil && !agentKeyChoicesRead {
+		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, gateAgentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
 		}
@@ -934,9 +939,9 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		request:          r,
 		projectID:        mcpEndpoint.ProjectID,
 		metaServerID:     metaServer.ID,
-		// Both unset for a stored gateway, whose members come from
-		// meta_mcp_server_members rather than from a caller's grants.
-		agentID:             membership.agentID,
+		// Machine callers use their effective agent's upstream credentials.
+		agentID:             gateAgentID,
+		agentMembership:     membership.agentID != uuid.Nil,
 		organizationGateway: membership.organization,
 		organizationID:      metaServer.OrganizationID,
 		tokens:              gateTokens,
@@ -966,7 +971,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion:   request.resolution,
 		connectURL:        connectURL,
-		agentFix:          s.newAgentFixLinks(ctx, logger, metaServer.OrganizationID, membership.agentID),
+		agentFix:          s.newAgentFixLinks(ctx, logger, metaServer.OrganizationID, gateAgentID),
 		skillsOverMCP:     nil,
 		servedCredentials: nil,
 	}
