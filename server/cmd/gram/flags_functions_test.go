@@ -85,8 +85,9 @@ func TestFunctionsProviderDisabledIgnoresProviderSettingsWithoutLoggingValues(t 
 	} {
 		require.Contains(t, out, envVar)
 	}
-	// The runner image is shared by every provider and set by default, and
-	// the Fly.io region has a default, so neither is reported.
+	// The runner image is shared by every provider, so it is not reported
+	// even when set, and the Fly.io region's default value is not reported
+	// either.
 	require.NotContains(t, out, "GRAM_FUNCTIONS_RUNNER_OCI_IMAGE")
 	require.NotContains(t, out, "GRAM_FUNCTIONS_FLYIO_REGION")
 	for _, value := range []string{"fly-token-value", "fly-org", "s3://bucket", "tigris-key-value", secret} {

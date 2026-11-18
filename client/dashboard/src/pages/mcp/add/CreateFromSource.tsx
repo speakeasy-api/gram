@@ -39,7 +39,17 @@ export default function CreateFromSource(): JSX.Element {
   const routes = useRoutes();
   const client = useSdkClient();
   const { openPanel } = useSidePanel();
-  const { sources, isLoading: isLoadingDeployment } = useProjectSources();
+  const { sources: projectSources, isLoading: isLoadingDeployment } =
+    useProjectSources();
+  // Function sources are offered only once the server confirms Functions are
+  // available, like every other Functions entry point.
+  const sources = useMemo(
+    () =>
+      functionsAvailable
+        ? projectSources
+        : projectSources.filter((source) => source.kind !== "function"),
+    [functionsAvailable, projectSources],
+  );
   const { data: toolsResult, isLoading: isLoadingTools } = useListTools();
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);

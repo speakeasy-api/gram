@@ -12,8 +12,10 @@ export type FunctionsAvailabilityStatus =
  * runs with Functions turned off answers false for every organization.
  *
  * `available` is true only once the server has said so. While the answer is
- * loading, failed to load, or absent from an older server, it is false, so a
- * deployment without Functions never flashes Functions entry points.
+ * loading, could not be loaded at all, or is absent from an older server, it
+ * is false, so a deployment without Functions never flashes Functions entry
+ * points. A failed refetch keeps the last answer: the setting comes from the
+ * server's configuration, so a network error does not change it.
  */
 export function useFunctionsAvailable(): {
   status: FunctionsAvailabilityStatus;
