@@ -80,9 +80,6 @@ func (r cubeRow) value(facet Facet) string {
 	case FacetPeople:
 		return r.Subject
 	case FacetNetworks:
-		if r.Subject != "" {
-			return ""
-		}
 		return r.Network
 	case FacetApps:
 		return r.App
@@ -130,7 +127,15 @@ func (f Filters) matches(r cubeRow, skip Facet) bool {
 		if facet == skip {
 			continue
 		}
-		if values := f.values(facet); len(values) > 0 && !slices.Contains(values, r.value(facet)) {
+		values := f.values(facet)
+		if len(values) == 0 {
+			continue
+		}
+		// A network stands for attempts with no known person, as in filterSQL.
+		if facet == FacetNetworks && (r.Subject != "" || r.Network == "") {
+			return false
+		}
+		if !slices.Contains(values, r.value(facet)) {
 			return false
 		}
 	}
@@ -210,6 +215,9 @@ func countCube(cube []cubeRow, f Filters) Counts {
 	for _, facet := range Facets {
 		byValue := map[string]uint64{}
 		for _, row := range cube {
+			if facet == FacetNetworks && row.Subject != "" {
+				continue
+			}
 			// Only apps and people have a meaning for empty: unlisted, and no known person.
 			if facet != FacetApps && facet != FacetPeople && row.value(facet) == "" {
 				continue

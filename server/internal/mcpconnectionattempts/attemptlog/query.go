@@ -332,7 +332,9 @@ func filterSQL(f Filters) (string, []any) {
 	add("d_member", f.MemberIDs)
 	add("a_subject", f.People)
 	// A network stands for attempts with no known person, as in its counts.
-	add("if(a_subject = '', a_device, '')", f.Networks)
+	if len(f.Networks) > 0 {
+		conds, args = append(conds, "(a_subject = '' AND a_device != '' AND has(?, a_device))"), append(args, f.Networks)
+	}
 	add("d_app", f.Apps)
 	add("d_app_version", f.AppVersions)
 	add("d_reason", f.Reasons)
@@ -392,7 +394,7 @@ func List(ctx context.Context, ch driver.Conn, s Scope, f Filters, after *Cursor
 				SELECT *, if(a_started > lagInFrame(d_at, 1, toDateTime64(0, 9, 'UTC')) OVER (PARTITION BY fold_key ORDER BY a_started, a_id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) + toIntervalSecond(?), 1, 0) AS new_run
 				FROM (
 					SELECT *, if(d_outcome IN ` + failing + `,
-						cityHash64(multiIf(a_subject != '', a_subject, a_device != '', concat('network:', a_device), concat('attempt:', toString(a_id))), a_server, d_member, d_step, d_stored_step, d_outcome, d_reason, d_app, d_version, d_service),
+						cityHash64(multiIf(a_subject != '', a_subject, a_device != '', concat('network:', a_device), concat('attempt:', toString(a_id))), a_server, a_kind, d_member, d_step, d_stored_step, d_outcome, d_reason, d_app, d_version, d_service),
 						cityHash64(toString(a_id))) AS fold_key
 					FROM attempts
 				)

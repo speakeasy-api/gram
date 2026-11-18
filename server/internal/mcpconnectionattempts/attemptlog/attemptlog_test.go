@@ -384,7 +384,7 @@ func TestSignIns_SixHourBucketsStartOnUTCBoundaries(t *testing.T) {
 func TestSourceOf_NamesTheServerForRejectedCredentials(t *testing.T) {
 	t.Parallel()
 	failed := attemptlog.OutcomeFailed
-	require.Equal(t, attemptlog.SourceServer, attemptlog.SourceOf(mcpconnectionattempts.CodeStaticKeyRejected.String(), failed))
+	require.Equal(t, attemptlog.SourceServer, attemptlog.SourceOf(mcpconnectionattempts.CodeRejectedByMember.String(), failed))
 	require.Equal(t, attemptlog.SourceService, attemptlog.SourceOf(mcpconnectionattempts.CodeProviderUnavailable.String(), failed))
 	require.Equal(t, attemptlog.SourceApp, attemptlog.SourceOf(mcpconnectionattempts.CodePKCEMismatch.String(), failed))
 	require.Equal(t, attemptlog.SourceSpeakeasySetting, attemptlog.SourceOf(mcpconnectionattempts.CodeCIMDAdmissionDenied.String(), attemptlog.OutcomeBlocked))
@@ -404,6 +404,8 @@ func TestSourceOf_NoneForSuccessLiveAttemptsOrThePersonsOwnDoing(t *testing.T) {
 		mcpconnectionattempts.CodeProviderDenied.String(),
 		mcpconnectionattempts.CodeIssuerMismatch.String(),
 		mcpconnectionattempts.CodeProviderRateLimited.String(),
+		mcpconnectionattempts.CodeProviderServerError.String(),
+		mcpconnectionattempts.CodeStaticKeyRejected.String(),
 	}
 	for _, code := range unattributed {
 		require.Empty(t, attemptlog.SourceOf(code, attemptlog.OutcomeFailed), code)
@@ -503,4 +505,10 @@ func TestList_ANetworkFilterKeepsAttemptsWithNoKnownPersonLikeItsCount(t *testin
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), counts.Total)
 	require.Equal(t, []attemptlog.FacetValue{{Value: "net1", Attempts: 1}}, counts.Facets[attemptlog.FacetNetworks])
+
+	empty := attemptlog.Filters{Networks: []string{""}}
+	require.Empty(t, list(t, f, f.scope(), empty))
+	counts, err = attemptlog.Count(t.Context(), f.ch, f.scope(), empty, f.now)
+	require.NoError(t, err)
+	require.Zero(t, counts.Total)
 }
