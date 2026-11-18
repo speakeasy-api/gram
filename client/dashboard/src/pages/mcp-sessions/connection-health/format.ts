@@ -5,6 +5,7 @@ import type {
   ProblemRule,
   Source,
   StepGroup,
+  SuspectedProblem,
 } from "./types";
 
 export const OUTCOME_LABELS: Record<Outcome, string> = {
@@ -173,3 +174,12 @@ export const PROBLEM_RULES: Record<ProblemRule, string> = {
   one_person_24_hours:
     "One person got the same kind of failure for 24 hours and has not connected since.",
 };
+
+/** The headline with when it started, as the panel lists it. */
+export function problemHeadline(problem: SuspectedProblem, now: Date): string {
+  const since =
+    problem.rule === "one_person_24_hours"
+      ? formatDayMonth(problem.since)
+      : formatSince(problem.since, now);
+  return `${problem.headline} since ${since}`;
+}

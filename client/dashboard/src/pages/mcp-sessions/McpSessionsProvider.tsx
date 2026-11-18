@@ -45,6 +45,7 @@ import { useConnectionHealthFlag } from "./connection-health/flag";
 import { OverviewTab } from "./connection-health/OverviewTab";
 import { ProviderPicker } from "./ProviderPicker";
 import {
+  clientAccessLabel,
   HEALTH_PROVIDER_SEGMENTS,
   PROVIDER_TABS,
   type HealthProviderSegment,
@@ -277,14 +278,6 @@ function HeaderSettingLink({
       <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
     </Link>
   );
-}
-
-/** The client access mode as Settings words it. */
-function clientAccessLabel(mode: string): string {
-  if (mode === "presets") return "Known clients";
-  // "reporting" is a legacy value that admits what "open" admits.
-  if (mode === "open" || mode === "reporting") return "Any client";
-  return "Off";
 }
 
 /**

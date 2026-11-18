@@ -80,3 +80,11 @@ export function providerScopeLabel(
 ): string {
   return provider.projectId === "" ? "Organization-wide" : "This project";
 }
+
+/** The client access mode as Settings words it. */
+export function clientAccessLabel(mode: string): string {
+  if (mode === "presets") return "Known clients";
+  // "reporting" is a legacy value that admits what "open" admits.
+  if (mode === "open" || mode === "reporting") return "Any client";
+  return "Off";
+}
