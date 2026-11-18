@@ -56,7 +56,7 @@ export function SuspectedProblems({
                 <span className="text-muted-foreground block text-xs">
                   {problem.peopleOnServerCount !== undefined &&
                   problem.peopleOnServerCount < problem.peopleCount
-                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} across the ${problem.scope.name}. `
+                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} ${problem.scope.kind === "service" ? `across the ${problem.scope.name}` : "in all"}. `
                     : ""}
                   {problem.fact}
                 </span>

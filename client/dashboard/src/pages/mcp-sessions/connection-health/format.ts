@@ -55,11 +55,21 @@ export const SOURCE_LABELS: Record<Source, string> = {
   speakeasy: "Speakeasy",
 };
 
+const UNNAMED_SERVER: Record<string, string> = {
+  authorization_server: "Shared sign-in",
+  gateway: "Removed gateway",
+  toolset: "Removed server",
+  mcp: "Removed server",
+  none: "",
+};
+
 /** "Engineering Tools › Linear" for a gateway member, else the server. */
 export function serverLabel(
   row: Pick<AttemptRow, "server" | "member">,
 ): string {
-  const server = row.server?.name ?? (row.server ? "Removed server" : "");
+  const server = row.server
+    ? (row.server.name ?? UNNAMED_SERVER[row.server.kind] ?? "Removed server")
+    : "";
   return row.member?.name ? `${server} › ${row.member.name}` : server;
 }
 
@@ -67,9 +77,23 @@ export function appLabel(app: App): string {
   return app.version ? `${app.name} ${app.version}` : app.name;
 }
 
+const UNNAMED_PERSON: Record<string, string> = {
+  user: "Unnamed person",
+  agent: "Unnamed agent",
+  apikey: "API key",
+  workload: "Workload",
+  anonymous: "No known person",
+  other: "Unknown caller",
+};
+
 export function personLabel(row: Pick<AttemptRow, "person">): string {
   if (!row.person) return "No known person";
-  return row.person.name ?? row.person.email ?? "Unnamed person";
+  return (
+    row.person.name ??
+    row.person.email ??
+    UNNAMED_PERSON[row.person.kind] ??
+    "Unknown caller"
+  );
 }
 
 const TIME_SECONDS = new Intl.DateTimeFormat(undefined, {
