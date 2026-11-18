@@ -338,6 +338,72 @@ WHERE sqlc.narg('cursor')::uuid IS NULL OR attachment.id < sqlc.narg('cursor')::
 ORDER BY attachment.id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: ListUserSessionIssuerBoundRemoteSessionClients :many
+-- The live remote session clients an issuer binds, with the authorization
+-- server each one belongs to. Clients scoped to another organization, or to a
+-- project outside it, are left out.
+SELECT
+    client.id,
+    client.client_id,
+    remote_issuer.id AS remote_session_issuer_id,
+    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
+    remote_issuer.issuer AS remote_session_issuer_url
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND client.deleted IS FALSE
+  AND remote_issuer.deleted IS FALSE
+  AND (client.organization_id IS NULL OR client.organization_id = @organization_id::text)
+  AND (client.project_id IS NULL OR EXISTS (
+    SELECT 1 FROM projects AS client_project
+    WHERE client_project.id = client.project_id
+      AND client_project.organization_id = @organization_id::text
+      AND client_project.deleted IS FALSE
+  ))
+ORDER BY client.id;
+
+-- name: ListUserSessionIssuerServerRemoteSessionClients :many
+-- The remote session clients associated with each live MCP server that uses
+-- an issuer in the organization, with the authorization server each client
+-- belongs to. A server uses the issuer when it is attached directly or is a
+-- member of a live gateway attached to it.
+SELECT
+    server.id AS mcp_server_id,
+    COALESCE(server.name, server.slug, server.id::text)::text AS mcp_server_name,
+    project.id AS project_id,
+    project.name AS project_name,
+    client.id,
+    client.client_id,
+    remote_issuer.id AS remote_session_issuer_id,
+    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
+    remote_issuer.issuer AS remote_session_issuer_url
+FROM mcp_servers AS server
+JOIN projects AS project ON project.id = server.project_id
+JOIN mcp_server_remote_session_clients AS association
+    ON association.mcp_server_id = server.id
+   AND association.project_id = server.project_id
+JOIN remote_session_clients AS client ON client.id = association.remote_session_client_id
+JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
+WHERE (server.user_session_issuer_id = @user_session_issuer_id::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_server_members AS member
+      JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+      WHERE member.mcp_server_id = server.id
+        AND member.deleted IS FALSE
+        AND gateway.deleted IS FALSE
+        AND gateway.organization_id = @organization_id::text
+        AND gateway.user_session_issuer_id = @user_session_issuer_id::uuid
+    ))
+  AND server.deleted IS FALSE
+  AND project.organization_id = @organization_id::text
+  AND project.deleted IS FALSE
+  AND association.deleted IS FALSE
+  AND client.deleted IS FALSE
+  AND remote_issuer.deleted IS FALSE
+ORDER BY server.id, client.id;
+
 -- name: CountOrganizationManagedUserSessionIssuerMCPServers :one
 -- How many servers ListOrganizationManagedUserSessionIssuerMCPServers lists,
 -- by the same rules.
@@ -2112,21 +2178,18 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: GetExpiredUserSessionByRefreshTokenHash :one
--- Finds a session retired by reaching its deadline, by refresh-token hash for
--- the issuer and client that presented it, so a refusal can say the token
--- expired. Rows retired earlier (rotated or revoked) do not match: their reuse
--- stays "unknown or already used". Project scoping is intentionally NOT
--- applied here -- the OAuth surface is public and the issuer_id is the
--- authoritative scope.
-SELECT subject_urn
+-- name: GetSpentUserSessionByRefreshTokenHash :one
+-- A retired session by refresh-token hash for the presenting issuer and client (issuer_id scopes it, not project).
+SELECT
+  subject_urn,
+  COALESCE(deleted_at >= refresh_expires_at, FALSE)::boolean AS expired
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND user_session_client_id = @user_session_client_id::uuid
   AND refresh_token_hash = @refresh_token_hash::text
   AND refresh_token_hash IS NOT NULL
   AND deleted IS TRUE
-  AND deleted_at >= refresh_expires_at
+ORDER BY expired DESC
 LIMIT 1;
 
 -- name: GetUserSessionPolicyByJTI :one
@@ -4001,13 +4064,15 @@ WHERE organization_id = @organization_id AND project_id IS NULL AND deleted IS F
 -- name: GetReconnectSessionPolicy :one
 -- Resolve the original credential across refresh rotation, without reviving
 -- revoked/expired connections or borrowing another client's catalogue.
+-- Sessions from an organization-wide issuer have no project and may reconnect
+-- through any project's gateway in that organization.
 SELECT us.tool_selection
 FROM user_sessions AS us
 JOIN user_session_clients AS c ON c.id = us.user_session_client_id
 WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
   AND us.user_session_issuer_id = @user_session_issuer_id::uuid
   AND us.organization_id = @organization_id::text
-  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND (us.project_id IS NULL OR us.project_id = sqlc.narg('project_id')::uuid)
   AND c.user_session_issuer_id = us.user_session_issuer_id
   AND us.subject_urn = @subject_urn
   AND c.client_id = @client_id::text
@@ -4033,7 +4098,7 @@ UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = cl
 WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
   AND us.user_session_issuer_id = @user_session_issuer_id::uuid
   AND us.organization_id = @organization_id::text
-  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND (us.project_id IS NULL OR us.project_id = sqlc.narg('project_id')::uuid)
   AND us.subject_urn = @subject_urn
   AND us.tool_selection -> 'catalog' ->> 'id' = @catalog_id::text
   AND EXISTS (SELECT 1 FROM user_session_clients AS c

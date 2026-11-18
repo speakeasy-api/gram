@@ -58,6 +58,7 @@ func TestIngressProvisioner_GeneratedRouteBackendTable(t *testing.T) {
 			name: result.ResourceName,
 			paths: []networkingv1.HTTPIngressPath{
 				expectedIngressPath("/mcp", networkingv1.PathTypePrefix, "custom-domain-mcp"),
+				expectedIngressPath("/agent-mcp", networkingv1.PathTypePrefix, "custom-domain-mcp"),
 				expectedIngressPath("/oauth", networkingv1.PathTypePrefix, "custom-domain-mcp"),
 				expectedIngressPath("/shared/skills", networkingv1.PathTypePrefix, "custom-domain-server"),
 				expectedIngressPath("/.well-known/openai-apps-challenge", networkingv1.PathTypeExact, "custom-domain-mcp"),

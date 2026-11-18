@@ -46,7 +46,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -944,13 +943,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		if wErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset mcp server").LogError(ctx, s.logger)
 		}
-		alias, aErr := legacyalias.Get(ctx, s.db, *ac.ProjectID, toolset.ID)
-		if aErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, aErr, "verify toolset mcp server").LogError(ctx, s.logger)
-		}
-		hosted := hosting.Enabled && alias.Slug.Valid && alias.Slug.String != ""
-		if wrapper != nil && hosting.Enabled && !hosted {
-			// Without the legacy slug alias the server needs an endpoint of its own.
+		hosted := false
+		if wrapper != nil && hosting.Enabled {
 			server, mcpErr := s.repo.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{McpServerID: wrapper.ID, ProjectID: *ac.ProjectID})
 			if mcpErr != nil && !errors.Is(mcpErr, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify toolset mcp server").LogError(ctx, s.logger)
@@ -1543,22 +1537,34 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "read published marketplace name").LogError(ctx, s.logger)
 	}
 
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
+
+	// For vibe, check the gate before minting anything: a pinned release
+	// without the provider, or an org name that breaks the AP1.0 name schema,
+	// is a failed precondition, not a 500 — and must not store a hooks key.
+	if payload.Platform == "vibe" && !VibeObservabilityPluginAvailable(cfg) {
+		if !vibeProviderReleased() {
+			return nil, nil, oops.E(oops.CodeFailedPrecondition, nil, "the pinned speakeasy-hooks release ("+hooksBinaryVersion+") does not carry the vibe provider; it opens when a release with hooks/relay/vibe.go is pinned")
+		}
+		return nil, nil, oops.E(oops.CodeFailedPrecondition, nil, "the organization name produces a plugin name that does not satisfy the Agent Plugins 1.0 name schema (max 64 characters, starting with a letter or digit)")
+	}
+
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").LogError(ctx, s.logger)
 	}
-
-	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
-	}
-
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 	cfg.InstallRoute = InstallRouteDownload
 
+	// Generate first, persist the key only on success: a failed generation
+	// (e.g. an org name the schema rejects) must not leave a stored hooks key
+	// behind — each attempt used to mint one.
 	archive, err := ObservabilityPluginZip(cfg, payload.Platform)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").LogError(ctx, s.logger)
+	}
+	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
 	}
 
 	filename := "observability"
@@ -1575,6 +1581,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-openclaw"
 	case "pi":
 		filename = "observability-pi"
+	case "vibe":
+		filename = "observability-vibe"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1747,21 +1755,23 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:                s.github != nil,
-		Connected:                 false,
-		RepoOwner:                 nil,
-		RepoName:                  nil,
-		RepoURL:                   nil,
-		MarketplaceURL:            nil,
-		ClaudeObservabilityPlugin: nil,
-		CodexObservabilityPlugin:  nil,
-		CursorObservabilityPlugin: nil,
-		HasCollaborators:          nil,
-		UpToDate:                  nil,
-		AutomaticSyncPending:      nil,
-		Plugins:                   nil,
-		LastPublishedAt:           nil,
-		LiveVersion:               nil,
+		Configured:                 s.github != nil,
+		Connected:                  false,
+		RepoOwner:                  nil,
+		RepoName:                   nil,
+		RepoURL:                    nil,
+		MarketplaceURL:             nil,
+		ClaudeObservabilityPlugin:  nil,
+		CodexObservabilityPlugin:   nil,
+		CursorObservabilityPlugin:  nil,
+		VibeObservabilityPlugin:    nil,
+		VibeObservabilityAvailable: nil,
+		HasCollaborators:           nil,
+		UpToDate:                   nil,
+		AutomaticSyncPending:       nil,
+		Plugins:                    nil,
+		LastPublishedAt:            nil,
+		LiveVersion:                nil,
 	}
 
 	if s.github != nil {
@@ -1805,6 +1815,19 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 				result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 				result.CursorObservabilityPlugin = conv.PtrEmpty(CursorObservabilitySlug(slugCfg))
+				// The ZIP download depends only on the pin and the org name,
+				// not on the marketplace repo, so availability is reported
+				// on VibeObservabilityPluginAvailable alone. The slug is
+				// reported from what was actually published: the stored
+				// published hooks version matching the current generator —
+				// a first publish skips the rollout gate and writes the
+				// current hooks subtree, so rollout eligibility is the wrong
+				// signal here.
+				vibeStatus := VibeObservabilityStatusFor(slugCfg, conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion))
+				result.VibeObservabilityAvailable = &vibeStatus.Available
+				if vibeStatus.Published {
+					result.VibeObservabilityPlugin = conv.PtrEmpty(vibeStatus.Plugin)
+				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
 			if admin && conn.MarketplaceToken.Valid && s.serverURL != "" {
@@ -3220,7 +3243,7 @@ func pluginMCPKeyPolicy(ctx context.Context, dbtx repo.DBTX, projectID uuid.UUID
 	}}
 	policy := []*authz.RoleGrant{shared}
 
-	rows, err := listPluginMCPServers(ctx, dbtx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: nil})
+	rows, err := repo.New(dbtx).ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: nil})
 	if err != nil {
 		return nil, fmt.Errorf("list plugin servers: %w", err)
 	}
@@ -3524,7 +3547,7 @@ func (s *Service) resolvePluginInfosInTx(ctx context.Context, tx pgx.Tx, organiz
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
 	}
-	mcpRows, err := listPluginMCPServers(ctx, tx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	mcpRows, err := lockedRepo.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}

@@ -1011,7 +1011,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// selection is bound to another endpoint's resource — rejected at use
 		// time anyway, but failing the redemption is cheaper than a
 		// 200-then-401 loop.
-		if toolPolicy.Resource != endpointToolSelectionResource(endpoint) {
+		if !endpointAcceptsToolSelectionResource(endpoint, toolPolicy.Resource) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return rejectGrant(mcpconnectionattempts.CodeResourceMismatch, "authorization code is bound to a different MCP endpoint")
@@ -1310,7 +1310,7 @@ func (s *Service) rotateRefreshToken(
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) {
 		selection, selectionErr := toolfilter.ParseSessionPolicy(refreshSession.ToolSelection)
-		selectionMatches := selectionErr == nil && (selection == nil || selection.Resource == endpointToolSelectionResource(endpoint))
+		selectionMatches := selectionErr == nil && (selection == nil || endpointAcceptsToolSelectionResource(endpoint, selection.Resource))
 		if selectionMatches {
 			credential, admissionErr := loadAgentSessionCredential(
 				endpoint, refreshSession.SubjectUrn, refreshSession.SubjectUrn, refreshSession.OrganizationID,
@@ -1452,18 +1452,21 @@ func (s *Service) rotateRefreshToken(
 
 			failureReason, description := "refresh_token_unknown_or_already_used", "refresh_token is unknown or already used"
 			var failureSubject *urn.SessionSubject
-			expiredSubject, expiredErr := usersessions_repo.New(s.db).GetExpiredUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetExpiredUserSessionByRefreshTokenHashParams{
+			spent, spentErr := usersessions_repo.New(s.db).GetSpentUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetSpentUserSessionByRefreshTokenHashParams{
 				UserSessionIssuerID: endpoint.UserSessionIssuerID,
 				UserSessionClientID: clientRow.ID,
 				RefreshTokenHash:    refreshTokenHash,
 			})
 			switch {
-			case expiredErr == nil:
+			case spentErr == nil && spent.Expired:
 				// The session was retired by reaching its length limit; that outlives the replay grace.
 				failureReason, description = "refresh_token_expired", "refresh_token has expired"
-				failureSubject = &expiredSubject
-			case !errors.Is(expiredErr, pgx.ErrNoRows):
-				logger.WarnContext(ctx, "failed to load expired refresh token session", attr.SlogError(expiredErr))
+				failureSubject = &spent.SubjectUrn
+			case spentErr == nil:
+				// Rotated or revoked: only the row names the owner.
+				failureSubject = &spent.SubjectUrn
+			case !errors.Is(spentErr, pgx.ErrNoRows):
+				logger.WarnContext(ctx, "failed to load spent refresh token session", attr.SlogError(spentErr))
 			}
 
 			published := s.storeRefreshTokenReplayFailure(ctx, replayKey, clientRow.ID, failureSubject, failureReason, description, logger)
@@ -1555,7 +1558,7 @@ func (s *Service) rotateRefreshToken(
 		writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
 		return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "tool_selection_malformed", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 	}
-	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
+	if oldSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, oldSelection.Resource) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
 		writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 		return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "tool_selection_resource_mismatch", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))

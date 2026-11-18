@@ -25,6 +25,14 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
+	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
+	// new private network connection: the tsnet tailnet gateway when enabled,
+	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
+	// connection is created, and by the dashboard to show the matching setup
+	// steps until one exists. Targeted by PostHog organization group (org
+	// slug). Fails closed to the operator. Existing connections keep the
+	// runtime they were created with. Removed once the gateway is the default.
+	FlagPrivateNetworkGateway Flag = "private-network-gateway"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
@@ -93,11 +101,6 @@ const (
 	// provider errors. Removed at GA, or promoted to a productfeatures
 	// entitlement if the analyzer becomes a sold capability.
 	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
-
-	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
-	// Targeted by PostHog organization group (org slug) and removed once PAYG
-	// billing is generally available.
-	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
 
 	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
 	// (CIMD) support for assistant MCP OAuth clients. When on, and the

@@ -147,6 +147,7 @@ var cardTools = map[string]cardSpec{
 	"create_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 	"pause_data_export":            {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 	"resume_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"send_data_export_test_event":  {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 	"set_data_export_min_severity": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 
 	// Dashboards and Explore widgets.
@@ -257,6 +258,7 @@ var textOnlyTools = map[string]string{
 	"select_assistant_runtime":             textOnlyAssistant,
 	"choose_assistant_upstream_credential": textOnlyAssistant,
 	"get_my_install_instructions":          textOnlyMember,
+	"get_my_vibe_observability_install":    "reports Vibe observability install availability and guidance; the plugins page covers it for people",
 	"get_my_mcp_access":                    textOnlyMember,
 	"get_my_mcp_connection_status":         textOnlyMember,
 	"list_my_mcp_access":                   textOnlyMember,

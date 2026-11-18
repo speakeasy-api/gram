@@ -47,10 +47,6 @@ func (*UnavailableClient) GetStoredPeriodUsage(context.Context, string) (*gen.Pe
 	return nil, errLegacyBillingUnavailable
 }
 
-func (*UnavailableClient) CreateCheckout(context.Context, string, string, string) (string, error) {
-	return "", errLegacyBillingUnavailable
-}
-
 func (*UnavailableClient) CreateTopUpCheckout(context.Context, string, string, string) (string, error) {
 	return "", errLegacyBillingUnavailable
 }

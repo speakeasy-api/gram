@@ -9,6 +9,7 @@ import { saveState } from "@/pages/platform-admin/rbac-override-state";
 
 const mocks = vi.hoisted(() => ({
   orgRead: true,
+  workloadWrite: true,
   agents: vi.fn(),
   coverage: vi.fn(),
   roster: vi.fn(),
@@ -29,7 +30,10 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "example", projectSlug: "example" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => mocks.orgRead }),
+  useRBAC: () => ({
+    hasScope: (scope: string) =>
+      scope === "workload:write" ? mocks.workloadWrite : mocks.orgRead,
+  }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -116,6 +120,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   mocks.orgRead = true;
+  mocks.workloadWrite = true;
   mocks.session = {
     user: { id: "user_example" },
     organizationOverride: false,
@@ -228,6 +233,19 @@ it("keeps agents visible and refetches their permissions when the RBAC override 
   await waitFor(() => expect(mocks.agents).toHaveBeenCalledTimes(2));
   expect(await screen.findByText("Registered agent")).toBeTruthy();
   expect(screen.getByText("New agent identity")).toBeTruthy();
+});
+
+it("offers the Claude Tag setup only to someone who can trust a platform", async () => {
+  mocks.agents.mockResolvedValue({ items: [] });
+  setup("", "agent");
+  expect(await screen.findByText("Set up Claude Tag")).toBeTruthy();
+  cleanup();
+  // Claude Tag signs in with workload identity: without workload:write the
+  // wizard would refuse the setup at its Agent sign-in step.
+  mocks.workloadWrite = false;
+  setup("", "agent");
+  expect(await screen.findByText("New agent identity")).toBeTruthy();
+  expect(screen.queryByText("Set up Claude Tag")).toBeNull();
 });
 
 it("does not read the people roster on the agents roster", async () => {

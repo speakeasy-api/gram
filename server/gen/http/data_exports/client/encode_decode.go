@@ -2155,6 +2155,277 @@ func DecodeDeleteRouteResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// BuildTestRouteRequest instantiates a HTTP request object with method and
+// path set to call the "dataExports" service "testRoute" endpoint
+func (c *Client) BuildTestRouteRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TestRouteDataExportsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("dataExports", "testRoute", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTestRouteRequest returns an encoder for requests sent to the
+// dataExports testRoute server.
+func EncodeTestRouteRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*dataexports.TestRoutePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("dataExports", "testRoute", "*dataexports.TestRoutePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeTestRouteResponse returns a decoder for responses returned by the
+// dataExports testRoute endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeTestRouteResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTestRouteResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body TestRouteResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			res := NewTestRouteTestDataExportRouteResultOK(&body)
+			return res, nil
+		case http.StatusTooManyRequests:
+			var (
+				body TestRouteRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteRateLimitExceeded(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body TestRouteUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body TestRouteUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TestRouteForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TestRouteBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TestRouteNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TestRouteConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TestRouteUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TestRouteInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TestRouteInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+				}
+				err = ValidateTestRouteInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+				}
+				return nil, NewTestRouteInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TestRouteUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+				}
+				err = ValidateTestRouteUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+				}
+				return nil, NewTestRouteUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("dataExports", "testRoute", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TestRouteGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("dataExports", "testRoute", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalDestinationResponseBodyToDataexportsDestination builds a value of
 // type *dataexports.Destination from a value of type *DestinationResponseBody.
 func unmarshalDestinationResponseBodyToDataexportsDestination(v *DestinationResponseBody) *dataexports.Destination {
@@ -2373,6 +2644,20 @@ func marshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDe
 	res := &dataexports.UpdateOtelDestinationHeaderInput{
 		Name:  v.Name,
 		Value: v.Value,
+	}
+
+	return res
+}
+
+// unmarshalTestDataExportRouteSignalResultResponseBodyToDataexportsTestDataExportRouteSignalResult
+// builds a value of type *dataexports.TestDataExportRouteSignalResult from a
+// value of type *TestDataExportRouteSignalResultResponseBody.
+func unmarshalTestDataExportRouteSignalResultResponseBodyToDataexportsTestDataExportRouteSignalResult(v *TestDataExportRouteSignalResultResponseBody) *dataexports.TestDataExportRouteSignalResult {
+	res := &dataexports.TestDataExportRouteSignalResult{
+		Signal:     *v.Signal,
+		Outcome:    *v.Outcome,
+		StatusCode: v.StatusCode,
+		Message:    *v.Message,
 	}
 
 	return res

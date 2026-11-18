@@ -93,7 +93,28 @@ type transcriptUpload struct {
 	OffsetStart   int64             `json:"offset_start"`
 	OffsetEnd     int64             `json:"offset_end"`
 	Entries       []json.RawMessage `json:"entries"`
+	// Diagnostic, when set, carries no entries: it tells the server why this
+	// Stop shipped nothing, so a skip that would otherwise only reach a local
+	// debug log shows up in the server's logs.
+	Diagnostic *transcriptDiagnostic `json:"diagnostic,omitempty"`
 }
+
+// transcriptDiagnostic names why a Stop shipped no transcript lines.
+type transcriptDiagnostic struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// Reasons a Stop reports when it ships nothing. Skips that happen before a
+// credential is resolved cannot be reported: the report needs one.
+const (
+	transcriptSkipPathInvalid = "transcript_path_invalid"
+	transcriptSkipReadFailed  = "transcript_read_failed"
+	transcriptSkipEmpty       = "transcript_empty"
+)
+
+// transcriptDiagnosticMaxDetail bounds the detail a skip report carries.
+const transcriptDiagnosticMaxDetail = 512
 
 // transcriptChunk is a run of complete transcript lines read from one offset.
 type transcriptChunk struct {
@@ -132,11 +153,6 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 		r.debugf("transcript skipped: no session id")
 		return nil
 	}
-	path, err := validateClaudeTranscriptPath(base.Session.TranscriptPath)
-	if err != nil {
-		r.debugf("transcript skipped: %v", err)
-		return nil
-	}
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		r.debugf("transcript skipped: no credentials")
@@ -163,6 +179,7 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 		OffsetStart:   0,
 		OffsetEnd:     0,
 		Entries:       nil,
+		Diagnostic:    nil,
 	}
 
 	// One client for every batch, so later batches reuse the connection.
@@ -173,6 +190,13 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 		},
 		Timeout: 0,
 		Jar:     nil,
+	}
+
+	path, err := validateClaudeTranscriptPath(base.Session.TranscriptPath)
+	if err != nil {
+		r.debugf("transcript skipped: %v", err)
+		r.reportTranscriptSkip(ctx, client, c, upload, transcriptSkipPathInvalid, err.Error())
+		return nil
 	}
 
 	var warnings []transcriptWarning
@@ -199,6 +223,7 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 			chunk, err := readTranscriptChunk(path, offset)
 			if err != nil {
 				r.debugf("transcript read failed path=%s offset=%d: %v", path, offset, err)
+				r.reportTranscriptSkip(ctx, client, c, upload, transcriptSkipReadFailed, err.Error())
 				return
 			}
 			if chunk.start != offset {
@@ -209,6 +234,15 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 				writeTranscriptHighWater(marker, chunk.start)
 			}
 			if chunk.end == chunk.start {
+				// A Stop follows a reply, so a transcript that has never held a
+				// complete line means Claude did not write it where the hook
+				// said. It is reported once. A replaced file has a recorded
+				// offset, so one still being written is not reported.
+				if chunk.start == 0 && !transcriptOffsetRecorded(marker) && !transcriptEmptyReported(marker) {
+					if r.reportTranscriptSkip(ctx, client, c, upload, transcriptSkipEmpty, "no complete line at "+path) {
+						markTranscriptEmptyReported(marker)
+					}
+				}
 				return
 			}
 			next := chunk.end
@@ -234,6 +268,52 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 	// the same range and race the offset.
 	withFileLock(marker, ship)
 	return warnings
+}
+
+// reportTranscriptSkip tells the server why this Stop shipped nothing, so
+// the reason reaches the server's logs instead of only a local debug log that
+// nobody reads inside the Cowork VM. It is best effort: a failed report is
+// only logged locally.
+func (r *Relay) reportTranscriptSkip(ctx context.Context, client *http.Client, c creds, upload transcriptUpload, reason, detail string) bool {
+	if len(detail) > transcriptDiagnosticMaxDetail {
+		detail = strings.ToValidUTF8(detail[:transcriptDiagnosticMaxDetail], "")
+	}
+	upload.OffsetStart, upload.OffsetEnd, upload.Entries = 0, 0, nil
+	upload.Diagnostic = &transcriptDiagnostic{Reason: reason, Detail: detail}
+	status, _, err := postTranscript(ctx, client, c, upload)
+	r.debugf("transcript skip reported session=%s reason=%s status=%d err=%v", upload.SessionID, reason, status, err)
+	return err == nil && status >= 200 && status < 300
+}
+
+// transcriptOffsetRecorded reports whether an offset was ever written for the
+// transcript: a shipped chunk or a recorded restart of a replaced file.
+func transcriptOffsetRecorded(marker string) bool {
+	if marker == "" {
+		return false
+	}
+	_, err := os.Stat(marker)
+	return err == nil
+}
+
+// transcriptEmptyReportedPath marks that an empty transcript was already
+// reported, so later Stops on the same empty file do not report it again.
+func transcriptEmptyReportedPath(marker string) string {
+	return marker + ".empty-reported"
+}
+
+func transcriptEmptyReported(marker string) bool {
+	if marker == "" {
+		return false
+	}
+	_, err := os.Stat(transcriptEmptyReportedPath(marker))
+	return err == nil
+}
+
+func markTranscriptEmptyReported(marker string) {
+	if marker == "" {
+		return
+	}
+	_ = atomicWriteCacheFile(transcriptEmptyReportedPath(marker), []byte("1"))
 }
 
 // inCoworkVM reports whether a Claude Code event fires inside Claude's

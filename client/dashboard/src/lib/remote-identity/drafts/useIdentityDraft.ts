@@ -31,6 +31,7 @@ import {
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
 import { useRemoteSessionIssuersByIds } from "../queries/useRemoteSessionIssuersByIds";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 /**
  * The provider the upstream advertises but Speakeasy has no record of yet.
@@ -912,6 +913,7 @@ export function useUserIdentityDraft({
   };
 
   const commit = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async ({
       revision,
       replaceClientServerIds,

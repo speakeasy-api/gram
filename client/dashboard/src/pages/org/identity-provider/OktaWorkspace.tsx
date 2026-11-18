@@ -13,8 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import { CONNECTION_STATUS, isConnected } from "./connectionView";
 import { OktaOverview } from "./OktaOverview";
@@ -120,11 +118,7 @@ export function OktaWorkspace(): JSX.Element {
   const [emaPath] = useQueryState("emaReturn", parseAsString);
   const emaReturn = parseEmaReturn(emaFor, emaPath);
   const orgRoutes = useOrgRoutes();
-  const mcpAuthenticationHref =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-    "enabled"
-      ? orgRoutes.userSessionIssuers.href()
-      : undefined;
+  const mcpAuthenticationHref = orgRoutes.userSessionIssuers.href();
   const navigate = useNavigate();
   const { query, connection } = useOktaConnection();
   const unavailable = connectionsUnavailable(query.error);
