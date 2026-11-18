@@ -93,7 +93,7 @@ function denySublabel(stdio: boolean, narrowed: boolean): string {
  * Who a decision covers, as sent to the API: nothing means everyone. An
  * approval uses the approval audience and a denial its own.
  */
-export function grantedPrincipalUrns(
+function grantedPrincipalUrns(
   decision: AccessDecision,
   approveAudience: string[],
   denyAudience: string[],
