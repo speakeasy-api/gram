@@ -8103,6 +8103,49 @@ func (q *Queries) UpdatePlatformMCPRegistrationsToUserSessionIssuer(ctx context.
 	return result.RowsAffected(), nil
 }
 
+const updatePrincipalRemoteSessionBindingsToUserSessionIssuer = `-- name: UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer :execrows
+UPDATE principal_remote_session_bindings AS binding
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE binding.user_session_issuer_id = $2
+  AND binding.organization_id = $3::text
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    WHERE link.remote_session_client_id = binding.remote_session_client_id
+      AND link.user_session_issuer_id = $1
+  )
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
+`
+
+type UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+// Moves agents' attachments with the issuer they were made on. An attachment
+// need not share its connection's issuer, so moving the connections does not
+// move it. Only clients the target now binds come along; the rest leave with
+// the source's client bindings.
+func (q *Queries) UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx context.Context, arg UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updatePrincipalRemoteSessionBindingsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateReconnectSessionPolicy = `-- name: UpdateReconnectSessionPolicy :many
 UPDATE user_sessions AS us SET tool_selection = $1, updated_at = clock_timestamp()
 WHERE COALESCE(us.credential_id, us.id) = $2::uuid
