@@ -256,7 +256,7 @@ it("passes bookmarked filters to the API and resets pagination when identity sea
   expect(screen.getByText("Expired sessions")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Load more" }));
   await screen.findByText("Person second");
-  await user.type(screen.getByPlaceholderText("Search identities…"), "Ada");
+  await user.type(screen.getByPlaceholderText("Search names…"), "Ada");
   await screen.findByText("Person Ada");
   expect(screen.queryByText("Person first")).toBeNull();
   expect(screen.queryByText("Person second")).toBeNull();
@@ -335,7 +335,7 @@ it("opens a bookmarked registration without selecting a session first", async ()
     entry: "/?registration=bookmarked&q=Ada",
   });
   expect(await screen.findByText("Registration bookmarked")).toBeTruthy();
-  expect(screen.getByPlaceholderText("Search identities…")).toHaveProperty(
+  expect(screen.getByPlaceholderText("Search names…")).toHaveProperty(
     "value",
     "Ada",
   );
@@ -363,7 +363,7 @@ it("explains a gateway with no session issuer instead of listing", () => {
     gatewayId: "gateway",
     issuerId: "",
   });
-  expect(screen.getByText(/has no session issuer/i)).toBeTruthy();
+  expect(screen.getByText(/Turn on sign-in/i)).toBeTruthy();
   expect(requests).toHaveLength(0);
 });
 

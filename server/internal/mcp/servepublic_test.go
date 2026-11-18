@@ -149,7 +149,7 @@ func servePublicHTTPWithBody(
 	return w, nil
 }
 
-// createPublicMCPToolset creates a public MCP toolset served through its legacy slug.
+// createPublicMCPToolset creates a public MCP toolset served at a platform endpoint at slug.
 func createPublicMCPToolset(
 	t *testing.T,
 	ctx context.Context,
@@ -169,7 +169,7 @@ func createPublicMCPToolset(
 	})
 	require.NoError(t, err)
 
-	return hostLegacyToolset(t, ctx, ti, toolset, slug, "public", noIssuer())
+	return hostToolset(t, ctx, ti, toolset, slug, "public", noIssuer())
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ func TestServePublic_InitializeSucceeds(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "test-mcp", "public", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "test-mcp", "public", noIssuer())
 
 	mcpSlug := toolset.McpSlug.String
 	w, err := servePublicHTTP(t, ctx, ti, mcpSlug, makeInitializeBody(), "", nil)
@@ -240,7 +240,7 @@ func TestServePublic_InitializeWithMalformedParamsSucceeds(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "malformed-params-mcp", "public", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "malformed-params-mcp", "public", noIssuer())
 
 	// params is an array rather than the expected object, so decoding into our
 	// recorded shape fails — but the RPC must still succeed.
@@ -285,8 +285,8 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
-// A public toolset served through its legacy slug stops serving once its canonical server is disabled.
-func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
+// A public toolset stops serving at its endpoint once its canonical server is disabled.
+func TestServePublic_DisabledPublicToolset_Returns404(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -329,7 +329,7 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-auth-error-mcp", "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "private-auth-error-mcp", "private", noIssuer())
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
@@ -422,13 +422,13 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "test-mcp-instructions", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
 	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
 		ID: toolset.ID, ProjectID: toolset.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "public",
 	})
 	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: "test-mcp-instructions", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	_, err = metadataRepo.UpsertMetadataByMcpServerID(ctx, metadata_repo.UpsertMetadataByMcpServerIDParams{
 		McpServerID:              toolset.ID,
 		ProjectID:                *authCtx.ProjectID,

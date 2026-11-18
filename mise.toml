@@ -188,13 +188,14 @@ GRAM_TAILNET_GATEWAY_CONTROL_PORT = "8093"
 ## gateway presents an HMAC-signed token in place of a projected
 ## service-account token, and the listener verifies it with the key file; both
 ## files are created on first start. The API server accepts new connections
-## only for organizations with the network_ingress entitlement, and queues
-## their reconciliation for the dedicated reconciler in that group. Every
+## only for organizations with the network_ingress entitlement. The start
+## scripts route reconciliation to that group's reconciler on the
+## `network-ingress` queue; a single-process `gram start` reconciles on its own
+## queue, so the setting is not here. Every
 ## hostname, service and machine is named after GRAM_NETWORK_INGRESS_DEV_ID
 ## in mise.local.toml (`mise run zero:network-ingress`), so a shared tailnet's
 ## production artifacts are never touched.
 GRAM_NETWORK_INGRESS_ENABLED = "true"
-GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE = "network-ingress"
 GRAM_NETINGRESS_PORT = "8094"
 GRAM_NETINGRESS_CONTROL_PORT = "8095"
 GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT = "8096"
@@ -275,6 +276,10 @@ GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
 ## Raise on blocking code detected on the pystreams event loop (aiocop). On by
 ## default locally; unset in production. Set to "" in mise.local.toml to disable.
 GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
+## Skip pystreams locally: `gram streams` acknowledges its subscriptions and
+## answers Presidio enforcement with no findings. Set to "false" in
+## mise.local.toml to run the real Python consumers (pystreams-multi daemon).
+GRAM_PYSTREAMS_STUB = "true"
 
 ##########################
 ## Observability config ##

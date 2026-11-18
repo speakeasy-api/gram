@@ -19,6 +19,15 @@ if [[ -z "${GRAM_NETWORK_INGRESS_DEV_ID:-}" ]]; then
   export GRAM_NETWORK_INGRESS_DEV_ID
 fi
 
+# The API server queues private network reconciliation for the
+# private-network group's reconciler (network-ingress-worker), which polls the
+# network-ingress queue. A single-process server reconciles in-process and
+# requires the queue to match its Temporal queue, so it keeps the default.
+case "${GRAM_SINGLE_PROCESS:-}" in
+  1 | t | T | true | TRUE | True) ;;
+  *) export GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE="${GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE:-network-ingress}" ;;
+esac
+
 CONFIG_ARGS=()
 if [ -f "../config.local.toml" ]; then
     CONFIG_ARGS=(--config-file ../config.local.toml)

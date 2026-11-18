@@ -19,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 )
@@ -72,7 +73,7 @@ func newTailnetGatewayCommand() *cli.Command {
 		&cli.StringFlag{
 			Name:    "tag",
 			Usage:   "Tailscale ACL tag advertised by every node",
-			Value:   tailnetgateway.DefaultTag,
+			Value:   networkingress.DefaultGatewayTag,
 			EnvVars: []string{"GRAM_TAILNET_GATEWAY_TAG"},
 		},
 		&cli.StringFlag{
@@ -80,6 +81,7 @@ func newTailnetGatewayCommand() *cli.Command {
 			Usage:   "Local development only: name this gateway's devices speakeasy-gw-local-<id>-<slot> and host only local-<id>-... hostnames",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
 		},
+		networkIngressGatewayNameQualifierFlagDef(),
 		&cli.StringFlag{
 			Name:     "upstream-url",
 			Usage:    "Speakeasy private listener URL",
@@ -318,7 +320,7 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		}
 	}
 
-	namer, err := localDevelopmentNamer(c.String("environment"), c.String(networkIngressDevIDFlag))
+	namer, err := localDevelopmentNamer(c.String("environment"), c.String(networkIngressDevIDFlag), c.String(networkIngressGatewayNameQualifierFlag))
 	if err != nil {
 		return tailnetgateway.Config{}, err
 	}
@@ -336,6 +338,7 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		PollInterval:       c.Duration("poll-interval"),
 		DrainTimeout:       c.Duration("drain-timeout"),
 		StartTimeout:       c.Duration("start-timeout"),
+		ApprovalGrace:      tailnetgateway.DefaultApprovalGrace,
 		MaxHosts:           c.Int("max-hosts"),
 		ReconcileTaskQueue: c.String(networkIngressQueueFlag),
 		ControlURL:         c.String("control-url"),

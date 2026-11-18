@@ -2612,9 +2612,25 @@ SELECT deleted FROM remote_sessions WHERE id = @id;
 
 -- name: InsertOlderRemoteSessionTombstoneFixture :exec
 -- Test-only fixture: an unrelated tombstone one second older than the source row.
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at)
-SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id, 'unrelated-old-access', src.deleted_at - interval '1 second'
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, deleted_at)
+SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = src.remote_session_client_id),
+  'unrelated-old-access', src.deleted_at - interval '1 second'
 FROM remote_sessions src WHERE src.id = @id::uuid;
+
+-- name: SetRemoteSessionOrganizationFixture :exec
+-- Test-only fixture: NULL reproduces a row written before remote_sessions had
+-- an organization_id; any other value fakes a row that disagrees with its
+-- client.
+UPDATE remote_sessions SET organization_id = sqlc.narg('organization_id')::text WHERE id = @id;
+
+-- name: GetRemoteSessionOrganizationFixture :one
+-- Test-only fixture: reads a session's organization at any client scope,
+-- soft-deleted or not.
+SELECT organization_id, updated_at FROM remote_sessions WHERE id = @id;
 
 -- name: RemoteSessionSharesUserSessionBoundaryFixture :one
 SELECT (r.deleted_at = s.deleted_at)::boolean AS same_boundary
@@ -2690,6 +2706,32 @@ SELECT name, value, value_from_request_header, is_secret FROM remote_mcp_server_
 -- name: GetEnvironmentEntryFixture :one
 -- Reads one environment entry by environment and name.
 SELECT value, is_secret FROM environment_entries WHERE environment_id = @environment_id AND name = @name;
+
+-- name: GetLocalEMAWiringFixture :one
+-- Reads what the local seed points the Enterprise Sign-In (ID-JAG) Server's
+-- binding at: its resource, the user session issuer's trusted identity
+-- provider and client, and the authorization server and its client.
+SELECT b.resource,
+       idp.issuer AS identity_provider,
+       idp_client.client_id AS identity_provider_client_id,
+       idp_client.client_secret_encrypted AS identity_provider_client_secret,
+       vendor.issuer AS authorization_server,
+       vendor.token_endpoint AS authorization_server_token_endpoint,
+       vendor_client.client_id AS authorization_server_client_id
+FROM remote_session_ema_bindings b
+JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id
+JOIN remote_session_issuers idp ON idp.id = usi.trusted_remote_session_issuer_id
+JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_session_client_id
+JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
+JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
+WHERE b.id = @id;
+
+-- name: GetLocalEMATypedAuthClientResourceFixture :one
+-- Reads the resource of the typed auth client the local seed records for the
+-- Enterprise Sign-In (ID-JAG) Server's client.
+SELECT resource FROM mcp_auth_client_emas
+WHERE remote_session_client_id = @remote_session_client_id
+  AND organization_id = @organization_id AND deleted IS FALSE;
 
 -- name: SetCustomDomainHealthWithoutDNSObservation :exec
 -- Models a worker that does not write the independent DNS observation columns.

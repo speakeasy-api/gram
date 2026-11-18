@@ -1552,8 +1552,6 @@ type Chat struct {
 	SummaryRedacted bool
 	// @access: confidential
 	MemoryExcludedAt pgtype.Timestamptz
-	// @access: confidential
-	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
 	InferenceActorKey []byte
 	// @access: confidential
@@ -4267,9 +4265,12 @@ type NetworkIngress struct {
 	Runtime pgtype.Text
 	// @access: confidential
 	GatewayShard string
-	// Label of the Tailscale Service the gateway last defined for this ingress; a copy of a former hostname.
+	// Superseded by gateway_service_hostnames and no longer written; read only as the recorded label of a row whose gateway_service_hostnames is empty.
 	// @access: restricted
 	GatewayServiceHostname pgtype.Text
+	// Labels of the Tailscale Services the gateway may have defined for this ingress; copies of current and former hostnames.
+	// @access: restricted
+	GatewayServiceHostnames []string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

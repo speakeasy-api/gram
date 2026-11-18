@@ -72,12 +72,16 @@ type NodeState struct {
 	// approved it to host its service, so the service has no addresses here.
 	AwaitingApproval bool
 
-	// AwaitingCertificate is true when the node is approved but has no TLS
-	// certificate for its service yet, so every client handshake fails.
+	// AwaitingCertificate is true when the node is approved but holds no
+	// valid TLS certificate for its service because a request failed or the
+	// certificate expired, so every client handshake fails until a retry
+	// succeeds. It is false while a request is still running or waiting for
+	// another slot's lease or for control to list the service name.
 	AwaitingCertificate bool
 
-	// CertificateStatus says why the certificate is missing and when the
-	// node retries; empty otherwise.
+	// CertificateStatus says why an approved node holds no valid
+	// certificate: that a request is running, or why the last one failed and
+	// when the node retries. Empty otherwise.
 	CertificateStatus string
 
 	// CertificateExpiresAt is when the certificate the node serves expires;

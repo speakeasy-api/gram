@@ -87,6 +87,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -94,6 +95,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/resend"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
@@ -109,6 +111,27 @@ import (
 func noopShutdown(context.Context) error { return nil }
 
 func newEmailService(ctx context.Context, c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*email.Service, error) {
+	provider := c.String("email-provider")
+	switch provider {
+	case "", "loops":
+	case "resend":
+		enabled := loops.IsConfigured(c.String("resend-api-key"))
+		if !enabled && c.String("environment") != "local" {
+			return nil, fmt.Errorf("RESEND_API_KEY is required when email provider is resend outside local development")
+		}
+		from, replyTo := c.String("email-from"), c.String("email-reply-to")
+		if enabled && (from == "" || replyTo == "") {
+			return nil, fmt.Errorf("email-from and email-reply-to are required for Resend delivery")
+		}
+		if !enabled {
+			return email.NewResendService(logger, resend.NewNoop(), nil, from, replyTo, false), nil
+		}
+		sender := resend.New(guardianPolicy.PooledClient(), c.String("resend-api-key"))
+		contacts := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+		return email.NewResendService(logger, sender, contacts, from, replyTo, true), nil
+	default:
+		return nil, fmt.Errorf("unsupported email provider %q (expected loops or resend)", provider)
+	}
 	ids, err := email.ParseTemplateIDs(c.String("email-template-ids"))
 	if err != nil {
 		return nil, fmt.Errorf("load email template IDs: %w", err)
@@ -1976,4 +1999,21 @@ func orgEncryptionSweeper(provisioner *orgencryption.Provisioner) background.Org
 		return nil
 	}
 	return provisioner
+}
+
+// newHookFleetMetrics returns nil when the gauges cannot be set up, which
+// leaves their schedule off rather than failing worker startup. The query
+// runs on the read replica; its reader needs SELECT on hook_install_summaries.
+func newHookFleetMetrics(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, chRead clickhouse.Conn) background.HookFleetMetricsEmitter {
+	policy, err := plugins.HooksVersionPolicy()
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled: hooks version policy", attr.SlogError(err))
+		return nil
+	}
+	m, err := admin.NewHookFleetMetrics(logger, meterProvider, db, telemetry.NewHookFleet(chRead), policy)
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled", attr.SlogError(err))
+		return nil
+	}
+	return m
 }
