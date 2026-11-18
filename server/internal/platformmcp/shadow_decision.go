@@ -37,7 +37,7 @@ type DecideShadowMCPAccessInput struct {
 	TargetReference    string   `json:"target_reference" jsonschema:"short-lived opaque target reference returned by list_shadow_mcp_inventory or get_shadow_mcp_review"`
 	Decision           string   `json:"decision" jsonschema:"decision to enforce: allow or deny"`
 	Rationale          string   `json:"rationale" jsonschema:"bounded reason for the decision; required and stored in the audit trail"`
-	AudienceReferences []string `json:"audience_references,omitempty" jsonschema:"for allow, one or more opaque role/directory references returned by list_plugin_assignments; use the explicit Everyone reference for organization-wide access; forbidden for deny"`
+	AudienceReferences []string `json:"audience_references,omitempty" jsonschema:"for allow, one or more opaque role/directory references returned by list_plugin_assignments; use the explicit Everyone reference for organization-wide access. For deny, optional: references to block only those roles or groups; omit them to block everyone"`
 	ExpectedVersion    string   `json:"expected_version" jsonschema:"opaque decision version returned by get_shadow_mcp_review immediately before this write"`
 	IdempotencyKey     string   `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact decision"`
 	Confirmed          bool     `json:"confirmed" jsonschema:"set true only after the user confirms the exact project, target, decision, audiences, and rationale"`
@@ -118,9 +118,6 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 	if input.Decision == "allow" && len(references) == 0 {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionInvalid("Allow requires at least one explicit audience reference. Use the Everyone reference for organization-wide access.")
 	}
-	if input.Decision == "deny" && len(references) != 0 {
-		return DecideShadowMCPAccessOutput{}, shadowDecisionInvalid("Deny does not accept audience references.")
-	}
 	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(nil)
 	}
@@ -146,7 +143,9 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 		}
 		principalURNs := []string{}
 		summaries := []PluginAssignmentSummaryResult{}
-		if input.Decision == "allow" {
+		// An allow always names its audience. A deny names one only when it
+		// blocks some roles or groups rather than everyone.
+		if len(references) > 0 {
 			principalURNs, summaries, err = s.audiences.ResolveAssignmentReferences(ctx, tx, principal, project, references)
 			if err != nil {
 				return ShadowDecisionReceiptResult{}, mapShadowAudienceError(err)

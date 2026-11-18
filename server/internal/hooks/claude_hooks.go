@@ -1275,6 +1275,16 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// can't enforce the policy — deny with a retry-or-restart message so the
 	// user knows the guard is fail-closed rather than silently allowing.
 	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
+	// The built-in blocklist (a project without a blocking policy, so no
+	// policy ID) allows servers until an administrator denies one. Without
+	// the list there is no server to match, and failing closed would block
+	// every MCP call in projects that never chose to block anything.
+	if cacheErr != nil && policy.ID == "" {
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
 	if cacheErr != nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."

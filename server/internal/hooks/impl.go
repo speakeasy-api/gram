@@ -549,10 +549,13 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 	return s.implicitShadowMCPPolicy(ctx, organizationID, pid, userID)
 }
 
-// implicitShadowMCPPolicy is the built-in blocklist for a project without a
-// blocking policy. It has no ID: blocks it causes are recorded without a
-// policy, and the block message offers no request link, since a server is
-// only on this list because an administrator denied it.
+// implicitShadowMCPPolicy is the built-in blocklist for a user no blocking
+// policy covers. Its blocked URLs are this user's own: servers denied for
+// everyone or for a person or role the user holds, and servers approved only
+// for people or roles the user holds none of. It has no ID: blocks it causes
+// are recorded without a policy, and the block message offers no request
+// link, since a server is only on this list because of an administrator's
+// decision.
 func (s *Service) implicitShadowMCPPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) *risk.ShadowMCPPolicy {
 	if s.shadowMCPClient == nil {
 		return nil

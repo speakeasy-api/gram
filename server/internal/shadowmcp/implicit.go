@@ -12,8 +12,9 @@ import (
 
 // ImplicitPolicyName names the built-in blocklist in block messages. A user
 // no blocking Shadow MCP policy covers is in this mode: every server
-// connects except the ones an administrator denied them, and a server
-// linked to an official version is redirected to it.
+// connects except the ones a standing decision blocks for them (see
+// [Client.BlockedServerURLs]), and a server linked to an official version is
+// redirected to it.
 const ImplicitPolicyName = "Shadow MCP"
 
 // BlockedServerURLs lists the canonical server URLs a standing decision

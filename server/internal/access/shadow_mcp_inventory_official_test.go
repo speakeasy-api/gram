@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
 
@@ -229,7 +230,8 @@ func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 
-	// Without the linked server there is nothing to switch off.
+	// Keeping direct connections working needs the linked server in the
+	// payload: without its ID the request is rejected, and the link stays.
 	require.Error(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
 		SessionToken:      nil,
 		ProjectID:         authCtx.ProjectID.String(),
@@ -266,7 +268,20 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 		McpServerID:       new(disabledID.String()),
 		AllowDirectAccess: false,
 	})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// A live server in another project of the same organization is not this
+	// project's to link.
+	otherProject := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	foreignID := seedAccessOfficialServer(t, ctx, ti, otherProject.ID, "Elsewhere", "https://elsewhere.example.com/mcp", "private")
+	err = ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp",
+		McpServerID:       new(foreignID.String()),
+		AllowDirectAccess: false,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
 
 	err = ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
 		SessionToken:      nil,
@@ -275,7 +290,7 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 		McpServerID:       new(uuid.NewString()),
 		AllowDirectAccess: false,
 	})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 // Without a blocking policy the project is in the built-in blocklist mode:
@@ -309,6 +324,7 @@ func TestService_ReadShadowMCPInventoryTarget_BuiltInBlocklist(t *testing.T) {
 	server = read()
 	require.Equal(t, shadowMCPInventoryAccessBlocked, server.Access)
 	require.Equal(t, shadowMCPAccessStateBlocked, server.AccessSummary.State)
+	require.Equal(t, shadowMCPAccessCoverageFull, server.AccessSummary.DecisionCoverage)
 }
 
 // A blocked-by-default policy for some people leaves everyone else in the
@@ -390,4 +406,32 @@ func TestService_ReadShadowMCPInventoryTarget_NarrowApprovalIsRestricted(t *test
 	})
 	require.NoError(t, err)
 	require.Equal(t, shadowMCPInventoryAccessRestricted, server.Access)
+	// The built-in blocklist enforces the approval itself, with no grants:
+	// it is carried as recorded.
+	require.Equal(t, shadowMCPAccessCoverageFull, server.AccessSummary.DecisionCoverage)
+}
+
+// An approval for everyone in the built-in blocklist writes no grants, yet
+// it is what keeps the server allowed, so its coverage is full.
+func TestService_ReadShadowMCPInventoryTarget_BuiltInApprovalIsFullyCarried(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://github.example.com/mcp", "approved", 0)
+	seedApprovalDecisionRow(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, request.ID, "approved", []string{"user:all"})
+
+	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindServerURL,
+		TargetKey:      "https://github.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPAccessStateAllowed, server.AccessSummary.State)
+	require.NotNil(t, server.AccessSummary.Decision)
+	require.Equal(t, "approved", *server.AccessSummary.Decision)
+	require.Equal(t, shadowMCPAccessCoverageFull, server.AccessSummary.DecisionCoverage)
 }

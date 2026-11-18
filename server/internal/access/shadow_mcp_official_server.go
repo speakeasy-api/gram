@@ -20,8 +20,10 @@ import (
 
 // SetShadowMCPOfficialServer links one Shadow MCP server to its official
 // version, switches the link off or on, or removes it. Without
-// mcp_server_id the link is removed, which leaves the Shadow MCP server
-// unmanaged so another server can be linked.
+// mcp_server_id and with allow_direct_access false, the link is removed,
+// which leaves the Shadow MCP server unmanaged so another server can be
+// linked. Without mcp_server_id and with allow_direct_access true, the
+// request is rejected: switching a link off needs the linked server.
 func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.SetShadowMCPOfficialServerPayload) error {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {

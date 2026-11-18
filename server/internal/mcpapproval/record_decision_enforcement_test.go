@@ -225,6 +225,31 @@ func TestRecordDecision_NarrowApprovalRejectedUnderAllowAllOnly(t *testing.T) {
 	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }
 
+// A denial narrower than everyone is rejected under a block_all policy that
+// covers everyone: the denial revokes every exception, so it blocks everyone,
+// and a record naming one person would understate who is blocked.
+func TestRecordDecision_NarrowDenialRejectedUnderEveryoneBlockAll(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/narrow-deny-block-all"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	payload := decisionPayload(requestID.String(), "denied")
+	payload.GrantedPrincipalUrns = []string{seedMemberPrincipal(t, ctx, ti, "someone-denied")}
+
+	_, err := ti.service.RecordDecision(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Empty(t, decisionsFor(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+
+	// A denial for everyone is still recorded.
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
+}
+
 // Deciding a promoted request resolves the legacy bypass request it grew out
 // of, in the same transaction: the original ask must not stay pending in the
 // legacy queue (and on the inventory's request counters) after its review is

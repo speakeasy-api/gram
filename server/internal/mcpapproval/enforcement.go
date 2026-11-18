@@ -35,15 +35,19 @@ import (
 // and an stdio command has none. Platform callers reject stdio targets; the
 // dashboard may still record those decisions without calling this function.
 //
-// One combination is rejected rather than approximated: an approval narrower
-// than everyone when only allow_all policies govern. The evaluator never
-// consults bypass grants under an allow_all block rule — a server there is
-// block-ruled for everyone or allowed for everyone — so enforcing a named
-// blast radius is impossible, and silently widening to everyone would make
-// the recorded decision lie about who was given access. With a block_all
-// policy also present the narrow radius composes correctly (the block_all
-// bypass audience gates who actually passes), so the rejection only fires
-// when nothing can express the radius.
+// Two combinations are rejected rather than approximated. The first is an
+// approval narrower than everyone when only allow_all policies govern. An
+// allow_all policy has no per-principal allow: an approval only clears its
+// block rule, so enforcing a named blast radius is impossible, and silently
+// widening to everyone would make the recorded decision lie about who was
+// given access. Denials under allow_all can name people or roles, since a
+// block rule can. With a block_all policy also present the narrow approval
+// composes correctly (the block_all bypass audience gates who actually
+// passes), so that rejection only fires when nothing can express the radius.
+// The second is a denial narrower than everyone under a block_all policy
+// that covers everyone: the denial revokes every exception, which blocks the
+// server for everyone, so a record naming only some people would understate
+// who is blocked.
 func reconcileDecisionGrants(
 	ctx context.Context,
 	db pgx.Tx,
@@ -63,6 +67,7 @@ func reconcileDecisionGrants(
 
 	blocking := make([]riskrepo.RiskPolicy, 0, len(rows))
 	hasBlockAll := false
+	hasEveryoneBlockAll := false
 	hasAllowAll := false
 	for _, policy := range rows {
 		if policy.Action != "block" {
@@ -71,13 +76,19 @@ func reconcileDecisionGrants(
 		blocking = append(blocking, policy)
 		if policyDisposition(policy) == shadowmcp.DispositionAllowAll {
 			hasAllowAll = true
-		} else {
-			hasBlockAll = true
+			continue
+		}
+		hasBlockAll = true
+		if policy.AudienceType == policyAudienceEveryone {
+			hasEveryoneBlockAll = true
 		}
 	}
 
 	if approved && !principalsAreEveryone(principals) && hasAllowAll && !hasBlockAll {
 		return oops.E(oops.CodeBadRequest, nil, "This project's policy allows servers by default, so an approval can only clear the block for everyone. Approve without naming principals, or switch the policy to block-by-default for per-person approvals.")
+	}
+	if !approved && len(principals) > 0 && !principalsAreEveryone(principals) && hasEveryoneBlockAll {
+		return oops.E(oops.CodeBadRequest, nil, "This project blocks servers by default for everyone, so a denial blocks the server for everyone. Deny without naming principals.")
 	}
 
 	for _, policy := range blocking {
@@ -152,6 +163,10 @@ func applyDecisionToPolicy(
 
 	return nil
 }
+
+// policyAudienceEveryone is a risk policy that applies to everyone in the
+// project rather than to chosen people or roles.
+const policyAudienceEveryone = "everyone"
 
 // policyDisposition resolves a blocking policy's shadow-MCP disposition,
 // defaulting legacy rows to block_all the way the policy setup flow does.

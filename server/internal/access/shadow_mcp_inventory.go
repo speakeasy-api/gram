@@ -1209,6 +1209,10 @@ func shadowMCPInventoryUsageByURL(rows []telemetryrepo.ShadowMCPInventoryUsageRo
 
 type shadowMCPInventoryPolicyState struct {
 	hasBlockingPolicy bool
+	// builtInBlocklist is set when the project has no blocking policy, so
+	// the built-in blocklist enforces standing decisions directly, with no
+	// grants in between.
+	builtInBlocklist bool
 	// hasBlockAllPolicy is set when any enabled blocking policy denies by
 	// default. When only allow_all blocking policies exist, rows are blocked
 	// solely by risk_policy:block grants (blockedPolicyIDs).
@@ -1272,6 +1276,7 @@ type shadowMCPInventoryRequestState struct {
 func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizationID string, projectID uuid.UUID, canonicalURLs []string) (shadowMCPInventoryPolicyState, error) {
 	state := shadowMCPInventoryPolicyState{
 		hasBlockingPolicy:         false,
+		builtInBlocklist:          false,
 		hasBlockAllPolicy:         false,
 		hasEveryoneBlockAllPolicy: false,
 		allowedPolicyIDs:          map[string][]string{},
@@ -1448,6 +1453,7 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	if len(blockingPolicyIDs) == 0 {
 		// No blocking policy: the project is in the built-in blocklist mode.
 		state.hasBlockingPolicy = true
+		state.builtInBlocklist = true
 		return state, nil
 	}
 
@@ -1634,9 +1640,19 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	// blast radius may be scoped — that is the decision as recorded, not a
 	// shortfall) unless an explicit block overrides them; a denial is fully
 	// carried only when the result is a project-wide block, and partially
-	// when only a targeted policy enforces it. With no blocking policy there
-	// is nothing to carry a decision at all.
-	if decision != nil && s.hasBlockingPolicy {
+	// when only a targeted policy enforces it. The built-in blocklist reads
+	// the standing decision itself, so the decision is carried as recorded
+	// unless something else, such as a link to an official server, wins over
+	// it.
+	if decision != nil && s.builtInBlocklist {
+		coverage = shadowMCPAccessCoverageFull
+		approvedButBlocked := *decision == shadowMCPInventoryBypassStatusApproved && state == shadowMCPAccessStateBlocked
+		deniedButAllowed := *decision == shadowMCPInventoryBypassStatusDenied && state == shadowMCPAccessStateAllowed
+		if approvedButBlocked || deniedButAllowed {
+			coverage = shadowMCPAccessCoveragePartial
+		}
+	}
+	if decision != nil && s.hasBlockingPolicy && !s.builtInBlocklist {
 		coverage = shadowMCPAccessCoveragePartial
 		switch *decision {
 		case shadowMCPInventoryBypassStatusApproved:
