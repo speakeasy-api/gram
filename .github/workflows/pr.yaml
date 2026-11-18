@@ -1514,6 +1514,14 @@ jobs:
           key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
 
+      # Lint the package list the local task uses rather than the action's
+      # default ./..., which also analyses the generated server/gen packages.
+      - name: List server lint packages
+        id: lint-packages
+        run: |
+          packages=$(mise run -q go:server-lint-packages)
+          echo "packages=${packages//$'\n'/ }" >> "$GITHUB_OUTPUT"
+
       - name: Start lint timer
         run: echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
@@ -1524,6 +1532,7 @@ jobs:
           # Skips a JSONSchema fetch from golangci-lint.run on every run.
           verify: false
           working-directory: server
+          args: ${{ steps.lint-packages.outputs.packages }}
           # Cached by the steps around this one.
           skip-cache: true
         env:
@@ -1625,6 +1634,14 @@ jobs:
           key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
 
+      # Keep the package list in step with server-checks, or the cache saved
+      # here would not cover what pull requests lint.
+      - name: List server lint packages
+        id: lint-packages
+        run: |
+          packages=$(mise run -q go:server-lint-packages)
+          echo "packages=${packages//$'\n'/ }" >> "$GITHUB_OUTPUT"
+
       - name: Lint with golangci-lint
         continue-on-error: true
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -1632,6 +1649,7 @@ jobs:
           install-mode: none
           verify: false
           working-directory: server
+          args: ${{ steps.lint-packages.outputs.packages }}
           skip-cache: true
         env:
           GOMEMLIMIT: 12GiB
