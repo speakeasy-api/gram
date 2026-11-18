@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => {
     enforcement: "legacy" as string,
     // The agent's attachments, read when editing.
     bindings: [] as unknown[],
+    // The clients each other sign-in issuer binds, keyed by issuer id.
+    provenance: new Map<string, unknown[]>(),
   };
 });
 vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
@@ -59,6 +61,14 @@ vi.mock("@tanstack/react-query", () => ({
         };
       if (queryKey[1] === "bindings")
         return { data: { items: mocks.bindings }, refetch: mocks.refetch };
+      if (queryKey[1] === "provenance") {
+        const issuer = (queryKey[3] as { userSessionIssuerId: string })
+          .userSessionIssuerId;
+        return {
+          data: mocks.provenance.get(issuer) ?? [],
+          refetch: mocks.refetch,
+        };
+      }
       return {
         data: queryKey[1] === "clients" ? mocks.clients : mocks.sessions,
         refetch: mocks.refetch,
@@ -74,6 +84,7 @@ afterEach(() => {
   mocks.required = undefined;
   mocks.enforcement = "legacy";
   mocks.bindings = [];
+  mocks.provenance.clear();
 });
 
 // The org-wide issuer lists a personal sign-in that belongs to another server.
@@ -175,6 +186,7 @@ describe("a member server of a team gateway", () => {
   beforeEach(() => {
     mocks.clients = [memberSignIn];
     mocks.sessions = [viaGateway];
+    mocks.provenance.set("issuer_gateway", [memberSignIn]);
     mocks.auth.set(server.id, {
       data: {
         status: "configured",
@@ -205,6 +217,19 @@ describe("a member server of a team gateway", () => {
       status: "ready",
       sessions: [viaGateway],
     });
+  });
+
+  it("does not count it once the gateway's issuer no longer binds the client", () => {
+    // Attaching it would be refused, so the row must not read as connected.
+    mocks.provenance.set("issuer_gateway", []);
+    for (const enforcement of ["enforced", "legacy"]) {
+      mocks.enforcement = enforcement;
+      const { result } = renderHook(() => useOwnerConnections([server], true));
+      expect(result.current.byServer.get(server.id)).toMatchObject({
+        status: "missing",
+        connected: 0,
+      });
+    }
   });
 
   it("does not count a gateway-made connection for a client the server does not bind", () => {

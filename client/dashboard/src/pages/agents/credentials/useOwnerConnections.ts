@@ -1,4 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
+import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { queryKeyMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
@@ -104,6 +105,41 @@ export function useOwnerConnections(
   const clients = useQueries({
     queries: issuers.map((request) => ({
       queryKey: ["owner-connections", "clients", ownerScope, request],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        collectPageItems(
+          sdk.remoteSessionClients.list(request, undefined, { signal }),
+        ),
+      enabled,
+      retry: false,
+      throwOnError: false,
+    })),
+  });
+  /**
+   * The other issuers the person signed in through, per project, such as a
+   * team gateway's. A connection made through one serves a server only when
+   * that issuer binds the connection's client too, as attaching it requires.
+   */
+  const provenance = [
+    ...new Map(
+      personal.flatMap((server) =>
+        (sessions[projects.indexOf(server.projectSlug)]?.data ?? [])
+          .filter((session) => session.userSessionIssuerId !== server.issuerId)
+          .map(
+            (session) =>
+              [
+                `${server.projectSlug}:${session.userSessionIssuerId}`,
+                {
+                  gramProject: server.projectSlug,
+                  userSessionIssuerId: session.userSessionIssuerId,
+                },
+              ] as const,
+          ),
+      ),
+    ).values(),
+  ];
+  const provenanceClients = useQueries({
+    queries: provenance.map((request) => ({
+      queryKey: ["owner-connections", "provenance", ownerScope, request],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         collectPageItems(
           sdk.remoteSessionClients.list(request, undefined, { signal }),
@@ -224,6 +260,43 @@ export function useOwnerConnections(
       anyOne: false,
     };
   };
+  /**
+   * The person's own connections that could serve one of a server's sign-ins:
+   * made through the server's issuer, or through another issuer that binds
+   * the same client. Undefined while an issuer's clients are still being
+   * read. A connection whose issuer cannot be read is not counted, as
+   * attaching it would be refused too.
+   */
+  const usableSessions = (
+    server: InventoryServer,
+    signIns: ServerSignIn[],
+    own: RemoteSession[],
+  ): RemoteSession[] | undefined => {
+    const wanted = new Set(signIns.map((signIn) => signIn.id));
+    const usable: RemoteSession[] = [];
+    for (const session of own) {
+      if (!wanted.has(session.remoteSessionClientId)) continue;
+      if (session.userSessionIssuerId === server.issuerId) {
+        usable.push(session);
+        continue;
+      }
+      const read =
+        provenanceClients[
+          provenance.findIndex(
+            (request) =>
+              request.gramProject === server.projectSlug &&
+              request.userSessionIssuerId === session.userSessionIssuerId,
+          )
+        ];
+      if (read?.isError) continue;
+      if (!read?.data) return undefined;
+      if (
+        read.data.some((client) => client.id === session.remoteSessionClientId)
+      )
+        usable.push(session);
+    }
+    return usable;
+  };
   const byServer = new Map<string, ServerConnection>();
   for (const server of personal) {
     if (shared(server)) {
@@ -252,6 +325,11 @@ export function useOwnerConnections(
       byServer.set(server.id, { status: "checking" });
       continue;
     }
+    const own = usableSessions(server, clientRead.data, sessionRead.data);
+    if (!own) {
+      byServer.set(server.id, { status: "checking" });
+      continue;
+    }
     byServer.set(
       server.id,
       serverConnection(
@@ -260,7 +338,7 @@ export function useOwnerConnections(
           ...(bindingRead?.data?.items ?? []).flatMap((binding) =>
             binding.remoteSession ? [binding.remoteSession] : [],
           ),
-          ...sessionRead.data,
+          ...own,
         ],
         undefined,
         { anyOne: clientRead.anyOne },
@@ -313,6 +391,7 @@ export function useOwnerConnections(
         [
           ...sessions,
           ...clients,
+          ...provenanceClients,
           // Which sign-ins a server requires does not change on sign-in, but
           // a failed read gets another try.
           ...required.filter((read) => read.isError),
