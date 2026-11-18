@@ -51,7 +51,7 @@ var clientGrantMessages = map[toolconfig.ClientGrantFailure]string{
 	toolconfig.ClientGrantRejected:        "This tool couldn't sign in: its sign-in service refused the request. If you didn't set its sign-in details yourself, ask your administrator to check the tool's sign-in setup.",
 	toolconfig.ClientGrantBlocked:         "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",
 	toolconfig.ClientGrantAddressNotFound: "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",
-	toolconfig.ClientGrantMisconfigured:   "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. If you didn't set this tool up yourself, ask your administrator to check its sign-in address.",
+	toolconfig.ClientGrantMisconfigured:   "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. If you didn't set its sign-in address yourself, ask your administrator to check it.",
 }
 
 // A failed token request reports why and which secret it used, and adds nothing to the response headers.
@@ -108,7 +108,9 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 			require.Equal(t, http.StatusUnauthorized, status)
 			require.Equal(t, tc.want, report.GrantFailure)
 			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true, Carrier: "Authorization"}}, report.Sent)
+			require.Equal(t, http.StatusUnauthorized, w.Code)
 			require.Equal(t, []string{"Content-Type"}, keys(w.Header()))
+			require.Equal(t, "application/json", w.Header().Get("Content-Type"))
 			require.JSONEq(t, `{"error":`+strconv.Quote(clientGrantMessages[tc.want])+`}`, w.Body.String())
 			parsed, err := url.Parse(tc.tokenURL)
 			require.NoError(t, err)
