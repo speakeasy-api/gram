@@ -21,6 +21,13 @@ func (e *Events) WithDashboardURL(dashboardURL string) *Events {
 	return e
 }
 
+// WithAssistantsDisabled marks the deployment as running without assistants,
+// so messages to the app get UnavailableReply rather than reaching a trigger.
+func (e *Events) WithAssistantsDisabled(disabled bool) *Events {
+	e.assistantsDisabled = disabled
+	return e
+}
+
 // WithHome sets where the Home tab's organization data comes from. Without
 // it the Home tab only shows the static welcome view.
 func (e *Events) WithHome(home *HomeSource) *Events {

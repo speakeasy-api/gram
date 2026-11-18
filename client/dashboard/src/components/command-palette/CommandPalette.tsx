@@ -32,6 +32,7 @@ import {
 } from "./performance";
 import { prefilter, rank } from "./ranker";
 import { useRecentsUserId } from "./recentlyVisited";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
@@ -292,8 +293,11 @@ export function CommandPalette(): JSX.Element {
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
+  const assistantsAvailable = useAssistantsAvailable();
   const canAskAssistant =
-    inProject && hasScope("assistant:read", undefined, project.id);
+    inProject &&
+    assistantsAvailable &&
+    hasScope("assistant:read", undefined, project.id);
 
   // Recents are scoped per user so a shared browser profile doesn't leak
   // history. Gate the session lookup on `isOpen` so we don't poll auth.info on
@@ -508,9 +512,11 @@ export function CommandPalette(): JSX.Element {
       )}
       <CommandInput
         placeholder={
-          inProject
-            ? "Ask AI or search resources and pages…"
-            : "Search projects and pages…"
+          !inProject
+            ? "Search projects and pages…"
+            : assistantsAvailable
+              ? "Ask AI or search resources and pages…"
+              : "Search resources and pages…"
         }
         value={query}
         onValueChange={(value) => {

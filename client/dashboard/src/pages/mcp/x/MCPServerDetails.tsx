@@ -1,9 +1,8 @@
 import { DetailBody } from "@/components/detail-body";
 import { useMcpServerDetailChrome } from "@/components/mcp/useMcpServerDetailChrome";
-import { McpDetailFrame } from "@/components/mcp/McpDetailFrame";
+import { McpDetailFrame, McpSetupFrame } from "@/components/mcp/McpDetailFrame";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { ProviderSetupPage } from "./setup/ProviderSetupPage";
-import { SetupModal } from "./setup/SetupModal";
 import { isKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { SplashScreen } from "@/components/ui/LogoLoader";
@@ -37,13 +36,7 @@ import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { ArrowRight, Check, ChevronDown, Loader2 } from "lucide-react";
-import {
-  Link,
-  Navigate,
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { Link, Navigate, useLocation, useParams } from "react-router";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
 import {
@@ -85,7 +78,6 @@ export default function MCPServerDetails(): JSX.Element | null {
   const location = useLocation();
   const routes = useRoutes();
   const providerSetupRollout = useProviderSetupRollout();
-  const navigate = useNavigate();
   const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScopedFlag.status === "enabled";
   const idOrSlug = mcpServerSlug ?? "";
@@ -148,8 +140,7 @@ export default function MCPServerDetails(): JSX.Element | null {
   }
   // Which tabs exist depends on the server's kind, so route only once it loads.
   if (!mcpServer) return <SplashScreen />;
-  // Setup renders inside the frame like every other tab, but only once the
-  // rollout is known: a disabled one sends the viewer to Overview.
+  // Setup waits for the rollout: a disabled one sends the viewer to Overview.
   if (activeTab === "setup" && providerSetupRollout === "disabled") {
     return (
       <Navigate
@@ -197,6 +188,46 @@ export default function MCPServerDetails(): JSX.Element | null {
       />
     );
   }
+  const breadcrumbs = {
+    substitutions: { [idOrSlug]: mcpServer?.name || "MCP Server" },
+    // skipSegments matches by literal value, not position — if the
+    // server's own slug happens to collide with a tab name (e.g. a
+    // server slugged "settings"), guard against also skipping the
+    // server's own breadcrumb crumb.
+    skipSegments: MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
+  };
+  // Setup is its own page, not a tab: the server's header without the tabs,
+  // and a way back to Overview. Adding a server lands here when the provider
+  // needs steps outside Speakeasy.
+  if (activeTab === "setup") {
+    return (
+      <McpSetupFrame
+        chrome={chrome}
+        overviewHref={routes.mcp.details.overview.href(
+          mcpServerRouteParam(mcpServer),
+        )}
+        breadcrumbs={{
+          ...breadcrumbs,
+          // The Setup crumb shows which page this is under the server's.
+          skipSegments: breadcrumbs.skipSegments.filter(
+            (tab) => tab !== "setup",
+          ),
+        }}
+      >
+        {providerSetupRollout === "loading" ? (
+          <SplashScreen />
+        ) : (
+          <RequireScope
+            scope="mcp:write"
+            resourceId={mcpServer.id}
+            level="page"
+          >
+            <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
+          </RequireScope>
+        )}
+      </McpSetupFrame>
+    );
+  }
   const renderTabContent = () => {
     // Hosted tabs and settings need the toolset; never fall back to another layout.
     // Overview needs the loaded toolset only when the read's summary is missing.
@@ -206,8 +237,7 @@ export default function MCPServerDetails(): JSX.Element | null {
         ? !mcpServer.toolset
         : activeTab !== "sessions" &&
           activeTab !== "guardrails" &&
-          activeTab !== "skills" &&
-          activeTab !== "setup";
+          activeTab !== "skills";
     if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return <SplashScreen />;
       return (
@@ -230,35 +260,6 @@ export default function MCPServerDetails(): JSX.Element | null {
       );
     }
     switch (activeTab) {
-      case "setup":
-        if (providerSetupRollout === "loading") return <SplashScreen />;
-        // Setup is a modal over Overview; closing it lands there.
-        return (
-          <>
-            <OverviewTab
-              mcpServer={mcpServer}
-              hostedToolset={hostedToolset}
-              agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
-            />
-            <SetupModal
-              onClose={() =>
-                void navigate(
-                  routes.mcp.details.overview.href(
-                    mcpServerRouteParam(mcpServer),
-                  ),
-                )
-              }
-            >
-              <RequireScope
-                scope="mcp:write"
-                resourceId={mcpServer.id}
-                level="page"
-              >
-                <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
-              </RequireScope>
-            </SetupModal>
-          </>
-        );
       case "tools":
         return (
           hostedToolset && (
@@ -390,14 +391,7 @@ export default function MCPServerDetails(): JSX.Element | null {
   return (
     <McpDetailFrame
       chrome={chrome}
-      breadcrumbs={{
-        substitutions: { [idOrSlug]: mcpServer?.name || "MCP Server" },
-        // skipSegments matches by literal value, not position — if the
-        // server's own slug happens to collide with a tab name (e.g. a
-        // server slugged "settings"), guard against also skipping the
-        // server's own breadcrumb crumb.
-        skipSegments: MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
-      }}
+      breadcrumbs={breadcrumbs}
       contentRef={tabContentRef}
     >
       {renderTabContent()}

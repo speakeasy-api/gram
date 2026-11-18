@@ -676,7 +676,10 @@ describe("ShadowMCPInventoryTable", () => {
       throw new Error("Row context menu was not rendered");
     }
     const actions = lastCall[0];
-    expect(actions.map((action) => action.label)).toEqual(["Decide access"]);
+    expect(actions.map((action) => action.label)).toEqual([
+      "Decide access",
+      "Make official",
+    ]);
 
     act(() => {
       actions[0]!.onClick();
@@ -722,15 +725,22 @@ describe("ShadowMCPInventoryTable", () => {
     >;
     expect(calls.length).toBeGreaterThan(0);
     for (const [actions] of calls) {
-      expect(actions).toEqual([
+      expect(actions[0]).toEqual(
         expect.objectContaining({
           label: "Decide access",
           disabled: true,
           description:
             "Policy data could not be loaded — deciding now would not be enforced",
         }),
-      ]);
+      );
     }
+    // A URL row can also be made official; a local command has no URL to
+    // serve, so it offers only the decision.
+    const labelLists = calls.map(([actions]) =>
+      actions.map((action) => action.label),
+    );
+    expect(labelLists).toContainEqual(["Decide access", "Make official"]);
+    expect(labelLists).toContainEqual(["Decide access"]);
 
     // The stdio review still opens, so the evidence can be read, but its
     // Decide Access button waits too.

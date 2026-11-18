@@ -6,7 +6,7 @@ import { Link } from "react-router";
 /**
  * Overview's banner while a provider's setup is unfinished, in the plugin
  * banner's shape, so a step easy to miss in the readiness list is the first
- * thing on the page. It opens the Setup modal.
+ * thing on the page. It opens the Setup page.
  */
 export function SetupPrompt({
   name,

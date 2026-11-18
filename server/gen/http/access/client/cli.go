@@ -994,6 +994,42 @@ func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInvento
 	return v, nil
 }
 
+// BuildSetShadowMCPOfficialServerPayload builds the payload for the access
+// setShadowMCPOfficialServer endpoint from CLI flags.
+func BuildSetShadowMCPOfficialServerPayload(accessSetShadowMCPOfficialServerBody string, accessSetShadowMCPOfficialServerSessionToken string) (*access.SetShadowMCPOfficialServerPayload, error) {
+	var err error
+	var body SetShadowMCPOfficialServerRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetShadowMCPOfficialServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_direct_access\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetShadowMCPOfficialServerSessionToken != "" {
+			sessionToken = &accessSetShadowMCPOfficialServerSessionToken
+		}
+	}
+	v := &access.SetShadowMCPOfficialServerPayload{
+		ProjectID:         body.ProjectID,
+		ServerURL:         body.ServerURL,
+		McpServerID:       body.McpServerID,
+		AllowDirectAccess: body.AllowDirectAccess,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListShadowMCPInventoryUsersPayload builds the payload for the access
 // listShadowMCPInventoryUsers endpoint from CLI flags.
 func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersProjectID string, accessListShadowMCPInventoryUsersServerURL string, accessListShadowMCPInventoryUsersLimit string, accessListShadowMCPInventoryUsersCursor string, accessListShadowMCPInventoryUsersSessionToken string) (*access.ListShadowMCPInventoryUsersPayload, error) {
