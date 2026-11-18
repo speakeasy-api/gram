@@ -547,6 +547,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       isRemoteBacked || isTunneledBacked,
       authReadiness,
       `${settingsHref}#${SETTINGS_GROUPS.identity.id}`,
+      needsSetup ? setupHref : undefined,
     ),
     readinessChecks,
     setupHref: showSetup ? setupHref : undefined,
@@ -589,7 +590,18 @@ function identitySummary(
   signsInUpstream: boolean,
   auth: McpServerAuthenticationReadiness,
   href: string,
+  /** Guided setup collects the missing credentials, so send the admin there. */
+  setupHref?: string,
 ): McpDetailChrome["identity"] {
+  const setupPending: McpDetailChrome["identity"] = setupHref
+    ? {
+        label: "Setup pending",
+        href: setupHref,
+        warn: true,
+        tone: "warning",
+        opens: "Open setup",
+      }
+    : undefined;
   // The header always shows this row, so every state has words: one that
   // can't be settled yet says so rather than dropping the row.
   if (!signsInUpstream) return { label: "Not used", href };
@@ -614,6 +626,7 @@ function identitySummary(
         };
       }
     }
+    if (setupPending) return setupPending;
     const presentation = enumPresentation(
       UPSTREAM_AUTH_STATUS,
       data.status,
@@ -633,6 +646,7 @@ function identitySummary(
   if (auth.unavailable || auth.identityUnavailable) {
     return { label: "Couldn't check", href, warn: true, tone: "warning" };
   }
+  if (setupPending && !auth.passThroughAuthorization) return setupPending;
   return {
     label: auth.passThroughAuthorization
       ? "Needs cleanup"

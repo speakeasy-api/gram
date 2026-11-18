@@ -406,6 +406,7 @@ it.each([
 );
 
 it("names an enforced server with no credentials by its sign-in status", () => {
+  state.url = "https://other.example/mcp";
   state.upstreamAuth = "enforced";
   state.upstreamAuthQuery = {
     data: { status: "no_auth_required", clients: [] },
@@ -423,4 +424,35 @@ it("warns when an enforced server's credentials can't be read", () => {
   expect(screen.getByText("Couldn't check").getAttribute("data-warn")).toBe(
     "true",
   );
+});
+
+it.each([
+  ["setup_incomplete", "enforced"],
+  ["no_auth_required", "enforced"],
+] as const)(
+  "sends a guided server whose credentials are %s to Setup",
+  (status, upstreamAuth) => {
+    state.upstreamAuth = upstreamAuth;
+    state.upstreamAuthQuery = {
+      data: { status, clients: [] },
+      isPending: false,
+      isError: false,
+    };
+    renderIdentity();
+    expect(screen.getByText("Setup pending").getAttribute("data-warn")).toBe(
+      "true",
+    );
+  },
+);
+
+it("keeps a guided server's configured credentials", () => {
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = {
+    data: { status: "configured", clients: [credential(true)] },
+    isPending: false,
+    isError: false,
+  };
+  renderIdentity();
+  expect(screen.getByText("1 credential configured")).toBeDefined();
+  expect(screen.queryByText("Setup pending")).toBeNull();
 });

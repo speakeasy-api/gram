@@ -250,7 +250,7 @@ function HeaderControls({
         <Link
           to={chrome.identity.href}
           state={HIGHLIGHT_STATE}
-          aria-label={`Upstream auth: ${chrome.identity.label}. Open authentication settings`}
+          aria-label={`Upstream auth: ${chrome.identity.label}. ${chrome.identity.opens ?? "Open authentication settings"}`}
           className={DETAIL_HEADER_CONTROL_BUTTON}
         >
           {chrome.identity.tone ? (
