@@ -197,7 +197,7 @@ var appNames = map[string]string{
 	mcpconnectionattempts.FamilyCursor:          "Cursor",
 	mcpconnectionattempts.FamilyVSCode:          "VS Code",
 	mcpconnectionattempts.FamilyPerplexity:      "Perplexity",
-	mcpconnectionattempts.FamilyScript:         "Script",
+	mcpconnectionattempts.FamilyScript:          "Script",
 	mcpconnectionattempts.FamilyBrowser:         "Browser",
 	mcpconnectionattempts.FamilyCopilot:         "GitHub Copilot",
 	mcpconnectionattempts.FamilyZed:             "Zed",
