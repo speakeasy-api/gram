@@ -18133,6 +18133,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS inference_profile_rules_org_principal_harness_
 ON inference_profile_rules (organization_id, principal_urn, harness) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
 
+-- Not partial: it also backs the organization cascade and the composite
+-- profile FK, whose checks do not filter on deleted.
 CREATE INDEX IF NOT EXISTS inference_profile_rules_organization_id_profile_id_idx
-ON inference_profile_rules (organization_id, profile_id)
-WHERE deleted IS FALSE;
+ON inference_profile_rules (organization_id, profile_id);

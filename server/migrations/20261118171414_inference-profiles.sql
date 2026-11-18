@@ -56,7 +56,7 @@ CREATE TABLE "inference_profile_rules" (
 -- Create index "inference_profile_rules_org_principal_harness_key" to table: "inference_profile_rules"
 CREATE UNIQUE INDEX "inference_profile_rules_org_principal_harness_key" ON "inference_profile_rules" ("organization_id", "principal_urn", "harness") NULLS NOT DISTINCT WHERE (deleted IS FALSE);
 -- Create index "inference_profile_rules_organization_id_profile_id_idx" to table: "inference_profile_rules"
-CREATE INDEX "inference_profile_rules_organization_id_profile_id_idx" ON "inference_profile_rules" ("organization_id", "profile_id") WHERE (deleted IS FALSE);
+CREATE INDEX "inference_profile_rules_organization_id_profile_id_idx" ON "inference_profile_rules" ("organization_id", "profile_id");
 -- Set comment to column: "id" on table: "inference_profile_rules"
 COMMENT ON COLUMN "inference_profile_rules"."id" IS '@access: confidential';
 -- Set comment to column: "organization_id" on table: "inference_profile_rules"
