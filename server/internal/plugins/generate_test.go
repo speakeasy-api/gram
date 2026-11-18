@@ -4639,6 +4639,34 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	} {
 		require.NotContains(t, workflow, forbidden)
 	}
+
+	_, settings, found := strings.Cut(workflow, "## Default access and official servers")
+	require.True(t, found, "the skill must have a default access and official servers section")
+	cursor = 0
+	for _, tool := range []string{
+		"list_shadow_mcp_inventory",
+		"list_plugin_assignments",
+		"set_shadow_mcp_default_access",
+		"get_shadow_mcp_review",
+		"find_mcp",
+		"set_shadow_mcp_official_server",
+	} {
+		token := "`" + tool + "`"
+		index := strings.Index(settings[cursor:], token)
+		require.NotEqual(t, -1, index, "%s must appear in the settings workflow order", tool)
+		cursor += index + len(token)
+	}
+	for _, guardrail := range []string{
+		"change that policy in Guardrails and stop",
+		"Directory groups cannot narrow it",
+		"blocks servers people use today",
+		"`confirmed: false`",
+		"Local commands cannot be linked",
+		"never guess an ID",
+		"obtain confirmation again",
+	} {
+		require.Contains(t, settings, guardrail)
+	}
 }
 
 func TestGeneratePlatformMCPPackageEmitsSkillSuggestionReviewWorkflow(t *testing.T) {

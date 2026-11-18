@@ -9,11 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/officiallink"
 )
 
 const (
@@ -84,12 +89,44 @@ type ShadowMCPTargetSummary struct {
 	DecisionVersion    string                  `json:"decision_version,omitempty"`
 	TargetReference    string                  `json:"target_reference"`
 	ReferenceExpiresAt string                  `json:"reference_expires_at"`
+
+	// OfficialServer is the project MCP server linked as this server's
+	// official version. Remote targets only.
+	OfficialServer *ShadowMCPOfficialServerLink `json:"official_server,omitempty" jsonschema:"the project MCP server linked as this server's official version; while link_state is on, direct use is blocked and agents are sent to it"`
+
+	// SuggestedOfficialServer is a project MCP server that proxies to the
+	// same upstream, offered while nothing is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer `json:"suggested_official_server,omitempty" jsonschema:"a project MCP server that serves the same upstream, offered as the server to link while nothing is linked"`
+
+	// OfficialLinkVersion is the token set_shadow_mcp_official_server takes
+	// as expected_version. Remote targets only.
+	OfficialLinkVersion string `json:"official_link_version,omitempty" jsonschema:"opaque version to pass as expected_version to set_shadow_mcp_official_server; remote targets only"`
+}
+
+// ShadowMCPOfficialServerLink is a Shadow MCP server's link to its official
+// version.
+type ShadowMCPOfficialServerLink struct {
+	MCPID     string `json:"mcp_id" jsonschema:"the linked MCP server's ID, as find_mcp returns it"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug,omitempty"`
+	LinkState string `json:"link_state" jsonschema:"on: direct use is blocked and agents are sent to the official server; off: the link is kept but direct use follows the ordinary Shadow MCP rules"`
+}
+
+// ShadowMCPSuggestedOfficialServer is a project MCP server that can be
+// linked as a Shadow MCP server's official version.
+type ShadowMCPSuggestedOfficialServer struct {
+	MCPID string `json:"mcp_id" jsonschema:"the MCP server's ID, to pass as mcp_id to set_shadow_mcp_official_server"`
+	Name  string `json:"name"`
+	Slug  string `json:"slug,omitempty"`
 }
 
 type ListShadowMCPInventoryOutput struct {
-	Project    RiskProject              `json:"project"`
-	Targets    []ShadowMCPTargetSummary `json:"targets"`
-	NextCursor string                   `json:"next_cursor,omitempty"`
+	Project RiskProject `json:"project"`
+	// DefaultAccess is what the project does with a server nobody decided
+	// on. Absent when it could not be read.
+	DefaultAccess *ShadowMCPDefaultAccess  `json:"default_access,omitempty" jsonschema:"what the project does with an MCP server nobody decided on; absent when it could not be read"`
+	Targets       []ShadowMCPTargetSummary `json:"targets"`
+	NextCursor    string                   `json:"next_cursor,omitempty"`
 }
 
 type ShadowMCPEvidenceSummary struct {
@@ -113,6 +150,7 @@ type ShadowMCPEvidenceSummary struct {
 
 type GetShadowMCPReviewOutput struct {
 	Project               RiskProject              `json:"project"`
+	DefaultAccess         *ShadowMCPDefaultAccess  `json:"default_access,omitempty" jsonschema:"what the project does with an MCP server nobody decided on; absent when it could not be read"`
 	Target                ShadowMCPTargetSummary   `json:"target"`
 	Evidence              ShadowMCPEvidenceSummary `json:"evidence"`
 	DistributionAdmission *DistributionAdmission   `json:"distribution_admission,omitempty"`
@@ -137,6 +175,7 @@ type ShadowInventoryService struct {
 	versions                  *shadowDecisionVersionCodec
 	now                       func() time.Time
 	distributionAdmissionRead distributionAdmissionReader
+	settings                  *pgxpool.Pool
 }
 
 func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowReviewReader, dbQueries *platformrepo.Queries, budget OperationBudget, keyMaterial string) (*ShadowInventoryService, error) {
@@ -153,7 +192,7 @@ func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowRev
 	}
 	return &ShadowInventoryService{
 		projects: postgresRiskProjectResolver{queries: dbQueries}, inventory: dbReader, reviews: reviews,
-		budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil,
+		budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil, settings: nil,
 	}, nil
 }
 
@@ -162,6 +201,28 @@ func (s *ShadowInventoryService) WithDistributionAdmissionReads(read distributio
 		s.distributionAdmissionRead = read
 	}
 	return s
+}
+
+// WithSettingsReads lets the inventory and the review report the project's
+// default access and each server's official link version.
+func (s *ShadowInventoryService) WithSettingsReads(db *pgxpool.Pool) *ShadowInventoryService {
+	if s != nil {
+		s.settings = db
+	}
+	return s
+}
+
+// defaultAccess reads the project's default access, or nil when it cannot
+// be read: the inventory still answers without it.
+func (s *ShadowInventoryService) defaultAccess(ctx context.Context, principal Principal, project ResolvedProject) *ShadowMCPDefaultAccess {
+	if s.settings == nil {
+		return nil
+	}
+	access, err := readShadowDefaultAccess(ctx, s.settings, principal.OrganizationID, project.ID, s.versions)
+	if err != nil {
+		return nil
+	}
+	return &access
 }
 
 func (s *ShadowInventoryService) valid() bool {
@@ -210,7 +271,7 @@ func (s *ShadowInventoryService) List(ctx context.Context, principal Principal, 
 	if len(selected) > limit {
 		selected = selected[:limit]
 	}
-	output := ListShadowMCPInventoryOutput{Project: riskProject(project), Targets: make([]ShadowMCPTargetSummary, 0, len(selected)), NextCursor: ""}
+	output := ListShadowMCPInventoryOutput{Project: riskProject(project), DefaultAccess: s.defaultAccess(ctx, principal, project), Targets: make([]ShadowMCPTargetSummary, 0, len(selected)), NextCursor: ""}
 	for _, row := range selected {
 		target, err := s.projectTarget(principal, project, row)
 		if err != nil {
@@ -283,7 +344,7 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 	if err != nil {
 		return GetShadowMCPReviewOutput{}, err
 	}
-	output := GetShadowMCPReviewOutput{Project: riskProject(project), Target: target, Evidence: emptyShadowEvidence(), DistributionAdmission: nil}
+	output := GetShadowMCPReviewOutput{Project: riskProject(project), DefaultAccess: s.defaultAccess(ctx, principal, project), Target: target, Evidence: emptyShadowEvidence(), DistributionAdmission: nil}
 	if s.distributionAdmissionRead != nil {
 		var distributionAdmission DistributionAdmission
 		if targetKind == shadowTargetKindServerURL {
@@ -346,6 +407,12 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 		UserCount: NewSubjectCount(int64(row.UserCount)),
 		Access:    ShadowMCPAccessSummary{State: row.AccessSummary.State, AllowedFor: row.AccessSummary.AllowedFor, BlockedFor: row.AccessSummary.BlockedFor, BlockingDefault: row.AccessSummary.BlockingDefault, Decision: "", DecisionCoverage: row.AccessSummary.DecisionCoverage},
 		Review:    nil, DecisionVersion: "", TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
+		OfficialServer: nil, SuggestedOfficialServer: nil, OfficialLinkVersion: "",
+	}
+	if kind == shadowTargetKindServerURL {
+		if err := s.projectOfficialLink(project, row, &result); err != nil {
+			return ShadowMCPTargetSummary{}, err
+		}
 	}
 	if !validShadowAccessSummary(result.Access) {
 		return ShadowMCPTargetSummary{}, ErrShadowInventoryUnavailable
@@ -377,6 +444,35 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 		}
 	}
 	return result, nil
+}
+
+// projectOfficialLink adds a remote target's official server link, the
+// suggested server while nothing is linked, and the link's version.
+func (s *ShadowInventoryService) projectOfficialLink(project ResolvedProject, row *accessgen.ShadowMCPInventoryServer, result *ShadowMCPTargetSummary) error {
+	link := officiallink.Link{MCPServerID: uuid.Nil, AllowDirectAccess: false}
+	if official := row.OfficialServer; official != nil {
+		id, err := uuid.Parse(official.McpServerID)
+		if err != nil {
+			return ErrShadowInventoryUnavailable
+		}
+		link = officiallink.Link{MCPServerID: id, AllowDirectAccess: official.DirectAccessAllowed}
+		result.OfficialServer = &ShadowMCPOfficialServerLink{MCPID: id.String(), Name: official.Name, Slug: conv.PtrValOr(official.Slug, ""), LinkState: shadowOfficialLinkState(link)}
+	}
+	if suggested := row.SuggestedOfficialServer; suggested != nil && result.OfficialServer == nil {
+		result.SuggestedOfficialServer = &ShadowMCPSuggestedOfficialServer{MCPID: suggested.McpServerID, Name: suggested.Name, Slug: conv.PtrValOr(suggested.Slug, "")}
+	}
+	key, err := officiallink.Key(row.CanonicalServerURL)
+	if err != nil {
+		// A URL the link store cannot key cannot be linked either, so it
+		// carries no version to change it with.
+		return nil
+	}
+	version, err := s.versions.encodeSetting(shadowOfficialLinkVersionDomain, shadowOfficialLinkVersionState(project.ID, key, link))
+	if err != nil {
+		return ErrShadowInventoryUnavailable
+	}
+	result.OfficialLinkVersion = version
+	return nil
 }
 
 func emptyShadowEvidence() ShadowMCPEvidenceSummary {

@@ -3,8 +3,6 @@ package platformmcp
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -41,15 +39,5 @@ func unavailableShadowDecisionTool(_ context.Context, _ *mcp.CallToolRequest, _ 
 }
 
 func shadowDecisionToolResult(err error) (*mcp.CallToolResult, bool) {
-	if mutation, ok := errors.AsType[*ShadowDecisionError](err); ok {
-		payload, marshalErr := json.Marshal(featureUnavailableResult{Code: mutation.Code, Feature: "shadow_mcp_decisions", Message: mutation.Message})
-		if marshalErr != nil {
-			return nil, false
-		}
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
-	}
-	if budget, ok := operationBudgetToolResult(err); ok {
-		return budget, true
-	}
-	return nil, false
+	return shadowWriteToolResult(err, "shadow_mcp_decisions")
 }

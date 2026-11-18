@@ -27,6 +27,7 @@ type Transactor interface {
 type MutationAuditor interface {
 	LogPolicyCreate(ctx context.Context, db repo.DBTX, event CreateAuditEvent) error
 	LogPolicyUpdate(ctx context.Context, db repo.DBTX, event UpdateAuditEvent) error
+	LogPolicyDelete(ctx context.Context, db repo.DBTX, event DeleteAuditEvent) error
 }
 
 // ApprovalCoordinator applies standing Shadow MCP decisions in the policy
@@ -85,6 +86,14 @@ type UpdateAuditEvent struct {
 	After          Policy
 }
 
+// DeleteAuditEvent records the policy a delete removed.
+type DeleteAuditEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Actor          Actor
+	Policy         Policy
+}
+
 // CreateMutation is a fully validated, normalized policy create command.
 type CreateMutation struct {
 	Params             repo.CreateRiskPolicyParams
@@ -121,6 +130,26 @@ type UpdateMutation struct {
 	// validation so the core can carry its audience through audit and results.
 	ValidateLocked func(context.Context, pgx.Tx, Policy) (Policy, error)
 	Actor          Actor
+}
+
+// DeleteMutation removes one policy with its bypass requests, exclusions and
+// audience grants.
+type DeleteMutation struct {
+	ProjectID uuid.UUID
+	PolicyID  uuid.UUID
+	// ValidateLocked runs after the row is locked but before any write. An
+	// error it returns aborts the delete unchanged.
+	ValidateLocked func(context.Context, pgx.Tx, Policy) error
+	Actor          Actor
+}
+
+// DeleteResult is the policy a committed delete removed, as it stood when
+// locked.
+type DeleteResult struct {
+	Row                   repo.RiskPolicy
+	AudiencePrincipalURNs []string
+	// DeletedExclusions counts the exclusions removed with the policy.
+	DeletedExclusions int64
 }
 
 // MutationResult is the committed policy row and canonical audience.
@@ -505,6 +534,81 @@ func (c *Core) AfterUpdatePolicy(ctx context.Context, result MutationResult) {
 		deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
 	}
 	_ = deps.Signaler.Signal(ctx, result.Row.ProjectID)
+}
+
+// DeletePolicyInTransaction soft-deletes one policy, its bypass requests and
+// exclusions, clears its audience grants, and records the audit event, all in
+// a caller-owned transaction. The caller owns commit and must invoke
+// AfterDeletePolicy only after that commit succeeds.
+func (c *Core) DeletePolicyInTransaction(ctx context.Context, tx pgx.Tx, input DeleteMutation) (DeleteResult, error) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return DeleteResult{}, err
+	}
+	if tx == nil {
+		return DeleteResult{}, mutationError("policy mutation transaction is not configured", nil)
+	}
+	if err := shadowadmission.LockProject(ctx, tx, input.ProjectID); err != nil {
+		return DeleteResult{}, mutationError("lock shadow mcp admission project", err)
+	}
+	queries := repo.New(tx)
+	if err := queries.LockRiskPolicyMutations(ctx, input.ProjectID.String()); err != nil {
+		return DeleteResult{}, mutationError("lock risk policy mutations", err)
+	}
+	if err := queries.LockRiskExclusionMutations(ctx, input.ProjectID.String()); err != nil {
+		return DeleteResult{}, mutationError("lock risk exclusion mutations", err)
+	}
+	locked, err := queries.GetRiskPolicyForUpdate(ctx, repo.GetRiskPolicyForUpdateParams{ID: input.PolicyID, ProjectID: input.ProjectID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DeleteResult{}, fmt.Errorf("%w: %w", ErrLoadPolicy, err)
+		}
+		return DeleteResult{}, mutationError("lock risk policy", err)
+	}
+	audience, err := audiencePrincipalURNs(ctx, tx, locked.OrganizationID, locked.ID.String())
+	if err != nil {
+		return DeleteResult{}, mutationError("load risk policy audience snapshot", err)
+	}
+	snapshot := Project(locked, audience)
+	if input.ValidateLocked != nil {
+		if err := input.ValidateLocked(ctx, tx, snapshot); err != nil {
+			return DeleteResult{}, err
+		}
+	}
+	if err := queries.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{ID: locked.ID, ProjectID: input.ProjectID}); err != nil {
+		return DeleteResult{}, mutationError("delete risk policy", err)
+	}
+	if err := queries.DeleteRiskPolicyBypassRequestsByPolicy(ctx, repo.DeleteRiskPolicyBypassRequestsByPolicyParams{RiskPolicyID: locked.ID, ProjectID: input.ProjectID}); err != nil {
+		return DeleteResult{}, mutationError("delete risk policy bypass requests", err)
+	}
+	deletedExclusions, err := queries.DeleteRiskExclusionsByPolicy(ctx, repo.DeleteRiskExclusionsByPolicyParams{RiskPolicyID: uuid.NullUUID{UUID: locked.ID, Valid: true}, ProjectID: input.ProjectID})
+	if err != nil {
+		return DeleteResult{}, mutationError("delete risk exclusions by policy", err)
+	}
+	if err := replaceAudience(ctx, tx, locked.OrganizationID, locked.ID.String(), nil); err != nil {
+		return DeleteResult{}, mutationError("clear risk policy audience", err)
+	}
+	if err := deps.Auditor.LogPolicyDelete(ctx, tx, DeleteAuditEvent{
+		OrganizationID: locked.OrganizationID,
+		ProjectID:      locked.ProjectID,
+		Actor:          input.Actor,
+		Policy:         AuditSnapshot(snapshot),
+	}); err != nil {
+		return DeleteResult{}, mutationError("log risk policy delete", err)
+	}
+	return DeleteResult{Row: locked, AudiencePrincipalURNs: audience, DeletedExclusions: deletedExclusions}, nil
+}
+
+// AfterDeletePolicy runs best-effort convergence only after the transaction
+// containing the delete, audit, and any outer receipt has committed.
+func (c *Core) AfterDeletePolicy(ctx context.Context, result DeleteResult) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return
+	}
+	if deps.CacheInvalidator != nil {
+		deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
+	}
 }
 
 func (c *Core) requireMutationDependencies() (*MutationDependencies, error) {

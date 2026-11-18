@@ -65,6 +65,21 @@ func (a policyMutationAuditor) LogPolicyUpdate(ctx context.Context, db repo.DBTX
 	return nil
 }
 
+func (a policyMutationAuditor) LogPolicyDelete(ctx context.Context, db repo.DBTX, event policycore.DeleteAuditEvent) error {
+	if err := a.logger.LogRiskPolicyDelete(ctx, db, audit.LogRiskPolicyDeleteEvent{
+		OrganizationID:   event.OrganizationID,
+		ProjectID:        event.ProjectID,
+		Actor:            event.Actor.Principal,
+		ActorDisplayName: event.Actor.DisplayName,
+		ActorSlug:        event.Actor.Slug,
+		RiskPolicyID:     event.Policy.ID,
+		RiskPolicyName:   event.Policy.Name,
+	}); err != nil {
+		return fmt.Errorf("log policy delete audit: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) policyMutationError(ctx context.Context, err error) error {
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return shareable

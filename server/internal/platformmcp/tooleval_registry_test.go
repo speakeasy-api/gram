@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/officiallink"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -138,6 +139,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		WithPublicationEvidence(stubPluginPublicationEvidence{}).
 		WithRepublish(publication, &recordingPluginPublishSignaler{}, budget)
 	reader.WithShadowDecisions(NewShadowDecisionService(pool, shadowInventory, &mcpapproval.Service{}, pluginInventory, flags, slugs, budget))
+	reader.WithShadowSettings(NewShadowMCPSettingsService(pool, shadowInventory, pluginInventory, risk.NewPolicyMutationCore(pool, auditLogger, nil, noopRiskPolicySignaler{}, nil), officiallink.NewWriter(auditLogger), flags, slugs, budget))
 	distributions := NewDistributionService(pool, auditLogger,
 		func(context.Context, pgx.Tx, *contextvalues.AuthContext, string, uuid.UUID, uuid.UUID, uuid.UUID, string) (uuid.UUID, bool, error) {
 			return uuid.Nil, false, errToolEvalNotInvoked

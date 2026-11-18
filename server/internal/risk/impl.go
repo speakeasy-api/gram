@@ -69,7 +69,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -1212,79 +1211,40 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.C(oops.CodeInvalid)
 	}
 
-	// Fetch before delete so we can log the policy name.
-	existing, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := shadowadmission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock shadow mcp admission project").LogError(ctx, s.logger)
+	result, err := s.policies.DeletePolicyInTransaction(ctx, dbtx, policycore.DeleteMutation{
+		ProjectID:      *authCtx.ProjectID,
+		PolicyID:       id,
+		ValidateLocked: nil,
+		Actor: policycore.Actor{
+			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			DisplayName: authCtx.Email,
+			Slug:        nil,
+		},
+	})
+	if errors.Is(err, policycore.ErrLoadPolicy) {
+		return oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
-	q := repo.New(dbtx)
-	if err := q.LockRiskExclusionMutations(ctx, authCtx.ProjectID.String()); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock risk exclusion mutations").LogError(ctx, s.logger)
-	}
-	if err := q.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy").LogError(ctx, s.logger)
 	}
-
-	if err := q.DeleteRiskPolicyBypassRequestsByPolicy(ctx, repo.DeleteRiskPolicyBypassRequestsByPolicyParams{
-		RiskPolicyID: id,
-		ProjectID:    *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete risk policy bypass requests").LogError(ctx, s.logger)
-	}
-
-	deletedExclusions, err := q.DeleteRiskExclusionsByPolicy(ctx, repo.DeleteRiskExclusionsByPolicyParams{
-		RiskPolicyID: uuid.NullUUID{UUID: id, Valid: true},
-		ProjectID:    *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete risk exclusions by policy").LogError(ctx, s.logger)
-	}
-	if deletedExclusions > 0 {
+	if result.DeletedExclusions > 0 {
 		s.logger.InfoContext(ctx, "deleted risk exclusions for policy",
 			attr.SlogRiskPolicyID(id.String()),
-			attr.SlogDBDeletedRowsCount(deletedExclusions),
+			attr.SlogDBDeletedRowsCount(result.DeletedExclusions),
 		)
-	}
-
-	if err := clearRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, id.String()); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "clear risk policy audience").LogError(ctx, s.logger)
-	}
-
-	if err := s.audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		RiskPolicyID:     id,
-		RiskPolicyName:   existing.Name,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log risk policy delete").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").LogError(ctx, s.logger)
 	}
 
-	if s.shadowMCPClient != nil {
-		s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
-	}
+	s.policies.AfterDeletePolicy(ctx, result)
 
 	s.cleanPolicyResults(ctx, *authCtx.ProjectID, id)
 

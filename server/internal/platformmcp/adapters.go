@@ -391,6 +391,7 @@ type PostgresReader struct {
 	identityGate              CanonicalIdentityGate
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
+	shadowSettings            *ShadowMCPSettingsService
 	shadowAI                  *ShadowAIService
 	deviceCoverage            *DeviceCoverageService
 	gatewayActivity           *OrganizationGatewayActivityService
@@ -445,6 +446,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		identityGate:              nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
+		shadowSettings:            nil,
 		shadowAI:                  nil,
 		deviceCoverage:            nil,
 		gatewayActivity:           nil,
@@ -611,6 +613,15 @@ func (r *PostgresReader) WithShadowMCPReviewLinks(links ShadowMCPReviewLinker) *
 func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *PostgresReader {
 	if r != nil && service != nil && service.valid() {
 		r.shadowDecisions = service
+	}
+	return r
+}
+
+// WithShadowSettings activates the Shadow MCP default access and official
+// server tools.
+func (r *PostgresReader) WithShadowSettings(service *ShadowMCPSettingsService) *PostgresReader {
+	if r != nil {
+		r.shadowSettings = service
 	}
 	return r
 }

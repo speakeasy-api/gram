@@ -237,6 +237,36 @@
     decision: deny
     project_slug: default
     target_reference: smr_7f3a9c21
+- id: risk-shadow-mcp-block-by-default
+  prompt: In Default, block every MCP server nobody has approved yet, for everyone. Stop letting unknown servers through.
+  expect: [set_shadow_mcp_default_access]
+  allow: [list_shadow_mcp_inventory, list_projects]
+  args:
+    mode: blocked
+    project_slug: default
+- id: risk-shadow-mcp-allow-by-default
+  prompt: Turn off blocking by default for unreviewed MCP servers in Payments; servers should connect unless we deny them.
+  expect: [set_shadow_mcp_default_access]
+  allow: [list_shadow_mcp_inventory, list_projects]
+  args:
+    mode: allowed
+    project_slug: payments
+- id: risk-shadow-mcp-link-official
+  prompt: People in Default keep connecting straight to the unsanctioned MCP target smr_7f3a9c21. Point them at our official server 0b6f2a10-0000-4000-8000-000000000071 instead and block the direct route.
+  expect: [set_shadow_mcp_official_server]
+  allow: [list_shadow_mcp_inventory, get_shadow_mcp_review, find_mcp]
+  args:
+    action: link
+    project_slug: default
+    target_reference: smr_7f3a9c21
+- id: risk-shadow-mcp-switch-off-official
+  prompt: Keep the official server link for Shadow MCP target smr_7f3a9c21 in Default, but stop blocking people who connect to it directly for now.
+  expect: [set_shadow_mcp_official_server]
+  allow: [list_shadow_mcp_inventory, get_shadow_mcp_review]
+  args:
+    action: switch_off
+    project_slug: default
+    target_reference: smr_7f3a9c21
 - id: risk-shadow-ai-inventory
   prompt: What AI apps like ChatGPT desktop or Cursor have we detected on employee machines, and are they allowed?
   expect: [list_shadow_ai_inventory]
