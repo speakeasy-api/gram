@@ -124,10 +124,20 @@ func (a *WorkOSAdapter) signInEvidence(ctx context.Context, resp usermanagement.
 		return ev
 	}
 
-	// Each lookup has its own budget, so a slow session listing never hides the hosted domain.
+	// The two lookups run side by side, each with its own budget, so a slow session listing never hides the hosted domain.
 	sessionCtx, cancelSession := context.WithTimeout(ctx, c.timeout)
-	ev.AuthenticatedAt = a.sessionCreatedAt(sessionCtx, resp.User.ID, extractSessionIDFromJWT(resp.AccessToken))
-	cancelSession()
+	defer cancelSession()
+	authenticatedAt := make(chan time.Time, 1)
+	go func() {
+		authenticatedAt <- a.sessionCreatedAt(sessionCtx, resp.User.ID, extractSessionIDFromJWT(resp.AccessToken))
+	}()
+	ev = a.providerEvidence(ctx, resp, ev)
+	ev.AuthenticatedAt = <-authenticatedAt
+	return ev
+}
+
+func (a *WorkOSAdapter) providerEvidence(ctx context.Context, resp usermanagement.AuthenticateResponse, ev SignInEvidence) SignInEvidence {
+	c := a.evidence
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
