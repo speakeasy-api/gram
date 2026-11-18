@@ -31,6 +31,7 @@ import {
   type ResourceSearchMetrics,
   useResourceSearchCandidates,
 } from "./useResourceSearchCandidates";
+import { useShadowMCPServerCandidates } from "./useShadowMCPServerCandidates";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
@@ -219,6 +220,11 @@ export function useLauncherCandidates({
   const people = usePersonCandidates({
     enabled: remoteCandidatesEnabled && !inProject && canReadPeople,
   });
+  // Not in the remote index, so it stays a local inventory, deferred to the
+  // same eligible query as the other remote candidates.
+  const shadowMCPServers = useShadowMCPServerCandidates({
+    enabled: projectRemoteCandidatesEnabled && canReadApprovals,
+  });
   const devices = useManagedDeviceCandidates({
     enabled: remoteCandidatesEnabled && canReadDevices,
   });
@@ -266,6 +272,7 @@ export function useLauncherCandidates({
       ...adminOnly(builtinRules),
       ...(fallback("rule") ? adminOnly(rules) : []),
       ...(inProject && canReadApprovals ? accessRequests : []),
+      ...(inProject && canReadApprovals ? shadowMCPServers : []),
       ...(!inProject && canReadPeople ? people : []),
       ...(canReadDevices ? devices : []),
       ...projects,
@@ -304,6 +311,7 @@ export function useLauncherCandidates({
     rules,
     builtinRules,
     accessRequests,
+    shadowMCPServers,
     people,
     devices,
     projects,

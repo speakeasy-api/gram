@@ -70,6 +70,18 @@ type Service struct {
 	email    *email.Service
 	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
+	// serverURL is the deployment's API base URL, which MCP endpoint
+	// addresses are built on. Nil leaves official-server addresses on the
+	// platform domain empty.
+	serverURL *url.URL
+}
+
+// WithServerURL sets the base URL that platform MCP endpoint addresses are
+// built on, so the Shadow MCP inventory can say where an official server is
+// served.
+func (s *Service) WithServerURL(serverURL *url.URL) *Service {
+	s.serverURL = serverURL
+	return s
 }
 
 // canonicalFoldOrg resolves the org id to fold under. A nil gate means no fold.
@@ -112,6 +124,7 @@ func NewService(
 		email:      emailService,
 		orgHosts:   orgHosts,
 		foldGate:   foldGate,
+		serverURL:  nil,
 	}
 }
 

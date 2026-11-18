@@ -109,6 +109,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
+      { route: routes.shadowMCP, scope: ["org:admin"] as Scope[] },
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled
         ? [

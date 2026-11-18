@@ -1,6 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
@@ -28,6 +34,7 @@ import { useRecordMcpApprovalDecisionMutation } from "@gram/client/react-query/r
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { invalidateAllShadowMCPInventoryServer } from "@gram/client/react-query/shadowMCPInventoryServer.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { audienceGroups } from "./audienceGroups";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -65,50 +72,34 @@ export type AccessDecision = "approved" | "denied";
 export const POLICIES_UNAVAILABLE_REASON =
   "Policy data could not be loaded — deciding now would not be enforced";
 
-type AudienceGroup = {
-  heading: string;
-  options: { label: string; value: string }[];
-};
-
-/**
- * The grouped role/member options an approval audience is picked from. Values
- * are principal URNs — exactly what recordDecision's granted_principal_urns
- * accepts.
- */
-function audienceGroups(
-  members: AccessMember[],
-  roles: Role[],
-): AudienceGroup[] {
-  return [
-    {
-      heading: "Roles",
-      options: roles.map((role) => ({
-        label: role.name,
-        value: role.principalUrn,
-      })),
-    },
-    {
-      heading: "Members",
-      options: members.map((member) => ({
-        label:
-          member.name && member.name !== member.email
-            ? `${member.name} (${member.email})`
-            : member.email,
-        value: member.principalUrn,
-      })),
-    },
-  ].filter((group) => group.options.length > 0);
-}
-
 const RATIONALE_PREFILL: Record<AccessDecision, string> = {
   approved: "Approved for use in this project.",
   denied: "Denied for use in this project.",
 };
 
-function approveSublabel(stdio: boolean, audienceSelectable: boolean): string {
+function approveSublabel(stdio: boolean, narrowed: boolean): string {
   if (stdio) return "Record the approval as the decision of record.";
-  if (audienceSelectable) return "Allow the server for the audience below.";
+  if (narrowed) return "Allow the server only for the people or roles below.";
   return "Unblock the server for everyone in the project.";
+}
+
+function denySublabel(stdio: boolean, narrowed: boolean): string {
+  if (stdio) return "Record the denial as the decision of record.";
+  if (narrowed) return "Block the server only for the people or roles below.";
+  return "Block the server for everyone in the project.";
+}
+
+/**
+ * Who a decision covers, as sent to the API: nothing means everyone. An
+ * approval uses the approval audience and a denial its own.
+ */
+function grantedPrincipalUrns(
+  decision: AccessDecision,
+  approveAudience: string[],
+  denyAudience: string[],
+): string[] | undefined {
+  const audience = decision === "approved" ? approveAudience : denyAudience;
+  return audience.length > 0 ? audience : undefined;
 }
 
 /**
@@ -141,6 +132,7 @@ export function DecideAccessSheet({
   const decide = useRecordMcpApprovalDecisionMutation();
   const [decision, setDecision] = useState<AccessDecision>("approved");
   const [audience, setAudience] = useState<string[]>([]);
+  const [denyAudience, setDenyAudience] = useState<string[]>([]);
   const [rationale, setRationale] = useState(RATIONALE_PREFILL.approved);
   const [rationaleEdited, setRationaleEdited] = useState(false);
   // The request a previous submit already opened or promoted, so a retry
@@ -158,6 +150,7 @@ export function DecideAccessSheet({
     if (!open) {
       setDecision("approved");
       setAudience([]);
+      setDenyAudience([]);
       setRationale(RATIONALE_PREFILL.approved);
       setRationaleEdited(false);
       setOpenedRequestId(undefined);
@@ -168,11 +161,17 @@ export function DecideAccessSheet({
   if (!target) return null;
 
   const stdio = target.targetKind === "stdio_command";
-  // Under an allow-by-default policy a narrow approval is inexpressible —
-  // approving clears the block for everyone — so the audience picker only
-  // appears when a block-by-default policy can scope who passes. A stdio
-  // command has no URL for grants to attach to, so it never shows one.
+  // A narrowed approval lets only its people or roles through. A Shadow AI
+  // policy that allows servers by default can only clear a block for
+  // everyone, so it offers no audience. A stdio command has no URL for grants
+  // to attach to, so it never shows one.
   const audienceSelectable = disposition !== "allow_all" && !stdio;
+  // A denial can be narrowed to people or roles wherever servers are allowed
+  // by default: it blocks only them. Under blocked by default a denial
+  // withdraws the approval, which already blocks everyone.
+  const denyAudienceSelectable = disposition !== "block_all" && !stdio;
+  const pickerShown =
+    decision === "approved" ? audienceSelectable : denyAudienceSelectable;
   const isSubmitting =
     submitting ||
     createRequest.isPending ||
@@ -232,10 +231,11 @@ export function DecideAccessSheet({
             id: requestId,
             decision,
             rationale: trimmedRationale,
-            grantedPrincipalUrns:
-              decision === "approved" && audience.length > 0
-                ? audience
-                : undefined,
+            grantedPrincipalUrns: grantedPrincipalUrns(
+              decision,
+              audienceSelectable ? audience : [],
+              denyAudienceSelectable ? denyAudience : [],
+            ),
           },
         },
       });
@@ -286,8 +286,8 @@ export function DecideAccessSheet({
         <SheetHeader>
           <SheetTitle>Decide access</SheetTitle>
           <SheetDescription>
-            The decision is recorded with its rationale and enforced across
-            every blocking policy in this project.
+            The decision is recorded with its rationale and enforced in this
+            project, whether servers are allowed or blocked by default.
           </SheetDescription>
         </SheetHeader>
 
@@ -321,7 +321,10 @@ export function DecideAccessSheet({
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    {approveSublabel(stdio, audienceSelectable)}
+                    {approveSublabel(
+                      stdio,
+                      audienceSelectable && audience.length > 0,
+                    )}
                   </Text>
                 </span>
               </label>
@@ -337,13 +340,56 @@ export function DecideAccessSheet({
                     <Badge.Text>Deny</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    {stdio
-                      ? "Record the denial as the decision of record."
-                      : "Block the server for everyone in the project."}
+                    {denySublabel(
+                      stdio,
+                      denyAudienceSelectable && denyAudience.length > 0,
+                    )}
                   </Text>
                 </span>
               </label>
             </RadioGroup>
+
+            {pickerShown && (
+              // Keyed by decision and open whenever that decision already
+              // names people or roles, so a narrowed audience that will be
+              // sent is never hidden behind a collapsed section.
+              <Collapsible
+                key={decision}
+                defaultOpen={
+                  (decision === "approved" ? audience : denyAudience).length > 0
+                }
+              >
+                <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+                  <Icon name="chevron-right" className="size-3.5" aria-hidden />
+                  Advanced
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  <section className="border-border space-y-2 border p-3">
+                    <Text variant="small" className="font-medium">
+                      {decision === "approved"
+                        ? "Who the approval covers"
+                        : "Who the denial covers"}
+                    </Text>
+                    <MultiSelect
+                      key={decision}
+                      options={audienceGroups(members, roles)}
+                      defaultValue={
+                        decision === "approved" ? audience : denyAudience
+                      }
+                      onValueChange={
+                        decision === "approved" ? setAudience : setDenyAudience
+                      }
+                      placeholder="Everyone in the project"
+                    />
+                    <Text muted small>
+                      {decision === "approved"
+                        ? "Pick people or roles to allow the server only for them; everyone else is blocked. Leave empty to approve for everyone."
+                        : "Pick people or roles to block the server only for them. Leave empty to deny for everyone."}
+                    </Text>
+                  </section>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
             {stdio && (
               <Text muted small>
@@ -351,23 +397,6 @@ export function DecideAccessSheet({
                 command-line server has no URL for blocking policies to enforce
                 against automatically.
               </Text>
-            )}
-
-            {decision === "approved" && audienceSelectable && (
-              <section className="border-border space-y-2 border p-3">
-                <Text variant="small" className="font-medium">
-                  Who the approval covers
-                </Text>
-                <MultiSelect
-                  options={audienceGroups(members, roles)}
-                  defaultValue={audience}
-                  onValueChange={setAudience}
-                  placeholder="Everyone in the project"
-                />
-                <Text muted small>
-                  Leave empty to approve for everyone.
-                </Text>
-              </section>
             )}
 
             <section className="border-border space-y-2 border p-3">

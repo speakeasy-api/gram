@@ -41,6 +41,7 @@ type Endpoints struct {
 	ListShadowMCPInventory               goa.Endpoint
 	GetShadowMCPInventoryServer          goa.Endpoint
 	UpdateShadowMCPInventoryServerName   goa.Endpoint
+	SetShadowMCPOfficialServer           goa.Endpoint
 	ListShadowMCPInventoryUsers          goa.Endpoint
 	ListShadowMCPInventoryServersForUser goa.Endpoint
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
@@ -93,6 +94,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListShadowMCPInventory:               NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
 		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
 		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameEndpoint(s, a.APIKeyAuth),
+		SetShadowMCPOfficialServer:           NewSetShadowMCPOfficialServerEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventoryServersForUser: NewListShadowMCPInventoryServersForUserEndpoint(s, a.APIKeyAuth),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
@@ -143,6 +145,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListShadowMCPInventory = m(e.ListShadowMCPInventory)
 	e.GetShadowMCPInventoryServer = m(e.GetShadowMCPInventoryServer)
 	e.UpdateShadowMCPInventoryServerName = m(e.UpdateShadowMCPInventoryServerName)
+	e.SetShadowMCPOfficialServer = m(e.SetShadowMCPOfficialServer)
 	e.ListShadowMCPInventoryUsers = m(e.ListShadowMCPInventoryUsers)
 	e.ListShadowMCPInventoryServersForUser = m(e.ListShadowMCPInventoryServersForUser)
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
@@ -978,6 +981,29 @@ func NewUpdateShadowMCPInventoryServerNameEndpoint(s Service, authAPIKeyFn secur
 			return nil, err
 		}
 		return nil, s.UpdateShadowMCPInventoryServerName(ctx, p)
+	}
+}
+
+// NewSetShadowMCPOfficialServerEndpoint returns an endpoint function that
+// calls the method "setShadowMCPOfficialServer" of service "access".
+func NewSetShadowMCPOfficialServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetShadowMCPOfficialServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.SetShadowMCPOfficialServer(ctx, p)
 	}
 }
 
