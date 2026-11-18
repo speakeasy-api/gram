@@ -47,7 +47,7 @@ var machineSecurity = &HTTPToolSecurity{
 
 // clientGrantMessages pins each failure's exact text; both address failures read the same.
 var clientGrantMessages = map[toolconfig.ClientGrantFailure]string{
-	toolconfig.ClientGrantUnavailable:     "This tool couldn't sign in: its sign-in service didn't answer or had an error. If it keeps happening and you didn't set its sign-in address yourself, ask your administrator.",
+	toolconfig.ClientGrantUnavailable:     "This tool couldn't sign in: its sign-in service didn't answer or had an error. If it keeps happening, check its sign-in address if you set it yourself, or ask your administrator.",
 	toolconfig.ClientGrantRejected:        "This tool couldn't sign in: its sign-in service refused the request. If you didn't set its sign-in details yourself, ask your administrator to check the tool's sign-in setup.",
 	toolconfig.ClientGrantBlocked:         "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",
 	toolconfig.ClientGrantAddressNotFound: "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",

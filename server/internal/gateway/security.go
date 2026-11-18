@@ -176,14 +176,9 @@ func processSecurity(
 					token, variable, grant, err := processClientCredentials(ctx, logger, guardianPolicy, req, cacheImpl, tool, plan.SecurityScopes, security, mergedEnv, serverURL)
 					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
-						if strings.Contains(err.Error(), "failed to make client credentials token request") {
-							failure, ok := errors.AsType[*clientCredentialsError](err)
-							reason := toolconfig.ClientGrantMisconfigured
-							if ok {
-								reason = failure.failure
-							}
-							message := clientGrantFailureMessage(reason)
-							if ok && env.Credentials != nil {
+						if failure, ok := errors.AsType[*clientCredentialsError](err); ok && failure.tokenRequest {
+							message := clientGrantFailureMessage(failure.failure)
+							if env.Credentials != nil {
 								applied[http.CanonicalHeaderKey("Authorization")] = credentialFrom(variable, grant)
 								env.Credentials.GrantFailure = failure.failure
 							}
@@ -326,11 +321,11 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	var oauthFlows oAuthFlows
 	if err := json.Unmarshal(security.OAuthFlows, &oauthFlows); err != nil {
-		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)}
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err), tokenRequest: false}
 	}
 
 	if oauthFlows.ClientCredentials == nil {
-		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("no client credentials flow found")}
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("no client credentials flow found"), tokenRequest: false}
 	}
 
 	tokenURL := oauthFlows.ClientCredentials.TokenUrl
@@ -343,7 +338,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	}
 
 	if tokenURL == "" {
-		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("no client credentials token url found")}
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("no client credentials token url found"), tokenRequest: false}
 	}
 
 	cacheKey := clientCredentialsTokenCacheCacheKey(tool.ProjectID, clientID, tokenURL, requestedScopes)
@@ -365,7 +360,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	tokenReq, err := http.NewRequestWithContext(ctx, "POST", tokenURL, data)
 	if err != nil {
-		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to create client credentials token request: %w", err)}
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to create client credentials token request: %w", err), tokenRequest: false}
 	}
 
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -375,7 +370,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	client.Timeout = 10 * time.Second
 	resp, err := client.Do(tokenReq)
 	if err != nil {
-		return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsTransportFailure(err), err: fmt.Errorf("failed to make client credentials token request: %w", err)}
+		return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsTransportFailure(err), err: fmt.Errorf("failed to make client credentials token request: %w", err), tokenRequest: true}
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -395,7 +390,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, client, tokenURL, clientID, clientSecret, requestedScopes)
 			if retryErr != nil {
-				return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsTransportFailure(retryErr), err: fmt.Errorf("failed to make client credentials token request: %w", retryErr)}
+				return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsTransportFailure(retryErr), err: fmt.Errorf("failed to make client credentials token request: %w", retryErr), tokenRequest: true}
 			}
 
 			resp = retryResp
@@ -405,21 +400,21 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantUnavailable, err: fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)}
+				return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantUnavailable, err: fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err), tokenRequest: true}
 			}
 
-			return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsStatusFailure(resp.StatusCode), err: fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))}
+			return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsStatusFailure(resp.StatusCode), err: fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes)), tokenRequest: true}
 		}
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantUnavailable, err: fmt.Errorf("failed to read client credentials token response body: %w", err)}
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantUnavailable, err: fmt.Errorf("failed to read client credentials token response body: %w", err), tokenRequest: false}
 	}
 
 	accessToken, expiresIn, err := parseClientCredentialsTokenResponse(bodyBytes)
 	if err != nil {
-		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to parse client credentials token response: %w", err)}
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to parse client credentials token response: %w", err), tokenRequest: false}
 	}
 
 	// If we are passed an expiry value we will use the cache
@@ -444,6 +439,9 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 type clientCredentialsError struct {
 	failure toolconfig.ClientGrantFailure
 	err     error
+
+	// tokenRequest: the token request itself failed, so the caller gets a 401 and a message.
+	tokenRequest bool
 }
 
 func (e *clientCredentialsError) Error() string { return e.err.Error() }
@@ -466,7 +464,7 @@ func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure 
 }
 
 const (
-	clientGrantUnavailableMessage   = "This tool couldn't sign in: its sign-in service didn't answer or had an error. If it keeps happening and you didn't set its sign-in address yourself, ask your administrator."
+	clientGrantUnavailableMessage   = "This tool couldn't sign in: its sign-in service didn't answer or had an error. If it keeps happening, check its sign-in address if you set it yourself, or ask your administrator."
 	clientGrantRejectedMessage      = "This tool couldn't sign in: its sign-in service refused the request. If you didn't set its sign-in details yourself, ask your administrator to check the tool's sign-in setup."
 	clientGrantAddressMessage       = "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it."
 	clientGrantMisconfiguredMessage = "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. If you didn't set its sign-in address yourself, ask your administrator to check it."
