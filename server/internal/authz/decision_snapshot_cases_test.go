@@ -373,17 +373,18 @@ func (b *snapshotBuilder) mcpServerGrantPairs() {
 	b.group("mcp server grant pairs", checks, sets)
 }
 
-// authClients: shared and personal auth clients against grants on one client,
+// authClients: every type of auth client, shared and personal, against grants on one client,
 // on every client in a project, on personal clients and their blocks. The
 // evaluator binds no represented user here, so personal checks are refused.
 func (b *snapshotBuilder) authClients() {
 	var checks []int
 	for _, project := range []string{snapshotProjectA, snapshotProjectB} {
 		for _, client := range []string{"c1", "c2"} {
-			checks = append(checks,
-				b.check(snapshotCheck{Op: "auth_client", ID: client, Kind: AuthClientTypeServiceAccount, Project: project}),
-				b.check(snapshotCheck{Op: "auth_client", ID: client, Kind: AuthClientTypeRemoteSession, Project: project, Dimensions: map[string]string{SelectorKeyConnectionOwner: "u1", SelectorKeyUpstreamClient: "up1"}}),
-			)
+			// Literal names: main does not have constants for every type.
+			for _, clientType := range []string{"service_account", "static_credential", "pass_through", "ema"} {
+				checks = append(checks, b.check(snapshotCheck{Op: "auth_client", ID: client, Kind: clientType, Project: project}))
+			}
+			checks = append(checks, b.check(snapshotCheck{Op: "auth_client", ID: client, Kind: "remote_session", Project: project, Dimensions: map[string]string{SelectorKeyConnectionOwner: "u1", SelectorKeyUpstreamClient: "up1"}}))
 		}
 	}
 	grant := func(principal string, scope Scope, selector Selector) int {

@@ -1221,12 +1221,24 @@
   {"op":"tool_call","id":"s3","project":"p2","tool":"t2","disposition":"open_world"},
   {"op":"tool_call","id":"s3","project":"p2","tool":"t2","disposition":"unannotated"},
   {"op":"auth_client","kind":"service_account","id":"c1","project":"p1"},
+  {"op":"auth_client","kind":"static_credential","id":"c1","project":"p1"},
+  {"op":"auth_client","kind":"pass_through","id":"c1","project":"p1"},
+  {"op":"auth_client","kind":"ema","id":"c1","project":"p1"},
   {"op":"auth_client","kind":"remote_session","id":"c1","dimensions":{"connection_owner":"u1","upstream_client":"up1"},"project":"p1"},
   {"op":"auth_client","kind":"service_account","id":"c2","project":"p1"},
+  {"op":"auth_client","kind":"static_credential","id":"c2","project":"p1"},
+  {"op":"auth_client","kind":"pass_through","id":"c2","project":"p1"},
+  {"op":"auth_client","kind":"ema","id":"c2","project":"p1"},
   {"op":"auth_client","kind":"remote_session","id":"c2","dimensions":{"connection_owner":"u1","upstream_client":"up1"},"project":"p1"},
   {"op":"auth_client","kind":"service_account","id":"c1","project":"p2"},
+  {"op":"auth_client","kind":"static_credential","id":"c1","project":"p2"},
+  {"op":"auth_client","kind":"pass_through","id":"c1","project":"p2"},
+  {"op":"auth_client","kind":"ema","id":"c1","project":"p2"},
   {"op":"auth_client","kind":"remote_session","id":"c1","dimensions":{"connection_owner":"u1","upstream_client":"up1"},"project":"p2"},
   {"op":"auth_client","kind":"service_account","id":"c2","project":"p2"},
+  {"op":"auth_client","kind":"static_credential","id":"c2","project":"p2"},
+  {"op":"auth_client","kind":"pass_through","id":"c2","project":"p2"},
+  {"op":"auth_client","kind":"ema","id":"c2","project":"p2"},
   {"op":"auth_client","kind":"remote_session","id":"c2","dimensions":{"connection_owner":"u1","upstream_client":"up1"},"project":"p2"}
 ],
 "groups": [
@@ -6643,16 +6655,16 @@
     {"grants":[903,1057],"answers":"001111110011001110111111110011111100110011101111111100000000000000000000000000"},
     {"grants":[903,1058],"answers":"001111111100001111011111110011111111000011110111111100000000000000000000000000"}
 ]},
-{"name":"auth clients","checks":[155,156,157,158,159,160,161,162],"sets": [
-    {"grants":[],"answers":"00000000"},
-    {"grants":[1059],"answers":"10001000"},
-    {"grants":[1060],"answers":"10100000"},
-    {"grants":[1061],"answers":"00000000"},
-    {"grants":[4],"answers":"00000000"},
-    {"grants":[1059,1062],"answers":"10001000"},
-    {"grants":[1060,1062],"answers":"00100000"},
-    {"grants":[1061,1062],"answers":"00000000"},
-    {"grants":[4,1062],"answers":"00000000"}
+{"name":"auth clients","checks":[155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174],"sets": [
+    {"grants":[],"answers":"00000000000000000000"},
+    {"grants":[1059],"answers":"11110000001111000000"},
+    {"grants":[1060],"answers":"11110111100000000000"},
+    {"grants":[1061],"answers":"00000000000000000000"},
+    {"grants":[4],"answers":"00000000000000000000"},
+    {"grants":[1059,1062],"answers":"11110000001111000000"},
+    {"grants":[1060,1062],"answers":"00000111100000000000"},
+    {"grants":[1061,1062],"answers":"00000000000000000000"},
+    {"grants":[4,1062],"answers":"00000000000000000000"}
 ]}
 ]
 }
