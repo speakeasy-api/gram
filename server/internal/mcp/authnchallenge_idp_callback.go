@@ -626,6 +626,14 @@ type signInRestart struct {
 	WorkOSOrganizationID string
 }
 
+// reason names why the sign-in restarts, for logs.
+func (r signInRestart) reason() string {
+	if r.MustEnd {
+		return "account_switch"
+	}
+	return "sign_in_revoked"
+}
+
 // restartSignIn ends a WorkOS session, then sends the browser back to
 // authenticate again with a fresh login (OIDC Core 1.0 section 3.1.2.1,
 // prompt=login). A revoked sign-in restarts once (the caller sets
@@ -663,7 +671,7 @@ func (s *Service) restartSignIn(w http.ResponseWriter, r *http.Request, logger *
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
 	}
 	if handoff != "" {
-		logger.InfoContext(ctx, "requiring a fresh login")
+		logger.InfoContext(ctx, "requiring a fresh login", attr.SlogReason(restart.reason()))
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		http.Redirect(w, r, handoff, http.StatusFound)
@@ -688,7 +696,7 @@ func (s *Service) restartSignIn(w http.ResponseWriter, r *http.Request, logger *
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
 		return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 	}
-	logger.InfoContext(ctx, "requiring a fresh login")
+	logger.InfoContext(ctx, "requiring a fresh login", attr.SlogReason(restart.reason()))
 	// A form post continues with GET (RFC 9110 section 15.4.4).
 	status := http.StatusFound
 	if r.Method == http.MethodPost {

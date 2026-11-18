@@ -34,9 +34,10 @@ const switchAccountMinRemaining = 2 * time.Minute
 
 // The switch action's errors: one short sentence each.
 const (
-	switchAccountRetry       = "Speakeasy couldn't start a new sign-in. Try again."
+	switchAccountRetry       = "Speakeasy couldn't start a new sign-in. Go back and try again."
 	switchAccountUnavailable = "This page can't start a new sign-in. Go back and use your own account."
 	switchAccountExpired     = "This page expired; start connecting again."
+	switchAccountTooLate     = "It's too late to switch accounts on this page. Go back and use your own account, or start connecting again."
 	switchAccountChanged     = "This page changed. Go back, reload it, and try again."
 )
 
@@ -146,7 +147,7 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	case err != nil:
 		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
 	case verdict == accountSwitchExpired:
-		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountExpired).LogWarn(ctx, logger))
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountTooLate).LogWarn(ctx, logger))
 	case verdict != accountSwitchOK:
 		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountUnavailable).LogWarn(ctx, logger))
 	}
@@ -162,6 +163,10 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	consumed, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+state.ID)
 	switch {
 	case errors.Is(err, redisCache.ErrCacheMiss):
+		// A second submit of a switch already under way explains the switch.
+		if switched := s.switchedConsentError(ctx, logger, endpoint, state.ID); switched != nil {
+			return switched
+		}
 		return switchRefused(oops.E(oops.CodeBadRequest, err, switchAccountExpired).LogWarn(ctx, logger))
 	case err != nil:
 		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
@@ -183,6 +188,11 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	if focusServer != "" {
 		next.FocusServer = focusServer
 	}
+	// Marked first, so a request racing this one finds why the page is spent.
+	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug, ClientName: clientName}
+	if err := s.accountSwitchCache.Store(context.WithoutCancel(ctx), marker); err != nil {
+		logger.WarnContext(ctx, "mark consent challenge as switched", attr.SlogError(err))
+	}
 	err = s.restartSignIn(w, r, logger, endpoint, next, signInRestart{
 		WorkOSSessionID:      session.WorkOSSessionID,
 		Stage:                mcpmetrics.OAuthFlowStageConsent,
@@ -192,12 +202,10 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	})
 	if err != nil {
 		s.restoreConsentChallenge(r, logger, consumed)
+		if derr := s.accountSwitchCache.DeleteByKey(context.WithoutCancel(ctx), marker.CacheKey()); derr != nil {
+			logger.WarnContext(ctx, "unmark consent challenge as switched", attr.SlogError(derr))
+		}
 		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry))
-	}
-	// The old page's URL, reached again with Back, says why instead of "expired".
-	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug, ClientName: clientName}
-	if err := s.accountSwitchCache.Store(context.WithoutCancel(ctx), marker); err != nil {
-		logger.WarnContext(ctx, "mark consent challenge as switched", attr.SlogError(err))
 	}
 	return nil
 }

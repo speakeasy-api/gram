@@ -37,7 +37,7 @@ const (
 	switchClientState   = "client-state-switch"
 	switchCodeChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 	switchWorkDomain    = "example.test"
-	switchAgainCopy     = "That account is personal too, so Speakeasy can't sign you in to "
+	switchAgainCopy     = "The account you just signed in with is also personal, so Speakeasy can't sign you in to "
 )
 
 // recordingRevoker records the identity provider sessions it ends. Like
@@ -372,7 +372,7 @@ func TestConsentSwitchAccount_OfferedOnlyForAPersonalAccount(t *testing.T) {
 		"switches used up":  {func(s *mcp.AuthnChallengeState) { s.AccountSwitches = 3 }, "This page can't start a new sign-in. Go back and use your own account."},
 		"dashboard connect": {func(s *mcp.AuthnChallengeState) { s.FirstParty = true }, ""},
 		"support session":   {func(s *mcp.AuthnChallengeState) { yes := true; s.AuthorizerImpersonated = &yes }, "This page can't start a new sign-in. Go back and use your own account."},
-		"too old to finish": {func(s *mcp.AuthnChallengeState) { s.CreatedAt = time.Now().Add(-9 * time.Minute) }, "This page expired; start connecting again."},
+		"too old to finish": {func(s *mcp.AuthnChallengeState) { s.CreatedAt = time.Now().Add(-9 * time.Minute) }, "It's too late to switch accounts on this page. Go back and use your own account, or start connecting again."},
 	} {
 		fx.store(t, func(s *mcp.AuthnChallengeState) { reset(s); tc.edit(s) })
 		body := checkCard(t, fx)
@@ -504,9 +504,9 @@ func TestConsentSwitchAccount_EndingTheSessionFailsCleanly(t *testing.T) {
 	fx.revoker.fail(errors.New("identity provider unavailable"))
 
 	_, err := postSwitchAccount(t, fx, nil)
-	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Try again.")
+	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Go back and try again.")
 	require.Equal(t, before, fx.state(t), "the consent page keeps working")
-	requireRefusedSwitchPage(t, fx, "Speakeasy couldn't start a new sign-in. Try again.")
+	requireRefusedSwitchPage(t, fx, "Speakeasy couldn't start a new sign-in. Go back and try again.")
 	require.Equal(t, before, fx.state(t))
 	require.Empty(t, fx.mock.buildAuthURLParams.State, "no sign-in was started")
 
@@ -536,11 +536,35 @@ func TestConsentSwitchAccount_StoreFailureLeavesARetry(t *testing.T) {
 	fault.arm(before.ID)
 
 	_, err := postSwitchAccount(t, fx, nil)
-	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Try again.")
+	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Go back and try again.")
 	require.Equal(t, []string{fx.session}, fx.revoker.sessions(), "the session did end")
 	require.Equal(t, before, fx.state(t), "the page is put back")
 
 	require.Equal(t, 1, switchAccount(t, fx).AccountSwitches, "the retry finds the session already ended and goes on")
+}
+
+// A failure after the rotated challenge is stored, before the redirect, puts the page back; the retry rotates again.
+func TestConsentSwitchAccount_RedirectFailureAfterRotationLeavesARetry(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-url", nil)
+	old := fx.consentActionFixture
+	before := fx.state(t)
+	fx.mock.buildAuthURLErr = errors.New("identity provider unavailable")
+
+	_, err := postSwitchAccount(t, fx, nil)
+	requireSwitchRefused(t, err, oops.CodeUnavailable, "Speakeasy couldn't start a new sign-in. Go back and try again.")
+	require.Equal(t, []string{fx.session}, fx.revoker.sessions(), "the session did end")
+	require.NotEmpty(t, fx.mock.buildAuthURLParams.State, "the rotated challenge was stored before the failure")
+	require.NotEqual(t, before.ID, fx.mock.buildAuthURLParams.State)
+	require.Equal(t, before, fx.state(t), "the page is put back")
+	requireRefusedSwitchPage(t, fx, "Speakeasy couldn't start a new sign-in. Go back and try again.")
+
+	fx.mock.buildAuthURLErr = nil
+	after := switchAccount(t, fx)
+	require.Equal(t, 1, after.AccountSwitches, "the failed try is not counted")
+	require.NotEqual(t, before.ID, after.ID)
+	requireSwitchedPage(t, fx, old, after.ID)
 }
 
 // A company account connects and completes the attempt; another personal account is refused again, and the person is never stranded.
@@ -657,7 +681,7 @@ func requireSwitchedPage(t *testing.T, fx *switchFixture, old consentActionFixtu
 	page := strings.Join(strings.Fields(html.UnescapeString(w.Body.String())), " ")
 	require.Contains(t, page, "New sign-in started")
 	require.Contains(t, page, "You started a new sign-in for this connection.")
-	require.Contains(t, page, `Continue the sign-in you started, or start connecting again from <span class="text-foreground font-medium">Routability Client</span>.`, "with the client's own name")
+	require.Contains(t, page, `If that sign-in is still open, finish it there. Otherwise, start connecting again from <span class="text-foreground font-medium">Routability Client</span>.`, "with the client's own name")
 	require.NotContains(t, page, "Couldn't connect")
 	require.NotContains(t, page, "close this tab")
 	for _, secret := range append([]string{"idp.example.com", fx.workosOrganization, fx.subject.ID + "@" + switchWorkDomain}, secrets...) {

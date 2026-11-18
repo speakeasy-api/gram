@@ -33,7 +33,7 @@ var (
 )
 
 // unmanagedAgainMessage refuses the account a person switched to.
-const unmanagedAgainMessage = "That account is personal too, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal."
+const unmanagedAgainMessage = "The account you just signed in with is also personal, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal."
 
 // consentChainCheckTimeout bounds the page's background exchange; a slower
 // provider reads as unknown and the first tool call retries.
