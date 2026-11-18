@@ -286,6 +286,8 @@ func TestErrHandlersLeaveUnpacedUnavailableWithoutRetryAfter(t *testing.T) {
 		require.Equal(t, http.StatusServiceUnavailable, w.Code, name)
 		require.Empty(t, w.Header().Get("Retry-After"), name)
 	}
+	require.False(t, oops.E(oops.CodeUnavailable, nil, "fix the address").Unpaced().IsTemporary(t.Context()), "waiting won't fix it")
+	require.True(t, oops.E(oops.CodeUnavailable, nil, "down").IsTemporary(t.Context()))
 }
 
 // Chat, webhooks, instance execution and admin keep their own retry contract.
