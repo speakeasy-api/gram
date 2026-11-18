@@ -196,7 +196,7 @@ export function SettingsLayout({
           </ul>
         </nav>
 
-        {/* The frame's bottom padding (`pb-32` in McpDetailFrame) is pulled
+        {/* The frame's bottom padding (`pb-32` in DetailFrame) is pulled
             into the content column, so the index's row runs to the bottom of
             the scroll container and a long index never scrolls out under the
             tabs at the end of the page. */}

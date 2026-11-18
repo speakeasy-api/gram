@@ -1,5 +1,12 @@
-import { useIconDither } from "@/components/icon-dither";
-import { Page } from "@/components/page-layout";
+import {
+  DETAIL_HEADER_CONTROL_BUTTON,
+  DetailFrame,
+  DetailHeaderControls,
+  DetailHeaderLayout,
+  DetailHeaderTitle,
+  DetailHeaderTitleSkeleton,
+  type DetailHeaderControlRow,
+} from "@/components/detail/detail-frame";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { CopyButton } from "@/components/ui/CopyButton";
 import {
@@ -7,9 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { scrollWithinPage } from "@/lib/scroll-within-page";
-import { useIsDarkTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import {
   Check,
@@ -23,15 +28,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { ReadinessIssuesProvider } from "@/components/detail/readiness-issues";
 import type { McpDetailChrome, McpReadinessCheck } from "./mcpDetailChrome";
-import { HEADER_CONTROL_BUTTON } from "./headerControl";
 
 /** Link state that asks the frame to show the section a link lands on. */
 const HIGHLIGHT_STATE = { highlightLinkedSection: true } as const;
 
 /**
  * The frame every MCP detail page shares, servers and gateways alike: the
- * breadcrumb trail, a full-width header over the cards' halftone sea, the page
- * tabs on a white strip, then the active tab's content.
+ * shared detail frame with the server's name, URL and controls in the header.
  *
  * The header's pattern fades out behind the title, so the name and its
  * controls always read on a clean ground in either theme.
@@ -61,193 +64,106 @@ export function McpDetailFrame({
   useHighlightLinkedSection();
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={breadcrumbs.substitutions}
-          skipSegments={breadcrumbs.skipSegments}
+    <DetailFrame
+      breadcrumbs={breadcrumbs}
+      tabsLabel="Server sections"
+      tabs={chrome?.items ?? []}
+      activeTab={activeTab}
+      // Inspect fills the view and scrolls inside itself; it also hides the
+      // floating insights dock the other tabs clear.
+      fill={activeTab === "inspect"}
+      contentRef={contentRef}
+      header={
+        <DetailHeaderLayout
+          title={
+            chrome ? (
+              <TitleBlock chrome={chrome} />
+            ) : (
+              <DetailHeaderTitleSkeleton />
+            )
+          }
+          controls={chrome ? <HeaderControls chrome={chrome} /> : null}
         />
-      </Page.Header>
-
-      {/* No body padding, so the header band and tab strip run edge to edge;
-          each region pads itself to the same column as the tab content. */}
-      {/* The body fills the viewport and only the tab content scrolls, so the
-          header and tabs stay put on every tab. */}
-      <Page.Body fullWidth noPadding overflowHidden className="gap-0">
-        <HeaderBand>
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            {chrome ? <TitleBlock chrome={chrome} /> : <TitleSkeleton />}
-            <div className="flex w-full flex-col items-end gap-4 sm:w-auto sm:pt-1">
-              {chrome ? <HeaderControls chrome={chrome} /> : null}
-            </div>
-          </div>
-        </HeaderBand>
-
-        <nav
-          aria-label="Server sections"
-          className="border-border bg-card shrink-0 border-b"
-        >
-          <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-4 sm:px-8">
-            {(chrome?.items ?? []).map((item) => (
-              <Link
-                key={item.key}
-                to={item.href}
-                aria-current={item.key === activeTab ? "page" : undefined}
-                className={cn(
-                  "relative flex h-12 shrink-0 items-center gap-1.5 text-sm transition-colors hover:no-underline",
-                  item.key === activeTab
-                    ? "text-foreground font-medium after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-current"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {item.titleNode ?? item.title}
-              </Link>
-            ))}
-          </div>
-        </nav>
-
-        {/* data-page-bound marks this as the scroll container, so tab changes
-            reset it to the top (useTabScrollReset). */}
-        <div
-          data-page-bound=""
-          className="min-h-0 w-full flex-1 overflow-y-auto px-4 sm:px-8"
-        >
-          {/* Inspect gets a definite height, so it can fill the view and
-              scroll inside itself. Other tabs grow with their content, so the
-              bottom padding lands after the last card and clears the floating
-              insights dock, which Inspect hides. */}
-          <div
-            ref={contentRef}
-            className={cn(
-              "mx-auto flex w-full max-w-[1270px] flex-col pt-8",
-              activeTab === "inspect" ? "h-full pb-12" : "min-h-full pb-32",
-            )}
-          >
-            <ReadinessIssuesProvider
-              checks={(chrome?.readinessChecks ?? []).filter(
-                (check) => !check.pending,
-              )}
-              pathname={pathname}
-            >
-              {activeTab === "overview" && chrome?.overviewSetup ? (
-                <div className="mb-6">{chrome.overviewSetup}</div>
-              ) : null}
-              {activeTab === "overview" && chrome?.overviewBanner ? (
-                // The banner renders nothing for viewers who can't manage
-                // plugins, so the gap goes with it.
-                <div className="mb-6 empty:hidden">{chrome.overviewBanner}</div>
-              ) : null}
-              {children}
-            </ReadinessIssuesProvider>
-          </div>
-        </div>
-      </Page.Body>
-    </Page>
-  );
-}
-
-/**
- * A full-bleed header with the cards' halftone sea on its right half. The sea
- * dissolves to white on the left, so the title and controls sit on a clean
- * ground instead of on tiles.
- */
-function HeaderBand({ children }: { children: ReactNode }): JSX.Element {
-  // A slow swell rather than the cards' hover shimmer.
-  const { canvasRef, start } = useIconDither({
-    speed: 0.18,
-    stillWhenReduced: true,
-    exclusive: false,
-  });
-  // The sea reads its ink when it starts, so a theme switch restarts it in
-  // the new theme's color.
-  const isDark = useIsDarkTheme();
-  // Starts once laid out.
-  useEffect(() => {
-    const frame = requestAnimationFrame(start);
-    return () => cancelAnimationFrame(frame);
-  }, [start, isDark]);
-
-  return (
-    <header className="border-border bg-card relative isolate shrink-0 overflow-hidden border-b">
-      <canvas
-        ref={canvasRef}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 size-full [mask-image:linear-gradient(to_right,transparent_28%,rgba(0,0,0,0.55)_58%,black_88%)]"
-      />
-      <div className="mx-auto w-full max-w-[1334px] px-4 pt-10 pb-8 sm:px-8">
+      }
+    >
+      <ReadinessIssuesProvider
+        checks={(chrome?.readinessChecks ?? []).filter(
+          (check) => !check.pending,
+        )}
+        pathname={pathname}
+      >
+        {activeTab === "overview" && chrome?.overviewSetup ? (
+          <div className="mb-6">{chrome.overviewSetup}</div>
+        ) : null}
+        {activeTab === "overview" && chrome?.overviewBanner ? (
+          // The banner renders nothing for viewers who can't manage
+          // plugins, so the gap goes with it.
+          <div className="mb-6 empty:hidden">{chrome.overviewBanner}</div>
+        ) : null}
         {children}
-      </div>
-    </header>
+      </ReadinessIssuesProvider>
+    </DetailFrame>
   );
 }
 
 function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
   return (
-    <div className="flex max-w-[640px] min-w-0 flex-col gap-5">
-      <div className="flex min-w-0 items-center gap-4">
-        {chrome.icon("size-10 shrink-0 object-contain")}
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-eyebrow">
-            {chrome.kindLabel ? `Connect · ${chrome.kindLabel}` : "Connect"}
-          </span>
-          {/* Long names wrap rather than run off a narrow screen. */}
-          <h1 className="font-display text-[26px] leading-8 font-light tracking-tight break-words sm:text-[34px] sm:leading-9">
-            {chrome.name}
-          </h1>
-        </div>
-      </div>
-
-      {chrome.primaryUrl || chrome.installLinks.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-          {chrome.primaryUrl ? (
-            <span className="text-muted-foreground flex h-6 min-w-0 items-center gap-1">
-              <span
-                // Mono sits low beside the sans labels; a matching line box
-                // keeps its centre on theirs.
-                className="max-w-[320px] truncate font-mono text-xs leading-6"
-                title={chrome.primaryUrl}
-              >
-                {chrome.primaryUrl.replace(/^https?:\/\//, "")}
+    <DetailHeaderTitle
+      icon={chrome.icon("size-10 shrink-0 object-contain")}
+      eyebrow={chrome.kindLabel ? `Connect · ${chrome.kindLabel}` : "Connect"}
+      name={chrome.name}
+      below={
+        chrome.primaryUrl || chrome.installLinks.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            {chrome.primaryUrl ? (
+              <span className="text-muted-foreground flex h-6 min-w-0 items-center gap-1">
+                <span
+                  // Mono sits low beside the sans labels; a matching line box
+                  // keeps its centre on theirs.
+                  className="max-w-[320px] truncate font-mono text-xs leading-6"
+                  title={chrome.primaryUrl}
+                >
+                  {chrome.primaryUrl.replace(/^https?:\/\//, "")}
+                </span>
+                <CopyButton
+                  text={chrome.primaryUrl}
+                  size="xs"
+                  tooltip="Copy URL"
+                />
+                {chrome.addresses ? (
+                  <AddressList addresses={chrome.addresses} />
+                ) : null}
               </span>
-              <CopyButton
-                text={chrome.primaryUrl}
-                size="xs"
-                tooltip="Copy URL"
-              />
-              {chrome.addresses ? (
-                <AddressList addresses={chrome.addresses} />
-              ) : null}
-            </span>
-          ) : null}
-          {chrome.installLinks.map((link) => (
-            <a
-              key={link.url}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground flex h-6 items-center gap-1 leading-6 hover:no-underline"
-            >
-              {link.label}
-              <ExternalLink className="size-3.5" />
-            </a>
-          ))}
-        </div>
-      ) : null}
-    </div>
+            ) : null}
+            {chrome.installLinks.map((link) => (
+              <a
+                key={link.url}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground flex h-6 items-center gap-1 leading-6 hover:no-underline"
+              >
+                {link.label}
+                <ExternalLink className="size-3.5" />
+              </a>
+            ))}
+          </div>
+        ) : undefined
+      }
+    />
   );
 }
 
 /**
- * The header's controls, stacked on the right: a label, then the same
- * dropdown-style button, for readiness, how it authenticates to the upstream server, and whether
- * agents can connect.
+ * The header's controls: readiness, how it authenticates to the upstream
+ * server, and whether agents can connect.
  */
 function HeaderControls({
   chrome,
 }: {
   chrome: McpDetailChrome;
 }): JSX.Element | null {
-  const rows: { key: string; label: string; control: ReactNode }[] = [];
+  const rows: DetailHeaderControlRow[] = [];
   if (chrome.readinessChecks.length > 0) {
     rows.push({
       key: "readiness",
@@ -264,7 +180,7 @@ function HeaderControls({
           to={chrome.identity.href}
           state={HIGHLIGHT_STATE}
           aria-label={`Upstream auth: ${chrome.identity.label}. Open authentication settings`}
-          className={HEADER_CONTROL_BUTTON}
+          className={DETAIL_HEADER_CONTROL_BUTTON}
         >
           {chrome.identity.tone ? (
             <StatusDot tone={chrome.identity.tone} />
@@ -294,19 +210,7 @@ function HeaderControls({
       ),
     });
   }
-  if (rows.length === 0) return null;
-  return (
-    // A soft wash of the card color behind the rows lifts their labels off
-    // the halftone sea.
-    <dl className="before:bg-card/85 relative isolate grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 before:absolute before:-inset-y-5 before:-right-5 before:-left-12 before:-z-10 before:rounded-3xl before:blur-xl sm:w-[360px]">
-      {rows.map((row) => (
-        <div key={row.key} className="contents">
-          <dt className="text-eyebrow">{row.label}</dt>
-          <dd className="min-w-0">{row.control}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <DetailHeaderControls rows={rows} />;
 }
 
 /** The server's other addresses, one click from the primary one. */
@@ -367,7 +271,7 @@ function ReadinessChip({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className={HEADER_CONTROL_BUTTON}
+        className={DETAIL_HEADER_CONTROL_BUTTON}
         aria-label={
           summary.open.length > 0
             ? `${summary.label}: ${pendingNames}. Open checklist`
@@ -621,16 +525,4 @@ function useHighlightLinkedSection(): void {
     };
     // location.key re-runs it for a second click on the same link.
   }, [highlight, targetId, location.key]);
-}
-
-function TitleSkeleton(): JSX.Element {
-  return (
-    <div className="flex items-center gap-4">
-      <Skeleton className="size-10" />
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-3 w-28" />
-        <Skeleton className="h-8 w-72" />
-      </div>
-    </div>
-  );
 }

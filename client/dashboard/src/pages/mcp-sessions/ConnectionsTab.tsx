@@ -8,8 +8,6 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
-import { ResourceListPage, TabbedPage } from "@/components/page-templates";
-import { RequireScope } from "@/components/require-scope";
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import {
   CONNECTION_GROUPING_LABELS,
@@ -17,22 +15,13 @@ import {
 } from "@/components/connections/groupConnections";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
-import {
-  MCP_SESSIONS_DESCRIPTION,
-  MCP_SESSIONS_TITLE,
-  useMcpSessionsTabs,
-} from "./mcpSessionsTabs";
-import { RemoteSessionRefreshPolicySetting } from "./RemoteSessionRefreshPolicySetting";
 
 const USER_SESSION_FILTERS = defineFilters([
   // Unpinned: the list already splits itself into active and inactive, so a
@@ -40,21 +29,10 @@ const USER_SESSION_FILTERS = defineFilters([
   // "More filters" for the narrower cuts the split does not make — expired
   // versus revoked — and it re-pins itself as a chip once set.
   { id: "status", label: "Status", kind: "select" },
-  {
-    id: "issuerId",
-    label: "MCP server",
-    kind: "select",
-    pinned: true,
-    // `allLabelFor` lowercases the label to pluralize it, which turns MCP into
-    // mcp. Fine for ordinary nouns, wrong for an acronym.
-    allLabel: "All MCP servers",
-  },
-  // Unpinned to keep the bar on one line. Project and MCP server are the two
-  // axes this page is read along; narrowing to one person is a follow-up
-  // question, and the chip appears the moment it is answered.
+  // The provider is the header's picker, not a filter here.
   // "User", not "Identity": the facets endpoint lists only `user:` subjects,
   // so the wider label offered agents and keys the filter cannot select.
-  { id: "subjectUrn", label: "User", kind: "select" },
+  { id: "subjectUrn", label: "User", kind: "select", pinned: true },
 ]);
 
 const STATUS_TOOLBAR_OPTIONS = [
@@ -70,62 +48,17 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
 ];
 
 const CONNECTIONS_DESCRIPTION =
-  "Connections Speakeasy brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one.";
+  "Connections Speakeasy brokers through this provider. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one.";
 
-export default function UserSessions(): JSX.Element {
-  const project = useProject();
-  const flag = useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard);
-  const tabbed = flag.status === "enabled";
-  const tabs = useMcpSessionsTabs();
-
-  // Wait for the flag rather than drawing one layout and swapping to the
-  // other, which would remount the list and drop its search and grouping.
-  if (flag.status === "loading") return <SplashScreen />;
-
-  if (!tabbed) {
-    return (
-      <ResourceListPage
-        scope="project:read"
-        resourceId={project.id}
-        title={MCP_SESSIONS_TITLE}
-        description={CONNECTIONS_DESCRIPTION}
-      >
-        <div className="space-y-8">
-          {/* `Page.Section` stacks two `mb-6`s under the description, which reads
-              as a dropped card when what follows is a surface rather than a
-              toolbar. Pulled back locally rather than changing the shared header,
-              which every list page is spaced against. */}
-          <div className="-mt-6 space-y-4">
-            <RemoteSessionRefreshPolicySetting />
-          </div>
-          <Connections key={project.id} />
-        </div>
-      </ResourceListPage>
-    );
-  }
-
-  // Behind gram-user-session-issuer-dashboard: the connections are the
-  // Overview tab, and the refresh policy moves to Authorization Servers.
-  return (
-    <TabbedPage
-      title={MCP_SESSIONS_TITLE}
-      description={MCP_SESSIONS_DESCRIPTION}
-      tabs={tabs}
-      activeTab="overview"
-    >
-      <RequireScope scope="project:read" resourceId={project.id} level="page">
-        <div className="space-y-6">
-          <p className="text-muted-foreground max-w-3xl text-sm">
-            {CONNECTIONS_DESCRIPTION}
-          </p>
-          <Connections key={project.id} />
-        </div>
-      </RequireScope>
-    </TabbedPage>
-  );
-}
-
-function Connections(): JSX.Element {
+/**
+ * One provider's connections: today's MCP Sessions list, narrowed to the
+ * provider the header's picker chose.
+ */
+export function ConnectionsTab({
+  providerId,
+}: {
+  providerId: string;
+}): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
   const filters = useFilterState(USER_SESSION_FILTERS);
@@ -143,10 +76,6 @@ function Connections(): JSX.Element {
   const optionsById: OptionsById = useMemo(
     () => ({
       status: STATUS_TOOLBAR_OPTIONS,
-      issuerId: (facets?.servers ?? []).map((s) => ({
-        value: s.value,
-        label: s.displayName,
-      })),
       subjectUrn: (facets?.users ?? []).map((u) => ({
         value: u.value,
         label: u.displayName,
@@ -170,7 +99,7 @@ function Connections(): JSX.Element {
       | ListUserSessionsQueryParamStatus
       | undefined,
     subjectUrn: filters.values.subjectUrn ?? undefined,
-    userSessionIssuerId: filters.values.issuerId ?? undefined,
+    userSessionIssuerId: providerId,
   });
   const unresolvedSessions = useMemo(
     () => data?.pages.flatMap((p) => p.result.items) ?? [],
@@ -249,6 +178,9 @@ function Connections(): JSX.Element {
 
   return (
     <div className="space-y-4">
+      <p className="text-muted-foreground max-w-3xl text-sm">
+        {CONNECTIONS_DESCRIPTION}
+      </p>
       <Page.Toolbar>
         <Page.Toolbar.Search
           value={searchQuery}
