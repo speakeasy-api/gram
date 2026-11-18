@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,8 +95,9 @@ func TestIngest_InstallFailureRecordsDiagnosticRowAndCounter(t *testing.T) {
 	point := findInstallFailurePoint(t, rm)
 	require.Equal(t, int64(1), point.Value)
 	for key, want := range map[attr.Key]string{
-		attr.HookInstallCauseKey:   "checksum_mismatch",
-		attr.HookInstallVersionKey: "0.3.46",
+		attr.HookInstallCauseKey: "checksum_mismatch",
+		// The row keeps the exact version; the metric buckets it.
+		attr.HookInstallVersionKey: hookInstallVersionOlder,
 		attr.HookDeviceHarnessKey:  "claude",
 		attr.HookDeviceOSKey:       "darwin",
 		attr.OrganizationSlugKey:   authCtx.OrganizationSlug,
@@ -180,11 +182,24 @@ func TestIngest_DeliveryFailureRejectsInstallFailureBlock(t *testing.T) {
 	require.Contains(t, err.Error(), "data.install_failure is not valid on client.delivery_failed")
 }
 
-func TestBoundedInstallVersionKeepsReleaseShapedVersions(t *testing.T) {
+func TestBoundedInstallVersion(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, plugins.LatestHooksVersion(), boundedInstallVersion(plugins.LatestHooksVersion()))
-	require.Equal(t, "0.3.0", boundedInstallVersion("0.3.0"))
-	require.Equal(t, hookMetricDimensionUnknown, boundedInstallVersion("not a version"))
-	require.Equal(t, hookMetricDimensionUnknown, boundedInstallVersion("dev"))
-	require.Equal(t, hookMetricDimensionUnknown, boundedInstallVersion(""))
+	latest := plugins.LatestHooksVersion()
+	tests := []struct {
+		name, version, want string
+	}{
+		{name: "it keeps the pinned release", version: latest, want: latest},
+		{name: "it buckets an earlier release as older", version: "0.3.0", want: hookInstallVersionOlder},
+		{name: "it buckets an earlier prerelease as older", version: "0.0.1-" + strings.Repeat("x", 32), want: hookInstallVersionOlder},
+		{name: "it drops a release after the pin", version: "999.0.0", want: hookMetricDimensionUnknown},
+		{name: "it drops a non-version", version: "not a version", want: hookMetricDimensionUnknown},
+		{name: "it drops the dev build", version: "dev", want: hookMetricDimensionUnknown},
+		{name: "it drops an empty version", version: "", want: hookMetricDimensionUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, boundedInstallVersion(tt.version))
+		})
+	}
 }

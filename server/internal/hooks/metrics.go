@@ -6,12 +6,14 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const (
@@ -30,6 +32,9 @@ const (
 	// a bucket rather than an absent tag that would make per-dimension totals
 	// disagree with the overall one.
 	hookMetricDimensionUnknown = "unknown"
+	// hookInstallVersionOlder buckets install failures for any release before
+	// the pinned one.
+	hookInstallVersionOlder = "older"
 
 	hookMetricOutcomeAccepted        = "accepted"
 	hookMetricOutcomeFailure         = "failure"
@@ -205,13 +210,26 @@ func boundedDeviceOS(v string) string {
 	return hookMetricDimensionUnknown
 }
 
-// boundedInstallVersion keeps a version only when it has the shape of a
-// release, so scripts pinned to older releases still report their version.
+// boundedInstallVersion keeps the series finite: the pinned release keeps its
+// version, any earlier release becomes "older", and everything else "unknown".
+// The diagnostic row still carries the exact version.
 func boundedInstallVersion(v string) string {
-	if releaseVersionPattern.MatchString(v) {
+	latest := plugins.LatestHooksVersion()
+	if v == latest {
 		return v
 	}
-	return hookMetricDimensionUnknown
+	if !releaseVersionPattern.MatchString(v) {
+		return hookMetricDimensionUnknown
+	}
+	reported, err := semver.NewVersion(v)
+	if err != nil {
+		return hookMetricDimensionUnknown
+	}
+	pinned, err := semver.NewVersion(latest)
+	if err != nil || !reported.LessThan(pinned) {
+		return hookMetricDimensionUnknown
+	}
+	return hookInstallVersionOlder
 }
 
 // boundedBinaryVersion keeps a reported version only when it has the shape
