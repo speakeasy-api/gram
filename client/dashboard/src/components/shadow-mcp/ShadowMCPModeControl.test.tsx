@@ -273,7 +273,7 @@ describe("ShadowMCPModeControl", () => {
     );
   });
 
-  it("says the edit covers everyone until someone is picked", () => {
+  it("says the edit covers everyone once the picker is cleared", () => {
     mocks.policies = [
       {
         id: "policy-1",
