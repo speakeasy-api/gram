@@ -827,10 +827,9 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 			disposition := shadowmcp.EffectiveDisposition(p.ShadowMcpDisposition, p.Sources, p.Action)
 			var blockedURLs []string
 			if disposition == ShadowMCPDispositionAllowAll {
-				blockedURLs, err = loadShadowMCPBlockedURLs(ctx, s.db, organizationID, p.ID.String())
-				if err != nil {
-					return nil, err
-				}
+				// The user's own grants hold the block rules that cover them:
+				// a denial narrowed to people or roles blocks only them.
+				blockedURLs = shadowMCPBlockedURLsFromGrants(grants, p.ID.String())
 			}
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),

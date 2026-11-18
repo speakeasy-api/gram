@@ -3831,7 +3831,13 @@ export function StandardPolicyEditor({
     }
   };
 
-  const categoryCards = allCategories(mode);
+  // Shadow MCP is not a built-in rule: whether a server nobody decided on is
+  // allowed or blocked is set on the Shadow MCP page. A policy that already
+  // carries the detector keeps its card so it can be turned off.
+  const categoryCards = allCategories(mode).filter(
+    (cat) =>
+      cat !== "shadow_mcp" || (policy?.sources.includes("shadow_mcp") ?? false),
+  );
 
   const header = (
     <PolicyHeader

@@ -341,6 +341,8 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// A deployment-wide setting, not part of an organization's features.
+		AssistantsAvailable: nil,
 		// Staff read enforcement through the upstream auth enforcement status.
 		UpstreamAuthEnforced: nil,
 	}
@@ -584,11 +586,11 @@ type adminCallbackWriter struct{ http.ResponseWriter }
 
 func (w *adminCallbackWriter) WriteHeader(status int) {
 	if status == http.StatusTemporaryRedirect {
-		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct_v5 // Only response headers are needed to parse cookies.
 			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
 				continue
 			}
-			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct_v5 // No Domain so middleware controls cookie sharing.
 				Name:     constants.AdminSessionCookie,
 				Path:     "/admin-mcp",
 				Secure:   true,

@@ -19,7 +19,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exhaustruct
+    - exhaustruct_v5
     - exptostd
     - forcetypeassert
     - gochecksumtype
@@ -90,6 +90,6 @@ linters:
         - mapliteral
       default-signifies-exhaustive: true
 
-    exhaustruct:
-      exclude:
+    exhaustruct_v5:
+      ignore-patterns:
         - '^github.com/speakeasy-api/gram/plog\.Theme$'

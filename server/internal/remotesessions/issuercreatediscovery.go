@@ -79,7 +79,7 @@ func (s *Service) recordCreateDiscovery(ctx context.Context, logger *slog.Logger
 		return
 	}
 	// Same key-set gate as refresh; the set itself is fetched again on first use.
-	if _, err := refreshIssuerKeySet(ctx, s.jwksResolver, tunnel, doc.JwksURI, repo.RemoteSessionIssuer{}); err != nil { //nolint:exhaustruct // No stored key set to reuse on create.
+	if _, err := refreshIssuerKeySet(ctx, s.jwksResolver, tunnel, doc.JwksURI, repo.RemoteSessionIssuer{}); err != nil { //nolint:exhaustruct_v5 // No stored key set to reuse on create.
 		logger.InfoContext(ctx, "create-time issuer key set validation failed; creating undiscovered", attr.SlogError(err))
 		return
 	}

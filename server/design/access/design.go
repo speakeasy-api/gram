@@ -676,6 +676,26 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateShadowMCPInventoryServerName", "type": "mutation"}`)
 	})
 
+	Method("setShadowMCPOfficialServer", func() {
+		Description("Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetShadowMCPOfficialServerForm)
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.setShadowMCPOfficialServer")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetShadowMCPOfficialServer", "type": "mutation"}`)
+	})
+
 	Method("listShadowMCPInventoryUsers", func() {
 		Description("List users with observed telemetry usage for one project-scoped Shadow MCP server URL.")
 		Security(security.Session)
@@ -1801,6 +1821,46 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
+	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
+		Description("The MCP server linked as this Shadow MCP server's official version. While the link is on, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+	})
+	Attribute("suggested_official_server", ShadowMCPSuggestedOfficialServerModel, func() {
+		Description("A project MCP server that proxies to the same upstream URL, offered as the server to link. Present only while no official server is linked.")
+	})
+})
+
+var ShadowMCPSuggestedOfficialServerModel = Type("ShadowMCPSuggestedOfficialServer", func() {
+	Description("A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.")
+	Required("mcp_server_id", "name")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The server's display name.")
+	Attribute("slug", String, "The server's slug, when it has one.")
+})
+
+var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
+	Description("The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.")
+	Required("mcp_server_id", "name", "direct_access_allowed")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The official server's display name.")
+	Attribute("slug", String, "The official server's slug, when it has one.")
+	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
+	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
+	Attribute("direct_access_allowed", Boolean, "True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.")
+})
+
+var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func() {
+	Required("project_id", "server_url", "allow_direct_access")
+
+	Attribute("project_id", String, func() { Format(FormatUUID) })
+	Attribute("server_url", String, "The Shadow MCP server's URL.", func() { Format(FormatURI) })
+	Attribute("mcp_server_id", String, "The MCP server to link as the official version. Omit it to remove the link.", func() { Format(FormatUUID) })
+	Attribute("allow_direct_access", Boolean, "Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {

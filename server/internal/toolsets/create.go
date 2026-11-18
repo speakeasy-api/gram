@@ -1,4 +1,4 @@
-//nolint:exhaustruct // The audit actor carries only the identity a toolset creation records.
+//nolint:exhaustruct_v5 // The audit actor carries only the identity a toolset creation records.
 package toolsets
 
 import (

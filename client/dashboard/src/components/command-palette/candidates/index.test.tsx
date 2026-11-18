@@ -2,9 +2,11 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  assistantsAvailable: true,
   scopes: [] as string[],
   grants: [] as unknown[],
   gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
+  shadowMCPServerOptions: [] as Array<{ enabled: boolean }>,
   indexFallback: true,
   failedKinds: [] as string[],
   indexCandidates: [] as unknown[],
@@ -61,6 +63,10 @@ const mocks = vi.hoisted(() => ({
   calls: {} as Record<string, unknown[]>,
 }));
 
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => mocks.assistantsAvailable,
+}));
+
 vi.mock("./useResourceSearchCandidates", () => ({
   createGrantFingerprint: (grants: unknown[]) => JSON.stringify(grants),
   useResourceSearchCandidates: (options: {
@@ -104,6 +110,26 @@ vi.mock("./useGatewayConnectionCandidates", () => ({
   useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
     mocks.gatewayCandidateOptions.push(options);
     return [];
+  },
+}));
+
+vi.mock("./useShadowMCPServerCandidates", () => ({
+  useShadowMCPServerCandidates: (options: { enabled: boolean }) => {
+    mocks.shadowMCPServerOptions.push(options);
+    return options.enabled
+      ? [
+          {
+            id: "shadow_mcp_server:notion",
+            kind: "shadow_mcp_server",
+            title: "Notion",
+            detail: "Shadow MCP",
+            keywords: [],
+            verbs: ["open"],
+            group: "Shadow MCP Servers",
+            run: () => undefined,
+          },
+        ]
+      : [];
   },
 }));
 
@@ -463,6 +489,7 @@ function acme(projects: ReturnType<typeof project>[]) {
 }
 
 beforeEach(() => {
+  mocks.assistantsAvailable = true;
   mocks.scopes = [];
   mocks.grants = [];
   mocks.indexFallback = true;
@@ -1428,6 +1455,23 @@ describe("useRecentCandidates", () => {
     expect(byKind(result.current, "recent")).toHaveLength(0);
   });
 
+  it("does not offer stored Chat or Assistants visits on a deployment without assistants", () => {
+    mocks.assistantsAvailable = false;
+    mocks.recents = [
+      { label: "Chat", href: "/acme/projects/default/chat", visitedAt: 1 },
+      {
+        label: "Support assistant",
+        href: "/acme/projects/default/assistants/assistant-a",
+        visitedAt: 2,
+      },
+      { label: "Slack", href: "/acme/mcp/slack", visitedAt: 3 },
+    ];
+    const { result } = renderCandidates();
+    expect(byKind(result.current, "recent").map((c) => c.title)).toEqual([
+      "Slack",
+    ]);
+  });
+
   // The stored entries are keyed per user, and until the session resolves
   // whatever the hook last read belongs to somebody else's key.
   it("yields nothing, and does not read, until the user id has resolved", () => {
@@ -1542,14 +1586,29 @@ describe("usePolicyCandidates", () => {
     {
       id: "p-1",
       name: "Block secrets",
+      enabled: true,
+      sources: ["gitleaks"],
       action: "block",
       policyType: "standard",
     },
     {
       id: "p-2",
       name: "No customer data",
+      enabled: true,
+      sources: [],
       action: "flag",
       policyType: "prompt_based",
+    },
+    // The policy behind the Shadow MCP page's "blocked by default" setting.
+    // Guardrails does not list it, so the palette does not either.
+    {
+      id: "p-3",
+      name: "Shadow MCP",
+      enabled: true,
+      sources: ["shadow_mcp"],
+      action: "block",
+      policyType: "standard",
+      shadowMcpDisposition: "block_all",
     },
   ];
 
@@ -1609,6 +1668,48 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
+  // The Shadow MCP page's own gate: org admins, inside a project, palette
+  // open, and a query long enough to load remote inventories.
+  it.each([
+    {
+      scopes: ["org:admin", "project:read"],
+      enabled: true,
+      query: "resource",
+      expected: true,
+    },
+    {
+      scopes: ["org:read", "project:read"],
+      enabled: true,
+      query: "resource",
+      expected: false,
+    },
+    {
+      scopes: ["org:admin", "project:read"],
+      enabled: false,
+      query: "resource",
+      expected: false,
+    },
+    {
+      scopes: ["org:admin", "project:read"],
+      enabled: true,
+      query: "r",
+      expected: false,
+    },
+  ])(
+    "offers Shadow MCP servers only to org admins with a search query (%o)",
+    ({ scopes, enabled, query, expected }) => {
+      mocks.scopes = scopes;
+      const { result } = renderCandidates({ enabled, query });
+
+      expect(mocks.shadowMCPServerOptions.at(-1)).toEqual({
+        enabled: expected,
+      });
+      expect(result.current.some((c) => c.kind === "shadow_mcp_server")).toBe(
+        expected,
+      );
+    },
+  );
+
   it("registers gateway discovery with the palette open state", () => {
     renderCandidates({ enabled: false });
     expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
@@ -1646,6 +1747,7 @@ describe("useLauncherCandidates", () => {
       "gateway",
       "catalog",
       "rule",
+      "shadow_mcp_server",
       "project",
     ]);
   });
@@ -1724,6 +1826,28 @@ describe("useLauncherCandidates", () => {
       false,
     );
     expect(optionsOf(mocks.calls.useMcpServers?.at(-1)).enabled).toBe(true);
+  });
+
+  it("offers no assistants on a deployment without assistants", () => {
+    mocks.assistantsAvailable = false;
+    mocks.indexFallback = false;
+    mocks.failedKinds = ["assistant"];
+    mocks.scopes = ["assistant:read"];
+    mocks.indexCandidates = [
+      {
+        id: "assistant:assistant-a",
+        kind: "assistant",
+        title: "Support Assistant",
+        group: "Assistants",
+        run: vi.fn(),
+      },
+    ];
+    const { result } = renderCandidates();
+
+    expect(optionsOf(mocks.calls.useAssistantsList?.at(-1)).enabled).toBe(
+      false,
+    );
+    expect(byKind(result.current, "assistant")).toHaveLength(0);
   });
 
   it("deduplicates remote MCP open rows in favor of specialized local rows", () => {

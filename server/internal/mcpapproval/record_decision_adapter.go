@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -47,12 +46,8 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		}
 		reportID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
+	// DecideInTransaction reads an empty audience as everyone.
 	granted := payload.GrantedPrincipalUrns
-	if payload.Decision == decisionDenied {
-		granted = []string{}
-	} else if len(granted) == 0 {
-		granted = []string{authz.AllUsersPrincipal().String()}
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)

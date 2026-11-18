@@ -76,12 +76,12 @@ func (r *LocalTokenReviewer) Create(_ context.Context, review *authenticationv1.
 	result := review.DeepCopy()
 	audiences, subject, err := r.verify(review.Spec.Token, review.Spec.Audiences)
 	if err != nil {
-		//nolint:exhaustruct // a rejected review carries only the error, as the Kubernetes API does.
+		//nolint:exhaustruct_v5 // a rejected review carries only the error, as the Kubernetes API does.
 		result.Status = authenticationv1.TokenReviewStatus{Authenticated: false, Error: err.Error()}
 		return result, nil
 	}
 
-	//nolint:exhaustruct // service-account tokens carry no UID, groups or extra attributes here.
+	//nolint:exhaustruct_v5 // service-account tokens carry no UID, groups or extra attributes here.
 	result.Status = authenticationv1.TokenReviewStatus{
 		Authenticated: true,
 		User:          authenticationv1.UserInfo{Username: subject},
@@ -91,7 +91,7 @@ func (r *LocalTokenReviewer) Create(_ context.Context, review *authenticationv1.
 }
 
 func (r *LocalTokenReviewer) verify(token string, requested []string) ([]string, string, error) {
-	claims := jwt.RegisteredClaims{} //nolint:exhaustruct // populated by the parser
+	claims := jwt.RegisteredClaims{} //nolint:exhaustruct_v5 // populated by the parser
 	_, err := jwt.ParseWithClaims(token, &claims, func(*jwt.Token) (any, error) { return r.key, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 		jwt.WithIssuer(LocalTokenIssuer),
@@ -145,7 +145,7 @@ func MintLocalToken(key []byte, claims LocalTokenClaims, now time.Time) (string,
 		return "", fmt.Errorf("local attestation token identity: %w", err)
 	}
 
-	//nolint:exhaustruct // JWT ID and not-before are not used by attestation.
+	//nolint:exhaustruct_v5 // JWT ID and not-before are not used by attestation.
 	registered := jwt.RegisteredClaims{
 		Issuer:    LocalTokenIssuer,
 		Subject:   subject,
