@@ -77,10 +77,11 @@ func routePathForSlug(t *testing.T, pattern, slug string) string {
 // otherwise be served uninstrumented with nothing to signal it. The list of
 // endpoints is maintained by hand: a new MCP endpoint must be added here.
 //
-// Every MCP endpoint mounts all three Streamable HTTP verbs, and the protocol
-// version is carried on all of them: POST for JSON-RPC messages, GET for the
-// standalone SSE stream, DELETE for session termination. Asserting the full
-// cross-product keeps a verb-specific gap from hiding behind a passing POST.
+// Every slug-addressed MCP endpoint mounts all three Streamable HTTP verbs,
+// and the protocol version is carried on all of them: POST for JSON-RPC
+// messages, GET for the standalone SSE stream, DELETE for session termination.
+// Asserting the full cross-product keeps a verb-specific gap from hiding behind
+// a passing POST.
 func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 	t.Parallel()
 
