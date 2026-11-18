@@ -43,6 +43,11 @@ const KBD_CLASS =
   "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 border px-1.5 font-mono text-[10px] font-medium select-none";
 
 const ASK_AI_VALUE = "__ask_ai__";
+// Keep broad terms (for example a popular integration name) from mounting an
+// unbounded number of cmdk rows. The server contract is already bounded to 40
+// results globally; applying the same ceiling after local ranking also covers
+// page actions, catalog entries, recents, and specialized MCP actions.
+const MAX_VISIBLE_SEARCH_RESULTS = 40;
 
 /** A candidate displayed by the palette. */
 interface DisplayRow {
@@ -328,8 +333,12 @@ export function CommandPalette(): JSX.Element {
     if (!isOpen || !hasQuery) return null;
 
     const startedAt = performance.now();
-    const rows = rank(prefilter(trimmedQuery, candidates));
-    return { rows, duration: performance.now() - startedAt };
+    const rankedRows = rank(prefilter(trimmedQuery, candidates));
+    return {
+      rows: rankedRows.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
+      total: rankedRows.length,
+      duration: performance.now() - startedAt,
+    };
   }, [candidates, hasQuery, isOpen, trimmedQuery]);
   const rows = ranked?.rows ?? EMPTY_ROWS;
   const idle = useMemo(() => idleRows(candidates), [candidates]);
@@ -545,6 +554,12 @@ export function CommandPalette(): JSX.Element {
               <div className="py-6 text-center text-sm">No results found.</div>
             )}
             <RankedRows rows={rows} {...rowGroupProps} />
+            {ranked !== null && ranked.total > rows.length && (
+              <div className="text-muted-foreground px-3 py-2 text-center text-xs">
+                Showing top {rows.length} of {ranked.total} results. Refine your
+                search to see more.
+              </div>
+            )}
             {askAiGroup}
           </>
         )}

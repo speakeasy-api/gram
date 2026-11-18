@@ -19,6 +19,7 @@ type CandidateKind =
   | "policy"
   | "rule"
   | "access_request"
+  | "shadow_mcp_server"
   | "person"
   | "project";
 

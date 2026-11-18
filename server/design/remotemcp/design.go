@@ -571,6 +571,9 @@ var ProbeURLResult = Type("ProbeURLResult", func() {
 	})
 	Attribute("http_status", Int, "HTTP status returned by the remote server. Required for invalid_mcp_response and present for HTTP-based unreachable outcomes.")
 	Attribute("reason", String, "Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.")
+	Attribute("sign_in_setup", String, "How Speakeasy can register as a client with the server's sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider's metadata could not be read).", func() {
+		Enum("dcr", "cimd", "manual", "unknown")
+	})
 
 	Required("outcome")
 })

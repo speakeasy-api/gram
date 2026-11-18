@@ -7,10 +7,6 @@ import {
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
-import {
-  policyCenterTabLabel,
-  policyCenterTabSearch,
-} from "@/pages/security/policy-center-tabs";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +27,11 @@ import {
   MoreToggle,
   useCollapsedPreview,
 } from "@/components/ui/collapsible-preview";
+import { OfficialServerPanel } from "@/components/shadow-mcp/OfficialServerPanel";
+import {
+  SHADOW_MCP_OFFICIAL_STATE_LABEL,
+  shadowMCPOfficialState,
+} from "@/components/shadow-mcp/shadowMCPOfficialServer";
 import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
@@ -177,16 +178,28 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
  */
 function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
+  // The same rule as the inventory row: a linked server reads as onboarded
+  // unless someone is waiting on a request for the direct URL.
+  // Where it is served is the panel's job, so the tile only names the state.
+  const officialState = shadowMCPOfficialState(server, status === "pending");
 
   return (
     <MetricCard.Group className="flex-wrap">
       <MetricCard
         label="Status"
-        value={shadowMCPInventoryStatusLabel(status)}
-        tone={statusTone(status)}
+        value={
+          officialState
+            ? SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]
+            : shadowMCPInventoryStatusLabel(status)
+        }
+        tone={officialState ? "success" : statusTone(status)}
         size="xs"
         className={SUMMARY_TILE_CLASS}
-        description={shadowMCPInventoryStatusDescription(server)}
+        description={
+          officialState
+            ? "Linked to an official server"
+            : shadowMCPInventoryStatusDescription(server)
+        }
       />
       {/* First-seen rides under the call count rather than taking a tile of
           its own: it is the span those calls happened over, not a figure
@@ -691,18 +704,17 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   return (
     <Page>
       <Page.Header>
-        {/* The page is opened from the MCP approvals tab of Guardrails, where
-            the sidebar puts it too, so the trail names that tab rather than
-            the retired Shadow AI section its URL still carries. */}
+        {/* The page is opened from the Shadow MCP page, where the sidebar
+            puts it too, so the trail leads back there rather than through
+            the Shadow AI section its URL still carries. */}
         <Page.Header.Breadcrumbs
+          skipSegments={["shadow-ai"]}
           substitutions={{
-            "shadow-ai": routes.policyCenter.title,
-            mcps: policyCenterTabLabel("mcp-approvals"),
+            mcps: routes.shadowMCP.title,
             [serverSlug]: server?.serverName || server?.urlHost,
           }}
           urlSubstitutions={{
-            "/shadow-ai": `/${routes.policyCenter.url}`,
-            "/shadow-ai/mcps": `/${routes.policyCenter.url}${policyCenterTabSearch("mcp-approvals")}`,
+            "/shadow-ai/mcps": `/${routes.shadowMCP.url}`,
           }}
         />
       </Page.Header>
@@ -758,6 +770,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     members={membersQuery.data?.members ?? []}
                     roles={rolesQuery.data?.roles ?? []}
                   />
+                  {/* First on the page: turning the server into an official
+                      one is the outcome the inventory leads to, and the
+                      review below is the evidence for it. */}
+                  <OfficialServerPanel server={server} />
                   <section className="min-h-0 space-y-3">
                     {/* The review owns its own heading: the request's status
                         shares that row, and only the review has it. Observed

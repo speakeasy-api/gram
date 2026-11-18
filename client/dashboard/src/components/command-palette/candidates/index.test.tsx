@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
   grants: [] as unknown[],
   gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
+  shadowMCPServerOptions: [] as Array<{ enabled: boolean }>,
   indexFallback: true,
   failedKinds: [] as string[],
   indexCandidates: [] as unknown[],
@@ -104,6 +105,26 @@ vi.mock("./useGatewayConnectionCandidates", () => ({
   useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
     mocks.gatewayCandidateOptions.push(options);
     return [];
+  },
+}));
+
+vi.mock("./useShadowMCPServerCandidates", () => ({
+  useShadowMCPServerCandidates: (options: { enabled: boolean }) => {
+    mocks.shadowMCPServerOptions.push(options);
+    return options.enabled
+      ? [
+          {
+            id: "shadow_mcp_server:notion",
+            kind: "shadow_mcp_server",
+            title: "Notion",
+            detail: "Shadow MCP",
+            keywords: [],
+            verbs: ["open"],
+            group: "Shadow MCP Servers",
+            run: () => undefined,
+          },
+        ]
+      : [];
   },
 }));
 
@@ -1542,14 +1563,29 @@ describe("usePolicyCandidates", () => {
     {
       id: "p-1",
       name: "Block secrets",
+      enabled: true,
+      sources: ["gitleaks"],
       action: "block",
       policyType: "standard",
     },
     {
       id: "p-2",
       name: "No customer data",
+      enabled: true,
+      sources: [],
       action: "flag",
       policyType: "prompt_based",
+    },
+    // The policy behind the Shadow MCP page's "blocked by default" setting.
+    // Guardrails does not list it, so the palette does not either.
+    {
+      id: "p-3",
+      name: "Shadow MCP",
+      enabled: true,
+      sources: ["shadow_mcp"],
+      action: "block",
+      policyType: "standard",
+      shadowMcpDisposition: "block_all",
     },
   ];
 
@@ -1609,6 +1645,48 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
+  // The Shadow MCP page's own gate: org admins, inside a project, palette
+  // open, and a query long enough to load remote inventories.
+  it.each([
+    {
+      scopes: ["org:admin", "project:read"],
+      enabled: true,
+      query: "resource",
+      expected: true,
+    },
+    {
+      scopes: ["org:read", "project:read"],
+      enabled: true,
+      query: "resource",
+      expected: false,
+    },
+    {
+      scopes: ["org:admin", "project:read"],
+      enabled: false,
+      query: "resource",
+      expected: false,
+    },
+    {
+      scopes: ["org:admin", "project:read"],
+      enabled: true,
+      query: "r",
+      expected: false,
+    },
+  ])(
+    "offers Shadow MCP servers only to org admins with a search query (%o)",
+    ({ scopes, enabled, query, expected }) => {
+      mocks.scopes = scopes;
+      const { result } = renderCandidates({ enabled, query });
+
+      expect(mocks.shadowMCPServerOptions.at(-1)).toEqual({
+        enabled: expected,
+      });
+      expect(result.current.some((c) => c.kind === "shadow_mcp_server")).toBe(
+        expected,
+      );
+    },
+  );
+
   it("registers gateway discovery with the palette open state", () => {
     renderCandidates({ enabled: false });
     expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
@@ -1646,6 +1724,7 @@ describe("useLauncherCandidates", () => {
       "gateway",
       "catalog",
       "rule",
+      "shadow_mcp_server",
       "project",
     ]);
   });

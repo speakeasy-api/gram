@@ -73,6 +73,7 @@ trackedFiles:
   src/funcs/accessSetAIToolDecision.ts: {}
   src/funcs/accessSetDirectoryRoleMappings.ts: {}
   src/funcs/accessSetResourceAudience.ts: {}
+  src/funcs/accessSetShadowMCPOfficialServer.ts: {}
   src/funcs/accessSyncDirectoryGroups.ts: {}
   src/funcs/accessUpdateDirectoryReviewSettings.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
@@ -1988,6 +1989,7 @@ trackedFiles:
   src/models/components/setscheduleenabledrequestbody.ts: {}
   src/models/components/setserverscopepinrequestbody.ts: {}
   src/models/components/setsetupguidecompletedrequestbody.ts: {}
+  src/models/components/setshadowmcpofficialserverform.ts: {}
   src/models/components/setslackdirectorydefaultprojectrequestbody.ts: {}
   src/models/components/setslackidentitymappingrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
@@ -2007,6 +2009,8 @@ trackedFiles:
   src/models/components/shadowmcpinventoryurlstate.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/shadowmcpinventoryusersource.ts: {}
+  src/models/components/shadowmcpofficialserver.ts: {}
+  src/models/components/shadowmcpsuggestedofficialserver.ts: {}
   src/models/components/sharedskill2.ts: {}
   src/models/components/shareskillrequestbody.ts: {}
   src/models/components/sigintsensor.ts: {}
@@ -3054,6 +3058,7 @@ trackedFiles:
   src/models/operations/setremotesessionautorefreshpolicy.ts: {}
   src/models/operations/setresourceaudience.ts: {}
   src/models/operations/setrootmcpendpoint.ts: {}
+  src/models/operations/setshadowmcpofficialserver.ts: {}
   src/models/operations/setslackdirectorydefaultproject.ts: {}
   src/models/operations/setslackidentitymapping.ts: {}
   src/models/operations/setsourceenvironmentlink.ts: {}
@@ -4205,6 +4210,7 @@ trackedFiles:
   src/react-query/setRemoteSessionAutoRefreshPolicy.ts: {}
   src/react-query/setResourceAudience.ts: {}
   src/react-query/setRootMcpEndpoint.ts: {}
+  src/react-query/setShadowMCPOfficialServer.ts: {}
   src/react-query/setSlackDirectoryDefaultProject.ts: {}
   src/react-query/setSlackIdentityMapping.ts: {}
   src/react-query/setSourceEnvironmentLink.ts: {}
@@ -13624,6 +13630,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  setShadowMCPOfficialServer:
+    speakeasy-default-set-shadow-MCP-official-server:
+      requestBody:
+        application/json: {"allow_direct_access": true, "project_id": "040ef24d-51e0-4646-85b6-c7b50843c53a", "server_url": "https://super-behest.net"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   setSlackDirectoryDefaultProject:
     speakeasy-default-set-slack-directory-default-project:
       requestBody:

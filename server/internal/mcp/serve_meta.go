@@ -769,14 +769,30 @@ func (s *Service) handleMetaListServersCall(
 		})
 	}
 
-	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, ConnectURL: "", Note: ""}
-	for _, member := range catalogSelectedMembers(gate, gate.hiddenMembers) {
+	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, Unapproved: nil, ConnectURL: "", Note: ""}
+	// A tool selection narrows the approved hidden members like the served
+	// ones; a hidden member outside the approval has no selection to narrow.
+	// A hidden member outside the approval is listed under both: showing it
+	// again does not approve it.
+	hidden, unapproved := gate.hiddenMembers, gate.unapprovedMembers
+	if gate.catalog != nil {
+		approvedHidden, unapprovedHidden := gate.catalog.approvedMembers(hidden)
+		hidden = slices.Concat(catalogSelectedMembers(gate, approvedHidden), unapprovedHidden)
+		unapproved = slices.Concat(unapproved, unapprovedHidden)
+	}
+	for _, member := range hidden {
 		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
 	}
-	notes := make([]string, 0, 2)
+	for _, member := range unapproved {
+		result.Unapproved = append(result.Unapproved, metamcp.UnapprovedServer{Slug: member.slug, Name: member.name})
+	}
+	notes := make([]string, 0, 3)
 	if len(result.Hidden) > 0 && gate.connectURL != "" {
 		result.ConnectURL = gate.connectURL
 		notes = append(notes, metamcp.HiddenNote)
+	}
+	if len(result.Unapproved) > 0 {
+		notes = append(notes, metamcp.UnapprovedNote)
 	}
 	if slices.ContainsFunc(servers, func(server metamcp.ListedServer) bool { return server.Status == metamcp.StatusUnknown }) {
 		notes = append(notes, metamcp.UnknownNote)
