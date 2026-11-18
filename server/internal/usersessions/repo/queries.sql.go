@@ -467,6 +467,7 @@ JOIN principal_remote_session_bindings AS target
   ON target.project_id = source.project_id
  AND target.principal_id = source.principal_id
  AND target.remote_session_client_id = source.remote_session_client_id
+ AND target.remote_session_id <> source.remote_session_id
  AND target.user_session_issuer_id = $1
  AND target.revoked_at IS NULL
 WHERE source.user_session_issuer_id = $2
@@ -491,6 +492,9 @@ type CountUserSessionIssuerPrincipalBindingConflictsParams struct {
 	OrganizationID string
 }
 
+// An agent attached to the same client on both issuers blocks the merge only
+// when the two attachments use different logins: merging would silently swap
+// the agent's credential. On the same login the target's attachment is kept.
 func (q *Queries) CountUserSessionIssuerPrincipalBindingConflicts(ctx context.Context, arg CountUserSessionIssuerPrincipalBindingConflictsParams) (int32, error) {
 	row := q.db.QueryRow(ctx, countUserSessionIssuerPrincipalBindingConflicts, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	var column_1 int32
@@ -8120,6 +8124,16 @@ WHERE binding.user_session_issuer_id = $2
     WHERE link.remote_session_client_id = binding.remote_session_client_id
       AND link.user_session_issuer_id = $1
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_remote_session_bindings AS target
+    WHERE target.project_id = binding.project_id
+      AND target.principal_id = binding.principal_id
+      AND target.remote_session_client_id = binding.remote_session_client_id
+      AND target.remote_session_id = binding.remote_session_id
+      AND target.user_session_issuer_id = $1
+      AND target.revoked_at IS NULL
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -8143,7 +8157,8 @@ type UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams struct {
 // need not share its connection's issuer, so moving the connections does not
 // move it. Only live connections of live clients the target now binds come
 // along, as only live connections move; the rest leave with the source's
-// client bindings.
+// client bindings. So does an attachment the target already holds on the same
+// login, so the agent keeps exactly one active attachment for it.
 func (q *Queries) UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx context.Context, arg UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updatePrincipalRemoteSessionBindingsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
