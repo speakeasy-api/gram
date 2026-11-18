@@ -129,7 +129,7 @@ export function OverviewTab({
 
   return (
     <div className="space-y-10 pb-8">
-      {activityPage?.loggingEnabled === false ? null : problems.isPending ? (
+      {activityPage?.loggingEnabled !== true ? null : problems.isPending ? (
         <Skeleton className="h-40 w-full" />
       ) : (
         <SuspectedProblems
@@ -173,6 +173,16 @@ export function OverviewTab({
         )}
         sessionsHref={routes.mcpSessions.provider.connections.href(providerId)}
       />
+
+      {killswitches.isError || denied.isError ? (
+        <p className="text-muted-foreground text-sm">
+          {killswitches.isError && denied.isError
+            ? "Couldn't load killswitches or denied clients."
+            : killswitches.isError
+              ? "Couldn't load killswitches."
+              : "Couldn't load denied clients."}
+        </p>
+      ) : null}
 
       {activeKillswitches.length > 0 || deniedClients.length > 0 ? (
         <div className="grid gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
@@ -247,7 +257,11 @@ export function OverviewTab({
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />
       <ProblemDetailSheet
-        id={searchParams.get(PROBLEM_PARAM)}
+        id={
+          activityPage?.loggingEnabled === true
+            ? searchParams.get(PROBLEM_PARAM)
+            : null
+        }
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}
@@ -336,7 +350,12 @@ function KillswitchesInForce({
         key: "servers",
         header: "Servers",
         width: "1fr",
-        render: (k) => scopeLabel(k.scope, serverNames),
+        render: (k) =>
+          k.scope.type === "selected_servers" && !servers.isSuccess
+            ? servers.isPending
+              ? ""
+              : "Unknown servers"
+            : scopeLabel(k.scope, serverNames),
       },
       {
         key: "until",
@@ -345,7 +364,14 @@ function KillswitchesInForce({
         render: (k) => (k.until ? formatDayMonth(k.until) : "No end date"),
       },
     ];
-  }, [members.data, members.isPending, members.isError, servers.data]);
+  }, [
+    members.data,
+    members.isPending,
+    members.isError,
+    servers.data,
+    servers.isSuccess,
+    servers.isPending,
+  ]);
   return (
     <OverviewSection
       title={`Killswitches in force · ${killswitches.length}`}
@@ -460,7 +486,7 @@ function Configuration({
     ["Mode", authorizationServerModeLabel(provider)],
     [
       "Enterprise Managed Auth",
-      provider.trustedRemoteSessionClientId ? "On" : "Off",
+      provider.trustedRemoteSessionIssuerId ? "On" : "Off",
     ],
   ];
   return (

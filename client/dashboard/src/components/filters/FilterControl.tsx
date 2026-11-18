@@ -1,3 +1,4 @@
+import type { DateRangePreset } from "@/elements";
 import { calendarDateRangeValue } from "./filter-schema";
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
@@ -153,6 +154,7 @@ export function FilterControl({
       return (
         <DateRangeControl
           value={value as DateRangeValue}
+          presets={dim.presets}
           defaultPreset={dim.defaultPreset ?? null}
           onChange={onChange}
           projectSlug={projectSlug}
@@ -164,12 +166,14 @@ export function FilterControl({
 
 function DateRangeControl({
   value,
+  presets,
   defaultPreset,
   onChange,
   projectSlug,
   className,
 }: {
   value: DateRangeValue;
+  presets?: readonly DateRangePreset[];
   defaultPreset: DateRangeValue["preset"];
   onChange: (value: DateRangeValue) => void;
   projectSlug?: string;
@@ -177,6 +181,7 @@ function DateRangeControl({
 }): JSX.Element {
   return (
     <TimeRangePicker
+      availablePresets={presets}
       preset={value.customRange ? null : value.preset}
       customRange={value.customRange}
       customRangeLabel={value.customLabel}

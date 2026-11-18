@@ -244,7 +244,7 @@ export function AttemptsFooter({
         {total === undefined ? "" : `${plural(total, "attempt")} · `}
         newest first
       </span>
-      <span>{hasMore ? "Scroll to load more" : "All loaded"}</span>
+      <span>{hasMore ? "More below" : "All loaded"}</span>
     </div>
   );
 }

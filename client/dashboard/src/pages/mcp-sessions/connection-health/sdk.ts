@@ -44,7 +44,7 @@ const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** A window start no older than retention by the time it is sent. */
 function since(from: string): Date {
-  const oldest = Date.now() - RETENTION_MS + 60_000;
+  const oldest = Date.now() - RETENTION_MS;
   return new Date(Math.max(Date.parse(from), oldest));
 }
 

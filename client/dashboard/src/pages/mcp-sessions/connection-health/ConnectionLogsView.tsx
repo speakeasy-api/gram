@@ -18,7 +18,7 @@ import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -35,8 +35,10 @@ import {
   ATTEMPT_PARAM,
   LOG_FILTERS,
   LOG_FILTERS_WITHOUT_SERVER,
+  DEFAULT_LOG_RANGE,
   LOG_PARAMS,
   resolveWindow,
+  TIME_RANGE_PRESETS,
   UNLISTED_APP,
   RETENTION_MS,
   SEARCH_PARAM,
@@ -99,31 +101,35 @@ function optionsFrom(facets: AttemptFacets | undefined): OptionsById {
 }
 
 /** Matches free text to people, else servers, else gateway members (the API filters by id). */
+type SearchResult = AttemptFilters | "no-match" | "too-broad" | null;
+
+/** The API takes at most this many values per filter. */
+const MAX_FILTER_VALUES = 50;
+
 function searchFilters(
   text: string,
   facets: AttemptFacets | undefined,
-): AttemptFilters | "no-match" | null {
+): SearchResult {
   const q = text.trim().toLowerCase();
   if (!q) return null;
   const hits = (values: FacetValue[] | undefined) =>
     (values ?? [])
       .filter((v) => (v.label ?? v.value).toLowerCase().includes(q))
       .map((v) => v.value);
-  const people = hits(facets?.people);
-  if (people.length > 0) return { people };
+  const cap = (key: "people" | "serverIds" | "memberIds", values: string[]) =>
+    values.length > MAX_FILTER_VALUES ? "too-broad" : { [key]: values };
+  const people = hits(facets?.people).filter(Boolean);
+  if (people.length > 0) return cap("people", people);
   const serverIds = hits(facets?.servers);
-  if (serverIds.length > 0) return { serverIds };
+  if (serverIds.length > 0) return cap("serverIds", serverIds);
   const memberIds = hits(facets?.members);
-  if (memberIds.length > 0) return { memberIds };
+  if (memberIds.length > 0) return cap("memberIds", memberIds);
   return "no-match";
 }
 
 /** Search narrows a filter it shares a field with, never widens it. */
-function narrow(
-  base: AttemptFilters,
-  text: AttemptFilters | "no-match" | null,
-): AttemptFilters | "no-match" | null {
-  if (!text || text === "no-match") return text;
+function narrow(base: AttemptFilters, text: SearchResult): SearchResult {
+  if (!text || typeof text === "string") return text;
   const next: AttemptFilters = {};
   for (const key of ["people", "serverIds", "memberIds"] as const) {
     const hits = text[key];
@@ -177,6 +183,21 @@ export function ConnectionLogsView({
     [filters.values.date, now],
   );
   const beforeRetention = startsBeforeRetention(window, now);
+  // A preset these logs don't offer would label a range that is not queried.
+  const { preset, customRange } = filters.values.date;
+  const unsupportedPreset =
+    !customRange &&
+    preset !== null &&
+    !(TIME_RANGE_PRESETS as readonly string[]).includes(preset);
+  const { setValue } = filters;
+  useEffect(() => {
+    if (unsupportedPreset)
+      setValue("date", {
+        preset: DEFAULT_LOG_RANGE,
+        customRange: null,
+        customLabel: null,
+      });
+  }, [unsupportedPreset, setValue]);
   const scope = useMemo(
     () => ({ providerId, serverId: lockedServer?.id }),
     [providerId, lockedServer?.id],
@@ -196,13 +217,18 @@ export function ConnectionLogsView({
     enabled: !beforeRetention,
   });
   const facets = optionCounts.data?.facets ?? counts.data?.facets;
-  const facetsReady = !!facets;
-  const textFilters =
+  // Search matches against the filtered counts, so a narrow filter finds rarer names.
+  const searchFacets = counts.data?.facets;
+  const textFilters: SearchResult | "pending" =
     isReference || !search.trim()
       ? null
-      : facetsReady
-        ? narrow(baseFilters, searchFilters(search, facets))
+      : searchFacets
+        ? narrow(baseFilters, searchFilters(search, searchFacets))
         : "pending";
+  const searchBlocked =
+    textFilters === "no-match" ||
+    textFilters === "too-broad" ||
+    textFilters === "pending";
   const listFilters = useMemo<AttemptFilters>(
     () =>
       textFilters && typeof textFilters === "object"
@@ -216,11 +242,7 @@ export function ConnectionLogsView({
   });
 
   const list = useConnectionAttempts(scope, window, listFilters, {
-    enabled:
-      !beforeRetention &&
-      !isReference &&
-      textFilters !== "no-match" &&
-      textFilters !== "pending",
+    enabled: !beforeRetention && !isReference && !searchBlocked,
   });
   const reference = useAttempt(isReference ? search.trim() : null);
   // A reference is looked up project-wide; keep it only if it belongs here.
@@ -311,17 +333,19 @@ export function ConnectionLogsView({
     true;
   const rows: AttemptRow[] = useMemo(() => {
     if (isReference) return referenceHere ? [referenceHere] : [];
-    if (textFilters === "no-match") return [];
+    if (searchBlocked) return [];
     return list.data?.pages.flatMap((p) => p.attempts ?? []) ?? [];
-  }, [isReference, referenceHere, list.data, textFilters]);
+  }, [isReference, referenceHere, list.data, searchBlocked]);
 
   const total = isReference
     ? rows.length
     : textFilters === "no-match"
       ? 0
-      : textFilters
-        ? searchedCounts.data?.totalAttempts
-        : counts.data?.totalAttempts;
+      : searchBlocked
+        ? undefined
+        : textFilters
+          ? searchedCounts.data?.totalAttempts
+          : counts.data?.totalAttempts;
 
   const countText = !loggingEnabled
     ? null
@@ -349,13 +373,23 @@ export function ConnectionLogsView({
 
   const refresh = () => {
     setNow(connectionHealthNow());
+    // A reference or a picked range keeps its key, so it refetches instead.
+    if (isReference) void reference.refetch();
+    else if (filters.values.date.customRange) {
+      void counts.refetch();
+      void optionCounts.refetch();
+      void list.refetch();
+    }
   };
   const isFetching = isReference
     ? reference.isFetching
     : list.isFetching || counts.isFetching;
 
   let body: JSX.Element;
-  const isError = isReference ? reference.isError : list.isError;
+  const countsFailed = textFilters === "pending" && counts.isError;
+  const isError = isReference
+    ? reference.isError
+    : list.isError || countsFailed;
   const isPending = isReference ? reference.isPending : list.isPending;
   if (!loggingEnabled) {
     body = (
@@ -366,7 +400,7 @@ export function ConnectionLogsView({
         action={<EnableLoggingAction />}
       />
     );
-  } else if (beforeRetention) {
+  } else if (beforeRetention && !isReference) {
     const oldest = new Date(now.getTime() - RETENTION_MS).toISOString();
     body = (
       <InlineEmptyState
@@ -401,7 +435,11 @@ export function ConnectionLogsView({
           <Button
             variant="secondary"
             onClick={() =>
-              void (isReference ? reference.refetch() : list.refetch())
+              void (isReference
+                ? reference.refetch()
+                : countsFailed
+                  ? counts.refetch()
+                  : list.refetch())
             }
           >
             <Button.LeftIcon>
@@ -413,14 +451,22 @@ export function ConnectionLogsView({
       />
     );
   } else if (
-    (isPending || textFilters === "pending") &&
-    textFilters !== "no-match" &&
+    (textFilters === "pending" || (isPending && !searchBlocked)) &&
     rows.length === 0
   ) {
     body = (
       <SkeletonTable
         label="Loading Connection Logs"
         columns={["120px", "1.2fr", "1fr", "140px", "2fr"]}
+      />
+    );
+  } else if (textFilters === "too-broad") {
+    body = (
+      <InlineEmptyState
+        icon="search"
+        orientation="horizontal"
+        heading="Too many matches"
+        description={`More than ${MAX_FILTER_VALUES} people or servers match “${search}”. Type more of the name.`}
       />
     );
   } else if (rows.length === 0) {
@@ -565,6 +611,7 @@ export function ConnectionLogsView({
       <AttemptDetailSheet
         reference={openReference}
         providerId={providerId}
+        lockedServerId={lockedServer?.id}
         providerName={providers.find((p) => p.id === providerId)?.slug}
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />

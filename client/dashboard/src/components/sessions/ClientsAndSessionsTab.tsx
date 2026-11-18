@@ -139,15 +139,30 @@ function NoIssuerEmptyState({
   );
 }
 
-function IssuerClientsAndSessions({
+function IssuerClientsAndSessions(
+  props: Omit<ClientsAndSessionsTabProps, "gateway">,
+): JSX.Element {
+  const health = useConnectionHealthFlag();
+  const { issuerId, originatingMcpServerId, serverName } = props;
+  // The sessions list mounts only when its view is shown, so its queries wait.
+  return issuerId && health === "on" && originatingMcpServerId ? (
+    <ServerConnectionHealth
+      providerId={issuerId}
+      server={{ id: originatingMcpServerId, name: serverName ?? "This server" }}
+      sessions={<IssuerSessionsList {...props} />}
+    />
+  ) : (
+    <IssuerSessionsList {...props} />
+  );
+}
+
+function IssuerSessionsList({
   issuerId,
   originatingMcpServerId,
   authTabPath = "settings",
   attachedSessions,
-  serverName,
 }: Omit<ClientsAndSessionsTabProps, "gateway">): JSX.Element {
   const queryClient = useQueryClient();
-  const health = useConnectionHealthFlag();
   // Both queries treat a missing user_session_issuer_id as "don't filter by
   // issuer", so leaving them enabled on a server with no issuer would list the
   // whole project's sessions and clients under one server's tab. The hooks
@@ -190,7 +205,7 @@ function IssuerClientsAndSessions({
 
   if (!issuerId) return <NoIssuerEmptyState authTabPath={authTabPath} />;
 
-  const body = (
+  return (
     <ClientsAndSessionsBody
       attachedSessions={attachedSessions}
       sessions={sessions}
@@ -217,15 +232,6 @@ function IssuerClientsAndSessions({
       }}
       onRevoked={onClientOrSessionRevoked}
     />
-  );
-  return health === "on" && originatingMcpServerId ? (
-    <ServerConnectionHealth
-      providerId={issuerId}
-      server={{ id: originatingMcpServerId, name: serverName ?? "This server" }}
-      sessions={body}
-    />
-  ) : (
-    body
   );
 }
 

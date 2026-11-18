@@ -46,15 +46,25 @@ export function AttemptDetailSheet({
   reference,
   providerId,
   providerName,
+  lockedServerId,
   onClose,
 }: {
   reference: string | null;
   providerId: string;
   providerName?: string;
+  /** On a server's tab, only that server's attempts open. */
+  lockedServerId?: string;
   onClose: () => void;
 }): JSX.Element {
   const query = useAttempt(reference);
-  const attempt = query.data?.attempt;
+  const found = query.data?.attempt;
+  // The lookup is project-wide; an attempt from elsewhere does not open here.
+  const elsewhere =
+    !!found &&
+    ((!!found.userSessionIssuerId &&
+      found.userSessionIssuerId !== providerId) ||
+      (!!lockedServerId && found.server?.id !== lockedServerId));
+  const attempt = elsewhere ? undefined : found;
   return (
     <Sheet
       open={!!reference}
@@ -91,18 +101,24 @@ export function AttemptDetailSheet({
                   heading={
                     query.isError
                       ? "Couldn't load this attempt"
-                      : query.data?.loggingEnabled === false
-                        ? "Logging is off"
-                        : "No attempt with this reference"
+                      : elsewhere
+                        ? lockedServerId
+                          ? "This attempt is on another server"
+                          : "This attempt is through another provider"
+                        : query.data?.loggingEnabled === false
+                          ? "Logging is off"
+                          : "No attempt with this reference"
                   }
                   description={
                     query.isError
                       ? "Connections are not affected."
-                      : query.data?.loggingEnabled === false
-                        ? "Attempts are not kept while logging is off for this organization."
-                        : query.data?.viewerScope === "own"
-                          ? "Connection Logs keep the last 30 days, and you see only your own attempts."
-                          : "Connection Logs keep the last 30 days of this project."
+                      : elsewhere
+                        ? "Search for its reference in that view to open it."
+                        : query.data?.loggingEnabled === false
+                          ? "Attempts are not kept while logging is off for this organization."
+                          : query.data?.viewerScope === "own"
+                            ? "Connection Logs keep the last 30 days, and you see only your own attempts."
+                            : "Connection Logs keep the last 30 days of this project."
                   }
                   action={
                     query.isError ? (

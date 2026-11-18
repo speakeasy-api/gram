@@ -4,9 +4,13 @@ import { ArrowRight } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useProjectProviders } from "../providers";
-import { connectionHealthNow, useSuspectedProblems } from "./api";
+import {
+  connectionHealthNow,
+  useSignInSummary,
+  useSuspectedProblems,
+} from "./api";
 import { ConnectionLogsView } from "./ConnectionLogsView";
-import { PROBLEM_PARAM } from "./filters";
+import { presetWindow, PROBLEM_PARAM } from "./filters";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SuspectedProblems } from "./SuspectedProblems";
 
@@ -33,6 +37,9 @@ export function ServerConnectionHealth({
     [providerId, server.id],
   );
   const problems = useSuspectedProblems(scope);
+  // Sample problems show only once logging is known to be on.
+  const window = useMemo(() => presetWindow("1h", now), [now]);
+  const logging = useSignInSummary(scope, window, "hour").data?.loggingEnabled;
   const provider = providers.find((p) => p.id === providerId);
 
   const setParam = (key: string, value: string | null) => {
@@ -50,7 +57,7 @@ export function ServerConnectionHealth({
   return (
     <div className="space-y-8">
       <SuspectedProblems
-        problems={problems.data?.problems ?? []}
+        problems={logging === true ? (problems.data?.problems ?? []) : []}
         now={now}
         onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
       />
@@ -84,7 +91,7 @@ export function ServerConnectionHealth({
         )}
       </div>
       <ProblemDetailSheet
-        id={searchParams.get(PROBLEM_PARAM)}
+        id={logging === true ? searchParams.get(PROBLEM_PARAM) : null}
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}
