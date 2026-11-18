@@ -3,6 +3,7 @@ package remotemcp
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -148,11 +149,61 @@ func normalizedRemoteMCPSourceName(name *string) pgtype.Text {
 	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
 }
 
+// remoteMCPDisplayName is the name the server is shown with: the one given,
+// or else one read from its address.
 func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 	if name.Valid {
 		return name.String
 	}
+	if readable := readableServiceName(rawURL); readable != "" {
+		return readable
+	}
 	return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
+}
+
+// serviceHostPrefixes are leading host labels that name a role, not the
+// service.
+var serviceHostPrefixes = map[string]bool{
+	"mcp": true, "api": true, "www": true, "app": true, "auth": true, "access": true,
+	"login": true, "sso": true, "oauth": true, "id": true, "accounts": true,
+}
+
+// secondLevelSuffixes precede a two-letter country code in public suffixes
+// such as co.uk.
+var secondLevelSuffixes = map[string]bool{"co": true, "com": true, "org": true, "net": true, "ac": true, "gov": true}
+
+// readableServiceName reads the service's name from a URL's host:
+// https://mcp.ramp.com/mcp reads "Ramp" and mcp.acme-wiki.example reads
+// "Acme Wiki". Hosts that cannot be read that way, such as IP addresses and
+// localhost, come back as they are; an unparsable URL gives "". The dashboard
+// suggests names with the same rules (readableServiceNameFromUrl).
+func readableServiceName(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	host := strings.TrimSuffix(parsed.Hostname(), ".")
+	if host == "" {
+		return ""
+	}
+	labels := strings.Split(host, ".")
+	last := labels[len(labels)-1]
+	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" {
+		return host
+	}
+	suffix := 1
+	if len(labels) >= 3 && len(last) == 2 && secondLevelSuffixes[labels[len(labels)-2]] {
+		suffix = 2
+	}
+	rest := labels[:len(labels)-suffix]
+	for len(rest) > 1 && serviceHostPrefixes[rest[0]] {
+		rest = rest[1:]
+	}
+	words := strings.FieldsFunc(rest[len(rest)-1], func(r rune) bool { return r == '-' || r == '_' })
+	for i, word := range words {
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // createRemoteMCPSource owns the source row, its derived identifier, and the
