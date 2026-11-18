@@ -53,10 +53,7 @@ export {
 export { useUpstreamProbe } from "./queries/useUpstreamProbe";
 
 export { AgentIdentityRow } from "./components/CredentialFields";
-export {
-  IdentityExplainerCallout,
-  IdentityExplainerDialog,
-} from "./components/IdentityExplainer";
+export { IdentityExplainerCallout } from "./components/IdentityExplainer";
 export { identityModeCards } from "./components/IdentityModeCards";
 export { IssuerLink } from "./components/ProviderLink";
 export { UserIdentityRow } from "./components/ProviderRow";

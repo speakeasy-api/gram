@@ -2308,12 +2308,16 @@ type GetToolsetEnvironmentGatewayErrorResponseBody struct {
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
 	Name string `form:"name" json:"name" xml:"name"`
-	// The value of the environment variable. Cleartext when is_secret is false,
-	// redacted otherwise.
+	// The value of the environment variable. Cleartext when is_secret is false.
+	// For a secret, a fixed mask ("***") when it has a value or "<EMPTY>" when it
+	// does not; use has_value to tell whether a value is set.
 	Value string `form:"value" json:"value" xml:"value"`
 	// Whether the value is a secret. Secret values are redacted in reads;
 	// non-secret values are returned in cleartext.
 	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
+	// Whether the entry holds a non-empty value. Secret entries can be empty
+	// placeholders waiting for a value.
+	HasValue bool `form:"has_value" json:"has_value" xml:"has_value"`
 	// The creation date of the environment entry
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment entry was last updated

@@ -67,35 +67,15 @@ const renderNav = () =>
   renderHook(() => useProjectNavRoutes(), { wrapper: MemoryRouter });
 
 describe("useProjectNavRoutes", () => {
-  it.each(["disabled", "loading", "missing", "error"] as const)(
-    "removes the Channels page-action source when its flag becomes %s",
-    (status) => {
-      testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
-      const { result, rerender } = renderNav();
-      expect(
-        result.current.find(
-          (entry) => entry.route.href() === routes.channels.href(),
-        )?.scope,
-      ).toEqual([]);
-      testState.featureFlags[FEATURE_FLAGS.channels] =
-        status === "disabled"
-          ? { status: "disabled" }
-          : unavailableFeatureFlag(status);
-      rerender();
-      expect(
-        result.current.some(
-          (entry) => entry.route.href() === routes.channels.href(),
-        ),
-      ).toBe(false);
-      testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
-      rerender();
-      expect(
-        result.current.some(
-          (entry) => entry.route.href() === routes.channels.href(),
-        ),
-      ).toBe(true);
-    },
-  );
+  it("keeps Channels out of navigation and Command K even when its flag is on", () => {
+    testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
+    const { result } = renderNav();
+    expect(
+      result.current.some(
+        (entry) => entry.route.href() === routes.channels.href(),
+      ),
+    ).toBe(false);
+  });
 
   it("removes Signals Intelligence when entitlement is disabled or a refresh fails", () => {
     testState.productFeatures.data.signalsIntelligenceEnabled = true;
@@ -199,13 +179,15 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("leaves Shadow AI and Shadow MCP out of nav; they live in Guardrails", () => {
+  it("lists Shadow MCP after Guardrails, and keeps Shadow AI out", () => {
     const { result } = renderNav();
 
     const titles = result.current.map((entry) => entry.route.title);
+    expect(titles.indexOf("Shadow MCP")).toBe(titles.indexOf("Guardrails") + 1);
     expect(titles).not.toContain("Shadow AI");
-    expect(titles).not.toContain("Shadow MCP");
-    expect(titles).toContain("Guardrails");
+    expect(
+      result.current.find((entry) => entry.route.title === "Shadow MCP")?.scope,
+    ).toEqual(["org:admin"]);
   });
 
   it("leaves Approval Requests out of nav", () => {
@@ -329,25 +311,5 @@ describe("useProjectNavRoutes", () => {
         }),
       ]),
     );
-  });
-});
-
-it("keeps the Channels page discoverable for explicit grants without native scopes", () => {
-  testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
-  const { result, rerender } = renderNav();
-  const channels = () =>
-    result.current.find(
-      (entry) => entry.route.href() === routes.channels.href(),
-    );
-  expect(channels()).toMatchObject({
-    scope: [],
-    resourceId: "project_a",
-    projectId: "project_a",
-  });
-  testState.projectId = "project_b";
-  rerender();
-  expect(channels()).toMatchObject({
-    resourceId: "project_b",
-    projectId: "project_b",
   });
 });

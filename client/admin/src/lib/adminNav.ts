@@ -23,6 +23,7 @@ import {
   ActivityIcon,
   GlobeIcon,
   MessageSquareIcon,
+  FlaskConicalIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -100,6 +101,12 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
+        to: "/assistants",
+        label: "Assistants",
+        keywords: "assistant agent identity names migration kit runtime repair",
+        icon: MessageSquareIcon,
+      },
+      {
         to: "/upstream-oauth-migration",
         label: "Upstream OAuth migration",
         keywords: "oauth clients associations credentials backfill migrate",
@@ -117,6 +124,13 @@ export const ADMIN_NAV_GROUPS = [
         label: "Custom domains",
         keywords: "dns cname routing target hostname domain vanity",
         icon: GlobeIcon,
+      },
+      {
+        to: "/memory-evals",
+        label: "Organizational Memory evals",
+        keywords:
+          "organizational memory team memory eval evals benchmark models summary digest accuracy compare",
+        icon: FlaskConicalIcon,
       },
       {
         to: "/fleet-health",

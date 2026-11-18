@@ -381,6 +381,7 @@ type PostgresReader struct {
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
+	dataExportTestEvent       *DataExportTestEventService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -432,6 +433,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
+		dataExportTestEvent:       nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
@@ -483,8 +485,8 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 	return r
 }
 
-// WithCanonicalIdentityGate folds a member's own-scope email through the same
-// rollout switch the telemetry APIs use, so their hook rows match either way.
+// WithCanonicalIdentityGate folds a member's own-scope email the same way the
+// telemetry APIs do, so their hook rows match either way.
 func (r *PostgresReader) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *PostgresReader {
 	if r != nil {
 		r.identityGate = gate

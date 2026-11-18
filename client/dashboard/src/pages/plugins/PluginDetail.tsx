@@ -1,4 +1,3 @@
-import { MCPToolsetIcon } from "@/components/mcp/MCPToolsetIcon";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
@@ -72,7 +71,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Trash2 } from "lucide-react";
+import { Network, Trash2 } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -672,11 +671,7 @@ function PluginDetailContent({
         value: serverOptionKey(o.kind, o.id),
         label: o.name,
         icon: toolset ? (
-          <MCPToolsetIcon
-            toolset={toolset}
-            className="size-6 shrink-0"
-            fallbackClassName="size-6"
-          />
+          <Network className="text-muted-foreground size-6 shrink-0" />
         ) : (
           <SourceMcpIcon
             mcpServerId={o.id}
@@ -1413,6 +1408,7 @@ export function PluginInstallControl({
               name: plugin.name,
               slug: plugin.slug,
               description: plugin.description,
+              agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
             },
           ]}
         />
@@ -1560,7 +1556,7 @@ function PluginServerCard({
       onClick={isClickable ? handleClick : undefined}
       icon={
         toolset ? (
-          <MCPToolsetIcon toolset={toolset} />
+          <Network className="text-muted-foreground h-8 w-8" />
         ) : (
           <SourceMcpIcon
             mcpServerId={server.mcpServerId}

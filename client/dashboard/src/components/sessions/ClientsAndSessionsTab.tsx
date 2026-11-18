@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
@@ -26,6 +26,11 @@ import { useDrainedPages, PAGE_FETCH_LIMIT } from "./useDrainedPages";
 import { useGatewaySessionListing } from "./useGatewaySessionListing";
 import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
 import { ConnectionsListSection } from "@/components/connections/ConnectionsListSection";
+import {
+  groupingOptions,
+  type ConnectionGrouping,
+} from "@/components/connections/groupConnections";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 type ClientsAndSessionsTabProps = {
   issuerId: string | undefined;
@@ -42,11 +47,11 @@ type ClientsAndSessionsTabProps = {
   authTabPath?: string;
   /**
    * Lists the sessions authorized through a gateway instead of every session
-   * `issuerId` issued, filtered and paginated on the server. Without an id the
-   * listing covers every gateway in the organization, independent of the
-   * working project.
+   * `issuerId` issued, filtered and paginated on the server: a stored gateway
+   * by `id`, or a project's Project Gateway by `projectId`. With neither the
+   * listing covers the whole Organization Gateway.
    */
-  gateway?: { id?: string };
+  gateway?: { id?: string; projectId?: string };
 };
 
 /**
@@ -64,7 +69,11 @@ export function ClientsAndSessionsTab({
   ...props
 }: ClientsAndSessionsTabProps): JSX.Element {
   return gateway ? (
-    <GatewayClientsAndSessions {...props} gatewayId={gateway.id} />
+    <GatewayClientsAndSessions
+      {...props}
+      gatewayId={gateway.id}
+      projectId={gateway.projectId}
+    />
   ) : (
     <IssuerClientsAndSessions {...props} />
   );
@@ -106,8 +115,8 @@ function NoIssuerEmptyState({
   return (
     <InlineEmptyState
       icon="unplug"
-      heading="No connections can be made yet"
-      description="This server has no session issuer, so no agent can register against it and no session can be established. Turn on authentication to start accepting OAuth connections."
+      heading="Let people and agents connect"
+      description="Turn on sign-in so people and agents can connect."
       action={
         // The last path segment is swapped rather than using a `../` link:
         // these tabs are a switch on a route param, not nested routes, so
@@ -115,7 +124,7 @@ function NoIssuerEmptyState({
         // land on the MCP index.
         <Link to={authTabHref} className="hover:no-underline">
           <Button variant="secondary" size="sm">
-            <Button.Text>Configure authentication</Button.Text>
+            <Button.Text>Set up sign-in</Button.Text>
             <Button.RightIcon>
               <Icon name="arrow-right" size="small" />
             </Button.RightIcon>
@@ -182,10 +191,10 @@ function IssuerClientsAndSessions({
       clients={clients.clients}
       sessionsTile={{
         title: "Active sessions",
-        subtext: "Currently authenticated MCP sessions",
+        subtext: "Signed in right now",
       }}
-      agentsSubtext="Registered against this server"
-      description="Who is connected to this server, what they connect through, and the upstream providers Speakeasy reaches on their behalf."
+      agentsSubtext="Set up to connect to this server"
+      description="People and agents connected to this server, and the accounts Speakeasy uses for them."
       // Counts, search, and sort all run over what was loaded, so a set the
       // cap cut short has to say so rather than read as the whole picture.
       notice={
@@ -207,20 +216,26 @@ function IssuerClientsAndSessions({
 
 function GatewayClientsAndSessions({
   gatewayId,
+  projectId,
   issuerId,
   authTabPath = "settings",
   attachedSessions,
 }: Omit<ClientsAndSessionsTabProps, "gateway" | "originatingMcpServerId"> & {
   gatewayId: string | undefined;
+  projectId: string | undefined;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  // One gateway's registrations belong to its issuer in its project; the
-  // organization-wide listing has neither to scope them to.
+  // One stored gateway's registrations belong to its issuer in its project;
+  // the Organization and Project Gateways share the organization's issuer, so
+  // they have no registrations of their own to show.
   const projectScoped = Boolean(gatewayId);
   // Without an issuer a gateway cannot establish sessions, so nothing is read
   // behind the empty state below.
   const hasNothingToList = projectScoped && !issuerId;
-  const listing = useGatewaySessionListing(gatewayId, !hasNothingToList);
+  const listing = useGatewaySessionListing(
+    { gatewayId, projectId },
+    !hasNothingToList,
+  );
   const { query } = listing;
   const clients = useIssuerClients(issuerId, projectScoped && !!issuerId);
 
@@ -273,16 +288,16 @@ function GatewayClientsAndSessions({
         title: listing.sessionsTileTitle,
         subtext: listing.isFiltered
           ? "Matching the current search and filters"
-          : "Currently authenticated MCP sessions",
+          : "Signed in right now",
       }}
-      agentsSubtext="Registered against this gateway"
-      description="Who is connected through this gateway, what they connect through, and the upstream providers Speakeasy reaches on their behalf."
+      agentsSubtext="Set up to connect to this gateway"
+      description="People and agents connected through this gateway, and the accounts Speakeasy uses for them."
       notice={
         query.hasNextPage
           ? `Showing the first ${loaded} sessions. The counts cover only the sessions loaded so far.`
           : undefined
       }
-      toolbar={listing.toolbar}
+      renderToolbar={listing.renderToolbar}
       footer={loadMore}
       isPending={query.isPending || (projectScoped && clients.query.isPending)}
       isError={query.isError && loaded === 0}
@@ -304,6 +319,10 @@ function GatewayClientsAndSessions({
   );
 }
 
+// Every session here was issued by this server or gateway, so filing them by
+// MCP server draws one group and an option that appears broken.
+const HIDDEN_GROUPINGS: ConnectionGrouping[] = ["issuer"];
+
 function ClientsAndSessionsBody({
   attachedSessions,
   sessions,
@@ -312,7 +331,7 @@ function ClientsAndSessionsBody({
   agentsSubtext,
   description,
   notice,
-  toolbar,
+  renderToolbar,
   footer,
   originatingMcpServerId,
   isPending,
@@ -331,7 +350,11 @@ function ClientsAndSessionsBody({
   agentsSubtext: string;
   description: string;
   notice?: string;
-  toolbar?: React.ReactNode;
+  /**
+   * Draws the listing's search and filter bar with the given controls added to
+   * the same row. Without it the grouping control sits above the list alone.
+   */
+  renderToolbar?: (actions: React.ReactNode) => React.ReactNode;
   footer?: React.ReactNode;
   originatingMcpServerId?: string;
   isPending: boolean;
@@ -350,6 +373,7 @@ function ClientsAndSessionsBody({
   // Command K links straight to a registration that may sit on a page of
   // connections not yet loaded, so the sheet opens from the URL rather than
   // from a row.
+  const [grouping, setGrouping] = useState<ConnectionGrouping>("subject");
   const [params, setParams] = useSearchParams();
   const registrationId = projectScoped ? params.get("registration") : null;
   const closeRegistration = () =>
@@ -406,7 +430,15 @@ function ClientsAndSessionsBody({
           {projectScoped && <ViewOrgSessionsButton />}
         </Stack>
 
-        {toolbar}
+        {renderToolbar?.(
+          <SegmentedControl
+            value={grouping}
+            onChange={(value: string) =>
+              setGrouping(value as ConnectionGrouping)
+            }
+            options={groupingOptions(HIDDEN_GROUPINGS)}
+          />,
+        )}
 
         {/* Registrations are handed in rather than listed separately: the
             client grouping is the same inventory, and a registration with no
@@ -422,9 +454,9 @@ function ClientsAndSessionsBody({
           isError={isError}
           onRetry={onRetry}
           onRevoked={onRevoked}
-          // Every session here was issued by this server or gateway, so filing
-          // them by MCP server draws one group and an option that appears broken.
-          hideGroupings={["issuer"]}
+          hideGroupings={HIDDEN_GROUPINGS}
+          grouping={renderToolbar ? grouping : undefined}
+          showGroupingControl={!renderToolbar}
           emptyHeading={emptyHeading}
           emptyDescription={emptyDescription}
           revocable={projectScoped}

@@ -342,6 +342,9 @@ type AiIntegrationConfig struct {
 	ID uuid.UUID
 	// @access: confidential
 	Deleted bool
+	// Provider settings JSON; holds admin emails and customer directory structure.
+	// @access: opaque-restricted
+	Settings []byte
 }
 
 type AiIntegrationConfigChat struct {
@@ -598,6 +601,8 @@ type Assistant struct {
 	Name string
 	// @access: confidential
 	Model string
+	// @access: confidential
+	ReasoningEffort pgtype.Text
 	// @access: opaque-restricted
 	Instructions string
 	// @access: confidential
@@ -1031,12 +1036,15 @@ type AuthzChallengeResolution struct {
 	ResourceKind string
 	// @access: opaque-confidential
 	ResourceID string
-	// How the challenge was resolved: role_assigned, dismissed.
+	// How the challenge was resolved: role_assigned, temporary_grant, dismissed.
 	// @access: confidential
 	ResolutionType string
 	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
 	// @access: confidential
 	RoleSlug pgtype.Text
+	// When resolution_type=temporary_grant, the principal_grants row that was granted with an expiry. Soft reference: the grant row may be revoked (deleted) later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
 	// URN of the admin who resolved the challenge.
 	// @access: confidential
 	ResolvedBy string
@@ -1544,8 +1552,6 @@ type Chat struct {
 	SummaryRedacted bool
 	// @access: confidential
 	MemoryExcludedAt pgtype.Timestamptz
-	// @access: confidential
-	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
 	InferenceActorKey []byte
 	// @access: confidential
@@ -1863,9 +1869,15 @@ type CustomDomain struct {
 	// Advisory DNS configuration observation, independent of ownership and infrastructure health.
 	// @access: confidential
 	DnsConfigurationStatus pgtype.Text
-	// Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+	// Time of the routing DNS observation; matches health_checked_at only when both observations came from the same check.
 	// @access: confidential
 	DnsCheckedAt pgtype.Timestamptz
+	// Start of the current run of successful checks of the domain's Certificate Manager DNS authorization record. NULL until a check succeeds; a failed check clears it. Reflects our own DNS lookup, not certificate issuance.
+	// @access: confidential
+	DnsAuthorizationVerifiedAt pgtype.Timestamptz
+	// Time of the last check of the domain's Certificate Manager DNS authorization record, whatever its result. NULL when it has never been checked.
+	// @access: confidential
+	DnsAuthorizationCheckedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -3614,6 +3626,31 @@ type McpAuthClientEma struct {
 	Deleted bool
 }
 
+type McpAuthClientGithubApp struct {
+	// @access: confidential
+	AuthClientID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ClientType string
+	// @access: restricted
+	InstanceUrl string
+	// @access: confidential
+	AppID int64
+	// @access: confidential
+	InstallationID int64
+	// @access: secret-restricted
+	PrivateKeyEncrypted string
+	// @access: restricted
+	UpstreamOrigin string
+	// @access: confidential
+	CredentialVersion uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type McpAuthClientHeader struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -3641,6 +3678,24 @@ type McpAuthClientHeader struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type McpConnectionLogRoute struct {
+	// @access: confidential
+	DataExportRouteID uuid.UUID
+	// @access: confidential
+	DataExportRoutesDataSource string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Lowest log severity this route sends: info, warn or error.
+	// @access: confidential
+	MinSeverity string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type McpEndpoint struct {
@@ -3835,6 +3890,8 @@ type McpServer struct {
 	// Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
 	// @access: confidential
 	RequiresUpstreamAuth pgtype.Bool
+	// @access: confidential
+	SetupGuideCompletedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -4205,6 +4262,16 @@ type NetworkIngress struct {
 	// @access: confidential
 	ConnectedSince pgtype.Timestamptz
 	// @access: confidential
+	Runtime pgtype.Text
+	// @access: confidential
+	GatewayShard string
+	// Superseded by gateway_service_hostnames and no longer written; read only as the recorded label of a row whose gateway_service_hostnames is empty.
+	// @access: restricted
+	GatewayServiceHostname pgtype.Text
+	// Labels of the Tailscale Services the gateway may have defined for this ingress; copies of current and former hostnames.
+	// @access: restricted
+	GatewayServiceHostnames []string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -4212,6 +4279,79 @@ type NetworkIngress struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type NetworkIngressCertificateState struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// tsnet certificate state key: "<domain>.crt", "<domain>.key" or the ACME account key name.
+	// @access: confidential
+	StateKey string
+	// Certificate, private key or ACME account key, encrypted under the organization's key.
+	// @access: secret-restricted
+	ValueEncrypted string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NetworkIngressNode struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	PodName pgtype.Text
+	// @access: secret-restricted
+	AuthKeyEncrypted pgtype.Text
+	// @access: confidential
+	AuthKeyExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	Status string
+	// @access: restricted
+	NodeID pgtype.Text
+	// @access: restricted
+	DnsName pgtype.Text
+	// @access: confidential
+	LastError pgtype.Text
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	ConnectedSince pgtype.Timestamptz
+	// @access: confidential
+	RetiredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NetworkIngressNodeState struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	StateKey string
+	// @access: secret-restricted
+	ValueEncrypted string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type OktaApplication struct {
@@ -4572,6 +4712,73 @@ type OrganizationEncryptionConfig struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type OrganizationEncryptionTransition struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UseCase string
+	// @access: confidential
+	State string
+	// Starts at 1 and increases on every state change; never decreases.
+	// @access: confidential
+	Generation int64
+	// @access: confidential
+	StateChangedAt pgtype.Timestamptz
+	// When finalize finished destroying the platform-key copies. Set only in org_kms.
+	// @access: confidential
+	PlatformCopiesClearedAt pgtype.Timestamptz
+	// @access: confidential
+	LastBackfillStartedAt pgtype.Timestamptz
+	// @access: confidential
+	LastBackfillCompletedAt pgtype.Timestamptz
+	// @access: confidential
+	LastBackfillConvertedCount pgtype.Int8
+	// @access: confidential
+	LastBackfillRemainingCount pgtype.Int8
+	// @access: confidential
+	LastBackfillUnreadableCount pgtype.Int8
+	// Short error summary; never carries values, ciphertext or key material.
+	// @access: restricted
+	LastBackfillError pgtype.Text
+	// @access: confidential
+	LastVerifiedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type OrganizationEncryptionUnreadableValue struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UseCase string
+	// Logical table.column name registered by Speakeasy code.
+	// @access: confidential
+	SourceColumn string
+	// Single-column primary key of the source row, as produced by <pk>::text.
+	// @access: confidential
+	RowID string
+	// SHA-256 of the UTF-8 bytes of the stored platform-key ciphertext text that failed to decrypt.
+	// @access: secret-restricted
+	PlatformCiphertextSha256 []byte
+	// Speakeasy decryption error code; never the value or ciphertext.
+	// @access: confidential
+	ErrorCode string
+	// @access: confidential
+	FirstDetectedAt pgtype.Timestamptz
+	// @access: confidential
+	LastDetectedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type OrganizationFeature struct {
@@ -5531,9 +5738,6 @@ type PrincipalGrant struct {
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	// @access: confidential
 	Scope string
-	// Whether this grant allows or denies the scope. NULL = allow for backward compatibility.
-	// @access: confidential
-	Effect pgtype.Text
 	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
 	// @access: confidential
 	DropResource pgtype.Text
@@ -5972,12 +6176,18 @@ type RemoteSession struct {
 	UserSessionIssuerID uuid.UUID
 	// @access: confidential
 	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
 	// @access: secret-restricted
-	AccessTokenEncrypted string
+	AccessTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AccessExpiresAt pgtype.Timestamptz
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AuthorizationExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -6033,6 +6243,10 @@ type RemoteSessionClient struct {
 	ClientID string
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
+	// @access: secret-restricted
+	ClientSecretOrgEncrypted pgtype.Text
+	// @access: confidential
+	ClientSecretGeneration int64
 	// @access: confidential
 	ClientIDIssuedAt pgtype.Timestamptz
 	// @access: confidential
@@ -6174,6 +6388,8 @@ type RemoteSessionEmaCredential struct {
 	GrantedScopes []string
 	// @access: secret-restricted
 	AccessTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AccessExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -6833,6 +7049,31 @@ type SessionQuarantine struct {
 	ReleasedAt pgtype.Timestamptz
 	// @access: confidential
 	ReleasedBy pgtype.Text
+}
+
+type ShadowMcpOfficialServer struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	ServerUrl string
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	AllowDirectAccess bool
+	// @access: confidential
+	CreatedByUserID pgtype.Text
+	// @access: confidential
+	UpdatedByUserID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type SigintCustomSignal struct {
@@ -8294,10 +8535,14 @@ type TrustedIssuerSession struct {
 	SubjectUrn string
 	// @access: secret-restricted
 	IdentityAssertionEncrypted pgtype.Text
+	// @access: secret-restricted
+	IdentityAssertionOrgEncrypted pgtype.Text
 	// @access: confidential
 	IdentityAssertionExpiresAt pgtype.Timestamptz
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	RefreshExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -8313,7 +8558,11 @@ type TrustedIssuerSession struct {
 	// @access: secret-restricted
 	UpstreamSubjectEncrypted pgtype.Text
 	// @access: secret-restricted
+	UpstreamSubjectOrgEncrypted pgtype.Text
+	// @access: secret-restricted
 	NonceEncrypted pgtype.Text
+	// @access: secret-restricted
+	NonceOrgEncrypted pgtype.Text
 	// @access: secret-restricted
 	CredentialConfigHash pgtype.Text
 	// @access: confidential

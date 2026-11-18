@@ -280,9 +280,6 @@ func unmarshalToolResponseBodyToTypesTool(v *ToolResponseBody) *types.Tool {
 	if v.PlatformToolDefinition != nil {
 		res.PlatformToolDefinition = unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition(v.PlatformToolDefinition)
 	}
-	if v.ExternalMcpToolDefinition != nil {
-		res.ExternalMcpToolDefinition = unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition(v.ExternalMcpToolDefinition)
-	}
 
 	return res
 }
@@ -570,61 +567,6 @@ func unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition(v 
 	return res
 }
 
-// unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition
-// builds a value of type *types.ExternalMCPToolDefinition from a value of type
-// *ExternalMCPToolDefinitionResponseBody.
-func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition(v *ExternalMCPToolDefinitionResponseBody) *types.ExternalMCPToolDefinition {
-	if v == nil {
-		return nil
-	}
-	res := &types.ExternalMCPToolDefinition{
-		Type:                       v.Type,
-		DeploymentExternalMcpID:    *v.DeploymentExternalMcpID,
-		DeploymentID:               *v.DeploymentID,
-		RegistryID:                 *v.RegistryID,
-		RegistrySpecifier:          *v.RegistrySpecifier,
-		RegistryServerName:         *v.RegistryServerName,
-		Slug:                       *v.Slug,
-		RemoteURL:                  *v.RemoteURL,
-		TransportType:              *v.TransportType,
-		RequiresOauth:              *v.RequiresOauth,
-		OauthVersion:               *v.OauthVersion,
-		OauthAuthorizationEndpoint: v.OauthAuthorizationEndpoint,
-		OauthTokenEndpoint:         v.OauthTokenEndpoint,
-		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
-		CreatedAt:                  *v.CreatedAt,
-		UpdatedAt:                  *v.UpdatedAt,
-		ID:                         *v.ID,
-		ToolUrn:                    *v.ToolUrn,
-		ProjectID:                  *v.ProjectID,
-		Name:                       *v.Name,
-		CanonicalName:              *v.CanonicalName,
-		Description:                *v.Description,
-		SchemaVersion:              v.SchemaVersion,
-		Schema:                     *v.Schema,
-		Confirm:                    v.Confirm,
-		ConfirmPrompt:              v.ConfirmPrompt,
-		Summarizer:                 v.Summarizer,
-	}
-	if v.OauthScopesSupported != nil {
-		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
-		for i, val := range v.OauthScopesSupported {
-			res.OauthScopesSupported[i] = val
-		}
-	}
-	if v.Canonical != nil {
-		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
-	}
-	if v.Variation != nil {
-		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
-	}
-	if v.Annotations != nil {
-		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
-	}
-
-	return res
-}
-
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -684,25 +626,6 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 		Description:   v.Description,
 		AuthInputType: v.AuthInputType,
 		Name:          *v.Name,
-	}
-
-	return res
-}
-
-// unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition
-// builds a value of type *types.ExternalMCPHeaderDefinition from a value of
-// type *ExternalMCPHeaderDefinitionResponseBody.
-func unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(v *ExternalMCPHeaderDefinitionResponseBody) *types.ExternalMCPHeaderDefinition {
-	if v == nil {
-		return nil
-	}
-	res := &types.ExternalMCPHeaderDefinition{
-		Name:        *v.Name,
-		HeaderName:  *v.HeaderName,
-		Description: v.Description,
-		Placeholder: v.Placeholder,
-		Required:    *v.Required,
-		Secret:      *v.Secret,
 	}
 
 	return res

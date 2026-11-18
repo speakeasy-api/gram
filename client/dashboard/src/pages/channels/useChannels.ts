@@ -746,3 +746,23 @@ export function useReadMarks(
 
   return [marks, markRead];
 }
+
+/** Remembers that a person put the setup away, per project and account. */
+export function useSetupHidden(storageKey: string): [boolean, () => void] {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(storageKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const hide = useCallback(() => {
+    setHidden(true);
+    try {
+      localStorage.setItem(storageKey, "1");
+    } catch {
+      /* Hiding the checklist is a convenience, not data worth failing over. */
+    }
+  }, [storageKey]);
+  return [hidden, hide];
+}

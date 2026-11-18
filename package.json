@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "aube run --filter ./client/dashboard dev",
     "dev:docs": "aube run --filter ./client/docs dev",
-    "lint": "tsc --noEmit && aube run -r --if-present lint",
+    "lint": "mise run lint:tooling && mise run lint:client",
     "build": "aube run -r --if-present build",
     "type-check": "aube run -r --if-present type-check",
     "format": "oxfmt -c .oxfmtrc.json"
@@ -29,7 +29,7 @@
     "confbox": "^0.2.4",
     "get-port-please": "^3.2.0",
     "jsonc-parser": "^3.3.1",
-    "oxfmt": "^0.76.0",
+    "oxfmt": "^0.78.0",
     "tsx": "^4.23.5",
     "typescript": "catalog:",
     "zx": "^8.8.5"

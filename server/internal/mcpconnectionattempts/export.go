@@ -28,9 +28,8 @@ const (
 	// instead of growing memory while Pub/Sub is slow.
 	exportMaxInFlight = 1024
 
-	// minExportSeverity is the lowest severity published. Blocked and declined rows keep their
-	// severity for when a destination can ask for them; until then publishing them is waste.
-	minExportSeverity = log.SeverityError
+	// minExportSeverity is the lowest severity published. The relay drops what is below each route's level.
+	minExportSeverity = log.SeverityInfo
 
 	// defaultExportDrain is how long outstanding publishes may settle at shutdown.
 	defaultExportDrain = 5 * time.Second
@@ -38,6 +37,9 @@ const (
 	exportLogInterval = time.Minute
 
 	exportEventName = "speakeasy.mcp_connection"
+
+	// testExportEventName is the one event name every data export test log uses.
+	testExportEventName = "speakeasy.test_event"
 
 	// minAttemptDuration separates a real span from a one-row attempt, whose start and end are the same moment.
 	minAttemptDuration = time.Millisecond
@@ -49,9 +51,11 @@ type notExportedReason string
 const (
 	notExportedNoProject notExportedReason = "no_project"
 	notExportedQueueFull notExportedReason = "export_queue_full"
-	notExportedFailed    notExportedReason = "export_failed"
-	notExportedShutdown  notExportedReason = "shutdown"
-	notExportedPanic     notExportedReason = "panic"
+	// notExportedReserved is a row below ERROR shed while the queue nears full, keeping room for errors.
+	notExportedReserved notExportedReason = "queue_reserved_for_errors"
+	notExportedFailed   notExportedReason = "export_failed"
+	notExportedShutdown notExportedReason = "shutdown"
+	notExportedPanic    notExportedReason = "panic"
 )
 
 // ExportSink publishes connection logs. Publish must not wait for the ack: the writer
@@ -125,8 +129,11 @@ func (r *Recorder) exportRows(rows []Row) {
 	if r.exporter == nil {
 		return
 	}
+	// Rows below ERROR stop at about three quarters of the limit, so errors keep the rest.
+	belowErrorLimit := r.exporter.maxInFlight - r.exporter.maxInFlight/4
 	for _, row := range rows {
-		if severity, _, ok := exportSeverity(row); !ok || severity < minExportSeverity {
+		severity, _, ok := exportSeverity(row)
+		if !ok || severity < minExportSeverity {
 			continue
 		}
 		// otelpub requires a project, and org gateways have none.
@@ -135,8 +142,13 @@ func (r *Recorder) exportRows(rows []Row) {
 			continue
 		}
 		// Only the writer adds, so the check and the add do not race.
-		if r.exporter.inFlight.Load() >= r.exporter.maxInFlight {
+		inFlight := r.exporter.inFlight.Load()
+		if inFlight >= r.exporter.maxInFlight {
 			r.countNotExported(row, notExportedQueueFull, nil)
+			continue
+		}
+		if severity < log.SeverityError && inFlight >= belowErrorLimit {
+			r.countNotExported(row, notExportedReserved, nil)
 			continue
 		}
 		r.exportRow(row)
@@ -222,8 +234,15 @@ func withRowTrace(ctx context.Context, row Row) context.Context {
 	}))
 }
 
+// notExportedWhileOpen lists person failures left out while the attempt is open.
+var notExportedWhileOpen = map[string]bool{
+	// Link unfurlers and mail scanners trigger it on attempts that then connect.
+	CodeSessionChanged.String(): true,
+}
+
 // exportSeverity also decides what is exported: every final row that did not connect,
-// and non-final rows only when someone other than the person has to fix them.
+// non-final rows an admin, provider or Speakeasy has to fix, and non-final failures the
+// person has to fix, at WARN since the attempt may still recover. App retry loops stay out.
 func exportSeverity(row Row) (log.Severity, string, bool) {
 	meaning, ok := MeaningOf(row.Reason)
 	if !ok {
@@ -232,7 +251,13 @@ func exportSeverity(row Row) (log.Severity, string, bool) {
 	if !row.IsFinal {
 		switch WhoFixes(row.WhoFixes) {
 		case WhoAdmin, WhoProvider, WhoSpeakeasy:
-		case WhoNobody, WhoPerson, WhoApp:
+		case WhoPerson:
+			// Only failures: needs_sign_in and other normal sign-in steps are not.
+			if meaning.Outcome != OutcomeFailed || notExportedWhileOpen[row.Reason] {
+				return log.SeverityUndefined, "", false
+			}
+			return log.SeverityWarn, "WARN", true
+		case WhoNobody, WhoApp:
 			return log.SeverityUndefined, "", false
 		default:
 			return log.SeverityUndefined, "", false
@@ -256,14 +281,13 @@ func exportSeverity(row Row) (log.Severity, string, bool) {
 // destinations that exclude sensitive data redact string bodies. The catalog text is written
 // to the person who hit the failure, so its keys say so.
 func exportRecord(row Row) (log.Record, bool) {
-	var record log.Record
 	severity, severityText, ok := exportSeverity(row)
 	if !ok {
-		return record, false
+		return log.Record{}, false
 	}
 	meaning, ok := MeaningOf(row.Reason)
 	if !ok {
-		return record, false
+		return log.Record{}, false
 	}
 
 	attrs := []attribute.KeyValue{
@@ -306,14 +330,29 @@ func exportRecord(row Row) (log.Record, bool) {
 		}
 	}
 
-	record.SetEventName(exportEventName)
-	record.SetTimestamp(row.EventTime)
+	return newExportRecord(exportEventName, row.EventTime, severity, severityText, attrs), true
+}
+
+// TestExportRecord is the event a destination test sends: the export schema with no
+// attempt, person or server in it, and message as its user message. The route
+// tester adds the body and the test marks.
+func TestExportRecord(at time.Time, message string) log.Record {
+	return newExportRecord(testExportEventName, at, log.SeverityInfo, "INFO", []attribute.KeyValue{
+		attr.LogRecordUID(uuid.NewString()),
+		attr.ExtMcpConnectionUserMessage(message),
+	})
+}
+
+func newExportRecord(eventName string, at time.Time, severity log.Severity, severityText string, attrs []attribute.KeyValue) log.Record {
+	var record log.Record
+	record.SetEventName(eventName)
+	record.SetTimestamp(at)
 	record.SetSeverity(severity)
 	record.SetSeverityText(severityText)
 	for _, kv := range attrs {
 		record.AddAttributes(log.KeyValueFromAttribute(kv))
 	}
-	return record, true
+	return record
 }
 
 // addressNamesTheFailure reports whether the row's host is the external system that failed:

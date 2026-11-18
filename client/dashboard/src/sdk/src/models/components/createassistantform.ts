@@ -17,6 +17,20 @@ import {
 } from "./assistanttoolsetref.js";
 
 /**
+ * The reasoning effort used by the assistant.
+ */
+export const ReasoningEffort = {
+  None: "none",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+} as const;
+/**
+ * The reasoning effort used by the assistant.
+ */
+export type ReasoningEffort = ClosedEnum<typeof ReasoningEffort>;
+
+/**
  * Optional initial status.
  */
 export const CreateAssistantFormStatus = {
@@ -52,6 +66,10 @@ export type CreateAssistantForm = {
    */
   name: string;
   /**
+   * The reasoning effort used by the assistant.
+   */
+  reasoningEffort?: ReasoningEffort | undefined;
+  /**
    * Optional initial status.
    */
   status?: CreateAssistantFormStatus | undefined;
@@ -66,6 +84,11 @@ export type CreateAssistantForm = {
 };
 
 /** @internal */
+export const ReasoningEffort$outboundSchema: z.ZodMiniEnum<
+  typeof ReasoningEffort
+> = z.enum(ReasoningEffort);
+
+/** @internal */
 export const CreateAssistantFormStatus$outboundSchema: z.ZodMiniEnum<
   typeof CreateAssistantFormStatus
 > = z.enum(CreateAssistantFormStatus);
@@ -77,6 +100,7 @@ export type CreateAssistantForm$Outbound = {
   mcp_servers?: Array<AssistantMCPServerRef$Outbound> | undefined;
   model: string;
   name: string;
+  reasoning_effort: string;
   status?: string | undefined;
   toolsets: Array<AssistantToolsetRef$Outbound>;
   warm_ttl_seconds?: number | undefined;
@@ -93,6 +117,7 @@ export const CreateAssistantForm$outboundSchema: z.ZodMiniType<
     mcpServers: z.optional(z.array(AssistantMCPServerRef$outboundSchema)),
     model: z.string(),
     name: z.string(),
+    reasoningEffort: z._default(ReasoningEffort$outboundSchema, "medium"),
     status: z.optional(CreateAssistantFormStatus$outboundSchema),
     toolsets: z.array(AssistantToolsetRef$outboundSchema),
     warmTtlSeconds: z.optional(z.int()),
@@ -101,6 +126,7 @@ export const CreateAssistantForm$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       maxConcurrency: "max_concurrency",
       mcpServers: "mcp_servers",
+      reasoningEffort: "reasoning_effort",
       warmTtlSeconds: "warm_ttl_seconds",
     });
   }),

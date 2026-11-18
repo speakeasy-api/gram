@@ -41,6 +41,9 @@ var cardTools = map[string]cardSpec{
 	"register_remote_mcp":                   {kind: cardKindReceipt, route: "P/mcp/{mcp}", label: "Open MCP server"},
 	"attach_platform_mcp_identity_provider": {kind: cardKindReceipt, route: "P/mcp/{mcp}/settings", label: "Open settings"},
 
+	// Configuration previews and committed preferences both link to Overview.
+	"set_assistant_reasoning_effort": {kind: cardKindDetail, route: "P/assistants/{assistant}", label: "Open assistant Overview"},
+
 	// MCP servers.
 	"find_mcp":                              {kind: cardKindList, route: "P/mcp", label: "Open MCP servers"},
 	"get_mcp":                               {kind: cardKindDetail, route: "P/mcp/{mcp}", label: "Open MCP server"},
@@ -110,9 +113,9 @@ var cardTools = map[string]cardSpec{
 	"unmark_risk_findings_false_positive": {kind: cardKindReceipt, route: "P/risk-events", label: "Open risk events"},
 
 	// Shadow MCP, shadow AI and devices.
-	"list_shadow_mcp_inventory": {kind: cardKindList, route: "P/shadow-ai", label: "Open shadow AI"},
-	"get_shadow_mcp_review":     {kind: cardKindDetail, route: "P/shadow-ai", label: "Open shadow AI"},
-	"decide_shadow_mcp_access":  {kind: cardKindReceipt, route: "P/shadow-ai", label: "Open shadow AI"},
+	"list_shadow_mcp_inventory": {kind: cardKindList, route: "P/shadow-mcp", label: "Open Shadow MCP"},
+	"get_shadow_mcp_review":     {kind: cardKindDetail, route: "P/shadow-mcp", label: "Open Shadow MCP"},
+	"decide_shadow_mcp_access":  {kind: cardKindReceipt, route: "P/shadow-mcp", label: "Open Shadow MCP"},
 	"list_shadow_ai_inventory":  {kind: cardKindList, route: "P/shadow-ai", label: "Open shadow AI"},
 	"get_device_coverage":       {kind: cardKindDetail, route: "O/device-agent/devices", label: "Open devices"},
 	"list_managed_devices":      {kind: cardKindList, route: "O/device-agent/devices", label: "Open devices"},
@@ -136,14 +139,16 @@ var cardTools = map[string]cardSpec{
 	// Gateways.
 	"create_gateway":              {kind: cardKindReceipt, route: "P/mcp/gateway/{gateway}", label: "Open gateway"},
 	"set_gateway_members":         {kind: cardKindReceipt, route: "P/mcp/gateway/{gateway}", label: "Open gateway"},
-	"get_my_project_gateway":      {kind: cardKindDetail, route: "P/mcp/organization-gateway", label: "Open gateway"},
+	"get_my_project_gateway":      {kind: cardKindDetail, route: "P/mcp/project-gateway", label: "Open gateway"},
 	"get_my_organization_gateway": {kind: cardKindDetail, route: "O/gateway", label: "Open gateway"},
 
 	// Data exports.
-	"list_data_exports":  {kind: cardKindList, route: "O/data/exports", label: "Open data exports"},
-	"create_data_export": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
-	"pause_data_export":  {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
-	"resume_data_export": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"list_data_exports":            {kind: cardKindList, route: "O/data/exports", label: "Open data exports"},
+	"create_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"pause_data_export":            {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"resume_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"send_data_export_test_event":  {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"set_data_export_min_severity": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 
 	// Dashboards and Explore widgets.
 	"list_dashboards":        {kind: cardKindList, route: "P/dashboards", label: "Open dashboards"},
@@ -251,9 +256,9 @@ var textOnlyTools = map[string]string{
 	"search_users":                         textOnlyPicker,
 	"continue_session":                     textOnlyForModel,
 	"select_assistant_runtime":             textOnlyAssistant,
-	"upgrade_assistant_workload_identity":  textOnlyAssistant,
 	"choose_assistant_upstream_credential": textOnlyAssistant,
 	"get_my_install_instructions":          textOnlyMember,
+	"get_my_vibe_observability_install":    "reports Vibe observability install availability and guidance; the plugins page covers it for people",
 	"get_my_mcp_access":                    textOnlyMember,
 	"get_my_mcp_connection_status":         textOnlyMember,
 	"list_my_mcp_access":                   textOnlyMember,
@@ -274,6 +279,7 @@ type cardRouteParam struct {
 }
 
 var cardRouteParams = map[string]cardRouteParam{
+	"assistant":  {exact: []string{"assistant_id"}, subject: nil, nested: ""},
 	"mcp":        {exact: []string{"mcp_slug", "mcp_id"}, subject: []string{"slug"}, nested: "mcp"},
 	"plugin":     {exact: []string{"plugin_id"}, subject: []string{"id"}, nested: "plugin"},
 	"skill":      {exact: []string{"skill_id"}, subject: []string{"id"}, nested: "skill"},

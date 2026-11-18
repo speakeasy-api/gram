@@ -2,12 +2,16 @@ package hooks
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/hooks/wire"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -44,7 +48,21 @@ type shadowMCPRequestLink struct {
 }
 
 func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
-	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason)
+	server := conv.PtrValOr(redactedObservedName(params.Evidence, params.ToolName), "")
+	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason, params.PolicyName, server)
+	// A server linked to an official version is not something to ask access
+	// to: the answer is to use the official one. No request link is minted and
+	// no block effect is set, so nothing downstream offers "request access".
+	// A switched-off link leaves the ordinary rules in charge, so a block then
+	// reads like any other and offers the request link.
+	if official, ok := s.shadowMCPOfficialServer(ctx, params.OrganizationID, params.ProjectID, params.Evidence.FullURL); ok && !official.DirectAccessAllowed {
+		return strings.TrimSpace(message) + "\n\n" + shadowMCPOfficialServerRedirect(official)
+	}
+	// The built-in blocklist has no policy to request a bypass of: its
+	// servers are blocked because an administrator denied them.
+	if params.RiskPolicyID == "" {
+		return message
+	}
 	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
 		return message
@@ -69,6 +87,47 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 	return strings.TrimSpace(message) + "\n\nRequest access:\n" + link.URL + "\n\n" + shadowMCPApprovalRequestPrompt
 }
 
+// shadowMCPOfficialServer finds the official, Speakeasy-served version of a
+// directly-used server URL. It answers only when that version has an address
+// to send people to: an official server without an endpoint cannot replace
+// the direct one yet. A failed lookup reads as "none", which keeps the guard
+// on its ordinary rules rather than blocking on an infrastructure blip.
+func (s *Service) shadowMCPOfficialServer(ctx context.Context, organizationID string, projectID string, fullURL string) (shadowmcp.OfficialServer, bool) {
+	none := shadowmcp.OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: "", DirectAccessAllowed: false}
+	if s.shadowMCPClient == nil || strings.TrimSpace(fullURL) == "" {
+		return none, false
+	}
+	parsedProjectID, err := uuid.Parse(projectID)
+	if err != nil {
+		return none, false
+	}
+	official, found, err := s.shadowMCPClient.OfficialServerForURL(ctx, organizationID, parsedProjectID, fullURL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve official server for shadow mcp url",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+		)
+		return none, false
+	}
+	if !found || official.URL == "" {
+		return none, false
+	}
+	return official, true
+}
+
+// shadowMCPOfficialServerRedirect is the part of a block message that sends
+// the agent to the official server. It is written for the agent to act on:
+// the address stands on its own line so it can be copied or opened.
+func shadowMCPOfficialServerRedirect(official shadowmcp.OfficialServer) string {
+	served := fmt.Sprintf("Your organization serves an official version of this MCP server: %q.", official.Name)
+	if official.GatewayName != "" {
+		served = fmt.Sprintf("Your organization serves an official version of this MCP server, %q, through the gateway %q.", official.Name, official.GatewayName)
+	}
+	return served + " Use it instead of the direct connection:\n" + official.URL +
+		"\n\nIf that server is already connected, call its tools. If it is not, tell the user to add the URL above as an MCP server, then retry."
+}
+
 func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (shadowMCPRequestLink, bool) {
 	if s.cache == nil || strings.TrimSpace(s.jwtSecret) == "" {
 		return shadowMCPRequestLink{URL: "", Token: "", ExpiresAt: time.Time{}, ServerName: "", ServerURL: ""}, false
@@ -88,7 +147,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              params.ProjectID,
 		RequesterUserID:        params.RequesterUserID,
-		ObservedName:           shadowmcp.ObservedName(evidence, params.ToolName),
+		ObservedName:           redactedObservedName(params.Evidence, params.ToolName),
 		ObservedFullURL:        stringPtrOrNil(evidence.FullURL),
 		ObservedURLHost:        stringPtrOrNil(evidence.URLHost),
 		ObservedServerIdentity: stringPtrOrNil(evidence.ServerIdentity),
@@ -111,9 +170,20 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		URL:        requestURL,
 		Token:      token,
 		ExpiresAt:  expiry,
-		ServerName: conv.PtrValOr(shadowmcp.ObservedName(evidence, params.ToolName), ""),
+		ServerName: conv.PtrValOr(redactedObservedName(params.Evidence, params.ToolName), ""),
 		ServerURL:  redactedServerURL(evidence.FullURL),
 	}, true
+}
+
+// redactedObservedName names the observed server for people and for the
+// machine-readable block effect. A local server's identity can be its launch
+// command, which may carry credentials, so it is redacted first. The raw
+// identity still keys the request server side, where approvers see it
+// redacted (policyBypassRequestTargetView).
+func redactedObservedName(evidence shadowmcp.AccessEvidence, toolName string) *string {
+	redacted := shadowmcp.NormalizeAccessEvidence(evidence)
+	redacted.ServerIdentity = identity.RedactCommand(redacted.ServerIdentity)
+	return shadowmcp.ObservedName(redacted, toolName)
 }
 
 // redactedServerURL reduces an observed server URL to the inventory

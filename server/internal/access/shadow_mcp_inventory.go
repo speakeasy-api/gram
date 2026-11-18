@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -26,6 +27,7 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	shadowmcprepo "github.com/speakeasy-api/gram/server/internal/shadowmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -246,10 +248,76 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 		servers = append(servers, buildShadowMCPInventoryServer(row, usageByURL[row.CanonicalServerURL], policyState.forURL(row.CanonicalServerURL), shadowMCPTargetKindServerURL))
 	}
 
+	s.attachShadowMCPOfficialServers(ctx, input.OrganizationID, input.ProjectID, servers)
+
 	return &gen.ListShadowMCPInventoryResult{
 		Servers:    servers,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// attachShadowMCPOfficialServers marks the rows linked to an official
+// server, and offers a project server that proxies to the same URL to the
+// rows without a link. Access and AccessSummary stay the policy verdict; the
+// dashboard reads OfficialServer to show an active link as onboarded, since
+// the link blocks direct calls whatever the policy allows. A failed lookup
+// leaves the rows unmarked rather than failing the inventory: the page still
+// lists what was observed, and only the onboarded state is missing.
+func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizationID string, projectID uuid.UUID, servers []*gen.ShadowMCPInventoryServer) {
+	hasURLRow := false
+	for _, server := range servers {
+		if server != nil && conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) == shadowMCPTargetKindServerURL {
+			hasURLRow = true
+			break
+		}
+	}
+	if !hasURLRow {
+		return
+	}
+
+	official, err := shadowmcp.OfficialServers(ctx, s.db, organizationID, projectID, s.serverURL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID.String()),
+		)
+		return
+	}
+	suggested, err := shadowmcp.SuggestedOfficialServers(ctx, s.db, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "suggest official servers for shadow mcp inventory",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID.String()),
+		)
+		suggested = nil
+	}
+	for _, server := range servers {
+		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
+			continue
+		}
+		match, ok := shadowmcp.OfficialServerFor(official, server.CanonicalServerURL)
+		if !ok {
+			key, keyOK := shadowmcp.OfficialServerKey(server.CanonicalServerURL)
+			if suggestion, found := suggested[key]; keyOK && found {
+				server.SuggestedOfficialServer = &gen.ShadowMCPSuggestedOfficialServer{
+					McpServerID: suggestion.MCPServerID.String(),
+					Name:        suggestion.Name,
+					Slug:        conv.PtrEmpty(suggestion.Slug),
+				}
+			}
+			continue
+		}
+		server.OfficialServer = &gen.ShadowMCPOfficialServer{
+			McpServerID:         match.MCPServerID.String(),
+			Name:                match.Name,
+			Slug:                conv.PtrEmpty(match.Slug),
+			URL:                 conv.PtrEmpty(match.URL),
+			GatewayName:         conv.PtrEmpty(match.GatewayName),
+			DirectAccessAllowed: match.DirectAccessAllowed,
+		}
+	}
 }
 
 // shadowMCPRequestOnlyTargets lists the reviews whose targets telemetry has
@@ -413,6 +481,15 @@ func (s *Service) readShadowMCPInventoryServer(ctx context.Context, organization
 
 // ReadShadowMCPInventoryTarget composes one exact observed or request-only inventory target.
 func (s *Service) ReadShadowMCPInventoryTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (*gen.ShadowMCPInventoryServer, error) {
+	server, err := s.readShadowMCPInventoryTarget(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	s.attachShadowMCPOfficialServers(ctx, input.OrganizationID, input.ProjectID, []*gen.ShadowMCPInventoryServer{server})
+	return server, nil
+}
+
+func (s *Service) readShadowMCPInventoryTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (*gen.ShadowMCPInventoryServer, error) {
 	if strings.TrimSpace(input.OrganizationID) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
 	}
@@ -656,10 +733,8 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 
 	chRepo := telemetryrepo.New(s.chConn)
 	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		// Gated, not the raw org id: the fold is behind a rollout flag, and
-		// this endpoint must fall under the same switch as every other folded
-		// read. With the fold off the email leg drops and matching falls back
-		// to the user id, which returns less rather than something wrong.
+		// With no fold org the email leg drops and matching falls back to the
+		// user id, which returns less rather than something wrong.
 		OrganizationID:      s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
 		GramProjectID:       projectID.String(),
 		CanonicalServerURLs: nil,
@@ -1136,6 +1211,10 @@ func shadowMCPInventoryUsageByURL(rows []telemetryrepo.ShadowMCPInventoryUsageRo
 
 type shadowMCPInventoryPolicyState struct {
 	hasBlockingPolicy bool
+	// builtInBlocklist is set when the project has no blocking policy, so
+	// the built-in blocklist enforces standing decisions directly, with no
+	// grants in between.
+	builtInBlocklist bool
 	// hasBlockAllPolicy is set when any enabled blocking policy denies by
 	// default. When only allow_all blocking policies exist, rows are blocked
 	// solely by risk_policy:block grants (blockedPolicyIDs).
@@ -1155,6 +1234,11 @@ type shadowMCPInventoryPolicyState struct {
 	// every user blocks via a risk_policy:block grant. A URL blocked only by
 	// targeted allow_all policies is restricted, not blocked.
 	everyoneBlockedURLs map[string]struct{}
+
+	// someBlockedURLs holds the URLs the built-in blocklist blocks for some
+	// people only, so they read restricted: a denial narrowed to people or
+	// roles blocks them, and a narrowed approval blocks everyone else.
+	someBlockedURLs map[string]struct{}
 
 	// blockAllPolicyAudiences maps each deny-by-default policy to its
 	// audience principal URNs (the evaluate grants). A bypass grant only
@@ -1194,11 +1278,13 @@ type shadowMCPInventoryRequestState struct {
 func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizationID string, projectID uuid.UUID, canonicalURLs []string) (shadowMCPInventoryPolicyState, error) {
 	state := shadowMCPInventoryPolicyState{
 		hasBlockingPolicy:         false,
+		builtInBlocklist:          false,
 		hasBlockAllPolicy:         false,
 		hasEveryoneBlockAllPolicy: false,
 		allowedPolicyIDs:          map[string][]string{},
 		blockedPolicyIDs:          map[string][]string{},
 		everyoneBlockedURLs:       map[string]struct{}{},
+		someBlockedURLs:           map[string]struct{}{},
 		blockAllPolicyAudiences:   map[string][]string{},
 		bypassPrincipalsByURL:     map[string]map[string]map[string]struct{}{},
 		requestsByURL:             map[string]shadowMCPInventoryRequestState{},
@@ -1246,11 +1332,17 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	}
 
 	blockingPolicyIDs := make(map[string]struct{}, len(policies))
+	// Whether a blocking policy covers every user. Without one, the people no
+	// policy covers are in the built-in blocklist, as the hooks enforce.
+	hasEveryoneBlockingPolicy := false
 	for _, policy := range policies {
 		if policy.Action != "block" {
 			continue
 		}
 		state.hasBlockingPolicy = true
+		if policy.AudienceType == shadowMCPInventoryAudienceEveryone {
+			hasEveryoneBlockingPolicy = true
+		}
 		policyID := policy.ID.String()
 		blockingPolicyIDs[policyID] = struct{}{}
 
@@ -1273,7 +1365,9 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 					continue
 				}
 				state.blockedPolicyIDs[serverURL] = append(state.blockedPolicyIDs[serverURL], policyID)
-				if everyoneAudience {
+				// A block rule for everyone under an everyone policy blocks
+				// everyone; one narrowed to people or roles blocks only them.
+				if everyoneAudience && grant.PrincipalUrn == authz.AllUsersPrincipal().String() {
 					state.everyoneBlockedURLs[serverURL] = struct{}{}
 				}
 			}
@@ -1332,7 +1426,36 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			principals[grant.PrincipalUrn] = struct{}{}
 		}
 	}
+	if !hasEveryoneBlockingPolicy {
+		// The built-in blocklist covers everyone no blocking policy covers:
+		// every server connects for them except those a standing decision
+		// blocks. A denial for everyone blocks everyone, since a targeted
+		// policy blocks a denied server for its own audience too. A denial
+		// narrowed to people or roles blocks only them, and an approval
+		// narrowed to people or roles blocks everyone else.
+		decisions, err := shadowmcprepo.New(s.db).ListStandingShadowMCPDecisions(ctx, projectID)
+		if err != nil {
+			return state, fmt.Errorf("listing shadow mcp decisions: %w", err)
+		}
+		for _, decision := range decisions {
+			if _, ok := canonicalURLSet[decision.TargetKey]; !ok {
+				continue
+			}
+			forEveryone := len(decision.GrantedPrincipalUrns) == 0 || slices.Contains(decision.GrantedPrincipalUrns, authz.AllUsersPrincipal().String())
+			if decision.Decision == shadowMCPInventoryBypassStatusDenied && forEveryone {
+				state.everyoneBlockedURLs[decision.TargetKey] = struct{}{}
+				continue
+			}
+			if forEveryone {
+				continue
+			}
+			state.someBlockedURLs[decision.TargetKey] = struct{}{}
+		}
+	}
 	if len(blockingPolicyIDs) == 0 {
+		// No blocking policy: the project is in the built-in blocklist mode.
+		state.hasBlockingPolicy = true
+		state.builtInBlocklist = true
 		return state, nil
 	}
 
@@ -1391,7 +1514,8 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInventoryRowState {
 	requestState := s.requestsByURL[canonicalURL]
 	allowedPolicyIDs := s.allowedPolicyIDs[canonicalURL]
-	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0
+	_, deniedForSome := s.someBlockedURLs[canonicalURL]
+	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0 || deniedForSome
 	_, blockedForEveryoneList := s.everyoneBlockedURLs[canonicalURL]
 	// A block sourced from an everyone-audience policy stops every user; one
 	// sourced only from targeted policies stops a subset, which reads as
@@ -1493,7 +1617,7 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	blockedFor := shadowMCPAccessReachNone
 	if _, everyone := s.everyoneBlockedURLs[canonicalURL]; everyone {
 		blockedFor = shadowMCPAccessReachEveryone
-	} else if len(s.blockedPolicyIDs[canonicalURL]) > 0 || (s.hasBlockAllPolicy && !s.hasEveryoneBlockAllPolicy) {
+	} else if _, some := s.someBlockedURLs[canonicalURL]; some || len(s.blockedPolicyIDs[canonicalURL]) > 0 || (s.hasBlockAllPolicy && !s.hasEveryoneBlockAllPolicy) {
 		blockedFor = shadowMCPAccessReachSome
 	}
 
@@ -1518,9 +1642,21 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	// blast radius may be scoped — that is the decision as recorded, not a
 	// shortfall) unless an explicit block overrides them; a denial is fully
 	// carried only when the result is a project-wide block, and partially
-	// when only a targeted policy enforces it. With no blocking policy there
-	// is nothing to carry a decision at all.
-	if decision != nil && s.hasBlockingPolicy {
+	// when only a targeted policy enforces it. The built-in blocklist reads
+	// the standing decision itself, so the decision is carried as recorded
+	// unless the resulting access state contradicts it. This verdict covers
+	// policies, grants and decisions only. A link to an official server is
+	// reported beside it in the row's OfficialServer, and an active link
+	// blocks direct calls whatever this summary says.
+	if decision != nil && s.builtInBlocklist {
+		coverage = shadowMCPAccessCoverageFull
+		approvedButBlocked := *decision == shadowMCPInventoryBypassStatusApproved && state == shadowMCPAccessStateBlocked
+		deniedButAllowed := *decision == shadowMCPInventoryBypassStatusDenied && state == shadowMCPAccessStateAllowed
+		if approvedButBlocked || deniedButAllowed {
+			coverage = shadowMCPAccessCoveragePartial
+		}
+	}
+	if decision != nil && s.hasBlockingPolicy && !s.builtInBlocklist {
 		coverage = shadowMCPAccessCoveragePartial
 		switch *decision {
 		case shadowMCPInventoryBypassStatusApproved:
@@ -1576,24 +1712,26 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 	}
 
 	return &gen.ShadowMCPInventoryServer{
-		CanonicalServerURL: row.CanonicalServerURL,
-		ServerSlug:         shadowMCPInventoryServerSlug(row.CanonicalServerURL),
-		URLHost:            row.URLHost,
-		TargetKind:         conv.PtrEmpty(targetKind),
-		ServerName:         serverName,
-		FirstSeen:          formatTimeValue(row.FirstSeen),
-		LastSeen:           formatTimeValue(row.LastSeen),
-		LastCalled:         formatTimePtrValue(usage.LastCalled),
-		ObservedUseCount:   shadowMCPInventoryCount(usage.CallCount),
-		UserCount:          shadowMCPInventoryCount(usage.UserCount),
-		TopUsers:           topUsers,
-		Access:             rowState.Access,
-		AccessSummary:      rowState.Summary,
-		RequestCount:       rowState.RequestCount,
-		LatestRequest:      rowState.LatestRequest,
-		ApprovalRequest:    rowState.ApprovalRequest,
-		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
-		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
+		CanonicalServerURL:      row.CanonicalServerURL,
+		ServerSlug:              shadowMCPInventoryServerSlug(row.CanonicalServerURL),
+		URLHost:                 row.URLHost,
+		TargetKind:              conv.PtrEmpty(targetKind),
+		ServerName:              serverName,
+		FirstSeen:               formatTimeValue(row.FirstSeen),
+		LastSeen:                formatTimeValue(row.LastSeen),
+		LastCalled:              formatTimePtrValue(usage.LastCalled),
+		ObservedUseCount:        shadowMCPInventoryCount(usage.CallCount),
+		UserCount:               shadowMCPInventoryCount(usage.UserCount),
+		TopUsers:                topUsers,
+		Access:                  rowState.Access,
+		AccessSummary:           rowState.Summary,
+		RequestCount:            rowState.RequestCount,
+		LatestRequest:           rowState.LatestRequest,
+		ApprovalRequest:         rowState.ApprovalRequest,
+		AllowedPolicyIds:        rowState.AllowedPolicyIDs,
+		BlockedPolicyIds:        rowState.BlockedPolicyIDs,
+		OfficialServer:          nil,
+		SuggestedOfficialServer: nil,
 	}
 }
 

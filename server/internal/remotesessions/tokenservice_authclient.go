@@ -188,7 +188,7 @@ func (m *ChallengeManager) DisconnectAuthClientRemoteSession(ctx context.Context
 	for _, row := range disconnected {
 		m.revoker.RevokeDetached(ctx, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted,
+			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
 			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
 		})
 	}

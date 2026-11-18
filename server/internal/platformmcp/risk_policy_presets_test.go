@@ -105,15 +105,15 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 
+	// The schema is one flat object (Anthropic rejects a top-level oneOf), so
+	// it still refuses unknown values and fields, and the handler refuses the
+	// wrong mix of fields for each kind of request.
 	for name, arguments := range map[string]string{
 		"unknown preset":            `{"project_slug":"project","preset":"missing","idempotency_key":"key"}`,
-		"preset with policy_type":   `{"project_slug":"project","preset":"secrets_and_credentials","policy_type":"standard","idempotency_key":"key"}`,
-		"preset with sources":       `{"project_slug":"project","preset":"secrets_and_credentials","sources":["gitleaks"],"idempotency_key":"key"}`,
-		"standard without sources":  `{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"idempotency_key":"key"}`,
-		"standard without policy":   `{"project_slug":"project","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`,
+		"unknown policy type":       `{"project_slug":"project","policy_type":"regex","name":"policy","enabled":true,"idempotency_key":"key"}`,
+		"unknown field":             `{"project_slug":"project","preset":"secrets_and_credentials","idempotency_key":"key","unknown":true}`,
 		"scope with unknown field":  `{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"server":"github"},"idempotency_key":"key"}`,
 		"scope with bad annotation": `{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"all_servers":true,"tool_annotations":["dangerous"]},"idempotency_key":"key"}`,
-		"prompt branch with preset": `{"project_slug":"project","policy_type":"prompt_based","name":"policy","enabled":true,"prompt":"instruction","preset":"prompt_injection","idempotency_key":"key"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -125,48 +125,80 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 	type property struct {
 		Description string `json:"description"`
 		Enum        []any  `json:"enum"`
-		Const       any    `json:"const"`
 		Items       struct {
 			Description string `json:"description"`
 		} `json:"items"`
 	}
 	var schema struct {
-		OneOf []struct {
-			Properties map[string]property `json:"properties"`
-		} `json:"oneOf"`
+		Type       string              `json:"type"`
+		Properties map[string]property `json:"properties"`
+		Required   []string            `json:"required"`
+		OneOf      []json.RawMessage   `json:"oneOf"`
 	}
 	require.NoError(t, json.Unmarshal(create.InputSchema, &schema))
-	require.Len(t, schema.OneOf, 3)
-	var standard, prompt, preset map[string]property
-	for _, branch := range schema.OneOf {
-		switch {
-		case branch.Properties["preset"].Enum != nil:
-			preset = branch.Properties
-		case branch.Properties["policy_type"].Const == "standard":
-			standard = branch.Properties
-		case branch.Properties["policy_type"].Const == "prompt_based":
-			prompt = branch.Properties
-		}
-	}
-	require.NotNil(t, standard)
-	require.NotNil(t, prompt)
-	require.NotNil(t, preset)
-	require.Contains(t, standard["sources"].Description, "gitleaks: Secrets")
-	require.Contains(t, standard["sources"].Items.Description, "gitleaks: Secrets")
-	require.Contains(t, standard["presidio_entities"].Description, "US_SSN: US social security number")
-	require.Contains(t, standard["action"].Description, "block: Deny")
-	require.Contains(t, standard["policy_type"].Description, "Built-in detectors")
-	require.Contains(t, prompt["policy_type"].Description, "policy model")
-	require.Contains(t, preset["preset"].Description, "secrets_and_credentials: Secrets and credentials")
-	require.Len(t, preset["preset"].Enum, len(presets.IDs()))
-	require.NotContains(t, preset, "policy_type")
-	for _, branch := range []map[string]property{standard, prompt, preset} {
-		require.Contains(t, branch["mcp_scope"].Description, "before the tool runs")
-	}
+	require.Equal(t, "object", schema.Type)
+	require.Empty(t, schema.OneOf)
+	require.ElementsMatch(t, []string{"project_slug", "idempotency_key"}, schema.Required)
+	properties := schema.Properties
+	require.Contains(t, properties["sources"].Description, "gitleaks: Secrets")
+	require.Contains(t, properties["sources"].Items.Description, "gitleaks: Secrets")
+	require.Contains(t, properties["presidio_entities"].Description, "US_SSN: US social security number")
+	require.Contains(t, properties["action"].Description, "block: Deny")
+	require.Contains(t, properties["policy_type"].Description, "Built-in detectors")
+	require.Contains(t, properties["policy_type"].Description, "policy model")
+	require.ElementsMatch(t, []any{"standard", "prompt_based"}, properties["policy_type"].Enum)
+	require.Contains(t, properties["preset"].Description, "secrets_and_credentials: Secrets and credentials")
+	require.Len(t, properties["preset"].Enum, len(presets.IDs()))
+	require.Contains(t, properties["mcp_scope"].Description, "before the tool runs")
 
 	_, err = create.Invoke(ctx, json.RawMessage(`{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["delete_repository"]}],"tool_annotations":["destructiveHint"]},"idempotency_key":"key"}`))
 	require.ErrorAs(t, err, &refusal, "a scoped request passes schema validation and reaches the handler")
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
+}
+
+func TestValidateCreateRiskPolicyKind(t *testing.T) {
+	t.Parallel()
+
+	enabled := true
+	threshold := 0.5
+	for name, test := range map[string]struct {
+		input   createRiskPolicyInput
+		refusal string
+	}{
+		"preset":                    {input: createRiskPolicyInput{Preset: "secrets_and_credentials", Name: "Team secrets", ApprovedEmailDomains: []string{"example.com"}}},
+		"preset prompt override":    {input: createRiskPolicyInput{Preset: "destructive_production_actions", Prompt: "Only the billing database."}},
+		"standard":                  {input: createRiskPolicyInput{PolicyType: "standard", Name: "policy", Enabled: &enabled, Sources: []string{"gitleaks"}}},
+		"prompt based":              {input: createRiskPolicyInput{PolicyType: "prompt_based", Name: "policy", Enabled: &enabled, Prompt: "instruction"}},
+		"preset with policy_type":   {input: createRiskPolicyInput{Preset: "secrets_and_credentials", PolicyType: "standard"}, refusal: "not both"},
+		"preset with sources":       {input: createRiskPolicyInput{Preset: "secrets_and_credentials", Sources: []string{"gitleaks"}}, refusal: "sources cannot override a preset"},
+		"preset with threshold":     {input: createRiskPolicyInput{Preset: "customer_pii_egress", PresidioScoreThreshold: &threshold}, refusal: "presidio_score_threshold cannot override a preset"},
+		"preset with scopes":        {input: createRiskPolicyInput{Preset: "customer_pii_egress", DetectionScopes: []riskDetectionScope{{Category: "pii", MessageTypes: []string{"user"}}}}, refusal: "detection_scopes cannot override a preset"},
+		"preset with empty sources": {input: createRiskPolicyInput{Preset: "secrets_and_credentials", Sources: []string{}}, refusal: "sources cannot override a preset"},
+		"preset with empty rules":   {input: createRiskPolicyInput{Preset: "secrets_and_credentials", DisabledRules: []string{}}, refusal: "disabled_rules cannot override a preset"},
+		"neither preset nor type":   {input: createRiskPolicyInput{Name: "policy", Enabled: &enabled, Sources: []string{"gitleaks"}}, refusal: "Name a preset, or set policy_type"},
+		"standard without name":     {input: createRiskPolicyInput{PolicyType: "standard", Enabled: &enabled, Sources: []string{"gitleaks"}}, refusal: "needs name and enabled"},
+		"standard without enabled":  {input: createRiskPolicyInput{PolicyType: "standard", Name: "policy", Sources: []string{"gitleaks"}}, refusal: "needs name and enabled"},
+		"standard without sources":  {input: createRiskPolicyInput{PolicyType: "standard", Name: "policy", Enabled: &enabled}, refusal: "at least one source"},
+		"standard with prompt":      {input: createRiskPolicyInput{PolicyType: "standard", Name: "policy", Enabled: &enabled, Sources: []string{"gitleaks"}, Prompt: "instruction"}, refusal: "prompt is only for policy_type prompt_based"},
+		"prompt without prompt":     {input: createRiskPolicyInput{PolicyType: "prompt_based", Name: "policy", Enabled: &enabled}, refusal: "needs a prompt"},
+		"prompt with sources":       {input: createRiskPolicyInput{PolicyType: "prompt_based", Name: "policy", Enabled: &enabled, Prompt: "instruction", Sources: []string{"gitleaks"}}, refusal: "takes no detector settings"},
+		"prompt with email domains": {input: createRiskPolicyInput{PolicyType: "prompt_based", Name: "policy", Enabled: &enabled, Prompt: "instruction", ApprovedEmailDomains: []string{"example.com"}}, refusal: "takes no detector settings"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := validateCreateRiskPolicyKind(test.input)
+			if test.refusal == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrRiskMutationInvalid)
+			var mutation *RiskMutationError
+			require.ErrorAs(t, err, &mutation)
+			require.Equal(t, "invalid_request", mutation.Code)
+			require.Contains(t, mutation.Message, test.refusal)
+			require.Contains(t, mutation.Message, "No policy was created.")
+		})
+	}
 }
 
 func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {

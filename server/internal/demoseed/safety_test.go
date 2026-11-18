@@ -68,14 +68,14 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	// Provision the other tenant with the seed itself, including realistic MCP
 	// server dependents that the demo cleanup must not touch.
-	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), otherTenantSpec)
+	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, otherTenantSpec)
 	require.NoError(t, err)
 	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
 	planted, err := repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
 		OrgID: otherTenantSpec.OrgID, ProjectID: uuid.MustParse(otherTenantSpec.ProjectID()),
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 3, planted, "fixture must include a root endpoint and two same-slug toolsets")
+	require.EqualValues(t, 1, planted, "fixture must include a root endpoint")
 
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
@@ -132,7 +132,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.True(t, fixtureOutside, "fixture produced no clickhouse rows; the isolation check would be vacuous")
 
 	// First real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), DefaultSpec()))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec()))
 
 	pgAfter1, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -156,7 +156,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		OrgID: constants.DemoOrganizationID, ProjectID: uuid.MustParse(DefaultSpec().ProjectID()),
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 3, planted, "reseed must remove both kinds of custom-domain dependents")
+	require.EqualValues(t, 1, planted, "reseed must remove custom-domain dependents")
 
 	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
@@ -166,7 +166,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), DefaultSpec()))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec()))
 
 	pgAfter2, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)

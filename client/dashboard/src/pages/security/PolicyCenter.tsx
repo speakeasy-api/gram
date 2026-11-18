@@ -82,7 +82,11 @@ import {
   type PolicyAction,
   canonicalPolicyAction,
 } from "./policy-data";
-import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
+import {
+  isShadowMCPModePolicy,
+  POLICY_TYPE_LABEL,
+  policyTypeOf,
+} from "./policy-type";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { useDetectionRulesStore } from "./detection-rules-data";
@@ -90,7 +94,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
-import { Outlet } from "react-router";
+import { Navigate, Outlet } from "react-router";
 import {
   ACTION_OPTIONS,
   categoriesToPayload,
@@ -105,12 +109,12 @@ import {
 import { DetectionRulesTab } from "./DetectionRules";
 import {
   POLICY_CENTER_TABS,
+  movedToShadowMCP,
   policyCenterTabLabel,
   policyCenterTabs,
   resolvePolicyCenterTab,
   type PolicyCenterTab,
 } from "./policy-center-tabs";
-import { MCPApprovalsTab } from "./MCPApprovalsTab";
 import {
   compareMembersByName,
   compareRolesByName,
@@ -593,10 +597,6 @@ function policyCenterHeaderAction(
     // The targets library carries its own add button in its toolbar.
     case "shadow-ai-targets":
       return null;
-    // Access is decided per server, on the row or the server page; the queue
-    // itself is fed by requests and observed traffic.
-    case "mcp-approvals":
-      return null;
     // Requests come from held calls; approval policies are created from the
     // Policies tab.
     case "tool-approvals":
@@ -610,6 +610,12 @@ function policyCenterHeaderAction(
 }
 
 export default function PolicyCenter(): JSX.Element {
+  const routes = useRoutes();
+  const [rawTab] = useQueryState("tab");
+  // MCP approvals moved to the Shadow MCP page; its old tab link lands there.
+  if (movedToShadowMCP(rawTab)) {
+    return <Navigate to={routes.shadowMCP.href()} replace />;
+  }
   return (
     <RequireScope scope="org:admin" level="page">
       <PolicyCenterContent />
@@ -641,6 +647,9 @@ function PolicyCenterContent() {
     (): PolicyRow[] =>
       (data?.policies ?? [])
         .filter((policy) => nlEnabled || !isPromptPolicy(policy))
+        // The Shadow MCP page owns the policy behind "blocked by default"; it
+        // is a setting there, not a policy here.
+        .filter((policy) => !isShadowMCPModePolicy(policy))
         .map((policy) => {
           const kind: PolicyKind = isPromptPolicy(policy) ? "prompt" : "risk";
           return { kind, policy };
@@ -917,7 +926,9 @@ function PolicyCenterContent() {
     {
       key: "actions",
       header: "",
-      width: "0.3fr",
+      // Fixed so the trigger is never clipped: cells hide overflow, and a
+      // fractional track shrinks below the button on narrower screens.
+      width: "72px",
       render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
@@ -994,7 +1005,7 @@ function PolicyCenterContent() {
     {
       key: "actions",
       header: "",
-      width: "0.4fr",
+      width: "120px",
       render: (row) => (
         <Button
           variant="tertiary"
@@ -1153,8 +1164,7 @@ function PolicyCenterContent() {
     >
       {/* The dock follows the active tab: the Detection Rules tab took over
           the standalone page whose URL used to select these suggestions, and
-          the Shadow AI targets and MCP approvals tabs mount their own config
-          from their own data. */}
+          the Shadow AI targets tab mounts its own config from its own data. */}
       {activeTab === "detection-rules" ? (
         <InsightsConfig
           contextInfo={detectionRulesInsightsContext()}
@@ -1163,7 +1173,6 @@ function PolicyCenterContent() {
           subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
         />
       ) : activeTab === "shadow-ai-targets" ||
-        activeTab === "mcp-approvals" ||
         activeTab === "tool-approvals" ? null : (
         <InsightsConfig
           contextInfo={insightsContext}
@@ -1180,7 +1189,6 @@ function PolicyCenterContent() {
         />
       )}
       {activeTab === "shadow-ai-targets" && <ShadowAITargetsTab />}
-      {activeTab === "mcp-approvals" && <MCPApprovalsTab />}
       {activeTab === "tool-approvals" && toolApprovalsEnabled && (
         <ToolApprovalsTab />
       )}

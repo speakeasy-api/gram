@@ -196,17 +196,44 @@ func renderUserBlockReason(scanResult *risk.ScanResult, auditReason string) stri
 	if scanResult.AnalysisUnavailable() {
 		return analysisUnavailableReason(scanResult)
 	}
-	return renderPolicyUserMessage(scanResult.UserMessage, auditReason)
-}
-
-// renderPolicyUserMessage applies a policy's user_message override to a deny
-// that has no ScanResult behind it (the shadow-MCP guard); the audit reason
-// is rendered verbatim when there is none.
-func renderPolicyUserMessage(userMessage *string, auditReason string) string {
-	if userMessage != nil && *userMessage != "" {
-		return *userMessage
+	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
+		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult, maskBlockedMatch(scanResult.MatchedValue))
 	}
 	return auditReason
+}
+
+// maskBlockedMatch is %{match} in a block message. A block exists to keep the
+// value out of the session, so the message only hints at it: up to four
+// characters from each end, and never more than a quarter of the value, so
+// the person can tell which value was caught. A value of 12 characters or
+// fewer shows as "…". A match with no value (an LLM judge finding) renders
+// as an empty string rather than suggest a hidden value. Repeating a live
+// credential in full also makes Claude's apps drop the whole message.
+func maskBlockedMatch(v string) string {
+	r := []rune(v)
+	if len(r) == 0 {
+		return ""
+	}
+	if len(r) <= 12 {
+		return "…"
+	}
+	show := min(4, len(r)/8)
+	return string(r[:show]) + "…" + string(r[len(r)-show:])
+}
+
+// shadowMCPEntity is %{entity} in a shadow-MCP block message.
+const shadowMCPEntity = "shadow MCP server"
+
+// renderPolicyUserMessage applies a policy's user_message override to a deny
+// that has no ScanResult behind it (the shadow-MCP guard). The template takes
+// the same placeholders as other block messages: %{match} is the observed
+// server, %{policy} the policy name, and %{rule} is empty. The audit reason
+// is rendered verbatim when there is no override.
+func renderPolicyUserMessage(userMessage *string, auditReason, policyName, server string) string {
+	if userMessage == nil || strings.TrimSpace(*userMessage) == "" {
+		return auditReason
+	}
+	return fillPolicyPlaceholders(*userMessage, server, shadowMCPEntity, policyName, "")
 }
 
 // analysisUnavailableReason is the user-facing deny copy for a fail-closed
@@ -265,11 +292,22 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 	// Record the challenge (log-safe fields only — never the matched value).
 	s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
 
+	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, siteURL, policyAckInput(ev, scanResult, toolName), 0)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",
+			attr.SlogError(err))
+		return "", "", false
+	}
+	return renderWarnAgentReason(scanResult), renderWarnUserReason(scanResult, ackURL), true
+}
+
+// policyAckInput is the challenge state an acknowledgement link redeems.
+func policyAckInput(ev hookevents.Event, scanResult *risk.ScanResult, toolName string) risk.PolicyAckTokenInput {
 	var toolPtr *string
 	if toolName != "" {
 		toolPtr = &toolName
 	}
-	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, siteURL, risk.PolicyAckTokenInput{
+	return risk.PolicyAckTokenInput{
 		OrganizationID: ev.Context.OrganizationID,
 		ProjectID:      ev.Context.ProjectID.String(),
 		UserID:         ev.Context.User.ID,
@@ -283,13 +321,7 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 		ChallengeMessage: renderWarnBody(scanResult),
 		// Zero: use the ack-window default (defaultAckGrace) so the retry passes.
 		RememberFor: 0,
-	}, 0)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",
-			attr.SlogError(err))
-		return "", "", false
 	}
-	return renderWarnAgentReason(scanResult), renderWarnUserReason(scanResult, ackURL), true
 }
 
 // renderWarnBody builds the challenge message body. Uses the policy's
@@ -306,13 +338,7 @@ func renderWarnBody(scanResult *risk.ScanResult) string {
 	}
 
 	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
-		r := strings.NewReplacer(
-			"%{match}", match,
-			"%{entity}", entity,
-			"%{policy}", scanResult.PolicyName,
-			"%{rule}", scanResult.RuleID,
-		)
-		return r.Replace(*scanResult.UserMessage)
+		return renderPolicyPlaceholders(*scanResult.UserMessage, scanResult, match)
 	}
 	if match != "" {
 		return fmt.Sprintf("Your request matched policy %q: potentially harmful or sensitive content %q identified as %s. Do you wish to continue?",
@@ -320,6 +346,27 @@ func renderWarnBody(scanResult *risk.ScanResult) string {
 	}
 	return fmt.Sprintf("Your request matched policy %q: potentially harmful or sensitive content identified as %s. Do you wish to continue?",
 		scanResult.PolicyName, entity)
+}
+
+// renderPolicyPlaceholders fills a policy's custom message template:
+// %{match} (the caller's rendering of the matched value), %{entity},
+// %{policy} and %{rule}. Warn, block and quarantine messages all accept the
+// same placeholders.
+func renderPolicyPlaceholders(message string, scanResult *risk.ScanResult, match string) string {
+	entity := scanResult.Entity
+	if entity == "" {
+		entity = scanResult.RuleID
+	}
+	return fillPolicyPlaceholders(message, match, entity, scanResult.PolicyName, scanResult.RuleID)
+}
+
+func fillPolicyPlaceholders(message, match, entity, policy, rule string) string {
+	return strings.NewReplacer(
+		"%{match}", match,
+		"%{entity}", entity,
+		"%{policy}", policy,
+		"%{rule}", rule,
+	).Replace(message)
 }
 
 // renderWarnAgentReason is the model-facing framing of a warn challenge. It

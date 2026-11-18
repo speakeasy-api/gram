@@ -46,7 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
+	"github.com/speakeasy-api/gram/server/internal/keys"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -943,13 +943,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		if wErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset mcp server").LogError(ctx, s.logger)
 		}
-		alias, aErr := legacyalias.Get(ctx, s.db, *ac.ProjectID, toolset.ID)
-		if aErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, aErr, "verify toolset mcp server").LogError(ctx, s.logger)
-		}
-		hosted := hosting.Enabled && alias.Slug.Valid && alias.Slug.String != ""
-		if wrapper != nil && hosting.Enabled && !hosted {
-			// Without the legacy slug alias the server needs an endpoint of its own.
+		hosted := false
+		if wrapper != nil && hosting.Enabled {
 			server, mcpErr := s.repo.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{McpServerID: wrapper.ID, ProjectID: *ac.ProjectID})
 			if mcpErr != nil && !errors.Is(mcpErr, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify toolset mcp server").LogError(ctx, s.logger)
@@ -1542,22 +1537,34 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "read published marketplace name").LogError(ctx, s.logger)
 	}
 
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
+
+	// For vibe, check the gate before minting anything: a pinned release
+	// without the provider, or an org name that breaks the AP1.0 name schema,
+	// is a failed precondition, not a 500 — and must not store a hooks key.
+	if payload.Platform == "vibe" && !VibeObservabilityPluginAvailable(cfg) {
+		if !vibeProviderReleased() {
+			return nil, nil, oops.E(oops.CodeFailedPrecondition, nil, "the pinned speakeasy-hooks release ("+hooksBinaryVersion+") does not carry the vibe provider; it opens when a release with hooks/relay/vibe.go is pinned")
+		}
+		return nil, nil, oops.E(oops.CodeFailedPrecondition, nil, "the organization name produces a plugin name that does not satisfy the Agent Plugins 1.0 name schema (max 64 characters, starting with a letter or digit)")
+	}
+
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").LogError(ctx, s.logger)
 	}
-
-	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
-	}
-
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 	cfg.InstallRoute = InstallRouteDownload
 
+	// Generate first, persist the key only on success: a failed generation
+	// (e.g. an org name the schema rejects) must not leave a stored hooks key
+	// behind — each attempt used to mint one.
 	archive, err := ObservabilityPluginZip(cfg, payload.Platform)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").LogError(ctx, s.logger)
+	}
+	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
 	}
 
 	filename := "observability"
@@ -1574,6 +1581,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-openclaw"
 	case "pi":
 		filename = "observability-pi"
+	case "vibe":
+		filename = "observability-vibe"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1746,21 +1755,23 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:                s.github != nil,
-		Connected:                 false,
-		RepoOwner:                 nil,
-		RepoName:                  nil,
-		RepoURL:                   nil,
-		MarketplaceURL:            nil,
-		ClaudeObservabilityPlugin: nil,
-		CodexObservabilityPlugin:  nil,
-		CursorObservabilityPlugin: nil,
-		HasCollaborators:          nil,
-		UpToDate:                  nil,
-		AutomaticSyncPending:      nil,
-		Plugins:                   nil,
-		LastPublishedAt:           nil,
-		LiveVersion:               nil,
+		Configured:                 s.github != nil,
+		Connected:                  false,
+		RepoOwner:                  nil,
+		RepoName:                   nil,
+		RepoURL:                    nil,
+		MarketplaceURL:             nil,
+		ClaudeObservabilityPlugin:  nil,
+		CodexObservabilityPlugin:   nil,
+		CursorObservabilityPlugin:  nil,
+		VibeObservabilityPlugin:    nil,
+		VibeObservabilityAvailable: nil,
+		HasCollaborators:           nil,
+		UpToDate:                   nil,
+		AutomaticSyncPending:       nil,
+		Plugins:                    nil,
+		LastPublishedAt:            nil,
+		LiveVersion:                nil,
 	}
 
 	if s.github != nil {
@@ -1804,6 +1815,19 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 				result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 				result.CursorObservabilityPlugin = conv.PtrEmpty(CursorObservabilitySlug(slugCfg))
+				// The ZIP download depends only on the pin and the org name,
+				// not on the marketplace repo, so availability is reported
+				// on VibeObservabilityPluginAvailable alone. The slug is
+				// reported from what was actually published: the stored
+				// published hooks version matching the current generator —
+				// a first publish skips the rollout gate and writes the
+				// current hooks subtree, so rollout eligibility is the wrong
+				// signal here.
+				vibeStatus := VibeObservabilityStatusFor(slugCfg, conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion))
+				result.VibeObservabilityAvailable = &vibeStatus.Available
+				if vibeStatus.Published {
+					result.VibeObservabilityPlugin = conv.PtrEmpty(vibeStatus.Plugin)
+				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
 			if admin && conn.MarketplaceToken.Valid && s.serverURL != "" {
@@ -2810,7 +2834,12 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, targetHooksVersion, persistedHooksConfigJSON); err != nil {
+	// The MCP files a fresh consumer key is baked into are the active plugins'.
+	activeSlugs := make([]string, 0, len(plan.Active))
+	for _, info := range plan.Active {
+		activeSlugs = append(activeSlugs, info.Slug)
+	}
+	if err := s.persistPluginAPIKeys(ctx, input, candidates, activeSlugs, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, targetHooksVersion, persistedHooksConfigJSON); err != nil {
 		if errors.Is(err, ErrGitHubRepoConflict) {
 			return nil, oops.E(oops.CodeConflict, err, "persist plugin api keys").LogWarn(ctx, s.logger)
 		}
@@ -3197,6 +3226,58 @@ func (s *Service) resolveOrganizationName(ctx context.Context, orgID, orgSlug st
 	return orgName
 }
 
+// pluginMCPKeyPolicy is the policy a plugin's consumer key is minted with, so
+// the key reaches what it is published for without waiting for a default auth
+// permission run: mcp:connect on each server the plugins named by slugs
+// present the key to, and mcp:auth on the project's shared auth clients. The
+// servers are the ones a publish distributes, read as it reads them, less
+// those the generated config never sends the key to: public, OAuth and
+// unproxied servers, and gateways, which sign in through OAuth. A key
+// represents no user, so it never holds personal or identity chaining clients.
+func pluginMCPKeyPolicy(ctx context.Context, dbtx repo.DBTX, projectID uuid.UUID, slugs []string) ([]*authz.RoleGrant, error) {
+	project := projectID.String()
+	shared := &authz.RoleGrant{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{
+		authz.AuthClientTypeSelector(authz.AuthClientTypeServiceAccount, project),
+		authz.AuthClientTypeSelector(authz.AuthClientTypeStaticCredential, project),
+		authz.AuthClientTypeSelector(authz.AuthClientTypePassThrough, project),
+	}}
+	policy := []*authz.RoleGrant{shared}
+
+	rows, err := repo.New(dbtx).ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: nil})
+	if err != nil {
+		return nil, fmt.Errorf("list plugin servers: %w", err)
+	}
+	// mcp:connect is checked on the server's id on every path a plugin's
+	// address reaches: a toolset served at its own address is the wrapper
+	// whose id is the toolset's.
+	var resources []string
+	for _, row := range rows {
+		if !slices.Contains(slugs, row.PluginSlug) || row.McpServerIsPublic || row.McpServerIsOauth || row.UnproxiedUrl.Valid || !row.McpServerID.Valid {
+			continue
+		}
+		resources = append(resources, row.McpServerID.UUID.String())
+	}
+	slices.Sort(resources)
+	resources = slices.Compact(resources)
+	if len(resources) > 0 {
+		connect := &authz.RoleGrant{Scope: string(authz.ScopeMCPConnect), Selectors: make([]authz.Selector, 0, len(resources))}
+		for _, id := range resources {
+			selector := authz.NewSelector(authz.ScopeMCPConnect, id)
+			selector[authz.SelectorKeyProjectID] = project
+			connect.Selectors = append(connect.Selectors, selector)
+		}
+		policy = append(policy, connect)
+	}
+	for _, grant := range policy {
+		for _, selector := range grant.Selectors {
+			if err := authz.ValidateAPIKeyPolicyGrant(authz.Scope(grant.Scope), selector); err != nil {
+				return nil, fmt.Errorf("validate plugin key policy: %w", err)
+			}
+		}
+	}
+	return policy, nil
+}
+
 // pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
 // that has not yet been persisted to the database. It is built before GitHub
 // publishing so the key can be embedded in the published files, and only
@@ -3313,11 +3394,13 @@ func (s *Service) upsertGitHubConnection(ctx context.Context, tx pgx.Tx, params 
 // persistPluginAPIKeys atomically writes one or more API keys, their audit
 // log entries, the plugin publish audit log entry, and the GitHub
 // connection record in a single transaction. All-or-nothing: if any
-// candidate fails to insert, none are persisted.
+// candidate fails to insert, none are persisted. A consumer key is written
+// with its own policy, pluginMCPKeyPolicy over the plugins in mcpKeySlugs.
 func (s *Service) persistPluginAPIKeys(
 	ctx context.Context,
 	input publishProjectInput,
 	candidates []pluginAPIKeyCandidate,
+	mcpKeySlugs []string,
 	projectName string,
 	repoOwner, repoName string,
 	pluginSlugs []string,
@@ -3353,6 +3436,21 @@ func (s *Service) persistPluginAPIKeys(
 			return fmt.Errorf("create api key %s: %w", candidate.keyName, err)
 		}
 
+		var policy []*authz.RoleGrant
+		if candidate.scope == auth.APIKeyScopeConsumer {
+			policy, err = pluginMCPKeyPolicy(ctx, tx, input.ProjectID, mcpKeySlugs)
+			if err != nil {
+				return fmt.Errorf("plan api key %s policy: %w", candidate.keyName, err)
+			}
+			if err := authz.PatchPrincipalGrants(ctx, tx, input.OrganizationID, urn.NewAPIKeyPrincipal(createdKey.ID), policy, nil); err != nil {
+				return fmt.Errorf("grant api key %s policy: %w", candidate.keyName, err)
+			}
+		}
+		policyAudit, err := keys.PolicyAuditPayload(policy)
+		if err != nil {
+			return fmt.Errorf("audit api key %s policy: %w", candidate.keyName, err)
+		}
+
 		if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
 			OrganizationID:   input.OrganizationID,
 			ProjectID:        projectID,
@@ -3363,7 +3461,7 @@ func (s *Service) persistPluginAPIKeys(
 			KeyName:          candidate.keyName,
 			Scopes:           scopes,
 			AgentCredential:  nil,
-			PolicyGrants:     nil,
+			PolicyGrants:     policyAudit,
 		}); err != nil {
 			return fmt.Errorf("audit log key creation %s: %w", candidate.keyName, err)
 		}
@@ -3449,7 +3547,7 @@ func (s *Service) resolvePluginInfosInTx(ctx context.Context, tx pgx.Tx, organiz
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
 	}
-	mcpRows, err := listPluginMCPServers(ctx, tx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	mcpRows, err := lockedRepo.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}

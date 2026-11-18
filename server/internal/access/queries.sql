@@ -313,13 +313,25 @@ SELECT pg_advisory_xact_lock(hashtextextended(
 -- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
-  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+  resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by
 )
 SELECT
   @organization_id, unnest(@challenge_ids::text[]), @principal_urn, @scope,
-  @resource_kind, @resource_id, @resolution_type, @role_slug, @resolved_by
+  @resource_kind, @resource_id, @resolution_type, @role_slug, sqlc.narg(temporary_grant_id)::uuid, @resolved_by
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING *;
+
+-- name: ListChallengeResolutionTemporaryGrants :many
+-- Returns each temporary grant a challenge resolution points at, expired ones
+-- included. A grant that is missing was revoked (revocation deletes the row).
+-- active compares the deadline with the database clock, the same clock
+-- authorization reads grants with. created_at moves when an expired grant is
+-- restarted, which tells a resolution of the earlier grant from the new one.
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[])
+  AND expires_at IS NOT NULL;
 
 -- name: GetGlobalRoleBySlug :one
 SELECT *
@@ -1366,9 +1378,12 @@ SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || s
 -- server, so plugin membership is deliberately not consulted.
 --
 -- The shape mirrors the authorization engine's own: a permission is an allow
--- grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
--- server (see authz/expressions.go). mcp:blocked_connect withdraws
--- mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+-- grant for a scope minus a blocked_ grant proving the same server for that
+-- scope or for one it implies (see authz/expressions.go): mcp:blocked_write
+-- withdraws mcp:write, and mcp:blocked_read withdraws mcp:read and also
+-- mcp:write, because a write check honours a read block (see scopeExpansions
+-- in authz/scopes.go). mcp:blocked_connect withdraws mcp:connect only;
+-- connect is implied by neither read nor write. A grant made directly to the
 -- user that names this server outranks a block inherited from a role or
 -- user:all, while the user's own blocks always apply (authz/precedence.go).
 WITH user_grants AS (
@@ -1437,7 +1452,10 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.server_id = s.id
     AND blocked.strict
-    AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+      OR (allowed.scope = 'mcp:write' AND blocked.scope = 'mcp:blocked_read')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name;

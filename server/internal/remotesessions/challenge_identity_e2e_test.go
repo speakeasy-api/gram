@@ -374,7 +374,7 @@ func TestRemoteLoginCapturesIDTokenIdentity(t *testing.T) {
 	require.False(t, tombstone.UpstreamDisplayName.Valid)
 	require.False(t, tombstone.IdentitySource.Valid)
 	require.Nil(t, tombstone.Enrichment)
-	require.NotEmpty(t, tombstone.AccessTokenEncrypted, "credentials stay for upstream revocation")
+	require.NotEmpty(t, tombstone.AccessTokenEncrypted.String, "credentials stay for upstream revocation")
 }
 
 func TestRemoteLoginStoresSessionWithoutIdentityWhenIDTokenIsRejected(t *testing.T) {
@@ -611,7 +611,7 @@ func TestRevocationPathsClearIdentity(t *testing.T) {
 			require.False(t, tombstone.UpstreamDisplayName.Valid)
 			require.False(t, tombstone.IdentitySource.Valid)
 			require.Nil(t, tombstone.Enrichment)
-			require.NotEmpty(t, tombstone.AccessTokenEncrypted, "credentials stay for upstream revocation")
+			require.NotEmpty(t, tombstone.AccessTokenEncrypted.String, "credentials stay for upstream revocation")
 		})
 	}
 }
@@ -743,7 +743,7 @@ func TestReconnectDuringRestatementKeepsItsIdentity(t *testing.T) {
 				SubjectUrn:             env.subject,
 				UserSessionIssuerID:    current.UserSessionIssuerID,
 				RemoteSessionClientID:  env.clientID,
-				AccessTokenEncrypted:   current.AccessTokenEncrypted,
+				AccessTokenEncrypted:   current.AccessTokenEncrypted.String,
 				AccessExpiresAt:        current.AccessExpiresAt,
 				RefreshTokenEncrypted:  current.RefreshTokenEncrypted,
 				AuthorizationExpiresAt: current.AuthorizationExpiresAt,

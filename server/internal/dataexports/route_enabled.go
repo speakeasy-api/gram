@@ -137,12 +137,16 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 	// route whose destination has since been deleted or corrupted is exporting
 	// nothing, and reporting "already resumed" would hide that.
 	if params.Enabled {
-		if err := checkRouteDestination(ctx, queries, c.encryption, params.OrganizationID, params.ProjectID, before.OtelDestinationID, true); err != nil {
+		if _, err := checkRouteDestination(ctx, queries, c.encryption, params.OrganizationID, params.ProjectID, before.OtelDestinationID, true); err != nil {
 			return SetRouteEnabledResult{}, err
 		}
 	}
 	if before.Enabled == params.Enabled {
 		return SetRouteEnabledResult{Before: before, After: before, Changed: false}, nil
+	}
+	level, err := routeMinSeverity(ctx, queries, params.OrganizationID, params.ProjectID, before)
+	if err != nil {
+		return SetRouteEnabledResult{}, err
 	}
 	after, err := queries.SetDataExportRouteEnabled(ctx, repo.SetDataExportRouteEnabledParams{
 		Enabled:        params.Enabled,
@@ -162,8 +166,8 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 		ActorSlug:           nil,
 		RouteURN:            urn.NewDataExportRoute(after.ID),
 		DataSource:          after.DataSource,
-		RouteSnapshotBefore: routeSnapshot(before),
-		RouteSnapshotAfter:  routeSnapshot(after),
+		RouteSnapshotBefore: routeSnapshot(before, level),
+		RouteSnapshotAfter:  routeSnapshot(after, level),
 	}
 	if params.Enabled {
 		err = c.audit.LogDataExportRouteResume(ctx, tx, event)
@@ -178,10 +182,13 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 
 // checkRouteDestination is the one place that decides whether a route may
 // point at a destination, shared by the dashboard's route create and update
-// and by RouteEnabledCore. An enabled route needs a destination; any named
-// destination must be live in the same project and hold a usable stored
-// configuration. The destination row is held FOR SHARE until tx ends, so a
-// concurrent destination delete cannot land between this check and the write.
+// and by RouteEnabledCore and RouteTestCore. An enabled route needs a
+// destination; any named destination must be live in the same project and hold
+// a usable stored configuration. Inside a transaction the destination row is
+// held FOR SHARE until it ends, so a concurrent destination delete cannot land
+// between this check and the write. RouteTestCore calls it without one and
+// writes nothing, so there the lock ends with the read.
+// It returns the decoded destination, zero when the route names none.
 func checkRouteDestination(
 	ctx context.Context,
 	queries *repo.Queries,
@@ -190,12 +197,13 @@ func checkRouteDestination(
 	projectID uuid.UUID,
 	destinationID uuid.NullUUID,
 	enabled bool,
-) error {
+) (routeDestination, error) {
+	var decoded routeDestination
 	if !destinationID.Valid {
 		if enabled {
-			return ErrRouteDestinationRequired
+			return decoded, ErrRouteDestinationRequired
 		}
-		return nil
+		return decoded, nil
 	}
 	destination, err := queries.GetOtelDestinationForRoute(ctx, repo.GetOtelDestinationForRouteParams{
 		OrganizationID: organizationID,
@@ -203,21 +211,36 @@ func checkRouteDestination(
 		ID:             destinationID.UUID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrRouteDestinationInactive
+		return decoded, ErrRouteDestinationInactive
 	}
 	if err != nil {
-		return fmt.Errorf("load route destination: %w", err)
+		return decoded, fmt.Errorf("load route destination: %w", err)
 	}
 	if _, err := validateDestinationURL(destination.EndpointUrl); err != nil {
-		return &routeDestinationInvalidError{reason: "stored OTEL destination has invalid endpoint URL", cause: err}
+		return decoded, &routeDestinationInvalidError{reason: "stored OTEL destination has invalid endpoint URL", cause: err}
 	}
-	if _, err := sensitiveDataFromRow(destination.SensitiveData); err != nil {
-		return &routeDestinationInvalidError{reason: "stored OTEL destination has invalid sensitive-data policy", cause: err}
+	policy, err := sensitiveDataFromRow(destination.SensitiveData)
+	if err != nil {
+		return decoded, &routeDestinationInvalidError{reason: "stored OTEL destination has invalid sensitive-data policy", cause: err}
 	}
-	if _, err := decryptHeaders(encryptionClient, destination.HeadersEncrypted); err != nil {
-		return &routeDestinationInvalidError{reason: "decode stored OTEL destination headers", cause: err}
+	headers, err := decryptHeaders(encryptionClient, destination.HeadersEncrypted)
+	if err != nil {
+		return decoded, &routeDestinationInvalidError{reason: "decode stored OTEL destination headers", cause: err}
 	}
-	return nil
+	return routeDestination{
+		ID:                   destination.ID,
+		EndpointURL:          destination.EndpointUrl,
+		Headers:              headers,
+		IncludeSensitiveData: policy == sensitiveDataInclude,
+	}, nil
+}
+
+// routeDestination is a route's destination as delivery reads it, headers decrypted.
+type routeDestination struct {
+	ID                   uuid.UUID
+	EndpointURL          string
+	Headers              map[string]string
+	IncludeSensitiveData bool
 }
 
 // routeDestinationInvalidError matches ErrRouteDestinationInvalid and keeps

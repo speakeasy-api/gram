@@ -104,29 +104,6 @@ func validateShadowMCPBlockedURLs(disposition string, rawURLs []string) ([]strin
 	return canonicalURLs, nil
 }
 
-// loadShadowMCPBlockedURLs reads the canonical blocked-URL set of an
-// allow_all policy from its risk_policy:block grants. Block rules are
-// project-wide, so only the URL selector matters — the grant audience is
-// always the all-users principal.
-func loadShadowMCPBlockedURLs(ctx context.Context, db repo.DBTX, organizationID string, policyID string) ([]string, error) {
-	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyBlock,
-		ResourceID:     policyID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list shadow mcp policy block grants: %w", err)
-	}
-	urls := make([]string, 0, len(grants))
-	for _, grant := range grants {
-		if serverURL := grant.Selector[authz.SelectorKeyServerURL]; serverURL != "" {
-			urls = append(urls, serverURL)
-		}
-	}
-	slices.Sort(urls)
-	return slices.Compact(urls), nil
-}
-
 // ShadowMCPPolicyURLReconciler replaces the URL grants owned by one risk policy.
 type ShadowMCPPolicyURLReconciler func(
 	ctx context.Context,
@@ -180,4 +157,22 @@ func validateShadowMCPAllowedURLs(
 		}
 	}
 	return canonicalURLs, nil
+}
+
+// shadowMCPBlockedURLsFromGrants is an allow_all policy's blocked list as one
+// user sees it: the server URLs of the policy's risk_policy:block rules among
+// that user's grants, which already include the roles and the everyone
+// principal the user holds.
+func shadowMCPBlockedURLsFromGrants(grants []authz.Grant, policyID string) []string {
+	urls := make([]string, 0)
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeRiskPolicyBlock || grant.Selector[authz.SelectorKeyResourceID] != policyID {
+			continue
+		}
+		if serverURL := grant.Selector[authz.SelectorKeyServerURL]; serverURL != "" {
+			urls = append(urls, serverURL)
+		}
+	}
+	slices.Sort(urls)
+	return slices.Compact(urls)
 }

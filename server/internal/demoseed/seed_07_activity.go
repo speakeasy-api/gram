@@ -100,9 +100,9 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	}
 	for i := 12; i >= 1; i-- {
 		u := demoUsers[i%6]
-		subject := "Acme Support Tools"
+		subject := "OpenAPI Server"
 		if i%2 == 0 {
-			subject = "Acme Ops"
+			subject = "Example OAuth"
 		}
 		if err := s.q.ActivityInsertProjectAuditLog(ctx, repo.ActivityInsertProjectAuditLogParams{
 			ID:                 s.det("audit-" + strconv.Itoa(i)),
@@ -129,6 +129,22 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		ProjectID:      proj,
 	}); err != nil {
 		return fmt.Errorf("insert demo anthropic inference config: %w", err)
+	}
+
+	// A paused Vault connection demonstrates setup without credentials or outbound sync.
+	if err := s.q.ActivityDeleteGeminiComplianceConfig(ctx, org); err != nil {
+		return fmt.Errorf("delete demo Gemini compliance config: %w", err)
+	}
+	if err := s.q.ActivityInsertGeminiComplianceConfig(ctx, repo.ActivityInsertGeminiComplianceConfigParams{
+		ID: s.det("gemini-compliance-config"), OrganizationID: org, ProjectID: proj,
+		MatterID: activityText(s.det("gemini-vault-matter").String()),
+	}); err != nil {
+		return fmt.Errorf("insert demo Gemini compliance config: %w", err)
+	}
+	if err := s.q.ActivityInsertGeminiComplianceSync(ctx, repo.ActivityInsertGeminiComplianceSyncParams{
+		ID: s.det("gemini-compliance-sync"), ConfigID: s.det("gemini-compliance-config"),
+	}); err != nil {
+		return fmt.Errorf("insert demo Gemini compliance sync: %w", err)
 	}
 
 	amara := demoUsers[0]
@@ -168,6 +184,19 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 			activityTextRaw("The checklist covers tests, rollout, and rollback readiness."), nil, chatSrc, model, activityMinutes(19), activityNull},
 		{"anthropic-inference-followup", "user", "Which checks remain before rollout?",
 			activityTextRaw("Which checks remain before rollout?"), nil, chatSrc, model, activityMinutes(18), activityNull},
+	}); err != nil {
+		return err
+	}
+
+	// Synthetic retained text chat, matching the Vault importer surface/source.
+	geminiChatID := s.det("gemini-compliance-chat")
+	geminiSource := activityText("gemini")
+	if err := insertChat(geminiChatID, jonas, "Gemini: release readiness review", geminiSource, activityNoAgent, activityHours(3), activityHours(2)); err != nil {
+		return err
+	}
+	if err := s.activityInsertMessages(ctx, geminiChatID, []activityMessage{
+		{"gemini-compliance-prompt", "user", "Draft a release readiness checklist for a staged rollout. Include rollback criteria and an owner for each check.", nil, nil, geminiSource, activityText("gemini"), activityHours(3), activityNull},
+		{"gemini-compliance-reply", "assistant", "Before rollout: the release owner confirms tests pass, operations checks dashboards, and support reviews the runbook. Start with a small cohort. Pause the rollout if error rates rise; the release owner approves rollback to the previous stable version.", nil, nil, geminiSource, activityText("gemini"), activityHours(2), activityNull},
 	}); err != nil {
 		return err
 	}

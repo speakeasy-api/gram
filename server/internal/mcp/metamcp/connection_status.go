@@ -187,6 +187,10 @@ func (r ConnectionStatusResult) Text() string {
 			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)
 		case SignInHidden:
 			hidden = true
+			if s.Detail != "" {
+				fmt.Fprintf(&b, "- %s: hidden by the user (%s)\n", label, s.Detail)
+				continue
+			}
 			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)
 		case SignInUnavailable:
 			fmt.Fprintf(&b, "- %s: temporarily unavailable (%s)\n", label, s.Detail)

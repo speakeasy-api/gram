@@ -63,7 +63,6 @@ func TestGetProjectRedeployPreview_ReturnsActiveDeployment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, active.String(), got.ActiveDeploymentID)
 	require.Equal(t, "default", got.ProjectName)
-	require.Zero(t, got.ExternalMcps)
 }
 
 func TestGetProject_ReportsActiveDeployment(t *testing.T) {

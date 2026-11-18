@@ -104,7 +104,7 @@ describe("MCPApprovalsTab", () => {
     id = `${action}-policy`,
     sources = ["shadow_mcp"],
   }: {
-    action: "block" | "flag" | "warn";
+    action: "block" | "flag" | "confirm";
     enabled?: boolean;
     id?: string;
     sources?: string[];
@@ -132,23 +132,20 @@ describe("MCPApprovalsTab", () => {
     });
   });
 
-  it("renders the inventory with the policy status beside the heading", () => {
+  it("renders the inventory under its description, with no policy card", () => {
     render(
       <MemoryRouter>
         <MCPApprovalsTab />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "MCP approvals" })).toBeTruthy();
+    // The page title and tab name it; the tab adds no heading of its own.
+    expect(screen.queryByRole("heading")).toBeNull();
     expect(
       screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "No policy is enabled. All Shadow MCP servers are allowed.",
-      ),
-    ).toBeTruthy();
+    // The mode lives in the page header, so the tab shows no policy card.
+    expect(screen.queryByText("No Policy")).toBeNull();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
     expect(
@@ -170,7 +167,7 @@ describe("MCPApprovalsTab", () => {
       expect.objectContaining({
         title: "MCP approval insights",
         contextInfo: expect.stringContaining(
-          "Page: Guardrails, MCP approvals tab. Shadow MCP policy posture: none.",
+          "Page: Shadow MCP. Shadow MCP policy posture: none.",
         ),
       }),
     );
@@ -218,12 +215,6 @@ describe("MCPApprovalsTab", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Blocking")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Block policy is enabled. Servers without allow rules are blocked for the policy's audience.",
-      ),
-    ).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();

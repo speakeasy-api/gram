@@ -6,7 +6,6 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { AdminAssets } from "./adminassets.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
-import { AdminExternalCredentials } from "./adminexternalcredentials.js";
 import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
@@ -23,6 +22,7 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { CommandSearch } from "./commandsearch.js";
 import { Dashboards } from "./dashboards.js";
 import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
@@ -120,13 +120,6 @@ export class Gram extends ClientSDK {
     return (this._adminChatAnalysis ??= new AdminChatAnalysis(this._options));
   }
 
-  private _adminExternalCredentials?: AdminExternalCredentials;
-  get adminExternalCredentials(): AdminExternalCredentials {
-    return (this._adminExternalCredentials ??= new AdminExternalCredentials(
-      this._options,
-    ));
-  }
-
   private _adminOpenRouterKeys?: AdminOpenRouterKeys;
   get adminOpenRouterKeys(): AdminOpenRouterKeys {
     return (this._adminOpenRouterKeys ??= new AdminOpenRouterKeys(
@@ -209,6 +202,11 @@ export class Gram extends ClientSDK {
   private _cliAuth?: CliAuth;
   get cliAuth(): CliAuth {
     return (this._cliAuth ??= new CliAuth(this._options));
+  }
+
+  private _commandSearch?: CommandSearch;
+  get commandSearch(): CommandSearch {
+    return (this._commandSearch ??= new CommandSearch(this._options));
   }
 
   private _dashboards?: Dashboards;

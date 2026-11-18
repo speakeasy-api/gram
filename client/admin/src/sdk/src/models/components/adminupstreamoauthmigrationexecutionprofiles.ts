@@ -17,7 +17,7 @@ import {
  */
 export type AdminUpstreamOAuthMigrationExecutionProfiles = {
   /**
-   * Whether every profile is recorded and holds a choice for every server its assistant reaches.
+   * Whether every profile that is pending is recorded and each holds a choice for every server its assistant reaches.
    */
   complete: boolean;
   /**
@@ -32,6 +32,10 @@ export type AdminUpstreamOAuthMigrationExecutionProfiles = {
    * Assistant and trigger pairs, each with a profile per execution context.
    */
   targets: number;
+  /**
+   * Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent when the serving replica predates the field, which is not a reported zero.
+   */
+  unexercisedVersions?: number | undefined;
 };
 
 /** @internal */
@@ -44,10 +48,12 @@ export const AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema:
       ),
       pending_versions: z.int(),
       targets: z.int(),
+      unexercised_versions: z.optional(z.int()),
     }),
     z.transform((v) => {
       return remap$(v, {
         "pending_versions": "pendingVersions",
+        "unexercised_versions": "unexercisedVersions",
       });
     }),
   );

@@ -155,6 +155,7 @@ var HookIngestSession = Type("HookIngestSession", func() {
 	Attribute("turn_id", String, "Generation, request, or turn identifier.")
 	Attribute("cwd", String, "Current working directory when the event fired.")
 	Attribute("model", String, "Model identifier reported by the local agent.")
+	Attribute("surface", String, "Product surface that sent the event, set when it changes how the server handles the event. \"cowork\" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.")
 })
 
 var HookIngestEvent = Type("HookIngestEvent", func() {
@@ -355,8 +356,8 @@ var IngestHookPayload = Type("IngestHookPayload", func() {
 var IngestHookResult = Type("IngestHookResult", func() {
 	Description("Provider-neutral decision returned by the unified hook endpoint.")
 	Required("decision")
-	Attribute("decision", String, "Whether the local hook should allow or deny the action.", func() {
-		Enum("allow", "deny")
+	Attribute("decision", String, "Whether the local hook should allow or deny the action. \"ask\" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.", func() {
+		Enum("allow", "deny", "ask")
 	})
 	Attribute("reason", String, "Machine-readable decision reason.")
 	Attribute("message", String, "User-facing decision message.")

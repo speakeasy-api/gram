@@ -642,3 +642,52 @@ func TestRunGatewayConfigurationAcceptsAssociationsAndRejectsUnrecordedGrants(t 
 		require.Empty(t, f.associations(onlyDetached))
 	}
 }
+
+// Several servers on one upstream each have a client of their own. A grant
+// names the upstream, not the server, so every client's grants match every one
+// of those servers; each server's own association settles it all the same.
+func TestRunTreatsGrantsOfASiblingsClientOnTheSameUpstreamAsConfigured(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	_, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	const upstream = "https://shared.example.com/mcp"
+
+	first, firstClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, upstream)
+	second, secondClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, upstream+"/")
+	f.grant(gatewayIssuer, firstClient, upstream)
+	f.grant(gatewayIssuer, secondClient, upstream)
+
+	// The sibling's client holds the only grants, and they disagree with the
+	// derived issuer of the server's own association.
+	_, otherRemoteIssuer := f.gatewayClient(gatewayIssuer)
+	conflicting, conflictingClient := f.dedicatedMember(gatewayIssuer, otherRemoteIssuer, upstream)
+
+	// A client associated with a server on another upstream is nobody's
+	// sibling here, so its grants for this one still need configuration.
+	elsewhere, elsewhereClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://elsewhere.example.com/mcp")
+	unsettled, unsettledClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://unsettled.example.com/mcp")
+	f.grant(gatewayIssuer, unsettledClient, "https://unsettled.example.com/mcp")
+	f.grant(gatewayIssuer, elsewhereClient, "https://unsettled.example.com/mcp")
+
+	f.gateway(gatewayIssuer, first, second, conflicting, elsewhere, unsettled)
+	want := map[uuid.UUID]uuid.UUID{
+		first:       firstClient,
+		second:      secondClient,
+		conflicting: conflictingClient,
+		elsewhere:   elsewhereClient,
+		unsettled:   unsettledClient,
+	}
+	for _, apply := range []bool{false, true, true} {
+		report := f.run(apply)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, first).Outcome)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, second).Outcome)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, conflicting).Outcome)
+		require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, unsettled).Outcome)
+		require.Equal(t, 1, report.Gaps)
+		require.Zero(t, report.Written)
+		for serverID, clientID := range want {
+			require.Equal(t, []uuid.UUID{clientID}, f.associations(serverID), "nothing is associated or removed")
+		}
+	}
+}

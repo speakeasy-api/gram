@@ -12,7 +12,9 @@ import (
 const maxSkillUsageRows = 25
 
 type QuerySkillUsageInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID to summarize"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
 
@@ -35,7 +37,7 @@ func (s *DiagnosticsService) QuerySkillUsage(ctx context.Context, principal Prin
 		return QuerySkillUsageOutput{}, ErrUnavailable
 	}
 	if input.ProjectID == "" {
-		return QuerySkillUsageOutput{}, fmt.Errorf("project_id is required")
+		return QuerySkillUsageOutput{}, fmt.Errorf("project_slug is required")
 	}
 	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
 		return QuerySkillUsageOutput{}, err
@@ -89,7 +91,9 @@ func (s *DiagnosticsService) QuerySkillUsage(ctx context.Context, principal Prin
 }
 
 type ListSkillUsageUsersInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the skill"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	SkillName string `json:"skill_name" jsonschema:"exact canonical skill name returned by query_skill_usage"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
@@ -115,7 +119,7 @@ func (s *DiagnosticsService) ListSkillUsageUsers(ctx context.Context, principal 
 	}
 	input.SkillName = strings.TrimSpace(input.SkillName)
 	if input.ProjectID == "" || input.SkillName == "" {
-		return ListSkillUsageUsersOutput{}, fmt.Errorf("project_id and skill_name are required")
+		return ListSkillUsageUsersOutput{}, fmt.Errorf("project_slug and skill_name are required")
 	}
 	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
 		return ListSkillUsageUsersOutput{}, err
@@ -178,7 +182,9 @@ func (s *DiagnosticsService) ListSkillUsageUsers(ctx context.Context, principal 
 }
 
 type GetUserSkillStatusInput struct {
-	ProjectID        string `json:"project_id" jsonschema:"project ID that owns the skill"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID        string `json:"-"`
 	SkillName        string `json:"skill_name" jsonschema:"exact canonical skill name returned by query_skill_usage"`
 	SubjectReference string `json:"subject_reference" jsonschema:"opaque subject reference returned by list_skill_usage_users"`
 	Window           string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); must match the window used to mint the reference"`
@@ -199,7 +205,7 @@ func (s *DiagnosticsService) GetUserSkillStatus(ctx context.Context, principal P
 	}
 	input.SkillName = strings.TrimSpace(input.SkillName)
 	if input.ProjectID == "" || input.SkillName == "" || input.SubjectReference == "" {
-		return GetUserSkillStatusOutput{}, fmt.Errorf("project_id, skill_name, and subject_reference are required")
+		return GetUserSkillStatusOutput{}, fmt.Errorf("project_slug, skill_name, and subject_reference are required")
 	}
 	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
 		return GetUserSkillStatusOutput{}, err

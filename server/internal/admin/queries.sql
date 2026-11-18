@@ -516,6 +516,7 @@ SELECT
     m.name,
     m.slug,
     t.name AS toolset_name,
+    r.url AS upstream_url,
     m.visibility,
     m.toolset_id,
     m.remote_mcp_server_id,
@@ -530,6 +531,7 @@ SELECT
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
 LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
 LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
     AND d.organization_id = p.organization_id
@@ -733,10 +735,22 @@ WHERE deleted_at IS NULL
   );
 
 -- name: SeedSupportMethods :exec
+-- The catalog owns a method's name, vendor, plan notes and order, so those
+-- follow the file on every start; staff edit a method's facts and platform
+-- mappings, never the method itself.
 INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'methods') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    plan_notes = EXCLUDED.plan_notes,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_integration_methods.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_integration_methods.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_integration_methods.plan_notes IS DISTINCT FROM EXCLUDED.plan_notes
+   OR support_matrix_integration_methods.sort_order IS DISTINCT FROM EXCLUDED.sort_order;
 
 -- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
@@ -940,8 +954,7 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 -- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
--- a domain root has no such path), else the server's own slug; the caller falls
--- back to the toolset's legacy alias when no other wrapper shares that toolset.
+-- a domain root has no such path), else the server's own slug.
 SELECT
     m.id,
     COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
@@ -1293,14 +1306,13 @@ SELECT
   (SELECT count(*) FROM taken_over)::bigint AS taken_over;
 
 -- name: AdminInsertPrincipalGrantFixture :exec
--- Test fixture: writes a grant row as stored, including temporary, expired,
--- deny-effect and backdated rows no single writer produces together.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+-- Test fixture: writes a grant row as stored, including temporary, expired
+-- and backdated rows no single writer produces together.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at, created_at)
 VALUES (
   @organization_id,
   @principal_urn,
   @scope,
-  sqlc.narg('effect')::text,
   @selectors,
   sqlc.narg('expires_at')::timestamptz,
   COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
@@ -1386,3 +1398,70 @@ WHERE d.deleted IS FALSE
     OR COALESCE(d.dns_routing_method, 'unknown') = sqlc.narg(dns_routing_method)::text
   )
 ORDER BY d.domain, d.id;
+
+-- name: AdminListOrganizationAssistants :many
+-- Every live assistant of an organization with its creator's membership, for
+-- the staff identity and runtime migrations. Identity state is read
+-- separately through assistantidentity.States, its single definition.
+SELECT
+    a.id,
+    a.project_id,
+    p.slug AS project_slug,
+    p.name AS project_name,
+    a.name,
+    a.status,
+    a.runtime_version,
+    a.created_by_user_id,
+    u.email AS created_by_user_email,
+    (u.id IS NOT NULL AND u.deleted_at IS NULL AND EXISTS (
+        SELECT 1 FROM organization_user_relationships r
+        WHERE r.organization_id = a.organization_id
+          AND r.user_id = a.created_by_user_id
+          AND r.deleted_at IS NULL
+    ))::boolean AS creator_active,
+    a.created_at
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+LEFT JOIN users u ON u.id = a.created_by_user_id
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+ORDER BY p.name, a.name, a.id;
+
+-- name: AdminListAssistantOrganizations :many
+SELECT o.id, o.name, o.slug, count(*)::bigint AS assistants
+FROM organization_metadata o
+JOIN projects p ON p.organization_id = o.id AND p.deleted IS FALSE
+JOIN assistants a ON a.organization_id = o.id AND a.project_id = p.id AND a.deleted IS FALSE
+GROUP BY o.id, o.name, o.slug
+ORDER BY lower(o.name), o.id;
+
+-- name: AdminListAssistantAgentNames :many
+WITH bound AS (
+ SELECT a.id AS assistant_id, a.project_id, a.name, g.id AS agent_id, g.name AS agent_name,
+ g.owner_user_id, g.owner_reassignment_required_at, g.owner_reassignment_reason,
+ CASE WHEN g.revoked_at IS NOT NULL THEN 'revoked' WHEN g.suspended_at IS NOT NULL THEN 'suspended' ELSE 'active' END::text AS lifecycle
+ FROM assistants a
+ JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+ JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+ JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+ WHERE a.organization_id = @organization_id AND a.deleted IS FALSE
+)
+SELECT bound.*, CASE
+ WHEN agent_name <> 'Assistant ' || assistant_id::text OR agent_name = name THEN 'not_needed'
+ WHEN EXISTS (SELECT 1 FROM agents other WHERE other.organization_id = @organization_id AND other.deleted IS FALSE AND other.id <> bound.agent_id AND lower(other.name) = lower(bound.name))
+ OR EXISTS (SELECT 1 FROM bound other WHERE other.agent_id <> bound.agent_id AND other.agent_name = 'Assistant ' || other.assistant_id::text AND lower(other.name) = lower(bound.name)) THEN 'conflict'
+ ELSE 'pending' END::text AS repair_state
+FROM bound ORDER BY assistant_id;
+
+-- name: AdminLockAssistantAgentNames :exec
+SELECT a.id FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+WHERE a.organization_id = @organization_id AND a.deleted IS FALSE
+ORDER BY a.id FOR UPDATE OF a, p, b, g;
+
+-- name: AdminRepairAssistantAgentName :execrows
+UPDATE agents SET name = @name, updated_at = clock_timestamp()
+WHERE id = @agent_id AND organization_id = @organization_id AND project_id = @project_id
+AND deleted IS FALSE AND name = @old_name;

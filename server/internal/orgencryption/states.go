@@ -94,6 +94,39 @@ var (
 	// ErrPlatformCredentialUnusable means the platform credential managed
 	// KEKs depend on is missing or misconfigured.
 	ErrPlatformCredentialUnusable = errors.New("orgencryption: platform encryption credential unusable")
+
+	// ErrTransitionNotAllowed means a transition does not start from the use
+	// case's current transition state, such as rolling back from org_kms.
+	ErrTransitionNotAllowed = errors.New("orgencryption: transition not allowed from the current transition state")
+
+	// ErrFinalizeBlocked means a finalize precondition does not hold yet. The
+	// wrapped message says which one.
+	ErrFinalizeBlocked = errors.New("orgencryption: finalize preconditions not met")
+
+	// ErrFenced means a write was refused because the transition state moved
+	// to a newer generation after the writer decided. The writer decides
+	// again and seals the same plaintext again; it never repeats a call to a
+	// provider.
+	ErrFenced = errors.New("orgencryption: transition state changed since the decision, decide again")
+
+	// ErrDecisionExpired means a Decision was held longer than MaxDecisionHold
+	// before sealing. The writer decides again and seals the same plaintext.
+	ErrDecisionExpired = errors.New("orgencryption: transition decision expired, decide again")
+
+	// ErrOrganizationEncryptionUnavailable means the use case is past
+	// platform_key but this process has no organization encryption, so it
+	// can neither seal nor open the organization-key copy.
+	ErrOrganizationEncryptionUnavailable = errors.New("orgencryption: organization encryption is not configured in this process")
+
+	// ErrUnreadable means a stored value does not decrypt: it is corrupt,
+	// sealed for another organization, use case or column, or only its
+	// platform-key copy remains after the use case stopped reading it.
+	// Retrying cannot help. Every other error from Cipher.Open, such as
+	// ErrKeyUnavailable or ErrSuspended, may clear on its own.
+	ErrUnreadable = errors.New("orgencryption: stored value does not decrypt")
+
+	// ErrMissing means the row holds no copy of the value.
+	ErrMissing = errors.New("orgencryption: stored value is not set")
 )
 
 // requireUsableState fails closed unless a configuration in state may encrypt

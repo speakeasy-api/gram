@@ -4,7 +4,6 @@ import (
 	. "goa.design/goa/v3/dsl"
 
 	extcred "github.com/speakeasy-api/gram/server/design/externalcredentials"
-	platformec "github.com/speakeasy-api/gram/server/design/platformadmin/externalcredentials"
 	"github.com/speakeasy-api/gram/server/design/security"
 )
 
@@ -67,7 +66,7 @@ func platformExternalCredentialMethods() {
 		Description("Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.")
 
 		Payload(func() {
-			Extend(platformec.CreatePlatformGcpIamCredentialForm)
+			Extend(CreatePlatformGcpIamCredentialForm)
 			security.AdminAuthPayload()
 		})
 
@@ -91,7 +90,7 @@ func platformExternalCredentialMethods() {
 			Attribute("id", String, "The ID of the credential to update.", func() {
 				Format(FormatUUID)
 			})
-			Extend(platformec.CreatePlatformGcpIamCredentialForm)
+			Extend(CreatePlatformGcpIamCredentialForm)
 			Required("id")
 			security.AdminAuthPayload()
 		})
@@ -120,7 +119,7 @@ func platformExternalCredentialMethods() {
 			security.AdminAuthPayload()
 		})
 
-		Result(platformec.VerifyPlatformCredentialResult)
+		Result(VerifyPlatformCredentialResult)
 
 		HTTP(func() {
 			declareUnavailableResponse()
@@ -154,3 +153,41 @@ func platformExternalCredentialMethods() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteGcpIamPlatformCredential")
 	})
 }
+
+// CreatePlatformGcpIamCredentialForm is the input for creating a platform GCP
+// IAM credential. The authentication approach is inferred from which fields are
+// provided:
+//
+//   - wif_* triple set: Workload Identity Federation (impersonate_service_account
+//     is an optional hop).
+//   - impersonate_service_account only: direct impersonation.
+//   - none: Speakeasy's ambient attached identity.
+//
+// The platform tier keeps all three because these records describe Speakeasy's own
+// infrastructure identity. The organization tier accepts impersonation only —
+// see externalcredentials.CreateGcpIamCredentialForm for why.
+var CreatePlatformGcpIamCredentialForm = Type("CreatePlatformGcpIamCredentialForm", func() {
+	Attribute("name", String, "A human-readable name for the credential.")
+	Attribute("impersonate_service_account", String, "The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.")
+	Attribute("wif_pool_id", String, "Workload Identity Federation pool ID. Set together with the other wif_* fields.")
+	Attribute("wif_provider_id", String, "Workload Identity Federation provider ID. Set together with the other wif_* fields.")
+	Attribute("wif_project_number", String, "GCP project number backing the WIF pool. Set together with the other wif_* fields.")
+
+	Required("name")
+})
+
+// VerifyPlatformCredentialResult is the outcome of a live "who am I" probe
+// against a platform credential's resolved cloud identity. It is ephemeral and
+// never persisted.
+var VerifyPlatformCredentialResult = Type("VerifyPlatformCredentialResult", func() {
+	Description("Result of a live 'who am I' probe against a platform credential's resolved identity.")
+
+	Attribute("verified", Boolean, "Whether the credential's identity resolved successfully.")
+	Attribute("principal", String, "The effective principal the identity resolves to (e.g. a service-account email). May be empty when the resolution source cannot report it.")
+	Attribute("identity_source", String, "How the identity was resolved. Lets the caller tell an in-cluster attached identity apart from local Application Default Credentials or an impersonated service account.", func() {
+		Enum("metadata_server", "application_default_credentials", "impersonation")
+	})
+	Attribute("detail", String, "Human-readable detail about the probe outcome (e.g. why the principal is unavailable, or the failure reason).")
+
+	Required("verified")
+})

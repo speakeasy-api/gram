@@ -1,5 +1,12 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LauncherCandidate } from "./candidates/types";
 
@@ -18,6 +25,14 @@ const slugs = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   candidates: [] as unknown[],
+  capture: vi.fn(),
+  prefilter: vi.fn(),
+  rank: vi.fn(),
+  launcherOptions: [] as Array<{
+    query: string;
+    enabled: boolean;
+    inProject: boolean;
+  }>,
 }));
 
 vi.mock("@/contexts/CommandPalette", () => ({
@@ -32,12 +47,36 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: mocks.capture }),
+}));
 vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
 }));
 vi.mock("./candidates", () => ({
-  useLauncherCandidates: () => mocks.candidates,
+  useLauncherCandidates: (options: {
+    query: string;
+    enabled: boolean;
+    inProject: boolean;
+  }) => {
+    mocks.launcherOptions.push(options);
+    return mocks.candidates;
+  },
 }));
+vi.mock("./ranker", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./ranker")>();
+  return {
+    ...actual,
+    prefilter: (...args: Parameters<typeof actual.prefilter>) => {
+      mocks.prefilter(...args);
+      return actual.prefilter(...args);
+    },
+    rank: (...args: Parameters<typeof actual.rank>) => {
+      mocks.rank(...args);
+      return actual.rank(...args);
+    },
+  };
+});
 import { CommandPalette } from "./CommandPalette";
 
 const runSettings = vi.fn();
@@ -103,6 +142,11 @@ beforeEach(() => {
   slugs.orgSlug = "acme";
   slugs.projectSlug = "widgets";
   mocks.candidates = [SETTINGS, SLACK];
+  mocks.capture.mockReset();
+  mocks.prefilter.mockReset();
+  mocks.rank.mockReset();
+  mocks.launcherOptions = [];
+  palette.isOpen = true;
   palette.close.mockReset();
   runSettings.mockReset();
   runSlack.mockReset().mockResolvedValue(undefined);
@@ -112,6 +156,113 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("CommandPalette", () => {
+  it("debounces two-character resource queries for 200ms", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<CommandPalette />);
+      fireEvent.change(input(), { target: { value: "ab" } });
+      expect(mocks.launcherOptions.at(-1)?.query).toBe("");
+      await act(async () => {
+        vi.advanceTimersByTime(199);
+      });
+      expect(mocks.launcherOptions.at(-1)?.query).toBe("");
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(mocks.launcherOptions.at(-1)?.query).toBe("ab");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("captures one performance event per open under StrictMode", () => {
+    const view = render(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.capture).toHaveBeenCalledWith(
+      "command_palette_open_performance",
+      expect.objectContaining({
+        cache_state: "warm",
+        ranking_invocation_count: 0,
+        scope: "project",
+      }),
+    );
+
+    palette.isOpen = true;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+  });
+
+  it("only ranks meaningful queries across updates and reopen", async () => {
+    const view = render(<CommandPalette />);
+
+    expect(mocks.prefilter).not.toHaveBeenCalled();
+    expect(mocks.rank).not.toHaveBeenCalled();
+
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    view.rerender(<CommandPalette />);
+    await userEvent.type(input(), "   ");
+    mocks.candidates = [SETTINGS, SLACK];
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).not.toHaveBeenCalled();
+    expect(mocks.rank).not.toHaveBeenCalled();
+
+    fireEvent.change(input(), { target: { value: "   s" } });
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("s", mocks.candidates);
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    await userEvent.clear(input());
+    mocks.candidates = [SETTINGS, SLACK];
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    palette.isOpen = false;
+    view.rerender(<CommandPalette />);
+    palette.isOpen = true;
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    fireEvent.change(input(), { target: { value: "slack" } });
+
+    expect(mocks.prefilter).toHaveBeenCalledTimes(2);
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("slack", mocks.candidates);
+    expect(mocks.rank).toHaveBeenCalledTimes(2);
+  });
+
   it("offers the Project Assistant for a query that matches nothing", async () => {
     render(<CommandPalette />);
 
@@ -209,6 +360,34 @@ describe("CommandPalette", () => {
     expect(
       screen.getByRole("option", { selected: true }).textContent,
     ).toContain("Sessions");
+  });
+
+  it("bounds broad searches before mounting result rows", async () => {
+    slugs.projectSlug = undefined;
+    mocks.candidates = Array.from({ length: 100 }, (_, index) =>
+      candidate({
+        id: `catalog:linear-${index}`,
+        kind: "catalog",
+        title: `Linear integration ${index.toString().padStart(3, "0")}`,
+        detail: "Catalog entry",
+        group: "MCP Catalog",
+      }),
+    );
+    render(<CommandPalette />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search projects and pages…"),
+      { target: { value: "linear" } },
+    );
+
+    expect(screen.getAllByRole("option")).toHaveLength(40);
+    expect(screen.getByText("Linear integration 000")).not.toBeNull();
+    expect(screen.queryByText("Linear integration 040")).toBeNull();
+    expect(
+      screen.getByText(
+        "Showing top 40 of 100 results. Refine your search to see more.",
+      ),
+    ).not.toBeNull();
   });
 
   it("keeps group headings for the idle list", () => {

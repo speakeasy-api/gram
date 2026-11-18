@@ -17,6 +17,7 @@ var AuditLogCreated = outbox.NewEventDef[AuditLogCreatedPayloadV1](
 )
 
 var (
+	AssistantConfigurationV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_configuration_event_v1", "Emitted when an assistant reasoning preference is configured")
 	CatalogPromotionV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.catalog_promotion_event_v1", "Emitted when staff curate catalogue promotion candidates or retry setup documentation")
 	AccessChallengeV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_challenge_event_v1", "Emitted when changes to access challenges are made")
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")
@@ -30,6 +31,7 @@ var (
 	AwsKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_kms_key_event_v1", "Emitted when changes to AWS KMS external keys are made")
 	AssistantIdentityV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_identity_event_v1", "Emitted when workload identity is configured for an assistant")
 	AssistantExecutionProfileV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_execution_profile_event_v1", "Emitted when the upstream credentials an assistant's turns use are changed")
+	AssistantRuntimeV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_runtime_event_v1", "Emitted when the runtime an assistant runs on is changed")
 	AssistantToolCallV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_tool_call_event_v1", "Emitted when an assistant executes a tool call")
 	AssistantWakeV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_wake_event_v1", "Emitted when an assistant wake is scheduled or canceled")
 	BillingMetadataV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.billing_metadata_event_v1", "Emitted when changes to billing metadata are made")
@@ -40,6 +42,7 @@ var (
 	DataExportRouteV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.data_export_route_event_v1", "Emitted when changes to data export routes are made")
 	AiScanTargetV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_agent_ai_scan_target_event_v1", "Emitted when an organization changes the Shadow AI scan targets its device agents probe for")
 	AIToolDecisionV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_tool_decision_event_v1", "Emitted when an organization decides whether a detected AI tool may reach its MCP gateway")
+	ShadowMCPOfficialServerV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_official_server_event_v1", "Emitted when an organization chooses the official version of a Shadow MCP server or keeps direct connections to it working")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
 	DirectoryReviewItemV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_review_item_event_v1", "Emitted when an admin approves, dismisses or opts out of a directory review decision")
 	DirectoryReviewSettingsV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_review_settings_event_v1", "Emitted when an admin turns directory review emails on or off")

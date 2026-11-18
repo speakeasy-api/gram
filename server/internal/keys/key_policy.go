@@ -181,7 +181,8 @@ type auditedPolicyGrant struct {
 	Selector authz.Selector `json:"selector"`
 }
 
-func policyAuditPayload(grants []*authz.RoleGrant) (json.RawMessage, error) {
+// PolicyAuditPayload encodes a key's policy as its audit events record it.
+func PolicyAuditPayload(grants []*authz.RoleGrant) (json.RawMessage, error) {
 	if len(grants) == 0 {
 		return nil, nil
 	}

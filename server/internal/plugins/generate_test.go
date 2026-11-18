@@ -1037,6 +1037,75 @@ func TestGenerateCopilotMarketplaceManifest(t *testing.T) {
 	require.Equal(t, "engineering-tools", bare.Plugins[0].Name)
 }
 
+// TestGenerateVibePluginPackage pins the <slug>-vibe package the device agent
+// unpacks into ~/.vibe/plugins/<slug>/: it carries the portable Agent Plugins
+// 1.0 files (plugin.json, mcp.json, skills/) under the bare slug's name, and
+// none of the Cursor/Codex native manifests that share compileAgentPlugin's
+// output. A plugin that fails the portability gate gets no Vibe package either.
+func TestGenerateVibePluginPackage(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "Eng MCP servers.",
+		Servers: []PluginServerInfo{{
+			DisplayName: "eng",
+			MCPURL:      "https://example.com/mcp",
+			IsPublic:    true,
+		}},
+		Skills: []PluginSkillInfo{{Name: "triage", Content: "---\nname: triage\ndescription: Triage\n---\nBody\n"}},
+	}}
+	cfg := GenerateConfig{
+		OrgName:   "Acme Corp",
+		ServerURL: "https://app.getgram.ai",
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	for _, p := range []string{
+		"engineering-tools-vibe/plugin.json",
+		"engineering-tools-vibe/mcp.json",
+		"engineering-tools-vibe/skills/triage/SKILL.md",
+	} {
+		_, ok := files[p]
+		require.True(t, ok, "missing Vibe package file: %s", p)
+	}
+	for p := range files {
+		rel := strings.TrimPrefix(p, "engineering-tools-vibe/")
+		if rel != p {
+			require.False(t, strings.HasPrefix(rel, "."), "Vibe package carries a native Cursor/Codex manifest: %s", p)
+		}
+	}
+
+	var meta struct {
+		Name string `json:"name"`
+	}
+	require.NoError(t, json.Unmarshal(files["engineering-tools-vibe/plugin.json"], &meta))
+	require.Equal(t, "engineering-tools", meta.Name, "Vibe package keeps the bare slug as the plugin identity")
+
+	var mcp agentMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools-vibe/mcp.json"], &mcp))
+	require.Contains(t, mcp.MCPServers, "eng")
+	require.Equal(t, "https://example.com/mcp", mcp.MCPServers["eng"].URL)
+
+	// A plugin whose servers need a Speakeasy credential is not portable, so
+	// no <slug>-vibe package is emitted for it (same gate as agent-plugins/).
+	incompatible := []PluginInfo{{
+		Name: "Proxied Tools",
+		Slug: "proxied-tools",
+		Servers: []PluginServerInfo{{
+			DisplayName: "crm",
+			MCPURL:      "https://app.getgram.ai/mcp/crm",
+		}},
+	}}
+	filesNoVibe, err := GeneratePluginPackages(incompatible, cfg)
+	require.NoError(t, err)
+	for p := range filesNoVibe {
+		require.False(t, strings.HasPrefix(p, "proxied-tools-vibe/"), "non-portable plugin got a Vibe package: %s", p)
+	}
+}
+
 func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
@@ -2066,6 +2135,130 @@ func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "pi package must ship the Windows bootstrapper the extension spawns")
 }
 
+// Mistral Vibe consumes the observability package as a native Agent Plugins
+// 1.0 plugin: plugin.json declares the ai.mistral.vibe extension and
+// ai.mistral.vibe/hooks.toml registers the relay on all three Vibe hook
+// events. Pin the whole shape — flat ZIP layout, TOML wiring, schema
+// validation, and which credentials ride in which file.
+// allowVibeHooks adds the vibe provider to the pinned release's provider list
+// for the duration of the test. No release carries it yet — the gate opens
+// only when pin-hooks-release pins one — so tests that call this must not be
+// parallel (the list is a package var).
+func allowVibeHooks(t *testing.T) {
+	t.Helper()
+	SetReleasedHooksProvidersForTest(t, append(append([]string{}, hooksReleaseProviders...), VibeProviderSlugForTest))
+}
+
+// TestGenerateVibeObservabilityPluginPackage pins the generated per-org Vibe
+// observability package: flat ZIP layout, three hook events, strict on
+// pre_tool only, schema-valid manifest, hooks key embedded.
+func TestGenerateVibeObservabilityPluginPackage(t *testing.T) { //nolint:paralleltest // Writes the releasedHooksProviders package var.
+	allowVibeHooks(t)
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		APIKey:      "gram_local_api_key_secret",
+		HooksAPIKey: "gram_local_hooks_secret",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "vibe")
+	require.NoError(t, err)
+
+	// Flat ZIP layout: everything at the package root.
+	for _, name := range []string{
+		"plugin.json",
+		"ai.mistral.vibe/hooks.toml",
+		"speakeasy.json",
+		"hooks/bootstrap.sh",
+	} {
+		require.Contains(t, files, name, "vibe package must ship %s", name)
+	}
+	// No bootstrap.ps1: the single hooks.toml command is POSIX/bash and Git
+	// Bash is a stated requirement, so the PowerShell bootstrapper is not shipped.
+	require.NotContains(t, files, "hooks/bootstrap.ps1")
+	require.Len(t, files, 4, "vibe package is exactly manifest + hooks.toml + runtime files")
+
+	// hooks.toml wires the relay on all three Vibe events with --provider=vibe.
+	hooksTOML := string(files["ai.mistral.vibe/hooks.toml"])
+	require.Contains(t, hooksTOML, "--provider=vibe")
+	require.Contains(t, hooksTOML, `$PLUGIN_ROOT/hooks/bootstrap.sh`)
+	var decoded struct {
+		Hooks []struct {
+			Name    string  `toml:"name"`
+			Type    string  `toml:"type"`
+			Match   string  `toml:"match"`
+			Timeout float64 `toml:"timeout"`
+			Command string  `toml:"command"`
+			Strict  bool    `toml:"strict"`
+		} `toml:"hooks"`
+	}
+	_, err = toml.Decode(hooksTOML, &decoded)
+	require.NoError(t, err, "generated hooks.toml must parse")
+	require.Len(t, decoded.Hooks, 3)
+	types := map[string]bool{}
+	for _, hook := range decoded.Hooks {
+		types[hook.Type] = true
+		require.Equal(t, "*", hook.Match)
+		require.InDelta(t, vibeHookTimeoutSeconds, hook.Timeout, 1e-9)
+		wantCommand := `bash "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=60s`
+		// Only pre_tool is strict: the server can only block prompt/pre-tool
+		// events, and strict post_tool would just clear a result that already
+		// ran. post_agent has no strict mode in Vibe.
+		wantStrict := hook.Type == "pre_tool"
+		if wantStrict {
+			wantCommand += " --strict"
+		}
+		require.Equal(t, wantCommand, hook.Command)
+		require.Equal(t, wantStrict, hook.Strict, "strict must match the hook type %s", hook.Type)
+	}
+	require.True(t, types["pre_tool"] && types["post_tool"] && types["post_agent"], "all three Vibe hook events must be registered, got %v", types)
+
+	// plugin.json validates against the vendored AP1.0 schema and declares the
+	// ai.mistral.vibe extension that gates loading hooks.toml.
+	var manifest map[string]any
+	require.NoError(t, json.Unmarshal(files["plugin.json"], &manifest))
+	require.NoError(t, validateAgentPluginDocument(agentPluginSchemaID, manifest))
+	require.Equal(t, "acme-observability", manifest["name"])
+	ext, ok := manifest["extensions"].(map[string]any)["ai.mistral.vibe"].(map[string]any)
+	require.True(t, ok, "plugin.json must declare the ai.mistral.vibe extension")
+	require.InDelta(t, 1, ext["schemaVersion"], 1e-9)
+
+	// The hooks-scoped key is baked into speakeasy.json (that one IS meant to be
+	// embedded — the package is as sensitive as the key); the consumer API key
+	// is not.
+	require.Contains(t, string(files["speakeasy.json"]), "gram_local_hooks_secret")
+	for name, content := range files {
+		require.NotContains(t, string(content), "gram_local_api_key_secret", "%s must not embed the consumer API key", name)
+	}
+}
+
+// The published marketplace repo carries the Vibe observability package at
+// <org>-observability-vibe/ next to the other platforms' subtrees.
+func TestGenerateHooksFilesIncludesVibeSubtree(t *testing.T) { //nolint:paralleltest // Writes the releasedHooksProviders package var.
+	allowVibeHooks(t)
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+
+	slug := VibeObservabilitySlug(cfg)
+	require.Equal(t, "acme-observability-vibe", slug)
+	hooksTOML, ok := files[slug+"/ai.mistral.vibe/hooks.toml"]
+	require.True(t, ok, "hooks subtree must ship the vibe package at %s", slug)
+	require.Contains(t, string(hooksTOML), "--provider=vibe")
+	require.Contains(t, files, slug+"/plugin.json")
+	require.Contains(t, files, slug+"/speakeasy.json")
+	require.Contains(t, files, slug+"/hooks/bootstrap.sh")
+	require.NotContains(t, files, slug+"/hooks/bootstrap.ps1", "no PowerShell bootstrapper: Git Bash is a stated requirement")
+
+	// The repo README tells Vibe users where to install the observability package.
+	readme := string(generateReadme(nil, cfg))
+	require.Contains(t, readme, "acme-observability-vibe/")
+	require.Contains(t, readme, "~/.vibe/plugins/acme-observability/")
+}
+
 // The dogfood trees are what `hooks:test` renders for local development, so a
 // platform missing here cannot be exercised against a dev server at all.
 func TestDogfoodPluginFilesIncludesPi(t *testing.T) {
@@ -2083,8 +2276,8 @@ func TestDogfoodPluginFilesIncludesPi(t *testing.T) {
 // The published hooks subtree carries one directory per platform and the
 // rollout carries it forward by prefix, so a platform missing from either the
 // generator or the prefix lists silently stops publishing.
-func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
-	t.Parallel()
+func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) { //nolint:paralleltest // Writes the releasedHooksProviders package var.
+	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
 		ServerURL:   "https://app.getgram.ai",
@@ -2100,6 +2293,7 @@ func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
 		}), "hooks subtree prefix %q has no generated files", prefix)
 	}
 	require.Contains(t, files, PiObservabilitySlug(cfg)+"/"+relay.PiExtensionFile)
+	require.Contains(t, files, VibeObservabilitySlug(cfg)+"/ai.mistral.vibe/hooks.toml")
 }
 
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
@@ -2272,10 +2466,53 @@ func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
 	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(restamped))
 }
 
+// The vibe gate is closed at the checked-in pin: no pinned release carries
+// the vibe provider yet, so the Vibe observability package is skipped without
+// failing the whole publish, and availability reports false. Not parallel:
+// reads the package var that allowVibeHooks tests write.
+func TestGenerateHooksFilesSkipsVibeUntilReleaseCarriesProvider(t *testing.T) { //nolint:paralleltest // Reads releasedHooksProviders, which sibling tests write.
+	require.NotContains(t, hooksReleaseProviders, VibeProviderSlugForTest, "checked-in pin must not list vibe before a release carries it")
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+	for name := range files {
+		require.NotContains(t, name, "observability-vibe", "vibe package must be skipped while the pin lacks the provider, got %s", name)
+	}
+	require.False(t, VibeObservabilityPluginAvailable(cfg))
+}
+
+// An org whose slug makes the manifest name exceed the AP1.0 schema's 64
+// characters skips only the Vibe package; the publish succeeds and a direct
+// platform=vibe generation returns the name error. Not parallel: writes the
+// releasedHooksProviders package var.
+func TestGenerateVibeManifestNameTooLongSkipsOnlyVibe(t *testing.T) { //nolint:paralleltest // Writes the releasedHooksProviders package var.
+	allowVibeHooks(t)
+	cfg := GenerateConfig{
+		OrgName:     strings.Repeat("a", 60), // slug 60 chars, name would be 75 > 64
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+	for name := range files {
+		require.NotContains(t, name, "observability-vibe", "vibe package must be skipped on a name-schema failure, got %s", name)
+	}
+	// The other platforms' packages still generate.
+	require.Contains(t, files, PiObservabilitySlug(cfg)+"/"+relay.PiExtensionFile)
+	_, err = GenerateObservabilityPluginPackage(cfg, "vibe")
+	require.ErrorContains(t, err, "name does not satisfy the Agent Plugins 1.0 name schema")
+	require.False(t, VibeObservabilityPluginAvailable(cfg))
+}
+
 // Substring assertions cannot catch shell quoting regressions — run bash -n
 // over every generated shell script.
-func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
-	t.Parallel()
+func TestGeneratedHookScriptsAreValidBash(t *testing.T) { //nolint:paralleltest // Writes the releasedHooksProviders package var.
+	allowVibeHooks(t)
 	bashPath, err := exec.LookPath("bash")
 	require.NoError(t, err, "bash is required to syntax-check generated hook scripts")
 
@@ -2284,7 +2521,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot", "openclaw"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "vibe"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -3949,6 +4186,48 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
 }
 
+// Agents name an MCP server only by its mcp_id. The registration ID and the
+// nested registration object are no longer part of any tool contract, so a
+// skill that still tells the agent to read or pass them would fail at runtime.
+func TestGeneratePlatformMCPSkillsNameServersByMCPID(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	for _, name := range []string{
+		"add-mcp-from-catalog",
+		"add-mcp-from-remote-url",
+		"add-existing-mcp-servers",
+		"migrate-mcp-between-projects",
+		"review-shadow-mcp",
+		"enable-enterprise-issuer",
+	} {
+		path := "skills/" + name + "/SKILL.md"
+		content := files["speakeasy/"+path]
+		require.NotEmpty(t, content, path)
+		workflow := string(content)
+		for _, forbidden := range []string{
+			"registration_id", "registration ID", "registration.id",
+			"registration.status", "components_complete",
+		} {
+			require.NotContains(t, workflow, forbidden, path)
+		}
+	}
+	for _, name := range []string{"add-mcp-from-catalog", "add-mcp-from-remote-url"} {
+		workflow := string(files["speakeasy/skills/"+name+"/SKILL.md"])
+		require.Contains(t, workflow, "Keep the `mcp_id` it returns", name)
+		require.Contains(t, workflow, "Pass the server as the `mcp_id` setup returned", name)
+	}
+	migrate := string(files["speakeasy/skills/migrate-mcp-between-projects/SKILL.md"])
+	for _, required := range []string{
+		"An `added_by_another_member` refusal (another administrator added it) or a `not_added_through_setup` refusal on the source",
+		"report that attribute as unreadable and hand off to the AICP dashboard",
+		"Continue only when it returns `model: platform_managed`, `operations` that include `update_mcp_metadata`",
+		"select only the entry whose `id` equals the `mcp_id` registration returned",
+	} {
+		require.Contains(t, migrate, required)
+	}
+}
+
 // A first-run conversation has no project to choose from, so the onboarding
 // workflows must offer to create one through the Platform MCP instead of
 // stopping. The offer is gated on the tool being present, because a managed
@@ -4063,7 +4342,8 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 		"process side effects",
 		"If discovery succeeds but returns no entries", "normal catalogue path",
 		"Do not claim import completion for an empty inventory",
-		"`registration.status: registered`", "`registration.components_complete: true`",
+		"require the entry's `id` to equal the exact `mcp_id` registration returned",
+		"has another `model`, lacks `update_mcp_metadata` in `operations` (setup pending or incomplete), or whose `id` does not match the returned `mcp_id` means blocked/unverified",
 		"`model: dashboard_managed`", "Do not require or invent a registration record",
 		"pending or incomplete registration", "must not be reported as already present or complete",
 		"Skip provider attachment for anonymous servers",
@@ -4240,7 +4520,7 @@ func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
 		{"two configurations of one catalogue reference require persisted evidence", []string{
 			"Two configurations of one catalogue reference are not the same target",
 			"source/reference alone cannot prove configuration equivalence",
-			"match fresh inventory `registration.id` to the receipt's returned `registration_id`",
+			"match the fresh inventory entry's `id` to the receipt's returned `mcp_id`",
 			"Receipt-ID correlation alone is not persisted configuration proof",
 			"do not invent fields or claim current configuration was read back",
 			"configuration equivalence remains unverified and requires manual resolution, not automatic reuse",
@@ -4250,7 +4530,7 @@ func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
 			"reuse an existing registration for the same source/reference with different configuration unchanged",
 			"Neither a new receipt nor `replayed: false` proves that the submitted configuration took effect",
 			"Require server-backed evidence of the registration's exact effective confirmed configuration",
-			"even when the returned ID matches the receipt and live status is registered with complete components",
+			"even when the entry's `id` matches the receipt's `mcp_id` and the entry reports `model: platform_managed`",
 		}},
 		{"race or unknown existing registration cannot prove creation", []string{
 			"A concurrent registration after preflight, an unknown existing registration or an uncertain write outcome",
@@ -4754,4 +5034,14 @@ func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
 	require.Len(t, cfg.Hooks, len(CopilotObservabilityHookEvents))
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
+}
+
+func TestHooksVersionPolicy(t *testing.T) {
+	t.Parallel()
+	policy, err := HooksVersionPolicy()
+	require.NoError(t, err)
+	require.Equal(t, hooksBinaryVersion, policy.Latest.String())
+	require.NotNil(t, policy.Minimum)
+	require.Equal(t, "0.3.0", policy.Minimum.String())
+	require.False(t, policy.Latest.LessThan(policy.Minimum), "the minimum supported hooks version must not be newer than the shipped release")
 }

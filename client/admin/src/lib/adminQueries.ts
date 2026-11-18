@@ -20,6 +20,8 @@ import {
   getSession,
   listOrganizationMembers,
   listOrganizationProjects,
+  listOrganizationAssistants,
+  listAssistantMigrationOrganizations,
   listOrganizations,
   listUsers,
   listUserOrganizations,
@@ -33,6 +35,7 @@ import {
   type AdminStripeSubscription,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
+  type AdminOrganizationAssistants,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
   type ListProjectMcpServersResult,
@@ -134,6 +137,18 @@ export function organizationProjectsQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-projects", organizationID] as const,
     queryFn: () => listOrganizationProjects(organizationID),
+  });
+}
+
+export function organizationAssistantsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationAssistants,
+  readonly ["gram-admin-organization-assistants", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-organization-assistants", organizationID] as const,
+    queryFn: () => listOrganizationAssistants(organizationID),
   });
 }
 
@@ -424,4 +439,14 @@ export function adminListCustomDomainsQuery(
   request: AdminListCustomDomainsRequest = {},
 ): ReturnType<typeof createAdminListCustomDomainsQuery> {
   return createAdminListCustomDomainsQuery(request);
+}
+
+export function assistantMigrationOrganizationsQuery(): AdminQuery<
+  Awaited<ReturnType<typeof listAssistantMigrationOrganizations>>,
+  readonly ["admin", "assistant-migration-organizations"]
+> {
+  return queryOptions({
+    queryKey: ["admin", "assistant-migration-organizations"] as const,
+    queryFn: listAssistantMigrationOrganizations,
+  });
 }

@@ -215,6 +215,10 @@ export type ScopeDefinition = {
    */
   subScopes: Array<string>;
   /**
+   * Whether an administrator can give this scope for a limited time with createTemporaryGrant.
+   */
+  temporaryGrantable: boolean;
+  /**
    * Whether this scope is a first-class permission or an internal storage/evaluation scope.
    */
   visibility: ScopeDefinitionVisibility;
@@ -266,6 +270,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
     sensitivity: z.optional(Sensitivity$inboundSchema),
     slug: Slug$inboundSchema,
     sub_scopes: z.array(z.string()),
+    temporary_grantable: z.boolean(),
     visibility: ScopeDefinitionVisibility$inboundSchema,
   }),
   z.transform((v) => {
@@ -274,6 +279,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
       "exclusion_scope": "exclusionScope",
       "resource_type": "resourceType",
       "sub_scopes": "subScopes",
+      "temporary_grantable": "temporaryGrantable",
     });
   }),
 );

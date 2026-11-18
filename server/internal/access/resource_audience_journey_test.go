@@ -71,6 +71,7 @@ func TestResourceAudience_AdministratorJourney(t *testing.T) {
 		t.Helper()
 		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
 		require.NoError(t, err)
+		dims.ProjectID = mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)
 		allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(serverID, dims))
 		require.NoError(t, err)
 		return allowed
@@ -195,6 +196,7 @@ func TestResourceAudience_NarrowedBlockSubtractsByAnnotation(t *testing.T) {
 		t.Helper()
 		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{role})
 		require.NoError(t, err)
+		dims.ProjectID = mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)
 		allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(serverID, dims))
 		require.NoError(t, err)
 		return allowed

@@ -33,7 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -170,6 +170,9 @@ type memberDial struct {
 
 	// configuredHeaders marks a member sent the headers an admin configured on it.
 	configuredHeaders bool
+
+	// provider is the member's upstream URL, empty through a tunnel.
+	provider string
 }
 
 func serverHeadersHaveCredential(headers []remotemcp_repo.RemoteMcpServerHeader) bool {
@@ -218,18 +221,25 @@ func (d memberDial) memberFix() memberFix {
 // An agent cannot sign in itself, so its message asks someone who can edit
 // it to fix the connection at the agent's sign-in step. Without a page, an
 // administrator fixes it.
-func memberAuthFailure(member metaMember, dial memberDial, status int) error {
+//
+// keySent: the rejected request carried the configured credential; credentialRejected: the answer rejects a credential.
+func memberAuthFailure(member metaMember, dial memberDial, status int, keySent, credentialRejected bool) error {
 	fix := dial.memberFix()
 	// A self client's credential is the administrator's, even an agent's.
 	agent := fix.agent && !dial.clientCredential
 	page := fix.callerURL()
+	forbidden := status == http.StatusForbidden && !credentialRejected
 	switch {
-	// With no agent token sent, a server that has no OAuth sign-in, or one
-	// whose configured credential was sent, refused the server's own
-	// credential. The agent's sign-in step does not set that, so the fix is
-	// the server's.
+	case agent && dial.anonymous && dial.configuredHeaders && !keySent:
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("The service behind server %q refused this request: the sign-in details saved for this server were not sent with the request. This agent can't fix this. Ask your administrator to check the sign-in details and address saved for server %q.", member.slug, member.slug)}}
+	// Only the configured credential was sent; the agent's sign-in step does not set it.
 	case agent && dial.anonymous && dial.configuredHeaders:
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin of the server's project to update the server's credential, then retry", member.slug)}}
+		return memberCredentialError{savedCredentialRefused(member.slug, true, forbidden)}
+	// The upstream may want the person's connection, the configured credential, or both.
+	case dial.connectsFirst(keySent):
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("The service behind server %q refused this request. You may need to connect this server first: %s. If it still fails after you connect, ask your administrator to check the sign-in details saved for server %q.", member.slug, page, member.slug)}}
+	case dial.anonymous && keySent && !dial.clientCredential:
+		return memberCredentialError{savedCredentialRefused(member.slug, false, forbidden)}
 	// An agent with a connection of its own never dials anonymously: routing
 	// refuses the member first (agentUnroutedError).
 	case agent && dial.anonymous && !dial.oauthSignIn:
@@ -250,6 +260,26 @@ func memberAuthFailure(member metaMember, dial memberDial, status int) error {
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, page)}}
 	}
 	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential. Ask your administrator to reconnect it", member.slug)}}
+}
+
+// connectsFirst is a person refused on the configured credential alone while a sign-in they have not connected is available.
+func (d memberDial) connectsFirst(keySent bool) bool {
+	return d.anonymous && keySent && !d.clientCredential && d.memberFix().callerURL() != ""
+}
+
+// savedCredentialRefused is a refused configured credential; forbidden is a 403 that does not reject it.
+func savedCredentialRefused(slug string, agent bool, forbidden bool) *metaMemberError {
+	message := fmt.Sprintf("server %q couldn't sign in: the service rejected the sign-in details saved for this server.", slug)
+	ask := fmt.Sprintf("Ask your administrator to update the sign-in details saved for server %q.", slug)
+	if forbidden {
+		message = fmt.Sprintf("The service behind server %q refused this request. The account saved for this server may not be allowed to do this.", slug)
+		ask = "Ask your administrator to check what that account is allowed to do."
+	}
+	who := "Connecting won't fix this."
+	if agent {
+		who = "This agent can't fix this."
+	}
+	return &metaMemberError{message: message + " " + who + " " + ask}
 }
 
 // memberCredentialError is a member failure the caller fixes by connecting or
@@ -443,7 +473,7 @@ func (s *Service) routeMetaMember(
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: memberSendsConfiguredCredential(headers, clientHeaders, clientSelected), build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: memberSendsConfiguredCredential(headers, clientHeaders, clientSelected), provider: remoteServer.Url, build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -473,7 +503,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, provider: "", build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
@@ -526,7 +556,7 @@ func (s *Service) memberServerContext(ctx context.Context, logger *slog.Logger, 
 	if project.ID != gate.organizationID {
 		return ctx
 	}
-	accountType, _ := mv.ResolveOrganizationTier(ctx, logger, s.billingRepository, project.ID, billing.Tier(project.GramAccountType))
+	accountType, _ := orgaccount.ResolveTier(ctx, logger, s.billingRepository, project.ID, billing.Tier(project.GramAccountType))
 	return remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
 		OrganizationID:   project.ID,
 		OrganizationSlug: project.Slug,
@@ -543,7 +573,7 @@ func (s *Service) memberAttributionContext(ctx context.Context, logger *slog.Log
 	if _, ok := contextvalues.GetAuthContext(ctx); ok {
 		return ctx
 	}
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, gate.organizationID)
+	orgMetadata, err := orgaccount.Describe(ctx, s.logger, s.orgsRepo, s.billingRepository, gate.organizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "attribute meta MCP member call", attr.SlogError(err))
 		return ctx
@@ -679,7 +709,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code)
+			s.recordMemberFailure(ctx, gate, member, failure.code, memberUpstreamHost(err))
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.

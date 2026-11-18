@@ -25,9 +25,10 @@ const (
 
 // RememberInput saves one fact to a project's team memory.
 type RememberInput struct {
-	ProjectID string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 
-	ProjectSlug string `json:"project_slug,omitempty"`
+	ProjectSlug string `json:"project_slug"`
 
 	// Content is the fact to remember, such as a decision and its reason.
 	Content string `json:"content"`

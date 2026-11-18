@@ -84,6 +84,7 @@ describe("useManagedDeviceCandidates", () => {
     expect(mocks.requests.at(-1)).toEqual({ limit: 200 });
     expect(mocks.options.at(-1)).toMatchObject({
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
       queryKey: ["fleetDevices", "org-one"],
