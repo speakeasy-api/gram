@@ -292,7 +292,7 @@ func (f *fixture) connectWorkspace(t *testing.T) slackrepo.SlackDirectoryConnect
 	}
 	connection, err := slackrepo.New(f.db).CreateSlackDirectoryConnection(t.Context(), slackrepo.CreateSlackDirectoryConnectionParams{
 		OrganizationID: f.organizationID, SlackTeamID: testTeamID, SlackTeamName: conv.ToPGText("Example workspace"),
-		CredentialsEncrypted: conv.ToPGTextEmpty(""), GrantedScopes: []string{}, Generation: uuid.New(),
+		GrantedScopes: []string{}, Generation: uuid.New(),
 	})
 	require.NoError(t, err)
 	f.connection = &connection

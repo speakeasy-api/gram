@@ -83,7 +83,11 @@ func (s *DirectorySync) routingToken(ctx context.Context, row repo.SlackDirector
 	if !slices.Contains(row.GrantedScopes, slackscopes.ChatWrite) {
 		return "", fmt.Errorf("%w: chat:write was not granted", ErrNoRoutingWorkspace)
 	}
-	tokens, err := usableTokens(s.encryption, row)
+	tokens, err := usableTokens(ctx, s.credentials, nil, row)
+	if syncErr, ok := errors.AsType[*SyncError](err); ok && syncErr.Retryable {
+		// An unavailable organization key clears on its own, so the event is retried rather than dropped.
+		return "", err
+	}
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrNoRoutingWorkspace, err)
 	}

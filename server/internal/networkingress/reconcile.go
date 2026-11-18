@@ -15,10 +15,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 )
 
 // ExecutorOptions contains only runtime configuration, never provider credentials.
@@ -79,17 +80,23 @@ func (e *ReconcileError) Error() string { return "network ingress reconciliation
 
 // Executor reconciles one ingress at a time across all workers and attempts.
 type Executor struct {
-	db       *pgxpool.Pool
-	enc      *encryption.Client
-	registry *k8s.NetworkIngressProvisionerRegistry
-	options  ExecutorOptions
+	db          *pgxpool.Pool
+	credentials *integrationcredentials.Credentials
+	registry    *k8s.NetworkIngressProvisionerRegistry
+	options     ExecutorOptions
 }
 
-func NewExecutor(db *pgxpool.Pool, enc *encryption.Client, registry *k8s.NetworkIngressProvisionerRegistry, options ExecutorOptions) *Executor {
+// NewExecutor builds the reconciler. Nil credentials leave provider mutations
+// unavailable.
+func NewExecutor(db *pgxpool.Pool, credentials *integrationcredentials.Credentials, registry *k8s.NetworkIngressProvisionerRegistry, options ExecutorOptions) *Executor {
 	if options.Logger == nil {
 		options.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Executor{db: db, enc: enc, registry: registry, options: options}
+	return &Executor{db: db, credentials: credentials, registry: registry, options: options}
+}
+
+func storedCredentials(row repo.NetworkIngress) orgencryption.Copies {
+	return integrationcredentials.Stored(row.CredentialsEncrypted, row.CredentialsOrgEncrypted)
 }
 
 func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid.UUID) (ReconcileResult, error) {
@@ -175,13 +182,21 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		}
 		gateCode = e.applyGate(ctx)
 		if gateCode == "" {
-			credentials, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
-			if err != nil || !row.CredentialsEncrypted.Valid || credentials == "" {
+			credentials, err := e.credentials.Open(ctx, conn, row.OrganizationID, integrationcredentials.NetworkIngresses, storedCredentials(row))
+			if err != nil && !integrationcredentials.IsUnreadable(err) {
+				// The organization key is unavailable for now. Report it, keep
+				// the recorded name routing to the hosts already serving it,
+				// and retry; the saved credentials are not invalid.
+				e.options.Logger.WarnContext(ctx, "network ingress credentials unavailable", attr.SlogError(err), attr.SlogNetworkIngressID(row.ID.String()))
+				unavailable := k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusError, DNSName: row.DnsName.String, ErrorCode: k8s.NetworkIngressErrorEncryptionKeyUnavailable, ConnectedAt: nil}
+				return e.record(ctx, conn, row, unavailable, reconcileFailure(k8s.NetworkIngressErrorEncryptionKeyUnavailable), "")
+			}
+			if err != nil || len(credentials) == 0 {
 				return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_credentials"), "")
 			}
 			callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 			observation, operationErr = provider.Apply(callCtx, k8s.NetworkIngressDesired{
-				ID: row.ID, OrganizationID: row.OrganizationID, Provider: row.Provider, Hostname: row.Hostname, Credentials: []byte(credentials), Resources: resources,
+				ID: row.ID, OrganizationID: row.OrganizationID, Provider: row.Provider, Hostname: row.Hostname, Credentials: credentials, Resources: resources,
 				AttestorImage: e.options.Image, BackendService: e.options.BackendService, BackendPort: e.options.BackendPort,
 				Runtime: row.Runtime.String,
 			})
@@ -220,7 +235,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 }
 
 func (e *Executor) applyGate(ctx context.Context) string {
-	if e.enc == nil || e.options.Queue == "" {
+	if e.credentials == nil || e.options.Queue == "" {
 		return "provider_configuration_unavailable"
 	}
 	if e.options.AttestorRequired && (e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535) {
@@ -233,7 +248,7 @@ func (e *Executor) applyGate(ctx context.Context) string {
 }
 
 func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.NetworkIngress) (ReconcileResult, error) {
-	if !row.CredentialsEncrypted.Valid && bytes.Equal(row.ProviderResources, []byte("{}")) {
+	if !integrationcredentials.Has(storedCredentials(row)) && bytes.Equal(row.ProviderResources, []byte("{}")) {
 		return ReconcileResult{Requeue: false}, nil
 	}
 	resources, err := k8s.ParseNetworkIngressResourceNames(row.ProviderResources)
@@ -301,16 +316,21 @@ func (e *Executor) deleteProviderResources(ctx context.Context, provider k8s.Net
 		return provider.Delete(ctx, resources) //nolint:wrapcheck // provider errors are classified by providerFailure
 	}
 	var credentials []byte
-	if e.enc != nil && row.CredentialsEncrypted.Valid && row.CredentialsEncrypted.String != "" {
-		plaintext, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
+	stored := storedCredentials(row)
+	if e.credentials != nil && integrationcredentials.Has(stored) {
+		plaintext, err := e.credentials.Open(ctx, nil, row.OrganizationID, integrationcredentials.NetworkIngresses, stored)
 		switch {
+		case err != nil && !integrationcredentials.IsUnreadable(err):
+			// Cleaning up without credentials that only cannot be opened
+			// right now could strand provider resources; retry instead.
+			return fmt.Errorf("%w: open network ingress credentials: %w", errCredentialsUnavailable, err)
 		case err != nil:
 			// Distinguishable from "nothing saved": the provider still reports
 			// the cleanup blocker, and this names the server-side cause.
 			e.options.Logger.ErrorContext(ctx, "saved network ingress credentials do not decrypt; cleanup proceeds without them",
 				attr.SlogError(err), attr.SlogNetworkIngressID(row.ID.String()))
-		case plaintext != "":
-			credentials = []byte(plaintext)
+		case len(plaintext) > 0:
+			credentials = plaintext
 		}
 	}
 	return deleter.DeleteWithCredentials(ctx, resources, credentials) //nolint:wrapcheck // provider errors are classified by providerFailure
@@ -428,8 +448,14 @@ func sameIngressDesired(a, b repo.NetworkIngress) bool {
 		a.AttestorNamespace == b.AttestorNamespace && a.AttestorServiceAccount == b.AttestorServiceAccount && bytes.Equal(a.ProviderResources, b.ProviderResources)
 }
 
+// errCredentialsUnavailable means saved credentials exist but the
+// organization key cannot open them right now.
+var errCredentialsUnavailable = errors.New("network ingress credentials unavailable")
+
 func providerFailure(err error, code string) *ReconcileError {
 	switch {
+	case errors.Is(err, errCredentialsUnavailable):
+		return reconcileFailure(k8s.NetworkIngressErrorEncryptionKeyUnavailable)
 	case errors.Is(err, k8s.ErrNetworkIngressProviderForbidden):
 		return reconcileFailure(k8s.NetworkIngressErrorProviderForbidden)
 	case errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected):

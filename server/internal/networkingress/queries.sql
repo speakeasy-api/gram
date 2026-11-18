@@ -26,7 +26,6 @@ INSERT INTO network_ingresses (
     custom_domain_id,
     enabled,
     identity_required,
-    credentials_encrypted,
     attestor_namespace,
     attestor_service_account,
     provider_resources,
@@ -40,7 +39,6 @@ INSERT INTO network_ingresses (
     sqlc.narg('custom_domain_id'),
     @enabled,
     @identity_required,
-    @credentials_encrypted,
     @attestor_namespace,
     @attestor_service_account,
     @provider_resources,
@@ -89,6 +87,7 @@ WHERE organization_id = @organization_id
   AND deleted IS TRUE
   AND (
     credentials_encrypted IS NOT NULL
+    OR credentials_org_encrypted IS NOT NULL
     OR provider_resources <> '{}'::jsonb
   )
 ORDER BY deleted_at DESC, id DESC
@@ -131,14 +130,23 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: RotateNetworkIngressCredentials :one
-UPDATE network_ingresses
+-- Stores both copies sealed under the decided transition generation; creation
+-- stores the first credentials the same way. No rows means the ingress is gone
+-- or the transition moved; integrationcredentials tells the two apart.
+UPDATE network_ingresses AS i
 SET
-    credentials_encrypted = @credentials_encrypted,
+    credentials_encrypted = sqlc.narg('platform_copy'),
+    credentials_org_encrypted = sqlc.narg('org_copy'),
     status = 'pending',
     last_error = NULL,
     updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
+WHERE i.organization_id = @organization_id
+  AND i.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = i.organization_id AND t.use_case = 'integration-credentials'
+    FOR KEY SHARE
+  ), 0) = @decided_generation
 RETURNING *;
 
 -- name: SoftDeleteNetworkIngress :one
@@ -246,7 +254,7 @@ SELECT id, organization_id, provider, deleted_at
 FROM network_ingresses
 WHERE id > @after_id::uuid
   AND (
-    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
+    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR credentials_org_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
     OR (deleted IS FALSE AND (
       health_checked_at IS NULL
       OR health_checked_at < @stale_before::timestamptz
@@ -275,9 +283,11 @@ WHERE id = @id
 -- name: ClearDeletedNetworkIngressResources :execrows
 -- AIS-611 calls this only after every persisted provider resource is confirmed
 -- absent. Clearing both fields is the replacement-create release boundary.
+-- orgencryption:unfenced erasing both copies is correct under any transition state
 UPDATE network_ingresses
 SET
     credentials_encrypted = NULL,
+    credentials_org_encrypted = NULL,
     provider_resources = '{}'::jsonb,
     last_error = NULL,
     updated_at = clock_timestamp()

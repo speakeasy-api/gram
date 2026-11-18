@@ -11,12 +11,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -43,44 +45,92 @@ type SyncScheduler interface {
 }
 
 type DirectorySync struct {
-	db         *pgxpool.Pool
-	encryption *encryption.Client
-	provider   DirectoryProvider
-	audit      *audit.Logger
-	refresher  TokenRefresher
+	db          *pgxpool.Pool
+	credentials *integrationcredentials.Credentials
+	provider    DirectoryProvider
+	audit       *audit.Logger
+	refresher   TokenRefresher
 	// A sync holds a pooled connection for its whole Slack fetch, including
 	// rate-limit waits, so this process runs at most a quarter of the pool at once.
 	slots chan struct{}
 }
 
 // NewDirectorySync takes an optional refresher; without one, expired tokens require reconnecting.
-func NewDirectorySync(db *pgxpool.Pool, enc *encryption.Client, provider DirectoryProvider, auditLogger *audit.Logger, refresher TokenRefresher) *DirectorySync {
-	return &DirectorySync{db: db, encryption: enc, provider: provider, audit: auditLogger, refresher: refresher, slots: make(chan struct{}, max(1, db.Config().MaxConns/4))}
+func NewDirectorySync(db *pgxpool.Pool, credentials *integrationcredentials.Credentials, provider DirectoryProvider, auditLogger *audit.Logger, refresher TokenRefresher) *DirectorySync {
+	return &DirectorySync{db: db, credentials: credentials, provider: provider, audit: auditLogger, refresher: refresher, slots: make(chan struct{}, max(1, db.Config().MaxConns/4))}
 }
 
 // Refresh this long before expiry so a slow directory fetch cannot outlive the token.
 const tokenRefreshMargin = 30 * time.Minute
 
-func usableTokens(enc *encryption.Client, row repo.SlackDirectoryConnection) (*TokenBundle, error) {
-	if row.DisconnectedAt.Valid || !row.CredentialsEncrypted.Valid || row.Health != "connected" {
+// errEncryptionUnavailable is an organization key that cannot be used right
+// now. Reconnecting cannot help, so the workspace stays connected and the
+// caller retries.
+var errEncryptionUnavailable = &SyncError{Code: "encryption_unavailable", Retryable: true, Reconnect: false, RetryAfter: 0}
+
+func usableTokens(ctx context.Context, credentials *integrationcredentials.Credentials, db integrationcredentials.DBTX, row repo.SlackDirectoryConnection) (*TokenBundle, error) {
+	stored := integrationcredentials.Stored(row.CredentialsEncrypted, row.CredentialsOrgEncrypted)
+	if row.DisconnectedAt.Valid || !integrationcredentials.Has(stored) || row.Health != "connected" {
 		return nil, &SyncError{Code: "reconnect_required", Retryable: false, Reconnect: true, RetryAfter: 0}
 	}
-	plaintext, err := enc.Decrypt(row.CredentialsEncrypted.String)
+	plaintext, err := credentials.Open(ctx, db, row.OrganizationID, integrationcredentials.SlackDirectoryConnections, stored)
+	if err != nil && !integrationcredentials.IsUnreadable(err) {
+		return nil, errEncryptionUnavailable
+	}
 	var tokens TokenBundle
-	if err != nil || json.Unmarshal([]byte(plaintext), &tokens) != nil || tokens.Version != 1 || tokens.AccessToken == "" {
+	if err != nil || json.Unmarshal(plaintext, &tokens) != nil {
+		return nil, &SyncError{Code: "credential_unavailable", Retryable: false, Reconnect: true, RetryAfter: 0}
+	}
+	return checkTokens(&tokens)
+}
+
+func lockedTokensUsable(row repo.SlackDirectoryConnection, tokens *TokenBundle) (*TokenBundle, error) {
+	if row.DisconnectedAt.Valid || !integrationcredentials.Has(integrationcredentials.Stored(row.CredentialsEncrypted, row.CredentialsOrgEncrypted)) || row.Health != "connected" {
+		return nil, &SyncError{Code: "reconnect_required", Retryable: false, Reconnect: true, RetryAfter: 0}
+	}
+	return checkTokens(tokens)
+}
+
+func checkTokens(tokens *TokenBundle) (*TokenBundle, error) {
+	if tokens.Version != 1 || tokens.AccessToken == "" {
 		return nil, &SyncError{Code: "credential_unavailable", Retryable: false, Reconnect: true, RetryAfter: 0}
 	}
 	// A rotating token past expiry stays usable while its refresh token can renew it.
 	if tokens.ExpiresAt != nil && !time.Now().Before(*tokens.ExpiresAt) && tokens.RefreshToken == "" {
 		return nil, &SyncError{Code: "authorization_expired", Retryable: false, Reconnect: true, RetryAfter: 0}
 	}
-	return &tokens, nil
+	return tokens, nil
+}
+
+// StoreTokens stores a workspace's token bundle, for the local development
+// seed, which writes connections without the OAuth flow.
+func StoreTokens(ctx context.Context, credentials *integrationcredentials.Credentials, db repo.DBTX, organizationID string, id, generation uuid.UUID, tokens *TokenBundle) error {
+	return storeTokens(ctx, credentials, db, organizationID, id, generation, tokens)
+}
+
+// storeTokens seals the bundle under the organization's key and stores it on
+// the connection's current generation. It returns errSyncSuperseded when the
+// connection was disconnected or reauthorized meanwhile.
+func storeTokens(ctx context.Context, credentials *integrationcredentials.Credentials, db repo.DBTX, organizationID string, id, generation uuid.UUID, tokens *TokenBundle) error {
+	plaintext, err := json.Marshal(tokens)
+	if err != nil {
+		return fmt.Errorf("encode Slack credentials: %w", err)
+	}
+	queries := repo.New(db)
+	err = credentials.Store(ctx, db, organizationID, integrationcredentials.SlackDirectoryConnections, plaintext, func(ctx context.Context, copies orgencryption.Copies, decided int64) (bool, error) {
+		updated, err := queries.UpdateSlackDirectoryCredentials(ctx, repo.UpdateSlackDirectoryCredentialsParams{PlatformCopy: copies.Platform, OrgCopy: copies.Org, OrganizationID: organizationID, ID: id, Generation: generation, DecidedGeneration: decided})
+		return updated > 0, err
+	})
+	if errors.Is(err, integrationcredentials.ErrNotStored) {
+		return errSyncSuperseded
+	}
+	return err
 }
 
 // freshTokens refreshes a rotating token close to expiry and persists the new bundle
 // before use, because Slack invalidates the old refresh token once it is exchanged.
-func (s *DirectorySync) freshTokens(ctx context.Context, queries *repo.Queries, row repo.SlackDirectoryConnection) (*TokenBundle, error) {
-	tokens, err := usableTokens(s.encryption, row)
+func (s *DirectorySync) freshTokens(ctx context.Context, db repo.DBTX, row repo.SlackDirectoryConnection) (*TokenBundle, error) {
+	tokens, err := usableTokens(ctx, s.credentials, db, row)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +142,11 @@ func (s *DirectorySync) freshTokens(ctx context.Context, queries *repo.Queries, 
 			return tokens, nil
 		}
 		return nil, &SyncError{Code: "authorization_expired", Retryable: false, Reconnect: true, RetryAfter: 0}
+	}
+	// Slack invalidates the old refresh token on exchange, so check that the
+	// new bundle can be stored before spending it.
+	if err := s.credentials.RequireUsable(ctx, db, row.OrganizationID); err != nil {
+		return nil, errEncryptionUnavailable
 	}
 	refreshed, err := s.refresher.Refresh(ctx, tokens.RefreshToken)
 	if err != nil {
@@ -109,21 +164,12 @@ func (s *DirectorySync) freshTokens(ctx context.Context, queries *repo.Queries, 
 		}
 		return nil, &SyncError{Code: "authorization_expired", Retryable: false, Reconnect: true, RetryAfter: 0}
 	}
-	plaintext, err := json.Marshal(refreshed)
-	if err != nil {
-		return nil, fmt.Errorf("encode refreshed Slack credentials: %w", err)
-	}
-	ciphertext, err := s.encryption.Encrypt(plaintext)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt refreshed Slack credentials: %w", err)
-	}
-	updated, err := queries.UpdateSlackDirectoryCredentials(ctx, repo.UpdateSlackDirectoryCredentialsParams{CredentialsEncrypted: conv.ToPGText(ciphertext), OrganizationID: row.OrganizationID, ID: row.ID, Generation: row.Generation})
-	if err != nil {
+	// Disconnected or reauthorized meanwhile means errSyncSuperseded: the newer generation owns the credentials.
+	if err := storeTokens(ctx, s.credentials, db, row.OrganizationID, row.ID, row.Generation, refreshed); err != nil {
+		if errors.Is(err, errSyncSuperseded) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("store refreshed Slack credentials: %w", err)
-	}
-	if updated == 0 {
-		// Disconnected or reauthorized meanwhile; the newer generation owns the credentials.
-		return nil, errSyncSuperseded
 	}
 	return refreshed, nil
 }
@@ -200,7 +246,7 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	} else if affected == 0 {
 		return nil
 	}
-	tokens, err := s.freshTokens(ctx, queries, row)
+	tokens, err := s.freshTokens(ctx, conn, row)
 	if errors.Is(err, errSyncSuperseded) {
 		return nil
 	}
@@ -230,7 +276,10 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	if current.Generation != input.Generation || current.DisconnectedAt.Valid || !current.LastSyncStartedAt.Valid || !current.LastSyncStartedAt.Time.Equal(started) {
 		return nil
 	}
-	if _, err := usableTokens(s.encryption, current); err != nil {
+	// The generation still matches, so the credentials can only have been
+	// refreshed since freshTokens read them. Check the decrypted bundle rather
+	// than decrypting again under the row lock.
+	if _, err := lockedTokensUsable(current, tokens); err != nil {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 			return fmt.Errorf("rollback expired Slack sync: %w", rollbackErr)
 		}

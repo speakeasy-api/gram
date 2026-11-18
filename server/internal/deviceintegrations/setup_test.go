@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -172,7 +173,7 @@ func newStoreTestDB(t *testing.T) (context.Context, *pgxpool.Pool, *Store, strin
 	})
 	require.NoError(t, err)
 
-	store := NewStore(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t))
+	store := NewStore(testenv.NewLogger(t), conn, testCredentials(t, conn))
 	return ctx, conn, store, orgID
 }
 
@@ -214,4 +215,9 @@ func validCreds() providers.Credentials {
 
 func validSettings() providers.Settings {
 	return providers.Settings{"instance_url": "https://example.test"}
+}
+
+func testCredentials(t *testing.T, conn *pgxpool.Pool) *integrationcredentials.Credentials {
+	t.Helper()
+	return integrationcredentials.WithoutOrganizationEncryption(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t))
 }

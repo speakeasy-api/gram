@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -105,10 +106,15 @@ type WorkerOptions struct {
 	// ClientSecrets opens remote session client secrets over the process's
 	// organization encryption. Nil opens them as a process without
 	// organization encryption.
-	ClientSecrets   *clientsecrets.Secrets
-	FeatureProvider feature.Provider
-	AssetStorage    assets.BlobStore
-	SlackClient     *slack_client.SlackClient
+	ClientSecrets *clientsecrets.Secrets
+
+	// IntegrationCredentials opens Slack, device integration and network
+	// ingress credentials over the process's organization encryption. Nil
+	// opens them as a process without organization encryption.
+	IntegrationCredentials *integrationcredentials.Credentials
+	FeatureProvider        feature.Provider
+	AssetStorage           assets.BlobStore
+	SlackClient            *slack_client.SlackClient
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
@@ -239,6 +245,7 @@ func ForDeploymentProcessing(
 		TunnelHTTPClient:               nil,
 		EncryptionClient:               enc,
 		ClientSecrets:                  nil,
+		IntegrationCredentials:         nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -346,6 +353,7 @@ func NewTemporalWorker(
 		DB:                             nil,
 		EncryptionClient:               nil,
 		ClientSecrets:                  nil,
+		IntegrationCredentials:         nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -410,6 +418,7 @@ func NewTemporalWorker(
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
+			IntegrationCredentials:         conv.Default(o.IntegrationCredentials, opts.IntegrationCredentials),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -519,6 +528,13 @@ func NewTemporalWorker(
 		}
 	}
 
+	// Workers wired without the process's seam (test workers) open
+	// integration credentials as a process without organization encryption.
+	integrationCredentials := opts.IntegrationCredentials
+	if integrationCredentials == nil {
+		integrationCredentials = integrationcredentials.WithoutOrganizationEncryption(logger, opts.DB, opts.EncryptionClient)
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -528,6 +544,7 @@ func NewTemporalWorker(
 		opts.DB,
 		opts.EncryptionClient,
 		opts.ClientSecrets,
+		integrationCredentials,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -779,7 +796,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SlackDirectorySyncWorkflow)
 	temporalWorker.RegisterWorkflow(SlackDirectorySweepWorkflow)
 	if opts.DB != nil && opts.EncryptionClient != nil && opts.GuardianPolicy != nil {
-		slackDirectory := newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
+		slackDirectory := newSlackDirectoryActivities(opts.DB, integrationCredentials, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
 		temporalWorker.RegisterActivity(slackDirectory.SyncSlackDirectory)
 		temporalWorker.RegisterActivity(slackDirectory.ListDueSlackDirectories)
 		if opts.ServerURL != nil {

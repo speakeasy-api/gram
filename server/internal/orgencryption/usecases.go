@@ -20,6 +20,11 @@ const (
 	// UseCaseOAuthClientSecrets is the use case for the client secrets of
 	// remote session clients, the OAuth clients Speakeasy uses upstream.
 	UseCaseOAuthClientSecrets UseCase = "oauth-client-secrets" //nolint:gosec // G101: a use case name, not a credential
+
+	// UseCaseIntegrationCredentials is the use case for credentials Speakeasy
+	// holds for third-party integrations: Slack workspaces, device management
+	// and compliance providers, and network ingress providers.
+	UseCaseIntegrationCredentials UseCase = "integration-credentials"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -27,6 +32,7 @@ const (
 var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
 	UseCaseOAuthClientSecrets,
+	UseCaseIntegrationCredentials,
 }
 
 // ParseUseCase returns the registered use case named value.

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -217,7 +218,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				return err
 			}
 			defer lockDB.Close()
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, integrationcredentials.New(logger, orgEncryption.Cipher(logger, encryptionClient)), orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err
 			}

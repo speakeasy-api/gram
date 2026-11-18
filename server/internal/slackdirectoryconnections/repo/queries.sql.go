@@ -31,37 +31,36 @@ func (q *Queries) AdvanceSlackMappingRevision(ctx context.Context, arg AdvanceSl
 const authorizeSlackDirectoryConnection = `-- name: AuthorizeSlackDirectoryConnection :one
 UPDATE slack_directory_connections SET
 slack_team_name = $1,
-credentials_encrypted = $2,
-granted_scopes = $3,
-generation = $4,
+granted_scopes = $2,
+generation = $3,
 health = 'connected', disconnected_at = NULL, last_error_code = NULL,
 default_project_id = COALESCE(default_project_id, (
   SELECT p.id FROM projects p
-  WHERE p.organization_id = $5 AND p.slug = 'default' AND p.deleted IS FALSE
+  WHERE p.organization_id = $4 AND p.slug = 'default' AND p.deleted IS FALSE
     AND NOT EXISTS (SELECT 1 FROM slack_directory_connections c WHERE c.default_project_id = p.id)
 )),
 updated_at = clock_timestamp()
-WHERE slack_directory_connections.organization_id = $5 AND slack_directory_connections.id = $6
-  AND slack_directory_connections.generation = $7 AND slack_directory_connections.slack_team_id = $8
+WHERE slack_directory_connections.organization_id = $4 AND slack_directory_connections.id = $5
+  AND slack_directory_connections.generation = $6 AND slack_directory_connections.slack_team_id = $7
 RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, credentials_org_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at
 `
 
 type AuthorizeSlackDirectoryConnectionParams struct {
-	SlackTeamName        pgtype.Text
-	CredentialsEncrypted pgtype.Text
-	GrantedScopes        []string
-	Generation           uuid.UUID
-	OrganizationID       string
-	ID                   uuid.UUID
-	ExpectedGeneration   uuid.UUID
-	SlackTeamID          string
+	SlackTeamName      pgtype.Text
+	GrantedScopes      []string
+	Generation         uuid.UUID
+	OrganizationID     string
+	ID                 uuid.UUID
+	ExpectedGeneration uuid.UUID
+	SlackTeamID        string
 }
 
+// The new credentials are stored by UpdateSlackDirectoryCredentials in the same
+// transaction, under the new generation.
 // Reconnecting a workspace with no project falls back to "default", as on create.
 func (q *Queries) AuthorizeSlackDirectoryConnection(ctx context.Context, arg AuthorizeSlackDirectoryConnectionParams) (SlackDirectoryConnection, error) {
 	row := q.db.QueryRow(ctx, authorizeSlackDirectoryConnection,
 		arg.SlackTeamName,
-		arg.CredentialsEncrypted,
 		arg.GrantedScopes,
 		arg.Generation,
 		arg.OrganizationID,
@@ -188,8 +187,8 @@ func (q *Queries) CountSlackIdentityMappingsForTest(ctx context.Context, organiz
 }
 
 const createSlackDirectoryConnection = `-- name: CreateSlackDirectoryConnection :one
-INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, default_project_id)
-VALUES ($1, $2, $3, $4, $5, $6, 'connected', (
+INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, granted_scopes, generation, health, default_project_id)
+VALUES ($1, $2, $3, $4, $5, 'connected', (
   SELECT p.id FROM projects p
   WHERE p.organization_id = $1 AND p.slug = 'default' AND p.deleted IS FALSE
     AND NOT EXISTS (SELECT 1 FROM slack_directory_connections c WHERE c.default_project_id = p.id)
@@ -199,22 +198,21 @@ RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encry
 `
 
 type CreateSlackDirectoryConnectionParams struct {
-	OrganizationID       string
-	SlackTeamID          string
-	SlackTeamName        pgtype.Text
-	CredentialsEncrypted pgtype.Text
-	GrantedScopes        []string
-	Generation           uuid.UUID
+	OrganizationID string
+	SlackTeamID    string
+	SlackTeamName  pgtype.Text
+	GrantedScopes  []string
+	Generation     uuid.UUID
 }
 
 // A new workspace answers for the organization's "default" project unless that
-// project already answers in another workspace.
+// project already answers in another workspace. Its credentials are stored by
+// UpdateSlackDirectoryCredentials in the same transaction.
 func (q *Queries) CreateSlackDirectoryConnection(ctx context.Context, arg CreateSlackDirectoryConnectionParams) (SlackDirectoryConnection, error) {
 	row := q.db.QueryRow(ctx, createSlackDirectoryConnection,
 		arg.OrganizationID,
 		arg.SlackTeamID,
 		arg.SlackTeamName,
-		arg.CredentialsEncrypted,
 		arg.GrantedScopes,
 		arg.Generation,
 	)
@@ -349,7 +347,7 @@ func (q *Queries) DeleteSlackMappingUserForTest(ctx context.Context, userID stri
 
 const disconnectSlackDirectoryConnection = `-- name: DisconnectSlackDirectoryConnection :one
 UPDATE slack_directory_connections SET
-credentials_encrypted = NULL, granted_scopes = '{}', generation = $1,
+credentials_encrypted = NULL, credentials_org_encrypted = NULL, granted_scopes = '{}', generation = $1,
 health = 'disconnected', disconnected_at = clock_timestamp(), updated_at = clock_timestamp(), last_error_code = NULL
 WHERE organization_id = $2 AND id = $3 AND generation = $4
 RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, credentials_org_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at
@@ -362,6 +360,7 @@ type DisconnectSlackDirectoryConnectionParams struct {
 	ExpectedGeneration uuid.UUID
 }
 
+// orgencryption:unfenced erasing both copies is correct under any transition state
 func (q *Queries) DisconnectSlackDirectoryConnection(ctx context.Context, arg DisconnectSlackDirectoryConnectionParams) (SlackDirectoryConnection, error) {
 	row := q.db.QueryRow(ctx, disconnectSlackDirectoryConnection,
 		arg.Generation,
@@ -529,7 +528,7 @@ func (q *Queries) GetSlackRoutingConnectionByProject(ctx context.Context, arg Ge
 
 const listDueSlackDirectorySyncs = `-- name: ListDueSlackDirectorySyncs :many
 SELECT organization_id, id, generation FROM slack_directory_connections
-WHERE disconnected_at IS NULL AND health = 'connected' AND credentials_encrypted IS NOT NULL
+WHERE disconnected_at IS NULL AND health = 'connected' AND (credentials_encrypted IS NOT NULL OR credentials_org_encrypted IS NOT NULL)
   AND organization_id <> $1
   AND (last_sync_started_at IS NULL OR last_sync_started_at < $2)
   -- Back off a workspace whose latest attempt failed, so a permanent error is not retried every tick.
@@ -1510,23 +1509,38 @@ func (q *Queries) UnlockSlackDirectorySync(ctx context.Context, lockKey string) 
 }
 
 const updateSlackDirectoryCredentials = `-- name: UpdateSlackDirectoryCredentials :execrows
-UPDATE slack_directory_connections SET credentials_encrypted = $1, updated_at = clock_timestamp()
-WHERE organization_id = $2 AND id = $3 AND generation = $4 AND disconnected_at IS NULL
+UPDATE slack_directory_connections AS c SET
+credentials_encrypted = $1,
+credentials_org_encrypted = $2,
+updated_at = clock_timestamp()
+WHERE c.organization_id = $3 AND c.id = $4 AND c.generation = $5 AND c.disconnected_at IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'integration-credentials'
+    FOR KEY SHARE
+  ), 0) = $6
 `
 
 type UpdateSlackDirectoryCredentialsParams struct {
-	CredentialsEncrypted pgtype.Text
-	OrganizationID       string
-	ID                   uuid.UUID
-	Generation           uuid.UUID
+	PlatformCopy      pgtype.Text
+	OrgCopy           pgtype.Text
+	OrganizationID    string
+	ID                uuid.UUID
+	Generation        uuid.UUID
+	DecidedGeneration int64
 }
 
+// Stores both copies sealed under the decided transition generation. No rows
+// means the connection was disconnected or reauthorized, or the transition
+// moved; integrationcredentials tells the two apart.
 func (q *Queries) UpdateSlackDirectoryCredentials(ctx context.Context, arg UpdateSlackDirectoryCredentialsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateSlackDirectoryCredentials,
-		arg.CredentialsEncrypted,
+		arg.PlatformCopy,
+		arg.OrgCopy,
 		arg.OrganizationID,
 		arg.ID,
 		arg.Generation,
+		arg.DecidedGeneration,
 	)
 	if err != nil {
 		return 0, err

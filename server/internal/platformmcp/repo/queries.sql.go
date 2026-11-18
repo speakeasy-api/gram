@@ -2000,7 +2000,7 @@ SELECT
     ingress.custom_domain_id,
     ingress.enabled,
     ingress.identity_required,
-    (ingress.credentials_encrypted IS NOT NULL)::boolean AS credentials_configured,
+    (ingress.credentials_encrypted IS NOT NULL OR ingress.credentials_org_encrypted IS NOT NULL)::boolean AS credentials_configured,
     ingress.status,
     ingress.dns_name,
     ingress.last_error,

@@ -194,11 +194,12 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 		CustomDomainID:         uuid.NullUUID{},
 		Enabled:                true,
 		IdentityRequired:       false,
-		CredentialsEncrypted:   pgtype.Text{String: credentialSentinel, Valid: true},
 		AttestorNamespace:      attestor,
 		AttestorServiceAccount: attestor,
 		ProviderResources:      []byte(`{"tailnet_key":"` + resourceSentinel + `"}`),
 	})
+	require.NoError(t, err)
+	created, err = networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: credentialSentinel, Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 	got, err = service.Get(ctx, principal)
 	require.NoError(t, err)
@@ -258,10 +259,12 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
 		ID: uuid.New(), OrganizationID: principal.OrganizationID,
 		Provider: "future-provider", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
-		Enabled: true, CredentialsEncrypted: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true},
+		Enabled:           true,
 		AttestorNamespace: attestor, AttestorServiceAccount: attestor,
 		ProviderResources: []byte(`{}`),
 	})
+	require.NoError(t, err)
+	created, err = networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 	updated, err := networkingressrepo.New(conn).RecordNetworkIngressObservation(ctx, networkingressrepo.RecordNetworkIngressObservationParams{
 		Status: "online", DnsName: pgtype.Text{String: "private-mcp.example.test", Valid: true},

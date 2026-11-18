@@ -10,6 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -19,8 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 func TestConnectionLifecycle(t *testing.T) {
@@ -272,7 +274,9 @@ func TestExpiredCredentialsWithoutRefreshRequireReconnect(t *testing.T) {
 	require.NoError(t, err)
 	ciphertext, err := f.enc.Encrypt(tokens)
 	require.NoError(t, err)
-	_, err = repo.New(f.db).CreateSlackDirectoryConnection(ctx, repo.CreateSlackDirectoryConnectionParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: "TEXAMPLE01", SlackTeamName: conv.ToPGText("Example workspace"), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: []string{}, Generation: uuid.New()})
+	created, err := repo.New(f.db).CreateSlackDirectoryConnection(ctx, repo.CreateSlackDirectoryConnectionParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: "TEXAMPLE01", SlackTeamName: conv.ToPGText("Example workspace"), GrantedScopes: []string{}, Generation: uuid.New()})
+	require.NoError(t, err)
+	_, err = repo.New(f.db).UpdateSlackDirectoryCredentials(ctx, repo.UpdateSlackDirectoryCredentialsParams{PlatformCopy: conv.ToPGText(ciphertext), OrgCopy: pgtype.Text{}, OrganizationID: created.OrganizationID, ID: created.ID, Generation: created.Generation, DecidedGeneration: 0})
 	require.NoError(t, err)
 	list, err := f.service.List(ctx, &gen.ListPayload{SessionToken: nil})
 	require.NoError(t, err)

@@ -27,6 +27,7 @@ const clearDeletedNetworkIngressResources = `-- name: ClearDeletedNetworkIngress
 UPDATE network_ingresses
 SET
     credentials_encrypted = NULL,
+    credentials_org_encrypted = NULL,
     provider_resources = '{}'::jsonb,
     last_error = NULL,
     updated_at = clock_timestamp()
@@ -42,6 +43,7 @@ type ClearDeletedNetworkIngressResourcesParams struct {
 
 // AIS-611 calls this only after every persisted provider resource is confirmed
 // absent. Clearing both fields is the replacement-create release boundary.
+// orgencryption:unfenced erasing both copies is correct under any transition state
 func (q *Queries) ClearDeletedNetworkIngressResources(ctx context.Context, arg ClearDeletedNetworkIngressResourcesParams) (int64, error) {
 	result, err := q.db.Exec(ctx, clearDeletedNetworkIngressResources, arg.ID, arg.OrganizationID)
 	if err != nil {
@@ -115,7 +117,6 @@ INSERT INTO network_ingresses (
     custom_domain_id,
     enabled,
     identity_required,
-    credentials_encrypted,
     attestor_namespace,
     attestor_service_account,
     provider_resources,
@@ -132,8 +133,7 @@ INSERT INTO network_ingresses (
     $9,
     $10,
     $11,
-    $12,
-    $13
+    $12
 )
 RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 `
@@ -147,7 +147,6 @@ type CreateNetworkIngressParams struct {
 	CustomDomainID         uuid.NullUUID
 	Enabled                bool
 	IdentityRequired       bool
-	CredentialsEncrypted   pgtype.Text
 	AttestorNamespace      string
 	AttestorServiceAccount string
 	ProviderResources      []byte
@@ -164,7 +163,6 @@ func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIng
 		arg.CustomDomainID,
 		arg.Enabled,
 		arg.IdentityRequired,
-		arg.CredentialsEncrypted,
 		arg.AttestorNamespace,
 		arg.AttestorServiceAccount,
 		arg.ProviderResources,
@@ -410,6 +408,7 @@ WHERE organization_id = $1
   AND deleted IS TRUE
   AND (
     credentials_encrypted IS NOT NULL
+    OR credentials_org_encrypted IS NOT NULL
     OR provider_resources <> '{}'::jsonb
   )
 ORDER BY deleted_at DESC, id DESC
@@ -497,7 +496,7 @@ SELECT id, organization_id, provider, deleted_at
 FROM network_ingresses
 WHERE id > $1::uuid
   AND (
-    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
+    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR credentials_org_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
     OR (deleted IS FALSE AND (
       health_checked_at IS NULL
       OR health_checked_at < $2::timestamptz
@@ -846,24 +845,40 @@ func (q *Queries) ReleaseNetworkIngressReconcileLock(ctx context.Context, lockKe
 }
 
 const rotateNetworkIngressCredentials = `-- name: RotateNetworkIngressCredentials :one
-UPDATE network_ingresses
+UPDATE network_ingresses AS i
 SET
     credentials_encrypted = $1,
+    credentials_org_encrypted = $2,
     status = 'pending',
     last_error = NULL,
     updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND deleted IS FALSE
+WHERE i.organization_id = $3
+  AND i.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = i.organization_id AND t.use_case = 'integration-credentials'
+    FOR KEY SHARE
+  ), 0) = $4
 RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 `
 
 type RotateNetworkIngressCredentialsParams struct {
-	CredentialsEncrypted pgtype.Text
-	OrganizationID       string
+	PlatformCopy      pgtype.Text
+	OrgCopy           pgtype.Text
+	OrganizationID    string
+	DecidedGeneration int64
 }
 
+// Stores both copies sealed under the decided transition generation; creation
+// stores the first credentials the same way. No rows means the ingress is gone
+// or the transition moved; integrationcredentials tells the two apart.
 func (q *Queries) RotateNetworkIngressCredentials(ctx context.Context, arg RotateNetworkIngressCredentialsParams) (NetworkIngress, error) {
-	row := q.db.QueryRow(ctx, rotateNetworkIngressCredentials, arg.CredentialsEncrypted, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, rotateNetworkIngressCredentials,
+		arg.PlatformCopy,
+		arg.OrgCopy,
+		arg.OrganizationID,
+		arg.DecidedGeneration,
+	)
 	var i NetworkIngress
 	err := row.Scan(
 		&i.ID,

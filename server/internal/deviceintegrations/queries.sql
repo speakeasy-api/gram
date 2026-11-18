@@ -30,16 +30,15 @@ WHERE organization_id = @organization_id
 FOR UPDATE;
 
 -- name: InsertConfig :one
+-- The credentials are stored by SetConfigCredentials in the same transaction.
 INSERT INTO device_integration_configs (
     organization_id
   , provider
-  , credentials_encrypted
   , settings
   , enabled
 ) VALUES (
     @organization_id
   , @provider
-  , @credentials_encrypted::text
   , @settings
   , @enabled
 )
@@ -49,15 +48,25 @@ RETURNING *;
 -- mdm_devices hang off the config id, and rotating a secret must not orphan
 -- the synced fleet inventory.
 
--- name: UpdateConfigCredentials :one
-UPDATE device_integration_configs
-SET credentials_encrypted = @credentials_encrypted::text,
+-- name: SetConfigCredentials :one
+-- Stores both copies of the credentials sealed under the decided transition
+-- generation, with the settings saved alongside them. No rows means the
+-- config is gone or the transition moved; integrationcredentials tells the two
+-- apart.
+UPDATE device_integration_configs AS c
+SET credentials_encrypted = sqlc.narg('platform_copy'),
+    credentials_org_encrypted = sqlc.narg('org_copy'),
     settings = @settings,
     enabled = @enabled,
     updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND provider = @provider
-  AND deleted IS FALSE
+WHERE c.id = @id
+  AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'integration-credentials'
+    FOR KEY SHARE
+  ), 0) = @decided_generation
 RETURNING *;
 
 -- name: UpdateConfigSettings :one
@@ -1624,6 +1633,7 @@ SELECT
   , c.organization_id
   , c.provider
   , c.credentials_encrypted
+  , c.credentials_org_encrypted
   , c.settings
   , c.enabled
   , c.deleted

@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -471,6 +472,17 @@ func newWorkerCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			// Unconfigured or disabled, Service and Provisioner are nil
+			// without an error. A configuration error stops the worker: a silently
+			// disabled sweep would leave organizations whose key was revoked
+			// unsuspended.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			if err != nil {
+				return err
+			}
+			integrationCredentials := integrationcredentials.New(logger, orgEncryption.Cipher(logger, encryptionClient))
+
 			var ghClient *ghclient.Client
 			if appID, key := c.Int64("plugins-github-app-id"), c.String("plugins-github-private-key"); appID != 0 && key != "" {
 				ghClient, err = ghclient.NewClient(appID, []byte(key), guardianPolicy.Client(), tracerProvider)
@@ -768,7 +780,7 @@ func newWorkerCommand() *cli.Command {
 			// unfurls is not needed here.
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
-			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
+			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, integrationCredentials, guardianPolicy, auditLogger)
 			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 
 			platformSigner, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
@@ -844,21 +856,12 @@ func newWorkerCommand() *cli.Command {
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
-			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("build kms signing client factory: %w", err)
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			// Unconfigured or disabled, Service and Provisioner are nil
-			// without an error. A configuration error stops the worker: a silently
-			// disabled sweep would leave organizations whose key was revoked
-			// unsuspended.
-			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
-			if err != nil {
-				return err
-			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
@@ -896,6 +899,7 @@ func newWorkerCommand() *cli.Command {
 				DB:                             db,
 				EncryptionClient:               encryptionClient,
 				ClientSecrets:                  orgEncryption.ClientSecrets(logger, encryptionClient),
+				IntegrationCredentials:         integrationCredentials,
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,

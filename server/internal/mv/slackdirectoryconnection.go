@@ -1,18 +1,19 @@
 package mv
 
 import (
+	"time"
+
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/slackscopes"
-	"time"
 )
 
 func BuildSlackDirectoryConnectionView(row repo.SlackDirectoryConnection) *gen.SlackDirectoryConnection {
 	status := "reconnect_required"
 	if row.DisconnectedAt.Valid {
 		status = "disconnected"
-	} else if row.CredentialsEncrypted.Valid && row.Health == "connected" {
+	} else if (row.CredentialsEncrypted.Valid || row.CredentialsOrgEncrypted.Valid) && row.Health == "connected" {
 		status = "connected"
 	}
 	scopes := append([]string{}, row.GrantedScopes...)

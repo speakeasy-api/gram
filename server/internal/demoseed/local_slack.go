@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
@@ -65,14 +66,8 @@ func connectLocalSlack(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 		logger.WarnContext(ctx, "local Slack app not connected; check GRAM_DEV_SLACK_BOT_TOKEN", attr.SlogError(err))
 		return nil
 	}
-	plaintext, err := json.Marshal(slackdirectoryconnections.TokenBundle{Version: 1, AccessToken: opts.BotToken, RefreshToken: "", ExpiresAt: nil, TokenType: "bot"})
-	if err != nil {
-		return fmt.Errorf("encode local Slack token: %w", err)
-	}
-	ciphertext, err := opts.Encryption.Encrypt(plaintext)
-	if err != nil {
-		return fmt.Errorf("encrypt local Slack token: %w", err)
-	}
+	tokens := slackdirectoryconnections.TokenBundle{Version: 1, AccessToken: opts.BotToken, RefreshToken: "", ExpiresAt: nil, TokenType: "bot"}
+	credentials := integrationcredentials.WithoutOrganizationEncryption(logger, db, opts.Encryption)
 	// Ask Slack before locking the connection row, so a slow answer cannot
 	// hold the lock.
 	email := conv.Default(opts.SlackEmail, dev.Email)
@@ -87,15 +82,19 @@ func connectLocalSlack(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := slackrepo.New(tx)
+	var row slackrepo.SlackDirectoryConnection
 	existing, err := queries.LockSlackDirectoryConnectionByTeam(ctx, slackrepo.LockSlackDirectoryConnectionByTeamParams{OrganizationID: organizationID, SlackTeamID: workspace.teamID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		_, err = queries.CreateSlackDirectoryConnection(ctx, slackrepo.CreateSlackDirectoryConnectionParams{OrganizationID: organizationID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: workspace.scopes, Generation: uuid.New()})
+		row, err = queries.CreateSlackDirectoryConnection(ctx, slackrepo.CreateSlackDirectoryConnectionParams{OrganizationID: organizationID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), GrantedScopes: workspace.scopes, Generation: uuid.New()})
 	case err == nil:
-		_, err = queries.AuthorizeSlackDirectoryConnection(ctx, slackrepo.AuthorizeSlackDirectoryConnectionParams{OrganizationID: organizationID, ID: existing.ID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: workspace.scopes, Generation: uuid.New(), ExpectedGeneration: existing.Generation})
+		row, err = queries.AuthorizeSlackDirectoryConnection(ctx, slackrepo.AuthorizeSlackDirectoryConnectionParams{OrganizationID: organizationID, ID: existing.ID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), GrantedScopes: workspace.scopes, Generation: uuid.New(), ExpectedGeneration: existing.Generation})
 	}
 	if err != nil {
 		return fmt.Errorf("save local Slack connection: %w", err)
+	}
+	if err := slackdirectoryconnections.StoreTokens(ctx, credentials, tx, organizationID, row.ID, row.Generation, &tokens); err != nil {
+		return fmt.Errorf("store local Slack token: %w", err)
 	}
 	if slackUserID != "" {
 		if err := mapLocalSlackUser(ctx, queries, organizationID, workspace.teamID, slackUserID, email, dev); err != nil {

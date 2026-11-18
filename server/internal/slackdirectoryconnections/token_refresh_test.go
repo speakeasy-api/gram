@@ -34,7 +34,7 @@ func storeTokens(t *testing.T, ctx context.Context, f *fixture, c *gen.SlackDire
 	require.NoError(t, err)
 	ciphertext, err := f.enc.Encrypt(plaintext)
 	require.NoError(t, err)
-	updated, err := repo.New(f.db).UpdateSlackDirectoryCredentials(ctx, repo.UpdateSlackDirectoryCredentialsParams{CredentialsEncrypted: conv.ToPGText(ciphertext), OrganizationID: f.auth.ActiveOrganizationID, ID: uuid.MustParse(c.ID), Generation: uuid.MustParse(c.Generation)})
+	updated, err := repo.New(f.db).UpdateSlackDirectoryCredentials(ctx, repo.UpdateSlackDirectoryCredentialsParams{PlatformCopy: conv.ToPGText(ciphertext), OrgCopy: pgtype.Text{}, DecidedGeneration: 0, OrganizationID: f.auth.ActiveOrganizationID, ID: uuid.MustParse(c.ID), Generation: uuid.MustParse(c.Generation)})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, updated)
 }
@@ -68,7 +68,7 @@ func TestSyncRefreshesAnExpiringTokenAndStoresItFirst(t *testing.T) {
 		require.Equal(t, "old-refresh", token)
 		return &slackdirectoryconnections.TokenBundle{Version: 1, AccessToken: "new-access", RefreshToken: "new-refresh", ExpiresAt: &renewed, TokenType: "bot"}, nil
 	})
-	worker := slackdirectoryconnections.NewDirectorySync(f.db, f.enc, tokenCheckingSnapshot(t, "new-access"), audit.NewLogger(), refresher)
+	worker := slackdirectoryconnections.NewDirectorySync(f.db, f.credentials, tokenCheckingSnapshot(t, "new-access"), audit.NewLogger(), refresher)
 	require.NoError(t, worker.Run(ctx, syncRequest(f, c), nil))
 	stored := storedTokens(t, ctx, f, c)
 	require.Equal(t, "new-access", stored.AccessToken)
@@ -85,7 +85,7 @@ func TestSyncLeavesAFreshTokenAlone(t *testing.T) {
 		t.Error("a fresh token was refreshed")
 		return nil, errors.New("unexpected refresh")
 	})
-	worker := slackdirectoryconnections.NewDirectorySync(f.db, f.enc, tokenCheckingSnapshot(t, "old-access"), audit.NewLogger(), refresher)
+	worker := slackdirectoryconnections.NewDirectorySync(f.db, f.credentials, tokenCheckingSnapshot(t, "old-access"), audit.NewLogger(), refresher)
 	require.NoError(t, worker.Run(ctx, syncRequest(f, c), nil))
 	require.Equal(t, "old-access", storedTokens(t, ctx, f, c).AccessToken)
 }
@@ -114,7 +114,7 @@ func TestSyncRefreshFailures(t *testing.T) {
 				t.Error("fetched with an unusable token")
 				return nil, nil
 			})
-			err := slackdirectoryconnections.NewDirectorySync(f.db, f.enc, fetch, audit.NewLogger(), refresher).Run(ctx, syncRequest(f, c), nil)
+			err := slackdirectoryconnections.NewDirectorySync(f.db, f.credentials, fetch, audit.NewLogger(), refresher).Run(ctx, syncRequest(f, c), nil)
 			var syncErr *slackdirectoryconnections.SyncError
 			require.ErrorAs(t, err, &syncErr)
 			require.Equal(t, tc.code, syncErr.Code)

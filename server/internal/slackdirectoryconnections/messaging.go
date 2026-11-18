@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
@@ -57,8 +58,11 @@ func (s *DirectorySync) MessagingWorkspaces(ctx context.Context, organizationID,
 		if !slices.Contains(row.GrantedScopes, scope) {
 			continue
 		}
-		tokens, err := usableTokens(s.encryption, row)
+		tokens, err := usableTokens(ctx, s.credentials, nil, row)
 		if err != nil {
+			if syncErr, ok := errors.AsType[*SyncError](err); ok && syncErr.Retryable {
+				unavailable = errors.Join(unavailable, err)
+			}
 			continue
 		}
 		if tokens.ExpiresAt != nil && time.Until(*tokens.ExpiresAt) <= tokenRefreshMargin {
@@ -114,7 +118,7 @@ func (s *DirectorySync) refreshForMessaging(ctx context.Context, organizationID 
 	if err != nil {
 		return nil, fmt.Errorf("read Slack workspace: %w", err)
 	}
-	tokens, err := s.freshTokens(ctx, queries, row)
+	tokens, err := s.freshTokens(ctx, conn, row)
 	if errors.Is(err, errSyncSuperseded) {
 		return nil, nil
 	}

@@ -9,6 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -18,11 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 var infra *testenv.Environment
@@ -53,14 +55,15 @@ func (p *mockProvider) Exchange(ctx context.Context, code string) (*slackdirecto
 }
 
 type fixture struct {
-	build     func(slackdirectoryconnections.Provider) *slackdirectoryconnections.Service
-	service   *slackdirectoryconnections.Service
-	db        *pgxpool.Pool
-	provider  *mockProvider
-	enc       *encryption.Client
-	cache     cache.Cache
-	auth      *contextvalues.AuthContext
-	scheduler *testSyncScheduler
+	build       func(slackdirectoryconnections.Provider) *slackdirectoryconnections.Service
+	service     *slackdirectoryconnections.Service
+	db          *pgxpool.Pool
+	provider    *mockProvider
+	enc         *encryption.Client
+	credentials *integrationcredentials.Credentials
+	cache       cache.Cache
+	auth        *contextvalues.AuthContext
+	scheduler   *testSyncScheduler
 }
 
 func newService(t *testing.T) (context.Context, *fixture) {
@@ -84,10 +87,11 @@ func newService(t *testing.T) (context.Context, *fixture) {
 	site, err := url.Parse("https://dashboard.example")
 	require.NoError(t, err)
 	scheduler := &testSyncScheduler{}
+	credentials := integrationcredentials.WithoutOrganizationEncryption(logger, db, enc)
 	build := func(oauth slackdirectoryconnections.Provider) *slackdirectoryconnections.Service {
-		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, enc, oauth, site, scheduler)
+		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, credentials, oauth, site, scheduler)
 	}
-	return ctx, &fixture{build: build, service: build(provider), scheduler: scheduler, db: db, provider: provider, enc: enc, cache: store, auth: ac}
+	return ctx, &fixture{build: build, service: build(provider), scheduler: scheduler, db: db, provider: provider, enc: enc, credentials: credentials, cache: store, auth: ac}
 }
 func begin(t *testing.T, ctx context.Context, f *fixture, id *string) string {
 	t.Helper()

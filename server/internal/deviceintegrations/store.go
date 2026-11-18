@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"net/url"
@@ -12,13 +13,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 )
 
 // minSecretLength is the floor for supplied secret values. It exists for
@@ -32,18 +35,18 @@ const minSecretLength = 8
 // plaintext exists only transiently inside store methods and their callers,
 // never in API responses, logs, or Temporal payloads.
 type Store struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	enc    *encryption.Client
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *repo.Queries
+	credentials *integrationcredentials.Credentials
 }
 
-func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
+func NewStore(logger *slog.Logger, db *pgxpool.Pool, credentials *integrationcredentials.Credentials) *Store {
 	return &Store{
-		logger: logger.With(attr.SlogComponent("deviceintegrations.store")),
-		db:     db,
-		repo:   repo.New(db),
-		enc:    enc,
+		logger:      logger.With(attr.SlogComponent("deviceintegrations.store")),
+		db:          db,
+		repo:        repo.New(db),
+		credentials: credentials,
 	}
 }
 
@@ -119,35 +122,75 @@ func (s *Store) LoadConfigWithCredentials(ctx context.Context, orgID string, pro
 	if err != nil {
 		return Config{}, nil, err
 	}
-	creds, err := s.decryptCredentials(row.CredentialsEncrypted.String)
+	creds, err := s.decryptCredentials(ctx, nil, orgID, storedCredentials(row.CredentialsEncrypted, row.CredentialsOrgEncrypted))
 	if err != nil {
 		return Config{}, nil, err
 	}
 	return cfg, creds, nil
 }
 
-func (s *Store) encryptCredentials(creds providers.Credentials) (string, error) {
-	doc, err := json.Marshal(creds)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encode device integration credentials")
-	}
-	ct, err := s.enc.Encrypt(doc)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encrypt device integration credentials")
-	}
-	return ct, nil
+func storedCredentials(platform, org pgtype.Text) orgencryption.Copies {
+	return integrationcredentials.Stored(platform, org)
 }
 
-func (s *Store) decryptCredentials(stored string) (providers.Credentials, error) {
-	plaintext, err := s.enc.Decrypt(stored)
+// storeCredentials seals creds for the organization and saves them with the
+// settings on config id, in the caller's transaction.
+func (s *Store) storeCredentials(ctx context.Context, dbtx repo.DBTX, orgID string, id uuid.UUID, creds providers.Credentials, settingsDoc []byte, enabled bool) (repo.DeviceIntegrationConfig, error) {
+	doc, err := json.Marshal(creds)
 	if err != nil {
+		return repo.DeviceIntegrationConfig{}, oops.E(oops.CodeUnexpected, err, "encode device integration credentials")
+	}
+	q := repo.New(dbtx)
+	var row repo.DeviceIntegrationConfig
+	err = s.credentials.Store(ctx, dbtx, orgID, integrationcredentials.DeviceIntegrationConfigs, doc, func(ctx context.Context, copies orgencryption.Copies, decided int64) (bool, error) {
+		stored, err := q.SetConfigCredentials(ctx, repo.SetConfigCredentialsParams{PlatformCopy: copies.Platform, OrgCopy: copies.Org, Settings: settingsDoc, Enabled: enabled, ID: id, OrganizationID: orgID, DecidedGeneration: decided})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		row = stored
+		return err == nil, err
+	})
+	switch {
+	case err == nil:
+		return row, nil
+	case integrationcredentials.IsCustomerKeyProblem(err):
+		return repo.DeviceIntegrationConfig{}, oops.E(oops.CodeFailedPrecondition, err, "This organization's encryption key is unavailable. Check its key, then try again.")
+	case errors.Is(err, integrationcredentials.ErrNotStored):
+		return repo.DeviceIntegrationConfig{}, oops.E(oops.CodeConflict, err, "The integration changed while saving. Reload and try again.")
+	default:
+		return repo.DeviceIntegrationConfig{}, oops.E(oops.CodeUnexpected, err, "encrypt device integration credentials")
+	}
+}
+
+// decryptCredentials opens a row's credentials. It returns an error matching
+// integrationcredentials.IsUnreadable when the stored document can never be
+// read again, as opposed to an organization key that is unavailable for now.
+// dbtx is the caller's transaction, or nil.
+func (s *Store) decryptCredentials(ctx context.Context, dbtx repo.DBTX, orgID string, stored orgencryption.Copies) (providers.Credentials, error) {
+	plaintext, err := s.credentials.Open(ctx, dbtx, orgID, integrationcredentials.DeviceIntegrationConfigs, stored)
+	switch {
+	case integrationcredentials.IsUnreadable(err):
 		return nil, oops.E(oops.CodeUnexpected, err, "decrypt device integration credentials")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnavailable, err, "This organization's encryption key is unavailable. Try again shortly.")
 	}
 	creds := providers.Credentials{}
-	if err := json.Unmarshal([]byte(plaintext), &creds); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "decode device integration credentials")
+	if err := json.Unmarshal(plaintext, &creds); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("%w: %w", orgencryption.ErrUnreadable, err), "decode device integration credentials")
 	}
 	return creds, nil
+}
+
+// storedCredentialsForMerge reads the stored credentials to merge a partial
+// update into. A document that can never be read again contributes nothing,
+// so a full set of fresh secrets can repair it; an unavailable key fails the
+// save rather than looking like missing credentials.
+func (s *Store) storedCredentialsForMerge(ctx context.Context, dbtx repo.DBTX, row repo.DeviceIntegrationConfig) (providers.Credentials, error) {
+	stored, err := s.decryptCredentials(ctx, dbtx, row.OrganizationID, storedCredentials(row.CredentialsEncrypted, row.CredentialsOrgEncrypted))
+	if err != nil && integrationcredentials.IsUnreadable(err) {
+		return providers.Credentials{}, nil
+	}
+	return stored, err
 }
 
 // PreValidateSupplied rejects malformed request shapes — unknown keys and
@@ -319,11 +362,13 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 	// to revoke credentials.
 	if exists && credentialsSupplied {
 		merged := providers.Credentials{}
-		if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted.String); decErr == nil {
-			for _, f := range desc.SecretFields() {
-				if v, ok := stored[f.Key]; ok {
-					merged[f.Key] = v
-				}
+		stored, err := s.storedCredentialsForMerge(ctx, dbtx, existingRow)
+		if err != nil {
+			return UpsertResult{}, err
+		}
+		for _, f := range desc.SecretFields() {
+			if v, ok := stored[f.Key]; ok {
+				merged[f.Key] = v
 			}
 		}
 		// On decrypt failure the stored side contributes nothing: a freshly
@@ -359,7 +404,11 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 		// with the secret sitting right there in the row.
 		provisionCreds := creds
 		if len(provisionCreds) == 0 && exists {
-			if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted.String); decErr == nil {
+			stored, err := s.storedCredentialsForMerge(ctx, dbtx, existingRow)
+			if err != nil {
+				return UpsertResult{}, err
+			}
+			if len(stored) > 0 {
 				provisionCreds = stored
 			}
 		}
@@ -378,34 +427,23 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 	var row repo.DeviceIntegrationConfig
 	switch {
 	case !exists:
-		encrypted, err := s.encryptCredentials(creds)
-		if err != nil {
-			return UpsertResult{}, err
-		}
-		row, err = q.InsertConfig(ctx, repo.InsertConfigParams{
-			OrganizationID:       orgID,
-			Provider:             desc.ID,
-			CredentialsEncrypted: encrypted,
-			Settings:             settingsDoc,
-			Enabled:              enabled,
+		inserted, err := q.InsertConfig(ctx, repo.InsertConfigParams{
+			OrganizationID: orgID,
+			Provider:       desc.ID,
+			Settings:       settingsDoc,
+			Enabled:        enabled,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "save device integration config")
 		}
-	case credentialsSupplied:
-		encrypted, err := s.encryptCredentials(creds)
+		row, err = s.storeCredentials(ctx, dbtx, orgID, inserted.ID, creds, settingsDoc, enabled)
 		if err != nil {
 			return UpsertResult{}, err
 		}
-		row, err = q.UpdateConfigCredentials(ctx, repo.UpdateConfigCredentialsParams{
-			OrganizationID:       orgID,
-			Provider:             desc.ID,
-			CredentialsEncrypted: encrypted,
-			Settings:             settingsDoc,
-			Enabled:              enabled,
-		})
+	case credentialsSupplied:
+		row, err = s.storeCredentials(ctx, dbtx, orgID, existingRow.ID, creds, settingsDoc, enabled)
 		if err != nil {
-			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "rotate device integration credentials")
+			return UpsertResult{}, err
 		}
 	default:
 		row, err = q.UpdateConfigSettings(ctx, repo.UpdateConfigSettingsParams{
