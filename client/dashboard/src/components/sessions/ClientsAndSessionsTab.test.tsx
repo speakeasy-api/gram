@@ -21,6 +21,10 @@ const {
   listAgents: vi.fn(),
 }));
 
+vi.mock("@/pages/mcp-sessions/connection-health/flag", () => ({
+  useConnectionHealthFlag: () => "off",
+}));
+
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
   useUserSessionClientsInfinite: (...args: unknown[]) =>
     useUserSessionClientsInfinite(...args),

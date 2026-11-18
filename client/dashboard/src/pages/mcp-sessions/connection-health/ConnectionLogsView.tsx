@@ -9,8 +9,9 @@ import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import type { Action } from "@/components/ui/MoreActions";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { useOrgRoutes } from "@/routes";
-import { RefreshCw } from "lucide-react";
+import { useOrgRoutes, useRoutes } from "@/routes";
+import { FilterChip } from "@/components/filters/FilterChip";
+import { ArrowRight, RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import { AttemptsFooter, AttemptsTable } from "./AttemptsTable";
 import {
   ATTEMPT_PARAM,
   LOG_FILTERS,
+  LOG_FILTERS_WITHOUT_SERVER,
   resolveWindow,
   RETENTION_MS,
   SEARCH_PARAM,
@@ -118,13 +120,14 @@ function rangePhrase(values: LogFilterValues, options: OptionsById): string {
 /** Connection Logs: what happened, attempt by attempt. */
 export function ConnectionLogsView({
   providerId,
-  serverId,
+  lockedServer,
 }: {
   providerId: string;
   /** Locks the view to one server (a server's own tab). */
-  serverId?: string;
+  lockedServer?: { id: string; name: string };
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { providers } = useProjectProviders();
   const filters = useFilterState(LOG_FILTERS);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -138,14 +141,14 @@ export function ConnectionLogsView({
   );
   const beforeRetention = startsBeforeRetention(window, now);
   const scope = useMemo(
-    () => ({ providerId, serverId }),
-    [providerId, serverId],
+    () => ({ providerId, serverId: lockedServer?.id }),
+    [providerId, lockedServer?.id],
   );
 
-  const baseFilters = useMemo(
-    () => toAttemptFilters(filters.values),
-    [filters.values],
-  );
+  const baseFilters = useMemo(() => {
+    const parsed = toAttemptFilters(filters.values);
+    return lockedServer ? { ...parsed, serverIds: undefined } : parsed;
+  }, [filters.values, lockedServer]);
   const isReference = REFERENCE_PATTERN.test(search.trim());
 
   const counts = useAttemptCounts(scope, window, baseFilters, {
@@ -217,7 +220,7 @@ export function ConnectionLogsView({
           onClick: () => filters.setValues({ person: urn }),
         });
       }
-      if (row.server && !serverId) {
+      if (row.server && !lockedServer) {
         const id = row.server.id;
         actions.push({
           icon: "server",
@@ -228,7 +231,7 @@ export function ConnectionLogsView({
       }
       return actions;
     },
-    [filters, serverId, setParam],
+    [filters, lockedServer, setParam],
   );
 
   const loggingEnabled =
@@ -266,7 +269,8 @@ export function ConnectionLogsView({
         ? null
         : plural(total, "attempt");
 
-  const filtersActive = LOG_FILTERS.some(
+  const schema = lockedServer ? LOG_FILTERS_WITHOUT_SERVER : LOG_FILTERS;
+  const filtersActive = schema.some(
     (dim) =>
       dim.kind !== "daterange" &&
       !isDimensionAtDefault(
@@ -438,12 +442,32 @@ export function ConnectionLogsView({
               </span>
             </Page.Toolbar.Actions>
           ) : null}
+          {lockedServer ? (
+            <Page.Toolbar.Actions>
+              <Link
+                to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?server=${encodeURIComponent(lockedServer.id)}`}
+                className="inline-flex items-center gap-1 text-sm whitespace-nowrap hover:underline"
+              >
+                Open in MCP Sessions with this server
+                <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            </Page.Toolbar.Actions>
+          ) : null}
           <Page.Toolbar.Refresh onRefresh={refresh} isRefreshing={isFetching} />
         </Page.Toolbar.Row>
         {loggingEnabled ? (
           <Page.Toolbar.Row>
             <Page.Toolbar.Filters
-              schema={LOG_FILTERS}
+              schema={schema}
+              extraChips={
+                lockedServer ? (
+                  <FilterChip
+                    label={`Server: ${lockedServer.name}`}
+                    ariaLabel={`Locked to ${lockedServer.name}`}
+                    active
+                  />
+                ) : undefined
+              }
               values={filters.values}
               optionsById={optionsById}
               onChange={(id, value) =>

@@ -729,13 +729,23 @@ interface RangeRequest {
   filters?: AttemptFilters;
 }
 
+const FIXTURE_SERVER_IDS = new Set<string>(
+  [...Object.values(SERVERS), ENG_LINEAR].map((s) => s.id),
+);
+
+/** A real server id has no sample attempts; the fixtures stand in Linear's. */
+function fixtureServerId(serverId: string): string {
+  return FIXTURE_SERVER_IDS.has(serverId) ? serverId : SERVERS.linear.id;
+}
+
 function rowsInRange(request: RangeRequest, skip?: FacetKey): AttemptDetail[] {
   const from = Date.parse(request.from);
   const to = Date.parse(request.to);
   return allRows().filter((r) => {
     const t = Date.parse(r.time);
     if (t < from || t >= to) return false;
-    if (request.serverId && r.server?.id !== request.serverId) return false;
+    if (request.serverId && r.server?.id !== fixtureServerId(request.serverId))
+      return false;
     return matchesFilters(r, request.filters, skip);
   });
 }
@@ -1181,16 +1191,16 @@ export const fixtureConnectionHealthSource: ConnectionHealthSource = {
       if (!loggingOn()) return { loggingEnabled: false };
       if (scenario() === "quiet") return { loggingEnabled: true, problems: [] };
       const list = problems();
+      const target = serverId ? fixtureServerId(serverId) : undefined;
       return {
         loggingEnabled: true,
-        problems: serverId
+        problems: target
           ? list
-              .filter((p) => p.servers.some((s) => s.server.id === serverId))
+              .filter((p) => p.servers.some((s) => s.server.id === target))
               .map((p) => ({
                 ...summaryOf(p),
-                peopleOnServer: p.people.filter(
-                  (x) => x.server?.id === serverId,
-                ).length,
+                peopleOnServer: p.people.filter((x) => x.server?.id === target)
+                  .length,
               }))
           : list.map(summaryOf),
       };

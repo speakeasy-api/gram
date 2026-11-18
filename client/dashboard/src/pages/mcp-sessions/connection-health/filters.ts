@@ -71,6 +71,11 @@ export const LOG_FILTERS = defineFilters([
 
 export type LogFilterValues = FilterValues<typeof LOG_FILTERS>;
 
+/** On a server's own tab the server is fixed, so it has no chip of its own. */
+export const LOG_FILTERS_WITHOUT_SERVER = LOG_FILTERS.filter(
+  (dim) => dim.id !== "server",
+);
+
 export const SEARCH_PARAM = "q";
 export const ATTEMPT_PARAM = "attempt";
 export const PROBLEM_PARAM = "problem";

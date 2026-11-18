@@ -31,6 +31,8 @@ import {
   type ConnectionGrouping,
 } from "@/components/connections/groupConnections";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { useConnectionHealthFlag } from "@/pages/mcp-sessions/connection-health/flag";
+import { ServerConnectionHealth } from "@/pages/mcp-sessions/connection-health/ServerConnectionHealth";
 
 type ClientsAndSessionsTabProps = {
   issuerId: string | undefined;
@@ -45,6 +47,8 @@ type ClientsAndSessionsTabProps = {
    * the caller's to name rather than something this component can infer.
    */
   authTabPath?: string;
+  /** The server's name, for connection health's locked server filter. */
+  serverName?: string;
   /**
    * Lists the sessions authorized through a gateway instead of every session
    * `issuerId` issued, filtered and paginated on the server: a stored gateway
@@ -140,8 +144,10 @@ function IssuerClientsAndSessions({
   originatingMcpServerId,
   authTabPath = "settings",
   attachedSessions,
+  serverName,
 }: Omit<ClientsAndSessionsTabProps, "gateway">): JSX.Element {
   const queryClient = useQueryClient();
+  const health = useConnectionHealthFlag();
   // Both queries treat a missing user_session_issuer_id as "don't filter by
   // issuer", so leaving them enabled on a server with no issuer would list the
   // whole project's sessions and clients under one server's tab. The hooks
@@ -184,7 +190,7 @@ function IssuerClientsAndSessions({
 
   if (!issuerId) return <NoIssuerEmptyState authTabPath={authTabPath} />;
 
-  return (
+  const body = (
     <ClientsAndSessionsBody
       attachedSessions={attachedSessions}
       sessions={sessions}
@@ -211,6 +217,15 @@ function IssuerClientsAndSessions({
       }}
       onRevoked={onClientOrSessionRevoked}
     />
+  );
+  return health === "on" && originatingMcpServerId ? (
+    <ServerConnectionHealth
+      providerId={issuerId}
+      server={{ id: originatingMcpServerId, name: serverName ?? "This server" }}
+      sessions={body}
+    />
+  ) : (
+    body
   );
 }
 
