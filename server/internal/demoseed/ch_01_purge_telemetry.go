@@ -108,6 +108,8 @@ var chPurgeProjectTables = []string{
 	"spend_rule_usage_summaries",
 	"attribute_keys",
 	"shadow_mcp_inventory_urls",
+	// Target of shadow_mcp_inventory_url_overrides_legacy_mv.
+	"shadow_mcp_inventory_url_overrides",
 	"mcp_network_traffic_hourly_summaries",
 	// No server the seed writes is tunnelled any more; the purge still clears
 	// the snapshots earlier seeds wrote.
@@ -1161,7 +1163,7 @@ func (s *seeder) chShadowInventory(ctx context.Context, ch driver.Conn) error {
 		{"https://payroll.example.com/mcp", "payroll.example.com", "Payroll Assistant", 10, 30},
 	}
 	batch, err := ch.PrepareBatch(ctx, `INSERT INTO shadow_mcp_inventory_urls
-		(gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at)`)
+		(gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at, legacy_override)`)
 	if err != nil {
 		return fmt.Errorf("prepare demo shadow_mcp_inventory_urls batch: %w", err)
 	}
@@ -1172,6 +1174,7 @@ func (s *seeder) chShadowInventory(ctx context.Context, ch driver.Conn) error {
 			s.now.AddDate(0, 0, -srv.firstDays),
 			s.now.Add(-time.Duration(srv.lastHours)*time.Hour),
 			s.now,
+			uint8(0),
 		); err != nil {
 			return fmt.Errorf("append demo shadow_mcp_inventory_urls row: %w", err)
 		}
