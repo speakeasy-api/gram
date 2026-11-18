@@ -32,6 +32,8 @@ func TestListServersReportsOnlyHiddenMembersTheConsentSelected(t *testing.T) {
 	// Wiki was approved with no tool selected; Added is outside the approval,
 	// so no selection narrows it.
 	require.Equal(t, []metamcp.HiddenServer{{Slug: "docs", Name: "Docs"}, {Slug: "added", Name: "Added"}}, listed.Hidden)
+	// Showing Added again would not approve it, so it is unapproved too.
+	require.Equal(t, []metamcp.UnapprovedServer{{Slug: "added", Name: "Added"}}, listed.Unapproved)
 }
 
 func TestListServersReportsUnapprovedMembers(t *testing.T) {
@@ -72,4 +74,11 @@ func TestCatalogNotApprovedMessageSeparatesSkippedFromAdded(t *testing.T) {
 	catalog := &connectionCatalog{ShownServerIDs: []uuid.UUID{skipped}}
 	require.Equal(t, catalogMemberSkippedAtConsent, catalog.notApprovedMessage(skipped))
 	require.Equal(t, catalogMemberAddedSinceConsent, catalog.notApprovedMessage(uuid.New()))
+
+	moved := uuid.New()
+	catalog = &connectionCatalog{
+		Members:        map[string]connectionCatalogMember{"moved": {ServerID: moved, ProjectID: uuid.New()}},
+		ShownServerIDs: []uuid.UUID{moved},
+	}
+	require.Equal(t, catalogMemberNotApproved, catalog.notApprovedMessage(moved), "a server approved under another project was neither skipped nor added")
 }

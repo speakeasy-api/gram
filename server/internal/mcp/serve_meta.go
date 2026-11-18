@@ -772,15 +772,18 @@ func (s *Service) handleMetaListServersCall(
 	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, Unapproved: nil, ConnectURL: "", Note: ""}
 	// A tool selection narrows the approved hidden members like the served
 	// ones; a hidden member outside the approval has no selection to narrow.
-	hidden := gate.hiddenMembers
+	// A hidden member outside the approval is listed under both: showing it
+	// again does not approve it.
+	hidden, unapproved := gate.hiddenMembers, gate.unapprovedMembers
 	if gate.catalog != nil {
 		approvedHidden, unapprovedHidden := gate.catalog.approvedMembers(hidden)
 		hidden = slices.Concat(catalogSelectedMembers(gate, approvedHidden), unapprovedHidden)
+		unapproved = slices.Concat(unapproved, unapprovedHidden)
 	}
 	for _, member := range hidden {
 		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
 	}
-	for _, member := range gate.unapprovedMembers {
+	for _, member := range unapproved {
 		result.Unapproved = append(result.Unapproved, metamcp.UnapprovedServer{Slug: member.slug, Name: member.name})
 	}
 	notes := make([]string, 0, 3)

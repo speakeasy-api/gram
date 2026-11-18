@@ -500,10 +500,15 @@ func (c *connectionCatalog) approvedMembers(members []metaMember) (approved, una
 
 // notApprovedMessage says why a member is outside this catalog: consent
 // showed it and left it out, or it joined the gateway since. A catalog that
-// predates the shown list keeps the message that covers both.
+// predates the shown list, or approved this server under another project,
+// keeps the message that covers both.
 func (c *connectionCatalog) notApprovedMessage(serverID uuid.UUID) string {
+	approvedElsewhere := false
+	for _, member := range c.Members {
+		approvedElsewhere = approvedElsewhere || member.ServerID == serverID
+	}
 	switch {
-	case c.ShownServerIDs == nil:
+	case c.ShownServerIDs == nil || approvedElsewhere:
 		return catalogMemberNotApproved
 	case slices.Contains(c.ShownServerIDs, serverID):
 		return catalogMemberSkippedAtConsent
