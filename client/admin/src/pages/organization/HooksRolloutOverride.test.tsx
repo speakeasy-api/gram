@@ -63,7 +63,11 @@ describe("HooksRolloutOverride", () => {
     const updated: AdminOrganizationHooksRollout = {
       ...LEGACY,
       source: "organization",
-      override: OVERRIDDEN.override,
+      override: {
+        version: 46,
+        set_by: "operator@example.com",
+        set_at: "2026-01-01T00:00:00Z",
+      },
       effective_version: 46,
       eligible: true,
     };

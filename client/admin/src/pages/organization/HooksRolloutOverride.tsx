@@ -148,40 +148,47 @@ function HooksRolloutOverrideForm({
             </Link>
           </dd>
         </dl>
-        {rollout.source !== "canary" && (
-          <div className="flex items-center gap-2">
-            <Input
-              className="w-28"
-              type="number"
-              min={1}
-              max={current}
-              step={1}
-              aria-label="Hooks version override"
-              value={value}
-              disabled={pending}
-              onChange={(event) => setValue(event.target.value)}
-            />
-            <Button
-              size="sm"
-              disabled={pending || version === undefined}
-              onClick={() => {
-                if (version !== undefined) setOverride.mutate(version);
-              }}
-            >
-              {rollout.override ? "Update override" : "Set override"}
-            </Button>
-            {rollout.override && (
+        <div className="flex items-center gap-2">
+          {rollout.source !== "canary" && (
+            <>
+              <Input
+                className="w-28"
+                type="number"
+                min={1}
+                max={current}
+                step={1}
+                aria-label="Hooks version override"
+                value={value}
+                disabled={pending}
+                onChange={(event) => setValue(event.target.value)}
+              />
               <Button
                 size="sm"
-                variant="secondary"
-                disabled={pending}
-                onClick={() => clearOverride.mutate()}
+                disabled={pending || version === undefined}
+                onClick={() => {
+                  if (version === undefined) return;
+                  clearOverride.reset();
+                  setOverride.mutate(version);
+                }}
               >
-                Clear override
+                {rollout.override ? "Update override" : "Set override"}
               </Button>
-            )}
-          </div>
-        )}
+            </>
+          )}
+          {rollout.override && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                setOverride.reset();
+                clearOverride.mutate();
+              }}
+            >
+              Clear override
+            </Button>
+          )}
+        </div>
         {rollout.source !== "canary" && version === undefined && (
           <p className="text-destructive text-sm">
             The override must be a whole number from 1 to {current}.

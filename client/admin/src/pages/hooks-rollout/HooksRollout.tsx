@@ -58,14 +58,35 @@ export function HooksRollout(): JSX.Element {
           {HOOKS_ROLLOUT_PROPAGATION_NOTE}
         </p>
       </div>
-      <DefaultPin key={rollout.current_version} rollout={rollout} />
+      {query.isError && (
+        <div role="alert" className="flex items-center gap-3 text-sm">
+          <span className="text-destructive">
+            Unable to refresh the hooks rollout, so this may be out of date.
+            Changes are disabled until it reloads.
+          </span>
+          <Button size="sm" onClick={() => void query.refetch()}>
+            Retry
+          </Button>
+        </div>
+      )}
+      <DefaultPin
+        key={rollout.current_version}
+        rollout={rollout}
+        stale={query.isError}
+      />
       <Overrides rollout={rollout} />
       <RecentChanges changes={rollout.recent_changes} />
     </div>
   );
 }
 
-function DefaultPin({ rollout }: { rollout: AdminHooksRollout }): JSX.Element {
+function DefaultPin({
+  rollout,
+  stale,
+}: {
+  rollout: AdminHooksRollout;
+  stale: boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
   const [value, setValue] = useState(String(rollout.current_version));
@@ -141,12 +162,12 @@ function DefaultPin({ rollout }: { rollout: AdminHooksRollout }): JSX.Element {
             step={1}
             aria-label="Default hooks version pin"
             value={value}
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || stale}
             onChange={(event) => setValue(event.target.value)}
           />
           <Button
             size="sm"
-            disabled={mutation.isPending || version === undefined}
+            disabled={mutation.isPending || stale || version === undefined}
             onClick={() => void submit()}
           >
             {mutation.isPending ? "Saving…" : "Set default pin"}

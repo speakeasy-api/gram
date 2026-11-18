@@ -58,11 +58,14 @@ when, and the last 25 changes are listed on the **Hooks rollout** page.
    override** (or **Update override**):
    - To roll a release out early, enter the current hooks version.
    - To hold the organization back, enter the last version it should receive.
+     This holds back upgrades only: a project's first hooks publish always
+     gets the current version.
 3. To make the organization follow the default pin again, click **Clear
    override**.
 
 The change reaches the organization on the next hourly rollout sweep. Canary
-organizations have no override control because they ignore pins.
+organizations ignore pins, so they have no control to set an override, only
+one to clear an override left from before.
 
 ## Hold back a release
 
@@ -71,7 +74,9 @@ or below it, whatever the current hooks version is. To stop a release that has
 already started rolling out, set the default pin back to the previous version:
 organizations that have not been republished yet stay on their current hooks
 plugin, and organizations already on the new version keep it until the next
-version they are cleared for.
+version they are cleared for. This does not stop canary organizations or
+organizations whose override is at the new version: lower or clear those
+overrides separately.
 
 ## Cutover from PostHog
 

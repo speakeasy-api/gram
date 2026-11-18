@@ -137,8 +137,8 @@ const (
 	// is consulted via its PAYLOAD, not its boolean state: JSON {"version": N}
 	// naming the highest hooksGeneratorVersion the matched org is cleared to
 	// receive. The plugin publisher reads it only for orgs no admin pin covers,
-	// which is every org without an override until a platform-wide default pin
-	// is set. Evaluated server-side with the org groups; fails closed. Remove it
+	// which is every non-canary org without an override until a platform-wide
+	// default pin is set. Evaluated server-side with the org groups; fails closed. Remove it
 	// once the default pin is set in production.
 	FlagHooksRollout Flag = "hooks-rollout"
 
