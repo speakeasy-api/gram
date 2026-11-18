@@ -50,11 +50,8 @@ func gatewayTargetFromEndpoint(endpoint *ResolvedMcpEndpoint) (gatewayTarget, er
 }
 
 // admits reports only whether the credential may enter this gateway. It does
-// not authorize any member. Phase one keeps agent and workload access disabled
-// after this check; later phases use the same result when enabling each kind.
+// not authorize any member.
 func (t gatewayTarget) admits(caller gatewayCaller) (bool, error) {
-	// Phase one preserves the existing people-only gateways. Machine entry
-	// rules are enabled separately for stored and project gateways in later
-	// rollout phases; member authorization remains a distinct step.
+	// Gateway entry remains people-only; member authorization is separate.
 	return caller.kind == gatewayCallerPerson, nil
 }

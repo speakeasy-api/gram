@@ -75,9 +75,8 @@ func (s *Service) admitGatewayCaller(
 	if err != nil {
 		return ctx, nil, err
 	}
-	// Anonymous sessions have no acting principal and therefore cannot form
-	// an RFC GatewayCaller. Preserve their existing gateway behavior during
-	// phase one without inventing a fourth caller kind or a false principal.
+	// Anonymous sessions have no acting principal. Preserve their existing
+	// behavior without inventing another caller kind or a false principal.
 	if authentication.subject.Kind == urn.SessionSubjectKindAnonymous {
 		return authedCtx, &gatewayAdmission{
 			caller:         emptyGatewayCaller(),
@@ -101,9 +100,8 @@ func (s *Service) admitGatewayCaller(
 		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "credential cannot enter this gateway")
 	}
 
-	// Phase one constructs and live-admits every caller without widening
-	// access. Later rollout phases replace this temporary policy for stored and
-	// project gateways with their gateway target checks.
+	// Machine callers are authenticated and live-admitted above, but gateways
+	// continue to accept user sessions only.
 	if caller.kind == gatewayCallerAgent || caller.kind == gatewayCallerWorkload {
 		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "this gateway accepts user sessions only")
 	}

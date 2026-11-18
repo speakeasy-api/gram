@@ -50,8 +50,7 @@ import (
 // outcome, and the surface-resolved protocol version. Assembled once in
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
-	// caller is the identity, owner, live authorization limits, and project
-	// admitted once for this gateway request.
+	// caller is the identity and credential boundary admitted for this request.
 	caller gatewayCaller
 
 	// fromRequest is what the request says about its client, for connection rows.
