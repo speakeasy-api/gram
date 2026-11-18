@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP options and bounded failure projections use their documented zero values.
+//nolint:exhaustruct_v5 // MCP options and bounded failure projections use their documented zero values.
 package adminmcp
 
 import (

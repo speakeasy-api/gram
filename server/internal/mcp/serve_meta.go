@@ -478,7 +478,7 @@ func (s *Service) handleMetaInitialize(
 	// Record who handshaked so every member dispatch in this session can
 	// attribute its tool calls to a client. Scoped to the gateway, not to a
 	// toolset: members each carry their own slug.
-	storeSessionClientInfo(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+	storeSessionClientInfo(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct_v5 // only the record's identity fields matter here
 		projectID:       gate.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),

@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Composition intentionally relies on documented optional zero values.
+//nolint:exhaustruct_v5,wrapcheck // Composition intentionally relies on documented optional zero values.
 package gram
 
 import (

@@ -348,7 +348,7 @@ type kitMCPConnection struct {
 	Name        string
 	Resource    *url.URL
 	Environment string
-	ProjectID   uuid.UUID `exhaustruct:"optional"`
+	ProjectID   uuid.UUID
 }
 
 func kitBuiltinMCPConnections(base *url.URL, projectID uuid.UUID, slugs []string) []kitMCPConnection {

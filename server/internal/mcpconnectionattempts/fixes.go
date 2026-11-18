@@ -108,7 +108,7 @@ type Fix struct {
 // that started after the failing row, within FixLookahead of the failure's start. A
 // failure with no person has none.
 func (s Successes) Next(failure AttemptSummary) (Fix, bool) {
-	fix := Fix{Failure: failure, Failed: failure.End(s.now), Success: AttemptSummary{}, LastFailed: time.Time{}} //nolint:exhaustruct // filled when found
+	fix := Fix{Failure: failure, Failed: failure.End(s.now), Success: AttemptSummary{}, LastFailed: time.Time{}} //nolint:exhaustruct_v5 // filled when found
 	if failure.SubjectURN == "" {
 		return fix, false
 	}
