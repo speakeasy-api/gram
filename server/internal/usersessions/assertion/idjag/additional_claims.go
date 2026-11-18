@@ -13,8 +13,8 @@ type additionalClaims struct {
 	Scope    string          `json:"scope"`
 }
 
-// errResourceClaimInvalid is a present resource claim that is not a non-empty string.
-var errResourceClaimInvalid = errors.New("resource claim must be a non-empty string")
+// ErrResourceClaimInvalid is a present resource claim that is not a non-empty string.
+var ErrResourceClaimInvalid = errors.New("resource claim must be a non-empty string")
 
 // parseResourceClaim parses a raw resource claim and reports whether the assertion carries one.
 func parseResourceClaim(raw json.RawMessage) (string, bool, error) {
@@ -23,7 +23,7 @@ func parseResourceClaim(raw json.RawMessage) (string, bool, error) {
 	}
 	var value *string
 	if err := json.Unmarshal(raw, &value); err != nil || value == nil || *value == "" {
-		return "", true, errResourceClaimInvalid
+		return "", true, ErrResourceClaimInvalid
 	}
 	return *value, true, nil
 }

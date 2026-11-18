@@ -166,6 +166,11 @@ type Plugin struct {
 	// then. Member reads omit it.
 	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
 
+	// AutoAddServersEnabled reports whether the plugin's role audiences add and
+	// remove its MCP servers automatically. When false, role and access changes
+	// leave its server list alone. Member reads omit it.
+	AutoAddServersEnabled *bool `json:"auto_add_servers_enabled,omitempty"`
+
 	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty"`
 }
 
@@ -1315,6 +1320,7 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 		},
 		Publication:           publication,
 		AutoSyncEnabled:       new(plugindelivery.PluginAutoSyncEnabled(row.AutoSyncEnabled)),
+		AutoAddServersEnabled: new(row.AutoAddServersEnabled),
 		DistributionAdmission: nil,
 	}
 }

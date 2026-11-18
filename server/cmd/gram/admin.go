@@ -597,6 +597,7 @@ func newAdminCommand() *cli.Command {
 				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
+				adminService.SetMCPSourceStorage(assetStorage)
 			}
 			adminService.SetGCPIdentity(gcpIdentity)
 			admin.Attach(mux, adminService)

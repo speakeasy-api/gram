@@ -1465,3 +1465,24 @@ ORDER BY a.id FOR UPDATE OF a, p, b, g;
 UPDATE agents SET name = @name, updated_at = clock_timestamp()
 WHERE id = @agent_id AND organization_id = @organization_id AND project_id = @project_id
 AND deleted IS FALSE AND name = @old_name;
+
+-- name: AdminGetMCPServerSourceToolset :one
+SELECT t.slug, COALESCE(s.tool_variations_group_id, t.tool_variations_group_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS variations_group_id
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id AND o.disabled_at IS NULL
+LEFT JOIN toolsets t ON t.id = s.toolset_id AND t.project_id = p.id
+    AND t.organization_id = o.id AND t.deleted IS FALSE
+WHERE s.id = @server_id AND s.project_id = @project_id
+    AND o.id = @organization_id AND s.deleted IS FALSE
+    AND (s.toolset_id IS NULL OR t.id IS NOT NULL);
+
+-- name: AdminListMCPServerOpenAPISources :many
+SELECT DISTINCT a.id, a.name, a.url, a.content_type
+FROM http_tool_definitions h
+JOIN deployments_openapiv3_assets d ON d.id = h.openapiv3_document_id
+JOIN assets a ON a.id = d.asset_id
+WHERE h.id = ANY(@tool_ids::uuid[]) AND h.project_id = @project_id
+    AND a.project_id = @project_id AND a.deleted IS FALSE
+    AND h.deleted IS FALSE
+ORDER BY a.name, a.id;
