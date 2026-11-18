@@ -5,7 +5,6 @@ import { useProject } from "@/contexts/Auth";
 import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { useEffect } from "react";
 import { useNavigate } from "react-router";
 
 export interface Investigation {
@@ -15,27 +14,24 @@ export interface Investigation {
   context: string;
 }
 
-/** Sends a question with page context to the Project Assistant, like Explore with AI. */
+/** Context rides in the message's tagged block, which the chat shows as Additional context. */
+function investigationPrompt({ question, context }: Investigation): string {
+  return `<dashboard_context>\n${context}\n</dashboard_context>\n\n${question}`;
+}
+
 function useInvestigate(): (investigation: Investigation) => void {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { available, isExpanded, setIsExpanded, setOverride, sendPrompt } =
-    useInsightsState();
-
-  // The context belongs to this question; once the dock closes it goes.
-  useEffect(() => {
-    if (!isExpanded) setOverride(null);
-  }, [isExpanded, setOverride]);
-
-  return ({ question, context }) => {
-    setOverride({ contextInfo: context });
+  const { available, setIsExpanded, sendPrompt } = useInsightsState();
+  return (investigation) => {
+    const prompt = investigationPrompt(investigation);
     if (!available) {
-      sendPrompt(question);
+      sendPrompt(prompt);
       void navigate(routes.chat.conversation.href("new"));
       return;
     }
     setIsExpanded(true);
-    sendPrompt(question);
+    sendPrompt(prompt);
   };
 }
 

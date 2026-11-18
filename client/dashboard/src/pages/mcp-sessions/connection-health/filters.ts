@@ -95,17 +95,21 @@ export function resolveWindow(value: DateRangeValue, now: Date): Window {
   );
 }
 
+// The server rejects a `from` older than 30 days by its own clock, so the
+// oldest start sent is a minute inside that.
+const RETENTION_MARGIN_MS = 60_000;
+
 export function presetWindow(preset: TimeRangePreset, now: Date): Window {
+  const span = Math.min(PRESET_MS[preset], RETENTION_MS - RETENTION_MARGIN_MS);
   return {
-    from: new Date(now.getTime() - PRESET_MS[preset]).toISOString(),
+    from: new Date(now.getTime() - span).toISOString(),
     to: now.toISOString(),
   };
 }
 
 /** Whether any of the window falls before what the log still holds. */
 export function startsBeforeRetention(window: Window, now: Date): boolean {
-  // A minute of slack so "Last 30 days" itself never trips it.
-  return Date.parse(window.from) < now.getTime() - RETENTION_MS - 60_000;
+  return Date.parse(window.from) < now.getTime() - RETENTION_MS;
 }
 
 const nonEmpty = <T>(list: T[]): T[] | undefined =>

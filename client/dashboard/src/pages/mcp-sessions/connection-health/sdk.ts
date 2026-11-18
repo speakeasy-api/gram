@@ -40,6 +40,14 @@ import type {
 
 const iso = (date: Date): string => date.toISOString();
 
+const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** A window start no older than retention by the time it is sent. */
+function since(from: string): Date {
+  const oldest = Date.now() - RETENTION_MS + 60_000;
+  return new Date(Math.max(Date.parse(from), oldest));
+}
+
 function server(ref: ConnectionServer | undefined): ServerRef | undefined {
   return ref && { id: ref.id, kind: ref.kind as ServerKind, name: ref.name };
 }
@@ -120,7 +128,7 @@ function range(request: AttemptRangeRequest) {
   return {
     userSessionIssuerId: request.userSessionIssuerId,
     serverId: request.serverId,
-    from: new Date(request.from),
+    from: since(request.from),
     to: new Date(request.to),
     filters: filters(request.filters),
   };
@@ -205,7 +213,7 @@ export async function getSignInSummary(
       getSignInSummaryRequestBody: {
         userSessionIssuerId: request.userSessionIssuerId,
         serverId: request.serverId,
-        from: new Date(request.from),
+        from: since(request.from),
         to: new Date(request.to),
         bucket: request.bucket,
       },
@@ -233,7 +241,7 @@ export async function getSessionActivity(
       gramProject,
       getSessionActivityRequestBody: {
         userSessionIssuerId: request.userSessionIssuerId,
-        from: new Date(request.from),
+        from: since(request.from),
         to: new Date(request.to),
       },
     }),
@@ -264,7 +272,7 @@ export async function listDeniedClients(
       connectionHealthRangeQuery: {
         userSessionIssuerId: request.userSessionIssuerId,
         serverId: request.serverId,
-        from: new Date(request.from),
+        from: since(request.from),
         to: new Date(request.to),
       },
     }),

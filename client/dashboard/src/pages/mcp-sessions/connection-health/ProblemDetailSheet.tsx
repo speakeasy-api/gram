@@ -110,7 +110,7 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
         : null,
     ]
       .filter(Boolean)
-      .join(". "),
+      .join("\n"),
   };
 }
 

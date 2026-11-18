@@ -121,7 +121,7 @@ function investigationFor(attempt: AttemptDetail): Investigation {
       attempt.count > 1 ? `Repeated ${attempt.count} times` : null,
     ]
       .filter(Boolean)
-      .join(". "),
+      .join("\n"),
   };
 }
 
