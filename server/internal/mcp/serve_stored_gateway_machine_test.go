@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -103,6 +105,61 @@ func TestServePublic_StoredGatewayAgentPrincipalCredentialInitializes(t *testing
 
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+func TestServePublic_StoredGatewayBoundWorkloadOnlyEntersNamedGateway(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixture(t)
+	ctx := f.fixtureContext(t)
+	issuerURL := f.sharedIssuer(t)
+
+	allowedSlug := "bound-workload-stored-" + uuid.NewString()
+	otherSlug := "other-workload-stored-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, f.ti.conn, f.fx.target.ProjectID, f.fx.orgID, allowedSlug, f.fx.target.UserSessionIssuerID)
+	createMetaMcpEndpoint(t, ctx, f.ti.conn, f.fx.target.ProjectID, f.fx.orgID, otherSlug, f.fx.target.UserSessionIssuerID)
+	allowedResource := strings.TrimSuffix(f.ti.serverURL.String(), "/") + "/mcp/" + allowedSlug
+	f.ti.features.SetFlag(feature.FlagStoredGatewayMachineAccess, f.fx.orgID, true)
+	target, ok, err := f.ti.service.WorkloadTokenTargetFor(t.Context(), allowedResource)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, issuerURL+"/token", target.TokenEndpoint)
+	require.Equal(t, target.TokenEndpoint, target.Audience)
+	require.Equal(t, allowedResource, target.Resource)
+
+	form := issuerWorkloadForm(f.assertion(t, issuerURL))
+	form.Set(oauthwire.ParamResource, allowedResource)
+	tokenResponse := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
+	require.Equal(t, http.StatusOK, tokenResponse.Code, tokenResponse.Body.String())
+	bearer := decodeSharedTokenResponse(t, tokenResponse).AccessToken
+	require.NotEmpty(t, bearer)
+
+	allowed, err := servePublicHTTP(t, t.Context(), f.ti, allowedSlug, makeInitializeBody(), bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, allowed.Code, allowed.Body.String())
+
+	_, err = servePublicHTTP(t, t.Context(), f.ti, otherSlug, makeInitializeBody(), bearer, nil)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestServePublic_StoredGatewayBoundWorkloadIssuanceRequiresRollout(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixture(t)
+	ctx := f.fixtureContext(t)
+	issuerURL := f.sharedIssuer(t)
+	gatewaySlug := "disabled-bound-workload-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, f.ti.conn, f.fx.target.ProjectID, f.fx.orgID, gatewaySlug, f.fx.target.UserSessionIssuerID)
+	resource := strings.TrimSuffix(f.ti.serverURL.String(), "/") + "/mcp/" + gatewaySlug
+	target, ok, err := f.ti.service.WorkloadTokenTargetFor(t.Context(), resource)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Empty(t, target)
+	form := issuerWorkloadForm(f.assertion(t, issuerURL))
+	form.Set(oauthwire.ParamResource, resource)
+
+	response := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
+
+	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	require.Equal(t, "invalid_grant", decodeSharedTokenResponse(t, response).Error)
 }
 
 func TestServePublic_StoredGatewayIssuerWorkloadListsAdmittedMember(t *testing.T) {

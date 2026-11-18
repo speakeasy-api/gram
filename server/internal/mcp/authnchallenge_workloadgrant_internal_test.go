@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
@@ -117,6 +118,24 @@ func TestWorkloadAssertionPolicyRejectsChangedVerificationSource(t *testing.T) {
 	require.True(t, workloadAssertionPolicyMatches(issuer, verified))
 	issuer.JwksUri = "https://issuer.example/replacement-keys"
 	require.False(t, workloadAssertionPolicyMatches(issuer, verified), "an update committed before the issuance snapshot must invalidate earlier verification")
+}
+
+func TestRecheckWorkloadGrantStoredGatewayRequiresCurrentRollout(t *testing.T) {
+	t.Parallel()
+	organizationID := "test-org"
+	flags := new(feature.InMemory)
+	service := &Service{features: flags, logger: testenv.NewLogger(t)}
+	endpoint := &ResolvedMcpEndpoint{
+		OrganizationID:      organizationID,
+		ProjectID:           uuid.New(),
+		UserSessionIssuerID: uuid.New(),
+		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
+	}
+	grant := workloadGrantIssuance{endpoint: endpoint}
+
+	require.ErrorIs(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant), errCredentialRejected)
+	flags.SetFlag(feature.FlagStoredGatewayMachineAccess, organizationID, true)
+	require.NoError(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant))
 }
 
 func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t *testing.T) {

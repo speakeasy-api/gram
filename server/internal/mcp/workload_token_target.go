@@ -56,13 +56,26 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 	if !s.workloadAssertionGrantAdvertised(endpoint) {
 		return none, false, nil
 	}
+	gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint)
+	if gatewayErr == nil && !s.storedGatewayMachineAccessEnabled(ctx, s.logger, gateway) {
+		return none, false, nil
+	}
 
 	if shared := endpoint.sharedAuthorizationServer; shared != nil {
 		urls, err := shared.urls()
 		if err != nil {
 			return none, false, fmt.Errorf("build shared authorization server URLs: %w", err)
 		}
-		return WorkloadTokenTarget{TokenEndpoint: urls.Token, Audience: urls.Token, Resource: ""}, true, nil
+		resource := ""
+		if gatewayErr == nil {
+			if _, ok := gateway.authorizationTarget(endpoint.ProjectID); ok {
+				resource, err = endpoint.RootURL(baseURL)
+				if err != nil {
+					return none, false, fmt.Errorf("build gateway resource URL: %w", err)
+				}
+			}
+		}
+		return WorkloadTokenTarget{TokenEndpoint: urls.Token, Audience: urls.Token, Resource: resource}, true, nil
 	}
 
 	urls, err := s.requestAuthorizationServerURLs(ctx, endpoint, baseURL)

@@ -396,7 +396,14 @@ func (s *Service) workloadAssertionGrantAdvertised(endpoint *ResolvedMcpEndpoint
 	if s.workloadGrant == nil {
 		return false
 	}
-	_, ok := agentAuthorizationTarget(endpoint)
+	if _, ok := agentAuthorizationTarget(endpoint); ok {
+		return true
+	}
+	gateway, err := gatewayTargetFromEndpoint(endpoint)
+	if err != nil {
+		return false
+	}
+	_, ok := gateway.authorizationTarget(endpoint.ProjectID)
 	return ok
 }
 
@@ -466,6 +473,12 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
+	if gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint); gatewayErr == nil {
+		target, ok = gateway.authorizationTarget(endpoint.ProjectID)
+		if ok && !s.storedGatewayMachineAccessEnabled(ctx, logger, gateway) {
+			ok = false
+		}
+	}
 	if !ok {
 		refusal := refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy"))
 		refuseWorkloadGrantRow(ctx, t, refusal)
@@ -883,11 +896,17 @@ func retryAfterSeconds(d time.Duration) string {
 func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance) error {
 	var checks []authz.Check
 	if grant.endpoint != nil {
-		target, ok := agentAuthorizationTarget(grant.endpoint)
-		if !ok {
-			return errCredentialRejected
+		if gateway, gatewayErr := gatewayTargetFromEndpoint(grant.endpoint); gatewayErr == nil {
+			if _, ok := gateway.authorizationTarget(grant.endpoint.ProjectID); !ok || !s.storedGatewayMachineAccessEnabled(ctx, s.logger, gateway) {
+				return errCredentialRejected
+			}
+		} else {
+			target, ok := agentAuthorizationTarget(grant.endpoint)
+			if !ok {
+				return errCredentialRejected
+			}
+			checks = append(checks, target.connectCheck())
 		}
-		checks = append(checks, target.connectCheck())
 	}
 	if grant.session.Audience == InferenceResource {
 		checks = append(checks, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
