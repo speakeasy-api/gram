@@ -104,6 +104,28 @@ func (q *Queries) ChatBelongsToProject(ctx context.Context, arg ChatBelongsToPro
 	return exists, err
 }
 
+const clearChatMessageSiblingKeys = `-- name: ClearChatMessageSiblingKeys :exec
+UPDATE chat_messages
+SET sibling_key = NULL
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+  AND id = ANY($3::uuid[])
+  AND sibling_key IS NOT NULL
+`
+
+type ClearChatMessageSiblingKeysParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+// A stored entry that gained a natural ID is deduplicated by that ID from now
+// on, so it leaves the content-only sibling index.
+func (q *Queries) ClearChatMessageSiblingKeys(ctx context.Context, arg ClearChatMessageSiblingKeysParams) error {
+	_, err := q.db.Exec(ctx, clearChatMessageSiblingKeys, arg.ChatID, arg.ProjectID, arg.Ids)
+	return err
+}
+
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2::uuid
@@ -673,6 +695,35 @@ func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExter
 	return id, err
 }
 
+type CreateTranscriptChatMessageParams struct {
+	ID                 uuid.UUID
+	ChatID             uuid.UUID
+	Role               string
+	ProjectID          uuid.UUID
+	Content            string
+	ContentRaw         []byte
+	Model              pgtype.Text
+	MessageID          pgtype.Text
+	ToolCallID         pgtype.Text
+	UserID             pgtype.Text
+	ExternalUserID     pgtype.Text
+	FinishReason       pgtype.Text
+	ToolCalls          []byte
+	Origin             pgtype.Text
+	UserAgent          pgtype.Text
+	IpAddress          pgtype.Text
+	Source             pgtype.Text
+	CaptureKind        pgtype.Text
+	RiskAnalyzedAt     pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	ParentMessageID    uuid.NullUUID
+	ContinuesMessageID uuid.NullUUID
+	ContentKey         []byte
+	ContentKeyVersion  pgtype.Int2
+	PathKey            []byte
+	SiblingKey         []byte
+}
+
 const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
 DELETE FROM chat_resolutions WHERE chat_id = $1 AND project_id = $2
 `
@@ -725,6 +776,73 @@ UPDATE risk_policies SET enabled = FALSE WHERE project_id = $1
 func (q *Queries) DisableRiskPoliciesForTest(ctx context.Context, projectID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, disableRiskPoliciesForTest, projectID)
 	return err
+}
+
+const findChatNaturalIDOwners = `-- name: FindChatNaturalIDOwners :many
+SELECT n.chat_message_id, n.kind, n.value, n.block_index, m.path_key
+FROM chat_message_natural_ids n
+LEFT JOIN chat_messages m ON m.id = n.chat_message_id AND m.chat_id = n.chat_id
+WHERE n.chat_id = $1
+  AND n.project_id = $2::uuid
+  AND (n.kind, n.value, n.block_index) IN (
+    SELECT input.kind, input.value, input.block_index
+    FROM ROWS FROM (
+        UNNEST($3::text[])
+      , UNNEST($4::text[])
+      , UNNEST($5::smallint[])
+    ) AS input(kind, value, block_index)
+  )
+`
+
+type FindChatNaturalIDOwnersParams struct {
+	ChatID        uuid.UUID
+	ProjectID     uuid.UUID
+	Kinds         []string
+	NaturalValues []string
+	BlockIndexes  []int16
+}
+
+type FindChatNaturalIDOwnersRow struct {
+	ChatMessageID uuid.NullUUID
+	Kind          string
+	Value         string
+	BlockIndex    int16
+	PathKey       []byte
+}
+
+// Resolves natural IDs to the stored entries that own them, in one chat only:
+// an ID stored in another chat never matches. path_key is NULL for an ID that
+// stands for the start of the chat.
+func (q *Queries) FindChatNaturalIDOwners(ctx context.Context, arg FindChatNaturalIDOwnersParams) ([]FindChatNaturalIDOwnersRow, error) {
+	rows, err := q.db.Query(ctx, findChatNaturalIDOwners,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Kinds,
+		arg.NaturalValues,
+		arg.BlockIndexes,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindChatNaturalIDOwnersRow
+	for rows.Next() {
+		var i FindChatNaturalIDOwnersRow
+		if err := rows.Scan(
+			&i.ChatMessageID,
+			&i.Kind,
+			&i.Value,
+			&i.BlockIndex,
+			&i.PathKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const findInferenceChatsByNewestMessageIdentity = `-- name: FindInferenceChatsByNewestMessageIdentity :many
@@ -1291,6 +1409,42 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 		return nil, err
 	}
 	return items, nil
+}
+
+const getChatTranscriptOwner = `-- name: GetChatTranscriptOwner :one
+SELECT
+    c.user_account_id
+  , COALESCE(c.user_id, '')::text AS user_id
+  , COALESCE(
+      CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END,
+      u.email,
+      ''
+    )::text AS email
+FROM chats c
+LEFT JOIN users u ON u.id = NULLIF(c.user_id, '')
+WHERE c.id = $1
+  AND c.project_id = $2
+`
+
+type GetChatTranscriptOwnerParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetChatTranscriptOwnerRow struct {
+	UserAccountID uuid.NullUUID
+	UserID        string
+	Email         string
+}
+
+// The identities a transcript delivery is compared with before it may write
+// into the chat. external_user_id counts as an email only when it is one;
+// otherwise the email of the owning Speakeasy user stands in.
+func (q *Queries) GetChatTranscriptOwner(ctx context.Context, arg GetChatTranscriptOwnerParams) (GetChatTranscriptOwnerRow, error) {
+	row := q.db.QueryRow(ctx, getChatTranscriptOwner, arg.ChatID, arg.ProjectID)
+	var i GetChatTranscriptOwnerRow
+	err := row.Scan(&i.UserAccountID, &i.UserID, &i.Email)
+	return i, err
 }
 
 const getImportedSessionObservations = `-- name: GetImportedSessionObservations :many
@@ -2170,6 +2324,48 @@ func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChat
 	return items, nil
 }
 
+const listChatMessageIDsByPathKey = `-- name: ListChatMessageIDsByPathKey :many
+SELECT id, path_key
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+  AND path_key = ANY($3::bytea[])
+ORDER BY seq
+`
+
+type ListChatMessageIDsByPathKeyParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	PathKeys  [][]byte
+}
+
+type ListChatMessageIDsByPathKeyRow struct {
+	ID      uuid.UUID
+	PathKey []byte
+}
+
+// Stored entries of a chat whose path from the root matches one of the given
+// path keys. Several entries share a path key when a rewind repeats text.
+func (q *Queries) ListChatMessageIDsByPathKey(ctx context.Context, arg ListChatMessageIDsByPathKeyParams) ([]ListChatMessageIDsByPathKeyRow, error) {
+	rows, err := q.db.Query(ctx, listChatMessageIDsByPathKey, arg.ChatID, arg.ProjectID, arg.PathKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatMessageIDsByPathKeyRow
+	for rows.Next() {
+		var i ListChatMessageIDsByPathKeyRow
+		if err := rows.Scan(&i.ID, &i.PathKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatMessageParticipants = `-- name: ListChatMessageParticipants :many
 SELECT p.message_id, p.provider, p.provider_user_id,
  p.provider_team_id, p.user_id, p.display_name
@@ -2652,6 +2848,100 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 	return items, nil
 }
 
+const listChatNaturalIDs = `-- name: ListChatNaturalIDs :many
+SELECT chat_message_id, kind, value, block_index
+FROM chat_message_natural_ids
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+ORDER BY id
+`
+
+type ListChatNaturalIDsParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ListChatNaturalIDsRow struct {
+	ChatMessageID uuid.NullUUID
+	Kind          string
+	Value         string
+	BlockIndex    int16
+}
+
+// Every natural ID stored for a chat. A NULL chat_message_id stands for the
+// start of the chat.
+func (q *Queries) ListChatNaturalIDs(ctx context.Context, arg ListChatNaturalIDsParams) ([]ListChatNaturalIDsRow, error) {
+	rows, err := q.db.Query(ctx, listChatNaturalIDs, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatNaturalIDsRow
+	for rows.Next() {
+		var i ListChatNaturalIDsRow
+		if err := rows.Scan(
+			&i.ChatMessageID,
+			&i.Kind,
+			&i.Value,
+			&i.BlockIndex,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatNaturalIDsForMessages = `-- name: ListChatNaturalIDsForMessages :many
+SELECT chat_message_id, kind, value, block_index
+FROM chat_message_natural_ids
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+  AND chat_message_id = ANY($3::uuid[])
+ORDER BY id
+`
+
+type ListChatNaturalIDsForMessagesParams struct {
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+	ChatMessageIds []uuid.UUID
+}
+
+type ListChatNaturalIDsForMessagesRow struct {
+	ChatMessageID uuid.NullUUID
+	Kind          string
+	Value         string
+	BlockIndex    int16
+}
+
+func (q *Queries) ListChatNaturalIDsForMessages(ctx context.Context, arg ListChatNaturalIDsForMessagesParams) ([]ListChatNaturalIDsForMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listChatNaturalIDsForMessages, arg.ChatID, arg.ProjectID, arg.ChatMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatNaturalIDsForMessagesRow
+	for rows.Next() {
+		var i ListChatNaturalIDsForMessagesRow
+		if err := rows.Scan(
+			&i.ChatMessageID,
+			&i.Kind,
+			&i.Value,
+			&i.BlockIndex,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatParticipantRollups = `-- name: ListChatParticipantRollups :many
 SELECT DISTINCT ON (p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id)
  p.chat_id, p.provider, p.provider_user_id, p.provider_team_id, p.user_id, p.display_name
@@ -3106,6 +3396,245 @@ func (q *Queries) ListChatTranscriptMessagesPage(ctx context.Context, arg ListCh
 			&i.ToolUrn,
 			&i.ToolOutcome,
 			&i.ToolOutcomeNotes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatTranscriptNodes = `-- name: ListChatTranscriptNodes :many
+WITH RECURSIVE chain AS (
+  SELECT m.id, m.parent_message_id
+  FROM chat_messages m
+  WHERE m.chat_id = $1
+    AND m.project_id = $2::uuid
+    AND m.id = ANY($3::uuid[])
+  UNION
+  SELECT p.id, p.parent_message_id
+  FROM chat_messages p
+  JOIN chain c ON p.id = c.parent_message_id
+  WHERE p.chat_id = $1
+    AND p.project_id = $2::uuid
+), nodes AS (
+  SELECT chain.id FROM chain
+  UNION
+  SELECT m.id
+  FROM chat_messages m
+  WHERE m.chat_id = $1
+    AND m.project_id = $2::uuid
+    AND m.parent_message_id = ANY($4::uuid[])
+  UNION
+  SELECT m.id
+  FROM chat_messages m
+  WHERE $5::boolean
+    AND m.chat_id = $1
+    AND m.project_id = $2::uuid
+    AND m.parent_message_id IS NULL
+    AND m.content_key IS NOT NULL
+)
+SELECT
+    m.id
+  , m.parent_message_id
+  , m.continues_message_id
+  , m.role
+  , COALESCE(m.capture_kind = 'synthetic', FALSE)::boolean AS synthetic
+  , m.content_key
+  , m.path_key
+  , m.seq
+FROM chat_messages m
+JOIN nodes n ON n.id = m.id
+WHERE m.chat_id = $1
+  AND m.project_id = $2::uuid
+  AND m.content_key IS NOT NULL
+ORDER BY m.seq
+`
+
+type ListChatTranscriptNodesParams struct {
+	ChatID       uuid.UUID
+	ProjectID    uuid.UUID
+	Ids          []uuid.UUID
+	ParentIds    []uuid.UUID
+	IncludeRoots bool
+}
+
+type ListChatTranscriptNodesRow struct {
+	ID                 uuid.UUID
+	ParentMessageID    uuid.NullUUID
+	ContinuesMessageID uuid.NullUUID
+	Role               string
+	Synthetic          bool
+	ContentKey         []byte
+	PathKey            []byte
+	Seq                int64
+}
+
+// The skeleton of part of a chat's transcript tree: the given entries and
+// every ancestor up to their roots, the children of @parent_ids, and, with
+// @include_roots, every root of the chat.
+func (q *Queries) ListChatTranscriptNodes(ctx context.Context, arg ListChatTranscriptNodesParams) ([]ListChatTranscriptNodesRow, error) {
+	rows, err := q.db.Query(ctx, listChatTranscriptNodes,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Ids,
+		arg.ParentIds,
+		arg.IncludeRoots,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatTranscriptNodesRow
+	for rows.Next() {
+		var i ListChatTranscriptNodesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentMessageID,
+			&i.ContinuesMessageID,
+			&i.Role,
+			&i.Synthetic,
+			&i.ContentKey,
+			&i.PathKey,
+			&i.Seq,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatTranscriptRowsForTest = `-- name: ListChatTranscriptRowsForTest :many
+SELECT
+    id
+  , parent_message_id
+  , continues_message_id
+  , role
+  , content
+  , tool_calls
+  , model
+  , finish_reason
+  , capture_kind
+  , (risk_analyzed_at IS NOT NULL)::boolean AS risk_analyzed
+  , (sibling_key IS NOT NULL)::boolean AS has_sibling_key
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+ORDER BY seq
+`
+
+type ListChatTranscriptRowsForTestParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ListChatTranscriptRowsForTestRow struct {
+	ID                 uuid.UUID
+	ParentMessageID    uuid.NullUUID
+	ContinuesMessageID uuid.NullUUID
+	Role               string
+	Content            string
+	ToolCalls          []byte
+	Model              pgtype.Text
+	FinishReason       pgtype.Text
+	CaptureKind        pgtype.Text
+	RiskAnalyzed       bool
+	HasSiblingKey      bool
+}
+
+// Test fixture: a chat's stored rows with their transcript tree columns.
+func (q *Queries) ListChatTranscriptRowsForTest(ctx context.Context, arg ListChatTranscriptRowsForTestParams) ([]ListChatTranscriptRowsForTestRow, error) {
+	rows, err := q.db.Query(ctx, listChatTranscriptRowsForTest, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatTranscriptRowsForTestRow
+	for rows.Next() {
+		var i ListChatTranscriptRowsForTestRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentMessageID,
+			&i.ContinuesMessageID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+			&i.Model,
+			&i.FinishReason,
+			&i.CaptureKind,
+			&i.RiskAnalyzed,
+			&i.HasSiblingKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatTranscriptTree = `-- name: ListChatTranscriptTree :many
+SELECT
+    id
+  , parent_message_id
+  , continues_message_id
+  , role
+  , COALESCE(capture_kind = 'synthetic', FALSE)::boolean AS synthetic
+  , content_key
+  , path_key
+  , seq
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+  AND content_key IS NOT NULL
+ORDER BY seq
+`
+
+type ListChatTranscriptTreeParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ListChatTranscriptTreeRow struct {
+	ID                 uuid.UUID
+	ParentMessageID    uuid.NullUUID
+	ContinuesMessageID uuid.NullUUID
+	Role               string
+	Synthetic          bool
+	ContentKey         []byte
+	PathKey            []byte
+	Seq                int64
+}
+
+// The skeleton of a chat's whole transcript tree, without message text, for a
+// delivery whose entries name their parents. One row per stored entry.
+func (q *Queries) ListChatTranscriptTree(ctx context.Context, arg ListChatTranscriptTreeParams) ([]ListChatTranscriptTreeRow, error) {
+	rows, err := q.db.Query(ctx, listChatTranscriptTree, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatTranscriptTreeRow
+	for rows.Next() {
+		var i ListChatTranscriptTreeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentMessageID,
+			&i.ContinuesMessageID,
+			&i.Role,
+			&i.Synthetic,
+			&i.ContentKey,
+			&i.PathKey,
+			&i.Seq,
 		); err != nil {
 			return nil, err
 		}
@@ -4269,6 +4798,17 @@ func (q *Queries) LockChatRowForTest(ctx context.Context, arg LockChatRowForTest
 	return err
 }
 
+const lockChatTranscript = `-- name: LockChatTranscript :exec
+SELECT pg_advisory_xact_lock(hashtextextended('chat-transcript:' || ($1::uuid)::text, 0))
+`
+
+// Serializes transcript merges into one chat for the rest of the transaction,
+// so two deliveries never load and extend the same tree at once.
+func (q *Queries) LockChatTranscript(ctx context.Context, chatID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockChatTranscript, chatID)
+	return err
+}
+
 const lockSubsessionLinks = `-- name: LockSubsessionLinks :exec
 SELECT pg_advisory_xact_lock(hashtextextended('subsession:' || CAST($1 AS text), 0))
 `
@@ -4767,6 +5307,37 @@ UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = $1
 // its threads behind).
 func (q *Queries) SeedSoftDeleteAssistant(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, seedSoftDeleteAssistant, id)
+	return err
+}
+
+const setChatMessageContinues = `-- name: SetChatMessageContinues :exec
+UPDATE chat_messages m
+SET continues_message_id = input.continues_message_id
+FROM ROWS FROM (
+    UNNEST($3::uuid[])
+  , UNNEST($4::uuid[])
+) AS input(id, continues_message_id)
+WHERE m.chat_id = $1
+  AND m.project_id = $2::uuid
+  AND m.id = input.id
+  AND m.continues_message_id IS NULL
+`
+
+type SetChatMessageContinuesParams struct {
+	ChatID              uuid.UUID
+	ProjectID           uuid.UUID
+	Ids                 []uuid.UUID
+	ContinuesMessageIds []uuid.UUID
+}
+
+// Links stored compaction roots to the old leaf each continues, once known.
+func (q *Queries) SetChatMessageContinues(ctx context.Context, arg SetChatMessageContinuesParams) error {
+	_, err := q.db.Exec(ctx, setChatMessageContinues,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Ids,
+		arg.ContinuesMessageIds,
+	)
 	return err
 }
 
@@ -5318,6 +5889,79 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertChatNaturalIDs = `-- name: UpsertChatNaturalIDs :many
+INSERT INTO chat_message_natural_ids (
+    project_id
+  , chat_id
+  , chat_message_id
+  , kind
+  , value
+  , block_index
+  , source
+)
+SELECT
+    $1::uuid
+  , $2::uuid
+  , NULLIF(input.chat_message_id, '00000000-0000-0000-0000-000000000000'::uuid)
+  , input.kind
+  , input.value
+  , input.block_index
+  , $3::text
+FROM ROWS FROM (
+    UNNEST($4::uuid[])
+  , UNNEST($5::text[])
+  , UNNEST($6::text[])
+  , UNNEST($7::smallint[])
+) AS input(chat_message_id, kind, value, block_index)
+ON CONFLICT (chat_id, kind, value, block_index) DO UPDATE
+SET chat_message_id = EXCLUDED.chat_message_id
+  , source = EXCLUDED.source
+WHERE chat_message_natural_ids.chat_message_id IS NULL
+RETURNING id
+`
+
+type UpsertChatNaturalIDsParams struct {
+	ProjectID      uuid.UUID
+	ChatID         uuid.UUID
+	Source         string
+	ChatMessageIds []uuid.UUID
+	Kinds          []string
+	NaturalValues  []string
+	BlockIndexes   []int16
+}
+
+// Stores natural IDs. A zero chat message id stores the start of the chat
+// (NULL). An existing row is taken over only when it stands for the start of
+// the chat; a row that names an entry is kept and returns nothing, so the
+// caller can tell a conflict from a write.
+func (q *Queries) UpsertChatNaturalIDs(ctx context.Context, arg UpsertChatNaturalIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, upsertChatNaturalIDs,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.Source,
+		arg.ChatMessageIds,
+		arg.Kinds,
+		arg.NaturalValues,
+		arg.BlockIndexes,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :one

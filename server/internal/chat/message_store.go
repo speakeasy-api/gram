@@ -748,14 +748,7 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
 				return false, fmt.Errorf("enqueue external chat message readings: %w", err)
 			}
-			if _, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{Proto: telemetryv1.SessionObserved_builder{
-				ProjectId:    new(projectID.String()),
-				MessageId:    new(param.ID.String()),
-				Provider:     new(write.Provider),
-				HookHostname: new(write.HookHostname),
-				AccountType:  new(write.AccountType),
-				BillingMode:  new(write.BillingMode),
-			}.Build(), PublicID: uuid.Nil, Attributes: nil}); err != nil {
+			if _, err := outbox.Publish(ctx, tx, organizationID, sessionObservation(projectID, param.ID, *write)); err != nil {
 				return false, fmt.Errorf("enqueue imported session observation: %w", err)
 			}
 			if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, publicationWrites, occurredAt); err != nil {
@@ -777,6 +770,19 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return total, nil
+}
+
+// sessionObservation announces a newly stored imported message to session
+// telemetry, with the producer attribution of its write.
+func sessionObservation(projectID uuid.UUID, messageID uuid.UUID, write ExternalMessageWrite) outbox.Message {
+	return outbox.Message{Proto: telemetryv1.SessionObserved_builder{
+		ProjectId:    new(projectID.String()),
+		MessageId:    new(messageID.String()),
+		Provider:     new(write.Provider),
+		HookHostname: new(write.HookHostname),
+		AccountType:  new(write.AccountType),
+		BillingMode:  new(write.BillingMode),
+	}.Build(), PublicID: uuid.Nil, Attributes: nil}
 }
 
 // WriteInTx inserts messages via a caller-provided transaction. Observers are

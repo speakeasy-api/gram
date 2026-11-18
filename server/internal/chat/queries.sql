@@ -2441,3 +2441,273 @@ SELECT (
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = @id AND c.project_id = @project_id;
+
+-- name: LockChatTranscript :exec
+-- Serializes transcript merges into one chat for the rest of the transaction,
+-- so two deliveries never load and extend the same tree at once.
+SELECT pg_advisory_xact_lock(hashtextextended('chat-transcript:' || (@chat_id::uuid)::text, 0));
+
+-- name: GetChatTranscriptOwner :one
+-- The identities a transcript delivery is compared with before it may write
+-- into the chat. external_user_id counts as an email only when it is one;
+-- otherwise the email of the owning Speakeasy user stands in.
+SELECT
+    c.user_account_id
+  , COALESCE(c.user_id, '')::text AS user_id
+  , COALESCE(
+      CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END,
+      u.email,
+      ''
+    )::text AS email
+FROM chats c
+LEFT JOIN users u ON u.id = NULLIF(c.user_id, '')
+WHERE c.id = @chat_id
+  AND c.project_id = @project_id;
+
+-- name: ListChatTranscriptTree :many
+-- The skeleton of a chat's whole transcript tree, without message text, for a
+-- delivery whose entries name their parents. One row per stored entry.
+SELECT
+    id
+  , parent_message_id
+  , continues_message_id
+  , role
+  , COALESCE(capture_kind = 'synthetic', FALSE)::boolean AS synthetic
+  , content_key
+  , path_key
+  , seq
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND content_key IS NOT NULL
+ORDER BY seq;
+
+-- name: ListChatTranscriptNodes :many
+-- The skeleton of part of a chat's transcript tree: the given entries and
+-- every ancestor up to their roots, the children of @parent_ids, and, with
+-- @include_roots, every root of the chat.
+WITH RECURSIVE chain AS (
+  SELECT m.id, m.parent_message_id
+  FROM chat_messages m
+  WHERE m.chat_id = @chat_id
+    AND m.project_id = @project_id::uuid
+    AND m.id = ANY(@ids::uuid[])
+  UNION
+  SELECT p.id, p.parent_message_id
+  FROM chat_messages p
+  JOIN chain c ON p.id = c.parent_message_id
+  WHERE p.chat_id = @chat_id
+    AND p.project_id = @project_id::uuid
+), nodes AS (
+  SELECT chain.id FROM chain
+  UNION
+  SELECT m.id
+  FROM chat_messages m
+  WHERE m.chat_id = @chat_id
+    AND m.project_id = @project_id::uuid
+    AND m.parent_message_id = ANY(@parent_ids::uuid[])
+  UNION
+  SELECT m.id
+  FROM chat_messages m
+  WHERE @include_roots::boolean
+    AND m.chat_id = @chat_id
+    AND m.project_id = @project_id::uuid
+    AND m.parent_message_id IS NULL
+    AND m.content_key IS NOT NULL
+)
+SELECT
+    m.id
+  , m.parent_message_id
+  , m.continues_message_id
+  , m.role
+  , COALESCE(m.capture_kind = 'synthetic', FALSE)::boolean AS synthetic
+  , m.content_key
+  , m.path_key
+  , m.seq
+FROM chat_messages m
+JOIN nodes n ON n.id = m.id
+WHERE m.chat_id = @chat_id
+  AND m.project_id = @project_id::uuid
+  AND m.content_key IS NOT NULL
+ORDER BY m.seq;
+
+-- name: ListChatMessageIDsByPathKey :many
+-- Stored entries of a chat whose path from the root matches one of the given
+-- path keys. Several entries share a path key when a rewind repeats text.
+SELECT id, path_key
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND path_key = ANY(@path_keys::bytea[])
+ORDER BY seq;
+
+-- name: ListChatNaturalIDs :many
+-- Every natural ID stored for a chat. A NULL chat_message_id stands for the
+-- start of the chat.
+SELECT chat_message_id, kind, value, block_index
+FROM chat_message_natural_ids
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+ORDER BY id;
+
+-- name: ListChatNaturalIDsForMessages :many
+SELECT chat_message_id, kind, value, block_index
+FROM chat_message_natural_ids
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND chat_message_id = ANY(@chat_message_ids::uuid[])
+ORDER BY id;
+
+-- name: FindChatNaturalIDOwners :many
+-- Resolves natural IDs to the stored entries that own them, in one chat only:
+-- an ID stored in another chat never matches. path_key is NULL for an ID that
+-- stands for the start of the chat.
+SELECT n.chat_message_id, n.kind, n.value, n.block_index, m.path_key
+FROM chat_message_natural_ids n
+LEFT JOIN chat_messages m ON m.id = n.chat_message_id AND m.chat_id = n.chat_id
+WHERE n.chat_id = @chat_id
+  AND n.project_id = @project_id::uuid
+  AND (n.kind, n.value, n.block_index) IN (
+    SELECT input.kind, input.value, input.block_index
+    FROM ROWS FROM (
+        UNNEST(@kinds::text[])
+      , UNNEST(@natural_values::text[])
+      , UNNEST(@block_indexes::smallint[])
+    ) AS input(kind, value, block_index)
+  );
+
+-- name: CreateTranscriptChatMessage :copyfrom
+-- Stores new transcript entries. The transcript merge is the only writer of
+-- the tree columns, and it keeps parent and continued entries in one chat.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , finish_reason
+  , tool_calls
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , capture_kind
+  , risk_analyzed_at
+  , created_at
+  , parent_message_id
+  , continues_message_id
+  , content_key
+  , content_key_version
+  , path_key
+  , sibling_key
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @finish_reason
+  , @tool_calls
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @capture_kind
+  , @risk_analyzed_at
+  , @created_at
+  , @parent_message_id
+  , @continues_message_id
+  , @content_key
+  , @content_key_version
+  , @path_key
+  , @sibling_key
+);
+
+-- name: UpsertChatNaturalIDs :many
+-- Stores natural IDs. A zero chat message id stores the start of the chat
+-- (NULL). An existing row is taken over only when it stands for the start of
+-- the chat; a row that names an entry is kept and returns nothing, so the
+-- caller can tell a conflict from a write.
+INSERT INTO chat_message_natural_ids (
+    project_id
+  , chat_id
+  , chat_message_id
+  , kind
+  , value
+  , block_index
+  , source
+)
+SELECT
+    @project_id::uuid
+  , @chat_id::uuid
+  , NULLIF(input.chat_message_id, '00000000-0000-0000-0000-000000000000'::uuid)
+  , input.kind
+  , input.value
+  , input.block_index
+  , @source::text
+FROM ROWS FROM (
+    UNNEST(@chat_message_ids::uuid[])
+  , UNNEST(@kinds::text[])
+  , UNNEST(@natural_values::text[])
+  , UNNEST(@block_indexes::smallint[])
+) AS input(chat_message_id, kind, value, block_index)
+ON CONFLICT (chat_id, kind, value, block_index) DO UPDATE
+SET chat_message_id = EXCLUDED.chat_message_id
+  , source = EXCLUDED.source
+WHERE chat_message_natural_ids.chat_message_id IS NULL
+RETURNING id;
+
+-- name: ClearChatMessageSiblingKeys :exec
+-- A stored entry that gained a natural ID is deduplicated by that ID from now
+-- on, so it leaves the content-only sibling index.
+UPDATE chat_messages
+SET sibling_key = NULL
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND id = ANY(@ids::uuid[])
+  AND sibling_key IS NOT NULL;
+
+-- name: ListChatTranscriptRowsForTest :many
+-- Test fixture: a chat's stored rows with their transcript tree columns.
+SELECT
+    id
+  , parent_message_id
+  , continues_message_id
+  , role
+  , content
+  , tool_calls
+  , model
+  , finish_reason
+  , capture_kind
+  , (risk_analyzed_at IS NOT NULL)::boolean AS risk_analyzed
+  , (sibling_key IS NOT NULL)::boolean AS has_sibling_key
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+ORDER BY seq;
+
+-- name: SetChatMessageContinues :exec
+-- Links stored compaction roots to the old leaf each continues, once known.
+UPDATE chat_messages m
+SET continues_message_id = input.continues_message_id
+FROM ROWS FROM (
+    UNNEST(@ids::uuid[])
+  , UNNEST(@continues_message_ids::uuid[])
+) AS input(id, continues_message_id)
+WHERE m.chat_id = @chat_id
+  AND m.project_id = @project_id::uuid
+  AND m.id = input.id
+  AND m.continues_message_id IS NULL;
