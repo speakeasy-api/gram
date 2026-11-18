@@ -133,6 +133,47 @@ func TestNetworkIngressDeletionTelemetry(t *testing.T) {
 	}
 }
 
+func TestNetworkIngressKubernetesFailureNamesTheCallButNotItsData(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "private-provider-request-sentinel"
+	conflict := k8serrors.NewConflict(schema.GroupResource{Group: "tailscale.com", Resource: "tailnets"}, "private-resource", errors.New(sensitive))
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: fmt.Errorf("delete Tailnet: %w", conflict)}, logger, nil)
+
+	err := provisioner.Delete(t.Context(), NetworkIngressResourceNames{})
+	require.ErrorIs(t, err, conflict)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.Equal(t, NetworkIngressErrorKubernetes, log[string(attr.NetworkIngressErrorCodeKey)])
+	require.Equal(t, "Conflict", log[string(attr.NetworkIngressKubernetesReasonKey)])
+	require.InDelta(t, 409, log[string(attr.NetworkIngressKubernetesStatusCodeKey)], 0)
+	require.Equal(t, "tailnets.tailscale.com", log[string(attr.NetworkIngressKubernetesResourceKey)])
+	require.NotContains(t, logs.String(), sensitive)
+	require.NotContains(t, logs.String(), "private-resource")
+}
+
+func TestNetworkIngressNonKubernetesFailureHasNoKubernetesFields(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: ErrNetworkIngressProviderRateLimited}, logger, nil)
+
+	err := provisioner.Delete(t.Context(), NetworkIngressResourceNames{})
+	require.ErrorIs(t, err, ErrNetworkIngressProviderRateLimited)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesReasonKey))
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesStatusCodeKey))
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesResourceKey))
+}
+
 func TestNetworkIngressObservationErrorTelemetry(t *testing.T) {
 	t.Parallel()
 

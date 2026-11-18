@@ -182,6 +182,7 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		// Provider errors can contain Kubernetes request data. Only bounded
 		// classifications may leave the provider boundary through telemetry.
 		attrs = append(attrs, attr.SlogError(fmt.Errorf("network ingress provider: %s", errorCode)))
+		attrs = append(attrs, kubernetesStatusAttrs(err)...)
 		p.logger.ErrorContext(ctx, "network ingress provisioner operation failed", attrs...)
 		return
 	}
@@ -190,6 +191,33 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		return
 	}
 	p.logger.InfoContext(ctx, "network ingress provisioner operation completed", attrs...)
+}
+
+// kubernetesStatusAttrs describes a failed Kubernetes API call by its reason,
+// HTTP status and resource type: enough to tell which teardown or apply step
+// failed and why. The status message and object name are omitted because they
+// can carry request data.
+func kubernetesStatusAttrs(err error) []any {
+	apiErr, ok := errors.AsType[interface {
+		error
+		k8serrors.APIStatus
+	}](err)
+	if !ok {
+		return nil
+	}
+	status := apiErr.Status()
+	attrs := []any{
+		attr.SlogNetworkIngressKubernetesReason(status.Reason),
+		attr.SlogNetworkIngressKubernetesStatusCode(status.Code),
+	}
+	if status.Details != nil && status.Details.Kind != "" {
+		resource := status.Details.Kind
+		if status.Details.Group != "" {
+			resource += "." + status.Details.Group
+		}
+		attrs = append(attrs, attr.SlogNetworkIngressKubernetesResource(resource))
+	}
+	return attrs
 }
 
 func classifyNetworkIngressError(err error, observationCode string) string {
