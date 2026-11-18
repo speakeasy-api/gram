@@ -137,7 +137,7 @@ func (e *Events) refreshHome(ctx context.Context, teamID, slackUserID, organizat
 	if !ok {
 		return
 	}
-	data := HomeData{DashboardURL: e.dashboardURL} //nolint:exhaustruct // an unlinked viewer sees no organization data
+	data := HomeData{DashboardURL: e.dashboardURL} //nolint:exhaustruct_v5 // an unlinked viewer sees no organization data
 	if viewer.userID != "" {
 		data = e.home.Load(ctx, viewer.workspace.OrganizationID, viewer.userID, e.dashboardURL)
 	}

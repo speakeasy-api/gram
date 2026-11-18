@@ -53,7 +53,7 @@ const awsAccessTokenRuleID = "aws-access-token"
 // always reported alongside the secret it anchors.
 func awsRules() []config.Rule {
 	return []config.Rule{
-		//nolint:exhaustruct // third-party gitleaks rule; only the set fields are relevant
+		//nolint:exhaustruct_v5 // third-party gitleaks rule; only the set fields are relevant
 		{
 			RuleID:      "aws-secret-access-key",
 			Description: "Identified a probable AWS secret access key co-located with an AWS access key id.",
@@ -68,7 +68,7 @@ func awsRules() []config.Rule {
 			},
 			Tags: []string{"aws"},
 		},
-		//nolint:exhaustruct // third-party gitleaks rule; only the set fields are relevant
+		//nolint:exhaustruct_v5 // third-party gitleaks rule; only the set fields are relevant
 		{
 			RuleID:      "aws-session-token",
 			Description: "Identified a probable AWS session (STS security) token adjacent to its credential label.",

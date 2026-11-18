@@ -192,7 +192,7 @@ func (c *HTTPClient) api(creds Credentials) (*tailscale.Client, error) {
 			break
 		}
 	}
-	//nolint:exhaustruct // APIKey and Tailnet take their documented defaults.
+	//nolint:exhaustruct_v5 // APIKey and Tailnet take their documented defaults.
 	client := &tailscale.Client{
 		BaseURL:   c.baseURL,
 		UserAgent: userAgent,
@@ -273,7 +273,7 @@ func (c *HTTPClient) UpsertService(ctx context.Context, creds Credentials, svc S
 		existing = nil
 	}
 
-	//nolint:exhaustruct // a new service gets its addresses from Tailscale.
+	//nolint:exhaustruct_v5 // a new service gets its addresses from Tailscale.
 	next := tailscale.Service{
 		Name:    svc.Name,
 		Ports:   svc.Ports,

@@ -321,7 +321,7 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 		return nil, err
 	}
 	// The shared exchange reads only these fields; federation owns its own state.
-	exchangeState := RemoteLoginState{RedirectURI: callbackURL, CodeVerifier: verifier, TokenEndpoint: p.metadata.TokenEndpoint} //nolint:exhaustruct // Not a persisted remote-session challenge.
+	exchangeState := RemoteLoginState{RedirectURI: callbackURL, CodeVerifier: verifier, TokenEndpoint: p.metadata.TokenEndpoint} //nolint:exhaustruct_v5 // Not a persisted remote-session challenge.
 	tok, err := m.exchangeCode(ctx, doer, exchangeState, clientAuth, "", code)
 	if err != nil {
 		return nil, classifyFederatedExchangeError(err)

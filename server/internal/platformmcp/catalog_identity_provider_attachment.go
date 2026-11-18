@@ -1,4 +1,4 @@
-//nolint:exhaustruct // OAuth persistence values intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // OAuth persistence values intentionally omit documented optional fields.
 package platformmcp
 
 import (
