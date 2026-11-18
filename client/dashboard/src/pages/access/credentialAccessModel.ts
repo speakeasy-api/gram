@@ -95,11 +95,13 @@ function credentialTierKey(selector: CredentialSelector): string | null {
     return null;
   }
   // An owner constraint only ever matches a personal credential, so a rule
-  // carrying one is a tier rule only where it names that kind.
+  // carrying one is a tier rule only where it names that kind, or names one
+  // credential (whose kind the rule need not repeat).
   if (selector.connectionOwner != null) {
+    const namesOne = selector.resourceId !== "*" && wild(selector.clientType);
     if (
       selector.connectionOwner !== REPRESENTED_USER ||
-      selector.clientType !== "remote_session"
+      (selector.clientType !== "remote_session" && !namesOne)
     ) {
       return null;
     }
@@ -182,7 +184,14 @@ export function credentialChildren(
 ): CredentialRow[] {
   switch (row.kind) {
     case "all":
-      return CLIENT_TYPES.map((clientType) => ({ kind: "type", clientType }));
+      // Every kind with a row, plus any kind a credential has that this
+      // dashboard does not know, so splitting never drops one.
+      return [
+        ...new Set([
+          ...CLIENT_TYPES,
+          ...clients.map((client) => client.clientType),
+        ]),
+      ].map((clientType) => ({ kind: "type", clientType }));
     case "type":
       return clients
         .filter((client) => client.clientType === row.clientType)

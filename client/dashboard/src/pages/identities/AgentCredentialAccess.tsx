@@ -84,7 +84,8 @@ function ManagerCredentials({ agent }: { agent: ManagedAgent }): JSX.Element {
   const grants = useAgentPolicyGrants(agent);
   // Naming one credential needs the organization's list; without it, kinds
   // of credential can still be set.
-  const clients = useAllAuthClients({ enabled: hasScope("org:read") });
+  const canReadOrg = hasScope("org:read");
+  const clients = useAllAuthClients({ enabled: canReadOrg });
   const policy = grants.data ?? [];
   const stored: StoredCredentialRule[] = useMemo(
     () =>
@@ -201,9 +202,10 @@ function ManagerCredentials({ agent }: { agent: ManagedAgent }): JSX.Element {
               current: next,
             }))
           }
-          clients={clients.data ?? null}
+          // Cached names stay hidden once org:read is gone.
+          clients={canReadOrg ? (clients.data ?? null) : null}
           clientsError={clients.isError}
-          clientsUnreadable={!hasScope("org:read")}
+          clientsUnreadable={!canReadOrg}
           onRetry={() => void clients.refetch()}
           projects={organization.projects}
           disabled={save.isPending}

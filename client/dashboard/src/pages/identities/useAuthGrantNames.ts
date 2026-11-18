@@ -93,8 +93,11 @@ export function useAuthGrantNames(
     retry: false,
     throwOnError: false,
   });
+  // Cached lists stay unused once org:read is gone.
+  const canReadOrg = hasScope("org:read");
+  const clientList = canReadOrg ? (clients.data ?? []) : [];
   const clientById = new Map(
-    (clients.data ?? []).map((client) => [
+    clientList.map((client) => [
       client.id,
       {
         name: client.name,
@@ -104,7 +107,9 @@ export function useAuthGrantNames(
     ]),
   );
   const upstreamClientById = new Map(
-    upstreamClients.flatMap(({ data }) => (data ? [[data.id, data]] : [])),
+    upstreamClients.flatMap(({ data }) =>
+      canReadOrg && data ? [[data.id, data]] : [],
+    ),
   );
   // An upstream OAuth client is named after the first auth client using it,
   // and reaches every server those auth clients serve.
@@ -112,7 +117,7 @@ export function useAuthGrantNames(
     string,
     { name: string; issuerId?: string; servers: AuthGrantServer[] }
   >();
-  for (const client of clients.data ?? []) {
+  for (const client of clientList) {
     if (!client.remoteSessionClientId) continue;
     const seen = upstreamById.get(client.remoteSessionClientId) ?? {
       name: client.name,
@@ -144,7 +149,7 @@ export function useAuthGrantNames(
   return {
     client: (id) => clientById.get(id),
     upstreamClient: (id) => upstreamById.get(id),
-    member: (id) => memberById.get(id),
-    clientsLoaded: clients.isSuccess,
+    member: (id) => (canReadOrg ? memberById.get(id) : undefined),
+    clientsLoaded: canReadOrg && clients.isSuccess,
   };
 }

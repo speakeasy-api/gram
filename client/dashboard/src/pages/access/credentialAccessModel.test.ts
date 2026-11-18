@@ -258,3 +258,32 @@ describe("rules the tree cannot show", () => {
     ).toEqual([future, named]);
   });
 });
+
+describe("forward compatibility", () => {
+  it("reads a personal tick on one credential without a kind as that row", () => {
+    const rule: CredentialRule = {
+      scope: "mcp:auth",
+      selector: {
+        resourceKind: "mcp_auth_client",
+        resourceId: "oauth-a",
+        connectionOwner: REPRESENTED_USER,
+      },
+    };
+    const row = {
+      kind: "client",
+      clientId: "oauth-a",
+      clientType: "remote_session",
+    } as const;
+    expect(credentialRowState([rule], row).state).toBe("on");
+    expect(revokeCredentialRow([rule], row, clients)).toEqual([]);
+  });
+
+  it("keeps a credential of an unknown kind when splitting every credential", () => {
+    const future = client("future-a", "future_kind");
+    const rules = splitCredentialRow([allowAll], { kind: "all" }, [
+      ...clients,
+      future,
+    ]);
+    expect(credentialUsable(rules, future, "p1")).toBe("allowed");
+  });
+});
