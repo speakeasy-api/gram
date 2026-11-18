@@ -362,6 +362,34 @@ describe("CommandPalette", () => {
     ).toContain("Sessions");
   });
 
+  it("bounds broad searches before mounting result rows", async () => {
+    slugs.projectSlug = undefined;
+    mocks.candidates = Array.from({ length: 100 }, (_, index) =>
+      candidate({
+        id: `catalog:linear-${index}`,
+        kind: "catalog",
+        title: `Linear integration ${index.toString().padStart(3, "0")}`,
+        detail: "Catalog entry",
+        group: "MCP Catalog",
+      }),
+    );
+    render(<CommandPalette />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search projects and pages…"),
+      { target: { value: "linear" } },
+    );
+
+    expect(screen.getAllByRole("option")).toHaveLength(40);
+    expect(screen.getByText("Linear integration 000")).not.toBeNull();
+    expect(screen.queryByText("Linear integration 040")).toBeNull();
+    expect(
+      screen.getByText(
+        "Showing top 40 of 100 results. Refine your search to see more.",
+      ),
+    ).not.toBeNull();
+  });
+
   it("keeps group headings for the idle list", () => {
     mocks.candidates = [SETTINGS, SLACK, SESSIONS];
     render(<CommandPalette />);
