@@ -1,4 +1,4 @@
-h1:5VdWt4uI+q0kZx5NdSEt2JLWoBpigu+o1LlHgb+Tuzs=
+h1:u8Sm6m+iZeN8IDhlJzMuDq8TPyUBxVh+KlhEKi2/goA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -543,3 +543,4 @@ h1:5VdWt4uI+q0kZx5NdSEt2JLWoBpigu+o1LlHgb+Tuzs=
 20261116122014_challenge-resolution-temporary-grant.sql h1:njROQQV1YS6taRcOznKeJKg+MDoEVyxQXDtfjTftW4w=
 20261116145951_command_search_prefix_indexes.sql h1:X8SclKw9E9VAeWOecjMqKBn9yxiPUiVzOQBRLneRAJ0=
 20261116152521_network-ingress-gateway-nodes.sql h1:GYKf326hFzfGH1KgKvxkmqZiUP/sgqRWuGUp2/s16MA=
+20261118091814_shadow-mcp-official-servers.sql h1:cJCC/XClYHjaIaC4Q8sjpY3j+kpH0n2jVJNXugZO4cU=
