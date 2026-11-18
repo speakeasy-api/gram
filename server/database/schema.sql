@@ -11319,19 +11319,19 @@ CREATE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_idx
 ON meta_mcp_server_members (meta_mcp_server_id, sort_order, created_at, id)
 WHERE deleted IS FALSE;
 
--- An administrator's choice about the official version of one Shadow MCP
--- server, keyed by the server's upstream URL. Without a row, the official
--- version is the project's MCP server that proxies to the same URL. A row
--- names a different server, or keeps direct connections to the upstream
--- working while the official version is tested.
+-- An administrator's link from one Shadow MCP server, keyed by its upstream
+-- URL, to the MCP server that is its official version. Only a row makes a
+-- server official: a project MCP server that proxies to the same URL is just
+-- a suggestion until it is linked. A row can also keep direct connections to
+-- the upstream working while the official version is tested.
 CREATE TABLE IF NOT EXISTS shadow_mcp_official_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   -- The Shadow MCP server's upstream URL in inventory form, without a
   -- trailing slash.
   server_url TEXT NOT NULL CHECK (server_url <> ''),
-  -- The MCP server chosen as the official version. NULL keeps the server
-  -- that proxies to server_url.
+  -- The MCP server chosen as the official version. NULL, or a deleted or
+  -- disabled server, reads as no link.
   mcp_server_id uuid,
   -- True keeps direct connections to server_url working after an official
   -- version exists, for example while it is tested.

@@ -35,6 +35,11 @@ WHERE c.project_id = @project_id
     AND c.server_url = @server_url
     AND c.deleted IS FALSE;
 
+-- name: LockShadowMCPOfficialServerURL :exec
+-- Serializes every write to one URL's choice, including the first, which has
+-- no row yet for LockShadowMCPOfficialServerChoice to lock.
+SELECT pg_advisory_xact_lock(hashtextextended('shadow_mcp_official_servers:' || (@project_id::uuid)::text || ':' || @server_url::text, 0));
+
 -- name: LockShadowMCPOfficialServerChoice :one
 -- The live choice row for one URL, locked for the update that replaces it.
 SELECT *

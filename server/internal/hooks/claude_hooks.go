@@ -1284,6 +1284,18 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// the list there is no server to match, and failing closed would block
 	// every MCP call in projects that never chose to block anything.
 	if cacheErr != nil && policy.ID == "" {
+		s.logger.With(
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(metadata.ProjectID),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+		).InfoContext(ctx, "allowing claude tool call: no cached MCP list under the built-in blocklist",
+			attr.SlogEvent("claude_hook_allowed_no_mcp_list"),
+			attr.SlogError(cacheErr),
+			attr.SlogRiskPolicyName(policy.Name),
+		)
 		if output != nil {
 			output.PermissionDecision = &allow
 		}
@@ -1549,6 +1561,12 @@ func (s *Service) recordShadowMCPBlockFinding(
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
 	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
+		return uuid.Nil, uuid.Nil, false
+	}
+	// The built-in blocklist has no policy row, so there is no risk result to
+	// attach the block to. The ClickHouse record and the durable block row
+	// still capture it.
+	if policy.ID == "" {
 		return uuid.Nil, uuid.Nil, false
 	}
 

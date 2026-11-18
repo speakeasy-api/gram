@@ -67,6 +67,12 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	q := shadowmcprepo.New(dbtx)
+	// The row lock below only holds an existing link. Concurrent first links
+	// would both read no link and audit no previous state, so serialize on
+	// the URL before reading.
+	if err := q.LockShadowMCPOfficialServerURL(ctx, shadowmcprepo.LockShadowMCPOfficialServerURLParams{ProjectID: projectID, ServerUrl: key}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock shadow mcp official server url").LogError(ctx, s.logger)
+	}
 	var before *audit.ShadowMCPOfficialServerSnapshot
 	choiceID := uuid.Nil
 	existing, err := q.LockShadowMCPOfficialServerChoice(ctx, shadowmcprepo.LockShadowMCPOfficialServerChoiceParams{ProjectID: projectID, ServerUrl: key})

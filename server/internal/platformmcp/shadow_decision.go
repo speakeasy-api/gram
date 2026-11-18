@@ -269,6 +269,14 @@ func mapShadowDecisionCoreError(err error) error {
 	if _, ok := errors.AsType[*ShadowDecisionError](err); ok {
 		return err
 	}
+	// The project's policy cannot express the requested audience. Rereading
+	// the review does not help, so name the decision that can be enforced.
+	if errors.Is(err, mcpapproval.ErrNarrowDenialUnderEveryoneBlockAll) {
+		return shadowDecisionInvalid("This project blocks servers by default for everyone, so a deny blocks the server for everyone. Deny without audience references.")
+	}
+	if errors.Is(err, mcpapproval.ErrNarrowApprovalUnderAllowAll) {
+		return shadowDecisionInvalid("This project allows servers by default, so an allow can only be for everyone. Allow with the Everyone reference, or switch the policy to block-by-default for per-role access.")
+	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		if shareable.Code == oops.CodeBadRequest || shareable.Code == oops.CodeInvalid {
 			return shadowDecisionInvalid("The Shadow MCP decision is no longer valid. Read the review again and retry.")

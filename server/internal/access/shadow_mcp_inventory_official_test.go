@@ -17,6 +17,8 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	shadowmcprepo "github.com/speakeasy-api/gram/server/internal/shadowmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t *testing.T) {
@@ -36,34 +38,9 @@ func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t 
 	})
 
 	// The project serves the same upstream URL through Speakeasy.
-	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
-		ID:            uuid.New(),
-		ProjectID:     *authCtx.ProjectID,
-		Name:          conv.ToPGText("Tracker"),
-		Slug:          conv.ToPGText("remote-" + uuid.NewString()),
-		TransportType: "streamable-http",
-		Url:           "https://github.example.com/mcp/",
-	})
-	require.NoError(t, err)
-	serverSlug := "tracker-" + uuid.NewString()
-	official, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                    uuid.New(),
-		ProjectID:             *authCtx.ProjectID,
-		Name:                  conv.ToPGText("Tracker (official)"),
-		Slug:                  conv.ToPGText(serverSlug),
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
-		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            "private",
-		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
+	official := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Tracker (official)", "https://github.example.com/mcp/", "private")
 	endpointSlug := "tracker-endpoint-" + uuid.NewString()
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
 		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:     uuid.NullUUID{UUID: official.ID, Valid: true},
@@ -103,7 +80,7 @@ func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t 
 	require.NotNil(t, server.OfficialServer)
 	require.Equal(t, official.ID.String(), server.OfficialServer.McpServerID)
 	require.Equal(t, "Tracker (official)", server.OfficialServer.Name)
-	require.Equal(t, serverSlug, conv.PtrValOr(server.OfficialServer.Slug, ""))
+	require.Equal(t, official.Slug.String, conv.PtrValOr(server.OfficialServer.Slug, ""))
 	require.Equal(t, "https://app.example.com/mcp/"+endpointSlug, conv.PtrValOr(server.OfficialServer.URL, ""))
 	require.Nil(t, server.OfficialServer.GatewayName)
 
@@ -145,7 +122,9 @@ func TestService_ReadShadowMCPInventoryTarget_NoOfficialServerByDefault(t *testi
 	require.Nil(t, server.OfficialServer)
 }
 
-func seedAccessOfficialServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, name string, remoteURL string, visibility string) uuid.UUID {
+// seedAccessOfficialServer creates a project MCP server in front of a remote
+// source at remoteURL, the way the dashboard makes a server official.
+func seedAccessOfficialServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, name string, remoteURL string, visibility string) mcpserversrepo.McpServer {
 	t.Helper()
 	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
 		ID:            uuid.New(),
@@ -172,7 +151,7 @@ func seedAccessOfficialServer(t *testing.T, ctx context.Context, ti *testInstanc
 		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	return server.ID
+	return server
 }
 
 func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T) {
@@ -182,7 +161,7 @@ func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T)
 	authCtx := testAccessAuthContext(t, ctx)
 	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
 
-	chosenID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Company Tools", "https://internal.example.com/mcp", "private")
+	chosenID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Company Tools", "https://internal.example.com/mcp", "private").ID
 	read := func() *gen.ShadowMCPInventoryServer {
 		server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -254,13 +233,65 @@ func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T)
 	require.Equal(t, int64(2), count)
 }
 
+// Two first links to one URL serialize on the URL: the second waits for the
+// first to commit and audits the link it replaces.
+func TestService_SetShadowMCPOfficialServer_ConcurrentFirstLinksAuditReplacedLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+	first := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "First", "https://first.example.com/mcp", "private")
+	second := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Second", "https://second.example.com/mcp", "private")
+	key := "https://github.example.com/mcp"
+
+	// The first writer holds the URL lock and has not saved its link yet.
+	holder, err := ti.conn.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	holderQueries := shadowmcprepo.New(holder)
+	require.NoError(t, holderQueries.LockShadowMCPOfficialServerURL(ctx, shadowmcprepo.LockShadowMCPOfficialServerURLParams{ProjectID: *authCtx.ProjectID, ServerUrl: key}))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+			SessionToken:      nil,
+			ProjectID:         authCtx.ProjectID.String(),
+			ServerURL:         key,
+			McpServerID:       new(second.ID.String()),
+			AllowDirectAccess: false,
+		})
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), 1)
+
+	_, err = holderQueries.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
+		ProjectID:         *authCtx.ProjectID,
+		ServerUrl:         key,
+		McpServerID:       uuid.NullUUID{UUID: first.ID, Valid: true},
+		AllowDirectAccess: false,
+		UserID:            pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	require.NoError(t, holder.Commit(ctx))
+	require.NoError(t, <-done)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	require.NoError(t, err)
+	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, first.ID.String(), before["mcp_server_id"], "the second link records the first as the link it replaced")
+	after, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, second.ID.String(), after["mcp_server_id"])
+}
+
 func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 
-	disabledID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Off", "https://off.example.com/mcp", "disabled")
+	disabledID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Off", "https://off.example.com/mcp", "disabled").ID
 	err := ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
 		SessionToken:      nil,
 		ProjectID:         authCtx.ProjectID.String(),
@@ -273,7 +304,7 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 	// A live server in another project of the same organization is not this
 	// project's to link.
 	otherProject := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
-	foreignID := seedAccessOfficialServer(t, ctx, ti, otherProject.ID, "Elsewhere", "https://elsewhere.example.com/mcp", "private")
+	foreignID := seedAccessOfficialServer(t, ctx, ti, otherProject.ID, "Elsewhere", "https://elsewhere.example.com/mcp", "private").ID
 	err = ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
 		SessionToken:      nil,
 		ProjectID:         authCtx.ProjectID.String(),
