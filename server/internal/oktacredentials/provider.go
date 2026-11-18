@@ -12,7 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
 
@@ -20,8 +22,13 @@ import (
 // Tx is only for verification, which already holds the connection lock and may
 // have an uncommitted replacement secret. Never open another transaction there.
 type Provider struct {
-	DB           *pgxpool.Pool
-	Tx           pgx.Tx
+	DB *pgxpool.Pool
+	Tx pgx.Tx
+
+	// Secrets opens the client secret through the lease's transaction, so it
+	// follows the organization's encryption transition state.
+	Secrets *clientsecrets.Secrets
+
 	ConnectionID uuid.UUID
 	// ObservedDPoP lets a verification caller retain binding evidence even if
 	// its credential replacement transaction subsequently rolls back.
@@ -32,6 +39,9 @@ func (p Provider) Acquire(ctx context.Context, cfg okta.Config) (okta.Credential
 	if cfg.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
 		return nil, errors.New("okta credential leases require client_secret_basic")
 	}
+	if p.Secrets == nil {
+		return nil, errors.New("okta credential leases require the client secret seam")
+	}
 	tx := p.Tx
 	owned := tx == nil
 	if owned {
@@ -41,7 +51,7 @@ func (p Provider) Acquire(ctx context.Context, cfg okta.Config) (okta.Credential
 			return nil, fmt.Errorf("begin okta credential transaction: %w", err)
 		}
 	}
-	l := &lease{tx: tx, owned: owned, connectionID: p.ConnectionID, org: cfg.OrganizationID, observed: p.ObservedDPoP, secret: "", required: false, clientID: cfg.ClientID}
+	l := &lease{tx: tx, owned: owned, connectionID: p.ConnectionID, org: cfg.OrganizationID, observed: p.ObservedDPoP, secrets: p.Secrets, secret: orgencryption.ErasedCopies(), required: false, clientID: cfg.ClientID}
 	success := false
 	defer func() {
 		if !success {
@@ -70,8 +80,8 @@ func (p Provider) Acquire(ctx context.Context, cfg okta.Config) (okta.Credential
 	if credential.ClientID != cfg.ClientID {
 		return nil, errors.New("okta client changed")
 	}
-	l.secret = credential.ClientSecretEncrypted.String
-	if cfg.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic && l.secret == "" {
+	l.secret = clientsecrets.Stored(credential.ClientSecretEncrypted, credential.ClientSecretOrgEncrypted)
+	if cfg.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic && !clientsecrets.Has(l.secret) {
 		return nil, errors.New("okta credential revoked")
 	}
 	l.required = rows.OktaIdentityProviderConnection.DpopRequired
@@ -102,12 +112,29 @@ type lease struct {
 	owned        bool
 	connectionID uuid.UUID
 	org          string
-	secret       string
+	secrets      *clientsecrets.Secrets
+	secret       orgencryption.Copies
 	required     bool
 }
 
-func (l *lease) EncryptedSecret() string { return l.secret }
-func (l *lease) RequireDPoP() bool       { return l.required }
+// ClientSecret opens the secret read under the lease, reading transition state
+// through the lease's own transaction, which already holds the connection
+// lock.
+func (l *lease) ClientSecret(ctx context.Context) (string, error) {
+	owner := clientsecrets.OwnerOf(conv.ToPGText(l.org), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	secret, err := l.secrets.Open(ctx, l.tx, owner, l.secret)
+	switch {
+	case clientsecrets.IsUnreadable(err):
+		return "", fmt.Errorf("%w: %w", okta.ErrClientSecretUndecryptable, err)
+	case clientsecrets.IsKeyProblem(err):
+		return "", fmt.Errorf("%w: %w", okta.ErrClientSecretKeyUnavailable, err)
+	case err != nil:
+		return "", fmt.Errorf("open okta client secret: %w", err)
+	}
+	return secret, nil
+}
+
+func (l *lease) RequireDPoP() bool { return l.required }
 func (l *lease) Close() {
 	if l.owned {
 		_ = l.tx.Rollback(context.Background())

@@ -129,7 +129,7 @@ func TestDuplicateClient_CopiesConfigurationAndSecret(t *testing.T) {
 
 	stored := storedOrganizationClient(t, ctx, ti, duplicate.ID)
 	require.True(t, stored.ClientSecretEncrypted.Valid)
-	require.Equal(t, source.ClientSecretEncrypted, stored.ClientSecretEncrypted, "the copy reuses the stored secret")
+	require.Equal(t, decryptTestSecret(t, source.ClientSecretEncrypted.String), decryptTestSecret(t, stored.ClientSecretEncrypted.String), "the copy reuses the stored secret, sealed again for its own row")
 	require.Equal(t, source.ClientIDIssuedAt, stored.ClientIDIssuedAt)
 	require.Equal(t, source.CallbackBaseUrl, stored.CallbackBaseUrl)
 	require.Equal(t, source.LegacyCallbackUrl, stored.LegacyCallbackUrl)
@@ -357,7 +357,7 @@ func TestDuplicateClient_SelfClient(t *testing.T) {
 	require.NotNil(t, duplicate.TokenEndpointAuthMethod)
 	require.Equal(t, oauthwire.AuthMethodClientSecretPost, *duplicate.TokenEndpointAuthMethod)
 	require.Nil(t, duplicate.CallbackURL)
-	require.Equal(t, storedOrganizationClient(t, ctx, ti, source.ID).ClientSecretEncrypted, storedOrganizationClient(t, ctx, ti, duplicate.ID).ClientSecretEncrypted)
+	require.Equal(t, "tenant-secret", decryptTestSecret(t, storedOrganizationClient(t, ctx, ti, duplicate.ID).ClientSecretEncrypted.String))
 
 	payload := newDuplicateClientPayload(source.ID)
 	payload.ClientID = new("registered-self-client")

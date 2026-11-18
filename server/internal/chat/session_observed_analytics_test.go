@@ -1,4 +1,4 @@
-package telemetry_test
+package chat_test
 
 import (
 	"context"
@@ -9,20 +9,37 @@ import (
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
+// TestImportedSessionObservationReachesUserAndSessionAnalytics checks that an
+// imported transcript written through the chat message writer reaches the
+// telemetry user and session analytics once the SessionObserved outbox rows are
+// delivered, even when storage and delivery are both retried.
 func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestLogsService(t)
-	projectID := uuid.MustParse(ti.projectID)
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	logger := testenv.NewLogger(t)
+	logsEnabled := func(context.Context, string) (bool, error) { return true, nil }
+	toolIOLogsDisabled := func(context.Context, string) (bool, error) { return false, nil }
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, logsEnabled, toolIOLogsDisabled, telemetry.NewUserInfoResolver(logger, ti.conn, cache.NoopCache), telemetry.NewNoopLogPublisher(logger))
+	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	telemService := telemetry.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.chConn, ti.chConn, nil, nil, logsEnabled, logsEnabled, nil, authzEngine)
+	chClient := repo.New(ti.chConn)
+	projectID := ti.projectID
 	now := time.Now().UTC().Add(-time.Minute)
 	upserted, err := chatrepo.New(ti.conn).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID: uuid.New(), ProjectID: projectID, OrganizationID: ti.orgID,
@@ -32,7 +49,7 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	})
 	require.NoError(t, err)
 	chatID := upserted.ID
-	writer, shutdown := chat.NewChatMessageWriter(ti.logger, ti.conn, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(logger, ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 	var write chat.ExternalMessageWrite
 	write.Params.ChatID = chatID
@@ -69,34 +86,34 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	require.Len(t, stored, 1)
 	require.Equal(t, "imported-user", stored[0].UserID, "empty message actor must not mask current chat ownership")
 	require.Equal(t, "person@example.test", stored[0].UserEmail, "opaque external user IDs must not become email addresses")
-	handler := telemetry.NewSessionObservedHandler(ti.conn, ti.telemLogger)
+	handler := telemetry.NewSessionObservedHandler(ti.conn, telemLogger)
 	for range 2 {
 		require.NoError(t, handler.HandleBatch(ctx, observations, nil))
 	}
-	metrics, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+	metrics, err := telemService.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
 		UserID: new("imported-user"), From: now.Add(-time.Hour).Format(time.RFC3339), To: now.Add(time.Hour).Format(time.RFC3339),
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, metrics.Metrics.TotalChats)
 	require.Zero(t, metrics.Metrics.TotalTokens)
 	require.Zero(t, metrics.Metrics.TotalToolCalls)
-	aggregates, err := ti.chClient.QueryAttributeMetricsTable(ctx, repo.AttributeMetricsQueryParams{
-		ProjectIDs: []string{ti.projectID}, TimeStart: now.Add(-time.Hour).UnixNano(), TimeEnd: now.Add(time.Hour).UnixNano(), SortBy: "total_chats",
+	aggregates, err := chClient.QueryAttributeMetricsTable(ctx, repo.AttributeMetricsQueryParams{
+		ProjectIDs: []string{projectID.String()}, TimeStart: now.Add(-time.Hour).UnixNano(), TimeEnd: now.Add(time.Hour).UnixNano(), SortBy: "total_chats",
 	})
 	require.NoError(t, err)
 	require.Len(t, aggregates, 1)
 	require.EqualValues(t, 1, aggregates[0].TotalChats)
 	require.Zero(t, aggregates[0].TotalCost)
 	var observedLogs uint64
-	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT count() FROM telemetry_logs WHERE gram_project_id = ? AND toString(attributes.gram.hook.event) = 'session.observed' AND user_email = ?`, ti.projectID, "person@example.test").Scan(&observedLogs))
+	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT count() FROM telemetry_logs WHERE gram_project_id = ? AND toString(attributes.gram.hook.event) = 'session.observed' AND user_email = ?`, projectID.String(), "person@example.test").Scan(&observedLogs))
 	require.Positive(t, observedLogs, "observations must carry an event marker and current stored email")
 	var sessions, records uint64
-	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT uniqExact(session_id), uniqExact(record_id) FROM agent_events WHERE organization_id = ? AND project_id = ?`, ti.orgID, ti.projectID).Scan(&sessions, &records))
+	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT uniqExact(session_id), uniqExact(record_id) FROM agent_events WHERE organization_id = ? AND project_id = ?`, ti.orgID, projectID.String()).Scan(&sessions, &records))
 	require.EqualValues(t, 1, sessions)
 	require.EqualValues(t, 1, records)
 	for _, window := range []time.Duration{time.Hour, repo.SessionSummaryMinWindow + 24*time.Hour} {
-		sessions, err := ti.chClient.ListSessions(ctx, repo.ListSessionsParams{
-			ProjectIDs: []string{ti.projectID}, TimeStart: now.Add(-window).UnixNano(), TimeEnd: now.Add(time.Hour).UnixNano(), SortBy: "message_count", Limit: 10,
+		sessions, err := chClient.ListSessions(ctx, repo.ListSessionsParams{
+			ProjectIDs: []string{projectID.String()}, TimeStart: now.Add(-window).UnixNano(), TimeEnd: now.Add(time.Hour).UnixNano(), SortBy: "message_count", Limit: 10,
 		})
 		require.NoError(t, err)
 		require.Len(t, sessions, 1)

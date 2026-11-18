@@ -13,10 +13,12 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -120,15 +122,15 @@ func (m *ChallengeManager) LoadClientTokenEndpoint(ctx context.Context, clientID
 	if err != nil {
 		return nil, fmt.Errorf("read client token endpoint: %w", err)
 	}
-	return m.clientTokenEndpoint(client)
+	return m.clientTokenEndpoint(ctx, client)
 }
 
-func (m *ChallengeManager) clientTokenEndpoint(client repo.GetRemoteSessionClientWithIssuerByIDRow) (*TokenEndpoint, error) {
-	return m.BindTokenEndpoint(TokenEndpointRegistration{
+func (m *ChallengeManager) clientTokenEndpoint(ctx context.Context, client repo.GetRemoteSessionClientWithIssuerByIDRow) (*TokenEndpoint, error) {
+	return m.BindTokenEndpoint(ctx, TokenEndpointRegistration{
 		ClientID:                        client.ClientID,
 		OrganizationID:                  client.ClientOrganizationID.String,
 		ExternalClientID:                client.ExternalClientID,
-		ClientSecretEncrypted:           client.ClientSecretEncrypted.String,
+		ClientSecret:                    clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted),
 		TokenEndpointAuthMethod:         client.TokenEndpointAuthMethod.String,
 		TokenEndpointAuthAudienceFormat: client.TokenEndpointAuthAudienceFormat.String,
 		JSONWebKeySetID:                 client.JsonWebKeySetID,
@@ -141,18 +143,24 @@ func (m *ChallengeManager) clientTokenEndpoint(client repo.GetRemoteSessionClien
 }
 
 // BindTokenEndpoint binds a stored registration to its issuer's token endpoint.
-// A registration that cannot authenticate is ErrTokenEndpointConfiguration.
-func (m *ChallengeManager) BindTokenEndpoint(reg TokenEndpointRegistration) (*TokenEndpoint, error) {
+// A registration that cannot authenticate, including one whose stored secret
+// does not decrypt, is ErrTokenEndpointConfiguration. A secret that cannot be
+// opened right now, such as when the organization's key is unavailable, is a
+// retryable error, never ErrTokenEndpointConfiguration.
+func (m *ChallengeManager) BindTokenEndpoint(ctx context.Context, reg TokenEndpointRegistration) (*TokenEndpoint, error) {
 	if reg.TokenEndpoint == "" {
 		return nil, ErrTokenEndpointConfiguration
 	}
 
 	secret := ""
-	if reg.ClientSecretEncrypted != "" && reg.TokenEndpointAuthMethod != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+	if clientsecrets.Has(reg.ClientSecret) && reg.TokenEndpointAuthMethod != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		var err error
-		secret, err = m.enc.Decrypt(reg.ClientSecretEncrypted)
-		if err != nil {
+		secret, err = m.secrets.Open(ctx, nil, clientsecrets.OwnerOf(conv.ToPGTextEmpty(reg.OrganizationID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}), reg.ClientSecret)
+		switch {
+		case clientsecrets.IsUnreadable(err):
 			return nil, ErrTokenEndpointConfiguration
+		case err != nil:
+			return nil, fmt.Errorf("open client secret: %w", err)
 		}
 	}
 

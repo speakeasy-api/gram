@@ -27,6 +27,12 @@ const state = vi.hoisted(() => ({
   listServers: vi.fn(),
   verifyResult: vi.fn(),
 }));
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
+}));
 vi.mock("@/pages/mcp/gateway/useGatewayCreation", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@/pages/mcp/gateway/useGatewayCreation")

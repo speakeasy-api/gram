@@ -127,6 +127,10 @@ type ProductFeatures struct {
 	// an organization entitlement: false when the deployment runs with the
 	// disabled assistant runtime provider. Absent from staff admin responses.
 	AssistantsAvailable *bool
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool
 	// Whether upstream auth enforcement is on for the organization. Absent when
 	// the state could not be read. Staff change it through the admin enforcement
 	// endpoint.
@@ -224,6 +228,7 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	res := &ProductFeatures{
 		ProviderSetupEnabled: vres.ProviderSetupEnabled,
 		AssistantsAvailable:  vres.AssistantsAvailable,
+		FunctionsAvailable:   vres.FunctionsAvailable,
 		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
 	}
 	if vres.LogsEnabled != nil {
@@ -323,6 +328,7 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 		AssistantsAvailable:                     res.AssistantsAvailable,
+		FunctionsAvailable:                      res.FunctionsAvailable,
 		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return vres

@@ -337,7 +337,8 @@ PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
 ## Speakeasy Functions runner settings ##
 ####################################
 ## Where to deploy functions.
-## Allowed values: local, flyio.
+## Allowed values: local, flyio, disabled. With disabled, Functions are turned
+## off and no Fly.io or Tigris settings are needed.
 GRAM_FUNCTIONS_PROVIDER = "local"
 GRAM_FUNCTIONS_RUNNER_OCI_IMAGE = "gram-runner"
 ## By default, the runner version is inferred from the version of the
