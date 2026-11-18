@@ -15,6 +15,7 @@ import (
 const averageEndedSessionSeconds = `-- name: AverageEndedSessionSeconds :one
 WITH endpoints AS (
   SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         endpoint.created_at AS live_from,
          LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
@@ -47,11 +48,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $3::text
                        AND client.project_id <> $5)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $5 AND endpoint.gone_at > session.created_at
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $5 AND endpoint.gone_at > session.created_at
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
@@ -108,6 +109,7 @@ WITH days AS (
 ),
 endpoints AS (
   SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         endpoint.created_at AS live_from,
          LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
@@ -135,11 +137,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $4::text
                        AND client.project_id <> $6)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $6 AND endpoint.gone_at > session.created_at
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $6 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $6 AND endpoint.gone_at > session.created_at
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $6 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
@@ -212,6 +214,7 @@ func (q *Queries) CountActiveSessionsByDay(ctx context.Context, arg CountActiveS
 const countActiveSessionsNow = `-- name: CountActiveSessionsNow :one
 WITH endpoints AS (
   SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         endpoint.created_at AS live_from,
          LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
@@ -239,11 +242,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $1::text
                        AND client.project_id <> $3)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $3 AND endpoint.gone_at > session.created_at
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $3 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $3 AND endpoint.gone_at > session.created_at
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $3 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
