@@ -240,7 +240,8 @@ describe("Plugins index authorization", () => {
           createPluginForm: {
             name: "Example plugin",
             description: undefined,
-            autoSyncEnabled: true,
+            autoSyncEnabled: false,
+            autoAddServersEnabled: false,
           },
         },
       }),
@@ -251,24 +252,37 @@ describe("Plugins index authorization", () => {
     expect(state.settings).not.toHaveBeenCalled();
     expect(state.settingsRead).not.toHaveBeenCalled();
   });
-  it("creates a plugin with auto sync off when the switch is turned off", () => {
+  it("keeps both automatic settings off and collapsed under Advanced settings", () => {
     render(page());
     fireEvent.click(screen.getByRole("button", { name: "Create plugin" }));
-    const toggle = screen.getByRole("switch", {
+    expect(
+      screen.queryByRole("switch", { name: "Sync changes automatically" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("switch", { name: "Add MCP servers automatically" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced settings" }));
+    const autoSync = screen.getByRole("switch", {
       name: "Sync changes automatically",
     });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(toggle);
+    const autoAdd = screen.getByRole("switch", {
+      name: "Add MCP servers automatically",
+    });
+    expect(autoSync.getAttribute("aria-checked")).toBe("false");
+    expect(autoAdd.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(autoSync);
+    fireEvent.click(autoAdd);
     fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "Staged plugin" },
+      target: { value: "Automatic plugin" },
     });
     fireEvent.submit(screen.getByLabelText("Name").closest("form")!);
     expect(state.create).toHaveBeenCalledWith(
       expect.objectContaining({
         request: {
           createPluginForm: expect.objectContaining({
-            name: "Staged plugin",
-            autoSyncEnabled: false,
+            name: "Automatic plugin",
+            autoSyncEnabled: true,
+            autoAddServersEnabled: true,
           }),
         },
       }),
