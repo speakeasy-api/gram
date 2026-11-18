@@ -115,17 +115,17 @@ func (f AttemptFilter) where() (string, []any, error) {
 	}
 	if !f.PeopleFailingFrom.IsZero() {
 		conds = append(conds, `(organization_id, subject_urn) IN (
-		SELECT organization_id, subject_urn FROM `+eventsTable+`
+		SELECT organization_id, subject_urn FROM `+EventsTable+`
 		WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 			AND subject_urn != ''
 			AND attempt_id IN (
-				SELECT attempt_id FROM `+eventsTable+`
+				SELECT attempt_id FROM `+EventsTable+`
 				WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?) AND reason != ''))`)
 		from, before := f.PeopleFailingFrom.UnixNano(), f.PeopleFailingBefore.UnixNano()
 		args = append(args, from, before, from, before)
 		// A row without the person still belongs to the attempt, so select whole attempts.
 		inner := strings.Join(conds, " AND ")
-		return `attempt_id IN (SELECT attempt_id FROM ` + eventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
+		return `attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
 	}
 	return strings.Join(conds, " AND "), args, nil
 }
@@ -140,7 +140,7 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 	if filter.FixCandidatesOnly {
 		having = ` HAVING (has_final AND (final_outcome = '` + string(OutcomeConnected) + `' OR final_reason != '')) OR (NOT has_final AND last_reason != '')`
 	}
-	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+eventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
+	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+EventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
 	if err != nil {
 		return fmt.Errorf("query attempts: %w", err)
 	}

@@ -27,7 +27,7 @@ import (
 
 func testConfig() config {
 	return config{
-		table:         eventsTable,
+		table:         EventsTable,
 		queueSize:     64,
 		maxBatch:      8,
 		flushInterval: 10 * time.Millisecond,

@@ -325,7 +325,7 @@ func providerAttemptsQuery(filter string) string {
 	SELECT` + attemptEndingColumns + `,
 		toBool(countIf(step = 'provider_sign_in' AND step_result = 'signed_in') > 0
 			AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop
-	FROM ` + eventsTable + `
+	FROM ` + EventsTable + `
 	WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND NOT has(?, organization_id)
 	GROUP BY organization_id, attempt_id
