@@ -1314,18 +1314,20 @@ type ConnectionAttemptRowResponseBody struct {
 	// Earliest attempt start in the row.
 	FirstStartedAt *string `form:"first_started_at,omitempty" json:"first_started_at,omitempty" xml:"first_started_at,omitempty"`
 	// Attempts this row stands for.
-	Count   *int64                         `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
-	Outcome *string                        `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
-	Step    *string                        `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
-	Reason  *string                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Message *string                        `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	Source  *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
-	Person  *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
-	Network *ConnectionNetworkResponseBody `form:"network,omitempty" json:"network,omitempty" xml:"network,omitempty"`
-	App     *ConnectionAppResponseBody     `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
-	Server  *ConnectionServerResponseBody  `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
-	Member  *ConnectionServerResponseBody  `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
-	Service *string                        `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
+	Count   *int64  `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	Step    *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+	Reason  *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string                        `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
+	Source           *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	Person           *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
+	Network          *ConnectionNetworkResponseBody `form:"network,omitempty" json:"network,omitempty" xml:"network,omitempty"`
+	App              *ConnectionAppResponseBody     `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
+	Server           *ConnectionServerResponseBody  `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
+	Member           *ConnectionServerResponseBody  `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	Service          *string                        `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
 }
 
 // ConnectionPersonResponseBody is used to define fields on response body types.
@@ -1403,32 +1405,36 @@ type ConnectionAttemptDetailResponseBody struct {
 	// Earliest attempt start in the row.
 	FirstStartedAt *string `form:"first_started_at,omitempty" json:"first_started_at,omitempty" xml:"first_started_at,omitempty"`
 	// Attempts this row stands for.
-	Count   *int64                         `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
-	Outcome *string                        `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
-	Step    *string                        `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
-	Reason  *string                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Message *string                        `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	Source  *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
-	Person  *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
-	Network *ConnectionNetworkResponseBody `form:"network,omitempty" json:"network,omitempty" xml:"network,omitempty"`
-	App     *ConnectionAppResponseBody     `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
-	Server  *ConnectionServerResponseBody  `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
-	Member  *ConnectionServerResponseBody  `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
-	Service *string                        `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
+	Count   *int64  `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	Step    *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+	Reason  *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string                        `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
+	Source           *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	Person           *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
+	Network          *ConnectionNetworkResponseBody `form:"network,omitempty" json:"network,omitempty" xml:"network,omitempty"`
+	App              *ConnectionAppResponseBody     `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
+	Server           *ConnectionServerResponseBody  `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
+	Member           *ConnectionServerResponseBody  `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	Service          *string                        `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
 }
 
 // ConnectionAttemptStepResponseBody is used to define fields on response body
 // types.
 type ConnectionAttemptStepResponseBody struct {
-	At         *string                       `form:"at,omitempty" json:"at,omitempty" xml:"at,omitempty"`
-	Step       *string                       `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
-	StoredStep *string                       `form:"stored_step,omitempty" json:"stored_step,omitempty" xml:"stored_step,omitempty"`
-	Result     *string                       `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
-	Final      *bool                         `form:"final,omitempty" json:"final,omitempty" xml:"final,omitempty"`
-	Reason     *string                       `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Message    *string                       `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	Member     *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
-	Service    *string                       `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
+	At         *string `form:"at,omitempty" json:"at,omitempty" xml:"at,omitempty"`
+	Step       *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+	StoredStep *string `form:"stored_step,omitempty" json:"stored_step,omitempty" xml:"stored_step,omitempty"`
+	Result     *string `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
+	Final      *bool   `form:"final,omitempty" json:"final,omitempty" xml:"final,omitempty"`
+	Reason     *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Message    *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string                       `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
+	Member           *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	Service          *string                       `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
 }
 
 // ConnectionAttemptContextResponseBody is used to define fields on response
@@ -1465,13 +1471,15 @@ type ConnectionSessionDayResponseBody struct {
 // ConnectionDeniedClientResponseBody is used to define fields on response body
 // types.
 type ConnectionDeniedClientResponseBody struct {
-	App      *ConnectionAppResponseBody `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
-	Reason   *string                    `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Message  *string                    `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	Attempts *int64                     `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
-	People   *int64                     `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`
-	Networks *int64                     `form:"networks,omitempty" json:"networks,omitempty" xml:"networks,omitempty"`
-	LastAt   *string                    `form:"last_at,omitempty" json:"last_at,omitempty" xml:"last_at,omitempty"`
+	App     *ConnectionAppResponseBody `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
+	Reason  *string                    `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Message *string                    `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
+	Attempts         *int64  `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
+	People           *int64  `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`
+	Networks         *int64  `form:"networks,omitempty" json:"networks,omitempty" xml:"networks,omitempty"`
+	LastAt           *string `form:"last_at,omitempty" json:"last_at,omitempty" xml:"last_at,omitempty"`
 }
 
 // NewListAttemptsRequestBody builds the HTTP request body from the payload of
@@ -2656,8 +2664,8 @@ func ValidateGetSignInSummaryResponseBody(body *GetSignInSummaryResponseBody) (e
 		}
 	}
 	if body.Bucket != nil {
-		if !(*body.Bucket == "hour" || *body.Bucket == "day") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.bucket", *body.Bucket, []any{"hour", "day"}))
+		if !(*body.Bucket == "hour" || *body.Bucket == "six_hours" || *body.Bucket == "day") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.bucket", *body.Bucket, []any{"hour", "six_hours", "day"}))
 		}
 	}
 	for _, e := range body.Buckets {
@@ -4243,8 +4251,8 @@ func ValidateConnectionAttemptRowResponseBody(body *ConnectionAttemptRowResponse
 		}
 	}
 	if body.Source != nil {
-		if !(*body.Source == "service" || *body.Source == "app" || *body.Source == "identity_provider" || *body.Source == "speakeasy_setting" || *body.Source == "speakeasy") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"service", "app", "identity_provider", "speakeasy_setting", "speakeasy"}))
+		if !(*body.Source == "service" || *body.Source == "server" || *body.Source == "app" || *body.Source == "identity_provider" || *body.Source == "speakeasy_setting" || *body.Source == "speakeasy") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"service", "server", "app", "identity_provider", "speakeasy_setting", "speakeasy"}))
 		}
 	}
 	if body.Person != nil {
@@ -4516,8 +4524,8 @@ func ValidateConnectionAttemptDetailResponseBody(body *ConnectionAttemptDetailRe
 		}
 	}
 	if body.Source != nil {
-		if !(*body.Source == "service" || *body.Source == "app" || *body.Source == "identity_provider" || *body.Source == "speakeasy_setting" || *body.Source == "speakeasy") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"service", "app", "identity_provider", "speakeasy_setting", "speakeasy"}))
+		if !(*body.Source == "service" || *body.Source == "server" || *body.Source == "app" || *body.Source == "identity_provider" || *body.Source == "speakeasy_setting" || *body.Source == "speakeasy") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"service", "server", "app", "identity_provider", "speakeasy_setting", "speakeasy"}))
 		}
 	}
 	if body.Person != nil {

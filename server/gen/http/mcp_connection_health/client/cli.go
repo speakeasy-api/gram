@@ -199,11 +199,11 @@ func BuildGetSignInSummaryPayload(mcpConnectionHealthGetSignInSummaryBody string
 	{
 		err = json.Unmarshal([]byte(mcpConnectionHealthGetSignInSummaryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"bucket\": \"day\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"bucket\": \"six_hours\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		if body.Bucket != nil {
-			if !(*body.Bucket == "hour" || *body.Bucket == "day") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.bucket", *body.Bucket, []any{"hour", "day"}))
+			if !(*body.Bucket == "hour" || *body.Bucket == "six_hours" || *body.Bucket == "day") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.bucket", *body.Bucket, []any{"hour", "six_hours", "day"}))
 			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))

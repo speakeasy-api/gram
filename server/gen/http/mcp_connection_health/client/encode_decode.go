@@ -1626,15 +1626,16 @@ func unmarshalConnectionAttemptRowResponseBodyToMcpconnectionhealthConnectionAtt
 		return nil
 	}
 	res := &mcpconnectionhealth.ConnectionAttemptRow{
-		ID:             *v.ID,
-		Time:           *v.Time,
-		FirstStartedAt: *v.FirstStartedAt,
-		Count:          *v.Count,
-		Outcome:        mcpconnectionhealth.ConnectionOutcome(*v.Outcome),
-		Step:           mcpconnectionhealth.ConnectionStepGroup(*v.Step),
-		Reason:         v.Reason,
-		Message:        v.Message,
-		Service:        v.Service,
+		ID:               *v.ID,
+		Time:             *v.Time,
+		FirstStartedAt:   *v.FirstStartedAt,
+		Count:            *v.Count,
+		Outcome:          mcpconnectionhealth.ConnectionOutcome(*v.Outcome),
+		Step:             mcpconnectionhealth.ConnectionStepGroup(*v.Step),
+		Reason:           v.Reason,
+		Message:          v.Message,
+		TechnicalMessage: v.TechnicalMessage,
+		Service:          v.Service,
 	}
 	if v.Source != nil {
 		source := mcpconnectionhealth.ConnectionFailureSource(*v.Source)
@@ -1844,6 +1845,7 @@ func unmarshalConnectionAttemptDetailResponseBodyToMcpconnectionhealthConnection
 		Step:                mcpconnectionhealth.ConnectionStepGroup(*v.Step),
 		Reason:              v.Reason,
 		Message:             v.Message,
+		TechnicalMessage:    v.TechnicalMessage,
 		Service:             v.Service,
 	}
 	if v.Source != nil {
@@ -1881,14 +1883,15 @@ func unmarshalConnectionAttemptDetailResponseBodyToMcpconnectionhealthConnection
 // value of type *ConnectionAttemptStepResponseBody.
 func unmarshalConnectionAttemptStepResponseBodyToMcpconnectionhealthConnectionAttemptStep(v *ConnectionAttemptStepResponseBody) *mcpconnectionhealth.ConnectionAttemptStep {
 	res := &mcpconnectionhealth.ConnectionAttemptStep{
-		At:         *v.At,
-		Step:       mcpconnectionhealth.ConnectionStepGroup(*v.Step),
-		StoredStep: *v.StoredStep,
-		Result:     *v.Result,
-		Final:      *v.Final,
-		Reason:     v.Reason,
-		Message:    v.Message,
-		Service:    v.Service,
+		At:               *v.At,
+		Step:             mcpconnectionhealth.ConnectionStepGroup(*v.Step),
+		StoredStep:       *v.StoredStep,
+		Result:           *v.Result,
+		Final:            *v.Final,
+		Reason:           v.Reason,
+		Message:          v.Message,
+		TechnicalMessage: v.TechnicalMessage,
+		Service:          v.Service,
 	}
 	if v.Member != nil {
 		res.Member = unmarshalConnectionServerResponseBodyToMcpconnectionhealthConnectionServer(v.Member)
@@ -1958,12 +1961,13 @@ func unmarshalConnectionDeniedClientResponseBodyToMcpconnectionhealthConnectionD
 		return nil
 	}
 	res := &mcpconnectionhealth.ConnectionDeniedClient{
-		Reason:   *v.Reason,
-		Message:  *v.Message,
-		Attempts: *v.Attempts,
-		People:   *v.People,
-		Networks: *v.Networks,
-		LastAt:   *v.LastAt,
+		Reason:           *v.Reason,
+		Message:          *v.Message,
+		TechnicalMessage: v.TechnicalMessage,
+		Attempts:         *v.Attempts,
+		People:           *v.People,
+		Networks:         *v.Networks,
+		LastAt:           *v.LastAt,
 	}
 	res.App = unmarshalConnectionAppResponseBodyToMcpconnectionhealthConnectionApp(v.App)
 

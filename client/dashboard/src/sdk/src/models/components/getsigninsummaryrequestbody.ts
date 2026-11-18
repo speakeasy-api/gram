@@ -11,6 +11,7 @@ import { ClosedEnum } from "../../types/enums.js";
  */
 export const Bucket = {
   Hour: "hour",
+  SixHours: "six_hours",
   Day: "day",
 } as const;
 /**

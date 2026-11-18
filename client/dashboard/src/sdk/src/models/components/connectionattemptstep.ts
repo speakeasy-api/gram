@@ -47,6 +47,10 @@ export type ConnectionAttemptStep = {
    */
   connectionStepGroup: ConnectionAttemptStepConnectionStepGroup;
   storedStep: string;
+  /**
+   * Reserved: a sentence for administrators about the reason. Not returned yet.
+   */
+  technicalMessage?: string | undefined;
 };
 
 /** @internal */
@@ -69,11 +73,13 @@ export const ConnectionAttemptStep$inboundSchema: z.ZodMiniType<
     service: z.optional(z.string()),
     step: ConnectionAttemptStepConnectionStepGroup$inboundSchema,
     stored_step: z.string(),
+    technical_message: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "step": "connectionStepGroup",
       "stored_step": "storedStep",
+      "technical_message": "technicalMessage",
     });
   }),
 );

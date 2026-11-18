@@ -52,6 +52,7 @@ export type ConnectionOutcome = OpenEnum<typeof ConnectionOutcome>;
  */
 export const ConnectionFailureSource = {
   Service: "service",
+  Server: "server",
   App: "app",
   IdentityProvider: "identity_provider",
   SpeakeasySetting: "speakeasy_setting",
@@ -117,6 +118,10 @@ export type ConnectionAttemptDetail = {
   connectionStepGroup: ConnectionStepGroup;
   steps: Array<ConnectionAttemptStep>;
   /**
+   * Reserved: a sentence for administrators about the reason. Not returned yet.
+   */
+  technicalMessage?: string | undefined;
+  /**
    * When the newest attempt ended or last moved.
    */
   time: Date;
@@ -171,6 +176,7 @@ export const ConnectionAttemptDetail$inboundSchema: z.ZodMiniType<
     ),
     step: ConnectionStepGroup$inboundSchema,
     steps: z.array(ConnectionAttemptStep$inboundSchema),
+    technical_message: z.optional(z.string()),
     time: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -185,6 +191,7 @@ export const ConnectionAttemptDetail$inboundSchema: z.ZodMiniType<
       "source": "connectionFailureSource",
       "started_at": "startedAt",
       "step": "connectionStepGroup",
+      "technical_message": "technicalMessage",
       "trace_id": "traceId",
       "user_session_issuer_id": "userSessionIssuerId",
     });

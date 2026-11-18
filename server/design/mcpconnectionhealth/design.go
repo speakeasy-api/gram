@@ -21,7 +21,7 @@ var StepGroup = Type("ConnectionStepGroup", String, func() {
 
 var FailureSource = Type("ConnectionFailureSource", String, func() {
 	Description("The party that returned a failure.")
-	Enum("service", "app", "identity_provider", "speakeasy_setting", "speakeasy")
+	Enum("service", "server", "app", "identity_provider", "speakeasy_setting", "speakeasy")
 	Meta("openapi:extension:x-speakeasy-name-override", "ConnectionFailureSource")
 })
 
@@ -115,7 +115,7 @@ var _ = Service("mcpConnectionHealth", func() {
 		Payload(func() {
 			Extend(RangeQuery)
 			Attribute("bucket", String, "Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.", func() {
-				Enum("hour", "day")
+				Enum("hour", "six_hours", "day")
 			})
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -252,6 +252,7 @@ var AttemptRow = Type("ConnectionAttemptRow", func() {
 	Attribute("step", StepGroup)
 	Attribute("reason", String)
 	Attribute("message", String)
+	Attribute("technical_message", String, "Reserved: a sentence for administrators about the reason. Not returned yet.")
 	Attribute("source", FailureSource)
 	Attribute("person", Person)
 	Attribute("network", Network)
@@ -270,6 +271,7 @@ var AttemptStep = Type("ConnectionAttemptStep", func() {
 	Attribute("final", Boolean)
 	Attribute("reason", String)
 	Attribute("message", String)
+	Attribute("technical_message", String, "Reserved: a sentence for administrators about the reason. Not returned yet.")
 	Attribute("member", ServerRef)
 	Attribute("service", String)
 	Required("at", "step", "stored_step", "result", "final")
@@ -355,7 +357,7 @@ var SignInBucket = Type("ConnectionSignInBucket", func() {
 
 var SignInSummaryResult = Type("ConnectionSignInSummaryResult", func() {
 	loggingEnabled()
-	Attribute("bucket", String, func() { Enum("hour", "day") })
+	Attribute("bucket", String, func() { Enum("hour", "six_hours", "day") })
 	Attribute("buckets", ArrayOf(SignInBucket))
 	Required("logging_enabled", "viewer_scope")
 })
@@ -378,6 +380,7 @@ var DeniedClient = Type("ConnectionDeniedClient", func() {
 	Attribute("app", App)
 	Attribute("reason", String)
 	Attribute("message", String)
+	Attribute("technical_message", String, "Reserved: a sentence for administrators about the reason. Not returned yet.")
 	Attribute("attempts", Int64)
 	Attribute("people", Int64)
 	Attribute("networks", Int64)

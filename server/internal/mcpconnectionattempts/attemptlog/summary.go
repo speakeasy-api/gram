@@ -14,9 +14,24 @@ import (
 type Bucket string
 
 const (
-	BucketHour Bucket = "hour"
-	BucketDay  Bucket = "day"
+	BucketHour     Bucket = "hour"
+	BucketSixHours Bucket = "six_hours"
+	BucketDay      Bucket = "day"
 )
+
+// width is the bucket's length. Buckets start on UTC boundaries of it.
+func (b Bucket) width() time.Duration {
+	switch b {
+	case BucketSixHours:
+		return 6 * time.Hour
+	case BucketDay:
+		return 24 * time.Hour
+	case BucketHour:
+		return time.Hour
+	default:
+		return time.Hour
+	}
+}
 
 // hourlyRangeLimit is the longest range that defaults to hourly buckets: two days of hours fit a chart.
 const hourlyRangeLimit = 48 * time.Hour
@@ -53,10 +68,8 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 	if err != nil {
 		return nil, err
 	}
-	startOf := "toStartOfHour(a_started)"
-	if bucket == BucketDay {
-		startOf = "toStartOfDay(a_started)"
-	}
+	width := bucket.width()
+	startOf := fmt.Sprintf("toStartOfInterval(a_started, INTERVAL %d SECOND, 'UTC')", int64(width/time.Second))
 	signIns, renewals := groupStrings(signInGroups), groupStrings(renewalGroups)
 	// Placeholders bind in text order: the select list comes before the subquery.
 	args = append(append([]any{signIns, signIns, renewals, renewals}, args...), string(OutcomeInProgress), signIns, renewals)
@@ -88,14 +101,9 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 		return nil, fmt.Errorf("read sign-in summary: %w", err)
 	}
 
-	step := time.Hour
-	first := s.From.UTC().Truncate(time.Hour)
-	if bucket == BucketDay {
-		step = 24 * time.Hour
-		first = time.Date(s.From.Year(), s.From.Month(), s.From.Day(), 0, 0, 0, 0, time.UTC)
-	}
+	first := s.From.UTC().Truncate(width)
 	var buckets []SignInBucket
-	for start := first; start.Before(s.To); start = start.Add(step) {
+	for start := first; start.Before(s.To); start = start.Add(width) {
 		b, ok := found[start.Unix()]
 		if !ok {
 			b = SignInBucket{Start: start, SignInsSucceeded: 0, SignInsDidNot: 0, RenewalsSucceeded: 0, RenewalsDidNot: 0}

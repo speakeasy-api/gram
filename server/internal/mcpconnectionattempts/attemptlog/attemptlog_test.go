@@ -362,3 +362,29 @@ func TestDenied_CountsPeopleAndNetworks(t *testing.T) {
 	require.Equal(t, uint64(2), clients[1].Networks)
 	require.Equal(t, uint64(0), clients[1].People)
 }
+
+func TestSignIns_SixHourBucketsStartOnUTCBoundaries(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := time.Date(f.now.Year(), f.now.Month(), f.now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -2)
+	a := f.attempt(f.org, f.project, f.server, day.Add(7*time.Hour))
+	f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Second)
+	f.insert()
+
+	s := f.scope()
+	s.From, s.To = day, day.Add(24*time.Hour)
+	buckets, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketSixHours, f.now)
+	require.NoError(t, err)
+	require.Len(t, buckets, 4)
+	require.True(t, buckets[1].Start.Equal(day.Add(6*time.Hour)))
+	require.Equal(t, uint64(1), buckets[1].SignInsSucceeded)
+}
+
+func TestSourceOf_NamesTheServerForRejectedCredentials(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, attemptlog.SourceServer, attemptlog.SourceOf(mcpconnectionattempts.CodeStaticKeyRejected.String()))
+	require.Equal(t, attemptlog.SourceService, attemptlog.SourceOf(mcpconnectionattempts.CodeProviderUnavailable.String()))
+	require.Equal(t, attemptlog.SourceApp, attemptlog.SourceOf(mcpconnectionattempts.CodePKCEMismatch.String()))
+	require.Equal(t, attemptlog.SourceSpeakeasySetting, attemptlog.SourceOf(mcpconnectionattempts.CodeCIMDAdmissionDenied.String()))
+	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(""))
+}

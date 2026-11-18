@@ -16,6 +16,7 @@ import {
 
 export const ConnectionSignInSummaryResultBucket = {
   Hour: "hour",
+  SixHours: "six_hours",
   Day: "day",
 } as const;
 export type ConnectionSignInSummaryResultBucket = OpenEnum<

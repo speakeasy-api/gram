@@ -192,21 +192,22 @@ func formatTime(t time.Time) string {
 
 func (n names) row(r attemptlog.Row) *gen.ConnectionAttemptRow {
 	return &gen.ConnectionAttemptRow{
-		ID:             r.ID.String(),
-		Time:           formatTime(r.Time),
-		FirstStartedAt: formatTime(r.FirstStartedAt),
-		Count:          count(r.Count),
-		Outcome:        gen.ConnectionOutcome(r.Outcome),
-		Step:           gen.ConnectionStepGroup(r.Step),
-		Reason:         conv.PtrEmpty(r.Reason),
-		Message:        conv.PtrEmpty(attemptlog.MessageOf(r.Reason)),
-		Source:         conv.PtrEmpty(gen.ConnectionFailureSource(attemptlog.SourceOf(r.Reason))),
-		Person:         n.person(r.Subject, false),
-		Network:        networkView(r.Network),
-		App:            appView(r.App, r.AppVersion, r.AppKey),
-		Server:         n.server(r.ServerID, r.ServerKind),
-		Member:         n.member(r.MemberID),
-		Service:        conv.PtrEmpty(r.Service),
+		ID:               r.ID.String(),
+		Time:             formatTime(r.Time),
+		FirstStartedAt:   formatTime(r.FirstStartedAt),
+		Count:            count(r.Count),
+		Outcome:          gen.ConnectionOutcome(r.Outcome),
+		Step:             gen.ConnectionStepGroup(r.Step),
+		Reason:           conv.PtrEmpty(r.Reason),
+		Message:          conv.PtrEmpty(attemptlog.MessageOf(r.Reason)),
+		TechnicalMessage: nil,
+		Source:           conv.PtrEmpty(gen.ConnectionFailureSource(attemptlog.SourceOf(r.Reason))),
+		Person:           n.person(r.Subject, false),
+		Network:          networkView(r.Network),
+		App:              appView(r.App, r.AppVersion, r.AppKey),
+		Server:           n.server(r.ServerID, r.ServerKind),
+		Member:           n.member(r.MemberID),
+		Service:          conv.PtrEmpty(r.Service),
 	}
 }
 

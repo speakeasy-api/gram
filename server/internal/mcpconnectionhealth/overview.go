@@ -75,13 +75,14 @@ func (s *Service) ListDeniedClients(ctx context.Context, payload *gen.ListDenied
 	result.Clients = make([]*gen.ConnectionDeniedClient, len(clients))
 	for i, client := range clients {
 		result.Clients[i] = &gen.ConnectionDeniedClient{
-			App:      appView(client.App, "", client.AppKey),
-			Reason:   client.Reason,
-			Message:  attemptlog.MessageOf(client.Reason),
-			Attempts: count(client.Attempts),
-			People:   count(client.People),
-			Networks: count(client.Networks),
-			LastAt:   formatTime(client.LastAt),
+			App:              appView(client.App, "", client.AppKey),
+			Reason:           client.Reason,
+			Message:          attemptlog.MessageOf(client.Reason),
+			TechnicalMessage: nil,
+			Attempts:         count(client.Attempts),
+			People:           count(client.People),
+			Networks:         count(client.Networks),
+			LastAt:           formatTime(client.LastAt),
 		}
 	}
 	return result, nil

@@ -17,6 +17,10 @@ export type ConnectionDeniedClient = {
   networks: number;
   people: number;
   reason: string;
+  /**
+   * Reserved: a sentence for administrators about the reason. Not returned yet.
+   */
+  technicalMessage?: string | undefined;
 };
 
 /** @internal */
@@ -35,10 +39,12 @@ export const ConnectionDeniedClient$inboundSchema: z.ZodMiniType<
     networks: z.int(),
     people: z.int(),
     reason: z.string(),
+    technical_message: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "last_at": "lastAt",
+      "technical_message": "technicalMessage",
     });
   }),
 );

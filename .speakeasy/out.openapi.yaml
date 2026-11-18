@@ -94914,6 +94914,7 @@ components:
           description: The party that returned a failure.
           enum:
             - service
+            - server
             - app
             - identity_provider
             - speakeasy_setting
@@ -94940,6 +94941,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ConnectionAttemptStep'
+        technical_message:
+          type: string
+          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
         time:
           type: string
           description: When the newest attempt ended or last moved.
@@ -95165,6 +95169,7 @@ components:
           description: The party that returned a failure.
           enum:
             - service
+            - server
             - app
             - identity_provider
             - speakeasy_setting
@@ -95184,6 +95189,9 @@ components:
             - other
           type: string
           x-speakeasy-name-override: ConnectionStepGroup
+        technical_message:
+          type: string
+          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
         time:
           type: string
           description: When the newest attempt ended or last moved.
@@ -95229,6 +95237,9 @@ components:
           x-speakeasy-name-override: ConnectionStepGroup
         stored_step:
           type: string
+        technical_message:
+          type: string
+          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
       required:
         - at
         - step
@@ -95256,6 +95267,9 @@ components:
           format: int64
         reason:
           type: string
+        technical_message:
+          type: string
+          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
       required:
         - app
         - reason
@@ -95440,6 +95454,7 @@ components:
           type: string
           enum:
             - hour
+            - six_hours
             - day
         buckets:
           type: array
@@ -102068,6 +102083,7 @@ components:
           description: Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.
           enum:
             - hour
+            - six_hours
             - day
         from:
           type: string

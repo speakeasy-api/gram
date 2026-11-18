@@ -1521,15 +1521,16 @@ func marshalMcpconnectionhealthConnectionAttemptRowToConnectionAttemptRowRespons
 		return nil
 	}
 	res := &ConnectionAttemptRowResponseBody{
-		ID:             v.ID,
-		Time:           v.Time,
-		FirstStartedAt: v.FirstStartedAt,
-		Count:          v.Count,
-		Outcome:        string(v.Outcome),
-		Step:           string(v.Step),
-		Reason:         v.Reason,
-		Message:        v.Message,
-		Service:        v.Service,
+		ID:               v.ID,
+		Time:             v.Time,
+		FirstStartedAt:   v.FirstStartedAt,
+		Count:            v.Count,
+		Outcome:          string(v.Outcome),
+		Step:             string(v.Step),
+		Reason:           v.Reason,
+		Message:          v.Message,
+		TechnicalMessage: v.TechnicalMessage,
+		Service:          v.Service,
 	}
 	if v.Source != nil {
 		source := string(*v.Source)
@@ -1781,6 +1782,7 @@ func marshalMcpconnectionhealthConnectionAttemptDetailToConnectionAttemptDetailR
 		Step:                string(v.Step),
 		Reason:              v.Reason,
 		Message:             v.Message,
+		TechnicalMessage:    v.TechnicalMessage,
 		Service:             v.Service,
 	}
 	if v.Source != nil {
@@ -1826,14 +1828,15 @@ func marshalMcpconnectionhealthConnectionAttemptDetailToConnectionAttemptDetailR
 // type *mcpconnectionhealth.ConnectionAttemptStep.
 func marshalMcpconnectionhealthConnectionAttemptStepToConnectionAttemptStepResponseBody(v *mcpconnectionhealth.ConnectionAttemptStep) *ConnectionAttemptStepResponseBody {
 	res := &ConnectionAttemptStepResponseBody{
-		At:         v.At,
-		Step:       string(v.Step),
-		StoredStep: v.StoredStep,
-		Result:     v.Result,
-		Final:      v.Final,
-		Reason:     v.Reason,
-		Message:    v.Message,
-		Service:    v.Service,
+		At:               v.At,
+		Step:             string(v.Step),
+		StoredStep:       v.StoredStep,
+		Result:           v.Result,
+		Final:            v.Final,
+		Reason:           v.Reason,
+		Message:          v.Message,
+		TechnicalMessage: v.TechnicalMessage,
+		Service:          v.Service,
 	}
 	if v.Member != nil {
 		res.Member = marshalMcpconnectionhealthConnectionServerToConnectionServerResponseBody(v.Member)
@@ -1907,12 +1910,13 @@ func marshalMcpconnectionhealthConnectionDeniedClientToConnectionDeniedClientRes
 		return nil
 	}
 	res := &ConnectionDeniedClientResponseBody{
-		Reason:   v.Reason,
-		Message:  v.Message,
-		Attempts: v.Attempts,
-		People:   v.People,
-		Networks: v.Networks,
-		LastAt:   v.LastAt,
+		Reason:           v.Reason,
+		Message:          v.Message,
+		TechnicalMessage: v.TechnicalMessage,
+		Attempts:         v.Attempts,
+		People:           v.People,
+		Networks:         v.Networks,
+		LastAt:           v.LastAt,
 	}
 	if v.App != nil {
 		res.App = marshalMcpconnectionhealthConnectionAppToConnectionAppResponseBody(v.App)

@@ -101,11 +101,21 @@ type Source string
 
 const (
 	SourceService          Source = "service"
+
+	// SourceServer is the MCP server itself, rejecting a credential Speakeasy sent it.
+	SourceServer           Source = "server"
 	SourceApp              Source = "app"
 	SourceIdentityProvider Source = "identity_provider"
 	SourceSpeakeasySetting Source = "speakeasy_setting"
 	SourceSpeakeasy        Source = "speakeasy"
 )
+
+// serverReasons come back from the MCP server Speakeasy connected to.
+var serverReasons = []string{
+	mcpconnectionattempts.CodeRejectedByMember.String(),
+	mcpconnectionattempts.CodeSharedCredentialRejected.String(),
+	mcpconnectionattempts.CodeStaticKeyRejected.String(),
+}
 
 // identityProviderReasons come back from the organization's sign-in service.
 var identityProviderReasons = []string{
@@ -129,13 +139,10 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeProviderDenied.String(),
 	mcpconnectionattempts.CodeIssuerMismatch.String(),
 	mcpconnectionattempts.CodeUnrenewableToken.String(),
-	mcpconnectionattempts.CodeRejectedByMember.String(),
 	mcpconnectionattempts.CodeProviderRateLimited.String(),
 	mcpconnectionattempts.CodeProviderUnavailable.String(),
 	mcpconnectionattempts.CodeProviderServerError.String(),
 	mcpconnectionattempts.CodeProviderUnreachable.String(),
-	mcpconnectionattempts.CodeSharedCredentialRejected.String(),
-	mcpconnectionattempts.CodeStaticKeyRejected.String(),
 	mcpconnectionattempts.CodeEMAProviderRejected.String(),
 	mcpconnectionattempts.CodeProviderTransientFailure.String(),
 	mcpconnectionattempts.CodeRemoteSessionUnavailable.String(),
@@ -154,6 +161,9 @@ func SourceOf(reason string) Source {
 	}
 	if slices.Contains(identityProviderReasons, reason) {
 		return SourceIdentityProvider
+	}
+	if slices.Contains(serverReasons, reason) {
+		return SourceServer
 	}
 	if slices.Contains(serviceReasons, reason) {
 		return SourceService

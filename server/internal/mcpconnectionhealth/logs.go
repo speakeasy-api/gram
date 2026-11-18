@@ -233,6 +233,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 		Step:                view.Step,
 		Reason:              view.Reason,
 		Message:             view.Message,
+		TechnicalMessage:    nil,
 		Source:              view.Source,
 		Person:              n.person(row.Subject, true),
 		Network:             view.Network,
@@ -255,15 +256,16 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 			detail.Context.SubReason = &step.SubReason
 		}
 		detail.Steps[i] = &gen.ConnectionAttemptStep{
-			At:         formatTime(step.At),
-			Step:       gen.ConnectionStepGroup(attemptlog.GroupOf(step.StoredStep, step.GrantType)),
-			StoredStep: step.StoredStep,
-			Result:     step.Result,
-			Final:      step.Final,
-			Reason:     conv.PtrEmpty(step.Reason),
-			Message:    conv.PtrEmpty(attemptlog.MessageOf(step.Reason)),
-			Member:     n.member(step.MemberID),
-			Service:    conv.PtrEmpty(step.Service),
+			At:               formatTime(step.At),
+			Step:             gen.ConnectionStepGroup(attemptlog.GroupOf(step.StoredStep, step.GrantType)),
+			StoredStep:       step.StoredStep,
+			Result:           step.Result,
+			Final:            step.Final,
+			Reason:           conv.PtrEmpty(step.Reason),
+			Message:          conv.PtrEmpty(attemptlog.MessageOf(step.Reason)),
+			TechnicalMessage: nil,
+			Member:           n.member(step.MemberID),
+			Service:          conv.PtrEmpty(step.Service),
 		}
 	}
 	if detail.Context.SubReason == nil {

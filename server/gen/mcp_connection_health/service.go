@@ -104,13 +104,15 @@ type ConnectionAttemptDetail struct {
 	Step    ConnectionStepGroup
 	Reason  *string
 	Message *string
-	Source  *ConnectionFailureSource
-	Person  *ConnectionPerson
-	Network *ConnectionNetwork
-	App     *ConnectionApp
-	Server  *ConnectionServer
-	Member  *ConnectionServer
-	Service *string
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string
+	Source           *ConnectionFailureSource
+	Person           *ConnectionPerson
+	Network          *ConnectionNetwork
+	App              *ConnectionApp
+	Server           *ConnectionServer
+	Member           *ConnectionServer
+	Service          *string
 }
 
 type ConnectionAttemptFacets struct {
@@ -161,13 +163,15 @@ type ConnectionAttemptRow struct {
 	Step    ConnectionStepGroup
 	Reason  *string
 	Message *string
-	Source  *ConnectionFailureSource
-	Person  *ConnectionPerson
-	Network *ConnectionNetwork
-	App     *ConnectionApp
-	Server  *ConnectionServer
-	Member  *ConnectionServer
-	Service *string
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string
+	Source           *ConnectionFailureSource
+	Person           *ConnectionPerson
+	Network          *ConnectionNetwork
+	App              *ConnectionApp
+	Server           *ConnectionServer
+	Member           *ConnectionServer
+	Service          *string
 }
 
 type ConnectionAttemptStep struct {
@@ -178,18 +182,22 @@ type ConnectionAttemptStep struct {
 	Final      bool
 	Reason     *string
 	Message    *string
-	Member     *ConnectionServer
-	Service    *string
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string
+	Member           *ConnectionServer
+	Service          *string
 }
 
 type ConnectionDeniedClient struct {
-	App      *ConnectionApp
-	Reason   string
-	Message  string
-	Attempts int64
-	People   int64
-	Networks int64
-	LastAt   string
+	App     *ConnectionApp
+	Reason  string
+	Message string
+	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	TechnicalMessage *string
+	Attempts         int64
+	People           int64
+	Networks         int64
+	LastAt           string
 }
 
 // ConnectionDeniedClientsResult is the result type of the mcpConnectionHealth
