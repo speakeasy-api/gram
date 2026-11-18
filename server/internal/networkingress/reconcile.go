@@ -182,7 +182,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		}
 		gateCode = e.applyGate(ctx)
 		if gateCode == "" {
-			credentials, err := e.credentials.Open(ctx, conn, row.OrganizationID, integrationcredentials.NetworkIngresses, storedCredentials(row))
+			credentials, err := e.credentials.Open(ctx, conn, current.OrganizationID, integrationcredentials.NetworkIngresses, storedCredentials(current))
 			if err != nil && !integrationcredentials.IsUnreadable(err) {
 				// The organization key is unavailable for now. Report it, keep
 				// the recorded name routing to the hosts already serving it,
@@ -268,8 +268,11 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 		// A missing permission blocks cleanup the same way rejected
 		// credentials do, and the dashboard explains both with one message.
 		blocker := ""
-		if errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected) {
+		switch {
+		case errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected):
 			blocker = k8s.NetworkIngressErrorProviderCredentialsRejected
+		case errors.Is(err, errCredentialsUnavailable):
+			blocker = k8s.NetworkIngressErrorEncryptionKeyUnavailable
 		}
 		if err := recordCleanupBlocker(ctx, repo.New(conn), row, blocker); err != nil {
 			return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")

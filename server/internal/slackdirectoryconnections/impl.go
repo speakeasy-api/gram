@@ -265,6 +265,9 @@ func (s *Service) Callback(ctx context.Context, p *CallbackPayload) (*CallbackRe
 		if errors.Is(err, pgx.ErrNoRows) {
 			return s.callbackResult(ac, "connection_changed"), nil
 		}
+		if integrationcredentials.IsCustomerKeyProblem(err) {
+			return nil, oops.E(oops.CodeFailedPrecondition, err, "This organization's encryption key is unavailable. Check its key, then try again.").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "could not save Slack authorization").LogError(ctx, s.logger)
 	}
 	return s.callbackResult(ac, "connected"), nil

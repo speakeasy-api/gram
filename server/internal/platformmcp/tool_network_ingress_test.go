@@ -305,3 +305,36 @@ func TestNetworkIngressEncryptionKeyUnavailableMatchesReconcilerCode(t *testing.
 	require.Equal(t, k8s.NetworkIngressErrorEncryptionKeyUnavailable, networkIngressEncryptionKeyUnavailable)
 	require.Equal(t, networkIngressEncryptionKeyUnavailable, safeNetworkIngressErrorCode(networkIngressEncryptionKeyUnavailable), "the code is returned to clients, not withheld")
 }
+
+func TestGetNetworkIngressCountsOrganizationKeyCredentials(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_network_ingress")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithNetworkIngressStatus(mustParseURL(t, "https://app.getgram.test")).networkIngress
+	_, err = featurerepo.New(conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
+		OrganizationID: principal.OrganizationID,
+		FeatureName:    string(productfeatures.FeatureNetworkIngress),
+	})
+	require.NoError(t, err)
+
+	attestor := "attestor-" + uuid.NewString()[:8]
+	_, err = networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+		ID: uuid.New(), OrganizationID: principal.OrganizationID,
+		Provider: "tailscale", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
+		CustomDomainID: uuid.NullUUID{}, Enabled: true, IdentityRequired: false,
+		AttestorNamespace: attestor, AttestorServiceAccount: attestor,
+		ProviderResources: []byte(`{}`),
+	})
+	require.NoError(t, err)
+	_, err = networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{}, OrgCopy: pgtype.Text{String: "sentinel-org-copy", Valid: true}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
+	require.NoError(t, err)
+
+	got, err := service.Get(ctx, principal)
+	require.NoError(t, err)
+	require.NotNil(t, got.Ingress)
+	require.True(t, got.Ingress.CredentialsConfigured, "only the organization copy remains after finalize")
+	require.Equal(t, networkIngressNextWait, got.NextAction)
+}

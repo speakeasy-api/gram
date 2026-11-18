@@ -174,6 +174,8 @@ func (s *Store) decryptCredentials(ctx context.Context, dbtx repo.DBTX, orgID st
 	switch {
 	case integrationcredentials.IsUnreadable(err):
 		return nil, oops.E(oops.CodeUnexpected, err, "decrypt device integration credentials")
+	case integrationcredentials.IsCustomerKeyProblem(err):
+		return nil, oops.E(oops.CodeFailedPrecondition, err, "This organization's encryption key is unavailable. Check its key, then try again.")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnavailable, err, "This organization's encryption key is unavailable. Try again shortly.")
 	}

@@ -218,7 +218,13 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				return err
 			}
 			defer lockDB.Close()
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, integrationcredentials.New(logger, orgEncryption.Cipher(logger, encryptionClient)), orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
+			// Without the platform key, provider mutations stay off and nothing
+			// opens saved credentials.
+			var credentials *integrationcredentials.Credentials
+			if encryptionClient != nil {
+				credentials = integrationcredentials.New(logger, orgEncryption.Cipher(logger, encryptionClient))
+			}
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, credentials, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err
 			}
