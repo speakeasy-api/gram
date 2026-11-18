@@ -54,6 +54,13 @@ var renewalGroups = []StepGroup{StepSignInRenewal, StepServiceRenewal}
 // deniedGroups are the steps where refusing an app counts as denying a client.
 var deniedGroups = []StepGroup{StepConnect, StepSignIn, StepSignInRenewal}
 
+// deniedReasons are the refusals of the app itself, by client access rules or an AI app block.
+var deniedReasons = []string{
+	mcpconnectionattempts.CodeCIMDAdmissionDenied.String(),
+	mcpconnectionattempts.CodeAIToolBlocked.String(),
+	mcpconnectionattempts.CodeClientNotCIMD.String(),
+}
+
 // GroupOf names the group of a stored step. A token step with a refresh grant renews a sign-in.
 func GroupOf(step, grantType string) StepGroup {
 	switch step {
@@ -110,16 +117,25 @@ const (
 	SourceSpeakeasy        Source = "speakeasy"
 )
 
+// unattributedReasons are recorded for more than one party, so they name none.
+var unattributedReasons = []string{
+	mcpconnectionattempts.CodeSharedCredentialRejected.String(),
+	mcpconnectionattempts.CodeSignInProviderError.String(),
+	mcpconnectionattempts.CodeProviderDenied.String(),
+	mcpconnectionattempts.CodeIssuerMismatch.String(),
+	mcpconnectionattempts.CodeProviderRateLimited.String(),
+	mcpconnectionattempts.CodeProviderServerError.String(),
+	mcpconnectionattempts.CodeStaticKeyRejected.String(),
+}
+
 // serverReasons come back from the MCP server Speakeasy connected to.
 var serverReasons = []string{
 	mcpconnectionattempts.CodeRejectedByMember.String(),
-	mcpconnectionattempts.CodeSharedCredentialRejected.String(),
-	mcpconnectionattempts.CodeStaticKeyRejected.String(),
 }
 
 // identityProviderReasons come back from the organization's sign-in service.
 var identityProviderReasons = []string{
-	mcpconnectionattempts.CodeSignInProviderError.String(),
+	mcpconnectionattempts.CodeIDPUnavailable.String(),
 	mcpconnectionattempts.CodeAccessDenied.String(),
 	mcpconnectionattempts.CodeScopePolicyDenied.String(),
 	mcpconnectionattempts.CodeInvalidTarget.String(),
@@ -136,12 +152,8 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeProviderOAuthInvalidClient.String(),
 	mcpconnectionattempts.CodeProviderOAuthInvalidScope.String(),
 	mcpconnectionattempts.CodeProviderOAuthInvalidGrant.String(),
-	mcpconnectionattempts.CodeProviderDenied.String(),
-	mcpconnectionattempts.CodeIssuerMismatch.String(),
 	mcpconnectionattempts.CodeUnrenewableToken.String(),
-	mcpconnectionattempts.CodeProviderRateLimited.String(),
 	mcpconnectionattempts.CodeProviderUnavailable.String(),
-	mcpconnectionattempts.CodeProviderServerError.String(),
 	mcpconnectionattempts.CodeProviderUnreachable.String(),
 	mcpconnectionattempts.CodeEMAProviderRejected.String(),
 	mcpconnectionattempts.CodeProviderTransientFailure.String(),
@@ -153,10 +165,13 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeRefreshRejected.String(),
 }
 
-// SourceOf names who returned a failure with this reason. It is derived from
-// the code, since rows do not store it. Empty reason has no source.
-func SourceOf(reason string) Source {
-	if reason == "" {
+// SourceOf names who returned a failure with this reason, derived from the code
+// since rows do not store it. Successes, live attempts and the person's own doing have none.
+func SourceOf(reason string, outcome Outcome) Source {
+	if reason == "" || outcome == OutcomeConnected || outcome == OutcomeInProgress {
+		return ""
+	}
+	if slices.Contains(unattributedReasons, reason) {
 		return ""
 	}
 	if slices.Contains(identityProviderReasons, reason) {
@@ -179,20 +194,31 @@ func SourceOf(reason string) Source {
 		return SourceService
 	case mcpconnectionattempts.WhoAdmin:
 		return SourceSpeakeasySetting
-	case mcpconnectionattempts.WhoSpeakeasy, mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoNobody:
+	case mcpconnectionattempts.WhoSpeakeasy:
 		return SourceSpeakeasy
+	case mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoNobody:
+		return ""
 	default:
 		return SourceSpeakeasy
 	}
 }
 
-// MessageOf is the plain sentence for a reason, empty when the reason is unknown or empty.
+// MessageOf is the administrator's sentence for a reason, empty when the reason is unknown or empty.
 func MessageOf(reason string) string {
 	meaning, ok := mcpconnectionattempts.MeaningOf(reason)
 	if !ok {
 		return ""
 	}
-	return meaning.WhatHappened
+	return meaning.WhatHappenedForAdmin
+}
+
+// TechnicalOf is the precise technical fact for a reason, empty when there is none.
+func TechnicalOf(reason string) string {
+	meaning, ok := mcpconnectionattempts.MeaningOf(reason)
+	if !ok {
+		return ""
+	}
+	return meaning.Technical
 }
 
 // UnlistedAppName is shown for an app that is not on the family list.

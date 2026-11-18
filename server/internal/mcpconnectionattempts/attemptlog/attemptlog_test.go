@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -382,11 +383,47 @@ func TestSignIns_SixHourBucketsStartOnUTCBoundaries(t *testing.T) {
 
 func TestSourceOf_NamesTheServerForRejectedCredentials(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, attemptlog.SourceServer, attemptlog.SourceOf(mcpconnectionattempts.CodeStaticKeyRejected.String()))
-	require.Equal(t, attemptlog.SourceService, attemptlog.SourceOf(mcpconnectionattempts.CodeProviderUnavailable.String()))
-	require.Equal(t, attemptlog.SourceApp, attemptlog.SourceOf(mcpconnectionattempts.CodePKCEMismatch.String()))
-	require.Equal(t, attemptlog.SourceSpeakeasySetting, attemptlog.SourceOf(mcpconnectionattempts.CodeCIMDAdmissionDenied.String()))
-	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(""))
+	failed := attemptlog.OutcomeFailed
+	require.Equal(t, attemptlog.SourceServer, attemptlog.SourceOf(mcpconnectionattempts.CodeRejectedByMember.String(), failed))
+	require.Equal(t, attemptlog.SourceService, attemptlog.SourceOf(mcpconnectionattempts.CodeProviderUnavailable.String(), failed))
+	require.Equal(t, attemptlog.SourceApp, attemptlog.SourceOf(mcpconnectionattempts.CodePKCEMismatch.String(), failed))
+	require.Equal(t, attemptlog.SourceSpeakeasySetting, attemptlog.SourceOf(mcpconnectionattempts.CodeCIMDAdmissionDenied.String(), attemptlog.OutcomeBlocked))
+	require.Equal(t, attemptlog.SourceIdentityProvider, attemptlog.SourceOf(mcpconnectionattempts.CodeIDPUnavailable.String(), failed))
+	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf("", failed))
+}
+
+func TestSourceOf_NoneForSuccessLiveAttemptsOrThePersonsOwnDoing(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(mcpconnectionattempts.CodeRefreshedUnverified.String(), attemptlog.OutcomeConnected))
+	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(mcpconnectionattempts.CodeProviderUnavailable.String(), attemptlog.OutcomeInProgress))
+	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(mcpconnectionattempts.CodeCanceled.String(), attemptlog.OutcomeDeclined))
+	// Recorded for more than one party, so they name none.
+	unattributed := []string{
+		mcpconnectionattempts.CodeSharedCredentialRejected.String(),
+		mcpconnectionattempts.CodeSignInProviderError.String(),
+		mcpconnectionattempts.CodeProviderDenied.String(),
+		mcpconnectionattempts.CodeIssuerMismatch.String(),
+		mcpconnectionattempts.CodeProviderRateLimited.String(),
+		mcpconnectionattempts.CodeProviderServerError.String(),
+		mcpconnectionattempts.CodeStaticKeyRejected.String(),
+	}
+	for _, code := range unattributed {
+		require.Empty(t, attemptlog.SourceOf(code, attemptlog.OutcomeFailed), code)
+	}
+	for _, code := range mcpconnectionattempts.Codes() {
+		meaning, ok := mcpconnectionattempts.MeaningOf(code)
+		require.True(t, ok)
+		if meaning.WhoFixes != mcpconnectionattempts.WhoPerson && meaning.WhoFixes != mcpconnectionattempts.WhoNobody && !slices.Contains(unattributed, code) {
+			require.NotEmpty(t, attemptlog.SourceOf(code, attemptlog.OutcomeFailed), code)
+		}
+	}
+}
+
+func TestValidateRange_AllowsALast30DaysRangeComputedAMomentAgo(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	require.NoError(t, attemptlog.ValidateRange(now.Add(-attemptlog.Retention-time.Minute), now.Add(-time.Minute), now))
+	require.Error(t, attemptlog.ValidateRange(now.Add(-attemptlog.Retention-time.Hour), now.Add(-time.Hour), now))
 }
 
 func TestList_DeclinedAttemptsNeverFold(t *testing.T) {
@@ -404,4 +441,74 @@ func TestList_DeclinedAttemptsNeverFold(t *testing.T) {
 		require.Equal(t, string(attemptlog.OutcomeDeclined), r.Outcome)
 		require.Equal(t, uint64(1), r.Count)
 	}
+}
+
+func TestList_FailuresWithNoPersonOrNetworkNeverFold(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i := range 3 {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour+time.Duration(i)*time.Minute))
+		f.row(a, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderUnavailable, true, time.Second)
+	}
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 3)
+	for _, row := range rows {
+		require.Equal(t, uint64(1), row.Count)
+	}
+}
+
+func TestDenied_LeavesOutRefusalsOfThePerson(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i, code := range []mcpconnectionattempts.Code{mcpconnectionattempts.CodeNotOrgMember, mcpconnectionattempts.CodeSignInRevokedByAdmin, mcpconnectionattempts.CodeCIMDAdmissionDenied} {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Duration(i+1)*time.Hour))
+		f.row(a, mcpconnectionattempts.StepInboundAuthorize, code, true, 0, person("u1"))
+	}
+	f.insert()
+
+	clients, err := attemptlog.Denied(t.Context(), f.ch, f.scope(), f.now)
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+	require.Equal(t, mcpconnectionattempts.CodeCIMDAdmissionDenied.String(), clients[0].Reason)
+}
+
+func TestList_ASignInAndARenewalWithTheSameReasonNeverFold(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i, grant := range []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken} {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour+time.Duration(i)*time.Minute))
+		f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeResourceMismatch, true, time.Second, person("u1"), mcpconnectionattempts.Grant(grant))
+	}
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 2)
+	require.ElementsMatch(t, []string{string(attemptlog.StepSignIn), string(attemptlog.StepSignInRenewal)}, []string{rows[0].Step, rows[1].Step})
+}
+
+func TestList_ANetworkFilterKeepsAttemptsWithNoKnownPersonLikeItsCount(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	known := f.attempt(f.org, f.project, f.server, f.now.Add(-2*time.Hour))
+	f.row(known, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Second, person("u1")).DeviceKey = "net1"
+	anonymous := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour))
+	f.row(anonymous, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Second).DeviceKey = "net1"
+	f.insert()
+
+	filters := attemptlog.Filters{Networks: []string{"net1"}}
+	rows := list(t, f, f.scope(), filters)
+	require.Len(t, rows, 1)
+	require.Equal(t, anonymous.ID(), rows[0].ID)
+	counts, err := attemptlog.Count(t.Context(), f.ch, f.scope(), filters, f.now)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), counts.Total)
+	require.Equal(t, []attemptlog.FacetValue{{Value: "net1", Attempts: 1}}, counts.Facets[attemptlog.FacetNetworks])
+
+	empty := attemptlog.Filters{Networks: []string{""}}
+	require.Empty(t, list(t, f, f.scope(), empty))
+	counts, err = attemptlog.Count(t.Context(), f.ch, f.scope(), empty, f.now)
+	require.NoError(t, err)
+	require.Zero(t, counts.Total)
 }

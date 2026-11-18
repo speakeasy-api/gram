@@ -82,7 +82,7 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 	FROM (` + attempts + `)
 	WHERE d_outcome != ? AND (has(?, d_step) OR has(?, d_step))
 	GROUP BY b_start
-	ORDER BY b_start`
+	ORDER BY b_start` + readSettings
 	result, err := ch.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query sign-in summary: %w", err)
@@ -138,23 +138,23 @@ type DeniedClient struct {
 	LastAt time.Time `ch:"x_last"`
 }
 
-// Denied lists apps refused at sign-in, most recent first.
+// Denied lists apps refused at sign-in for being the app they are, most recent first.
 func Denied(ctx context.Context, ch driver.Conn, s Scope, now time.Time) ([]DeniedClient, error) {
 	attempts, args, err := attemptsSQL(s, now)
 	if err != nil {
 		return nil, err
 	}
-	args = append(args, string(OutcomeBlocked), groupStrings(deniedGroups), maxDeniedClients)
+	args = append(args, string(OutcomeBlocked), groupStrings(deniedGroups), deniedReasons, maxDeniedClients)
 	query := `
-	SELECT d_app AS x_app, any(a_app_key) AS x_app_key, d_reason AS x_reason, sum(a_weight) AS x_attempts,
+	SELECT d_app AS x_app, a_app_key AS x_app_key, d_reason AS x_reason, sum(a_weight) AS x_attempts,
 		toUInt64(uniqExactIf(a_subject, a_subject != '')) AS x_people,
 		toUInt64(uniqExactIf(a_device, a_subject = '' AND a_device != '')) AS x_networks,
 		max(d_at) AS x_last
 	FROM (` + attempts + `)
-	WHERE d_outcome = ? AND has(?, d_step)
-	GROUP BY x_app, x_reason
+	WHERE d_outcome = ? AND has(?, d_step) AND has(?, d_reason)
+	GROUP BY x_app, x_app_key, x_reason
 	ORDER BY x_last DESC
-	LIMIT ?`
+	LIMIT ?` + readSettings
 	result, err := ch.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query denied clients: %w", err)

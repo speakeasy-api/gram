@@ -1322,8 +1322,9 @@ type ConnectionAttemptRowResponseBody struct {
 	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 	Step    *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 	Reason  *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What happened, in one sentence for an administrator.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string                        `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Source           *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	Person           *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
@@ -1413,8 +1414,9 @@ type ConnectionAttemptDetailResponseBody struct {
 	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 	Step    *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 	Reason  *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What happened, in one sentence for an administrator.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string                        `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Source           *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	Person           *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
@@ -1434,8 +1436,9 @@ type ConnectionAttemptStepResponseBody struct {
 	Result     *string `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
 	Final      *bool   `form:"final,omitempty" json:"final,omitempty" xml:"final,omitempty"`
 	Reason     *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Message    *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// What happened, in one sentence for an administrator.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string                       `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Member           *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
 	Service          *string                       `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
@@ -1475,10 +1478,11 @@ type ConnectionSessionDayResponseBody struct {
 // ConnectionDeniedClientResponseBody is used to define fields on response body
 // types.
 type ConnectionDeniedClientResponseBody struct {
-	App     *ConnectionAppResponseBody `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
-	Reason  *string                    `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Message *string                    `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	App    *ConnectionAppResponseBody `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
+	Reason *string                    `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What happened, in one sentence for an administrator.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Attempts         *int64  `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
 	People           *int64  `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`

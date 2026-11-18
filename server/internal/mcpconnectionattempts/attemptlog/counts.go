@@ -127,7 +127,15 @@ func (f Filters) matches(r cubeRow, skip Facet) bool {
 		if facet == skip {
 			continue
 		}
-		if values := f.values(facet); len(values) > 0 && !slices.Contains(values, r.value(facet)) {
+		values := f.values(facet)
+		if len(values) == 0 {
+			continue
+		}
+		// A network stands for attempts with no known person, as in filterSQL.
+		if facet == FacetNetworks && (r.Subject != "" || r.Network == "") {
+			return false
+		}
+		if !slices.Contains(values, r.value(facet)) {
 			return false
 		}
 	}
@@ -147,7 +155,8 @@ func Count(ctx context.Context, ch driver.Conn, s Scope, f Filters, now time.Tim
 		d_reason AS c_reason, d_service AS c_service, sum(a_weight) AS c_attempts
 	FROM (` + attempts + `)
 	GROUP BY c_outcome, c_step, c_server, c_member, c_subject, c_network, c_app, c_app_version, c_reason, c_service
-	LIMIT ?`
+	ORDER BY c_attempts DESC
+	LIMIT ?` + readSettings
 	result, err := ch.Query(ctx, query, args...)
 	if err != nil {
 		return Counts{}, fmt.Errorf("query attempt counts: %w", err)
@@ -171,7 +180,29 @@ func Count(ctx context.Context, ch driver.Conn, s Scope, f Filters, now time.Tim
 	}
 	counts := countCube(cube, f)
 	counts.Truncated = truncated
+	if truncated {
+		total, err := countTotal(ctx, ch, s, f, now)
+		if err != nil {
+			return Counts{}, err
+		}
+		counts.Total = total
+	}
 	return counts, nil
+}
+
+// countTotal is the exact weighted total under every filter, for when the cube is cut.
+func countTotal(ctx context.Context, ch driver.Conn, s Scope, f Filters, now time.Time) (uint64, error) {
+	attempts, args, err := attemptsSQL(s, now)
+	if err != nil {
+		return 0, err
+	}
+	where, filterArgs := filterSQL(f)
+	args = append(args, filterArgs...)
+	var total uint64
+	if err := ch.QueryRow(ctx, `SELECT toUInt64(sum(a_weight)) FROM (`+attempts+`) WHERE `+where+readSettings, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("query attempt total: %w", err)
+	}
+	return total, nil
 }
 
 func countCube(cube []cubeRow, f Filters) Counts {
@@ -184,8 +215,7 @@ func countCube(cube []cubeRow, f Filters) Counts {
 	for _, facet := range Facets {
 		byValue := map[string]uint64{}
 		for _, row := range cube {
-			// Attempts with a known person are listed by person, not network.
-			if facet == FacetNetworks && (row.Subject != "" || row.Network == "") {
+			if facet == FacetNetworks && row.Subject != "" {
 				continue
 			}
 			// Only apps and people have a meaning for empty: unlisted, and no known person.

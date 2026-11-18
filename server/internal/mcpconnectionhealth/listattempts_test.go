@@ -38,7 +38,8 @@ func TestListAttempts_ReturnsTheProvidersAttemptsWithNames(t *testing.T) {
 	require.Equal(t, gen.ConnectionStepGroup("service_sign_in"), row.Step)
 	require.Equal(t, gen.ConnectionFailureSource("service"), *row.Source)
 	require.Equal(t, "linear.app", *row.Service)
-	require.NotEmpty(t, *row.Message)
+	require.Equal(t, "The service refused the access Speakeasy asked for.", *row.Message)
+	require.Equal(t, "The service returned OAuth error invalid_scope, unauthorized_client, or invalid_target.", *row.TechnicalMessage)
 	require.Equal(t, "Linear", *row.Server.Name)
 	require.Equal(t, "gateway", row.Server.Kind)
 	require.Equal(t, subject.String(), row.Person.SubjectUrn)
@@ -154,4 +155,22 @@ func TestGetAttemptCounts_CountsEachFilterValue(t *testing.T) {
 	require.Equal(t, "Linear", *res.Facets.Servers[0].Label)
 	require.Equal(t, "invalid_bearer_token", res.Facets.Reasons[0].Value)
 	require.NotEmpty(t, *res.Facets.Reasons[0].Label)
+}
+
+func TestListAttempts_AServerLockAndAnotherServerFilterMatchNothing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.insert(t, ti.org, ti.project, ti.now.Add(-time.Hour), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderUnavailable)
+
+	payload := ti.listPayload()
+	payload.ServerID = new(ti.server.String())
+	res, err := ti.service.ListAttempts(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, res.Attempts, 1)
+
+	payload.Filters = &gen.ConnectionAttemptFilters{ServerIds: []string{uuid.NewString()}}
+	res, err = ti.service.ListAttempts(ctx, payload)
+	require.NoError(t, err)
+	require.Empty(t, res.Attempts)
 }

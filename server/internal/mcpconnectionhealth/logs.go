@@ -2,7 +2,6 @@ package mcpconnectionhealth
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,7 +15,7 @@ import (
 // detailLookahead covers attempts whose start is slightly ahead of this server's clock.
 const detailLookahead = time.Hour
 
-func filtersOf(f *gen.ConnectionAttemptFilters, serverID *string) attemptlog.Filters {
+func filtersOf(f *gen.ConnectionAttemptFilters) attemptlog.Filters {
 	var out attemptlog.Filters
 	if f != nil {
 		out = attemptlog.Filters{
@@ -31,9 +30,6 @@ func filtersOf(f *gen.ConnectionAttemptFilters, serverID *string) attemptlog.Fil
 			Reasons:     f.Reasons,
 			Services:    f.Services,
 		}
-	}
-	if serverID != nil && !slices.Contains(out.ServerIDs, *serverID) {
-		out.ServerIDs = append(out.ServerIDs, *serverID)
 	}
 	return out
 }
@@ -63,7 +59,7 @@ func (s *Service) ListAttempts(ctx context.Context, payload *gen.ListAttemptsPay
 	}
 
 	limit := conv.PtrValOr(payload.Limit, attemptlog.DefaultPageSize)
-	rows, next, err := attemptlog.List(ctx, s.ch, scope, filtersOf(payload.Filters, payload.ServerID), after, limit, now)
+	rows, next, err := attemptlog.List(ctx, s.ch, scope, filtersOf(payload.Filters), after, limit, now)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list connection attempts").LogError(ctx, s.logger)
 	}
@@ -102,7 +98,7 @@ func (s *Service) GetAttemptCounts(ctx context.Context, payload *gen.GetAttemptC
 		return result, err
 	}
 
-	counts, err := attemptlog.Count(ctx, s.ch, scope, filtersOf(payload.Filters, payload.ServerID), now)
+	counts, err := attemptlog.Count(ctx, s.ch, scope, filtersOf(payload.Filters), now)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count connection attempts").LogError(ctx, s.logger)
 	}
@@ -233,7 +229,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 		Step:                view.Step,
 		Reason:              view.Reason,
 		Message:             view.Message,
-		TechnicalMessage:    nil,
+		TechnicalMessage:    view.TechnicalMessage,
 		Source:              view.Source,
 		Person:              n.person(row.Subject, true),
 		Network:             view.Network,
@@ -252,7 +248,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 	}
 	for i, step := range steps {
 		detail.Context.Retries += int64(step.Retries)
-		if step.Final && step.SubReason != "" {
+		if step.Final && step.SubReason != "" && detail.Context.SubReason == nil {
 			detail.Context.SubReason = &step.SubReason
 		}
 		detail.Steps[i] = &gen.ConnectionAttemptStep{
@@ -263,7 +259,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 			Final:            step.Final,
 			Reason:           conv.PtrEmpty(step.Reason),
 			Message:          conv.PtrEmpty(attemptlog.MessageOf(step.Reason)),
-			TechnicalMessage: nil,
+			TechnicalMessage: conv.PtrEmpty(attemptlog.TechnicalOf(step.Reason)),
 			Member:           n.member(step.MemberID),
 			Service:          conv.PtrEmpty(step.Service),
 		}

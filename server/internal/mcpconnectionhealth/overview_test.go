@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -96,4 +97,27 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 30*24*time.Hour, to.Sub(from))
 	require.WithinDuration(t, time.Now(), to, time.Minute)
+}
+
+func TestGetSessionActivity_ADashboardMintEndsWithItsAccessToken(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead)
+	_, err := usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+		SubjectUrn:          urn.NewUserSubject(ti.userID),
+		Jti:                 uuid.NewString(),
+		RefreshTokenHash:    pgtype.Text{String: sessiontokens.DashboardMintRefreshTokenHashPrefix + ":" + uuid.NewString(), Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: ti.now.Add(14 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: ti.now.Add(-time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+		UserSessionIssuerID: ti.issuer,
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
+		UserSessionIssuerID: ti.issuer.String(),
+		From:                ti.now.Add(-24 * time.Hour).Format(time.RFC3339),
+		To:                  ti.now.Add(time.Minute).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), res.ActiveNow)
 }

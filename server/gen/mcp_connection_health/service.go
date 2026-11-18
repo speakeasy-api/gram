@@ -103,8 +103,9 @@ type ConnectionAttemptDetail struct {
 	Outcome ConnectionOutcome
 	Step    ConnectionStepGroup
 	Reason  *string
+	// What happened, in one sentence for an administrator.
 	Message *string
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string
 	Source           *ConnectionFailureSource
 	Person           *ConnectionPerson
@@ -162,8 +163,9 @@ type ConnectionAttemptRow struct {
 	Outcome ConnectionOutcome
 	Step    ConnectionStepGroup
 	Reason  *string
+	// What happened, in one sentence for an administrator.
 	Message *string
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string
 	Source           *ConnectionFailureSource
 	Person           *ConnectionPerson
@@ -181,18 +183,20 @@ type ConnectionAttemptStep struct {
 	Result     string
 	Final      bool
 	Reason     *string
-	Message    *string
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// What happened, in one sentence for an administrator.
+	Message *string
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string
 	Member           *ConnectionServer
 	Service          *string
 }
 
 type ConnectionDeniedClient struct {
-	App     *ConnectionApp
-	Reason  string
+	App    *ConnectionApp
+	Reason string
+	// What happened, in one sentence for an administrator.
 	Message string
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string
 	Attempts         int64
 	People           int64

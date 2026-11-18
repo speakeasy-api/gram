@@ -97,6 +97,9 @@ export type ConnectionAttemptDetail = {
    */
   id: string;
   member?: ConnectionServer | undefined;
+  /**
+   * What happened, in one sentence for an administrator.
+   */
   message?: string | undefined;
   network?: ConnectionNetwork | undefined;
   /**
@@ -118,7 +121,7 @@ export type ConnectionAttemptDetail = {
   connectionStepGroup: ConnectionStepGroup;
   steps: Array<ConnectionAttemptStep>;
   /**
-   * Reserved: a sentence for administrators about the reason. Not returned yet.
+   * A precise technical fact about the reason, when every cause of it shares one.
    */
   technicalMessage?: string | undefined;
   /**

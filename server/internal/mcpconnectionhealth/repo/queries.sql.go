@@ -17,18 +17,18 @@ WITH ended AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR session.organization_id = $5::text)
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) >= $1::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) < $2::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) <= clock_timestamp()
+    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text))
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) >= $1::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) < $2::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) <= clock_timestamp()
 ),
 lives AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
          MIN(session.created_at) AS started_at,
-         MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at)) AS ended_at
+         MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END)) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR session.organization_id = $5::text)
+    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text))
     AND COALESCE(session.credential_id, session.id) IN (SELECT credential FROM ended)
   GROUP BY 1
 )
@@ -40,11 +40,12 @@ WHERE lives.ended_at >= $1::timestamptz
 `
 
 type AverageEndedSessionSecondsParams struct {
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
-	IssuerID       uuid.UUID
-	ProjectID      uuid.NullUUID
-	OrganizationID string
+	FromTime             pgtype.Timestamptz
+	ToTime               pgtype.Timestamptz
+	IssuerID             uuid.UUID
+	ProjectID            uuid.NullUUID
+	OrganizationID       string
+	DashboardMintPattern string
 }
 
 // Mean length, first sign-in to expiry or revocation, of sessions that ended
@@ -56,6 +57,7 @@ func (q *Queries) AverageEndedSessionSeconds(ctx context.Context, arg AverageEnd
 		arg.IssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.DashboardMintPattern,
 	)
 	var average_seconds float64
 	err := row.Scan(&average_seconds)
@@ -70,12 +72,12 @@ WITH days AS (
 lives AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
          session.created_at AS started_at,
-         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) AS ended_at
+         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $3::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at
   FROM user_sessions AS session
-  WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR session.organization_id = $5::text)
-    AND session.created_at < $6::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) > $1::timestamptz
+  WHERE session.user_session_issuer_id = $4
+    AND (session.project_id = $5 OR (session.project_id IS NULL AND session.organization_id = $6::text))
+    AND session.created_at < $7::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $3::text THEN session.expires_at ELSE session.refresh_expires_at END) > $1::timestamptz
 )
 SELECT days.day_start, COUNT(DISTINCT lives.credential)::bigint AS active_sessions
 FROM days
@@ -87,12 +89,13 @@ ORDER BY days.day_start
 `
 
 type CountActiveSessionsByDayParams struct {
-	FromDay        pgtype.Timestamptz
-	LastDay        pgtype.Timestamptz
-	IssuerID       uuid.UUID
-	ProjectID      uuid.NullUUID
-	OrganizationID string
-	ToDay          pgtype.Timestamptz
+	FromDay              pgtype.Timestamptz
+	LastDay              pgtype.Timestamptz
+	DashboardMintPattern string
+	IssuerID             uuid.UUID
+	ProjectID            uuid.NullUUID
+	OrganizationID       string
+	ToDay                pgtype.Timestamptz
 }
 
 type CountActiveSessionsByDayRow struct {
@@ -101,11 +104,12 @@ type CountActiveSessionsByDayRow struct {
 }
 
 // A credential keeps its id across refresh rotation, so it is one session.
-// A row lives from its creation until it is deleted or reaches its deadline.
+// A row lives from its creation until it is deleted or reaches its deadline; a dashboard mint has no refresh, so its access token's.
 func (q *Queries) CountActiveSessionsByDay(ctx context.Context, arg CountActiveSessionsByDayParams) ([]CountActiveSessionsByDayRow, error) {
 	rows, err := q.db.Query(ctx, countActiveSessionsByDay,
 		arg.FromDay,
 		arg.LastDay,
+		arg.DashboardMintPattern,
 		arg.IssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
@@ -133,19 +137,25 @@ const countActiveSessionsNow = `-- name: CountActiveSessionsNow :one
 SELECT COUNT(DISTINCT COALESCE(session.credential_id, session.id))::bigint AS active_sessions
 FROM user_sessions AS session
 WHERE session.user_session_issuer_id = $1
-  AND (session.project_id = $2 OR session.organization_id = $3::text)
+  AND (session.project_id = $2 OR (session.project_id IS NULL AND session.organization_id = $3::text))
   AND session.deleted IS FALSE
-  AND session.refresh_expires_at > clock_timestamp()
+  AND CASE WHEN session.refresh_token_hash LIKE $4::text THEN session.expires_at ELSE session.refresh_expires_at END > clock_timestamp()
 `
 
 type CountActiveSessionsNowParams struct {
-	IssuerID       uuid.UUID
-	ProjectID      uuid.NullUUID
-	OrganizationID string
+	IssuerID             uuid.UUID
+	ProjectID            uuid.NullUUID
+	OrganizationID       string
+	DashboardMintPattern string
 }
 
 func (q *Queries) CountActiveSessionsNow(ctx context.Context, arg CountActiveSessionsNowParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveSessionsNow, arg.IssuerID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, countActiveSessionsNow,
+		arg.IssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.DashboardMintPattern,
+	)
 	var active_sessions int64
 	err := row.Scan(&active_sessions)
 	return active_sessions, err
@@ -269,19 +279,28 @@ const listServerNames = `-- name: ListServerNames :many
 SELECT server.id, COALESCE(server.name, server.slug, '')::text AS name, 'mcp'::text AS kind
 FROM mcp_servers AS server
 WHERE server.project_id = $1
+  AND server.deleted IS FALSE
   AND server.id = ANY($2::uuid[])
 UNION ALL
 SELECT gateway.id, gateway.name, 'gateway'::text AS kind
 FROM meta_mcp_servers AS gateway
 WHERE gateway.project_id = $1
   AND gateway.organization_id = $3::text
+  AND gateway.deleted IS FALSE
   AND gateway.id = ANY($2::uuid[])
 UNION ALL
 SELECT toolset.id, toolset.name, 'toolset'::text AS kind
 FROM toolsets AS toolset
 WHERE toolset.project_id = $1
   AND toolset.organization_id = $3::text
+  AND toolset.deleted IS FALSE
   AND toolset.id = ANY($2::uuid[])
+UNION ALL
+SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind
+FROM user_session_issuers AS issuer
+WHERE (issuer.project_id = $1 OR (issuer.project_id IS NULL AND issuer.organization_id = $3::text))
+  AND issuer.deleted IS FALSE
+  AND issuer.id = ANY($2::uuid[])
 `
 
 type ListServerNamesParams struct {
