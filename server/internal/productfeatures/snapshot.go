@@ -8,8 +8,6 @@ import (
 
 // ProductFeaturesSnapshot is the complete product-feature state for an organization.
 type ProductFeaturesSnapshot struct {
-	// ProviderSetupEnabled reports staff approval for the provider setup rollout.
-	ProviderSetupEnabled                    bool
 	LogsEnabled                             bool
 	ToolIoLogsEnabled                       bool
 	SessionCaptureEnabled                   bool
@@ -90,7 +88,6 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 	}
 
 	snapshot := ProductFeaturesSnapshot{
-		ProviderSetupEnabled:                    isEnabled(FeatureProviderSetup),
 		LogsEnabled:                             isEnabled(FeatureLogs),
 		ToolIoLogsEnabled:                       isEnabled(FeatureToolIOLogs),
 		SessionCaptureEnabled:                   isEnabled(FeatureSessionCapture),

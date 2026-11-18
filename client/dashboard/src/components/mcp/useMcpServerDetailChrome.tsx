@@ -18,7 +18,6 @@ import {
   type McpServerReachability,
   useMcpServerReachability,
 } from "./useMcpServerReachability";
-import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import {
   type SetupProvider,
   setupProviderForUrl,
@@ -107,7 +106,6 @@ const GUARDRAILS_TAB: McpDetailTabDef<TabValue> = {
  * per-scope rules), readiness checks, status control, and URLs.
  */
 export function useMcpServerDetailChrome(): McpDetailChrome | null {
-  const providerSetupRollout = useProviderSetupRollout();
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -321,7 +319,6 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   // reads the same however the queries race.
   const setupProvider = setupProviderForUrl(upstreamUrl);
   const showSetup =
-    providerSetupRollout === "enabled" &&
     !!mcpServer?.remoteMcpServerId &&
     (!!setupProvider || !!setupGuide) &&
     hasScope("mcp:write", mcpServer.id);

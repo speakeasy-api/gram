@@ -17,7 +17,6 @@ import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
   info: vi.fn(),
-  providerSetup: "enabled" as "enabled" | "disabled" | "loading",
   hasScope: vi.fn(),
   onOpenChange: vi.fn(),
   reset: vi.fn(),
@@ -33,9 +32,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("sonner", () => ({
   toast: { info: mocks.info, error: vi.fn(), warning: vi.fn() },
-}));
-vi.mock("@/hooks/useProviderSetupRollout", () => ({
-  useProviderSetupRollout: () => mocks.providerSetup,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "default" }),
@@ -165,7 +161,6 @@ function mockConfigureWorkflow(selectedServer = server): void {
 
 beforeEach(() => {
   sessionStorage.clear();
-  mocks.providerSetup = "enabled";
   mocks.hasScope.mockReturnValue(false);
   mockConfigureWorkflow();
 });
@@ -233,17 +228,6 @@ describe("guided setup identity defaults", () => {
       identityMode: "user",
     });
   });
-  it.each(["loading", "disabled"] as const)(
-    "does not override identity while guided setup is %s",
-    async (rollout) => {
-      mocks.providerSetup = rollout;
-      show("com.okta/managed-mcp", "https://{yourOktaDomain}/mcp");
-      await waitFor(() => expect(mocks.workflow).toHaveBeenCalled());
-      expect(
-        mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
-      ).toBeUndefined();
-    },
-  );
   it("keeps ordinary manual-auth catalog entries on their existing default", async () => {
     show("test/server", "https://mcp.example.test/mcp");
     await screen.findByRole("radio", { name: /User Identity/ });
@@ -360,23 +344,6 @@ describe("Salesforce catalog Add entry", () => {
         identityMode,
         name: "Test Server",
       });
-    },
-  );
-  it.each(["disabled", "loading"] as const)(
-    "does not enable guided source selection while rollout is %s",
-    async (status) => {
-      mocks.providerSetup = status;
-      openSalesforce();
-      await waitFor(() =>
-        expect(mocks.workflow.mock.calls.at(-1)?.[0].servers).toHaveLength(1),
-      );
-      const options = mocks.workflow.mock.calls.at(-1)![0];
-      expect(options.servers[0].remotes).toEqual(salesforceServer.remotes);
-      expect(options.initialConfiguration).toBeUndefined();
-      if (status === "loading")
-        expect(
-          screen.queryByRole("radio", { name: /User Identity/ }),
-        ).toBeNull();
     },
   );
   it.each([
@@ -731,54 +698,6 @@ describe.each([
     expect(mocks.navigate).toHaveBeenCalledTimes(1);
     expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
   });
-  it.each(["disabled", "loading"] as const)(
-    "keeps the install completion open while rollout is %s",
-    async (status) => {
-      mocks.providerSetup = status;
-      mocks.workflow.mockReturnValue({
-        phase: "complete",
-        statuses: [
-          {
-            key: provider.toLowerCase(),
-            name: provider,
-            identityMode: "user",
-            remoteUrl: url,
-            status: "completed",
-            mcpServerId: "example-id",
-            mcpServerParam: "installed",
-          },
-        ],
-        reset: mocks.reset,
-      });
-      const content = () => (
-        <TooltipProvider>
-          <AddServerDialog
-            servers={[catalogServer]}
-            open
-            openProviderSetup
-            onOpenChange={(open) => {
-              mocks.onOpenChange(open);
-            }}
-          />
-        </TooltipProvider>
-      );
-      const view = render(content());
-      await waitFor(() =>
-        expect(screen.getByText("Added to your project")).toBeDefined(),
-      );
-      expect(mocks.navigate).not.toHaveBeenCalled();
-      expect(mocks.onOpenChange).not.toHaveBeenCalled();
-      if (status === "loading") {
-        sessionStorage.clear();
-        mocks.providerSetup = "enabled";
-        view.rerender(content());
-        await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
-        expect(mocks.navigate).toHaveBeenCalledWith(
-          "/acme/projects/default/mcp/installed/setup",
-        );
-      }
-    },
-  );
   it("does not redirect when catalog setup opt-in is absent", async () => {
     mocks.workflow.mockReturnValue({
       phase: "complete",
@@ -952,23 +871,6 @@ describe.each(["snowflake", "okta"] as const)(
           ),
         );
         expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
-      },
-    );
-    it.each(["loading", "disabled"] as const)(
-      "does not enable Snowflake bootstrap while rollout is %s",
-      async (rollout) => {
-        mockConfigureWorkflow(snowflake);
-        mocks.providerSetup = rollout;
-        show();
-        await screen.findByRole("radio", { name: /User Identity/ });
-        const options = mocks.workflow.mock.calls.at(-1)![0];
-        expect(options.accountSetupEnabled).toBe(false);
-        expect(options.initialConfiguration).toBeUndefined();
-        expect(mocks.navigate).not.toHaveBeenCalled();
-        if (rollout === "loading") {
-          expect(await options.beforeInstall()).toBe(false);
-          expect(mocks.info).toHaveBeenCalled();
-        }
       },
     );
   },

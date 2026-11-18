@@ -4,8 +4,6 @@ import {
 } from "./account-provider";
 import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
-import { toast } from "sonner";
-import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import {
   providerSetupInstallTarget,
@@ -203,7 +201,6 @@ export function AddServerDialog({
 }: AddServerDialogProps): JSX.Element | null {
   const navigate = useNavigate();
   const routes = useRoutes();
-  const providerSetupRollout = useProviderSetupRollout();
   const setupHandoffRef = useRef(false);
 
   // Fetch server details (including remotes) when dialog opens
@@ -228,10 +225,8 @@ export function AddServerDialog({
       return null;
     return salesforceSetupInstallServer(enrichedServers[0]!);
   }, [openProviderSetup, bulk, headless, autoStartInstall, enrichedServers]);
-  const salesforceSetupEnabled =
-    providerSetupRollout === "enabled" && !!salesforceEntry;
   const guidedSalesforce =
-    salesforceSetupEnabled &&
+    !!salesforceEntry &&
     (salesforceIdentity?.identityMode ?? "user") === "user";
   const installServers = useMemo(
     () =>
@@ -240,7 +235,6 @@ export function AddServerDialog({
   );
   const initialConfiguration = useMemo(() => {
     if (
-      providerSetupRollout !== "enabled" ||
       (!openProviderSetup && !attachToGatewayId) ||
       bulk ||
       headless ||
@@ -260,7 +254,6 @@ export function AddServerDialog({
     if (salesforceEntry && salesforceIdentity) return salesforceIdentity;
     return { identityMode: "user" as const };
   }, [
-    providerSetupRollout,
     openProviderSetup,
     attachToGatewayId,
     bulk,
@@ -283,18 +276,8 @@ export function AddServerDialog({
   const workflow = useRemoteMcpInstallWorkflow({
     servers: installServers,
     initialConfiguration,
-    beforeInstall: async () => {
-      if (
-        providerSetupRollout === "loading" &&
-        enrichedServers.some((server) => !!accountCatalogProvider(server))
-      ) {
-        toast.info("Server setup is loading. Try again in a moment.");
-        return false;
-      }
-      return beforeInstall();
-    },
+    beforeInstall,
     accountSetupEnabled:
-      providerSetupRollout === "enabled" &&
       !!(openProviderSetup || attachToGatewayId) &&
       !bulk &&
       !headless &&
@@ -311,7 +294,7 @@ export function AddServerDialog({
   });
   const releaseState = useMemo<RemoteMcpInstallWorkflow>(
     () =>
-      salesforceSetupEnabled && workflow.phase === "configure"
+      salesforceEntry && workflow.phase === "configure"
         ? {
             ...workflow,
             updateServerConfig: (index, updates) => {
@@ -327,7 +310,7 @@ export function AddServerDialog({
             },
           }
         : workflow,
-    [salesforceSetupEnabled, guidedSalesforce, workflow],
+    [salesforceEntry, guidedSalesforce, workflow],
   );
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);
@@ -443,7 +426,6 @@ export function AddServerDialog({
 
   useEffect(() => {
     if (
-      providerSetupRollout !== "enabled" ||
       !open ||
       headless ||
       autoStartInstall ||
@@ -481,7 +463,6 @@ export function AddServerDialog({
       routes.mcp.details.setup.href(target) + (params.size ? `?${params}` : ""),
     );
   }, [
-    providerSetupRollout,
     openProviderSetup,
     attachToGatewayId,
     open,
@@ -592,10 +573,7 @@ export function AddServerDialog({
   if (headless) return null;
 
   // Show loading state while fetching server details
-  if (
-    isLoadingDetails ||
-    (salesforceEntry && providerSetupRollout === "loading")
-  ) {
+  if (isLoadingDetails) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <Dialog.Content className="gap-2">

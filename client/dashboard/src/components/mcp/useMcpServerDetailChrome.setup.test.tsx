@@ -4,7 +4,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useMcpServerDetailChrome } from "./useMcpServerDetailChrome";
 
 const state = vi.hoisted(() => ({
-  rollout: "enabled" as "enabled" | "disabled" | "loading",
   canWrite: true,
   url: "https://mcp.slack.com/mcp",
   server: undefined as Record<string, unknown> | undefined,
@@ -28,9 +27,6 @@ const REMOTE_SERVER = {
   slug: "slack",
   remoteMcpServerId: "remote",
 };
-vi.mock("@/hooks/useProviderSetupRollout", () => ({
-  useProviderSetupRollout: () => state.rollout,
-}));
 vi.mock("@/components/setup-guide/useSetupGuide", () => ({
   useSetupGuide: () => state.guide,
 }));
@@ -176,7 +172,6 @@ function Sidebar() {
 }
 afterEach(cleanup);
 beforeEach(() => {
-  state.rollout = "enabled";
   state.canWrite = true;
   state.url = "https://mcp.slack.com/mcp";
   state.server = undefined;
@@ -190,29 +185,13 @@ beforeEach(() => {
   state.upstreamAuthQuery = {};
   state.guide = null;
 });
-it.each(["disabled", "loading"] as const)(
-  "hides Setup while the rollout is %s",
-  (status) => {
-    state.rollout = status;
-    render(<Sidebar />);
-    expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Overview" })).toBeDefined();
-  },
-);
-it("lets an unconfigured server start Setup only after enablement, and hides it when disabled", () => {
-  state.rollout = "loading";
-  const view = render(<Sidebar />);
-  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
-  state.rollout = "enabled";
-  view.rerender(<Sidebar />);
+it("offers Setup for a supported provider", () => {
+  render(<Sidebar />);
   expect(screen.getByRole("link", { name: "Setup" }).getAttribute("href")).toBe(
     "/example/projects/default/mcp/slack/setup",
   );
-  state.rollout = "disabled";
-  view.rerender(<Sidebar />);
-  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
 });
-it("retains the write permission requirement when the rollout is enabled", () => {
+it("requires write permission to offer Setup", () => {
   state.canWrite = false;
   render(<Sidebar />);
   expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
@@ -355,16 +334,12 @@ it("sends a guide-only provider to the Setup tab, as the step after Authenticati
   expect(screen.getByText(/Marked done/)).toBeTruthy();
 });
 
-it("offers Setup for a guide-only provider only with the rollout and write access", () => {
+it("offers Setup for a guide-only provider only with write access", () => {
   state.url = "https://mcp.linear.app/mcp";
   state.guide = { only: { title: "Linear" }, openGuide: null };
-  const view = render(<Sidebar />);
+  render(<Sidebar />);
   expect(screen.getByRole("link", { name: "Setup" })).toBeDefined();
-  state.rollout = "disabled";
-  view.rerender(<Sidebar />);
-  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
   cleanup();
-  state.rollout = "enabled";
   renderReadiness();
   cleanup();
   state.canWrite = false;
