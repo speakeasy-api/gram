@@ -180,6 +180,15 @@ func TestIDJAGExchangeRecordsRefusals(t *testing.T) {
 			status: http.StatusBadRequest, body: `{"error":"invalid_grant","error_description":"assertion is invalid"}`,
 			what: mcpconnectionattempts.CodeResourceMismatch, who: mcpconnectionattempts.WhoApp, detail: "assertion_resource_mismatch",
 		},
+		"assertion naming another client": {
+			granted: true,
+			sign: func(t *testing.T, f idJAGOutageFixture, jti string) string {
+				t.Helper()
+				return f.signer.sign(t, idJAGOutageIssuer, f.resource, f.resource, "https://other-app.example.test/client.json", mockidp.MockUserEmail, jti)
+			},
+			status: http.StatusBadRequest, body: `{"error":"invalid_grant","error_description":"assertion is invalid"}`,
+			what: mcpconnectionattempts.CodeMalformedAssertion, who: mcpconnectionattempts.WhoAdmin, detail: "assertion_client_mismatch",
+		},
 		"person not in the directory": {
 			granted: true,
 			sign: func(t *testing.T, f idJAGOutageFixture, jti string) string {
@@ -360,7 +369,7 @@ func TestIDJAGExchangePublicClientJunkWritesNoRow(t *testing.T) {
 
 	rec.RequireNothing()
 	require.Equal(t, map[string]int64{
-		"token_assertion_missing":   1,
+		"token_missing_assertion":   1,
 		"token_assertion_malformed": 1,
 		"token_resource_mismatch":   1,
 	}, refusalsWithoutRow(t, f.reader))

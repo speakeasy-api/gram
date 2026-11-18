@@ -34,7 +34,7 @@ func TestIDJAGAssertionHappenedStaleKeyReadFailure(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeConfigurationRequired, code, "a key set that cannot be used is still the administrator's")
 }
 
-// A key set fetch that ended in a cancellation writes no row only when this request ended; a live request that shared another caller's fetch gets the key set problem.
+// A key set fetch that ended in a cancellation writes no row only when this request ended; a live request that shared another caller's fetch gets a temporary problem of ours.
 func TestIDJAGAssertionHappenedCancelledKeyFetch(t *testing.T) {
 	t.Parallel()
 
@@ -48,5 +48,5 @@ func TestIDJAGAssertionHappenedCancelledKeyFetch(t *testing.T) {
 
 	code, _, unrecorded = idJAGAssertionHappened(t.Context(), cancelledFetch)
 	require.Empty(t, unrecorded)
-	require.Equal(t, mcpconnectionattempts.CodeIDPTransientFailure, code)
+	require.Equal(t, mcpconnectionattempts.CodeTransientFailure, code)
 }

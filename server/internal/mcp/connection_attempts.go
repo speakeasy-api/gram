@@ -944,6 +944,12 @@ var unverifiedIDJAGReasons = []idjag.Reason{
 	idjag.ReasonKeyUnknown, idjag.ReasonKeyUnusable, idjag.ReasonSignatureInvalid,
 }
 
+// providerMintedIDJAGReasons are verified claims the identity provider's setup decides, not the app.
+var providerMintedIDJAGReasons = []idjag.Reason{
+	idjag.ReasonClaimsMalformed, idjag.ReasonClientMismatch, idjag.ReasonExpiryMissing,
+	idjag.ReasonIssuedAtMissing, idjag.ReasonLifetimeTooLong, idjag.ReasonIDMissing,
+}
+
 // keyFetchCancelled is a key set fetch that ended because a request context ended.
 func keyFetchCancelled(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
@@ -964,9 +970,9 @@ func idJAGAssertionHappened(ctx context.Context, err error) (mcpconnectionattemp
 	// This request ended while the key set was fetched: nothing shows the key set failed.
 	case reason == idjag.ReasonKeyUnusable && keyFetchCancelled(err) && ctx.Err() != nil:
 		return none, detail, "token_assertion_key_fetch_cancelled"
-	// A shared fetch another caller ended: from this live request, the key set could not be fetched.
+	// A shared fetch another caller ended: our fetch sharing, not the identity provider.
 	case reason == idjag.ReasonKeyUnusable && keyFetchCancelled(err):
-		return mcpconnectionattempts.CodeIDPTransientFailure, detail, ""
+		return mcpconnectionattempts.CodeTransientFailure, detail, ""
 	// The stored key set itself failed, not the caller's key: the administrator's setup.
 	case reason == idjag.ReasonKeyUnusable && !errors.Is(err, jwks.ErrKeyAlgorithmMismatch):
 		return mcpconnectionattempts.CodeConfigurationRequired, mcpconnectionattempts.Detail("key_set_unusable"), ""
@@ -990,6 +996,8 @@ func idJAGAssertionHappened(ctx context.Context, err error) (mcpconnectionattemp
 		return mcpconnectionattempts.CodeResourceMismatch, detail, ""
 	case reason == idjag.ReasonResourceNotIndicated:
 		return mcpconnectionattempts.CodeInvalidRequest, detail, ""
+	case slices.Contains(providerMintedIDJAGReasons, reason):
+		return mcpconnectionattempts.CodeMalformedAssertion, detail, ""
 	case strings.HasPrefix(string(reason), "assertion_"):
 		return mcpconnectionattempts.CodeAssertionInvalid, detail, ""
 	default:

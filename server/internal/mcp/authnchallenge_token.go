@@ -591,7 +591,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request", exchange.reject(mcpmetrics.IDJAGRejectionInvalidRequest, nil)...)
-		s.refusedWithoutRow(ctx, t, "token_assertion_missing")
+		s.refusedWithoutRow(ctx, t, "token_missing_assertion")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -758,7 +758,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	if err != nil {
 		// The issuer was retired after the assertion was checked.
 		if errors.Is(err, pgx.ErrNoRows) {
-			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("issuer_retired"))
 		} else {
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		}
