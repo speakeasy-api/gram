@@ -9,6 +9,7 @@ import { Text } from "@/components/ui/Text";
 import type { ToolAnnotation } from "@/components/tool-selection/ToolSelectionPanel";
 import type { Tool } from "@/lib/toolTypes";
 import type { ServerTool } from "@/pages/access/serverMerge";
+import { toolDispositionAnnotations } from "@/pages/access/mcpAccessModel";
 import type { ToolSource } from "@/pages/access/useServerTools";
 import { Button } from "@/components/ui/Button";
 import { TriangleAlert } from "lucide-react";
@@ -23,16 +24,13 @@ import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 import { toolSourceUnavailableMessage } from "./access/toolSourceMessage";
 
-/** The annotations a tool carries, in the vocabulary selectors store. */
+/**
+ * The tool's one disposition, in the vocabulary selectors store. The server
+ * matches a tool by that disposition alone, so coverage does too.
+ */
 function toolAnnotations(tool: Tool | ServerTool): ToolAnnotation[] {
-  const annotations = "annotations" in tool ? tool.annotations : undefined;
-  if (!annotations) return [];
-  const carried: ToolAnnotation[] = [];
-  if (annotations.readOnlyHint) carried.push("read_only");
-  if (annotations.destructiveHint) carried.push("destructive");
-  if (annotations.idempotentHint) carried.push("idempotent");
-  if (annotations.openWorldHint) carried.push("open_world");
-  return carried;
+  if (!("annotations" in tool)) return [];
+  return toolDispositionAnnotations(tool);
 }
 
 function getInitials(name: string) {
