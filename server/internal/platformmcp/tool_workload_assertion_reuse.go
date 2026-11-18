@@ -106,37 +106,37 @@ func (r *PostgresReader) WithWorkloadAssertionReuse(management WorkloadAssertion
 	return r
 }
 
-func (s *WorkloadAssertionReuseService) scopedProjectContext(ctx context.Context, principal Principal, projectInput string) (context.Context, string, error) {
+func (s *WorkloadAssertionReuseService) scopedProjectContext(ctx context.Context, principal Principal, projectInput string) (context.Context, string, string, error) {
 	if s == nil || s.management == nil || s.resolveProject == nil {
-		return nil, "", ErrUnavailable
+		return nil, "", "", ErrUnavailable
 	}
 	projectID, err := uuid.Parse(projectInput)
 	if err != nil || projectID == uuid.Nil {
-		return nil, "", oops.C(oops.CodeBadRequest)
+		return nil, "", "", oops.C(oops.CodeBadRequest)
 	}
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil || principal.UserID == "" || principal.OrganizationID == "" || ac.UserID != principal.UserID || ac.ActiveOrganizationID != principal.OrganizationID {
-		return nil, "", oops.C(oops.CodeUnauthorized)
+		return nil, "", "", oops.C(oops.CodeUnauthorized)
 	}
 	// Do not manufacture API-key tenancy to expose project-tier issuers to an
 	// external user. The shared API intentionally restricts users to org tier.
 	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
-		return nil, "", oops.C(oops.CodeUnauthorized)
+		return nil, "", "", oops.C(oops.CodeUnauthorized)
 	}
 	project, err := s.resolveProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: projectID.String()})
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	if project.ID != projectID {
-		return nil, "", ErrForbidden
+		return nil, "", "", ErrForbidden
 	}
 	scoped := *ac
 	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
-	return contextvalues.SetAuthContext(ctx, &scoped), projectID.String(), nil
+	return contextvalues.SetAuthContext(ctx, &scoped), projectID.String(), project.Slug, nil
 }
 
 func (s *WorkloadAssertionReuseService) scopedContext(ctx context.Context, principal Principal, projectInput, issuerInput string) (context.Context, string, string, error) {
-	ctx, projectID, err := s.scopedProjectContext(ctx, principal, projectInput)
+	ctx, projectID, _, err := s.scopedProjectContext(ctx, principal, projectInput)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -202,11 +202,11 @@ func workloadTrustPolicyProjection(policy *gen.WorkloadIdentityPolicy, principal
 }
 
 func (s *WorkloadAssertionReuseService) getTrustPolicy(ctx context.Context, principal Principal, input GetWorkloadTrustPolicyInput) (WorkloadTrustPolicyOutput, error) {
-	ctx, projectID, err := s.scopedProjectContext(ctx, principal, input.ProjectID)
+	ctx, projectID, projectSlug, err := s.scopedProjectContext(ctx, principal, input.ProjectID)
 	if err != nil {
 		return WorkloadTrustPolicyOutput{}, fmt.Errorf("workload trust policy: %w", err)
 	}
-	policy, err := s.management.List(ctx, &gen.ListPayload{})
+	policy, err := s.management.List(ctx, &gen.ListPayload{ProjectSlugInput: &projectSlug})
 	if err != nil {
 		return WorkloadTrustPolicyOutput{}, fmt.Errorf("workload trust policy: %w", err)
 	}
@@ -289,7 +289,9 @@ func workloadTrustPolicyToolResult(err error) (*mcp.CallToolResult, bool) {
 		switch shareable.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
 			result.Code, result.Message = "invalid_request", "Provide one exact project_slug from list_projects."
-		case oops.CodeForbidden, oops.CodeUnauthorized, oops.CodeNotFound:
+		case oops.CodeUnauthorized:
+			result.Code, result.Message = "permission_denied", "A user identity and workload:read are required."
+		case oops.CodeForbidden, oops.CodeNotFound:
 			result.Code, result.Message = "not_found", "That project is not available to you."
 		}
 	}

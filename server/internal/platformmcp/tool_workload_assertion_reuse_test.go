@@ -406,7 +406,9 @@ func TestWorkloadTrustPolicyReadFiltersAndLabelsVisibleTiers(t *testing.T) {
 			return ResolvedProject{ID: project, Slug: "workload-project"}, nil
 		},
 		management: assertionReuseManagementStub{
-			list: func(scoped context.Context, _ *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
+			list: func(scoped context.Context, payload *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
+				require.NotNil(t, payload.ProjectSlugInput)
+				require.Equal(t, "workload-project", *payload.ProjectSlugInput)
 				authContext, ok := contextvalues.GetAuthContext(scoped)
 				require.True(t, ok)
 				require.Equal(t, project, *authContext.ProjectID)
@@ -464,6 +466,14 @@ func TestWorkloadTrustPolicyToolContractAndUnavailableResult(t *testing.T) {
 	text, ok := result.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"feature":"workload_trust_policy"`)
+
+	unauthorized, ok := workloadTrustPolicyToolResult(oops.C(oops.CodeUnauthorized))
+	require.True(t, ok)
+	require.True(t, unauthorized.IsError)
+	unauthorizedText, ok := unauthorized.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, unauthorizedText.Text, `"code":"permission_denied"`)
+	require.Contains(t, unauthorizedText.Text, "workload:read")
 
 	output := inferOutputSchema[WorkloadTrustPolicyOutput]("list_workload_identities")
 	require.NotNil(t, output.Properties["issuers"])

@@ -65,6 +65,8 @@
 - id: access-workload-identities-list
   prompt: List the workload identities trusted for the Default project, including their issuers, subject match rules, and assigned agents.
   expect: [list_workload_identities]
+  args:
+    project_slug: default
 
 - id: access-workload-reuse-read
   prompt: Is replay protection on for workload issuer 8a1b2c00-0000-4000-8000-000000000091? Use the Default project for context.
