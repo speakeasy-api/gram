@@ -1989,12 +1989,14 @@ WHERE c.project_id = @project_id
   AND m.created_at <= @time_end;
 
 -- name: GetChatMetricsSummary :one
--- Starts from the project's messages in the window, a range scan on
--- chat_messages_project_id_created_at_idx, so the work grows with the chats
--- active in the window rather than with the project's whole chat history. The
--- latest resolution is one index probe per active chat. Neither step's plan
--- depends on the planner's row estimate for the window, which is unreliable
--- when created_at statistics lag behind recent inserts.
+-- Starts from the project's messages in the window, which
+-- chat_messages_project_id_created_at_idx serves as a range scan, so the work
+-- grows with the chats active in the window rather than with the project's
+-- whole chat history. The latest resolution is one LIMIT 1 lookup per active
+-- chat, which chat_resolutions_chat_id_created_at_idx serves as an index
+-- probe. Unlike the join it replaces, this shape stays cheap when the planner
+-- underestimates the window's rows, which happens when created_at statistics
+-- lag behind recent inserts. Postgres still picks the access paths by cost.
 WITH window_chats AS MATERIALIZED (
   SELECT
     m.chat_id,

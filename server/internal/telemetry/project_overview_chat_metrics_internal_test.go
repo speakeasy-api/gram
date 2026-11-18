@@ -46,3 +46,16 @@ func TestFetchOverviewChatMetricsZeroesOnError(t *testing.T) {
 	})
 	require.Equal(t, chatRepo.GetChatMetricsSummaryRow{}, got)
 }
+
+func TestFetchOverviewChatMetricsZeroesWhenRequestCanceled(t *testing.T) {
+	t.Parallel()
+
+	s := &Service{logger: testenv.NewLogger(t)}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	got := s.fetchOverviewChatMetrics(ctx, time.Minute, func(ctx context.Context) (chatRepo.GetChatMetricsSummaryRow, error) {
+		return chatRepo.GetChatMetricsSummaryRow{TotalChats: 7}, ctx.Err()
+	})
+	require.Equal(t, chatRepo.GetChatMetricsSummaryRow{}, got)
+}
