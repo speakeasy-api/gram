@@ -314,8 +314,14 @@ func deleteOwnedDynamic(ctx context.Context, client dynamic.ResourceInterface, n
 	)
 }
 
+// deleteWithoutReadConfirmation deletes an object the caller cannot read and
+// repeats the DELETE until it reports NotFound. It uses background
+// propagation: the object has no dependents, and a foreground delete would
+// leave it briefly in place carrying the foregroundDeletion finalizer, which
+// the OAuth Secret admission policy refuses on the repeated DELETE (422
+// Invalid) because those Secrets may not carry finalizers.
 func deleteWithoutReadConfirmation(ctx context.Context, name, kind string, remove func(context.Context, string, metav1.DeleteOptions) error) error {
-	propagation := metav1.DeletePropagationForeground
+	propagation := metav1.DeletePropagationBackground
 	options := metav1.DeleteOptions{PropagationPolicy: &propagation}
 	for range 2 {
 		err := remove(ctx, name, options)
