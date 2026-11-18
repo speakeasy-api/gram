@@ -1,0 +1,24 @@
+server/internal/telemetry/impl.go
+  s_5d8afeea7d7532::t_9a97b41aa1216b 2581-2586,2643-2658,2661-2668,2670-2671,2673-2674
+  s_5d8afeea7d7532::t_13dd37cd451b8b 2672
+  s_5d8afeea7d7532::t_716849c863eb1d 2659-2660,2669,2675
+  s_5d8afeea7d7532::t_634f379a4b95ef 2676-2677
+server/internal/telemetry/project_overview_chat_metrics_internal_test.go
+  s_5d8afeea7d7532::t_13dd37cd451b8b 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a65b5dc193b78904f849ac3d32628f1552278e47",
+  "prompts": {},
+  "sessions": {
+    "s_5d8afeea7d7532": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f553444d-a6f3-494d-8475-5cd56f07da4c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
