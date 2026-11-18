@@ -485,6 +485,34 @@ func TestMerge_AliasesAreEmittedOnce(t *testing.T) {
 	require.Empty(t, res.Added)
 }
 
+func TestMerge_AliasThroughAnotherLinkInAnyOrder(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "read it"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+	))
+	require.NoError(t, err)
+
+	// "outer" points at "inner", which is listed after it.
+	res, err := tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links: []Link{
+			{ID: line("outer"), To: parentLine("inner")},
+			{ID: line("inner"), To: parentLine("u2")},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Aliases, 2)
+	for _, a := range res.Aliases {
+		require.Equal(t, mustNode(t, tr, line("u2")), a.Node)
+	}
+
+	res, err = tr.Merge(transcriptDelivery(transcriptToolResult("u3", "outer", "toolu_1", "contents")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1, "a later delivery can name the outer line")
+}
+
 func TestMerge_DroppedFirstLineCanBeNamedLater(t *testing.T) {
 	t.Parallel()
 	tr := New(sequentialIDs())

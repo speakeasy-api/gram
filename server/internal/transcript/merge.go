@@ -218,8 +218,11 @@ func (t *Transcript) Merge(d Delivery) (Result, error) {
 		}
 		target := t.root
 		if l.To != nil {
-			n, ok := t.lookup(*l.To)
-			if !ok {
+			// Follow other links in this delivery, in any order. A link that
+			// leads through a compaction boundary is not stored: compaction
+			// links resolve only inside the delivery that carries them.
+			n, cont, err := t.resolve(*l.To, links, 0)
+			if err != nil || cont != nil {
 				continue
 			}
 			target = n
