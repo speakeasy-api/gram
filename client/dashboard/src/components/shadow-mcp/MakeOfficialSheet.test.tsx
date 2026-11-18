@@ -169,5 +169,11 @@ describe("MakeOfficialSheet", () => {
     expect(
       screen.getByRole("link", { name: "Finish setup" }).getAttribute("target"),
     ).toBe("_blank");
+    // An off server cannot be linked, so the sheet does not try, and says
+    // how to link it instead of reporting a failed link.
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(screen.getByText("Server added")).toBeTruthy();
+    expect(screen.getByText(/then link it from this page/)).toBeTruthy();
+    expect(screen.queryByText(/The link could not be saved/)).toBeNull();
   });
 });

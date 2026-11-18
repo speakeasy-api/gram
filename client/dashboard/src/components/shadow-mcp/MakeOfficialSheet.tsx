@@ -49,7 +49,8 @@ export type Created = {
   settingsHref: string;
   /** The server was added but stays off until its sign-in is set up. */
   setupRequired: string | null;
-  /** The server exists but the link could not be saved. */
+  /** The server exists but is not linked: the link could not be saved, or
+   *  the server stays off until its sign-in is set up. */
   linkFailed: boolean;
 };
 
@@ -142,25 +143,30 @@ export function MakeOfficialSheet({
               ? agentCredential.authorizationValue.trim()
               : undefined,
         });
-      let linkFailed = false;
-      try {
-        await link.save({
-          serverUrl: server.canonicalServerUrl,
-          mcpServerId: mcpServer.id,
-          allowDirectAccess: false,
-        });
-      } catch {
-        linkFailed = true;
+      const setupRequired =
+        identityConfiguration.status === "setup-required"
+          ? identityConfiguration.message
+          : null;
+      // A server waiting on its sign-in stays off, and an off server cannot
+      // be linked, so the link waits until the admin turns it on.
+      let linkFailed = setupRequired !== null;
+      if (!linkFailed) {
+        try {
+          await link.save({
+            serverUrl: server.canonicalServerUrl,
+            mcpServerId: mcpServer.id,
+            allowDirectAccess: false,
+          });
+        } catch {
+          linkFailed = true;
+        }
       }
       const routeParam = mcpServerRouteParam(mcpServer);
       setCreated({
         name: mcpServer.name || name.trim() || shadowName,
         serverHref: routes.mcp.details.overview.href(routeParam),
         settingsHref: `${routes.mcp.details.settings.href(routeParam)}#${MCP_AUTHENTICATION_SECTION_ID}`,
-        setupRequired:
-          identityConfiguration.status === "setup-required"
-            ? identityConfiguration.message
-            : null,
+        setupRequired,
         linkFailed,
       });
     } catch (err) {
@@ -366,6 +372,7 @@ export function CreatedSummary({
           >
             Finish setup
           </a>
+          , turn the server on, then link it from this page.
         </Alert>
       ) : (
         <Text muted small>
@@ -373,7 +380,7 @@ export function CreatedSummary({
           page you can switch the link off while you test, or remove it.
         </Text>
       )}
-      {created.linkFailed ? (
+      {created.linkFailed && !created.setupRequired ? (
         <Alert variant="error" dismissible={false}>
           The link could not be saved. Link it from this server&apos;s page
           under Advanced.

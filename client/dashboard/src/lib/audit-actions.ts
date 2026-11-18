@@ -1016,8 +1016,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "risk_policy:eval_review_delete":
       return "deleted an evaluation review for";
 
+    // One action records linking, switching the link off or on, and
+    // removing it, so the phrase names the link rather than one of them.
     case "shadow_mcp_official_server:set":
-      return "set the official version of Shadow MCP server";
+      return "changed the official server link of Shadow MCP server";
 
     case "risk_result:dismiss":
       return "dismissed risk finding";

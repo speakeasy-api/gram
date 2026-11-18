@@ -165,7 +165,10 @@ export function CatalogOfficialSheet({
   const [stage, setStage] = useState<Stage>({ kind: "configure" });
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
-  const handled = useRef(false);
+  // Set when this opening starts an install, and cleared once its result is
+  // handled. The workflow keeps its complete phase across a close, so a
+  // reopened sheet must not act on the previous install's result.
+  const started = useRef(false);
   // What the admin entered for the last attempt, put back after a failed
   // install starts the workflow over.
   const attempted = useRef<ServerConfig | null>(null);
@@ -176,7 +179,7 @@ export function CatalogOfficialSheet({
     if (!open) return;
     setStage({ kind: "configure" });
     setError(null);
-    handled.current = false;
+    started.current = false;
     resetWorkflow();
     // Each opening starts over; the workflow's reset is stable per opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,12 +245,13 @@ export function CatalogOfficialSheet({
     });
   };
 
-  // The install reports its result as a phase; act on it once.
+  // The install reports its result as a phase; act on it once, and only for
+  // an install this opening started.
   const finishRef = useRef(finish);
   finishRef.current = finish;
   useEffect(() => {
-    if (workflow.phase !== "complete" || handled.current) return;
-    handled.current = true;
+    if (workflow.phase !== "complete" || !started.current) return;
+    started.current = false;
     const status = workflow.statuses[0];
     if (!status?.mcpServerId) {
       setError(status?.error ?? "The server could not be added.");
@@ -256,7 +260,6 @@ export function CatalogOfficialSheet({
       // Nothing was added, but the workflow ends in its complete phase.
       // Start it over so the form can be edited and sent again.
       restore.current = attempted.current;
-      handled.current = false;
       resetWorkflow();
       return;
     }
@@ -279,9 +282,11 @@ export function CatalogOfficialSheet({
     attempted.current = config ?? null;
     setError(null);
     setWorking(true);
+    started.current = true;
     try {
       await workflow.startInstall();
     } catch (err) {
+      started.current = false;
       setError(
         err instanceof Error ? err.message : "The server could not be added.",
       );

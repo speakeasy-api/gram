@@ -108,7 +108,7 @@ describe("shadowMCPAudienceSummary", () => {
         },
         groups,
       ),
-    ).toBe("Applies to Contractors");
+    ).toBe("Applies only to Contractors. Everyone else is allowed by default.");
     expect(
       shadowMCPAudienceSummary(
         {
@@ -117,7 +117,9 @@ describe("shadowMCPAudienceSummary", () => {
         },
         groups,
       ),
-    ).toBe("Applies to 1 role and 2 people");
+    ).toBe(
+      "Applies only to 1 role and 2 people. Everyone else is allowed by default.",
+    );
     expect(
       shadowMCPAudienceSummary(
         { audienceType: "targeted", audiencePrincipalUrns: [] },

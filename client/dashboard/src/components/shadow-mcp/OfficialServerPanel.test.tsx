@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   probe: vi.fn(),
   capture: vi.fn(),
   toastSuccess: vi.fn(),
+  toastError: vi.fn(),
   save: vi.fn(),
   canWriteMcp: true,
   catalogServers: [] as Array<{
@@ -139,7 +140,7 @@ vi.mock("@/components/ui/Select", () => ({
   }) => <option value={value}>{children}</option>,
 }));
 vi.mock("sonner", () => ({
-  toast: { success: mocks.toastSuccess, error: vi.fn() },
+  toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
 
 import { OfficialServerPanel } from "./OfficialServerPanel";
@@ -181,6 +182,7 @@ describe("OfficialServerPanel", () => {
     mocks.probe.mockReset();
     mocks.capture.mockReset();
     mocks.toastSuccess.mockReset();
+    mocks.toastError.mockReset();
     mocks.save.mockReset();
     mocks.save.mockResolvedValue(undefined);
     mocks.catalogServers = [];
@@ -484,6 +486,36 @@ describe("OfficialServerPanel", () => {
         allowDirectAccess: false,
       }),
     );
+  });
+
+  it("says so when undoing a removed link fails", async () => {
+    const official = {
+      mcpServerId: "11111111-1111-4111-8111-111111111111",
+      name: "Tracker",
+      url: "https://app.example.com/mcp/tracker",
+      directAccessAllowed: false,
+    };
+    renderPanel(server({ officialServer: official }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
+    await vi.waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+    const options = mocks.toastSuccess.mock.calls[0]?.[1] as {
+      action: { label: string; onClick: () => void };
+    };
+    expect(options.action.label).toBe("Undo");
+
+    mocks.save.mockRejectedValueOnce(new Error("nope"));
+    options.action.onClick();
+    await vi.waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Could not restore the link. Try again.",
+      ),
+    );
+    expect(mocks.save).toHaveBeenLastCalledWith({
+      serverUrl: "https://tracker.example.com/mcp",
+      mcpServerId: official.mcpServerId,
+      allowDirectAccess: false,
+    });
   });
 
   it("recommends the server that already serves the URL, others under Advanced", async () => {

@@ -224,6 +224,19 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
     }
   };
 
+  const restoreLink = async () => {
+    try {
+      await save({
+        serverUrl: server.canonicalServerUrl,
+        mcpServerId: official.mcpServerId,
+        allowDirectAccess: official.directAccessAllowed,
+      });
+      toast.success(`Link to “${official.name}” restored`);
+    } catch {
+      toast.error("Could not restore the link. Try again.");
+    }
+  };
+
   const removeLink = async () => {
     try {
       await save({
@@ -232,15 +245,7 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         allowDirectAccess: false,
       });
       toast.success(`Link to “${official.name}” removed`, {
-        action: {
-          label: "Undo",
-          onClick: () =>
-            void save({
-              serverUrl: server.canonicalServerUrl,
-              mcpServerId: official.mcpServerId,
-              allowDirectAccess: official.directAccessAllowed,
-            }),
-        },
+        action: { label: "Undo", onClick: () => void restoreLink() },
       });
     } catch {
       toast.error("Could not remove the link. Try again.");
