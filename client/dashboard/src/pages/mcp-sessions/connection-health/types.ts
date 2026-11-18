@@ -10,14 +10,8 @@ export const ATTEMPT_OUTCOMES = [
 ] as const;
 export type Outcome = (typeof ATTEMPT_OUTCOMES)[number];
 
-/** The five outcomes the design offers as filters. */
-export const FILTER_OUTCOMES: readonly Outcome[] = [
-  "connected",
-  "failed",
-  "blocked",
-  "declined",
-  "didnt_finish",
-];
+/** Every outcome is a filter, In progress included. */
+export const FILTER_OUTCOMES: readonly Outcome[] = ATTEMPT_OUTCOMES;
 
 export const STEP_GROUPS = [
   "connect",
@@ -47,6 +41,7 @@ export const SIGN_IN_STEPS: readonly StepGroup[] = [
 /** The party that returned a failure. */
 export type Source =
   | "service"
+  | "server"
   | "app"
   | "identity_provider"
   | "speakeasy_setting"
@@ -134,6 +129,8 @@ export interface AttemptRow {
   step: StepGroup;
   reason?: string;
   message?: string;
+  /** Reserved: a sentence for administrators; not returned yet. */
+  technicalMessage?: string;
   source?: Source;
   /** Absent: no known person. */
   person?: Person;
@@ -188,6 +185,7 @@ export interface AttemptStep {
   final: boolean;
   reason?: string;
   message?: string;
+  technicalMessage?: string;
   member?: ServerRef;
   service?: string;
 }
@@ -207,7 +205,7 @@ export interface GetAttemptResponse {
   attempt?: AttemptDetail;
 }
 
-export type SummaryBucket = "hour" | "day";
+export type SummaryBucket = "hour" | "six_hours" | "day";
 
 export interface SignInSummaryResponse {
   loggingEnabled: boolean;
@@ -224,6 +222,9 @@ export interface SessionActivityResponse {
   days: { day: string; activeSessions: number }[];
   activeNow: number;
   averageSessionSeconds?: number;
+  /** The average always covers the 30 days ending now. */
+  averageWindowFrom: string;
+  averageWindowTo: string;
   configuredSessionSeconds: number;
 }
 
@@ -231,6 +232,7 @@ export interface DeniedClient {
   app: App;
   reason: string;
   message: string;
+  technicalMessage?: string;
   attempts: number;
   people: number;
   networks: number;
@@ -256,9 +258,15 @@ export interface SuspectedProblem {
   /** "Linear is returning errors." */
   fact: string;
   since: string;
-  people: number;
+  lastFailedAt: string;
+  peopleCount: number;
   /** Only when listed for one server. */
-  peopleOnServer?: number;
+  peopleOnServerCount?: number;
+  scope: {
+    kind: "server" | "service" | "app_version" | "person";
+    id: string;
+    name: string;
+  };
   rule: ProblemRule;
   /** Opens Connection Logs with exactly this item's rows. */
   filters: { from: string } & AttemptFilters;
@@ -269,24 +277,27 @@ export interface ListSuspectedProblemsResponse {
   problems?: SuspectedProblem[];
 }
 
-/** Contract `people` collides (count vs list); the list count is `people.length`. */
-export interface SuspectedProblemDetail extends Omit<
-  SuspectedProblem,
-  "people"
-> {
+export interface SuspectedProblemDetail extends SuspectedProblem {
   source?: Source;
   failedPer10Minutes: { start: string; attempts: number }[];
   lastConnectedAt?: string;
-  messages: { reason: string; message: string; attempts: number }[];
+  otherFailuresOnService: number;
+  messages: {
+    reason: string;
+    message: string;
+    technicalMessage?: string;
+    attempts: number;
+  }[];
   people: {
     person?: Person;
     network?: Network;
     app: App;
     server?: ServerRef;
+    member?: ServerRef;
     attempts: number;
     firstFailedAt: string;
   }[];
-  servers: { server: ServerRef; attempts: number }[];
+  servers: { server: ServerRef; member?: ServerRef; attempts: number }[];
 }
 
 export interface GetSuspectedProblemResponse {
@@ -295,10 +306,13 @@ export interface GetSuspectedProblemResponse {
   problem?: SuspectedProblemDetail;
 }
 
-/** Not in the contract; Killswitches in force stays on fixtures. */
+/** A killswitch in force, from the existing killswitches API. */
 export interface ActiveKillswitch {
   id: string;
-  subject: { kind: "agent" | "person"; name: string };
-  servers: string[];
+  userId: string;
+  scope:
+    | { type: "all_servers" }
+    | { type: "selected_servers"; serverIds: string[] };
+  /** Null when it holds until lifted. */
   until: string | null;
 }

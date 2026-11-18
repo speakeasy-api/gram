@@ -43,6 +43,7 @@ import { ConnectionsTab } from "./ConnectionsTab";
 import { ConnectionsViews } from "./connection-health/ConnectionsViews";
 import { useConnectionHealthFlag } from "./connection-health/flag";
 import { OverviewTab } from "./connection-health/OverviewTab";
+import { SessionDurationControl } from "./connection-health/SessionDurationControl";
 import { ProviderPicker } from "./ProviderPicker";
 import {
   clientAccessLabel,
@@ -194,6 +195,7 @@ function ProviderPage(): JSX.Element {
               <ProviderHeaderControls
                 provider={provider}
                 settingsHref={tabHref("settings")}
+                healthOn={healthOn}
               />
             ) : null
           }
@@ -227,10 +229,31 @@ function ProviderPage(): JSX.Element {
 function ProviderHeaderControls({
   provider,
   settingsHref,
+  healthOn,
 }: {
   provider: UserSessionIssuer;
   settingsHref: string;
+  healthOn: boolean;
 }): JSX.Element {
+  if (healthOn) {
+    return (
+      <DetailHeaderControls
+        rows={[
+          {
+            key: "session-duration",
+            label: "Session duration",
+            control: (
+              <SessionDurationControl
+                providerId={provider.id}
+                configuredHours={provider.sessionDurationHours}
+                href={`${settingsHref}#session-length`}
+              />
+            ),
+          },
+        ]}
+      />
+    );
+  }
   const duration = splitIntoUnit(provider.sessionDurationHours);
   const rows: DetailHeaderControlRow[] = [
     {

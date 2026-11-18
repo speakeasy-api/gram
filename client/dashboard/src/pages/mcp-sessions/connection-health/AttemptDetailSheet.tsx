@@ -185,6 +185,11 @@ function AttemptDetailBody({
             <div className="border-foreground border-l-2 pl-3">
               <div className="text-eyebrow mb-1">Message</div>
               <p className="text-sm">{attempt.message}</p>
+              {attempt.technicalMessage ? (
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {attempt.technicalMessage}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

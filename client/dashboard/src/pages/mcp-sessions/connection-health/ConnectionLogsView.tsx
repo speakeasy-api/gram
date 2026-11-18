@@ -88,7 +88,7 @@ function optionsFrom(facets: AttemptFacets | undefined): OptionsById {
   };
 }
 
-/** Matches free text to people, else servers, since the API filters by id. */
+/** Matches free text to people, else servers, else gateway members (the API filters by id). */
 function searchFilters(
   text: string,
   facets: AttemptFacets | undefined,
@@ -103,6 +103,8 @@ function searchFilters(
   if (people.length > 0) return { people };
   const serverIds = hits(facets?.servers);
   if (serverIds.length > 0) return { serverIds };
+  const memberIds = hits(facets?.members);
+  if (memberIds.length > 0) return { memberIds };
   return "no-match";
 }
 
@@ -231,6 +233,9 @@ export function ConnectionLogsView({
     [filters, lockedServer, setParam],
   );
 
+  const viewerScope =
+    (isReference ? reference.data : list.data?.pages[0])?.viewerScope ??
+    counts.data?.viewerScope;
   const loggingEnabled =
     (isReference ? reference.data : list.data?.pages[0])?.loggingEnabled ??
     counts.data?.loggingEnabled ??
@@ -264,7 +269,7 @@ export function ConnectionLogsView({
           : "No match"
       : total === undefined
         ? null
-        : plural(total, "attempt");
+        : `${(textFilters ? searchedCounts.data : counts.data)?.truncated ? "At least " : ""}${plural(total, "attempt")}`;
 
   const schema = lockedServer ? LOG_FILTERS_WITHOUT_SERVER : LOG_FILTERS;
   const filtersActive = schema.some(
@@ -481,6 +486,7 @@ export function ConnectionLogsView({
           Reference search covers all 30 days.
         </p>
       ) : null}
+      {viewerScope === "own" ? <OwnAttemptsNotice /> : null}
 
       {body}
 
@@ -510,4 +516,14 @@ function noMatchSentence(
   return verb
     ? `Nothing ${verb}${on} in ${range}.`
     : `No attempt matches${on} in ${range}.`;
+}
+
+/** Said once wherever the API reads only the viewer's own attempts. */
+export function OwnAttemptsNotice(): JSX.Element {
+  return (
+    <p className="text-muted-foreground text-sm">
+      You see only your own connection attempts. People with access to logs see
+      everyone&apos;s.
+    </p>
+  );
 }

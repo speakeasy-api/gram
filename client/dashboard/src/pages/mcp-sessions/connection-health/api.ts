@@ -1,4 +1,6 @@
-import { useProject } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useKillswitches } from "@gram/client/react-query/killswitches.js";
 import {
   keepPreviousData,
   useInfiniteQuery,
@@ -7,8 +9,11 @@ import {
   type UseInfiniteQueryResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { fixtureConnectionHealthSource, fixtureNow } from "./fixtures";
-import type { ConnectionHealthSource } from "./source";
+import {
+  fixtureGetSuspectedProblem,
+  fixtureListSuspectedProblems,
+} from "./problem-fixtures";
+import * as sdk from "./sdk";
 import type {
   ActiveKillswitch,
   AttemptCountsResponse,
@@ -23,9 +28,7 @@ import type {
   SummaryBucket,
 } from "./types";
 
-// The seam: point these at the SDK and `() => new Date()` when the API ships.
-const source: ConnectionHealthSource = fixtureConnectionHealthSource;
-export const connectionHealthNow: () => Date = fixtureNow;
+export const connectionHealthNow = (): Date => new Date();
 
 /** A resolved window, as every range read takes it. */
 export interface Window {
@@ -33,17 +36,30 @@ export interface Window {
   to: string;
 }
 
-const ROOT = "mcpConnectionHealth";
-
-function useKey(...parts: unknown[]): unknown[] {
-  const project = useProject();
-  return [ROOT, project.id, ...parts];
-}
-
 interface Scope {
   providerId: string;
   serverId?: string;
 }
+
+const ROOT = "mcpConnectionHealth";
+
+function useClient() {
+  const client = useGramContext();
+  const project = useProject();
+  return { client, gramProject: project.slug, projectId: project.id };
+}
+
+// A 4xx (flag off, bad range) will not change on retry.
+const retry = (failures: number, error: Error) =>
+  failures < 2 &&
+  !(
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    typeof error.statusCode === "number" &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500
+  );
 
 export function useConnectionAttempts(
   scope: Scope,
@@ -51,17 +67,19 @@ export function useConnectionAttempts(
   filters: AttemptFilters,
   options: { limit?: number; enabled?: boolean } = {},
 ): UseInfiniteQueryResult<InfiniteData<ListAttemptsResponse>> {
-  const queryKey = useKey(
-    "listAttempts",
-    scope,
-    window,
-    filters,
-    options.limit,
-  );
+  const { client, gramProject, projectId } = useClient();
   return useInfiniteQuery({
-    queryKey,
+    queryKey: [
+      ROOT,
+      projectId,
+      "listAttempts",
+      scope,
+      window,
+      filters,
+      options.limit,
+    ],
     queryFn: ({ pageParam }) =>
-      source.listAttempts({
+      sdk.listAttempts(client, gramProject, {
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
         ...window,
@@ -73,6 +91,7 @@ export function useConnectionAttempts(
     getNextPageParam: (last) => last.nextCursor,
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
+    retry,
   });
 }
 
@@ -82,11 +101,11 @@ export function useAttemptCounts(
   filters: AttemptFilters,
   options: { enabled?: boolean } = {},
 ): UseQueryResult<AttemptCountsResponse> {
-  const queryKey = useKey("getAttemptCounts", scope, window, filters);
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey,
+    queryKey: [ROOT, projectId, "getAttemptCounts", scope, window, filters],
     queryFn: () =>
-      source.getAttemptCounts({
+      sdk.getAttemptCounts(client, gramProject, {
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
         ...window,
@@ -94,17 +113,19 @@ export function useAttemptCounts(
       }),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
+    retry,
   });
 }
 
 export function useAttempt(
   reference: string | null,
 ): UseQueryResult<GetAttemptResponse> {
-  const queryKey = useKey("getAttempt", reference);
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey,
-    queryFn: () => source.getAttempt({ reference: reference ?? "" }),
+    queryKey: [ROOT, projectId, "getAttempt", reference],
+    queryFn: () => sdk.getAttempt(client, gramProject, reference ?? ""),
     enabled: !!reference,
+    retry,
   });
 }
 
@@ -113,17 +134,18 @@ export function useSignInSummary(
   window: Window,
   bucket?: SummaryBucket,
 ): UseQueryResult<SignInSummaryResponse> {
-  const queryKey = useKey("getSignInSummary", scope, window, bucket);
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey,
+    queryKey: [ROOT, projectId, "getSignInSummary", scope, window, bucket],
     queryFn: () =>
-      source.getSignInSummary({
+      sdk.getSignInSummary(client, gramProject, {
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
         ...window,
         bucket,
       }),
     placeholderData: keepPreviousData,
+    retry,
   });
 }
 
@@ -132,13 +154,17 @@ export function useSessionActivity(
   window: Window,
   options: { enabled?: boolean } = {},
 ): UseQueryResult<SessionActivityResponse> {
-  const queryKey = useKey("getSessionActivity", providerId, window);
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey,
+    queryKey: [ROOT, projectId, "getSessionActivity", providerId, window],
     queryFn: () =>
-      source.getSessionActivity({ userSessionIssuerId: providerId, ...window }),
+      sdk.getSessionActivity(client, gramProject, {
+        userSessionIssuerId: providerId,
+        ...window,
+      }),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
+    retry,
   });
 }
 
@@ -146,51 +172,70 @@ export function useDeniedClients(
   scope: Scope,
   window: Window,
 ): UseQueryResult<DeniedClientsResponse> {
-  const queryKey = useKey("listDeniedClients", scope, window);
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey,
+    queryKey: [ROOT, projectId, "listDeniedClients", scope, window],
     queryFn: () =>
-      source.listDeniedClients({
+      sdk.listDeniedClients(client, gramProject, {
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
         ...window,
       }),
     placeholderData: keepPreviousData,
+    retry,
   });
 }
 
+/** FIXTURES: suspected problems have no detector or API yet. */
 export function useSuspectedProblems(
   scope: Scope,
 ): UseQueryResult<ListSuspectedProblemsResponse> {
-  const queryKey = useKey("listSuspectedProblems", scope);
+  const { projectId } = useClient();
   return useQuery({
-    queryKey,
+    queryKey: [ROOT, projectId, "listSuspectedProblems", scope],
     queryFn: () =>
-      source.listSuspectedProblems({
+      fixtureListSuspectedProblems({
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
       }),
   });
 }
 
+/** FIXTURES: see useSuspectedProblems. */
 export function useSuspectedProblem(
   id: string | null,
 ): UseQueryResult<GetSuspectedProblemResponse> {
-  const queryKey = useKey("getSuspectedProblem", id);
+  const { projectId } = useClient();
   return useQuery({
-    queryKey,
-    queryFn: () => source.getSuspectedProblem({ id: id ?? "" }),
+    queryKey: [ROOT, projectId, "getSuspectedProblem", id],
+    queryFn: () => fixtureGetSuspectedProblem({ id: id ?? "" }),
     enabled: !!id,
   });
 }
 
-export function useActiveKillswitches(
-  providerId: string,
-): UseQueryResult<ActiveKillswitch[]> {
-  const queryKey = useKey("killswitches", providerId);
-  return useQuery({
-    queryKey,
-    queryFn: () =>
-      source.listActiveKillswitches({ userSessionIssuerId: providerId }),
-  });
+/** The organization's killswitches in force now (first page of 100). */
+export function useActiveKillswitches(): {
+  killswitches: ActiveKillswitch[];
+  isPending: boolean;
+  isError: boolean;
+} {
+  const session = useSession();
+  const query = useKillswitches(
+    { sessionHeaderGramSession: session.session },
+    { status: "active", limit: 100, gramSession: session.session },
+    { throwOnError: false },
+  );
+  const killswitches = (query.data?.result.items ?? []).map(
+    (k): ActiveKillswitch => ({
+      id: k.id,
+      userId: k.userId,
+      scope:
+        k.scope.type === "all_servers"
+          ? { type: "all_servers" }
+          : { type: "selected_servers", serverIds: k.scope.serverIds },
+      until:
+        k.schedule.end === "bounded" ? k.schedule.endsAt.toISOString() : null,
+    }),
+  );
+  return { killswitches, isPending: query.isPending, isError: query.isError };
 }

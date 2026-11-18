@@ -15,7 +15,7 @@ import { useMemo, type ReactNode } from "react";
 import { Line } from "react-chartjs-2";
 import { Link } from "react-router";
 import { useSessionActivity, useSignInSummary, type Window } from "./api";
-import type { SignInSummaryResponse } from "./types";
+import type { SignInSummaryResponse, SummaryBucket } from "./types";
 
 export type SummaryMetric = "sign-ins" | "sessions";
 
@@ -43,23 +43,18 @@ const TOOLTIP_TIME = new Intl.DateTimeFormat(undefined, {
   hourCycle: "h23",
 });
 
-/** Hourly buckets folded into `size`-hour bars; day buckets pass through. */
-function signInBars(data: SignInSummaryResponse, size: number) {
-  const buckets = data.buckets ?? [];
-  const bars: { start: number; signedIn: number; didNot: number }[] = [];
-  for (const bucket of buckets) {
-    const start = Date.parse(bucket.start);
-    const signedIn = bucket.signIns.succeeded + bucket.renewals.succeeded;
-    const didNot = bucket.signIns.didNot + bucket.renewals.didNot;
-    const last = bars[bars.length - 1];
-    if (data.bucket === "hour" && last && start - last.start < size * HOUR) {
-      last.signedIn += signedIn;
-      last.didNot += didNot;
-    } else {
-      bars.push({ start, signedIn, didNot });
-    }
-  }
-  return bars;
+const BUCKET_MS: Record<SummaryBucket, number> = {
+  hour: HOUR,
+  six_hours: 6 * HOUR,
+  day: 24 * HOUR,
+};
+
+function signInBars(data: SignInSummaryResponse) {
+  return (data.buckets ?? []).map((bucket) => ({
+    start: Date.parse(bucket.start),
+    signedIn: bucket.signIns.succeeded + bucket.renewals.succeeded,
+    didNot: bucket.signIns.didNot + bucket.renewals.didNot,
+  }));
 }
 
 /** The Overview's summary: sign-in attempts as bars, or active sessions. */
@@ -83,8 +78,8 @@ export function SummaryPanel({
   sessionsHref: string;
 }): JSX.Element {
   const scope = useMemo(() => ({ providerId }), [providerId]);
-  // A week reads best in 4-hour bars; the API buckets by hour or day.
-  const bucket = days <= 7 ? "hour" : "day";
+  const bucket: SummaryBucket =
+    days <= 1 ? "hour" : days <= 7 ? "six_hours" : "day";
   const signIns = useSignInSummary(scope, window, bucket);
   const sessions = useSessionActivity(providerId, window, {
     enabled: metric === "sessions",
@@ -124,11 +119,7 @@ export function SummaryPanel({
             ) : !signIns.data?.loggingEnabled ? (
               <ChartMessage>Sign-in attempts need logging.</ChartMessage>
             ) : (
-              <SignInBars
-                data={signIns.data}
-                size={days <= 1 ? 1 : 4}
-                dayLabels={days > 1}
-              />
+              <SignInBars data={signIns.data} dayLabels={days > 1} />
             )
           ) : sessions.isPending ? (
             <Skeleton className="h-full w-full" />
@@ -167,14 +158,12 @@ function ChartMessage({ children }: { children: ReactNode }): JSX.Element {
 
 function SignInBars({
   data,
-  size,
   dayLabels,
 }: {
   data: SignInSummaryResponse;
-  size: number;
   dayLabels: boolean;
 }): JSX.Element {
-  const bars = useMemo(() => signInBars(data, size), [data, size]);
+  const bars = useMemo(() => signInBars(data), [data]);
   const chart = useMemo(() => {
     const labels = bars.map((bar) =>
       dayLabels ? SHORT_DAY.format(bar.start) : HOUR_LABEL.format(bar.start),
@@ -206,7 +195,7 @@ function SignInBars({
     <StackedTimeBarChart
       labels={chart.labels}
       timestamps={chart.timestamps}
-      bucketMs={(data.bucket === "day" ? 24 : size) * HOUR}
+      bucketMs={BUCKET_MS[data.bucket ?? "hour"]}
       tooltipLabels={chart.tooltipLabels}
       datasets={chart.datasets}
       height={220}

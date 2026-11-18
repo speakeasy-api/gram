@@ -11,6 +11,10 @@ import { Table, type Column } from "@/components/ui/Table";
 import { authorizationServerModeLabel } from "@/pages/user-session-issuers/issuerDisplay";
 import { splitIntoUnit } from "@/pages/mcp/x/tabs/settings/sections/authentication/sessionSettings";
 import { useOrgRoutes, useRoutes } from "@/routes";
+import { scopeLabel } from "@/components/killswitch/killswitch-view-model";
+import { useSession } from "@/contexts/Auth";
+import { useKillswitchMCPServers } from "@gram/client/react-query/killswitchMCPServers.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { clientAccessLabel } from "../providers";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { ArrowRight, Pencil } from "lucide-react";
@@ -21,10 +25,12 @@ import {
   useActiveKillswitches,
   useConnectionAttempts,
   useDeniedClients,
+  useSessionActivity,
   useSuspectedProblems,
 } from "./api";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
 import { AttemptsTable } from "./AttemptsTable";
+import { OwnAttemptsNotice } from "./ConnectionLogsView";
 import {
   ATTEMPT_PARAM,
   logsSearch,
@@ -32,7 +38,12 @@ import {
   PROBLEM_PARAM,
   type TimeRangePreset,
 } from "./filters";
-import { formatDayMonth, formatLast, plural } from "./format";
+import {
+  formatDayMonth,
+  formatLast,
+  formatSessionLength,
+  plural,
+} from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SummaryPanel, type SummaryMetric } from "./SummaryPanel";
 import { SuspectedProblems } from "./SuspectedProblems";
@@ -91,7 +102,7 @@ export function OverviewTab({
   };
 
   const problems = useSuspectedProblems(scope);
-  const killswitches = useActiveKillswitches(providerId);
+  const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
     scope,
@@ -103,8 +114,9 @@ export function OverviewTab({
   const logsHref = (search: string) =>
     `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${search}`;
   const deniedClients = denied.data?.clients ?? [];
-  const activeKillswitches = killswitches.data ?? [];
-  const activityRows = activity.data?.pages[0]?.attempts ?? [];
+  const activeKillswitches = killswitches.killswitches;
+  const activityPage = activity.data?.pages[0];
+  const activityRows = activityPage?.attempts ?? [];
 
   return (
     <div className="space-y-10 pb-8">
@@ -117,6 +129,8 @@ export function OverviewTab({
           onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
         />
       )}
+
+      {activityPage?.viewerScope === "own" ? <OwnAttemptsNotice /> : null}
 
       <SummaryPanel
         providerId={providerId}
@@ -189,6 +203,14 @@ export function OverviewTab({
       >
         {activity.isPending ? (
           <Skeleton className="h-64 w-full" />
+        ) : activityPage && !activityPage.loggingEnabled ? (
+          <p className="text-muted-foreground border px-4 py-6 text-sm">
+            Sign-in activity needs logging, which is off for this organization.
+          </p>
+        ) : activity.isError ? (
+          <p className="text-muted-foreground border px-4 py-6 text-sm">
+            Couldn&apos;t load sign-in activity.
+          </p>
         ) : activityRows.length === 0 ? (
           <p className="text-muted-foreground border px-4 py-6 text-sm">
             No sign-ins or renewals in the last 30 days.
@@ -266,51 +288,54 @@ function ArrowLink({
   );
 }
 
-const KILLSWITCH_COLUMNS: Column<ActiveKillswitch>[] = [
-  {
-    key: "who",
-    header: "Who",
-    width: "1.4fr",
-    render: (k) => (
-      <div>
-        <div>{k.subject.name}</div>
-        <div className="text-muted-foreground text-xs">
-          {k.subject.kind === "agent" ? "Agent" : "Person"}
-        </div>
-      </div>
-    ),
-  },
-  {
-    key: "servers",
-    header: "Servers",
-    width: "1fr",
-    render: (k) => k.servers.join(", "),
-  },
-  {
-    key: "until",
-    header: "Until",
-    width: "1fr",
-    render: (k) => (k.until ? formatDayMonth(k.until) : "No end date"),
-  },
-];
-
 function KillswitchesInForce({
   killswitches,
 }: {
   killswitches: ActiveKillswitch[];
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const session = useSession();
+  const members = useMembers(undefined, undefined, { throwOnError: false });
+  const servers = useKillswitchMCPServers(
+    { sessionHeaderGramSession: session.session },
+    { gramSession: session.session },
+    { throwOnError: false },
+  );
+  const columns = useMemo<Column<ActiveKillswitch>[]>(() => {
+    const names = new Map(
+      (members.data?.members ?? []).map((m) => [m.id, m.name || m.email]),
+    );
+    const serverNames = new Map(
+      (servers.data?.servers ?? []).map((s) => [s.id, s.name]),
+    );
+    return [
+      {
+        key: "who",
+        header: "Who",
+        width: "1.4fr",
+        render: (k) => names.get(k.userId) ?? "Former member",
+      },
+      {
+        key: "servers",
+        header: "Servers",
+        width: "1fr",
+        render: (k) => scopeLabel(k.scope, serverNames),
+      },
+      {
+        key: "until",
+        header: "Until",
+        width: "1fr",
+        render: (k) => (k.until ? formatDayMonth(k.until) : "No end date"),
+      },
+    ];
+  }, [members.data, servers.data]);
   return (
     <OverviewSection
       title={`Killswitches in force · ${killswitches.length}`}
       description="Tool calls they block right now."
       action={<ArrowLink to={orgRoutes.killswitch.href()}>View all</ArrowLink>}
     >
-      <Table
-        columns={KILLSWITCH_COLUMNS}
-        data={killswitches}
-        rowKey={(k) => k.id}
-      />
+      <Table columns={columns} data={killswitches} rowKey={(k) => k.id} />
     </OverviewSection>
   );
 }
@@ -380,10 +405,19 @@ function Configuration({
   settingsHref: string;
 }): JSX.Element {
   const duration = splitIntoUnit(provider.sessionDurationHours);
-  const facts: [string, string][] = [
+  const averageWindow = useMemo(
+    () => presetWindow("30d", connectionHealthNow()),
+    [],
+  );
+  const average = useSessionActivity(provider.id, averageWindow).data
+    ?.averageSessionSeconds;
+  const facts: [string, string, string?][] = [
     [
       "Session duration",
       `${duration.number} ${duration.unit}${duration.number === 1 ? "" : "s"}`,
+      average === undefined
+        ? undefined
+        : `Sessions averaged ${formatSessionLength(average)} in the last 30 days.`,
     ],
     [
       "Client access",
@@ -410,11 +444,12 @@ function Configuration({
       }
     >
       <MetricCard.Group>
-        {facts.map(([label, value]) => (
+        {facts.map(([label, value, description]) => (
           <MetricCard
             key={label}
             label={label}
             value={value}
+            description={description}
             tone="neutral"
             size="xs"
           />

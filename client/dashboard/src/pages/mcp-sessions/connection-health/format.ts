@@ -48,6 +48,7 @@ export function stepResultLabel(result: string): string {
 
 export const SOURCE_LABELS: Record<Source, string> = {
   service: "The service",
+  server: "The MCP server",
   app: "The app",
   identity_provider: "The identity provider",
   speakeasy_setting: "A Speakeasy setting",
@@ -182,4 +183,13 @@ export function problemHeadline(problem: SuspectedProblem, now: Date): string {
       ? formatDayMonth(problem.since)
       : formatSince(problem.since, now);
   return `${problem.headline} since ${since}`;
+}
+
+/** A session length in its largest whole unit: "9 days", "5 hours". */
+export function formatSessionLength(seconds: number): string {
+  const days = Math.round(seconds / 86_400);
+  if (days >= 1) return plural(days, "day");
+  const hours = Math.round(seconds / 3_600);
+  if (hours >= 1) return plural(hours, "hour");
+  return plural(Math.max(1, Math.round(seconds / 60)), "minute");
 }

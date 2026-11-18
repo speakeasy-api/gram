@@ -104,7 +104,7 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
       `Rule: ${PROBLEM_RULES[problem.rule]}`,
       problem.source ? `Source: ${SOURCE_LABELS[problem.source]}` : null,
       `Messages: ${problem.messages.map((m) => `${m.message} (${m.reason}, ${m.attempts})`).join("; ")}`,
-      `Servers: ${problem.servers.map((s) => `${serverLabel({ server: s.server })} (${s.attempts})`).join("; ")}`,
+      `Servers: ${problem.servers.map((s) => `${serverLabel({ server: s.server, member: s.member })} (${s.attempts})`).join("; ")}`,
       problem.lastConnectedAt
         ? `Last successful connection: ${problem.lastConnectedAt}`
         : null,
@@ -144,8 +144,11 @@ function ProblemBody({
           {problem.headline}
         </SheetTitle>
         <SheetDescription>
-          Since {sinceLabel} ·{" "}
-          {formatDuration(now.getTime() - Date.parse(problem.since))}
+          Since {sinceLabel} · latest failure{" "}
+          {formatClockMinutes(problem.lastFailedAt)} ·{" "}
+          {formatDuration(
+            Date.parse(problem.lastFailedAt) - Date.parse(problem.since),
+          )}
         </SheetDescription>
       </SheetHeader>
 
@@ -207,7 +210,7 @@ function ProblemBody({
                     <div className="text-muted-foreground truncate text-xs">
                       {appLabel(p.app)}
                       {p.server
-                        ? ` · ${serverLabel({ server: p.server })}`
+                        ? ` · ${serverLabel({ server: p.server, member: p.member })}`
                         : ""}
                     </div>
                   </div>
@@ -230,11 +233,11 @@ function ProblemBody({
           <div className="divide-y border">
             {problem.servers.map((s) => (
               <div
-                key={s.server.id}
+                key={`${s.server.id}-${s.member?.id ?? ""}`}
                 className="flex items-center justify-between px-4 py-2.5 text-sm"
               >
                 <span className="underline underline-offset-2">
-                  {serverLabel({ server: s.server })}
+                  {serverLabel({ server: s.server, member: s.member })}
                 </span>
                 <span>{s.attempts}</span>
               </div>
@@ -251,6 +254,11 @@ function ProblemBody({
               >
                 <div className="min-w-0">
                   <div className="text-sm">{m.message}</div>
+                  {m.technicalMessage ? (
+                    <div className="text-muted-foreground text-sm">
+                      {m.technicalMessage}
+                    </div>
+                  ) : null}
                   <div className="text-muted-foreground font-mono text-xs">
                     {m.reason}
                   </div>
@@ -260,6 +268,16 @@ function ProblemBody({
             ))}
           </div>
         </Block>
+        {problem.otherFailuresOnService > 0 ? (
+          <p className="text-muted-foreground text-sm">
+            {problem.otherFailuresOnService === 1
+              ? "1 other failure"
+              : `${formatCount(problem.otherFailuresOnService)} other failures`}{" "}
+            on the {problem.scope.name} in this time{" "}
+            {problem.otherFailuresOnService === 1 ? "is" : "are"} not part of
+            this.
+          </p>
+        ) : null}
       </div>
 
       <SheetFooter className="bg-card sticky bottom-0 flex-row justify-between border-t px-6 py-4">

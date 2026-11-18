@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { problemHeadline } from "./format";
@@ -27,6 +28,10 @@ export function SuspectedProblems({
       <div>
         <h2 id="suspected-problems" className="text-eyebrow">
           Suspected problems · {problems.length}
+          {/* Fixture data until the detector ships. */}
+          <Badge variant="warning" className="ml-2 align-middle">
+            Sample data
+          </Badge>
         </h2>
         <p className="text-muted-foreground mt-1 text-sm">
           {SUSPECTED_PROBLEMS_RULE}
@@ -49,9 +54,9 @@ export function SuspectedProblems({
                   {problemHeadline(problem, now)}
                 </span>
                 <span className="text-muted-foreground block text-xs">
-                  {problem.peopleOnServer !== undefined &&
-                  problem.peopleOnServer < problem.people
-                    ? `${problem.peopleOnServer} on this server · ${problem.people} in all. `
+                  {problem.peopleOnServerCount !== undefined &&
+                  problem.peopleOnServerCount < problem.peopleCount
+                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} across the ${problem.scope.name}. `
                     : ""}
                   {problem.fact}
                 </span>
