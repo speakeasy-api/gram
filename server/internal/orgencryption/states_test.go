@@ -26,6 +26,11 @@ func TestIsUnreadableAndIsKeyProblem(t *testing.T) {
 		{name: "fenced", err: orgencryption.ErrFenced, unreadable: false, keyProblem: true},
 		{name: "decision expired", err: orgencryption.ErrDecisionExpired, unreadable: false, keyProblem: true},
 		{name: "no organization encryption", err: orgencryption.ErrOrganizationEncryptionUnavailable, unreadable: false, keyProblem: true},
+		{name: "not provisioned", err: orgencryption.ErrNotProvisioned, unreadable: false, keyProblem: true},
+		{name: "invalid key", err: orgencryption.ErrInvalidKey, unreadable: false, keyProblem: true},
+		{name: "invalid state", err: orgencryption.ErrInvalidState, unreadable: false, keyProblem: true},
+		{name: "platform credential unusable", err: orgencryption.ErrPlatformCredentialUnusable, unreadable: false, keyProblem: true},
+		{name: "concurrent change", err: orgencryption.ErrConcurrentChange, unreadable: false, keyProblem: true},
 		{name: "wrapped suspended", err: fmt.Errorf("open token: %w", orgencryption.ErrSuspended), unreadable: false, keyProblem: true},
 		{name: "database failure", err: errors.New("connection reset"), unreadable: false, keyProblem: false},
 	}

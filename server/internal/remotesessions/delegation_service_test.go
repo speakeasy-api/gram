@@ -135,3 +135,29 @@ func delegationPlain(t *testing.T, s *delegationAdapterFixture, ciphertext strin
 	require.NoError(t, err)
 	return plain
 }
+
+func TestDelegationRetentionStoresSealedSecrets(t *testing.T) {
+	t.Parallel()
+	s, _, p, b, _ := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "secret-id", "secret-refresh", time.Hour), true))
+
+	row, err := repo.New(s.db).GetTrustedDelegationCredential(t.Context(), repo.GetTrustedDelegationCredentialParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})
+	require.NoError(t, err)
+	for _, value := range []struct {
+		name          string
+		platform, org pgtype.Text
+		plain         string
+	}{
+		{name: "identity assertion", platform: row.IdentityAssertionEncrypted, org: row.IdentityAssertionOrgEncrypted, plain: "secret-id"},
+		{name: "refresh token", platform: row.RefreshTokenEncrypted, org: row.RefreshTokenOrgEncrypted, plain: "secret-refresh"},
+		{name: "upstream subject", platform: row.UpstreamSubjectEncrypted, org: row.UpstreamSubjectOrgEncrypted, plain: "secret-subject"},
+		{name: "nonce", platform: row.NonceEncrypted, org: row.NonceOrgEncrypted, plain: "secret-nonce"},
+	} {
+		require.True(t, value.platform.Valid, value.name)
+		require.NotContains(t, value.platform.String, value.plain, "%s is stored sealed", value.name)
+		opened, err := s.enc.Decrypt(value.platform.String)
+		require.NoError(t, err, value.name)
+		require.Equal(t, value.plain, opened, value.name)
+		require.False(t, value.org.Valid, "%s: an organization in platform_key stores no organization-key copy", value.name)
+	}
+}

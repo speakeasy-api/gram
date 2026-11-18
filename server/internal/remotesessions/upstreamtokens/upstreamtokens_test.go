@@ -24,6 +24,9 @@ const upstreamTokenQueriesPath = "../upstreamtoken_queries.sql"
 var tokenColumns = []string{
 	"access_token_encrypted", "access_token_org_encrypted",
 	"refresh_token_encrypted", "refresh_token_org_encrypted",
+	"identity_assertion_encrypted", "identity_assertion_org_encrypted",
+	"upstream_subject_encrypted", "upstream_subject_org_encrypted",
+	"nonce_encrypted", "nonce_org_encrypted",
 }
 
 func TestUpstreamTokenQueriesFenceEveryCopyWrite(t *testing.T) {

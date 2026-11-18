@@ -18898,9 +18898,10 @@ type UpsertRemoteSessionGrantParams struct {
 // caller stores them with SetRemoteSessionTokens in the same transaction,
 // which also replaces the tokens of a row this updates. Conflict target matches the
 // partial unique index on (subject_urn, remote_session_client_id) WHERE
-// deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
-// Attachments keep this source row and read its current credentials. Token refresh uses
-// UpdateRefreshedRemoteSessionIfUnchanged and never advances this generation. A
+// deleted IS FALSE; on conflict advance the grant generation and replace the
+// grant's metadata. Attachments keep this source row and read its current
+// credentials. Token refresh uses UpdateRefreshedRemoteSessionIfUnchanged and
+// never advances this generation. A
 // soft-deleted row falls outside the partial index, so a re-auth after
 // revocation inserts a fresh active row alongside the tombstone.
 // organization_id is the client's organization, through its project first,

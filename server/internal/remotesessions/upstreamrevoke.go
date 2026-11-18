@@ -742,15 +742,18 @@ func (r *UpstreamRevoker) tokenToRevoke(ctx context.Context, tokens revocationTo
 		)
 		return "", "", remotesessionmetrics.RevokeOutcomeSkipped
 	case err != nil:
-		// The organization's key could not open the token right now. The
-		// revocation is not retried, so the upstream grant stays live until it
-		// expires; the local revoke has already taken effect.
+		// The token could not be opened right now. The revocation is not
+		// retried, so the upstream grant stays live until it expires; the local
+		// revoke has already taken effect.
 		r.logger.ErrorContext(ctx, "upstream revoke: stored token could not be opened right now; the upstream grant stays live",
 			attr.SlogOAuthGrant(hint),
 			attr.SlogOrganizationID(stored.OrganizationID.String),
 			attr.SlogError(fmt.Errorf("open %s: %w", hint, err)),
 		)
-		return "", "", remotesessionmetrics.RevokeOutcomeKeyUnavailable
+		if orgencryption.IsKeyProblem(err) {
+			return "", "", remotesessionmetrics.RevokeOutcomeKeyUnavailable
+		}
+		return "", "", remotesessionmetrics.RevokeOutcomeInternal
 	}
 	return plain, hint, ""
 }

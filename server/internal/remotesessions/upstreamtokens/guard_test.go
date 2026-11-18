@@ -386,7 +386,7 @@ func TestTokenWriteProblems(t *testing.T) {
 var (
 	// pairedPresencePattern matches a presence check that considers both
 	// copies of a value, in the shape the AIM-1000 partial indexes use.
-	pairedPresencePattern = regexp.MustCompile(`(?is)\(\s*((?:\w+\.)?)(\w+?)_encrypted\s+IS\s+NOT\s+NULL\s+OR\s+(?:\w+\.)?(\w+?)_org_encrypted\s+IS\s+NOT\s+NULL\s*\)|\(\s*((?:\w+\.)?)(\w+?)_encrypted\s+IS\s+NULL\s+AND\s+(?:\w+\.)?(\w+?)_org_encrypted\s+IS\s+NULL\s*\)`)
+	pairedPresencePattern = regexp.MustCompile(`(?is)\(\s*((?:\w+\.)?)(\w+?)_encrypted\s+IS\s+NOT\s+NULL\s+OR\s+((?:\w+\.)?)(\w+?)_org_encrypted\s+IS\s+NOT\s+NULL\s*\)|\(\s*((?:\w+\.)?)(\w+?)_encrypted\s+IS\s+NULL\s+AND\s+((?:\w+\.)?)(\w+?)_org_encrypted\s+IS\s+NULL\s*\)`)
 
 	// presencePattern matches any presence check of a platform-key copy.
 	presencePattern = regexp.MustCompile(`(?is)\b(?:\w+\.)?(\w+?)_encrypted\s+IS\s+(?:NOT\s+)?NULL`)
@@ -395,7 +395,7 @@ var (
 // unpairedPresenceChecks returns the presence checks in statement that test a
 // value's platform-key copy without its organization-key copy.
 func unpairedPresenceChecks(statement string) []string {
-	paired := pairedPresencePattern.ReplaceAllString(statement, "")
+	paired := removePairedPresenceChecks(statement)
 	var unpaired []string
 	for _, match := range presencePattern.FindAllStringSubmatch(paired, -1) {
 		if slices.Contains(tokenValues, strings.ToLower(match[1])) {
@@ -403,6 +403,31 @@ func unpairedPresenceChecks(statement string) []string {
 		}
 	}
 	return unpaired
+}
+
+// removePairedPresenceChecks removes the presence checks that test both copies
+// of the same value of the same row. A check whose two halves name different
+// values or rows stays, so its unpaired half is reported.
+func removePairedPresenceChecks(statement string) string {
+	var kept strings.Builder
+	last := 0
+	for _, match := range pairedPresencePattern.FindAllStringSubmatchIndex(statement, -1) {
+		group := func(i int) string {
+			if match[2*i] < 0 {
+				return ""
+			}
+			return strings.ToLower(statement[match[2*i]:match[2*i+1]])
+		}
+		notNullPair := group(2) != "" && group(1) == group(3) && group(2) == group(4)
+		nullPair := group(6) != "" && group(5) == group(7) && group(6) == group(8)
+		if !notNullPair && !nullPair {
+			continue
+		}
+		kept.WriteString(statement[last:match[0]])
+		last = match[1]
+	}
+	kept.WriteString(statement[last:])
+	return kept.String()
 }
 
 // TestEveryTokenPresenceCheckConsidersBothCopies keeps queries that decide
@@ -468,6 +493,8 @@ func TestUnpairedPresenceChecks(t *testing.T) {
 	require.Equal(t, []string{"s.refresh_token_encrypted IS NOT NULL"}, unpairedPresenceChecks("WHERE s.refresh_token_encrypted IS NOT NULL AND s.deleted IS FALSE"))
 	require.Equal(t, []string{"c.access_token_encrypted IS NULL"}, unpairedPresenceChecks("WHERE c.access_token_encrypted IS NULL"))
 	require.Empty(t, unpairedPresenceChecks("WHERE c.client_secret_encrypted IS NULL"), "other values are not this use case's")
+	require.Equal(t, []string{"s.refresh_token_encrypted IS NOT NULL"}, unpairedPresenceChecks("WHERE (s.refresh_token_encrypted IS NOT NULL OR s.nonce_org_encrypted IS NOT NULL)"), "another value's copy does not pair")
+	require.Equal(t, []string{"s.refresh_token_encrypted IS NULL"}, unpairedPresenceChecks("WHERE (s.refresh_token_encrypted IS NULL AND t.refresh_token_org_encrypted IS NULL)"), "another row's copy does not pair")
 }
 
 // copyReadPattern matches Go code reading the text or presence of one stored
