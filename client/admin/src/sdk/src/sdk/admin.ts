@@ -535,6 +535,38 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getHooksRollout admin
+   *
+   * @remarks
+   * Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.
+   */
+  async getHooksRollout(
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminGetHooksRollout(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * setHooksRolloutDefault admin
+   *
+   * @remarks
+   * Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.
+   */
+  async setHooksRolloutDefault(
+    request: SetHooksRolloutDefaultRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminSetHooksRolloutDefault(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * backfillMcpAuthGrants admin
    *
    * @remarks
@@ -911,6 +943,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * clearOrganizationHooksRollout admin
+   *
+   * @remarks
+   * Removes an organization's hooks version override so it follows the default pin again.
+   */
+  async clearOrganizationHooksRollout(
+    request: ClearOrganizationHooksRolloutRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationHooksRollout> {
+    return unwrapAsync(adminClearOrganizationHooksRollout(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * createOrganization admin
    *
    * @remarks
@@ -1000,6 +1049,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminGetOrganization(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationHooksRollout admin
+   *
+   * @remarks
+   * Returns the hooks version rollout state for one organization.
+   */
+  async getOrganizationHooksRollout(
+    request: AdminGetOrganizationHooksRolloutRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationHooksRollout> {
+    return unwrapAsync(adminGetOrganizationHooksRollout(
       this,
       request,
       options,
@@ -1272,6 +1338,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminSetAdoptionDashboardUrl(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationHooksRollout admin
+   *
+   * @remarks
+   * Pins one organization to its own hooks version, regardless of the default pin.
+   */
+  async setOrganizationHooksRollout(
+    request: SetOrganizationHooksRolloutRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationHooksRollout> {
+    return unwrapAsync(adminSetOrganizationHooksRollout(
       this,
       request,
       options,
@@ -2354,89 +2437,6 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListUserOrganizationsResult> {
     return unwrapAsync(adminListUserOrganizations(
-      this,
-      request,
-      options,
-    ));
-  }
-
-  /**
-   * getHooksRollout admin
-   *
-   * @remarks
-   * Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.
-   */
-  async getHooksRollout(
-    options?: RequestOptions,
-  ): Promise<AdminHooksRollout> {
-    return unwrapAsync(adminGetHooksRollout(
-      this,
-      options,
-    ));
-  }
-
-  /**
-   * setHooksRolloutDefault admin
-   *
-   * @remarks
-   * Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.
-   */
-  async setHooksRolloutDefault(
-    request: SetHooksRolloutDefaultRequestBody,
-    options?: RequestOptions,
-  ): Promise<AdminHooksRollout> {
-    return unwrapAsync(adminSetHooksRolloutDefault(
-      this,
-      request,
-      options,
-    ));
-  }
-
-  /**
-   * clearOrganizationHooksRollout admin
-   *
-   * @remarks
-   * Removes an organization's hooks version override so it follows the default pin again.
-   */
-  async clearOrganizationHooksRollout(
-    request: ClearOrganizationHooksRolloutRequestBody,
-    options?: RequestOptions,
-  ): Promise<AdminOrganizationHooksRollout> {
-    return unwrapAsync(adminClearOrganizationHooksRollout(
-      this,
-      request,
-      options,
-    ));
-  }
-
-  /**
-   * getOrganizationHooksRollout admin
-   *
-   * @remarks
-   * Returns the hooks version rollout state for one organization.
-   */
-  async getOrganizationHooksRollout(
-    request: AdminGetOrganizationHooksRolloutRequest,
-    options?: RequestOptions,
-  ): Promise<AdminOrganizationHooksRollout> {
-    return unwrapAsync(adminGetOrganizationHooksRollout(
-      this,
-      request,
-      options,
-    ));
-  }
-
-  /**
-   * setOrganizationHooksRollout admin
-   *
-   * @remarks
-   * Pins one organization to its own hooks version, regardless of the default pin.
-   */
-  async setOrganizationHooksRollout(
-    request: SetOrganizationHooksRolloutRequestBody,
-    options?: RequestOptions,
-  ): Promise<AdminOrganizationHooksRollout> {
-    return unwrapAsync(adminSetOrganizationHooksRollout(
       this,
       request,
       options,

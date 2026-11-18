@@ -201,11 +201,11 @@ trackedFiles:
   src/models/components/adminhookfleetinstall.ts: {}
   src/models/components/adminhookfleetresult.ts: {}
   src/models/components/adminhookfleetversion.ts: {}
-  src/models/components/admininferencehookcell.ts: {}
   src/models/components/adminhooksrollout.ts: {}
   src/models/components/adminhooksrolloutchange.ts: {}
   src/models/components/adminhooksrolloutoverride.ts: {}
   src/models/components/adminhooksrolloutpin.ts: {}
+  src/models/components/admininferencehookcell.ts: {}
   src/models/components/admininferencekey.ts: {}
   src/models/components/admininferencekeycause.ts: {}
   src/models/components/admininferencekeylimit.ts: {}
@@ -465,8 +465,8 @@ trackedFiles:
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
-  src/react-query/adminCreateGcpIamPlatformCredential.ts: {}
   src/react-query/adminClearOrganizationHooksRollout.ts: {}
+  src/react-query/adminCreateGcpIamPlatformCredential.ts: {}
   src/react-query/adminCreateGlobalIssuer.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
   src/react-query/adminCreateRegistryEntry.ts: {}
@@ -1116,6 +1116,10 @@ examples:
       responses:
         "200":
           application/json: {"device_agents": [{"day": "2026-01-27", "machines": 773425, "organization_id": "<id>", "version": "<value>"}], "from_cache": false, "inference": [{"day": "2026-04-27", "events": 100846, "organization_id": "<id>", "sessions": 784612, "surface": "<value>", "users": 471482}], "organizations": [], "queried_at": "2026-05-11T11:31:26.857Z", "sessions": [], "window_days": 708711}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminGetHooksRollout:
     speakeasy-default-admin-get-hooks-rollout:
       responses:
