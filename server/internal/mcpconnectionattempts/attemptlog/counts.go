@@ -188,7 +188,8 @@ func countCube(cube []cubeRow, f Filters) Counts {
 			if facet == FacetNetworks && (row.Subject != "" || row.Network == "") {
 				continue
 			}
-			if facet == FacetAppVersions && row.AppVersion == "" {
+			// Only apps and people have a meaning for empty: unlisted, and no known person.
+			if facet != FacetApps && facet != FacetPeople && row.value(facet) == "" {
 				continue
 			}
 			if !f.matches(row, facet) {
