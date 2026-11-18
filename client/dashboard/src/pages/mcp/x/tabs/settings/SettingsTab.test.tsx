@@ -198,7 +198,7 @@ afterEach(() => {
 });
 
 describe("SettingsTab", () => {
-  it("adds a Setup area above Danger zone once guided setup is done", () => {
+  it("adds a Guided setup area above Danger zone once guided setup is done", () => {
     sourceUrl.value = "https://mcp.slack.com/mcp";
     const areas = renderAreas(
       server({
@@ -207,9 +207,11 @@ describe("SettingsTab", () => {
       }),
     );
     sourceUrl.value = "https://mcp.example.com/mcp";
-    expect(areas.Setup).toEqual(["Guided setup"]);
+    expect(areas["Guided setup"]).toEqual(["Guided setup"]);
     const names = Object.keys(areas);
-    expect(names.indexOf("Setup")).toBe(names.indexOf("Danger zone") - 1);
+    expect(names.indexOf("Guided setup")).toBe(
+      names.indexOf("Danger zone") - 1,
+    );
   });
 
   it.each([
@@ -219,14 +221,17 @@ describe("SettingsTab", () => {
       "https://mcp.example.com/mcp",
       new Date(),
     ],
-  ])("has no Setup area when %s", (_case, url, setupGuideCompletedAt) => {
-    sourceUrl.value = url;
-    const areas = renderAreas(
-      server({ remoteMcpServerId: "remote-source-1", setupGuideCompletedAt }),
-    );
-    sourceUrl.value = "https://mcp.example.com/mcp";
-    expect(areas.Setup).toBeUndefined();
-  });
+  ])(
+    "has no Guided setup area when %s",
+    (_case, url, setupGuideCompletedAt) => {
+      sourceUrl.value = url;
+      const areas = renderAreas(
+        server({ remoteMcpServerId: "remote-source-1", setupGuideCompletedAt }),
+      );
+      sourceUrl.value = "https://mcp.example.com/mcp";
+      expect(areas["Guided setup"]).toBeUndefined();
+    },
+  );
 
   it("groups Remote MCP settings into areas", () => {
     expect(

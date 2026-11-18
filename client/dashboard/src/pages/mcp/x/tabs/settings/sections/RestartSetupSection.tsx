@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ListRestart } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
@@ -10,6 +11,7 @@ import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { clearProviderProgress } from "@/pages/mcp/x/setup/provider-setup";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
+import { ServerControlRow } from "./ServerControlRow";
 
 /**
  * Reopens guided setup on a server whose setup is marked done, at its first
@@ -57,27 +59,31 @@ export function RestartSetupSection({
     <SettingsSection>
       <SettingsSection.Header>
         <SettingsSection.Title>Guided setup</SettingsSection.Title>
-        <SettingsSection.Description>
-          Walk through this server’s guided setup again. Saved credentials and
-          the connection stay in place until you change them.
-        </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          <div className="flex flex-col items-start gap-2">
+          <ServerControlRow
+            title="Restart setup"
+            description="Walk through this server’s guided setup again. Saved credentials and the connection stay in place until you change them."
+          >
             <Button
               variant="secondary"
               disabled={pending}
               onClick={() => void restart()}
             >
+              <Button.LeftIcon>
+                <ListRestart className="h-4 w-4" />
+              </Button.LeftIcon>
               <Button.Text>
                 {pending ? "Restarting…" : "Restart setup"}
               </Button.Text>
             </Button>
-            {failed && (
-              <FieldError>Unable to restart setup. Try again.</FieldError>
-            )}
-          </div>
+          </ServerControlRow>
+          {failed && (
+            <FieldError className="mt-3">
+              Unable to restart setup. Try again.
+            </FieldError>
+          )}
         </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>
