@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import {
   deriveRemoteSessionIssuerNameFromUrl,
+  readableServiceNameFromUrl,
   mcpServerRouteParam,
   validateMcpServerUrl,
 } from "@/lib/sources";
@@ -82,6 +83,9 @@ function CreateRemoteMcpForm() {
   const shadowServerName =
     searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ||
     "this Shadow MCP server";
+  // The name this form filled in itself, which a later check may replace. A
+  // name the person typed, or one a link filled in, is never replaced.
+  const [suggestedName, setSuggestedName] = useState("");
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
@@ -152,6 +156,20 @@ function CreateRemoteMcpForm() {
       );
     }
   }, [identityChoiceTouched, verify.result]);
+
+  // Once the URL checks out, an empty name is filled in: with the name the
+  // server reports for itself, or else one read from its address.
+  useEffect(() => {
+    if (!verify.result?.verified) return;
+    const suggestion =
+      verify.result.serverName?.trim() || readableServiceNameFromUrl(url) || "";
+    if (!suggestion) return;
+    setName((current) => {
+      if (current.trim() !== "" && current !== suggestedName) return current;
+      return suggestion;
+    });
+    setSuggestedName(suggestion);
+  }, [verify.result, url, suggestedName]);
 
   const handleVerify = () => {
     setTouched(true);

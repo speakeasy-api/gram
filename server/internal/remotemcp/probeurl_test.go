@@ -260,6 +260,8 @@ func TestProbeRemoteMcpURL_FallsBackToInitializeWhenDiscoverIsUnknown(t *testing
 	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
 	require.Nil(t, result.HTTPStatus)
 	require.Equal(t, []string{"server/discover", "initialize", "notifications/initialized"}, methods())
+	require.NotNil(t, result.ServerName)
+	require.Equal(t, "initialize-only", *result.ServerName)
 
 	headersMu.Lock()
 	defer headersMu.Unlock()
@@ -289,6 +291,20 @@ func TestProbeRemoteMcpURL_AcceptsDiscoverOnlyUpstream(t *testing.T) {
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
 	require.Equal(t, []string{"server/discover"}, methods(), "the upstream answers server/discover, so initialize is never sent")
+	require.NotNil(t, result.ServerName)
+	require.Equal(t, "upstream", *result.ServerName)
+}
+
+func TestProbeRemoteMcpURL_PrefersTheServersTitle(t *testing.T) {
+	t.Parallel()
+	server := mcp.NewServer(&mcp.Implementation{Name: "acme-wiki-mcp", Title: "Acme Wiki", Version: "1"}, nil)
+	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
+	t.Cleanup(upstream.Close)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+	require.NotNil(t, result.ServerName)
+	require.Equal(t, "Acme Wiki", *result.ServerName)
 }
 
 func TestVerifyURL_AcceptsDiscoverOnlyUpstream(t *testing.T) {

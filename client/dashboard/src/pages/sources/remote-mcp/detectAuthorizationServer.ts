@@ -1,6 +1,6 @@
 import { isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
-import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
+import { readableServiceNameFromUrl } from "@/lib/sources";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
@@ -118,7 +118,7 @@ export function issuerFormFromDraft(
   return {
     slug: buildUserSessionResourceSlug(baseSlug),
     issuer: draft.issuer,
-    name: deriveRemoteSessionIssuerNameFromUrl(draft.issuer) ?? undefined,
+    name: readableServiceNameFromUrl(draft.issuer) ?? undefined,
     authorizationEndpoint: draft.authorizationEndpoint,
     tokenEndpoint: draft.tokenEndpoint,
     registrationEndpoint: draft.registrationEndpoint,

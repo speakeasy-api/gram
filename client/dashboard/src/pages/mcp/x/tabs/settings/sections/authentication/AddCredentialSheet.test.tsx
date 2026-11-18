@@ -1131,7 +1131,7 @@ describe("AddCredentialSheet", () => {
 
       expect(
         await screen.findByText(
-          /auth\.example\.com isn't set up yet, so it's added to Authorization Servers when you save/,
+          /Example isn't set up yet, so it's added to Authorization Servers when you save/,
         ),
       ).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Add credential" }));
@@ -1168,6 +1168,23 @@ describe("AddCredentialSheet", () => {
       await waitFor(() => expect(mocks.fetchMetadata).toHaveBeenCalled());
       expect(screen.queryByText(/Detected from this server/)).toBeNull();
       expect(screen.getByText(/Not listed\? Add it in/)).toBeTruthy();
+    });
+
+    it("names the credential after the detected service when no name was typed", async () => {
+      mocks.clientPages = [];
+      mocks.pickableIssuers = [linear];
+      advertise(linear.issuer);
+      mocks.getIssuer.mockResolvedValue(linear);
+      renderSheet();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Name (required)") as HTMLInputElement).value,
+        ).toBe("Linear"),
+      );
     });
   });
 });

@@ -126,6 +126,59 @@ export function remoteSessionScopeTier(entity: {
 // than hyphenated. (URL parsing lowercases the host either way.) Returns null
 // for empty or unparseable URLs so callers can leave the prior value intact
 // while a partial URL is being typed.
+/** Leading host labels that name a role, not the service. */
+const SERVICE_HOST_PREFIXES = new Set([
+  "mcp",
+  "api",
+  "www",
+  "app",
+  "auth",
+  "access",
+  "login",
+  "sso",
+  "oauth",
+  "id",
+  "accounts",
+]);
+
+/**
+ * A readable name for the service behind a URL, from its host:
+ * "https://mcp.canva.com/mcp" reads "Canva" and "mcp.acme-wiki.example" reads
+ * "Acme Wiki". Hosts it cannot read that way, such as IP addresses or
+ * localhost, come back as they are. Null when the URL does not parse.
+ */
+export function readableServiceNameFromUrl(url: string): string | null {
+  let host: string;
+  try {
+    host = new URL(url.trim()).hostname;
+  } catch {
+    return null;
+  }
+  if (!host) return null;
+  const labels = host.split(".");
+  if (labels.length < 2 || /^\d+$/.test(labels[labels.length - 1]!)) {
+    return host;
+  }
+  // The registrable name sits before the public suffix: "canva" in
+  // mcp.canva.com, "example" in api.example.co.uk.
+  const suffixLength =
+    labels.length >= 3 &&
+    labels[labels.length - 1]!.length === 2 &&
+    ["co", "com", "org", "net", "ac", "gov"].includes(
+      labels[labels.length - 2]!,
+    )
+      ? 2
+      : 1;
+  const rest = labels.slice(0, labels.length - suffixLength);
+  while (rest.length > 1 && SERVICE_HOST_PREFIXES.has(rest[0]!)) rest.shift();
+  const name = rest[rest.length - 1] ?? host;
+  return name
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export function deriveRemoteSessionIssuerNameFromUrl(
   url: string,
 ): string | null {

@@ -12,7 +12,7 @@ import {
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { useRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
-import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
+import { readableServiceNameFromUrl } from "@/lib/sources";
 import {
   detectAuthorizationServer,
   issuerFormFromDraft,
@@ -39,8 +39,14 @@ export type PersonalSignInSource = "scratch" | "existing";
 export type DetectedSignIn =
   | { state: "checking" }
   | { state: "none" }
-  | { state: "existing"; issuerId: string; name: string; inUse: boolean }
-  | { state: "new"; issuer: string; inUse: boolean };
+  | {
+      state: "existing";
+      issuerId: string;
+      name: string;
+      serviceName: string;
+      inUse: boolean;
+    }
+  | { state: "new"; issuer: string; serviceName: string; inUse: boolean };
 type AuthMethod = CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
 
 /**
@@ -296,7 +302,7 @@ export function usePersonalSignInDraft({
       target = await sdk.remoteSessionIssuers.create({
         createRemoteSessionIssuerForm: issuerFormFromDraft(
           pendingIssuer,
-          deriveRemoteSessionIssuerNameFromUrl(pendingIssuer.issuer) ?? "mcp",
+          readableServiceNameFromUrl(pendingIssuer.issuer) ?? "mcp",
         ),
       });
       // A retry after a later step fails uses the server just added.
@@ -400,12 +406,18 @@ export function usePersonalSignInDraft({
                   name:
                     detection.data.issuer.name?.trim() ||
                     detection.data.issuer.issuer,
+                  serviceName:
+                    readableServiceNameFromUrl(detection.data.issuer.issuer) ??
+                    detection.data.issuer.issuer,
                   inUse: effectiveIssuerId === detection.data.issuer.id,
                 }
               : detection.data?.kind === "new"
                 ? {
                     state: "new",
                     issuer: detection.data.draft.issuer,
+                    serviceName:
+                      readableServiceNameFromUrl(detection.data.draft.issuer) ??
+                      detection.data.draft.issuer,
                     inUse: !!pendingIssuer,
                   }
                 : { state: "none" },

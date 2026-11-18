@@ -197,7 +197,7 @@ export function PersonalSignInFields({
             }
             pendingLabel={
               detected.state === "new" && detected.inUse
-                ? `${hostOf(detected.issuer)} — ${detected.issuer}`
+                ? `${detected.serviceName} — ${detected.issuer}`
                 : undefined
             }
           />
@@ -240,14 +240,6 @@ export function PersonalSignInFields({
   );
 }
 
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname || url;
-  } catch {
-    return url;
-  }
-}
-
 /**
  * What the MCP server advertises about its sign-in, beside the authorization
  * server picker: confirmation when the picker holds it, and a way back to it
@@ -273,7 +265,7 @@ function DetectedNote({
     return (
       <Text muted small className="block">
         This server advertises{" "}
-        {detected.state === "new" ? hostOf(detected.issuer) : detected.name}.{" "}
+        {detected.state === "new" ? detected.serviceName : detected.name}.{" "}
         <button
           type="button"
           className="font-medium underline underline-offset-2"
@@ -288,7 +280,7 @@ function DetectedNote({
     <Text muted small className="flex items-start gap-1.5">
       <Check aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
       {detected.state === "new"
-        ? `Detected from this server. ${hostOf(detected.issuer)} isn't set up yet, so it's added to Authorization Servers when you save.`
+        ? `Detected from this server. ${detected.serviceName} isn't set up yet, so it's added to Authorization Servers when you save.`
         : "Detected from this server."}
     </Text>
   );

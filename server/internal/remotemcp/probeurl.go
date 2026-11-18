@@ -59,6 +59,10 @@ type ProbeResult struct {
 
 	// Reason is the stable failure code for unreachable outcomes.
 	Reason *string
+
+	// ServerName is the name the server reports in the handshake, when it
+	// completed and named itself.
+	ServerName *string
 }
 
 type probeObservation struct {
@@ -145,7 +149,9 @@ func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 	if last != nil {
 		status = &last.status
 	}
-	return probeObservation{result: mcpAvailableResult(), httpStatus: status}
+	result := mcpAvailableResult()
+	result.ServerName = reportedServerName(session.InitializeResult())
+	return probeObservation{result: result, httpStatus: status}
 }
 
 // probeResponse is the part of an upstream response the probe classifies.
@@ -222,6 +228,7 @@ func classifyProbeError(ctx context.Context, err error, last *probeResponse) pro
 				ProtectedResourceMetadataURL: parseProtectedResourceMetadataURL(last.wwwAuthenticate),
 				HTTPStatus:                   nil,
 				Reason:                       nil,
+				ServerName:                   nil,
 			},
 			httpStatus: &status,
 		}
@@ -245,6 +252,7 @@ func mcpAvailableResult() ProbeResult {
 		ProtectedResourceMetadataURL: nil,
 		HTTPStatus:                   nil,
 		Reason:                       nil,
+		ServerName:                   nil,
 	}
 }
 
@@ -254,6 +262,7 @@ func invalidMCPResponseResult(status int) ProbeResult {
 		ProtectedResourceMetadataURL: nil,
 		HTTPStatus:                   &status,
 		Reason:                       nil,
+		ServerName:                   nil,
 	}
 }
 
@@ -263,6 +272,7 @@ func unreachableResult(reason string, status *int) ProbeResult {
 		ProtectedResourceMetadataURL: nil,
 		HTTPStatus:                   status,
 		Reason:                       &reason,
+		ServerName:                   nil,
 	}
 }
 
@@ -422,4 +432,18 @@ func parseAuthParamValue(header string, start int) (string, int, bool) {
 
 func isAuthTokenByte(b byte) bool {
 	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", rune(b))
+}
+
+// reportedServerName is the human name a server gives itself: its title, or
+// its name when it has none.
+func reportedServerName(result *mcp.InitializeResult) *string {
+	if result == nil || result.ServerInfo == nil {
+		return nil
+	}
+	for _, candidate := range []string{result.ServerInfo.Title, result.ServerInfo.Name} {
+		if name := strings.TrimSpace(candidate); name != "" {
+			return &name
+		}
+	}
+	return nil
 }

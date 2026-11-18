@@ -12,6 +12,8 @@ type VerifyResult = {
    * what distinguishes an upstream that User Identity can actually set up.
    */
   protectedResourceMetadataUrl?: string;
+  /** The name the server reports for itself, when it was reachable. */
+  serverName?: string;
 };
 
 function unreachableMessage(reason: string | undefined): string {
@@ -83,6 +85,7 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
             verified: true,
             message: "MCP server is available",
             outcome: "mcp_available",
+            serverName: response.serverName,
           });
           break;
         case "authentication_required":
