@@ -11,7 +11,7 @@ import type { ExplainedCredentialAccess } from "@gram/client/models/components/e
 import { clientTypeLabel } from "@/lib/auth-clients";
 import { useExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState, type JSX } from "react";
+import { useId, useState, type JSX } from "react";
 import {
   accessDecision,
   directorySourceLabel,
@@ -141,7 +141,11 @@ export function CheckAccessResult({
       {data.credentials.length > 0 && (
         <CredentialsWhy
           credentials={data.credentials}
-          canConnect={!!explainedLevel(data, "use")?.allowed}
+          canConnect={
+            data.visibility === "public" ||
+            (data.visibility === "private" &&
+              !!explainedLevel(data, "use")?.allowed)
+          }
           memberName={memberName}
         />
       )}
@@ -193,11 +197,15 @@ function CredentialsWhy({
   memberName: string;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const tableId = useId();
   const usable = credentials.filter(
     (credential) => credentialDecision(credential) === "usable",
   ).length;
-  const sentence =
-    usable === 0
+  const sentence = !canConnect
+    ? usable === 0
+      ? `${memberName} has no credential to sign in upstream with.`
+      : `${memberName} could sign in upstream with ${usable === credentials.length && credentials.length > 1 ? `any of its ${credentials.length} credentials` : usable === 1 && credentials.length === 1 ? "the server's credential" : `${usable} of its ${credentials.length} credentials`}, but cannot connect to the server.`
+    : usable === 0
       ? canConnect
         ? `${memberName} can connect but has no credential to sign in upstream with.`
         : `${memberName} has no credential to sign in upstream with.`
@@ -284,7 +292,13 @@ function CredentialsWhy({
         <Text variant="body" className="flex-1 text-sm">
           {sentence}
         </Text>
-        <Button variant="secondary" size="sm" onClick={() => setOpen(!open)}>
+        <Button
+          variant="secondary"
+          size="sm"
+          aria-expanded={open}
+          aria-controls={tableId}
+          onClick={() => setOpen(!open)}
+        >
           <Button.Text>
             {open
               ? "Hide credentials"
@@ -300,7 +314,7 @@ function CredentialsWhy({
         </Button>
       </div>
       {open && (
-        <div className="border-t">
+        <div id={tableId} className="border-t">
           <Table
             columns={columns}
             data={credentials}

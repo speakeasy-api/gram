@@ -994,6 +994,7 @@ export function CreateRoleDialog({
     setGrants({});
     setCredentialRules(credentialRulesFromRole(undefined));
     setSavedCredentialRules(credentialRulesFromRole(undefined));
+    setCredentialServer(null);
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
     setSelectedAgents(new Set());

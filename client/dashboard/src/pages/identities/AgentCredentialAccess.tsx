@@ -98,7 +98,11 @@ function ManagerCredentials({ agent }: { agent: ManagedAgent }): JSX.Element {
         })),
     [grants.data],
   );
-  const ownerBlocks = policy.filter(isOwnerBlock).length;
+  // People, not grants: one person can block the agent on several
+  // connections.
+  const ownerBlocks = new Set(
+    policy.filter(isOwnerBlock).map((grant) => grant.selector.connectionOwner),
+  ).size;
   const names = useAuthGrantNames(stored);
   // What the manager changed, against the rules as they read when they
   // started. Everything they did not touch follows the stored policy.
@@ -197,8 +201,9 @@ function ManagerCredentials({ agent }: { agent: ManagedAgent }): JSX.Element {
               current: next,
             }))
           }
-          clients={clients.data ?? (clients.isError ? [] : null)}
+          clients={clients.data ?? null}
           clientsError={clients.isError}
+          clientsUnreadable={!hasScope("org:read")}
           onRetry={() => void clients.refetch()}
           projects={organization.projects}
           disabled={save.isPending}

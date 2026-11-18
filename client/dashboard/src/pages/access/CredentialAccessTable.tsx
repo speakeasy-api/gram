@@ -42,7 +42,7 @@ const TD = "px-2 py-2 text-center align-middle";
 /** Name, use, used on, the row menu. */
 const COLUMN_COUNT = 4;
 
-const PERSONAL_TYPES = new Set(["remote_session", "ema"]);
+const PERSONAL_TYPES = new Set(["remote_session"]);
 
 function rowName(
   row: CredentialRow,
@@ -79,6 +79,7 @@ export function CredentialAccessTable({
   onChange,
   clients,
   clientsError,
+  clientsUnreadable = false,
   onRetry,
   projects,
   serverFilter,
@@ -94,6 +95,8 @@ export function CredentialAccessTable({
   /** The organization's credentials, or null while they load. */
   clients: CredentialRef[] | null;
   clientsError: boolean;
+  /** The caller may not read the organization's credentials. */
+  clientsUnreadable?: boolean;
   onRetry: () => void;
   projects: { id: string; name: string }[];
   /** Show only the credentials one server offers. */
@@ -317,7 +320,8 @@ export function CredentialAccessTable({
           <div className="border-border flex items-center justify-between gap-3 border-b px-4 py-2">
             <Text small>
               Credentials{" "}
-              <span className="font-medium">{serverFilter.name}</span> offers
+              <span className="font-medium">{serverFilter.name}</span> offers.
+              Ticks on all credentials or on a kind still apply on every server.
             </Text>
             <Button variant="tertiary" size="xs" onClick={onClearServerFilter}>
               <Button.LeftIcon>
@@ -327,16 +331,23 @@ export function CredentialAccessTable({
             </Button>
           </div>
         )}
-        {clientsError && (
-          <Alert variant="error" className="m-4 text-sm">
-            <span className="flex flex-wrap items-center gap-2">
-              Could not load this organization&rsquo;s credentials. Kinds of
-              credential can still be set.
-              <Button variant="tertiary" size="xs" onClick={onRetry}>
-                <Button.Text>Retry</Button.Text>
-              </Button>
-            </span>
-          </Alert>
+        {clientsUnreadable ? (
+          <Text muted small className="block border-b px-4 py-3">
+            Naming one credential needs permission to read the organization.
+            Kinds of credential can still be set here.
+          </Text>
+        ) : (
+          clientsError && (
+            <Alert variant="error" className="m-4 text-sm">
+              <span className="flex flex-wrap items-center gap-2">
+                Could not load this organization&rsquo;s credentials. Kinds of
+                credential can still be set.
+                <Button variant="tertiary" size="xs" onClick={onRetry}>
+                  <Button.Text>Retry</Button.Text>
+                </Button>
+              </span>
+            </Alert>
+          )
         )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[36rem] table-fixed border-collapse text-sm">
@@ -408,7 +419,7 @@ export function CredentialAccessTable({
                   </Fragment>
                 );
               })}
-              {clients === null && !clientsError && (
+              {clients === null && !clientsError && !clientsUnreadable && (
                 <tr>
                   <td colSpan={COLUMN_COUNT} className="p-4">
                     <Skeleton>

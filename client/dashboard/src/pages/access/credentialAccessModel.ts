@@ -90,14 +90,26 @@ export function credentialTierKey(selector: CredentialSelector): string | null {
     selector.upstreamClient != null ||
     selector.tool != null ||
     selector.disposition != null ||
-    selector.serverUrl != null ||
-    (selector.connectionOwner != null &&
-      selector.connectionOwner !== REPRESENTED_USER)
+    selector.serverUrl != null
   ) {
     return null;
   }
+  // An owner constraint only ever matches a personal credential, so a rule
+  // carrying one is a tier rule only where it names that kind.
+  if (selector.connectionOwner != null) {
+    if (
+      selector.connectionOwner !== REPRESENTED_USER ||
+      selector.clientType !== "remote_session"
+    ) {
+      return null;
+    }
+  }
   if (selector.resourceId === "*") {
-    return wild(selector.clientType) ? "all" : `type:${selector.clientType}`;
+    if (wild(selector.clientType)) return "all";
+    // A kind this dashboard does not know has no row to show it on.
+    return (CLIENT_TYPES as readonly string[]).includes(selector.clientType!)
+      ? `type:${selector.clientType}`
+      : null;
   }
   return `client:${selector.resourceId}`;
 }
@@ -125,7 +137,7 @@ export function tierSelector(
     resourceKind: "mcp_auth_client",
     resourceId: row.kind === "client" ? row.clientId : "*",
   };
-  if (row.kind === "type") selector.clientType = row.clientType;
+  if (row.kind === "type" || personal) selector.clientType = row.clientType;
   // A personal credential is allowed only for the person's own connection, so
   // the stored rule says what the engine enforces.
   if (personal) selector.connectionOwner = REPRESENTED_USER;
@@ -300,15 +312,25 @@ export function otherCredentialRules(
   rules: CredentialRule[],
   clients: CredentialRef[] | null,
 ): CredentialRule[] {
-  const known = clients ? new Set(clients.map((client) => client.id)) : null;
+  // Credentials with a row: those that exist and are of a kind shown here.
+  const shown = clients
+    ? new Set(
+        clients
+          .filter((client) =>
+            (CLIENT_TYPES as readonly string[]).includes(client.clientType),
+          )
+          .map((client) => client.id),
+      )
+    : null;
   return rules.filter((rule) => {
     const key = credentialTierKey(rule.selector);
     if (key === null) return true;
-    // A credential that no longer exists has no row to show it on.
+    // A credential that no longer exists, or of an unknown kind, has no row
+    // to show it on.
     return (
-      known !== null &&
+      shown !== null &&
       key.startsWith("client:") &&
-      !known.has(key.slice("client:".length))
+      !shown.has(key.slice("client:".length))
     );
   });
 }

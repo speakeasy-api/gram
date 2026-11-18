@@ -24,7 +24,7 @@ export function AuthGrantLabel({
   const projectSlug = (projectId: string) =>
     organization.projects?.find((project) => project.id === projectId)?.slug;
   return (
-    <Text small>
+    <Text as="span" small>
       {parts.map((part, index) => {
         if (part.kind === "text") return part.text;
         if (part.kind === "person") {

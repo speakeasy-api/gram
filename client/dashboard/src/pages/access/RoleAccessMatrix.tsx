@@ -944,9 +944,15 @@ function McpMatrix({
                             serverId={row.serverId}
                             projectId={row.projectId}
                             serverName={view.name}
-                            connects={["on", "inherited"].includes(
-                              cellState(view, "use").state,
-                            )}
+                            connects={
+                              ["on", "inherited"].includes(
+                                cellState(view, "use").state,
+                              ) &&
+                              !mcpBlocks(grants, row, "use") &&
+                              !ancestors(row).some((up) =>
+                                mcpBlocks(grants, up.row, "use"),
+                              )
+                            }
                           />
                         )}
                       </td>

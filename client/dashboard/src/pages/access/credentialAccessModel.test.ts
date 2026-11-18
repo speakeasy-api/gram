@@ -209,3 +209,52 @@ describe("saving", () => {
     expect(keys(rebased)).toEqual(keys([...current, gained]));
   });
 });
+
+describe("rules the tree cannot show", () => {
+  it("lists an owner-constrained rule on every credential as other", () => {
+    const ownOnly: CredentialRule = {
+      scope: "mcp:auth",
+      selector: {
+        resourceKind: "mcp_auth_client",
+        resourceId: "*",
+        connectionOwner: REPRESENTED_USER,
+      },
+    };
+    expect(credentialRowState([ownOnly], { kind: "all" }).state).toBe("off");
+    expect(otherCredentialRules([ownOnly], clients)).toEqual([ownOnly]);
+  });
+
+  it("keeps a personal credential's own tick on its row", () => {
+    const row = {
+      kind: "client",
+      clientId: "oauth-a",
+      clientType: "remote_session",
+    } as const;
+    const rules = splitCredentialRow(
+      splitCredentialRow([allowAll], { kind: "all" }, clients),
+      { kind: "type", clientType: "remote_session" },
+      clients,
+    );
+    expect(credentialRowState(rules, row).state).toBe("on");
+    expect(otherCredentialRules(rules, clients)).toEqual([]);
+  });
+
+  it("lists rules for a kind this dashboard does not know as other", () => {
+    const future: CredentialRule = {
+      scope: "mcp:auth",
+      selector: {
+        resourceKind: "mcp_auth_client",
+        resourceId: "*",
+        clientType: "future_kind",
+      },
+    };
+    const futureClient = client("future-a", "future_kind");
+    const named: CredentialRule = {
+      scope: "mcp:auth",
+      selector: { resourceKind: "mcp_auth_client", resourceId: "future-a" },
+    };
+    expect(
+      otherCredentialRules([future, named], [...clients, futureClient]),
+    ).toEqual([future, named]);
+  });
+});

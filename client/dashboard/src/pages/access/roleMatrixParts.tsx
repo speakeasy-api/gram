@@ -212,6 +212,7 @@ export function RowToggle({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={disabled ? undefined : onToggle}
       aria-expanded={open}
       aria-label={label}
