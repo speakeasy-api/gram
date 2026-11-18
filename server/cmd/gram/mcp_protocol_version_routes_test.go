@@ -71,10 +71,11 @@ func routePathForSlug(t *testing.T, pattern, slug string) string {
 }
 
 // TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes derives paths from the
-// route patterns the server actually registers rather than from string literals
-// repeated here. The middleware duplicates route knowledge outside the router,
-// so a route that moves out from under it would otherwise be served
-// uninstrumented with nothing to signal it.
+// route constants the server registers its MCP endpoints with, rather than from
+// string literals repeated here. The middleware duplicates route knowledge
+// outside the router, so a listed route that moves out from under it would
+// otherwise be served uninstrumented with nothing to signal it. The list of
+// endpoints is maintained by hand: a new MCP endpoint must be added here.
 //
 // Every MCP endpoint mounts all three Streamable HTTP verbs, and the protocol
 // version is carried on all of them: POST for JSON-RPC messages, GET for the
