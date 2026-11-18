@@ -3048,6 +3048,26 @@ type GlobalRole struct {
 	Deleted bool
 }
 
+type HooksRolloutPin struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// NULL for the platform-wide default pin.
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// Highest hooks generator version the scope is cleared for. NULL clears an organization override.
+	// @access: confidential
+	Version pgtype.Int4
+	// Email of the staff operator who made the change.
+	// @access: confidential-pii
+	SetBy string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type HooksServerNameOverride struct {
 	// @access: confidential
 	ID uuid.UUID
