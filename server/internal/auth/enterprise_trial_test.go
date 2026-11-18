@@ -80,6 +80,13 @@ func TestRegister_ArmsEnterpriseTrial(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, seeded, "the signup path seeds the entitlement bundle")
 
+	enforced, err := featureRepo.New(inst.conn).IsFeatureEnabled(ctx, featureRepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.True(t, enforced, "an organization created at signup starts with upstream auth enforcement")
+
 	auditsAfter, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
 	require.Equal(t, auditsBefore+1, auditsAfter)

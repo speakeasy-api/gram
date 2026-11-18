@@ -91,7 +91,7 @@ func TestService_HandleGetAuthorizationServer(t *testing.T) {
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 		})
 		require.NoError(t, err)
-		toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
+		toolset := hostToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
 
 		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
 

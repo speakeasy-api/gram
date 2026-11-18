@@ -4973,3 +4973,13 @@ func TestHooksBootstrapReportsInstallFailureWithWget(t *testing.T) {
 	install, _ := data["install_failure"].(map[string]any)
 	require.Equal(t, "checksum_mismatch", install["cause"])
 }
+
+func TestHooksVersionPolicy(t *testing.T) {
+	t.Parallel()
+	policy, err := HooksVersionPolicy()
+	require.NoError(t, err)
+	require.Equal(t, hooksBinaryVersion, policy.Latest.String())
+	require.NotNil(t, policy.Minimum)
+	require.Equal(t, "0.3.0", policy.Minimum.String())
+	require.False(t, policy.Latest.LessThan(policy.Minimum), "the minimum supported hooks version must not be newer than the shipped release")
+}

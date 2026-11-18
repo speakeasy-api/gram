@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -15,6 +16,10 @@ import {
  * The organization's active private network ingress, when configured.
  */
 export type NetworkIngressResult = {
+  /**
+   * Tailscale tag this environment's gateway nodes and services carry. The organization's tailnet policy must own it, auto-approve the connection's service for it, and the OAuth client must be scoped to it.
+   */
+  gatewayTag: string;
   ingress?: NetworkIngress | undefined;
 };
 
@@ -22,9 +27,17 @@ export type NetworkIngressResult = {
 export const NetworkIngressResult$inboundSchema: z.ZodMiniType<
   NetworkIngressResult,
   unknown
-> = z.object({
-  ingress: z.optional(NetworkIngress$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    gateway_tag: z.string(),
+    ingress: z.optional(NetworkIngress$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "gateway_tag": "gatewayTag",
+    });
+  }),
+);
 
 export function networkIngressResultFromJSON(
   jsonString: string,

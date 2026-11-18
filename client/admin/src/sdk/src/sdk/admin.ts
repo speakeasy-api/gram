@@ -61,6 +61,7 @@ import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubs
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminGetUpstreamOAuthMigrationStatus } from "../funcs/adminGetUpstreamOAuthMigrationStatus.js";
+import { adminListAssistantOrganizations } from "../funcs/adminListAssistantOrganizations.js";
 import { adminListCustomDomains } from "../funcs/adminListCustomDomains.js";
 import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
@@ -94,6 +95,7 @@ import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRedeployProject } from "../funcs/adminRedeployProject.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
+import { adminRepairOrganizationAssistantAgentNames } from "../funcs/adminRepairOrganizationAssistantAgentNames.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
@@ -122,8 +124,10 @@ import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AdminAssistantAgentNameRepairRun } from "../models/components/adminassistantagentnamerepairrun.js";
 import { AdminAssistantIdentityMigrationRun } from "../models/components/adminassistantidentitymigrationrun.js";
 import { AdminAssistantKitMigrationRun } from "../models/components/adminassistantkitmigrationrun.js";
+import { AdminAssistantOrganizations } from "../models/components/adminassistantorganizations.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
@@ -223,6 +227,7 @@ import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissu
 import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
+import { RepairOrganizationAssistantAgentNamesRequestBody } from "../models/components/repairorganizationassistantagentnamesrequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
@@ -351,6 +356,21 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminUploadPlatformImage(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * listAssistantOrganizations admin
+   *
+   * @remarks
+   * Lists live organizations with live assistants in live projects.
+   */
+  async listAssistantOrganizations(
+    options?: RequestOptions,
+  ): Promise<AdminAssistantOrganizations> {
+    return unwrapAsync(adminListAssistantOrganizations(
+      this,
       options,
     ));
   }
@@ -1173,6 +1193,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ProductFeatures> {
     return unwrapAsync(adminSetOrganizationProviderSetup(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * repairOrganizationAssistantAgentNames admin
+   *
+   * @remarks
+   * Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.
+   */
+  async repairOrganizationAssistantAgentNames(
+    request: RepairOrganizationAssistantAgentNamesRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantAgentNameRepairRun> {
+    return unwrapAsync(adminRepairOrganizationAssistantAgentNames(
       this,
       request,
       options,

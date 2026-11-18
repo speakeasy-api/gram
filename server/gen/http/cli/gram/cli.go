@@ -34,6 +34,7 @@ import (
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
+	commandsearchc "github.com/speakeasy-api/gram/server/gen/http/command_search/client"
 	dashboardsc "github.com/speakeasy-api/gram/server/gen/http/dashboards/client"
 	dataexportsc "github.com/speakeasy-api/gram/server/gen/http/data_exports/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
@@ -137,8 +138,9 @@ func UsageCommands() []string {
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|count-by-user|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
+		"command-search search",
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
-		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
+		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route|test-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs|evaluate-open-ap-iv3|get-deployment-evaluation)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage|list-fleet-devices|get-fleet-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|reconcile-domain|check-health|delete-domain|list-mcp-endpoints)",
@@ -199,17 +201,17 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
-		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit)",
+		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
-		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
+		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|list-remote-session-client-bindings|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"gateway-sessions (list-gateway-sessions|list-gateway-session-facets)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
@@ -1034,6 +1036,14 @@ func ParseEndpoint(
 		cliAuthRedeemFlags    = flag.NewFlagSet("redeem", flag.ExitOnError)
 		cliAuthRedeemBodyFlag = cliAuthRedeemFlags.String("body", "REQUIRED", "")
 
+		commandSearchFlags = flag.NewFlagSet("command-search", flag.ContinueOnError)
+
+		commandSearchSearchFlags                = flag.NewFlagSet("search", flag.ExitOnError)
+		commandSearchSearchQFlag                = commandSearchSearchFlags.String("q", "REQUIRED", "")
+		commandSearchSearchSessionTokenFlag     = commandSearchSearchFlags.String("session-token", "", "")
+		commandSearchSearchApikeyTokenFlag      = commandSearchSearchFlags.String("apikey-token", "", "")
+		commandSearchSearchProjectSlugInputFlag = commandSearchSearchFlags.String("project-slug-input", "", "")
+
 		dashboardsFlags = flag.NewFlagSet("dashboards", flag.ContinueOnError)
 
 		dashboardsListDashboardsFlags                = flag.NewFlagSet("list-dashboards", flag.ExitOnError)
@@ -1143,6 +1153,12 @@ func ParseEndpoint(
 		dataExportsDeleteRouteSessionTokenFlag     = dataExportsDeleteRouteFlags.String("session-token", "", "")
 		dataExportsDeleteRouteApikeyTokenFlag      = dataExportsDeleteRouteFlags.String("apikey-token", "", "")
 		dataExportsDeleteRouteProjectSlugInputFlag = dataExportsDeleteRouteFlags.String("project-slug-input", "", "")
+
+		dataExportsTestRouteFlags                = flag.NewFlagSet("test-route", flag.ExitOnError)
+		dataExportsTestRouteIDFlag               = dataExportsTestRouteFlags.String("id", "REQUIRED", "")
+		dataExportsTestRouteSessionTokenFlag     = dataExportsTestRouteFlags.String("session-token", "", "")
+		dataExportsTestRouteApikeyTokenFlag      = dataExportsTestRouteFlags.String("apikey-token", "", "")
+		dataExportsTestRouteProjectSlugInputFlag = dataExportsTestRouteFlags.String("project-slug-input", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
@@ -4307,13 +4323,6 @@ func ParseEndpoint(
 		toolsetsRemoveOAuthServerApikeyTokenFlag      = toolsetsRemoveOAuthServerFlags.String("apikey-token", "", "")
 		toolsetsRemoveOAuthServerProjectSlugInputFlag = toolsetsRemoveOAuthServerFlags.String("project-slug-input", "", "")
 
-		toolsetsSetUserSessionIssuerFlags                = flag.NewFlagSet("set-user-session-issuer", flag.ExitOnError)
-		toolsetsSetUserSessionIssuerBodyFlag             = toolsetsSetUserSessionIssuerFlags.String("body", "REQUIRED", "")
-		toolsetsSetUserSessionIssuerSlugFlag             = toolsetsSetUserSessionIssuerFlags.String("slug", "REQUIRED", "")
-		toolsetsSetUserSessionIssuerSessionTokenFlag     = toolsetsSetUserSessionIssuerFlags.String("session-token", "", "")
-		toolsetsSetUserSessionIssuerApikeyTokenFlag      = toolsetsSetUserSessionIssuerFlags.String("apikey-token", "", "")
-		toolsetsSetUserSessionIssuerProjectSlugInputFlag = toolsetsSetUserSessionIssuerFlags.String("project-slug-input", "", "")
-
 		toolsetsSetToolVariationsGroupFlags                = flag.NewFlagSet("set-tool-variations-group", flag.ExitOnError)
 		toolsetsSetToolVariationsGroupBodyFlag             = toolsetsSetToolVariationsGroupFlags.String("body", "REQUIRED", "")
 		toolsetsSetToolVariationsGroupSlugFlag             = toolsetsSetToolVariationsGroupFlags.String("slug", "REQUIRED", "")
@@ -4485,9 +4494,6 @@ func ParseEndpoint(
 
 		usageCreateCustomerSessionFlags            = flag.NewFlagSet("create-customer-session", flag.ExitOnError)
 		usageCreateCustomerSessionSessionTokenFlag = usageCreateCustomerSessionFlags.String("session-token", "", "")
-
-		usageCreateCheckoutFlags            = flag.NewFlagSet("create-checkout", flag.ExitOnError)
-		usageCreateCheckoutSessionTokenFlag = usageCreateCheckoutFlags.String("session-token", "", "")
 
 		usageGetStripeCheckoutStatusFlags            = flag.NewFlagSet("get-stripe-checkout-status", flag.ExitOnError)
 		usageGetStripeCheckoutStatusSessionIDFlag    = usageGetStripeCheckoutStatusFlags.String("session-id", "REQUIRED", "")
@@ -5032,6 +5038,13 @@ func ParseEndpoint(
 		adminStartMemoryEvalRunBodyFlag              = adminStartMemoryEvalRunFlags.String("body", "REQUIRED", "")
 		adminStartMemoryEvalRunAdminSessionTokenFlag = adminStartMemoryEvalRunFlags.String("admin-session-token", "", "")
 
+		adminListAssistantOrganizationsFlags                 = flag.NewFlagSet("list-assistant-organizations", flag.ExitOnError)
+		adminListAssistantOrganizationsAdminSessionTokenFlag = adminListAssistantOrganizationsFlags.String("admin-session-token", "", "")
+
+		adminRepairOrganizationAssistantAgentNamesFlags                 = flag.NewFlagSet("repair-organization-assistant-agent-names", flag.ExitOnError)
+		adminRepairOrganizationAssistantAgentNamesBodyFlag              = adminRepairOrganizationAssistantAgentNamesFlags.String("body", "REQUIRED", "")
+		adminRepairOrganizationAssistantAgentNamesAdminSessionTokenFlag = adminRepairOrganizationAssistantAgentNamesFlags.String("admin-session-token", "", "")
+
 		adminListOrganizationAssistantsFlags                 = flag.NewFlagSet("list-organization-assistants", flag.ExitOnError)
 		adminListOrganizationAssistantsOrganizationIDFlag    = adminListOrganizationAssistantsFlags.String("organization-id", "REQUIRED", "")
 		adminListOrganizationAssistantsAdminSessionTokenFlag = adminListOrganizationAssistantsFlags.String("admin-session-token", "", "")
@@ -5198,6 +5211,10 @@ func ParseEndpoint(
 		organizationUserSessionIssuersListMcpServersCursorFlag              = organizationUserSessionIssuersListMcpServersFlags.String("cursor", "", "")
 		organizationUserSessionIssuersListMcpServersLimitFlag               = organizationUserSessionIssuersListMcpServersFlags.String("limit", "", "")
 		organizationUserSessionIssuersListMcpServersSessionTokenFlag        = organizationUserSessionIssuersListMcpServersFlags.String("session-token", "", "")
+
+		organizationUserSessionIssuersListRemoteSessionClientBindingsFlags                   = flag.NewFlagSet("list-remote-session-client-bindings", flag.ExitOnError)
+		organizationUserSessionIssuersListRemoteSessionClientBindingsUserSessionIssuerIDFlag = organizationUserSessionIssuersListRemoteSessionClientBindingsFlags.String("user-session-issuer-id", "REQUIRED", "")
+		organizationUserSessionIssuersListRemoteSessionClientBindingsSessionTokenFlag        = organizationUserSessionIssuersListRemoteSessionClientBindingsFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersGetAuthenticationHostImpactFlags                     = flag.NewFlagSet("get-authentication-host-impact", flag.ExitOnError)
 		organizationUserSessionIssuersGetAuthenticationHostImpactIDFlag                    = organizationUserSessionIssuersGetAuthenticationHostImpactFlags.String("id", "REQUIRED", "")
@@ -5833,6 +5850,9 @@ func ParseEndpoint(
 	cliAuthAuthorizeFlags.Usage = cliAuthAuthorizeUsage
 	cliAuthRedeemFlags.Usage = cliAuthRedeemUsage
 
+	commandSearchFlags.Usage = commandSearchUsage
+	commandSearchSearchFlags.Usage = commandSearchSearchUsage
+
 	dashboardsFlags.Usage = dashboardsUsage
 	dashboardsListDashboardsFlags.Usage = dashboardsListDashboardsUsage
 	dashboardsGetDashboardFlags.Usage = dashboardsGetDashboardUsage
@@ -5856,6 +5876,7 @@ func ParseEndpoint(
 	dataExportsCreateRouteFlags.Usage = dataExportsCreateRouteUsage
 	dataExportsUpdateRouteFlags.Usage = dataExportsUpdateRouteUsage
 	dataExportsDeleteRouteFlags.Usage = dataExportsDeleteRouteUsage
+	dataExportsTestRouteFlags.Usage = dataExportsTestRouteUsage
 
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
@@ -6543,7 +6564,6 @@ func ParseEndpoint(
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
 	toolsetsUpdateExternalOAuthServerFlags.Usage = toolsetsUpdateExternalOAuthServerUsage
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
-	toolsetsSetUserSessionIssuerFlags.Usage = toolsetsSetUserSessionIssuerUsage
 	toolsetsSetToolVariationsGroupFlags.Usage = toolsetsSetToolVariationsGroupUsage
 
 	triggersFlags.Usage = triggersUsage
@@ -6585,7 +6605,6 @@ func ParseEndpoint(
 	usageGetInferenceSpendCapsFlags.Usage = usageGetInferenceSpendCapsUsage
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
-	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
 	usageGetStripeCheckoutStatusFlags.Usage = usageGetStripeCheckoutStatusUsage
 	usageCreateStripeCheckoutFlags.Usage = usageCreateStripeCheckoutUsage
 	usageGetStripeSubscriptionFlags.Usage = usageGetStripeSubscriptionUsage
@@ -6715,6 +6734,8 @@ func ParseEndpoint(
 	adminListMemoryEvalRunsFlags.Usage = adminListMemoryEvalRunsUsage
 	adminGetMemoryEvalRunFlags.Usage = adminGetMemoryEvalRunUsage
 	adminStartMemoryEvalRunFlags.Usage = adminStartMemoryEvalRunUsage
+	adminListAssistantOrganizationsFlags.Usage = adminListAssistantOrganizationsUsage
+	adminRepairOrganizationAssistantAgentNamesFlags.Usage = adminRepairOrganizationAssistantAgentNamesUsage
 	adminListOrganizationAssistantsFlags.Usage = adminListOrganizationAssistantsUsage
 	adminMigrateOrganizationAssistantIdentitiesFlags.Usage = adminMigrateOrganizationAssistantIdentitiesUsage
 	adminMigrateOrganizationAssistantsToKitFlags.Usage = adminMigrateOrganizationAssistantsToKitUsage
@@ -6751,6 +6772,7 @@ func ParseEndpoint(
 	organizationUserSessionIssuersGetIssuerFlags.Usage = organizationUserSessionIssuersGetIssuerUsage
 	organizationUserSessionIssuersUpdateIssuerFlags.Usage = organizationUserSessionIssuersUpdateIssuerUsage
 	organizationUserSessionIssuersListMcpServersFlags.Usage = organizationUserSessionIssuersListMcpServersUsage
+	organizationUserSessionIssuersListRemoteSessionClientBindingsFlags.Usage = organizationUserSessionIssuersListRemoteSessionClientBindingsUsage
 	organizationUserSessionIssuersGetAuthenticationHostImpactFlags.Usage = organizationUserSessionIssuersGetAuthenticationHostImpactUsage
 	organizationUserSessionIssuersSetAuthenticationHostFlags.Usage = organizationUserSessionIssuersSetAuthenticationHostUsage
 	organizationUserSessionIssuersGetIssuerDeletePreflightFlags.Usage = organizationUserSessionIssuersGetIssuerDeletePreflightUsage
@@ -6900,6 +6922,8 @@ func ParseEndpoint(
 			svcf = chatSessionsFlags
 		case "cli-auth":
 			svcf = cliAuthFlags
+		case "command-search":
+			svcf = commandSearchFlags
 		case "dashboards":
 			svcf = dashboardsFlags
 		case "data-exports":
@@ -7568,6 +7592,13 @@ func ParseEndpoint(
 
 			}
 
+		case "command-search":
+			switch epn {
+			case "search":
+				epf = commandSearchSearchFlags
+
+			}
+
 		case "dashboards":
 			switch epn {
 			case "list-dashboards":
@@ -7633,6 +7664,9 @@ func ParseEndpoint(
 
 			case "delete-route":
 				epf = dataExportsDeleteRouteFlags
+
+			case "test-route":
+				epf = dataExportsTestRouteFlags
 
 			}
 
@@ -9573,9 +9607,6 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				epf = toolsetsRemoveOAuthServerFlags
 
-			case "set-user-session-issuer":
-				epf = toolsetsSetUserSessionIssuerFlags
-
 			case "set-tool-variations-group":
 				epf = toolsetsSetToolVariationsGroupFlags
 
@@ -9690,9 +9721,6 @@ func ParseEndpoint(
 
 			case "create-customer-session":
 				epf = usageCreateCustomerSessionFlags
-
-			case "create-checkout":
-				epf = usageCreateCheckoutFlags
 
 			case "get-stripe-checkout-status":
 				epf = usageGetStripeCheckoutStatusFlags
@@ -10079,6 +10107,12 @@ func ParseEndpoint(
 			case "start-memory-eval-run":
 				epf = adminStartMemoryEvalRunFlags
 
+			case "list-assistant-organizations":
+				epf = adminListAssistantOrganizationsFlags
+
+			case "repair-organization-assistant-agent-names":
+				epf = adminRepairOrganizationAssistantAgentNamesFlags
+
 			case "list-organization-assistants":
 				epf = adminListOrganizationAssistantsFlags
 
@@ -10176,6 +10210,9 @@ func ParseEndpoint(
 
 			case "list-mcp-servers":
 				epf = organizationUserSessionIssuersListMcpServersFlags
+
+			case "list-remote-session-client-bindings":
+				epf = organizationUserSessionIssuersListRemoteSessionClientBindingsFlags
 
 			case "get-authentication-host-impact":
 				epf = organizationUserSessionIssuersGetAuthenticationHostImpactFlags
@@ -10990,6 +11027,13 @@ func ParseEndpoint(
 				endpoint = c.Redeem()
 				data, err = cliauthc.BuildRedeemPayload(*cliAuthRedeemBodyFlag)
 			}
+		case "command-search":
+			c := commandsearchc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "search":
+				endpoint = c.Search()
+				data, err = commandsearchc.BuildSearchPayload(*commandSearchSearchQFlag, *commandSearchSearchSessionTokenFlag, *commandSearchSearchApikeyTokenFlag, *commandSearchSearchProjectSlugInputFlag)
+			}
 		case "dashboards":
 			c := dashboardsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -11057,6 +11101,9 @@ func ParseEndpoint(
 			case "delete-route":
 				endpoint = c.DeleteRoute()
 				data, err = dataexportsc.BuildDeleteRoutePayload(*dataExportsDeleteRouteIDFlag, *dataExportsDeleteRouteSessionTokenFlag, *dataExportsDeleteRouteApikeyTokenFlag, *dataExportsDeleteRouteProjectSlugInputFlag)
+			case "test-route":
+				endpoint = c.TestRoute()
+				data, err = dataexportsc.BuildTestRoutePayload(*dataExportsTestRouteIDFlag, *dataExportsTestRouteSessionTokenFlag, *dataExportsTestRouteApikeyTokenFlag, *dataExportsTestRouteProjectSlugInputFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13008,9 +13055,6 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				endpoint = c.RemoveOAuthServer()
 				data, err = toolsetsc.BuildRemoveOAuthServerPayload(*toolsetsRemoveOAuthServerSlugFlag, *toolsetsRemoveOAuthServerSessionTokenFlag, *toolsetsRemoveOAuthServerApikeyTokenFlag, *toolsetsRemoveOAuthServerProjectSlugInputFlag)
-			case "set-user-session-issuer":
-				endpoint = c.SetUserSessionIssuer()
-				data, err = toolsetsc.BuildSetUserSessionIssuerPayload(*toolsetsSetUserSessionIssuerBodyFlag, *toolsetsSetUserSessionIssuerSlugFlag, *toolsetsSetUserSessionIssuerSessionTokenFlag, *toolsetsSetUserSessionIssuerApikeyTokenFlag, *toolsetsSetUserSessionIssuerProjectSlugInputFlag)
 			case "set-tool-variations-group":
 				endpoint = c.SetToolVariationsGroup()
 				data, err = toolsetsc.BuildSetToolVariationsGroupPayload(*toolsetsSetToolVariationsGroupBodyFlag, *toolsetsSetToolVariationsGroupSlugFlag, *toolsetsSetToolVariationsGroupSessionTokenFlag, *toolsetsSetToolVariationsGroupApikeyTokenFlag, *toolsetsSetToolVariationsGroupProjectSlugInputFlag)
@@ -13125,9 +13169,6 @@ func ParseEndpoint(
 			case "create-customer-session":
 				endpoint = c.CreateCustomerSession()
 				data, err = usagec.BuildCreateCustomerSessionPayload(*usageCreateCustomerSessionSessionTokenFlag)
-			case "create-checkout":
-				endpoint = c.CreateCheckout()
-				data, err = usagec.BuildCreateCheckoutPayload(*usageCreateCheckoutSessionTokenFlag)
 			case "get-stripe-checkout-status":
 				endpoint = c.GetStripeCheckoutStatus()
 				data, err = usagec.BuildGetStripeCheckoutStatusPayload(*usageGetStripeCheckoutStatusSessionIDFlag, *usageGetStripeCheckoutStatusSessionTokenFlag)
@@ -13516,6 +13557,12 @@ func ParseEndpoint(
 			case "start-memory-eval-run":
 				endpoint = c.StartMemoryEvalRun()
 				data, err = adminc.BuildStartMemoryEvalRunPayload(*adminStartMemoryEvalRunBodyFlag, *adminStartMemoryEvalRunAdminSessionTokenFlag)
+			case "list-assistant-organizations":
+				endpoint = c.ListAssistantOrganizations()
+				data, err = adminc.BuildListAssistantOrganizationsPayload(*adminListAssistantOrganizationsAdminSessionTokenFlag)
+			case "repair-organization-assistant-agent-names":
+				endpoint = c.RepairOrganizationAssistantAgentNames()
+				data, err = adminc.BuildRepairOrganizationAssistantAgentNamesPayload(*adminRepairOrganizationAssistantAgentNamesBodyFlag, *adminRepairOrganizationAssistantAgentNamesAdminSessionTokenFlag)
 			case "list-organization-assistants":
 				endpoint = c.ListOrganizationAssistants()
 				data, err = adminc.BuildListOrganizationAssistantsPayload(*adminListOrganizationAssistantsOrganizationIDFlag, *adminListOrganizationAssistantsAdminSessionTokenFlag)
@@ -13614,6 +13661,9 @@ func ParseEndpoint(
 			case "list-mcp-servers":
 				endpoint = c.ListMcpServers()
 				data, err = organizationusersessionissuersc.BuildListMcpServersPayload(*organizationUserSessionIssuersListMcpServersUserSessionIssuerIDFlag, *organizationUserSessionIssuersListMcpServersCursorFlag, *organizationUserSessionIssuersListMcpServersLimitFlag, *organizationUserSessionIssuersListMcpServersSessionTokenFlag)
+			case "list-remote-session-client-bindings":
+				endpoint = c.ListRemoteSessionClientBindings()
+				data, err = organizationusersessionissuersc.BuildListRemoteSessionClientBindingsPayload(*organizationUserSessionIssuersListRemoteSessionClientBindingsUserSessionIssuerIDFlag, *organizationUserSessionIssuersListRemoteSessionClientBindingsSessionTokenFlag)
 			case "get-authentication-host-impact":
 				endpoint = c.GetAuthenticationHostImpact()
 				data, err = organizationusersessionissuersc.BuildGetAuthenticationHostImpactPayload(*organizationUserSessionIssuersGetAuthenticationHostImpactIDFlag, *organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHostFlag, *organizationUserSessionIssuersGetAuthenticationHostImpactSessionTokenFlag)
@@ -17430,6 +17480,41 @@ func cliAuthRedeemUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth redeem --body '{\n      \"code\": \"abc123\",\n      \"code_verifier\": \"aaa\"\n   }'")
 }
 
+// commandSearchUsage displays the usage of the command-search command and its
+// subcommands.
+func commandSearchUsage() {
+	fmt.Fprintln(os.Stderr, `Searches authorized project resources for Command K.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] command-search COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    search: Returns compact openable resources matching a bounded server-side query.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s command-search COMMAND --help\n", os.Args[0])
+}
+func commandSearchSearchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] command-search search", os.Args[0])
+	fmt.Fprint(os.Stderr, " -q STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns compact openable resources matching a bounded server-side query.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -q STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "command-search search --q \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // dashboardsUsage displays the usage of the dashboards command and its
 // subcommands.
 func dashboardsUsage() {
@@ -17706,6 +17791,7 @@ func dataExportsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-route: Create the selected data source's export route configuration.`)
 	fmt.Fprintln(os.Stderr, `    update-route: Replace the selected data source's export route configuration.`)
 	fmt.Fprintln(os.Stderr, `    delete-route: Delete a data source's export route configuration.`)
+	fmt.Fprintln(os.Stderr, `    test-route: Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s data-exports COMMAND --help\n", os.Args[0])
@@ -17920,6 +18006,30 @@ func dataExportsDeleteRouteUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports delete-route --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsTestRouteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports test-route", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports test-route --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // deploymentsUsage displays the usage of the deployments command and its
@@ -31687,9 +31797,6 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
 	fmt.Fprintln(os.Stderr, `    update-externaloauth-server: Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association`)
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
-	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
-	
-	Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.`)
 	fmt.Fprintln(os.Stderr, `    set-tool-variations-group: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -31981,34 +32088,6 @@ func toolsetsRemoveOAuthServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets removeoauth-server --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func toolsetsSetUserSessionIssuerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets set-user-session-issuer", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
-	
-	Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets set-user-session-issuer --body '{\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsSetToolVariationsGroupUsage() {
@@ -32587,7 +32666,6 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    get-inference-spend-caps: List current usage and caps for the organization's materialized platform-managed inference keys`)
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
-	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-checkout-status: Read the current status of a Stripe Checkout session owned by the active organization`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create an embedded Stripe Checkout session for starting PAYG billing`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Get the live lifecycle state of the organization's Stripe PAYG subscription`)
@@ -32812,24 +32890,6 @@ func usageCreateCustomerSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-customer-session --session-token \"abc123\"")
-}
-
-func usageCreateCheckoutUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] usage create-checkout", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a checkout link for upgrading to the business plan`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-checkout --session-token \"abc123\"")
 }
 
 func usageGetStripeCheckoutStatusUsage() {
@@ -33108,6 +33168,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-memory-eval-runs: Organizational Memory eval runs, newest first, without their reports.`)
 	fmt.Fprintln(os.Stderr, `    get-memory-eval-run: One Organizational Memory eval run with its report.`)
 	fmt.Fprintln(os.Stderr, `    start-memory-eval-run: Queue an Organizational Memory eval run against the demo organization's synthetic corpus. Spends model credits; one run at a time and a daily limit.`)
+	fmt.Fprintln(os.Stderr, `    list-assistant-organizations: Lists live organizations with live assistants in live projects.`)
+	fmt.Fprintln(os.Stderr, `    repair-organization-assistant-agent-names: Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.`)
 	fmt.Fprintln(os.Stderr, `    list-organization-assistants: Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.`)
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistant-identities: Gives every assistant of one organization that has no dedicated agent its own agent, owned by the assistant's creator, and binds its triggers to workload identities. The agent starts with access to every MCP server and skill in the assistant's project, administration of the assistant, and project inference only when the creator has it. Assistants whose creator is no longer a member are skipped and reported. Idempotent, so it is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistants-to-kit: Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.`)
@@ -35577,6 +35639,44 @@ func adminStartMemoryEvalRunUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin start-memory-eval-run --body '{\n      \"config\": {\n         \"answer_models\": [\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"digest_model\": \"abc123\",\n         \"judge_model\": \"abc123\",\n         \"runs\": 2,\n         \"summary_model\": \"abc123\"\n      }\n   }' --admin-session-token \"abc123\"")
 }
 
+func adminListAssistantOrganizationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-assistant-organizations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists live organizations with live assistants in live projects.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-assistant-organizations --admin-session-token \"abc123\"")
+}
+
+func adminRepairOrganizationAssistantAgentNamesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin repair-organization-assistant-agent-names", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin repair-organization-assistant-agent-names --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
 func adminListOrganizationAssistantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin list-organization-assistants", os.Args[0])
@@ -36164,6 +36264,9 @@ func organizationUserSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    get-issuer: Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update an organization-owned user_session_issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-session-client-bindings: List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+	
+	Deprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.`)
 	fmt.Fprintln(os.Stderr, `    get-authentication-host-impact: Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-authentication-host: Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.`)
@@ -36285,6 +36388,28 @@ func organizationUserSessionIssuersListMcpServersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-mcp-servers --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\"")
+}
+
+func organizationUserSessionIssuersListRemoteSessionClientBindingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers list-remote-session-client-bindings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
+	
+	Deprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-remote-session-client-bindings --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersGetAuthenticationHostImpactUsage() {

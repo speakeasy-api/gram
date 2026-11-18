@@ -24,6 +24,7 @@ const (
 	ActionToolsetUpdateOAuthProxy          Action = "toolset:update_oauth_proxy"
 	ActionToolsetDetachOAuthProxy          Action = "toolset:detach_oauth_proxy"
 	ActionToolsetMigrateToRemoteMcp        Action = "toolset:migrate_to_remote_mcp"
+	ActionToolsetMoveLegacyAlias           Action = "toolset:move_legacy_alias"
 )
 
 type LogToolsetCreateEvent struct {

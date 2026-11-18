@@ -27,7 +27,14 @@ func Render(r authz.Registry) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []File{{Path: "internal/authz/scopes_gen.go", Content: scopes}}, nil
+	refs, err := renderRefs(r)
+	if err != nil {
+		return nil, err
+	}
+	return []File{
+		{Path: "internal/authz/scopes_gen.go", Content: scopes},
+		{Path: "internal/authz/refs_gen.go", Content: refs},
+	}, nil
 }
 
 // identifierAcronyms are scope name parts written in capitals in Go

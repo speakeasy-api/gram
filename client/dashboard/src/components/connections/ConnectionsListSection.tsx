@@ -5,7 +5,7 @@ import {
   type ConnectionKillswitchContext,
 } from "@/components/connections/ConnectionsList";
 import {
-  CONNECTION_GROUPING_LABELS,
+  groupingOptions,
   type ConnectionGrouping,
 } from "@/components/connections/groupConnections";
 import { InlineEmptyState } from "@/components/inline-empty-state";
@@ -18,24 +18,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
-
-const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
-  { value: "subject", label: CONNECTION_GROUPING_LABELS.subject },
-  { value: "issuer", label: CONNECTION_GROUPING_LABELS.issuer },
-  { value: "provider", label: CONNECTION_GROUPING_LABELS.provider },
-  { value: "client", label: CONNECTION_GROUPING_LABELS.client },
-];
-
-/**
- * Groupings worth offering for the scope a caller is showing.
- *
- * A grouping the caller has already fixed sorts a list of one: the MCP server
- * detail lists that server's own sessions, so filing them by MCP server draws
- * a single group and an option that appears to do nothing.
- */
-function groupingOptions(hide: ConnectionGrouping[]) {
-  return GROUPING_OPTIONS.filter((option) => !hide.includes(option.value));
-}
 
 /**
  * Connections plus their grouping control and the loading / error / empty
@@ -52,6 +34,7 @@ export function ConnectionsListSection({
   onRetry,
   onRevoked,
   defaultGrouping = "subject",
+  grouping: controlledGrouping,
   showGroupingControl = true,
   hideGroupings,
   bordered = true,
@@ -71,6 +54,11 @@ export function ConnectionsListSection({
   onRetry: () => void;
   onRevoked: () => void;
   defaultGrouping?: ConnectionGrouping;
+  /**
+   * The grouping chosen by a control the caller renders itself, such as one in
+   * its `Page.Toolbar`. Pair it with `showGroupingControl={false}`.
+   */
+  grouping?: ConnectionGrouping;
   /**
    * Whether the reader can regroup the list.
    *
@@ -96,7 +84,9 @@ export function ConnectionsListSection({
   /** Passed through to the list; see `ConnectionsList`. */
   canViewRegistrations?: boolean;
 }): JSX.Element {
-  const [grouping, setGrouping] = useState<ConnectionGrouping>(defaultGrouping);
+  const [ownGrouping, setGrouping] =
+    useState<ConnectionGrouping>(defaultGrouping);
+  const grouping = controlledGrouping ?? ownGrouping;
   const project = useProject();
   const { hasScope } = useRBAC();
   // Scoped to the project these connections belong to, not the bare scope: a
@@ -118,19 +108,18 @@ export function ConnectionsListSection({
 
   if (isError) {
     return (
-      <Stack
-        direction="horizontal"
-        align="center"
-        justify="space-between"
-        gap={3}
-      >
-        <p className="text-destructive text-sm">
-          Couldn&apos;t load connections.
-        </p>
-        <Button variant="tertiary" size="sm" onClick={onRetry}>
-          Retry
-        </Button>
-      </Stack>
+      <div role="alert">
+        <InlineEmptyState
+          icon="triangle-alert"
+          heading="Couldn't load connections"
+          description="Check your connection, then try again."
+          action={
+            <Button variant="secondary" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          }
+        />
+      </div>
     );
   }
 

@@ -25,6 +25,7 @@ type Endpoints struct {
 	CreateRoute       goa.Endpoint
 	UpdateRoute       goa.Endpoint
 	DeleteRoute       goa.Endpoint
+	TestRoute         goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "dataExports" service with endpoints.
@@ -41,6 +42,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRoute:       NewCreateRouteEndpoint(s, a.APIKeyAuth),
 		UpdateRoute:       NewUpdateRouteEndpoint(s, a.APIKeyAuth),
 		DeleteRoute:       NewDeleteRouteEndpoint(s, a.APIKeyAuth),
+		TestRoute:         NewTestRouteEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -55,6 +57,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRoute = m(e.CreateRoute)
 	e.UpdateRoute = m(e.UpdateRoute)
 	e.DeleteRoute = m(e.DeleteRoute)
+	e.TestRoute = m(e.TestRoute)
 }
 
 // NewListDestinationsEndpoint returns an endpoint function that calls the
@@ -549,5 +552,64 @@ func NewDeleteRouteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return nil, s.DeleteRoute(ctx, p)
+	}
+}
+
+// NewTestRouteEndpoint returns an endpoint function that calls the method
+// "testRoute" of service "dataExports".
+func NewTestRouteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TestRoutePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.TestRoute(ctx, p)
 	}
 }

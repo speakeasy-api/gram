@@ -109,6 +109,11 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/chat.listChats?search=REDACTED&limit=10",
 		},
 		{
+			name: "command resource query redacted",
+			in:   "/rpc/commandSearch.search?q=sensitive-resource",
+			want: "/rpc/commandSearch.search?q=REDACTED",
+		},
+		{
 			name: "credential and personal data redacted together",
 			in:   "/rpc/auth.login?email=dev%40acme.corp&token=supersecret",
 			want: "/rpc/auth.login?email=REDACTED&token=REDACTED",

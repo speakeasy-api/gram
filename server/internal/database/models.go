@@ -1552,8 +1552,6 @@ type Chat struct {
 	SummaryRedacted bool
 	// @access: confidential
 	MemoryExcludedAt pgtype.Timestamptz
-	// @access: confidential
-	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
 	InferenceActorKey []byte
 	// @access: confidential
@@ -4264,6 +4262,16 @@ type NetworkIngress struct {
 	// @access: confidential
 	ConnectedSince pgtype.Timestamptz
 	// @access: confidential
+	Runtime pgtype.Text
+	// @access: confidential
+	GatewayShard string
+	// Superseded by gateway_service_hostnames and no longer written; read only as the recorded label of a row whose gateway_service_hostnames is empty.
+	// @access: restricted
+	GatewayServiceHostname pgtype.Text
+	// Labels of the Tailscale Services the gateway may have defined for this ingress; copies of current and former hostnames.
+	// @access: restricted
+	GatewayServiceHostnames []string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -4271,6 +4279,79 @@ type NetworkIngress struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type NetworkIngressCertificateState struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// tsnet certificate state key: "<domain>.crt", "<domain>.key" or the ACME account key name.
+	// @access: confidential
+	StateKey string
+	// Certificate, private key or ACME account key, encrypted under the organization's key.
+	// @access: secret-restricted
+	ValueEncrypted string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NetworkIngressNode struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	PodName pgtype.Text
+	// @access: secret-restricted
+	AuthKeyEncrypted pgtype.Text
+	// @access: confidential
+	AuthKeyExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	Status string
+	// @access: restricted
+	NodeID pgtype.Text
+	// @access: restricted
+	DnsName pgtype.Text
+	// @access: confidential
+	LastError pgtype.Text
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	ConnectedSince pgtype.Timestamptz
+	// @access: confidential
+	RetiredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NetworkIngressNodeState struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	StateKey string
+	// @access: secret-restricted
+	ValueEncrypted string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type OktaApplication struct {

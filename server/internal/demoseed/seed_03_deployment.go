@@ -510,7 +510,7 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		OrganizationID: org,
 		ProjectID:      proj,
 		OwnerUserID:    owner,
-		Name:           "Identity-bound assistant agent",
+		Name:           "Identity-bound assistant",
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant agent: %w", err)
 	}

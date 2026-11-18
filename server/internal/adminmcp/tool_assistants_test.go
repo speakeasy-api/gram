@@ -32,7 +32,7 @@ func testAssistantReads(listedOrg string, assistants ...*gen.AdminOrganizationAs
 func testAdminAssistant() *gen.AdminOrganizationAssistant {
 	return &gen.AdminOrganizationAssistant{
 		ID: "assistant-a", Name: "Assistant", ProjectID: "project-a", ProjectSlug: "project", ProjectName: "Project",
-		Status: "active", IdentityState: "NEVER_CONFIGURED", RuntimeVersion: 2,
+		Status: "active", IdentityState: "NEVER_CONFIGURED", RuntimeVersion: 2, AgentName: new("Legacy name"), AgentNameRepairState: "pending",
 		CreatedByUserID: new("user-a"), CreatedByUserEmail: new("creator@example.invalid"), CreatorActive: false,
 		CreatedAt: "2026-01-01T00:00:00Z",
 	}
@@ -50,7 +50,7 @@ func TestListOrganizationAssistantsProjectsCreator(t *testing.T) {
 	require.False(t, output.PossiblyIncomplete)
 	require.Equal(t, []AssistantListing{{
 		ID: "assistant-a", Name: "Assistant", ProjectID: "project-a", ProjectSlug: "project", Status: "active",
-		IdentityState: "NEVER_CONFIGURED", RuntimeVersion: 2, CreatorUserID: "user-a", CreatorEmail: "creator@example.invalid",
+		AgentName: "Legacy name", AgentNameRepairState: "pending", IdentityState: "NEVER_CONFIGURED", RuntimeVersion: 2, CreatorUserID: "user-a", CreatorEmail: "creator@example.invalid",
 		CreatorActive: false, CreatedAt: "2026-01-01T00:00:00Z",
 	}}, output.Assistants)
 }
