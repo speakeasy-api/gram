@@ -377,6 +377,10 @@ type HookIngestData struct {
 	// where it must be the only block and the payload carries no session; rejected
 	// on every other event type.
 	DeliveryFailure *HookDeliveryFailureData
+	// Bootstrap install failure report. Required on client.install_failed, where
+	// it must be the only block and the payload carries no session; rejected on
+	// every other event type.
+	InstallFailure *HookInstallFailureData
 }
 
 // Canonical Speakeasy feature event.
@@ -397,6 +401,14 @@ type HookIngestSession struct {
 	Cwd *string
 	// Model identifier reported by the local agent.
 	Model *string
+	// Product surface that sent the event, set when it changes how the server
+	// handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the
+	// session transcript, so the server keys the event's conversation row by the
+	// id the transcript shares (the prompt id in turn_id, or the tool call id) and
+	// each prompt and tool call is stored once. Cowork cannot show the
+	// acknowledgement link, so a warned prompt there is confirmed by sending the
+	// same message again. Unknown values are ignored.
+	Surface *string
 }
 
 // Metadata about the local hook adapter that translated a provider event into
@@ -414,6 +426,28 @@ type HookIngestSource struct {
 	// or provider account), used for attribution when the API key is shared
 	// org-wide.
 	UserEmail *string
+}
+
+// Why a bootstrap script could not install the hooks binary.
+type HookInstallFailureCause string
+
+// Bootstrap install failure report, sent with event type
+// client.install_failed. A plugin's bootstrap script sends one, best effort,
+// when it cannot download the hooks binary or the download fails its checksum.
+// It is diagnostic only and never counts as agent activity.
+type HookInstallFailureData struct {
+	// Why the install failed.
+	Cause HookInstallFailureCause
+	// RFC3339 time of the failed install, on the device clock.
+	AttemptedAt string
+	// speakeasy-hooks version the script tried to install.
+	Version *string
+	// Operating system of the device.
+	Os *string
+	// CPU architecture of the device.
+	Arch *string
+	// Coding agent harness the hook ran under.
+	Harness *string
 }
 
 // Transcript-derived MCP attribution for one model API request. Claude redacts
@@ -566,7 +600,9 @@ type HooksStatus struct {
 
 // IngestHookResult is the result type of the hooks service ingest method.
 type IngestHookResult struct {
-	// Whether the local hook should allow or deny the action.
+	// Whether the local hook should allow or deny the action. "ask" (tool calls
+	// from Claude Cowork only) asks the person to allow the call in the agent's
+	// own permission prompt; a client that does not support it must deny.
 	Decision string
 	// Machine-readable decision reason.
 	Reason *string

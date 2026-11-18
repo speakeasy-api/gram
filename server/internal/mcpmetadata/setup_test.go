@@ -229,8 +229,6 @@ type servedToolsetOptions struct {
 	visibility     string
 	issuerID       uuid.NullUUID
 	customDomainID uuid.NullUUID
-	// legacyAlias serves mcpSlug through the toolset's legacy alias instead of a server endpoint.
-	legacyAlias    bool
 	organizationID string
 	projectID      uuid.UUID
 }
@@ -270,11 +268,6 @@ func createServedToolset(t *testing.T, ctx context.Context, ti *testInstance, op
 	hosted := testenv.HostedMCP{Visibility: "", UserSessionIssuerID: nil, Slug: opts.mcpSlug, CustomDomainID: opts.customDomainID}
 	if opts.issuerID.Valid {
 		hosted.UserSessionIssuerID = &opts.issuerID
-	}
-	if opts.legacyAlias {
-		testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, opts.mcpSlug, opts.customDomainID)
-		hosted.Slug = ""
-		hosted.CustomDomainID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, hosted)
 

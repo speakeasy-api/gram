@@ -27,7 +27,9 @@ var roleAuthClientAccessLevels = map[string]string{
 }
 
 type SetMCPRoleAuthClientAccessInput struct {
-	ProjectID     string `json:"project_id" jsonschema:"explicit project ID that owns the configured MCP"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID     string `json:"-"`
 	MCPID         string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp"`
 	RoleReference string `json:"role_reference" jsonschema:"opaque role reference returned by list_access_roles or get_mcp_access"`
 	AuthClientID  string `json:"auth_client_id" jsonschema:"shared credential ID returned for this role by get_mcp_access"`
@@ -148,7 +150,9 @@ func (s *AccessRoleMutationService) SetRoleAuthClientAccess(ctx context.Context,
 const operationOfferMCPUpstreamCredential = "offer_mcp_upstream_credential" //nolint:gosec // G101 false positive: a tool name, not a credential.
 
 type OfferMCPUpstreamCredentialInput struct {
-	ProjectID    string `json:"project_id" jsonschema:"explicit project ID that owns the configured MCP that should offer the credential"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID    string `json:"-"`
 	MCPID        string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp"`
 	AuthClientID string `json:"auth_client_id" jsonschema:"credential ID another server reports in get_mcp_connection_settings upstream_authentication"`
 	Confirmed    bool   `json:"confirmed" jsonschema:"set true only after the user confirms this exact credential and server; the credential stays one credential, so changing or rotating it changes every server that offers it"`

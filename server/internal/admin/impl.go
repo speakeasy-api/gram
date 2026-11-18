@@ -28,6 +28,7 @@ import (
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -44,6 +45,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -54,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -65,10 +69,16 @@ import (
 )
 
 type Service struct {
-	catalogPromotion     *catalogpromotion.Service
-	registry             *mcpregistry.Service
-	remoteSessions       *remotesessions.Service
-	assets               *assets.Service
+	catalogPromotion *catalogpromotion.Service
+	providerHealth   *mcpconnectionattempts.ProviderHealth
+	registry         *mcpregistry.Service
+	remoteSessions   *remotesessions.Service
+	assets           *assets.Service
+
+	// gcpIdentity screens and verifies platform external credentials. Nil
+	// leaves those methods unavailable.
+	gcpIdentity *gcpauth.Identity
+
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -105,10 +115,17 @@ type Service struct {
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
+	// memoryEvalStarter starts team memory eval runs. Nil leaves
+	// startMemoryEvalRun unavailable.
+	memoryEvalStarter MemoryEvalRunStarter
 
 	// projectRedeployer redeploys projects. Nil when this server has no
 	// Temporal connection.
 	projectRedeployer ProjectRedeployer
+
+	// assistantIdentities provisions assistant agent identities. Nil when this
+	// server has no Speakeasy signing issuer configured.
+	assistantIdentities *assistantidentity.Service
 
 	audit *audit.Logger
 
@@ -124,7 +141,11 @@ type Service struct {
 	*HookClientsCache
 
 	hookFleet         HookFleetReader
-	hookFleetVersions HookFleetVersions
+	hookFleetVersions hookversions.Policy
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
@@ -255,7 +276,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -274,6 +295,7 @@ func NewService(
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
+		memoryEvalStarter:    nil,
 		audit:                audit.NewLogger(),
 		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
@@ -281,13 +303,14 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:             trialNotifier,
-		billing:           billing,
-		supportCoverage:   supportCoverage,
-		mcpServerHealth:   mcpServerHealth,
-		HookClientsCache:  NewHookClientsCache(logger, adminCache, nil, nil),
-		hookFleet:         nil,
-		hookFleetVersions: HookFleetVersions{Latest: nil, Minimum: nil},
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
 	}
 }
 
@@ -318,6 +341,9 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// Deployment-wide settings, not part of an organization's features.
+		AssistantsAvailable: nil,
+		FunctionsAvailable:  nil,
 		// Staff read enforcement through the upstream auth enforcement status.
 		UpstreamAuthEnforced: nil,
 	}
@@ -490,6 +516,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
 	server.SetOrganizationProviderSetup = service.strictAdminJSON(server.SetOrganizationProviderSetup, func() any { return new(adminserver.SetOrganizationProviderSetupRequestBody) })
+	server.GetMemoryEvalOptions = service.preauthorizeAdmin(server.GetMemoryEvalOptions)
+	server.ListMemoryEvalRuns = service.preauthorizeAdmin(server.ListMemoryEvalRuns)
+	server.GetMemoryEvalRun = service.preauthorizeAdmin(server.GetMemoryEvalRun)
+	server.StartMemoryEvalRun = service.strictAdminJSON(server.StartMemoryEvalRun, func() any { return new(adminserver.StartMemoryEvalRunRequestBody) })
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
@@ -529,6 +559,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
 	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
 	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
+	server.ListPlatformExternalCredentials = service.preauthorizeAdmin(server.ListPlatformExternalCredentials)
+	server.GetGcpIamPlatformCredential = service.preauthorizeAdmin(server.GetGcpIamPlatformCredential)
+	server.CreateGcpIamPlatformCredential = service.strictAdminJSON(server.CreateGcpIamPlatformCredential, func() any { return new(adminserver.CreateGcpIamPlatformCredentialRequestBody) })
+	server.UpdateGcpIamPlatformCredential = service.strictAdminJSON(server.UpdateGcpIamPlatformCredential, func() any { return new(adminserver.UpdateGcpIamPlatformCredentialRequestBody) })
+	server.VerifyGcpIamPlatformCredential = service.strictAdminJSON(server.VerifyGcpIamPlatformCredential, func() any { return new(adminserver.VerifyGcpIamPlatformCredentialRequestBody) })
+	server.DeleteGcpIamPlatformCredential = service.strictAdminJSON(server.DeleteGcpIamPlatformCredential, func() any { return new(adminserver.DeleteGcpIamPlatformCredentialRequestBody) })
+	server.ListAssistantOrganizations = service.preauthorizeAdmin(server.ListAssistantOrganizations)
+	server.RepairOrganizationAssistantAgentNames = service.strictAdminJSON(server.RepairOrganizationAssistantAgentNames, func() any { return new(adminserver.RepairOrganizationAssistantAgentNamesRequestBody) })
+	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
+	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
+	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
 	adminserver.Mount(mux, server)
 
 }
@@ -546,11 +587,11 @@ type adminCallbackWriter struct{ http.ResponseWriter }
 
 func (w *adminCallbackWriter) WriteHeader(status int) {
 	if status == http.StatusTemporaryRedirect {
-		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct_v5 // Only response headers are needed to parse cookies.
 			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
 				continue
 			}
-			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct_v5 // No Domain so middleware controls cookie sharing.
 				Name:     constants.AdminSessionCookie,
 				Path:     "/admin-mcp",
 				Secure:   true,
@@ -1729,7 +1770,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision auth client defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
-	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
+	if err := productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seed organization default entitlements: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 

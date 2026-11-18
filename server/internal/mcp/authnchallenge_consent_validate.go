@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -125,6 +126,9 @@ func checkFailureCode(ctx context.Context, err error) mcpconnectionattempts.Code
 
 // checkFailureBrowserError explains a failed check on the error page the way its row records it.
 func checkFailureBrowserError(ctx context.Context, err error) error {
+	if refreshProvenance(err) {
+		contextvalues.ClaimRefreshConnectionReference(ctx)
+	}
 	if failure, ok := classifyCheckFailure(ctx, err); ok && failure.page != oauthui.ReasonDefault {
 		return fmt.Errorf("check connection: %w", oops.WithBrowserReason(err, failure.page))
 	}
@@ -161,6 +165,15 @@ const validationLimitedNotice = "Try again in a moment"
 
 // refreshUnavailableNotice follows a Refresh that didn't finish; it says nothing about now.
 const refreshUnavailableNotice = "Your last refresh didn't finish. Try again shortly."
+
+// refreshReconnectNotice names the card's own control for a saved sign-in that can't be renewed.
+func refreshReconnectNotice(connected bool) string {
+	if connected {
+		// A connected card offers Disconnect, not Reconnect.
+		return "Your saved sign-in can't be renewed. Disconnect this service, then connect it again."
+	}
+	return "Your saved sign-in can't be used anymore. Reconnect this service to fix it."
+}
 
 // newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
 func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterProvider) *ratelimit.Limiter {
@@ -232,7 +245,7 @@ func (s *Service) probeRemoteSession(
 	attribution = attribution.NotingSkips(skipped)
 	defer func() {
 		if failure, ok := classifyCheckFailure(ctx, retErr); ok {
-			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code)
+			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code, mcpconnectionattempts.FailedElsewhere())
 		}
 	}()
 
@@ -253,6 +266,10 @@ func (s *Service) probeRemoteSession(
 		tokenProjectID uuid.UUID
 		usable         bool
 	)
+	// Behind a gateway only the client being checked resolves: another client
+	// the issuer binds, even one for the same authorization server, says
+	// nothing about this one.
+	checked := map[uuid.UUID]bool{client.ID: true}
 	for _, projectID := range tokenProjectIDs {
 		var resolved map[uuid.UUID]remotesessions.UpstreamToken
 		var rerr error
@@ -271,8 +288,16 @@ func (s *Service) probeRemoteSession(
 			if errors.Is(rerr, remotesessions.ErrChosenClientUnbound) {
 				continue
 			}
+		} else if serverID := endpoint.proxiedServerID(); serverID.Valid && !endpoint.IsOrganizationGateway() {
+			// Match runtime's server scope before checking binding ambiguity: another
+			// server's clients on the shared sign-in issuer cannot block this probe.
+			var serverTokens remotesessions.ServerAccessTokens
+			serverTokens, rerr = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverID.UUID, true)
+			resolved = serverTokens.Tokens
 		} else {
-			resolved, rerr = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+			// A gateway checks ambiguity against the member's own credential set
+			// below, so only the client being checked resolves here.
+			resolved, rerr = s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, checked, true)
 		}
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
@@ -282,7 +307,12 @@ func (s *Service) probeRemoteSession(
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
-			if candidate.SessionUnavailable() {
+			if candidate.HeldWithoutToken() {
+				// Only an outage can clear on a retry. An unreadable or refused
+				// grant gets the remedy a readable grant refused the same way gets.
+				if !candidate.SessionUnavailable() {
+					continue
+				}
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
 					return errValidationRateLimited
 				}
@@ -317,9 +347,21 @@ func (s *Service) probeRemoteSession(
 		logger.InfoContext(ctx, "new remote grant not verified: credential changed before probe")
 		return nil
 	}
-	// Route the complete credential set, just as serving does. The target resolver
-	// separately proves that this card is the credential selected for the target.
-	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
+	// The target resolver proves that this card is the credential selected for
+	// the target. A gateway member's dispatch routes from the member's own
+	// credential set, so the check reads the same set to refuse what dispatch
+	// would refuse. A card a typed auth client offers already resolved to its
+	// one registration, which is what an enforcing dispatch routes from.
+	memberTokens := func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		if offer {
+			return tokens, nil
+		}
+		if resolvesByAssociation(member) {
+			return s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
+		}
+		return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	}
+	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, memberTokens)
 	switch {
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger)
@@ -362,14 +404,14 @@ func (s *Service) probeRemoteSession(
 		}
 	}()
 	probedAt := time.Now()
-	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
+	verdict, reason, failure := s.probeUpstream(probeCtx, logger, target.build, target.name)
 	<-enriched
 	ownResource := s.newResourceDisplayOwner(endpoint, challengeState).ownsOrFallsBack(ctx, logger, client)
 	issuerDisplay, _ := issuerCardBranding(client, ownResource, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
-	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
+	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, failure, trigger)
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,
@@ -525,6 +567,7 @@ func (s *Service) resolveValidationTarget(
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	subject := *challengeState.Subject
@@ -538,7 +581,7 @@ func (s *Service) resolveValidationTarget(
 
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
+		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, memberTokens, sessionID, subject)
 	case endpoint.McpServerID.Valid:
 		return s.standaloneValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	default:
@@ -553,6 +596,7 @@ func (s *Service) metaValidationTarget(
 	endpoint *ResolvedMcpEndpoint,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
 	sessionID string,
 	subject urn.SessionSubject,
 ) (context.Context, validationTarget, error) {
@@ -675,9 +719,14 @@ func (s *Service) metaValidationTarget(
 	if dial.anonymous {
 		return ctx, none, errRemoteSessionUnroutable
 	}
-	// The dial proves this card matches the actual backend. Check the complete
-	// set for ambiguity without loading and authorizing that backend twice.
-	if _, err := routeMetaMemberToken(tokens, member, entry.Resource); err != nil {
+	// The dial proves this card matches the actual backend. Check the member's
+	// own credential set for ambiguity without loading and authorizing that
+	// backend twice.
+	routable, err := memberTokens(ctx, member)
+	if err != nil {
+		return ctx, none, fmt.Errorf("resolve member credentials for validation: %w", err)
+	}
+	if _, err := routeMetaMemberToken(routable, member, entry.Resource); err != nil {
 		return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
 	}
 	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID, memberID: member.serverID, setupFailed: false}, nil

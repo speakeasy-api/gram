@@ -11,7 +11,6 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -73,8 +72,8 @@ func TestGetPluginReadsHostedEntryThroughCanonicalServer(t *testing.T) {
 	require.False(t, got.Servers[0].Enabled, "a disabled canonical server reads as disabled")
 }
 
-// An endpointless canonical wrapper reports its toolset legacy alias; a fresh-id server does not.
-func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
+// An endpointless server reports no slug, whether or not it is its toolset's canonical wrapper.
+func TestGetPluginEndpointlessWrapperHasNoSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -99,11 +98,8 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
 		require.NoError(t, err)
 	}
 	serverKeyed := newToolset("server-keyed")
-	serverKeyedAlias := "server-keyed-" + uuid.NewString()[:8]
-	testenv.SetLegacyAlias(t, ctx, conn, project.ID, serverKeyed.ID, serverKeyedAlias, uuid.NullUUID{})
 	newServer(serverKeyed.ID, serverKeyed)
 	freshBacking := newToolset("fresh-backing")
-	testenv.SetLegacyAlias(t, ctx, conn, project.ID, freshBacking.ID, "fresh-backing-"+uuid.NewString()[:8], uuid.NullUUID{})
 	freshID := uuid.New()
 	newServer(freshID, freshBacking)
 
@@ -119,24 +115,18 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
 	got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
 	require.Len(t, got.Servers, 2)
-	require.Equal(t, serverKeyedAlias, got.Servers[0].MCPSlug)
+	require.Empty(t, got.Servers[0].MCPSlug)
 	require.Empty(t, got.Servers[1].MCPSlug)
 	for _, server := range got.Servers {
 		require.Equal(t, "mcp_server", server.Backend)
 	}
 
-	// The member-facing projection resolves the same fallback.
+	// The member-facing projection agrees.
 	member, err := platformrepo.New(conn).ListPlatformMCPPluginServers(ctx, platformrepo.ListPlatformMCPPluginServersParams{
 		PluginID: plugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, ResultLimit: 10,
 	})
 	require.NoError(t, err)
 	require.Len(t, member, 2)
-	require.Equal(t, uuid.NullUUID{UUID: serverKeyed.ID, Valid: true}, member[0].AliasToolsetID)
-	require.False(t, member[1].AliasToolsetID.Valid)
-	aliases, err := pluginMemberAliases(ctx, conn, project.ID, member, func(row platformrepo.ListPlatformMCPPluginServersRow) (string, uuid.NullUUID) {
-		return row.McpSlug, row.AliasToolsetID
-	})
-	require.NoError(t, err)
-	require.Equal(t, serverKeyedAlias, memberSlug(member[0].McpSlug, member[0].AliasToolsetID, aliases))
-	require.Empty(t, memberSlug(member[1].McpSlug, member[1].AliasToolsetID, aliases))
+	require.Empty(t, member[0].McpSlug)
+	require.Empty(t, member[1].McpSlug)
 }

@@ -25,10 +25,10 @@ const (
 	// target (<token>.<suffix>) short enough to type.
 	DNSTargetTokenLength = 10
 
-	// maxDNSTargetTokenAttempts bounds how many tokens ensureDNSTargetToken
-	// tries before giving up. A collision is already negligible at 50 bits,
-	// so needing a third attempt points at a broken token source rather than
-	// bad luck.
+	// maxDNSTargetTokenAttempts bounds how many tokens
+	// EnsureDNSTargetTokenWithSource tries before giving up. A collision is
+	// already negligible at 50 bits, so needing a third attempt points at a
+	// broken token source rather than bad luck.
 	maxDNSTargetTokenAttempts = 3
 
 	// maxDNSNameLength is the longest DNS name in presentation form, without
@@ -38,6 +38,30 @@ const (
 	// dnsTargetTokenIndex is the partial unique index that keeps tokens unique
 	// across live custom domains.
 	dnsTargetTokenIndex = "custom_domains_dns_target_token_key"
+)
+
+// DNSRoutingMethod is how a custom domain's DNS was last observed routing
+// traffic to Speakeasy. Health checks persist it in
+// custom_domains.dns_routing_method.
+type DNSRoutingMethod string
+
+const (
+	// DNSRoutingMethodPerDomainCNAME is a CNAME to the domain's own per-domain
+	// target (<token>.<suffix>).
+	DNSRoutingMethodPerDomainCNAME DNSRoutingMethod = "per_domain_cname"
+
+	// DNSRoutingMethodSharedCNAME is a CNAME to the shared target that every
+	// custom domain may use.
+	DNSRoutingMethodSharedCNAME DNSRoutingMethod = "shared_cname"
+
+	// DNSRoutingMethodARecord is address records (an apex A record or a
+	// flattened CNAME) that all point at Speakeasy.
+	DNSRoutingMethodARecord DNSRoutingMethod = "a_record"
+
+	// DNSRoutingMethodUnknown means no supported routing method was observed:
+	// DNS was missing or pointed elsewhere, the check failed, or a proxied
+	// domain hides its origin behind a proxy.
+	DNSRoutingMethodUnknown DNSRoutingMethod = "unknown"
 )
 
 // TxBeginner starts a transaction. On a pool this is a real transaction; on a
@@ -80,6 +104,37 @@ func DNSTarget(suffix string, token pgtype.Text) (string, bool) {
 	return token.String + "." + suffix, true
 }
 
+// ParseDNSTarget returns the token of a per-domain target name. name must be
+// normalized (lowercase, no trailing dot). It reports false when per-domain
+// targets are disabled (empty suffix) or name is not exactly one label under
+// suffix shaped like a token (DNSTargetTokenLength lowercase base32
+// characters). This is a shape check, not an ownership lookup: an infrastructure
+// label with the same shape is also recognized as a token.
+func ParseDNSTarget(suffix, name string) (string, bool) {
+	if suffix == "" {
+		return "", false
+	}
+	token, ok := strings.CutSuffix(name, "."+suffix)
+	if !ok || !isDNSTargetToken(token) {
+		return "", false
+	}
+	return token, true
+}
+
+// isDNSTargetToken reports whether label has the shape NewDNSTargetToken
+// produces.
+func isDNSTargetToken(label string) bool {
+	if len(label) != DNSTargetTokenLength {
+		return false
+	}
+	for _, r := range label {
+		if (r < 'a' || r > 'z') && (r < '2' || r > '7') {
+			return false
+		}
+	}
+	return true
+}
+
 // EnsureDNSTargetToken assigns a random DNS target token to the
 // organization's live custom domain with the given id when it has none, and
 // returns the domain's token. It returns an empty token and no error when the
@@ -89,12 +144,13 @@ func DNSTarget(suffix string, token pgtype.Text) (string, bool) {
 // the live-row unique index is retried with a new token without aborting a
 // caller's enclosing transaction.
 func EnsureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID) (string, error) {
-	return ensureDNSTargetToken(ctx, db, organizationID, id, NewDNSTargetToken)
+	return EnsureDNSTargetTokenWithSource(ctx, db, organizationID, id, NewDNSTargetToken)
 }
 
-// ensureDNSTargetToken is EnsureDNSTargetToken with the token source as a
-// parameter, so tests can force collisions.
-func ensureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, newToken func() string) (string, error) {
+// EnsureDNSTargetTokenWithSource is EnsureDNSTargetToken with the token source
+// as a parameter, so callers can control which tokens are tried (tests use it
+// to force collisions). newToken is called once per attempt.
+func EnsureDNSTargetTokenWithSource(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, newToken func() string) (string, error) {
 	for range maxDNSTargetTokenAttempts {
 		token, err := assignDNSTargetToken(ctx, db, organizationID, id, newToken())
 		var pgErr *pgconn.PgError

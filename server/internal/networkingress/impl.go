@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -27,7 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -39,6 +41,11 @@ import (
 
 const ProviderTailscale = "tailscale"
 
+// RuntimeGateway is the network_ingresses.runtime value for an ingress hosted
+// by the tsnet tailnet gateway. Any other value, including NULL, means the
+// Tailscale Kubernetes operator hosts it.
+const RuntimeGateway = "gateway"
+
 var hostnamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type Service struct {
@@ -47,24 +54,36 @@ type Service struct {
 	db                   *pgxpool.Pool
 	auth                 *auth.Auth
 	authz                *authz.Engine
-	credentials          *integrationcredentials.Cipher
+	enc                  *encryption.Client
 	audit                *audit.Logger
 	admission            *ExpansionAdmission
 	requester            ReconcileRequester
 	publicationRequester PublicationRequester
 	health               HealthRefresher
+
+	// features chooses the runtime of a new ingress
+	// (feature.FlagPrivateNetworkGateway); nil means the operator.
+	features feature.Provider
+
+	// namer turns requested hostnames into stored ones, so a local
+	// development stack's stay apart from production's on a shared tailnet.
+	namer Namer
+
+	// gatewayTag is the Tailscale tag this environment's reconciler and
+	// gateway use, returned so the dashboard shows the policy they need.
+	gatewayTag string
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, credentials *integrationcredentials.Cipher, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
-	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, credentials, auditLogger, admission, requester, nil, health)
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
+	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, enc, auditLogger, admission, requester, nil, health)
 }
 
 // NewServiceWithPublication configures the optional durable publication invalidator.
 // A nil requester preserves the dormant producer behavior.
-func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, credentials *integrationcredentials.Cipher, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
+func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("network_ingress"))
 	return &Service{
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
@@ -72,12 +91,52 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		db:                   db,
 		auth:                 auth.New(logger, db, sessions, authzEngine),
 		authz:                authzEngine,
-		credentials:          credentials,
+		enc:                  enc,
 		audit:                auditLogger,
 		admission:            admission,
 		requester:            requester,
 		publicationRequester: publicationRequester,
 		health:               health,
+		features:             nil,
+		namer:                ProductionNamer{},
+		gatewayTag:           DefaultGatewayTag,
+	}
+}
+
+// WithFeatures lets the private-network-gateway flag choose the runtime of
+// new ingresses. Without it every new ingress uses the operator.
+func (s *Service) WithFeatures(features feature.Provider) *Service {
+	s.features = features
+	return s
+}
+
+// newIngressRuntime is the runtime a new ingress is created with: the tailnet
+// gateway when the organization has the private-network-gateway flag, the
+// operator (NULL) otherwise. It fails closed to the operator, the path every
+// existing ingress already runs on, when the flag is unset or unavailable.
+func (s *Service) newIngressRuntime(ctx context.Context, authCtx *contextvalues.AuthContext) pgtype.Text {
+	if s.features == nil {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagPrivateNetworkGateway, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate private network gateway flag; using the operator", attr.SlogError(err))
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return conv.ToPGText(RuntimeGateway)
+}
+
+// UseGateway applies the environment's gateway settings: the namer replacing
+// the ProductionNamer, as a local development stack's does, and the Tailscale
+// tag its gateways carry. An empty tag keeps DefaultGatewayTag.
+func (s *Service) UseGateway(config GatewayRuntimeConfig) {
+	if config.Namer != nil {
+		s.namer = config.Namer
+	}
+	if config.Tag != "" {
+		s.gatewayTag = config.Tag
 	}
 }
 
@@ -139,12 +198,34 @@ func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*ge
 		ingress, err = queries.GetPendingDeletedNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &gen.NetworkIngressResult{Ingress: nil}, nil
+		return &gen.NetworkIngressResult{Ingress: nil, GatewayTag: s.gatewayTag}, nil
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get network ingress").LogError(ctx, s.logger)
 	}
-	return &gen.NetworkIngressResult{Ingress: mv.BuildNetworkIngressView(ingress)}, nil
+	view := mv.BuildNetworkIngressView(ingress)
+	if ingress.LastError.String == k8s.NetworkIngressErrorProviderCertificateUnavailable {
+		view.StatusDetail = s.certificateFailure(ctx, ingress)
+	}
+	return &gen.NetworkIngressResult{Ingress: view, GatewayTag: s.gatewayTag}, nil
+}
+
+// certificateFailure is the gateway's message for why ingress has no TLS
+// certificate, or nil when no slot reports one. The error code alone still
+// explains the state, so a failed read is logged rather than failing the
+// request.
+func (s *Service) certificateFailure(ctx context.Context, ingress repo.NetworkIngress) *string {
+	message, err := repo.New(s.db).GetNetworkIngressCertificateFailure(ctx, repo.GetNetworkIngressCertificateFailureParams{
+		NetworkIngressID: ingress.ID, OrganizationID: ingress.OrganizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		s.logger.ErrorContext(ctx, "read gateway certificate failure", attr.SlogError(err), attr.SlogNetworkIngressID(ingress.ID.String()))
+		return nil
+	}
+	return conv.FromPGText[string](message)
 }
 
 type tailscaleCredentials struct {
@@ -152,19 +233,19 @@ type tailscaleCredentials struct {
 	ClientSecret string `json:"client_secret"`
 }
 
-func (s *Service) encryptCredentials(ctx context.Context, organizationID, clientID, clientSecret string) (integrationcredentials.Sealed, error) {
+func (s *Service) encryptCredentials(clientID, clientSecret string) (pgtype.Text, error) {
 	if clientID == "" || clientSecret == "" {
-		return integrationcredentials.Sealed{}, oops.E(oops.CodeBadRequest, errors.New("OAuth client ID and secret are required"), "invalid provider credentials")
+		return pgtype.Text{}, fmt.Errorf("OAuth client ID and secret are required")
 	}
 	plaintext, err := json.Marshal(tailscaleCredentials{ClientID: clientID, ClientSecret: clientSecret})
 	if err != nil {
-		return integrationcredentials.Sealed{}, oops.E(oops.CodeUnexpected, err, "encode provider credentials").LogError(ctx, s.logger)
+		return pgtype.Text{}, fmt.Errorf("encode provider credentials: %w", err)
 	}
-	sealed, err := s.credentials.Seal(ctx, organizationID, integrationcredentials.ColumnNetworkIngresses, plaintext)
+	ciphertext, err := s.enc.Encrypt(plaintext)
 	if err != nil {
-		return integrationcredentials.Sealed{}, oops.E(oops.CodeUnexpected, err, "encrypt provider credentials").LogError(ctx, s.logger)
+		return pgtype.Text{}, fmt.Errorf("encrypt provider credentials: %w", err)
 	}
-	return sealed, nil
+	return conv.ToPGText(ciphertext), nil
 }
 
 func validateHostname(hostname string) error {
@@ -185,12 +266,21 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if payload.Provider != ProviderTailscale {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported network ingress provider")
 	}
-	if err := validateHostname(payload.Hostname); err != nil {
+	// Decided before the transaction: the flag can need a network call.
+	runtime := s.newIngressRuntime(ctx, authCtx)
+	hostname, err := s.namer.Hostname(ctx, conv.PtrValOr(payload.Hostname, DefaultHostname))
+	if errors.Is(err, ErrReservedHostname) {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
-	credentials, err := s.encryptCredentials(ctx, authCtx.ActiveOrganizationID, payload.OauthClientID, payload.OauthClientSecret)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "name network ingress hostname").LogError(ctx, s.logger)
+	}
+	if err := validateHostname(hostname); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+	}
+	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider credentials")
 	}
 
 	ingressID, err := uuid.NewV7()
@@ -237,9 +327,11 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 
 	ingress, err := queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: payload.Provider,
-		Hostname: payload.Hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
-		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: conv.ToPGText(credentials.Legacy), CredentialsOrgEncrypted: credentials.Org,
+		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
+		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
+		// Chosen once, here; flipping the flag later never moves an ingress.
+		Runtime: runtime,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -273,6 +365,14 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 		return nil, oops.E(oops.CodeBadRequest, nil, "provide at least one ingress setting")
 	}
 	if payload.Hostname != nil {
+		hostname, err := s.namer.Hostname(ctx, *payload.Hostname)
+		if errors.Is(err, ErrReservedHostname) {
+			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "name network ingress hostname").LogError(ctx, s.logger)
+		}
+		payload.Hostname = &hostname
 		if err := validateHostname(*payload.Hostname); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 		}
@@ -336,9 +436,9 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
-	credentials, err := s.encryptCredentials(ctx, authCtx.ActiveOrganizationID, payload.OauthClientID, payload.OauthClientSecret)
+	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider credentials")
 	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -354,7 +454,7 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 	} else if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress").LogError(ctx, s.logger)
 	}
-	ingress, err := queries.RotateNetworkIngressCredentials(ctx, repo.RotateNetworkIngressCredentialsParams{CredentialsEncrypted: conv.ToPGText(credentials.Legacy), CredentialsOrgEncrypted: credentials.Org, OrganizationID: authCtx.ActiveOrganizationID})
+	ingress, err := queries.RotateNetworkIngressCredentials(ctx, repo.RotateNetworkIngressCredentialsParams{CredentialsEncrypted: credentials, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "rotate network ingress credentials").LogError(ctx, s.logger)
 	}

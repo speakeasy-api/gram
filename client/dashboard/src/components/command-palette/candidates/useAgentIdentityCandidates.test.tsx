@@ -112,6 +112,7 @@ describe("useAgentIdentityCandidates", () => {
         null,
       ],
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
     });
@@ -201,7 +202,6 @@ describe("useAgentIdentityCandidates", () => {
       title: "Release Agent",
       detail: "Agent identity",
       keywords: ["agent", "agent/one", "agent:agent/one"],
-      fuzzyOnly: true,
       icon: "bot",
       group: "Identities",
       verbs: ["open"],
@@ -212,7 +212,7 @@ describe("useAgentIdentityCandidates", () => {
       "/acme/projects/request-project/identities/agent%3Aagent%2Fone/overview?range=30d&from=2025-01-01&to=2025-01-31",
     );
   });
-  it("includes later pages and stops fetching when closed or pagination fails", async () => {
+  it("includes later pages and retries failed pagination on the next open", async () => {
     mocks.queryData = {
       pages: [
         { items: [{ id: "first", name: "Build Agent" }] },
@@ -240,10 +240,11 @@ describe("useAgentIdentityCandidates", () => {
     mocks.isFetchNextPageError = true;
     rerender({ enabled: true });
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
-    mocks.isFetchNextPageError = false;
     rerender({ enabled: false });
     expect(result.current).toEqual([]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+    rerender({ enabled: true });
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(2);
   });
 
   it("does not offer the project-scoped alias in the org shell despite the request default", () => {
@@ -298,7 +299,6 @@ describe("useAgentIdentityCandidates", () => {
     expect(aliases).toHaveLength(1);
     expect(aliases[0]).toMatchObject({
       title: "Worker · Permissions",
-      fuzzyOnly: true,
       keywords: expect.arrayContaining(["inference", "permissions"]),
     });
     void aliases[0]!.run("open");
@@ -327,7 +327,6 @@ describe("useAgentIdentityCandidates", () => {
     expect(signIns).toHaveLength(1);
     expect(signIns[0]).toMatchObject({
       title: "Worker · MCP sign-in",
-      fuzzyOnly: true,
       kind: "person",
       keywords: expect.arrayContaining(["mcp", "reconnect"]),
     });

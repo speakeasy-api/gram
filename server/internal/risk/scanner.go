@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -186,6 +187,19 @@ func (r *ScanResult) IsWarnChallenge() bool {
 func callFingerprint(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])
+}
+
+// coworkSendTime matches the sentence Claude's apps add to a prompt's
+// reminder naming the minute the message was sent.
+var coworkSendTime = regexp.MustCompile(`Message sent at [^<\n]*? local time\.`)
+
+// CoworkPromptCallFingerprint is callFingerprint for a prompt typed in Claude
+// Cowork. Cowork puts the minute the message was sent in a reminder before
+// the prompt, so that one sentence is masked: the same prompt sent again a
+// minute later must still match its challenge. Everything else, reminders
+// included, still counts.
+func CoworkPromptCallFingerprint(prompt string) string {
+	return callFingerprint(coworkSendTime.ReplaceAllString(prompt, "Message sent at <time>."))
 }
 
 const (
@@ -813,10 +827,9 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 			disposition := shadowmcp.EffectiveDisposition(p.ShadowMcpDisposition, p.Sources, p.Action)
 			var blockedURLs []string
 			if disposition == ShadowMCPDispositionAllowAll {
-				blockedURLs, err = loadShadowMCPBlockedURLs(ctx, s.db, organizationID, p.ID.String())
-				if err != nil {
-					return nil, err
-				}
+				// The user's own grants hold the block rules that cover them:
+				// a denial narrowed to people or roles blocks only them.
+				blockedURLs = shadowMCPBlockedURLsFromGrants(grants, p.ID.String())
 			}
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),

@@ -19,7 +19,6 @@ const queryHooks = vi.hoisted(() => ({
 }));
 const workflowHook = vi.hoisted(() => vi.fn());
 const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
-const toolLogsAccess = vi.hoisted(() => ({ canView: true }));
 const refetchActivity = vi.hoisted(() =>
   vi.fn<
     () => Promise<{
@@ -75,9 +74,6 @@ vi.mock("@gram/client/react-query/remoteMcpServers.js", () => ({
 vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
   invalidateAllGetMcpServerActivity: vi.fn(() => Promise.resolve()),
   useGetMcpServerActivity: queryHooks.serverActivity,
-}));
-vi.mock("@/components/observe/observeDeepLink", () => ({
-  useCanViewToolLogs: () => toolLogsAccess.canView,
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
@@ -136,7 +132,6 @@ beforeEach(() => {
     isError: false,
   });
   requestProject.slug = "request-project";
-  toolLogsAccess.canView = true;
   guideStore.specifier = undefined;
   queryHooks.catalog.mockReturnValue(
     queryResult({
@@ -828,36 +823,16 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
-  it("points at the server instead of Tool Logs without log:read", async () => {
-    toolLogsAccess.canView = false;
-    const { activityData, report, view, listenScope } = await listenForActivity(
-      [serverActivity()],
-    );
+  it("points every member at Tool Logs and the governed server", async () => {
+    const { view } = await listenForActivity([serverActivity()]);
 
-    expect(view.result.current.toolLogsHref).toBeUndefined();
+    // Tool Logs shows the caller's own calls without log:read, so the guide
+    // never has to fall back to the server's overview.
+    expect(view.result.current.toolLogsHref).toBe(
+      "/org/projects/request-project/logs",
+    );
     expect(view.result.current.mcpServerHref).toBe(
       "/org/projects/request-project/mcp/linear-governed/overview",
-    );
-
-    activityData.current = {
-      activity: [
-        serverActivity({
-          totalToolCalls: 2,
-          lastToolCallAt: new Date(Date.now() + 1_000),
-        }),
-      ],
-    };
-    view.rerender();
-
-    await waitFor(() =>
-      expect(report).toHaveBeenCalledWith({
-        type: "event",
-        scope: listenScope,
-        event: {
-          ...GOVERNED_CALL_EVENT,
-          note: "The first new call is counted in the server's activity.",
-        },
-      }),
     );
   });
 

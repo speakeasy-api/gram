@@ -48,6 +48,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -175,13 +176,13 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		conn,
 		sessionManager,
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		enc,
+		enc, clientsecretstest.New(t, conn, enc),
 		envEntries,
 		guardianPolicy,
 		tunnels,
 		audit.NewLogger(),
 		serverURL,
-		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, guardianPolicy, tunnels, nil),
+		remotesessions.NewIdentityCommitter(logger, conn, enc, clientsecretstest.New(t, conn, enc), audit.NewLogger(), serverURL, guardianPolicy, tunnels, nil),
 		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
 		features,
 		prober,
@@ -270,11 +271,13 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
+	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte("fixture-access"))
+	require.NoError(t, err)
 	row, err := repo.New(conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            principal,
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
-		AccessTokenEncrypted:  "ciphertext",
+		AccessTokenEncrypted:  ciphertext,
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		Scopes:                []string{},
 	})
@@ -573,7 +576,7 @@ func seedRemoteIssuerWithURL(t *testing.T, ctx context.Context, conn *pgxpool.Po
 func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, remoteIssuerID uuid.UUID, clientID string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
 	t.Helper()
 	q := repo.New(conn)
-	created, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	created, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:             uuid.NullUUID{},
 		OrganizationID:        conv.ToPGText(organizationID),
 		RemoteSessionIssuerID: remoteIssuerID,
@@ -609,7 +612,7 @@ func seedTrustedIdentityProviderClient(t *testing.T, ctx context.Context, conn *
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
 	})
 	require.NoError(t, err)
-	client, err := repo.New(conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(conn).CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:                       uuid.NullUUID{},
 		OrganizationID:                  organizationID,
 		RemoteSessionIssuerID:           issuer.ID,
@@ -632,7 +635,7 @@ func seedTrustedIdentityProviderClient(t *testing.T, ctx context.Context, conn *
 func seedRemoteClientAtTier(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, organizationID pgtype.Text, remoteIssuerID uuid.UUID, clientID string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
 	t.Helper()
 	q := repo.New(conn)
-	created, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	created, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:             projectID,
 		OrganizationID:        organizationID,
 		RemoteSessionIssuerID: remoteIssuerID,
@@ -779,7 +782,7 @@ func requirePlatformIssuerUnchanged(t *testing.T, ctx context.Context, conn *pgx
 // on the client's organization_id being populated.
 func seedProjectRemoteClientNoOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, remoteIssuerID uuid.UUID, clientID string) uuid.UUID {
 	t.Helper()
-	created, err := repo.New(conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	created, err := repo.New(conn).CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:             conv.ToNullUUID(projectID),
 		OrganizationID:        pgtype.Text{String: "", Valid: false},
 		RemoteSessionIssuerID: remoteIssuerID,

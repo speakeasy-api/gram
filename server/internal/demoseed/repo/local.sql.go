@@ -107,6 +107,331 @@ func (q *Queries) LocalAttachMCPAppToToolset(ctx context.Context, arg LocalAttac
 	return err
 }
 
+const localEMAInsertBinding = `-- name: LocalEMAInsertBinding :exec
+INSERT INTO remote_session_ema_bindings
+  (id, project_id, organization_id, user_session_issuer_id,
+   remote_session_issuer_id, resource, remote_session_client_id, generation,
+   state, grant_source, created_at, updated_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::uuid,
+   $6::text, $7::uuid, 1,
+   'ready', 'administrator_declared',
+   now() - interval '6 days', now() - interval '6 days')
+`
+
+type LocalEMAInsertBindingParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrgID               string
+	UserSessionIssuerID uuid.UUID
+	IssuerID            uuid.UUID
+	Resource            string
+	ClientID            uuid.UUID
+}
+
+func (q *Queries) LocalEMAInsertBinding(ctx context.Context, arg LocalEMAInsertBindingParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertBinding,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.UserSessionIssuerID,
+		arg.IssuerID,
+		arg.Resource,
+		arg.ClientID,
+	)
+	return err
+}
+
+const localEMAInsertEndpoint = `-- name: LocalEMAInsertEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, NULL, $3::uuid, $4::text)
+`
+
+type LocalEMAInsertEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+func (q *Queries) LocalEMAInsertEndpoint(ctx context.Context, arg LocalEMAInsertEndpointParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const localEMAInsertMCPServer = `-- name: LocalEMAInsertMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   NULL, $3::uuid, $4::uuid, 'private')
+`
+
+type LocalEMAInsertMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	RemoteID  uuid.UUID
+	IssuerID  uuid.UUID
+}
+
+func (q *Queries) LocalEMAInsertMCPServer(ctx context.Context, arg LocalEMAInsertMCPServerParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.RemoteID,
+		arg.IssuerID,
+	)
+	return err
+}
+
+const localEMAInsertProtectedResource = `-- name: LocalEMAInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::text, ARRAY[$6::text], $7::text[],
+   clock_timestamp())
+`
+
+type LocalEMAInsertProtectedResourceParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	OrgID       string
+	Resource    string
+	MetadataUrl string
+	Issuer      string
+	Scopes      []string
+}
+
+func (q *Queries) LocalEMAInsertProtectedResource(ctx context.Context, arg LocalEMAInsertProtectedResourceParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertProtectedResource,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+		arg.Scopes,
+	)
+	return err
+}
+
+const localEMAInsertRemoteMCPServer = `-- name: LocalEMAInsertRemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  ($1::uuid, $2::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   'streamable-http', $3::text)
+`
+
+type LocalEMAInsertRemoteMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Url       string
+}
+
+func (q *Queries) LocalEMAInsertRemoteMCPServer(ctx context.Context, arg LocalEMAInsertRemoteMCPServerParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertRemoteMCPServer, arg.ID, arg.ProjectID, arg.Url)
+	return err
+}
+
+const localEMAInsertUserSessionIssuer = `-- name: LocalEMAInsertUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode,
+                                  trusted_remote_session_issuer_id,
+                                  trusted_remote_session_client_id) VALUES
+  ($1::uuid, NULL, $2::text, 'enterprise-sign-in',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   $3::uuid, $4::uuid)
+`
+
+type LocalEMAInsertUserSessionIssuerParams struct {
+	ID              uuid.UUID
+	OrgID           string
+	TrustedIssuerID uuid.UUID
+	TrustedClientID uuid.UUID
+}
+
+// The Enterprise Sign-In (ID-JAG) Server exists only in the local org: it
+// needs the dev-idp and the MCP fixture, which the demo org does not have.
+// Its rows sit in the seeded project (the project delete cascades them away)
+// except its organization sign-in, which the org-scoped user session issuer
+// delete removes on every reseed. Its organization sign-in federates through
+// the company provider: its trusted client is the one the caller signs in
+// with, and the ID token it returns is what Speakeasy exchanges for an ID-JAG.
+func (q *Queries) LocalEMAInsertUserSessionIssuer(ctx context.Context, arg LocalEMAInsertUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertUserSessionIssuer,
+		arg.ID,
+		arg.OrgID,
+		arg.TrustedIssuerID,
+		arg.TrustedClientID,
+	)
+	return err
+}
+
+const localEMAInsertVendorClient = `-- name: LocalEMAInsertVendorClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::text,
+   $6::text, 'client_secret_post',
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   $7::text[])
+`
+
+type LocalEMAInsertVendorClientParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrgID                 string
+	IssuerID              uuid.UUID
+	ClientID              string
+	ClientSecretEncrypted string
+	Scopes                []string
+}
+
+func (q *Queries) LocalEMAInsertVendorClient(ctx context.Context, arg LocalEMAInsertVendorClientParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertVendorClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.Scopes,
+	)
+	return err
+}
+
+const localEMAInsertVendorIssuer = `-- name: LocalEMAInsertVendorIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, token_endpoint,
+   introspection_endpoint, jwks_uri, name, scopes_supported,
+   grant_types_supported, authorization_grant_profiles_supported,
+   token_endpoint_auth_methods_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   'enterprise-sign-in-auth', $4::text, $4::text || '/token',
+   $4::text || '/introspect', $4::text || '/.well-known/jwks.json',
+   'Enterprise Sign-In Authorization Server', $5::text[],
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+   ARRAY['client_secret_post'], clock_timestamp())
+`
+
+type LocalEMAInsertVendorIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+	Issuer    string
+	Scopes    []string
+}
+
+// The server's authorization server is the dev-idp resource authorization
+// server for the fixture's /mcp/ema endpoint, which accepts ID-JAGs from a
+// confidential client. Identity chaining trusts its JWT-bearer and ID-JAG
+// support only from a discovered document, so the row records when that
+// document was read; without it the binding reads as incomplete metadata and
+// the consent page offers an interactive sign-in the server does not have.
+func (q *Queries) LocalEMAInsertVendorIssuer(ctx context.Context, arg LocalEMAInsertVendorIssuerParams) error {
+	_, err := q.db.Exec(ctx, localEMAInsertVendorIssuer,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.Issuer,
+		arg.Scopes,
+	)
+	return err
+}
+
+const localEMAPointIdentityProvider = `-- name: LocalEMAPointIdentityProvider :execrows
+UPDATE remote_session_issuers
+SET issuer = $1::text,
+    authorization_endpoint = $1::text || '/authorize',
+    token_endpoint = $1::text || '/token',
+    userinfo_endpoint = $1::text || '/userinfo',
+    revocation_endpoint = $1::text || '/revoke',
+    registration_endpoint = NULL,
+    jwks_uri = $1::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = ARRAY['openid', 'email', 'profile'],
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['client_secret_post'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    id_token_signing_alg_values_supported = ARRAY['RS256'],
+    authorization_response_iss_parameter_supported = TRUE,
+    oidc = TRUE,
+    name = $2::text,
+    updated_at = clock_timestamp()
+WHERE id = $3::uuid AND organization_id = $4::text AND project_id IS NULL AND deleted IS FALSE
+`
+
+type LocalEMAPointIdentityProviderParams struct {
+	Issuer         string
+	Name           string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The Enterprise Sign-In (ID-JAG) Server (local_ema.go). Locally the company
+// identity provider is the dev-idp's OAuth 2.1 server.
+func (q *Queries) LocalEMAPointIdentityProvider(ctx context.Context, arg LocalEMAPointIdentityProviderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointIdentityProvider,
+		arg.Issuer,
+		arg.Name,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointIdentityProviderClient = `-- name: LocalEMAPointIdentityProviderClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text,
+    client_secret_encrypted = $2::text,
+    token_endpoint_auth_method = 'client_secret_post',
+    grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    scope = ARRAY['openid', 'email', 'profile'],
+    callback_base_url = $3::text,
+    updated_at = clock_timestamp()
+WHERE id = $4::uuid AND organization_id = $5::text AND project_id IS NULL AND deleted IS FALSE
+`
+
+type LocalEMAPointIdentityProviderClientParams struct {
+	ClientID              string
+	ClientSecretEncrypted string
+	CallbackBaseUrl       string
+	ID                    uuid.UUID
+	OrganizationID        string
+}
+
+// Speakeasy's registration at the dev-idp: its static login client, with the
+// checked-in local secret the dev-idp EMA app also holds.
+func (q *Queries) LocalEMAPointIdentityProviderClient(ctx context.Context, arg LocalEMAPointIdentityProviderClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointIdentityProviderClient,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.CallbackBaseUrl,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localEnableCodeModeFeature = `-- name: LocalEnableCodeModeFeature :exec
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1::text, 'code_mode')
@@ -168,6 +493,33 @@ func (q *Queries) LocalGrantAPIKeyPolicy(ctx context.Context, arg LocalGrantAPIK
 	return err
 }
 
+const localGrantRoleReadOnlyConnect = `-- name: LocalGrantRoleReadOnlyConnect :execrows
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT $1::text, 'role:organization:' || r.id, 'mcp:connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', ($2::uuid)::text, 'disposition', 'read_only')
+FROM organization_roles r
+WHERE r.organization_id = $1::text AND r.workos_slug = $3::text
+ON CONFLICT DO NOTHING
+`
+
+type LocalGrantRoleReadOnlyConnectParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	RoleSlug       string
+}
+
+// A role limited to the read-only tools of one server, the read_only reason
+// on the Inspect tab for its members. Custom role grants are cleared with
+// the roles on every seed run.
+func (q *Queries) LocalGrantRoleReadOnlyConnect(ctx context.Context, arg LocalGrantRoleReadOnlyConnectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localGrantRoleReadOnlyConnect, arg.OrganizationID, arg.McpServerID, arg.RoleSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localGrantSessionVisibility = `-- name: LocalGrantSessionVisibility :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1::text, 'user:' || $2::text, 'chat:read',
@@ -189,10 +541,10 @@ func (q *Queries) LocalGrantSessionVisibility(ctx context.Context, arg LocalGran
 }
 
 const localGrantToolLogVisibility = `-- name: LocalGrantToolLogVisibility :exec
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1::text, 'user:' || $2::text, 'log:read', NULL,
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1::text, 'user:' || $2::text, 'log:read',
         jsonb_build_object('resource_kind', 'project', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
 `
 
 type LocalGrantToolLogVisibilityParams struct {
@@ -228,6 +580,43 @@ type LocalLinkWorkOSOrgParams struct {
 // counterpart at all.
 func (q *Queries) LocalLinkWorkOSOrg(ctx context.Context, arg LocalLinkWorkOSOrgParams) error {
 	_, err := q.db.Exec(ctx, localLinkWorkOSOrg, arg.WorkosOrgID, arg.OrganizationID)
+	return err
+}
+
+const localProvisionDeveloperDirectoryUser = `-- name: LocalProvisionDeveloperDirectoryUser :exec
+INSERT INTO directory_users
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, workos_created_at, workos_updated_at)
+VALUES ($1::text, $2::text, 'devidp_dir_' || $2::text,
+        $3::text, $4::text, NULLIF($5::text, ''),
+        clock_timestamp(), clock_timestamp())
+ON CONFLICT (workos_directory_user_id) DO UPDATE
+SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
+    email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    deleted_at = NULL, workos_deleted_at = NULL,
+    workos_updated_at = clock_timestamp(), updated_at = clock_timestamp()
+`
+
+type LocalProvisionDeveloperDirectoryUserParams struct {
+	OrganizationID string
+	UserID         string
+	Email          string
+	FirstName      string
+	LastName       string
+}
+
+// Provisions the developer in the local org's directory, linked to their
+// user, the way directory sync would. Federated sign-in (the Enterprise
+// Sign-In server) admits only directory-provisioned people.
+func (q *Queries) LocalProvisionDeveloperDirectoryUser(ctx context.Context, arg LocalProvisionDeveloperDirectoryUserParams) error {
+	_, err := q.db.Exec(ctx, localProvisionDeveloperDirectoryUser,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Email,
+		arg.FirstName,
+		arg.LastName,
+	)
 	return err
 }
 
@@ -349,6 +738,100 @@ func (q *Queries) LocalUpsertEnvironment(ctx context.Context, arg LocalUpsertEnv
 	return err
 }
 
+const localUpsertInspectEndpoint = `-- name: LocalUpsertInspectEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text)
+ON CONFLICT (id) DO UPDATE
+  SET mcp_server_id = EXCLUDED.mcp_server_id, meta_mcp_server_id = NULL, slug = EXCLUDED.slug,
+      deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE mcp_endpoints.project_id = EXCLUDED.project_id
+`
+
+type LocalUpsertInspectEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+// Restores the fixture endpoint if it was soft-deleted, but only within the
+// local fixture's project.
+func (q *Queries) LocalUpsertInspectEndpoint(ctx context.Context, arg LocalUpsertInspectEndpointParams) error {
+	_, err := q.db.Exec(ctx, localUpsertInspectEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const localUpsertInspectMCPServer = `-- name: LocalUpsertInspectMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, remote_mcp_server_id,
+                         user_session_issuer_id, visibility)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::uuid,
+        $6::uuid, $7::text)
+ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name, slug = EXCLUDED.slug, visibility = EXCLUDED.visibility,
+      deleted_at = NULL, updated_at = clock_timestamp()
+`
+
+type LocalUpsertInspectMCPServerParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                string
+	Slug                string
+	RemoteMcpServerID   uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	Visibility          string
+}
+
+// Like DeepWiki, each takes no upstream credential and sits under the shared
+// workforce issuer, so the local developer connects without a sign-in.
+func (q *Queries) LocalUpsertInspectMCPServer(ctx context.Context, arg LocalUpsertInspectMCPServerParams) error {
+	_, err := q.db.Exec(ctx, localUpsertInspectMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.RemoteMcpServerID,
+		arg.UserSessionIssuerID,
+		arg.Visibility,
+	)
+	return err
+}
+
+const localUpsertInspectRemoteServer = `-- name: LocalUpsertInspectRemoteServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::text, 'streamable-http', $5::text)
+ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name, slug = EXCLUDED.slug, url = EXCLUDED.url,
+      deleted_at = NULL, updated_at = clock_timestamp()
+`
+
+type LocalUpsertInspectRemoteServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      string
+	Slug      string
+	Url       string
+}
+
+// Remote MCP servers for the Inspect tab that exist only locally: the mock
+// task tracker (server/cmd/mock-mcp), an unreachable upstream and a disabled
+// copy of the mock. They live in the seeded project, so the next seed run's
+// projects cascade removes them before the fixtures add them back.
+func (q *Queries) LocalUpsertInspectRemoteServer(ctx context.Context, arg LocalUpsertInspectRemoteServerParams) error {
+	_, err := q.db.Exec(ctx, localUpsertInspectRemoteServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.Url,
+	)
+	return err
+}
+
 const localUpsertMCPApp = `-- name: LocalUpsertMCPApp :exec
 WITH fn AS (
   INSERT INTO deployments_functions (id, deployment_id, asset_id, name, slug, runtime)
@@ -449,6 +932,37 @@ func (q *Queries) LocalUpsertMCPAppAsset(ctx context.Context, arg LocalUpsertMCP
 		arg.Sha256,
 	)
 	return err
+}
+
+const localVendorAppPointRegisteredClient = `-- name: LocalVendorAppPointRegisteredClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text, client_id_metadata_uri = NULL,
+    callback_base_url = $2::text, updated_at = clock_timestamp()
+WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+`
+
+type LocalVendorAppPointRegisteredClientParams struct {
+	ClientID        string
+	CallbackBaseUrl string
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Locally a vendor (Linear, Notion) cannot fetch a client ID metadata
+// document from localhost, so the shared seed's metadata document client
+// becomes the public client the local seed registered with the vendor by
+// dynamic registration.
+func (q *Queries) LocalVendorAppPointRegisteredClient(ctx context.Context, arg LocalVendorAppPointRegisteredClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localVendorAppPointRegisteredClient,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const localVerifyEmailDomain = `-- name: LocalVerifyEmailDomain :exec

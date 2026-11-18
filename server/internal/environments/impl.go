@@ -81,7 +81,7 @@ func NewService(logger *slog.Logger,
 // and for slug-miss paths in update/delete/clone, where authorizing before
 // reporting not-found keeps the response from becoming an existence oracle.
 func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, projectID.String(), projectID.String()))
+	return s.authz.Require(ctx, authz.Environments(projectID).Write())
 }
 
 // requireLinkedEnvironmentRead authorizes removing a link with the same grant
@@ -91,11 +91,11 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 func (s *Service) requireLinkedEnvironmentRead(ctx context.Context, projectID uuid.UUID, linked repo.Environment, err error) error {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+		return s.authz.Require(ctx, authz.Environments(projectID).Read())
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load linked environment").LogError(ctx, s.logger)
 	}
-	return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, linked.ID.String(), projectID.String()))
+	return s.authz.Require(ctx, authz.Environment(linked.ID, projectID).Read())
 }
 
 // resolveLinkableEnvironment parses and loads the environment a caller wants to
@@ -226,7 +226,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(*authCtx.ProjectID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -237,7 +237,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 
 	var result []*types.Environment
 	for _, environment := range environments {
-		entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+		entries, err := s.entries.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, s.logger)
 		}
@@ -273,7 +273,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, environment.ID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(environment.ID, *authCtx.ProjectID).Write()); err != nil {
 		return nil, err
 	}
 
@@ -306,7 +306,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
-	beforeEntries, err := entriesRepo.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	beforeEntries, err := entriesRepo.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, logger)
 	}
@@ -400,7 +400,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to re-fetch environment").LogError(ctx, logger)
 	}
 
-	entries, err := entriesRepo.ListEnvironmentEntries(ctx, projectID, environment.ID, true)
+	entries, err := entriesRepo.ListRedactedEnvironmentEntries(ctx, projectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, logger)
 	}
@@ -455,11 +455,13 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	}
 
 	// Authz: env:write on the source env with project_id as a constraining
-	// dimension. env:write implies env:read via scope expansion, so this single
-	// check covers both reading the source and producing the destination. Future
-	// per-env granularity is additive at the role layer (per-env grants instead
-	// of wildcard).
-	if err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, sourceEnv.ID.String(), authCtx.ProjectID.String())); err != nil {
+	// dimension covers reading it (env:write implies env:read). Cloning also
+	// creates an environment, so it needs the same project-wide env:write as
+	// CreateEnvironment: a grant on the source alone does not allow it.
+	if err := s.authz.Require(ctx, authz.Environment(sourceEnv.ID, *authCtx.ProjectID).Write()); err != nil {
+		return nil, err
+	}
+	if err := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -514,7 +516,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		}
 	}
 
-	entries, err := entriesRepo.ListEnvironmentEntries(ctx, *authCtx.ProjectID, newEnv.ID, true)
+	entries, err := entriesRepo.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, newEnv.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list cloned environment entries").LogError(ctx, logger)
 	}
@@ -564,7 +566,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, environment.ID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(environment.ID, *authCtx.ProjectID).Write()); err != nil {
 		return err
 	}
 
@@ -607,22 +609,26 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 	return nil
 }
 
-func buildEnvironmentEntries(entries []repo.EnvironmentEntry) []*types.EnvironmentEntry {
+func buildEnvironmentEntries(entries []RedactedEntry) []*types.EnvironmentEntry {
 	genEntries := make([]*types.EnvironmentEntry, len(entries))
 	for i, entry := range entries {
 		genEntries[i] = &types.EnvironmentEntry{
-			Name:      entry.Name,
-			Value:     entry.Value,
-			IsSecret:  entry.IsSecret,
-			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
+			Name:      entry.name,
+			Value:     entry.value,
+			IsSecret:  entry.isSecret,
+			HasValue:  entry.hasValue,
+			CreatedAt: entry.createdAt.Time.Format(time.RFC3339),
+			UpdatedAt: entry.updatedAt.Time.Format(time.RFC3339),
 		}
 	}
 
 	return genEntries
 }
 
-func buildEnvironmentView(environment repo.Environment, entries []repo.EnvironmentEntry) *types.Environment {
+// buildEnvironmentView builds the API view of an environment. It takes
+// RedactedEntry values so that responses and the audit snapshots built from
+// this view never carry a secret's plaintext.
+func buildEnvironmentView(environment repo.Environment, entries []RedactedEntry) *types.Environment {
 	return &types.Environment{
 		ID:             environment.ID.String(),
 		OrganizationID: environment.OrganizationID,
@@ -698,7 +704,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(*authCtx.ProjectID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -715,7 +721,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for source").LogError(ctx, s.logger)
 	}
 
-	entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	entries, err := s.entries.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, s.logger)
 	}
@@ -791,7 +797,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(*authCtx.ProjectID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -812,7 +818,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for toolset").LogError(ctx, s.logger)
 	}
 
-	entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	entries, err := s.entries.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, s.logger)
 	}

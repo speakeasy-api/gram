@@ -56,6 +56,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -121,8 +122,7 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
--- enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
--- legacyalias: drop disabled_wrapper with AIM-670.
+-- enables_mcp needs an endpoint.
 SELECT t.id, t.slug, EXISTS (
   SELECT 1
   FROM mcp_servers w
@@ -132,15 +132,7 @@ SELECT t.id, t.slug, EXISTS (
     AND w.visibility = 'disabled'
     AND w.deleted IS FALSE
     AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
-)::bool AS enables_mcp, EXISTS (
-  SELECT 1
-  FROM mcp_servers w
-  WHERE w.id = t.id
-    AND w.toolset_id = t.id
-    AND w.project_id = t.project_id
-    AND w.visibility = 'disabled'
-    AND w.deleted IS FALSE
-)::bool AS disabled_wrapper
+)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -350,10 +342,10 @@ LIMIT 1;
 -- name: LoadAssistantMcpServers :many
 -- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
 -- default environment, and sort first so they win runtime id
--- collisions. The address is the server's own endpoint: platform first, else
--- one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
--- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
--- caller fills in from legacyalias until the toolset slug fallback is removed.
+-- collisions. The address is the server's own endpoint on the platform or a verified, activated custom domain
+-- (ListAddressableMCPEndpointsByMCPServerIDs): for a hosted row in endpointaddr.PrimaryEndpoint's order (domain
+-- root, then another custom-domain endpoint, then platform), as its toolset view and plugins advertise, a domain
+-- root at the bare domain; for any other row platform first, whose slug the assistant view reports.
 SELECT
   ams.assistant_id,
   ams.mcp_server_id,
@@ -361,9 +353,8 @@ SELECT
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
-  -- legacyalias: drop with AIM-670.
-  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
+  (ep.domain IS NOT NULL AND ep.is_domain_root IS TRUE)::bool AS endpoint_is_domain_root,
   t.default_environment_slug,
   ams.environment_id,
   e.slug AS environment_slug
@@ -379,7 +370,7 @@ LEFT JOIN toolsets t
   AND t.project_id = @project_id
   AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT me.slug, cd.domain
+  SELECT me.slug, cd.domain, me.is_domain_root
   FROM mcp_endpoints me
   LEFT JOIN custom_domains cd
     ON cd.id = me.custom_domain_id
@@ -391,7 +382,15 @@ LEFT JOIN LATERAL (
     AND me.project_id = ms.project_id
     AND me.deleted IS FALSE
     AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (me.custom_domain_id IS NOT NULL), me.created_at, me.id
+  ORDER BY
+    CASE
+      WHEN t.id IS NULL THEN (me.custom_domain_id IS NOT NULL)::int
+      WHEN me.custom_domain_id IS NOT NULL AND me.is_domain_root IS TRUE THEN 0
+      WHEN me.custom_domain_id IS NOT NULL THEN 1
+      ELSE 2
+    END,
+    me.created_at,
+    me.id
   LIMIT 1
 ) ep ON TRUE
 LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = @project_id
@@ -499,6 +498,7 @@ INSERT INTO assistants (
   created_by_user_id,
   name,
   model,
+  reasoning_effort,
   instructions,
   warm_ttl_seconds,
   max_concurrency,
@@ -509,29 +509,30 @@ INSERT INTO assistants (
   @created_by_user_id,
   @name,
   @model,
+  COALESCE(NULLIF(@reasoning_effort::TEXT, ''), 'medium'),
   @instructions,
   @warm_ttl_seconds,
   @max_concurrency,
   @status
 )
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at;
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at;
 
 -- name: ListAssistants :many
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
 -- name: GetAssistant :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: GetAssistantForDispatch :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND deleted IS FALSE;
@@ -540,7 +541,7 @@ WHERE id = @assistant_id
 -- Resolves a project's platform-managed assistant (powers the AI Insights
 -- sidebar) through the project_managed_assistants mapping. Returns no rows
 -- when the feature isn't toggled on for the project.
-SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.reasoning_effort, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
 FROM project_managed_assistants pma
 JOIN assistants a ON a.id = pma.assistant_id
 WHERE pma.project_id = @project_id
@@ -572,6 +573,7 @@ UPDATE assistants
 SET
   name = COALESCE(sqlc.narg('name')::TEXT, name),
   model = COALESCE(sqlc.narg('model')::TEXT, model),
+  reasoning_effort = COALESCE(sqlc.narg('reasoning_effort')::TEXT, reasoning_effort),
   instructions = COALESCE(sqlc.narg('instructions')::TEXT, instructions),
   warm_ttl_seconds = COALESCE(sqlc.narg('warm_ttl_seconds')::BIGINT, warm_ttl_seconds),
   max_concurrency = COALESCE(sqlc.narg('max_concurrency')::BIGINT, max_concurrency),
@@ -580,7 +582,7 @@ SET
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at;
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at;
 
 -- name: DeleteAssistant :exec
 UPDATE assistants
@@ -967,6 +969,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -1030,6 +1033,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -1546,7 +1550,7 @@ WHERE assistant_thread_id = @assistant_thread_id
   AND state = @state;
 
 -- name: GetAssistantIgnoringDeleted :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND project_id = @project_id;
@@ -2095,3 +2099,8 @@ SELECT pg_advisory_xact_lock(hashtextextended(@subject_key::text, 0));
 
 -- name: LockProjectForKitWorkload :one
 SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR UPDATE;
+
+-- name: ClearAssistantReasoningEffortForTest :exec
+-- Test fixture only: simulate a legacy row during nullable column expansion.
+UPDATE assistants SET reasoning_effort = NULL
+WHERE id = @assistant_id AND project_id = @project_id;

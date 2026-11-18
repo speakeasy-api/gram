@@ -42,6 +42,12 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes assistant reasoning effort updates", () => {
+    expect(isAuditAction("assistant:update_reasoning_effort")).toBe(true);
+    expect(staticActionPhrase("assistant:update_reasoning_effort")).toBe(
+      "changed the reasoning effort of assistant",
+    );
+  });
   it.each([
     ["catalog-promotion:reject", "rejected catalog promotion candidate"],
     ["catalog-promotion:archive", "archived catalog promotion candidate"],
@@ -49,6 +55,12 @@ describe("AUDIT_ACTIONS", () => {
   ] as const)("describes candidate curation action %s", (action, phrase) => {
     expect(isAuditAction(action)).toBe(true);
     expect(staticActionPhrase(action)).toBe(phrase);
+  });
+  it("names the official server link for every change to it", () => {
+    expect(isAuditAction("shadow_mcp_official_server:set")).toBe(true);
+    expect(staticActionPhrase("shadow_mcp_official_server:set")).toBe(
+      "changed the official server link of Shadow MCP server",
+    );
   });
   it("describes catalogue publication and setup documentation retries", () => {
     expect(isAuditAction("mcp-server:promote-catalogue")).toBe(true);
@@ -125,6 +137,7 @@ describe("AUDIT_ACTIONS", () => {
           "data_export_route:delete",
           "data_export_route:pause",
           "data_export_route:resume",
+          "data_export_route:test",
           "otel_destination:create",
           "otel_destination:update",
           "otel_destination:delete",
@@ -136,6 +149,7 @@ describe("AUDIT_ACTIONS", () => {
       "deleted data export route",
       "paused data export route",
       "resumed data export route",
+      "sent a test event for data export route",
       "created OpenTelemetry destination",
       "updated OpenTelemetry destination",
       "deleted OpenTelemetry destination",

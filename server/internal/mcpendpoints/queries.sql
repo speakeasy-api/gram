@@ -155,10 +155,8 @@ RETURNING *;
 
 -- name: CheckEndpointSlugAvailability :one
 -- True when no live mcp_endpoints.slug holds the slug in the namespace
--- (platform when custom_domain_id is NULL, else that domain). Callers also
--- check the legacy toolset alias (legacyalias.Taken).
--- Not project-scoped, mirroring the partial unique index. exclude_toolset_id
--- discounts the endpoints of servers backed by that toolset. Unless
+-- (platform when custom_domain_id is NULL, else that domain).
+-- Not project-scoped, mirroring the partial unique index. Unless
 -- skip_domain_check, a supplied domain must be live and owned by
 -- organization_id or the result is false (blocks probing foreign domains).
 SELECT (
@@ -177,22 +175,14 @@ SELECT (
   WHERE e.slug = @slug
     AND e.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
     AND e.deleted IS FALSE
-    AND (
-      sqlc.narg('exclude_toolset_id')::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = e.mcp_server_id
-          AND s.toolset_id = sqlc.narg('exclude_toolset_id')::uuid
-      )
-    )
 );
 
 -- name: LockSlugScope :exec
 -- Serializes competing claims on one (namespace, slug) address for the rest of
--- the caller's transaction; the per-table unique indexes cannot see
--- cross-table collisions. The platform lock comes first, also for a
--- custom-domain claim, since the platform host serves custom-domain aliases.
+-- the caller's transaction, since the availability check runs before the write.
+-- A custom-domain claim also takes the platform lock first: it no longer needs
+-- it, but keeping one lock order stays deadlock-free beside pods still running
+-- the earlier order.
 SELECT
   pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0)),
   pg_advisory_xact_lock(hashtextextended(
@@ -348,3 +338,42 @@ WHERE project_id = @project_id
   AND slug = @slug
   AND deleted IS FALSE
 ORDER BY (custom_domain_id IS NULL) DESC, created_at, id;
+
+-- name: ListAddressableGatewayEndpointsByMemberMCPServerIDs :many
+-- The addressable endpoints of every live gateway that serves one of the
+-- given servers as a member. A member counts only when the gateway serves
+-- it, filtered exactly as ListServableMetaMCPMembers: its server is live,
+-- enabled and has a slug. Custom-domain endpoints count only on a verified,
+-- activated domain, the same gate as ListAddressableMCPEndpointsByMCPServerIDs.
+SELECT
+    sqlc.embed(e),
+    cd.domain AS custom_domain,
+    mm.mcp_server_id AS member_mcp_server_id,
+    g.name AS gateway_name
+FROM meta_mcp_server_members mm
+JOIN mcp_servers s
+  ON s.id = mm.mcp_server_id
+  AND s.project_id = mm.project_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+JOIN meta_mcp_servers g
+  ON g.id = mm.meta_mcp_server_id
+  AND g.project_id = mm.project_id
+  AND g.organization_id = @organization_id
+  AND g.deleted IS FALSE
+JOIN mcp_endpoints e
+  ON e.meta_mcp_server_id = g.id
+  AND e.project_id = g.project_id
+  AND e.deleted IS FALSE
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+  AND cd.verified IS TRUE
+  AND cd.activated IS TRUE
+WHERE mm.project_id = @project_id
+  AND mm.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND mm.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+ORDER BY g.created_at, g.id;

@@ -27,10 +27,10 @@ INSERT INTO network_ingresses (
     enabled,
     identity_required,
     credentials_encrypted,
-    credentials_org_encrypted,
     attestor_namespace,
     attestor_service_account,
-    provider_resources
+    provider_resources,
+    runtime
 ) VALUES (
     @id,
     @organization_id,
@@ -41,10 +41,10 @@ INSERT INTO network_ingresses (
     @enabled,
     @identity_required,
     @credentials_encrypted,
-    @credentials_org_encrypted,
     @attestor_namespace,
     @attestor_service_account,
-    @provider_resources
+    @provider_resources,
+    sqlc.narg('runtime')
 )
 RETURNING *;
 
@@ -134,7 +134,6 @@ RETURNING *;
 UPDATE network_ingresses
 SET
     credentials_encrypted = @credentials_encrypted,
-    credentials_org_encrypted = @credentials_org_encrypted,
     status = 'pending',
     last_error = NULL,
     updated_at = clock_timestamp()
@@ -279,10 +278,23 @@ WHERE id = @id
 UPDATE network_ingresses
 SET
     credentials_encrypted = NULL,
-    credentials_org_encrypted = NULL,
     provider_resources = '{}'::jsonb,
     last_error = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS TRUE;
+
+-- name: GetNetworkIngressCertificateFailure :one
+-- The message of the most recently seen gateway slot that holds no valid TLS
+-- certificate because a request failed. The gateway writes it, naming the
+-- cause and when it retries.
+SELECT last_error
+FROM network_ingress_nodes
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND retired_at IS NULL
+  AND status = 'awaiting_certificate'
+  AND last_error IS NOT NULL
+ORDER BY last_seen_at DESC NULLS LAST
+LIMIT 1;

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,8 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -33,8 +35,17 @@ type ExecutorOptions struct {
 	// BackendPort is the private backend Service port.
 	BackendPort int32
 
+	// AttestorRequired means the registered provider deploys an attestor and
+	// therefore needs Image, BackendService and BackendPort before applying.
+	AttestorRequired bool
+
 	// CanApply is checked on every attempt before credential decryption.
 	CanApply func(context.Context) error
+
+	// Logger receives operational failures that are not reflected in the
+	// bounded status codes, such as saved credentials that no longer decrypt.
+	// Nil discards them.
+	Logger *slog.Logger
 
 	// PublicationRequester atomically records organization invalidations for
 	// committed DNS authority changes. A nil requester keeps the producer off.
@@ -50,6 +61,11 @@ type ReconcileResult struct {
 	Requeue bool
 }
 
+// ReconcileCodeDeletionPending reports a teardown waiting for provider
+// resources to finish deleting. It is retryable and usually clears within
+// seconds.
+const ReconcileCodeDeletionPending = "deletion_pending"
+
 // ReconcileError deliberately has no wrapped cause or provider-supplied message.
 type ReconcileError struct {
 	// Code is a bounded diagnostic suitable for orchestration history.
@@ -63,16 +79,17 @@ func (e *ReconcileError) Error() string { return "network ingress reconciliation
 
 // Executor reconciles one ingress at a time across all workers and attempts.
 type Executor struct {
-	db          *pgxpool.Pool
-	credentials *integrationcredentials.Cipher
-	registry    *k8s.NetworkIngressProvisionerRegistry
-	options     ExecutorOptions
+	db       *pgxpool.Pool
+	enc      *encryption.Client
+	registry *k8s.NetworkIngressProvisionerRegistry
+	options  ExecutorOptions
 }
 
-// NewExecutor builds the reconciler. A nil credentials cipher leaves provider
-// mutations unavailable.
-func NewExecutor(db *pgxpool.Pool, credentials *integrationcredentials.Cipher, registry *k8s.NetworkIngressProvisionerRegistry, options ExecutorOptions) *Executor {
-	return &Executor{db: db, credentials: credentials, registry: registry, options: options}
+func NewExecutor(db *pgxpool.Pool, enc *encryption.Client, registry *k8s.NetworkIngressProvisionerRegistry, options ExecutorOptions) *Executor {
+	if options.Logger == nil {
+		options.Logger = slog.New(slog.DiscardHandler)
+	}
+	return &Executor{db: db, enc: enc, registry: registry, options: options}
 }
 
 func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid.UUID) (ReconcileResult, error) {
@@ -125,6 +142,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		return e.cleanup(ctx, conn, row)
 	}
 	resources, err := k8s.ParseNetworkIngressResourceNames(row.ProviderResources)
+	resources.Runtime = row.Runtime.String
 	if err != nil || resources.OwnerID != row.ID || resources.Namespace != row.AttestorNamespace || resources.AttestorServiceAccount != row.AttestorServiceAccount {
 		return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_desired_state"), "")
 	}
@@ -157,17 +175,15 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		}
 		gateCode = e.applyGate(ctx)
 		if gateCode == "" {
-			credentials, err := e.credentials.Open(ctx, row.OrganizationID, integrationcredentials.ColumnNetworkIngresses, integrationcredentials.Stored{Legacy: row.CredentialsEncrypted, Org: row.CredentialsOrgEncrypted})
-			if err != nil && !errors.Is(err, integrationcredentials.ErrUnreadable) && !errors.Is(err, integrationcredentials.ErrMissing) {
-				return ReconcileResult{Requeue: false}, reconcileFailure("credentials_unavailable")
-			}
-			if err != nil || len(credentials) == 0 {
+			credentials, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
+			if err != nil || !row.CredentialsEncrypted.Valid || credentials == "" {
 				return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_credentials"), "")
 			}
 			callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 			observation, operationErr = provider.Apply(callCtx, k8s.NetworkIngressDesired{
-				ID: row.ID, Provider: row.Provider, Hostname: row.Hostname, Credentials: credentials, Resources: resources,
+				ID: row.ID, OrganizationID: row.OrganizationID, Provider: row.Provider, Hostname: row.Hostname, Credentials: []byte(credentials), Resources: resources,
 				AttestorImage: e.options.Image, BackendService: e.options.BackendService, BackendPort: e.options.BackendPort,
+				Runtime: row.Runtime.String,
 			})
 			callCancel()
 		}
@@ -176,6 +192,12 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 		observation, operationErr = provider.Observe(callCtx, resources)
 		callCancel()
+		// A retryable Observe failure that reports no name says nothing about
+		// the hosts serving the recorded one, so the private listener keeps
+		// routing to it until an observation succeeds.
+		if operationErr != nil && observation.DNSName == "" && row.DnsName.Valid && providerFailure(operationErr, observation.ErrorCode).Retryable {
+			observation.DNSName = row.DnsName.String
+		}
 	}
 
 	// Even a failed or partially successful Apply can have created resources.
@@ -198,7 +220,10 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 }
 
 func (e *Executor) applyGate(ctx context.Context) string {
-	if e.credentials == nil || e.options.Queue == "" || e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535 {
+	if e.enc == nil || e.options.Queue == "" {
+		return "provider_configuration_unavailable"
+	}
+	if e.options.AttestorRequired && (e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535) {
 		return "provider_configuration_unavailable"
 	}
 	if e.options.CanApply == nil || e.options.CanApply(ctx) != nil {
@@ -215,18 +240,21 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	if err != nil || resources.OwnerID != row.ID {
 		return ReconcileResult{Requeue: false}, reconcileFailure("invalid_desired_state")
 	}
+	resources.Runtime = row.Runtime.String
 	provider, err := e.registry.Provisioner(row.Provider)
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("provider_configuration_unavailable")
 	}
 	callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
-	err = provider.Delete(callCtx, resources)
+	err = e.deleteProviderResources(callCtx, provider, row, resources)
 	callCancel()
 	if err != nil {
 		failure := providerFailure(err, "")
+		// A missing permission blocks cleanup the same way rejected
+		// credentials do, and the dashboard explains both with one message.
 		blocker := ""
-		if failure.Code == k8s.NetworkIngressErrorProviderCredentialsRejected {
-			blocker = failure.Code
+		if errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected) {
+			blocker = k8s.NetworkIngressErrorProviderCredentialsRejected
 		}
 		if err := recordCleanupBlocker(ctx, repo.New(conn), row, blocker); err != nil {
 			return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
@@ -263,6 +291,31 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	return ReconcileResult{Requeue: false}, nil
 }
 
+// deleteProviderResources hands the saved credentials to providers whose
+// teardown calls the customer's provider API. Such a provider always receives
+// the credentialed call, with nil credentials when none are saved or they no
+// longer decrypt, so it decides whether cleanup can finish without them.
+func (e *Executor) deleteProviderResources(ctx context.Context, provider k8s.NetworkIngressProvisioner, row repo.NetworkIngress, resources k8s.NetworkIngressResourceNames) error {
+	deleter, ok := provider.(k8s.NetworkIngressCredentialedDeleter)
+	if !ok {
+		return provider.Delete(ctx, resources) //nolint:wrapcheck // provider errors are classified by providerFailure
+	}
+	var credentials []byte
+	if e.enc != nil && row.CredentialsEncrypted.Valid && row.CredentialsEncrypted.String != "" {
+		plaintext, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
+		switch {
+		case err != nil:
+			// Distinguishable from "nothing saved": the provider still reports
+			// the cleanup blocker, and this names the server-side cause.
+			e.options.Logger.ErrorContext(ctx, "saved network ingress credentials do not decrypt; cleanup proceeds without them",
+				attr.SlogError(err), attr.SlogNetworkIngressID(row.ID.String()))
+		case plaintext != "":
+			credentials = []byte(plaintext)
+		}
+	}
+	return deleter.DeleteWithCredentials(ctx, resources, credentials) //nolint:wrapcheck // provider errors are classified by providerFailure
+}
+
 // recordCleanupBlocker exposes why a tombstone cannot finish cleanup, or clears
 // a previous blocker once teardown is progressing again.
 func recordCleanupBlocker(ctx context.Context, queries *repo.Queries, row repo.NetworkIngress, code string) error {
@@ -286,7 +339,10 @@ func (e *Executor) record(ctx context.Context, conn *pgxpool.Conn, row repo.Netw
 	status := observation.Status
 	code := observation.ErrorCode
 	switch code {
-	case "", "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api":
+	case "", "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
+		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable,
+		k8s.NetworkIngressErrorProviderServiceNotApproved, k8s.NetworkIngressErrorProviderCertificateUnavailable,
+		k8s.NetworkIngressErrorEncryptionKeyUnavailable:
 	default:
 		code = "provider_error"
 		failure = reconcileFailure(code)
@@ -374,19 +430,29 @@ func sameIngressDesired(a, b repo.NetworkIngress) bool {
 
 func providerFailure(err error, code string) *ReconcileError {
 	switch {
+	case errors.Is(err, k8s.ErrNetworkIngressProviderForbidden):
+		return reconcileFailure(k8s.NetworkIngressErrorProviderForbidden)
 	case errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected):
 		return reconcileFailure(k8s.NetworkIngressErrorProviderCredentialsRejected)
+	case errors.Is(err, k8s.ErrNetworkIngressProviderRateLimited):
+		return reconcileFailure(k8s.NetworkIngressErrorProviderRateLimited)
+	case errors.Is(err, k8s.ErrNetworkIngressProviderAPIUnavailable):
+		return reconcileFailure(k8s.NetworkIngressErrorProviderAPIUnavailable)
 	case errors.Is(err, k8s.ErrNetworkIngressDeletionPending):
-		return reconcileFailure("deletion_pending")
+		return reconcileFailure(ReconcileCodeDeletionPending)
 	case errors.Is(err, k8s.ErrNetworkIngressReplacementPending):
 		return reconcileFailure("replacement_pending")
 	case errors.Is(err, k8s.ErrNetworkIngressInvalidDesiredState):
 		return reconcileFailure("invalid_desired_state")
+	case errors.Is(err, k8s.ErrNetworkIngressProviderUnavailable):
+		return reconcileFailure("provider_configuration_unavailable")
 	case errors.Is(err, k8s.ErrNetworkIngressUnsupportedProvider):
 		return reconcileFailure("unsupported_provider")
 	}
 	switch code {
-	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api":
+	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
+		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable,
+		k8s.NetworkIngressErrorEncryptionKeyUnavailable:
 		return reconcileFailure(code)
 	default:
 		return reconcileFailure("provider_error")
@@ -399,7 +465,7 @@ func reconcileFailure(code string) *ReconcileError {
 	// Rejected provider credentials need a human to fix them. The hourly sweep
 	// and "Retry cleanup" re-drive the ingress instead of spinning here.
 	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "provider_configuration_unavailable",
-		k8s.NetworkIngressErrorProviderCredentialsRejected:
+		k8s.NetworkIngressErrorProviderCredentialsRejected, k8s.NetworkIngressErrorProviderForbidden:
 		retryable = false
 	}
 	return &ReconcileError{Code: code, Retryable: retryable}

@@ -41,10 +41,7 @@ func (s *Service) Sync(ctx context.Context, p *gen.SyncPayload) (*gen.SyncResult
 	if row.Generation != generation {
 		return nil, oops.E(oops.CodeConflict, nil, "The workspace connection changed. Reload and try again.")
 	}
-	if _, err := usableTokens(ctx, s.credentials, row); err != nil {
-		if syncErr, ok := errors.AsType[*SyncError](err); ok && !syncErr.Reconnect {
-			return nil, oops.E(oops.CodeUnavailable, err, "Could not read this workspace's credentials. Try again.").LogError(ctx, s.logger)
-		}
+	if _, err := usableTokens(s.encryption, row); err != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "Reconnect this Slack workspace before syncing.")
 	}
 	if err := s.syncScheduler.Start(ctx, SyncInput{OrganizationID: ac.ActiveOrganizationID, ConnectionID: id, Generation: generation, ActorID: ac.UserID, StartedAt: time.Time{}}); err != nil {

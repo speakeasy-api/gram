@@ -46,11 +46,11 @@ export const CLIENT_TYPES = [
 type StatusPresentation = {
   label: string;
   hint: string;
-  tone: "success" | "warning" | "neutral";
+  tone: "success" | "warning" | "destructive" | "neutral";
 };
 
 const NO_AUTH_STATUS: StatusPresentation = {
-  label: "No authentication required",
+  label: "No authentication",
   hint: "Speakeasy sends no credentials upstream. Callers still need access to the server itself.",
   tone: "neutral",
 };
@@ -60,9 +60,9 @@ const NO_AUTH_STATUS: StatusPresentation = {
  * send it.
  */
 export const SIGN_IN_DETECTED_STATUS: StatusPresentation = {
-  label: "Authentication setup incomplete",
+  label: "Setup incomplete",
   hint: "The upstream needs credentials, but none is set up and turned on. Add or turn on a credential below.",
-  tone: "warning",
+  tone: "destructive",
 };
 
 /** A status this dashboard does not know, never read as needing none. */
@@ -79,9 +79,9 @@ export const UPSTREAM_AUTH_STATUS: Record<string, StatusPresentation> = {
     tone: "success",
   },
   setup_incomplete: {
-    label: "Authentication setup incomplete",
+    label: "Setup incomplete",
     hint: "This server signs in to the upstream in a way no credential below records yet. Add a credential for it.",
-    tone: "warning",
+    tone: "destructive",
   },
   no_auth_required: NO_AUTH_STATUS,
 };

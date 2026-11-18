@@ -103,7 +103,7 @@ func TestConnectionStatusText_OutageWordsStayOutOfTheAppMessage(t *testing.T) {
 
 func TestConnectionStatusViewUsesOneReconnectWording(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, 2, strings.Count(ConnectionStatusHTML, "Reconnect this gateway in your AI app to review access"))
+	require.Equal(t, 1, strings.Count(ConnectionStatusHTML, "Reconnect this gateway in your AI app to review access"), "only the footer hint; rows say Needs Sign-In")
 	require.NotContains(t, ConnectionStatusHTML, "Start authorization again")
 	require.NotContains(t, ConnectionStatusHTML, "Give consent again")
 }
@@ -168,7 +168,18 @@ func TestConnectionStatusView_PreservesOutageAndConsentHints(t *testing.T) {
 	agentHint := strings.Index(ConnectionStatusHTML, `: needs > 0 && agent ? "This agent cannot fix these servers itself.`)
 	require.Positive(t, agentHint)
 	require.Less(t, agentHint, strings.Index(ConnectionStatusHTML, `: needs > 0 ? "After signing in`), "the agent branch comes before the caller's")
-	require.Contains(t, ConnectionStatusHTML, `(s.detail ? "Not signed in · " + s.detail : "Not signed in")`)
+	require.Contains(t, ConnectionStatusHTML, `: agent && s.detail ? s.detail : "Needs Sign-In";`)
+}
+
+// The view labels each server Connected or Needs Sign-In; the reasons stay in
+// the text result the model reads.
+func TestConnectionStatusHTML_ShortLabels(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 2, strings.Count(ConnectionStatusHTML, `state.textContent = "Connected";`), "ready and verified-at-consent rows")
+	require.Contains(t, ConnectionStatusHTML, `state.textContent = "Needs Sign-In";`)
+	require.NotContains(t, ConnectionStatusHTML, "No sign-in needed")
+	require.NotContains(t, ConnectionStatusHTML, `"Hidden by you · "`)
 }
 
 // An agent cannot sign in itself: its gateway sends it to someone who can

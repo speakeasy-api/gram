@@ -15,8 +15,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -747,6 +749,78 @@ func TestConnectionOutcome_ChainedFirstPartyEnds(t *testing.T) {
 	require.Equal(t, state.FlowID, row.AttemptID.String())
 }
 
+// seedIneligibleChainCheck: a consent attempt whose chained client Speakeasy won't vouch for.
+func seedIneligibleChainCheck(t *testing.T, tag string) (context.Context, consentActionFixture, mcp.AuthnChallengeState) {
+	t.Helper()
+	ctx, fx, issuer := seedChainedConsentEndpoint(t, tag+uuid.NewString()[:6])
+	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
+		return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+	}
+	state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.FlowID = uuid.NewString()
+	state.CreatedAt = time.Now()
+	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+	return ctx, fx, state
+}
+
+func requireIneligibleChainCheck(t *testing.T, fx consentActionFixture) {
+	t.Helper()
+	w, err := postChainCheck(t, fx, nil)
+	require.NoError(t, err)
+	require.Equal(t, "rejected", chainCheckResult(t, w)["status"])
+}
+
+// An account Speakeasy won't vouch for is recorded once per attempt on the consent page, naming the admin.
+func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, state := seedIneligibleChainCheck(t, "attempt-inelig-")
+	rec := recordConnections(t, fx.ti)
+	for range 3 {
+		requireIneligibleChainCheck(t, fx)
+	}
+
+	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
+	require.Len(t, rec.Rows(), 1, "reloading the page writes no more rows")
+	row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity)
+	require.Equal(t, state.FlowID, row.AttemptID.String())
+	require.Equal(t, fx.clientA.String(), row.RemoteSessionClientID, "the row names the refused server's client")
+	require.Empty(t, row.UserSessionClientID, "like the other pre-accept consent rows, the MCP client is not named yet")
+	rec.RequireNotEnded()
+
+	state.FlowID = uuid.NewString()
+	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+	requireIneligibleChainCheck(t, fx)
+	require.Len(t, rec.Rows(), 2, "a new attempt records its own row")
+	require.Equal(t, state.FlowID, rec.Rows()[1].AttemptID.String())
+}
+
+// Reloads of a refused consent page reach the connection log export once.
+func TestConnectionOutcome_ChainCheckExportsIneligibleIdentityOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, _ := seedIneligibleChainCheck(t, "export-inelig-")
+	recorder, exported := mcp.NewExportingConnectionRecorder(t)
+	fx.ti.service.SetConnectionRecorder(recorder)
+	for range 3 {
+		requireIneligibleChainCheck(t, fx)
+	}
+
+	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
+	records := exported()
+	require.Len(t, records, 1)
+	var code string
+	records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Key == string(attr.ErrorTypeKey) {
+			code = kv.Value.AsString()
+		}
+		return true
+	})
+	require.Equal(t, mcpconnectionattempts.CodeIneligibleIdentity.String(), code)
+}
+
 // A provider callback whose sign-in has gone ends that attempt once, however many callbacks follow.
 func TestConnectionOutcome_ParentGoneDuringProviderSignIn(t *testing.T) {
 	t.Parallel()
@@ -922,7 +996,7 @@ func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
 			require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
-			require.Equal(t, mcpconnectionattempts.AppOf(ds.clientID).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(ds.clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 			require.NotContains(t, row.AppKey, "/", "host only")
 			require.Len(t, rec.Rows(), 1)
 		})

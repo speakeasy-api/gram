@@ -32,7 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -53,7 +53,7 @@ type Service struct {
 	authz         *authz.Engine
 	audit         *audit.Logger
 	cache         cache.Cache
-	credentials   *integrationcredentials.Cipher
+	encryption    *encryption.Client
 	provider      Provider
 	siteURL       *url.URL
 	tracer        trace.Tracer
@@ -64,8 +64,8 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, auditLogger *audit.Logger, stateCache cache.Cache, credentials *integrationcredentials.Cipher, provider Provider, siteURL *url.URL, scheduler SyncScheduler) *Service {
-	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authz: engine, audit: auditLogger, cache: stateCache, credentials: credentials, provider: provider, syncScheduler: scheduler, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
+func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, auditLogger *audit.Logger, stateCache cache.Cache, enc *encryption.Client, provider Provider, siteURL *url.URL, scheduler SyncScheduler) *Service {
+	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authz: engine, audit: auditLogger, cache: stateCache, encryption: enc, provider: provider, syncScheduler: scheduler, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
 }
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
@@ -146,11 +146,9 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) (*gen.ListResult
 func (s *Service) connectionView(ctx context.Context, row repo.SlackDirectoryConnection) *gen.SlackDirectoryConnection {
 	view := mv.BuildSlackDirectoryConnectionView(row)
 	if view.Status == "connected" {
-		_, err := usableTokens(ctx, s.credentials, row)
-		// An unavailable organization key leaves the workspace connected.
-		if syncErr, ok := errors.AsType[*SyncError](err); err != nil && (!ok || syncErr.Reconnect) {
+		if _, err := usableTokens(s.encryption, row); err != nil {
 			view.Status = "reconnect_required"
-			if ok {
+			if syncErr, ok := errors.AsType[*SyncError](err); ok {
 				view.LastErrorCode = conv.PtrEmpty(syncErr.Code)
 			}
 			if view.DirectoryStatus == "current" {
@@ -265,7 +263,7 @@ func (s *Service) saveAuthorization(ctx context.Context, ac *contextvalues.AuthC
 	if err != nil {
 		return fmt.Errorf("encode credential bundle: %w", err)
 	}
-	sealed, err := s.credentials.Seal(ctx, ac.ActiveOrganizationID, integrationcredentials.ColumnSlackDirectoryConnections, plaintext)
+	ciphertext, err := s.encryption.Encrypt(plaintext)
 	if err != nil {
 		return fmt.Errorf("encrypt credential bundle: %w", err)
 	}
@@ -289,7 +287,7 @@ func (s *Service) saveAuthorization(ctx context.Context, ac *contextvalues.AuthC
 		if state.ConnectionID != uuid.Nil {
 			return pgx.ErrNoRows
 		}
-		row, err = queries.CreateSlackDirectoryConnection(ctx, repo.CreateSlackDirectoryConnectionParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: authorization.WorkspaceID, SlackTeamName: conv.ToPGTextEmpty(authorization.WorkspaceName), CredentialsEncrypted: conv.ToPGText(sealed.Legacy), CredentialsOrgEncrypted: sealed.Org, GrantedScopes: authorization.Scopes, Generation: uuid.New()})
+		row, err = queries.CreateSlackDirectoryConnection(ctx, repo.CreateSlackDirectoryConnectionParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: authorization.WorkspaceID, SlackTeamName: conv.ToPGTextEmpty(authorization.WorkspaceName), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: authorization.Scopes, Generation: uuid.New()})
 	case err != nil:
 		return fmt.Errorf("lock workspace: %w", err)
 	default:
@@ -297,7 +295,7 @@ func (s *Service) saveAuthorization(ctx context.Context, ac *contextvalues.AuthC
 			return pgx.ErrNoRows
 		}
 		previous = s.connectionView(ctx, before)
-		row, err = queries.AuthorizeSlackDirectoryConnection(ctx, repo.AuthorizeSlackDirectoryConnectionParams{OrganizationID: ac.ActiveOrganizationID, ID: before.ID, SlackTeamID: authorization.WorkspaceID, SlackTeamName: conv.ToPGTextEmpty(authorization.WorkspaceName), CredentialsEncrypted: conv.ToPGText(sealed.Legacy), CredentialsOrgEncrypted: sealed.Org, GrantedScopes: authorization.Scopes, Generation: uuid.New(), ExpectedGeneration: before.Generation})
+		row, err = queries.AuthorizeSlackDirectoryConnection(ctx, repo.AuthorizeSlackDirectoryConnectionParams{OrganizationID: ac.ActiveOrganizationID, ID: before.ID, SlackTeamID: authorization.WorkspaceID, SlackTeamName: conv.ToPGTextEmpty(authorization.WorkspaceName), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: authorization.Scopes, Generation: uuid.New(), ExpectedGeneration: before.Generation})
 	}
 	if err != nil {
 		return fmt.Errorf("save workspace authorization: %w", err)

@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -219,7 +219,7 @@ func proxiedResultText(result proxiedToolResult) string {
 // does not exist: connecting the server to the app directly.
 const gatewayProxyOff = "Running tools on your MCP servers through this Speakeasy connection (list_my_servers, search_my_tools, describe_tools and execute_tool) is not available for your organization right now. " +
 	"Speakeasy controls whether it is available; it is not an organization setting, so an administrator cannot switch it on. " +
-	"Your servers still work when connected to this app directly: call get_my_install_instructions with the server's project_id, its mcp_id or the registration_id setup returned, and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, or other), then show the user each step's link and snippet as written."
+	"Your servers still work when connected to this app directly: find the server with find_mcp, then call get_my_install_instructions with the id find_mcp returned as mcp_id and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, vibe, or other), then show the user each step's link and snippet as written."
 
 func gatewayProxyUnavailable(message string) error {
 	payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: gatewayProxyFeature, Message: message})
@@ -361,30 +361,37 @@ func registerGatewayProxyTools(reg *Registrar, service *GatewayProxyService) {
 	listTool := &mcp.Tool{
 		Name:  listMyServersName,
 		Title: "List My MCP Servers",
-		Description: "List the MCP servers the user can use through this Speakeasy connection: every server in their organization their access reaches, across all projects, including ones just added here. " +
-			"Call it whenever the user asks for data or an action in another system (a CRM, tickets, docs, a database, an internal API) before saying you cannot help, and after adding a server. " +
-			"Then call search_my_tools to find the right tool, or describe_tools for one server's tools, and execute_tool to run it. Servers that sign in upstream use the user's own connection; one they have not connected says so when called, with a link to connect it.",
+		Description: "List the MCP servers this user can reach through Speakeasy: every server in their organization that their access reaches, across all projects, including ones just added here. " +
+			"Returns each server's slug, name and status (available, unavailable, or unknown), the servers the user hid, and a link to manage them. " +
+			"Read-only: it reads the user's server list and does not contact the servers or run any of their tools. " +
+			"Call it when the user asks about their connected MCP servers or their tools, when they ask for data or an action that one of those servers might hold (a CRM, tickets, a database, an internal API), and after adding a server. " +
+			"Do not call it for general questions unrelated to the organization's MCP servers, such as weather, writing code, or reminders in an app no server covers.",
 		Annotations: readOnlyAnnotations(),
 	}
 	searchTool := &mcp.Tool{
 		Name:  searchMyToolsName,
 		Title: "Search Tools in My MCP Servers",
-		Description: "Find the right tool across all of the user's MCP servers in one call, by describing the task in plain words (for example: create a ticket, look up a customer by email). " +
-			"Returns ranked tools with their server, tool name, description and input_schema, ready for execute_tool. Use it whenever the user wants something done in another system; narrow with server when you already know it.",
+		Description: "Search the tool listings of the user's MCP servers for a task described in plain words (for example: create a ticket, look up a customer by email). " +
+			"Returns ranked matches, each with its server slug, tool name, description and input_schema. " +
+			"Read-only: it reads the servers' tool listings and runs no tool. Narrow with server when you already know which server to search. " +
+			"Use it only for tasks the user wants done through their organization's MCP servers; do not call it for general questions unrelated to those servers, such as weather or writing code.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}
 	describeTool := &mcp.Tool{
 		Name:  describeToolsName,
 		Title: "Get Tool Details from My MCP Servers",
-		Description: "Describe the tools of one server from list_my_servers. Omit tools to list every tool's name and description. " +
-			"Pass tool names to get their input_schema, which you need before calling execute_tool.",
+		Description: "Show the tool listing of one of the user's MCP servers, named by its slug from list_my_servers. " +
+			"Without tools, returns every tool's name and description; with tool names, also returns each named tool's input_schema. " +
+			"Read-only: it reads the server's tool listing and runs no tool.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}
 	executeTool := &mcp.Tool{
 		Name:  executeToolName,
 		Title: "Run a Tool from My MCP Servers",
-		Description: "Call one tool on one server from list_my_servers, as you, with arguments matching its input_schema from describe_tools. " +
-			"Returns the server's answer unchanged: is_error is true when the server or tool refused, with the reason in content. The tool may change data in the system behind the server.",
+		Description: "Run one named tool on one of the user's MCP servers, as the user, and return that server's answer unchanged. " +
+			"Name the server by its slug from list_my_servers and the tool by a name that search_my_tools or describe_tools returned, with arguments that match the input_schema they returned. " +
+			"The tool may read or change data in the system behind the server: before running one that changes data, tell the user what it will do and wait for them to confirm. " +
+			"is_error is true when the server or tool refused, with the reason in content.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), OpenWorldHint: new(true)},
 	}
 	if !service.valid() {

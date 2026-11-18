@@ -90,6 +90,7 @@ pub struct QueuedTurn {
 pub struct ConfiguredThread {
     pub thread_id: String,
     pub chat_id: String,
+    pub reasoning_effort: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
     pub inbox_tx: UnboundedSender<QueuedTurn>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
@@ -316,15 +317,48 @@ fn reap_oldest_idle(host: &RuntimeHost) {
 }
 
 /// Initializes warm state from an already-authenticated bootstrap. The caller
-/// holds the host admission lock through enqueue, excluding eviction. Later
-/// invocations still validate bootstrap but keep the existing driver/history;
-/// their bearer and MCP configuration change only when dequeued by the loop.
+/// captures bootstrap_started_at before fetching that bootstrap and holds the
+/// host admission lock through enqueue, excluding eviction. Later
+/// invocations still validate bootstrap. Reasoning changes rehydrate idle
+/// drivers; bearer and MCP configuration change only when dequeued by the loop.
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
     bootstrap: ThreadBootstrap,
+    bootstrap_started_at: Instant,
     bearer: String,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
+    // The provider is immutable for a driver's lifetime. Rehydrate an idle
+    // thread from its authoritative persisted history when settings change.
+    // Never replace a driver while its turn (including persistence) is active.
+    if let Some(thread) = host
+        .threads
+        .get(thread_id)
+        .and_then(|cell| cell.get().cloned())
+        && thread.reasoning_effort != bootstrap.reasoning_effort
+    {
+        // Bootstrap is fetched before admission. A turn may have completed
+        // while that fetch was in flight, leaving its history snapshot stale.
+        // Only replace a driver that was already idle before the fetch began;
+        // otherwise retry admission with a fresh authenticated snapshot.
+        if thread
+            .idle_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_none_or(|idle_since| idle_since >= bootstrap_started_at)
+        {
+            return Err(RunnerError::InvocationBusy);
+        }
+        host.threads.remove(thread_id);
+        if let Some(handle) = thread
+            .task_handle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        {
+            handle.abort();
+        }
+    }
     let cell = host
         .threads
         .entry(thread_id.to_string())
@@ -402,8 +436,7 @@ async fn spawn_thread(
         .default_headers(chat_headers)
         .build()?;
 
-    let openrouter_config = OpenRouterConfig::new(String::new(), bootstrap.model.clone())
-        .with_base_url(bootstrap.completions_url.clone());
+    let openrouter_config = inference_config(&bootstrap);
     let provider = OpenRouterProvider::from(openrouter_config);
 
     let completions_http = build_http(thread_http_client.clone(), tokens.clone());
@@ -592,12 +625,24 @@ async fn spawn_thread(
     let configured = Arc::new(ConfiguredThread {
         thread_id,
         chat_id,
+        reasoning_effort: bootstrap.reasoning_effort.clone(),
         idle_since,
         inbox_tx,
         task_handle: Mutex::new(Some(task_handle)),
         cancellation,
     });
     Ok(configured)
+}
+
+fn inference_config(bootstrap: &ThreadBootstrap) -> OpenRouterConfig {
+    // agentkit 0.9.2 exposes provider extensions through extra_body, not a
+    // typed reasoning setter. Keep "none" explicit rather than omitting it.
+    OpenRouterConfig::new(String::new(), bootstrap.model.clone())
+        .with_base_url(bootstrap.completions_url.clone())
+        .with_extra_body_value(
+            "reasoning",
+            serde_json::json!({"effort": bootstrap.reasoning_effort}),
+        )
 }
 
 fn mcp_disclosure_item(servers: &[McpServer]) -> String {
@@ -939,6 +984,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn inference_reasoning_effort_reaches_http_request() {
+        use agentkit_loop::{ModelAdapter, TurnRequest};
+        let (sent, mut received) = mpsc::unbounded_channel();
+        let app = axum::Router::new().route(
+            "/completions",
+            axum::routing::post(move |axum::Json(body): axum::Json<Value>| {
+                let sent = sent.clone();
+                async move {
+                    sent.send(body).unwrap();
+                    axum::Json(serde_json::json!({
+                        "id": "test", "model": "test", "choices": [{
+                            "index": 0, "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop"
+                        }]
+                    }))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/completions", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        for effort in [
+            None,
+            Some("medium"),
+            Some("high"),
+            Some("none"),
+            Some("low"),
+        ] {
+            let mut raw = serde_json::json!({
+                "assistant_id": "assistant", "project_id": "project", "chat_id": "chat",
+                "model": "test", "completions_url": endpoint
+            });
+            if let Some(effort) = effort {
+                raw["reasoning_effort"] = effort.into();
+            }
+            let bootstrap: ThreadBootstrap = serde_json::from_value(raw).unwrap();
+            let provider =
+                OpenRouterProvider::from(inference_config(&bootstrap).with_streaming(false));
+            let adapter = CompletionsAdapter::with_client(
+                provider,
+                agentkit_http::Http::new(reqwest::Client::new()),
+            );
+            let mut session = adapter
+                .start_session(SessionConfig::new("thread"))
+                .await
+                .unwrap();
+            session
+                .begin_turn(
+                    TurnRequest {
+                        session_id: "thread".into(),
+                        turn_id: "turn".into(),
+                        transcript: vec![Item::text(ItemKind::User, "hello")],
+                        available_tools: vec![],
+                        cache: None,
+                        metadata: Default::default(),
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+            let body = received.recv().await.unwrap();
+            assert_eq!(
+                body["reasoning"],
+                serde_json::json!({"effort": effort.unwrap_or("medium")})
+            );
+        }
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn queued_messages_rotate_existing_bearer_only_between_turns() {
         // Exercise the real terminal compactor and its awaited persistence,
         // gating the HTTP response rather than relying on a timing window.
@@ -1155,6 +1270,7 @@ mod tests {
         let configured = Arc::new(ConfiguredThread {
             thread_id: thread_id.to_string(),
             chat_id: format!("chat-{thread_id}"),
+            reasoning_effort: "medium".into(),
             idle_since: Arc::new(Mutex::new(idle_since)),
             inbox_tx,
             task_handle: Mutex::new(Some(handle)),
@@ -1165,6 +1281,103 @@ mod tests {
             .map_err(|_| ())
             .expect("OnceCell should accept first set");
         host.threads.insert(thread_id.to_string(), cell);
+    }
+
+    fn reasoning_bootstrap(effort: &str) -> ThreadBootstrap {
+        serde_json::from_value(serde_json::json!({
+            "assistant_id": "asst", "project_id": "project", "chat_id": "chat-T",
+            "model": "test", "completions_url": "http://127.0.0.1/completions",
+            "reasoning_effort": effort, "compaction": {"off": {}}
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn reasoning_update_preserves_matching_driver_and_rejects_busy_changes() {
+        let host = empty_host();
+        insert_thread(&host, "T", None);
+        let original = host.threads.get("T").unwrap().get().unwrap().clone();
+        let same = ensure_thread(
+            &host,
+            "T",
+            reasoning_bootstrap("medium"),
+            Instant::now(),
+            "token".into(),
+        )
+        .await
+        .unwrap();
+        assert!(Arc::ptr_eq(&original, &same));
+        assert!(matches!(
+            ensure_thread(
+                &host,
+                "T",
+                reasoning_bootstrap("none"),
+                Instant::now(),
+                "token".into()
+            )
+            .await,
+            Err(RunnerError::InvocationBusy)
+        ));
+        assert!(Arc::ptr_eq(
+            host.threads.get("T").unwrap().get().unwrap(),
+            &original
+        ));
+    }
+
+    #[tokio::test]
+    async fn reasoning_update_rejects_bootstrap_captured_before_last_completion() {
+        let host = empty_host();
+        insert_thread(&host, "T", None);
+        let original = host.threads.get("T").unwrap().get().unwrap().clone();
+
+        // Capture the old history while the driver is busy, then deterministically
+        // model completion/persistence before ensure_thread obtains admission.
+        let bootstrap_started_at = Instant::now();
+        let stale_bootstrap = reasoning_bootstrap("none");
+        *original.idle_since.lock().unwrap() = Some(bootstrap_started_at + Duration::from_nanos(1));
+
+        assert!(matches!(
+            ensure_thread(
+                &host,
+                "T",
+                stale_bootstrap,
+                bootstrap_started_at,
+                "token".into()
+            )
+            .await,
+            Err(RunnerError::InvocationBusy)
+        ));
+        assert!(Arc::ptr_eq(
+            host.threads.get("T").unwrap().get().unwrap(),
+            &original
+        ));
+        assert_eq!(original.reasoning_effort, "medium");
+        assert!(original.task_handle.lock().unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn reasoning_update_rehydrates_idle_driver() {
+        let host = empty_host();
+        insert_thread(&host, "T", Some(Instant::now()));
+        let original = host.threads.get("T").unwrap().get().unwrap().clone();
+        let replacement = ensure_thread(
+            &host,
+            "T",
+            reasoning_bootstrap("none"),
+            Instant::now(),
+            "token".into(),
+        )
+        .await
+        .unwrap();
+        assert!(!Arc::ptr_eq(&original, &replacement));
+        assert_eq!(replacement.reasoning_effort, "none");
+        replacement
+            .task_handle
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap()
+            .abort();
     }
 
     #[tokio::test]

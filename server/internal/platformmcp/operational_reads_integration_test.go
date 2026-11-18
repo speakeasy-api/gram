@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -87,6 +88,7 @@ func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
 	require.Equal(t, route.ID.String(), output.Routes[0].ID)
 	require.Equal(t, destination.ID.String(), output.Routes[0].DestinationID)
 	require.True(t, output.Routes[0].Enabled)
+	require.Empty(t, output.Routes[0].MinSeverity, "only connection logs routes have a level")
 	require.True(t, strings.HasSuffix(output.ManagementURL, "/data/exports"))
 
 	encoded, err := json.Marshal(output)
@@ -418,29 +420,32 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	require.NotContains(t, string(encoded), "trace-id")
 }
 
-func TestListRecentToolCallsRequiresLogRead(t *testing.T) {
+// Project access and organization administration do not imply log:read; such a
+// member is not refused but reads only their own scope, like the dashboard.
+func TestListRecentToolCallsWithoutLogReadStaysInOwnScope(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_recent_tool_calls_log_read")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	agents := seedOwnerScopeAgents(t, ctx, conn, principal)
 	telemetry := &recordingRecentToolCallReader{rows: nil}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
 		WithAuthorization(engine).
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
-	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
-	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{
+	ctx = platformMemberContext(ctx, principal,
 		authz.NewGrant(authz.ScopeProjectRead, project.ID.String()),
 		authz.NewGrant(authz.ScopeProjectWrite, project.ID.String()),
 		authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID),
-	})
+	)
 
 	_, err = reader.ListRecentToolCalls(ctx, principal, ListRecentToolCallsInput{ProjectSlug: project.Slug})
-	require.ErrorIs(t, err, ErrForbidden)
-	require.Empty(t, telemetry.params.GramProjectID, "no tool-call rows are read without log:read")
+	require.NoError(t, err)
+	require.Equal(t, project.ID.String(), telemetry.params.GramProjectID)
+	require.Equal(t, &telemetryrepo.OwnScope{UserID: principal.UserID, UserEmail: agents.email, AgentIDs: []string{agents.own.String()}, IdentityOrg: ""}, telemetry.params.OwnScope,
+		"without log:read the read is scoped to the member and the agents they currently own")
 }
 
 func TestListRecentToolCallsProjectsAgentIdentityAndFilters(t *testing.T) {
@@ -509,7 +514,8 @@ func TestRecentToolCallAgentContractMatchesUnavailable(t *testing.T) {
 	require.Equal(t, a.output, b.output)
 	require.Equal(t, a.Meta, b.Meta)
 	require.Equal(t, bothAudiences, a.Meta.Audiences)
-	require.Equal(t, discoveryLogRead, a.Meta.DiscoveryScopes)
+	require.Equal(t, ExternalAuthorizationMember, a.Meta.Authorization)
+	require.Empty(t, a.Meta.DiscoveryScopes, "every member has their own calls to list")
 }
 
 func TestRecentToolCallTargetOmitsUnclassifiedShadowSource(t *testing.T) {
@@ -701,4 +707,84 @@ func alwaysEnabledFeature(context.Context, string) (bool, error) {
 
 func alwaysDisabledFeature(context.Context, string) (bool, error) {
 	return false, nil
+}
+
+func createConnectionLogsExport(ctx context.Context, reader *PostgresReader, principal Principal, projectID string) (CreateDataExportOutput, error) {
+	output, err := reader.CreateDataExport(ctx, principal, CreateDataExportInput{
+		ProjectID:     projectID,
+		Name:          "Connection logs collector",
+		EndpointURL:   "https://otel.example.test/v1",
+		DataSource:    "mcp_connection_logs",
+		SensitiveData: "exclude",
+		Enabled:       nil,
+		Confirmed:     true,
+	})
+	if err != nil {
+		return output, fmt.Errorf("create export: %w", err)
+	}
+	return output, nil
+}
+
+func TestCreateDataExportCreatesConnectionLogs(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_connection_logs")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
+
+	output, err := createConnectionLogsExport(ctx, reader, principal, project.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "mcp_connection_logs", output.Route.DataSource)
+	require.Equal(t, project.ID.String(), output.Route.ProjectID)
+	require.True(t, output.Route.Enabled)
+	require.Equal(t, dataexports.MinSeverityError, output.Route.MinSeverity, "the default level")
+}
+
+func TestCreateDataExportSetsTheConnectionLogLevel(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_connection_log_level")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test")).
+		WithDataExports(testenv.NewEncryptionClient(t), mustParseURL(t, "https://app.getgram.test"))
+
+	input := CreateDataExportInput{
+		ProjectID:     project.ID.String(),
+		Name:          "Connection logs collector",
+		EndpointURL:   "https://otel.example.test/v1",
+		DataSource:    "product_telemetry",
+		SensitiveData: "exclude",
+		Enabled:       nil,
+		MinSeverity:   dataexports.MinSeverityWarn,
+		Confirmed:     true,
+	}
+	_, err = reader.CreateDataExport(ctx, principal, input)
+	require.ErrorIs(t, err, ErrDataExportInvalidInput, "the level is only for connection logs")
+	require.Equal(t, "invalid_input", requireDataExportRefusal(t, err).Code)
+
+	input.DataSource = "mcp_connection_logs"
+	input.MinSeverity = "debug"
+	_, err = reader.CreateDataExport(ctx, principal, input)
+	require.ErrorIs(t, err, ErrDataExportInvalidInput)
+
+	input.MinSeverity = dataexports.MinSeverityWarn
+	output, err := reader.CreateDataExport(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, dataexports.MinSeverityWarn, output.Route.MinSeverity)
+	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionDataExportRouteCreate)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, dataexports.MinSeverityWarn, snapshot["min_severity"], "the create audit records the level")
+
+	listed, err := reader.ListDataExports(ctx, principal, ListDataExportsInput{ProjectID: project.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Routes, 1)
+	require.Equal(t, dataexports.MinSeverityWarn, listed.Routes[0].MinSeverity)
 }

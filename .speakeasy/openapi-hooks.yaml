@@ -431,6 +431,8 @@ components:
       properties:
         delivery_failure:
           $ref: '#/components/schemas/HookDeliveryFailureData'
+        install_failure:
+          $ref: '#/components/schemas/HookInstallFailureData'
         mcp:
           $ref: '#/components/schemas/HookMCPData'
         mcp_attribution:
@@ -489,6 +491,7 @@ components:
             - skill.activated
             - notification.reported
             - client.delivery_failed
+            - client.install_failed
       description: Canonical Speakeasy feature event.
       required:
         - type
@@ -504,6 +507,9 @@ components:
         model:
           type: string
           description: Model identifier reported by the local agent.
+        surface:
+          type: string
+          description: Product surface that sent the event, set when it changes how the server handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.
         turn_id:
           type: string
           description: Generation, request, or turn identifier.
@@ -529,6 +535,39 @@ components:
       description: Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
       required:
         - adapter
+    HookInstallFailureData:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture of the device.
+          maxLength: 32
+        attempted_at:
+          type: string
+          description: RFC3339 time of the failed install, on the device clock.
+          format: date-time
+        cause:
+          type: string
+          description: Why a bootstrap script could not install the hooks binary.
+          enum:
+            - download
+            - checksum_mismatch
+        harness:
+          type: string
+          description: Coding agent harness the hook ran under.
+          maxLength: 64
+        os:
+          type: string
+          description: Operating system of the device.
+          maxLength: 32
+        version:
+          type: string
+          description: speakeasy-hooks version the script tried to install.
+          maxLength: 64
+      description: Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.
+      required:
+        - cause
+        - attempted_at
     HookMCPAttributionEntry:
       type: object
       properties:
@@ -732,10 +771,11 @@ components:
       properties:
         decision:
           type: string
-          description: Whether the local hook should allow or deny the action.
+          description: Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
           enum:
             - allow
             - deny
+            - ask
         effects:
           type: object
           description: Optional side-effect hints for hook SDKs.
@@ -887,6 +927,8 @@ tags:
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.
+  - name: commandSearch
+    description: Searches authorized project resources for Command K.
   - name: dashboards
     description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
   - name: dataExports
@@ -927,8 +969,6 @@ tags:
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
-  - name: launcher
-    description: Rank command palette candidates by the intent behind the text the user typed.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval
@@ -963,8 +1003,6 @@ tags:
     description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
-  - name: adminExternalCredentials
-    description: Platform-admin management of platform external_credentials — how Speakeasy authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformKillswitches
     description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Speakeasy session.
   - name: adminOpenRouterKeys

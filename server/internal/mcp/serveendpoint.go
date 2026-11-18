@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -18,9 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -35,7 +34,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -145,15 +144,21 @@ func (s *Service) endpointCustomDomainLockdown(ctx context.Context, logger *slog
 // project only to read the organization off it — so surfaces that know their
 // organization directly can ask at that scope.
 func (s *Service) organizationCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (bool, error) {
-	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, organizationID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return false, nil
-	case err != nil:
-		return false, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+	lockdown, err := s.organizationLockdown(ctx, logger, organizationID)
+	if err != nil {
+		return false, err
 	}
+	return lockdown.LockedDown, nil
+}
 
-	return len(domain.IpAllowlist) > 0, nil
+// organizationLockdown reads the organization's custom-domain lockdown,
+// including the host its traffic must use once the domain is serving.
+func (s *Service) organizationLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (customdomains.Lockdown, error) {
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organizationID)
+	if err != nil {
+		return customdomains.Lockdown{}, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+	}
+	return lockdown, nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,
@@ -317,8 +322,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 // that resolved through an mcp_endpoints → mcp_servers pair: the wrapper row
 // governs visibility, issuer gating, RBAC, and the variation group (AIS-633).
 // callerGated reports whether the caller already ran the issuer gate keyed on
-// mcp_servers.user_session_issuer_id; the in-toolset gate never runs on this
-// path regardless.
+// mcp_servers.user_session_issuer_id.
 func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.McpServer, callerGated bool) *hostedServing {
 	var groupID *uuid.UUID
 	if mcpServer.ToolVariationsGroupID.Valid {
@@ -328,14 +332,11 @@ func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.Mc
 	serverID := mcpServer.ID
 	return &hostedServing{
 		isPublic:              mcpServer.Visibility == mcpservers.VisibilityPublic,
-		runInToolsetGate:      false,
 		callerGated:           callerGated,
 		rbacResourceID:        mcpServer.ID,
 		toolVariationsGroupID: groupID,
 		mcpServerID:           &serverID,
 		mcpEndpointID:         &endpointID,
-		toolsetHosting:        nil,
-		toolsetAlias:          legacyalias.None(),
 	}
 }
 
@@ -380,7 +381,8 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		return none, nil
 	}
 
-	var match, outage remotesessions.UpstreamToken
+	var match, held remotesessions.UpstreamToken
+	var heldIssuer uuid.UUID
 	found, nullResources := 0, 0
 	for issuerID, entry := range tokens {
 		if entry.CredentialOwner != remotesessions.CredentialOwnerSelf && entry.Resource == "" {
@@ -389,16 +391,18 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		if !upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
 			continue
 		}
-		if entry.SessionUnavailable() {
-			outage = entry
+		if entry.HeldWithoutToken() {
+			if heldOutranks(entry, issuerID, held, heldIssuer) {
+				held, heldIssuer = entry, issuerID
+			}
 			continue
 		}
 		found++
 		match = entry
 	}
 	switch {
-	case found == 0 && outage.SessionUnavailable():
-		return none, outage.ClientCredentialErr
+	case found == 0 && held.HeldWithoutToken():
+		return none, held.ClientCredentialErr
 	case found == 1:
 		if err := match.ClientCredentialErr; err != nil {
 			return none, err
@@ -449,6 +453,19 @@ func upstreamTokenRoutes(issuerID uuid.UUID, entry remotesessions.UpstreamToken,
 			(entry.Resource == "" || grantRoutesToUpstream(entry.Resource, want, false))
 	}
 	return grantRoutesToUpstream(entry.Resource, want, false)
+}
+
+// heldOutranks reports whether held entry candidate, keyed under candidateIssuer,
+// answers instead of current, so the answer never depends on map order: an
+// outage, which a retry can clear, comes first, then the lower issuer id.
+func heldOutranks(candidate remotesessions.UpstreamToken, candidateIssuer uuid.UUID, current remotesessions.UpstreamToken, currentIssuer uuid.UUID) bool {
+	if !current.HeldWithoutToken() {
+		return true
+	}
+	if candidate.SessionUnavailable() != current.SessionUnavailable() {
+		return candidate.SessionUnavailable()
+	}
+	return bytes.Compare(candidateIssuer[:], currentIssuer[:]) < 0
 }
 
 // tunneledIssuerToken selects a tunneled backend's credential from the entry
@@ -528,8 +545,8 @@ func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, to
 // requests re-load their live ingress authority and supply its pinned namespace,
 // organization, and surface explicitly to the centralized resolver.
 //
-// A private namespace miss or policy mismatch is always authoritative and never
-// permits legacy toolset fallback. Transient ingress lookup failures return 503;
+// A private namespace miss or policy mismatch is always authoritative.
+// Transient ingress lookup failures return 503;
 // stale, deleted, disabled, or mismatched authority remains externally 404 while
 // being warning-logged. logger should already carry the slug attribute.
 func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, *metamcprepo.MetaMcpServer, error) {
@@ -601,24 +618,13 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 //     authoritative for the slug and is not an OAuth endpoint, so we do
 //     NOT fall back — this keeps non-issuer-gated remote-backed servers
 //     returning not-found, matching the well-known surface.
-//   - Addressing miss (CodeNotFound, not ErrEndpointUnavailable): fall back
-//     to the legacy toolsets.mcp_slug lookup so issuer-gated toolset-backed
-//     servers without an mcp_endpoint row (predating the toolsets →
-//     mcp_servers migration) still resolve. A resolvable-but-unavailable
-//     address (disabled wrapper, dangling backend) is terminal.
+//   - Addressing miss: CodeNotFound.
 //
-// mcpRouteBase propagates into the resolved endpoint's
-// URL building on both the primary and fallback paths.
+// mcpRouteBase propagates into the resolved endpoint's URL building.
 //
 // mcpRouteBase mcproute.OrganizationGateway resolves slug as an organization slug to that
 // organization's gateway instead.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base) (*ResolvedMcpEndpoint, error) {
-	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug, mcpRouteBase, mcpmetrics.LegacyFallbackOAuth)
-}
-
-// loadResolvedMcpEndpointBySlug is LoadResolvedMcpEndpointBySlug with the
-// entry point its legacy fallback is attributed to.
-func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
 	if mcpRouteBase == mcproute.OrganizationGateway {
 		gateway, err := s.loadOrganizationGateway(ctx, slug)
 		if err != nil {
@@ -646,7 +652,7 @@ func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 	case mcpendpoints.IsAddressMiss(err):
-		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase, fallbackEntryPoint)
+		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	default:
 		return nil, err
 	}
@@ -1132,7 +1138,7 @@ func (s *Service) prepareProxyBackendContext(
 	}
 	ctx = authorized
 
-	accountType, _ := mv.ResolveOrganizationTier(ctx, logger, s.billingRepository, projectWithOrganization.ID, billing.Tier(projectWithOrganization.GramAccountType))
+	accountType, _ := orgaccount.ResolveTier(ctx, logger, s.billingRepository, projectWithOrganization.ID, billing.Tier(projectWithOrganization.GramAccountType))
 	ctx = remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
 		OrganizationID:   projectWithOrganization.ID,
 		OrganizationSlug: projectWithOrganization.Slug,

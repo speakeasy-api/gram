@@ -19,8 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -407,4 +412,50 @@ func cacheBustZipFixture(t *testing.T, fixturePath string) []byte {
 	require.NoError(t, err)
 
 	return buf.Bytes()
+}
+
+// countingReader records whether the upload body was read.
+type countingReader struct {
+	reads int
+}
+
+func (r *countingReader) Read([]byte) (int, error) {
+	r.reads++
+	return 0, io.EOF
+}
+
+func TestService_UploadFunctions_RefusedWhenFunctionsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAssetsService(t)
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	disabled := svc.NewService(logger, tracerProvider, guardianPolicy, ti.conn, ti.sessionManager, ti.chatSessionsManager, ti.storage, "test-jwt-secret",
+		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		audit.NewLogger(),
+		false,
+	)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+
+	body := &countingReader{reads: 0}
+	_, err = disabled.UploadFunctions(ctx, &assets.UploadFunctionsForm{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/zip",
+		ContentLength:    100,
+	}, io.NopCloser(body))
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotImplemented, oopsErr.Code)
+	require.Equal(t, "functions are not available on this deployment", oopsErr.Error())
+	require.Zero(t, body.reads, "the upload body must not be read on a deployment without Functions")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }

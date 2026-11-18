@@ -94,6 +94,36 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 	return nil
 }
 
+// ResyncMCPServerRemoteSessionIssuersForConsolidation is the form issuer
+// consolidation runs in its own transaction, after it has moved the source's
+// servers and bindings and retired the source. It reconciles the project's
+// associations without the gateway capture, then derives the issuer once from
+// the result: the capture is the only reconcile step that reads the derived
+// value, and consolidation records what configuration proves before the move
+// instead of letting it decide from the merged bindings.
+//
+// The caller must hold LockEMAWriterScope for projectID before its first
+// mutation or row lock.
+func ResyncMCPServerRemoteSessionIssuersForConsolidation(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+	if organizationID == "" || projectID == uuid.Nil {
+		return fmt.Errorf("resync mcp server remote session issuers for consolidation: no tenant scope")
+	}
+	if err := upstreamclients.ReconcileWithoutGatewayCaptureInLockedTransaction(ctx, tx, organizationID, projectID, userIssuerIDs); err != nil {
+		return fmt.Errorf("resync mcp server remote session issuers for consolidation: %w", err)
+	}
+	if len(userIssuerIDs) == 0 {
+		return nil
+	}
+	if _, err := mcpserversrepo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+		UserSessionIssuerIds: userIssuerIDs,
+		OrganizationID:       organizationID,
+		ProjectID:            projectID,
+	}); err != nil {
+		return fmt.Errorf("resync mcp server remote session issuers for consolidation: %w", err)
+	}
+	return nil
+}
+
 // BestEffortResyncMCPServerRemoteSessionIssuers is the post-commit form: the
 // mutation it follows has already committed, so a failure is logged rather
 // than returned and the stale value it leaves is recoverable.

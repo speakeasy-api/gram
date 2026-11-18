@@ -567,3 +567,14 @@ WHERE a.organization_id = @organization_id
     OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
       AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
   );
+
+-- name: ListOwnedAgentIDs :many
+-- The agents whose activity counts as the user's own. Ownership follows the
+-- agent-management rule: an owner whose agent is latched for reassignment no
+-- longer answers for it, so its sessions and logs stop being theirs.
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = @organization_id
+  AND a.owner_user_id = @owner_user_id
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE;

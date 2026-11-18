@@ -10,6 +10,8 @@ const config: KnipConfig = {
   entry: [
     // Invoked by the Go registry HTTP integration test, outside Knip's import graph.
     "scripts/registry-discovery-wire.ts",
+    // Spawned as a child process by src/test/chatTestServerProcess.ts.
+    "src/test/chatTestServerMain.ts",
     "src/theme-init.ts",
     "src/consent-tools/main.tsx",
     "src/consent-page/consent-page.css",
@@ -18,6 +20,8 @@ const config: KnipConfig = {
   ignoreDependencies: [
     // Launched by .mise-tasks/start/agentation.sh, outside the import graph.
     "agentation-mcp",
+    // oxlint spawns its tsrs-lint binary for --type-aware; nothing imports it.
+    "tsrs",
   ],
   ignoreBinaries: [
     // The package manager itself, used to chain scripts and to reach the

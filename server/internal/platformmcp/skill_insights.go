@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Insight projections leave documented optional fields at their zero values.
+//nolint:exhaustruct_v5 // Insight projections leave documented optional fields at their zero values.
 package platformmcp
 
 import (

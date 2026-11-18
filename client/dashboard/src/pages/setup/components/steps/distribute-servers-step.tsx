@@ -667,6 +667,8 @@ export function DistributeServersStep({
                         {
                           name: DEFAULT_PLUGIN_NAME,
                           slug: distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG,
+                          agentPluginsV1Compatible:
+                            defaultPlugin?.agentPluginsV1Compatible,
                         },
                       ]}
                     />

@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type MigrateIssuerRequestBody2 = {
   /**
-   * The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.
+   * The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings, server impacts, or dropped client links.
    */
   confirmedWarningsFingerprint?: string | undefined;
   /**

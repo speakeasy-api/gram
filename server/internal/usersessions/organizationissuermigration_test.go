@@ -1,6 +1,7 @@
 package usersessions_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -573,9 +574,47 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.True(t, preflight.CanMigrate)
 	require.Equal(t, 1, preflight.RemoteSessionCount)
 
-	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	// Another agent's attachment whose connection was since disconnected. The
+	// merge moves only live connections, so this attachment stays behind and
+	// leaves with the source's client bindings instead of aborting the merge.
+	staleSubject := urn.NewUserSubject("remote-migrate-stale-user")
+	staleSession, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            staleSubject,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+		AccessTokenEncrypted:  "test-ciphertext",
+		Scopes:                []string{"openid"},
+	})
+	require.NoError(t, err)
+	staleAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Remote migration stale agent",
+	})
+	require.NoError(t, err)
+	staleBindingID, err := fixtures.InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           staleAgent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+		RemoteSessionID:       staleSession.ID,
+		GrantGeneration:       staleSession.GrantGeneration,
+		AttachedBySubjectID:   "remote-migrate-stale-user",
+	})
+	require.NoError(t, err)
+	disconnected, err := remoteRepo.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessionsrepo.SoftDeleteRemoteSessionBySubjectAndClientParams{
+		SubjectUrn: staleSubject, RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: sourceID,
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Len(t, disconnected, 1)
+
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	require.Equal(t, 1, result.RemoteSessionsMigrated)
+	_, err = fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, staleBindingID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a disconnected connection's attachment leaves with the source")
 
 	remoteSessionAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: remoteSession.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
@@ -594,6 +633,114 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
 	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "two distinct target upstream issuers must fail closed")
+
+	// The server was its source issuer's only consumer, so consolidation
+	// pinned the client it used. As the target's only consumer it also takes
+	// the client the target bound, which the preview reports before it does.
+	require.Len(t, preflight.ServerImpacts, 1)
+	impact := preflight.ServerImpacts[0]
+	require.Equal(t, mcpServerID.String(), impact.McpServerID)
+	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("warning"), impact.ImpactSeverity)
+	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"changes_provider", "pinned"}, impact.Reasons)
+	require.Equal(t, []string{remoteClient.ID.String()}, impact.PinnedClientIds)
+	require.Len(t, impact.ClientsAfter, 2)
+	require.Len(t, result.ServerImpacts, 1, "the migrate result reports the same change")
+}
+
+// seedMigrationRemoteClient seeds an upstream client bound to each issuer.
+func seedMigrationRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, slug string, issuerIDs ...uuid.UUID) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	upstream := "https://" + slug + ".example.com"
+	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              slug,
+		Issuer:                            upstream,
+		AuthorizationEndpoint:             conv.ToPGText(upstream + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(upstream + "/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	client, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              slug + "-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	for _, issuerID := range issuerIDs {
+		require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: client.ID,
+			UserSessionIssuerID:   issuerID,
+		}))
+	}
+	return client.ID
+}
+
+// An agent attached to one client on both issuers through different people's
+// logins cannot be merged: either attachment would silently replace the other.
+func TestOrganizationUserSessionIssuerMigrateRefusesAttachmentsOnDifferentLogins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "different-logins-source")
+	targetID := seedIssuer(t, ctx, ti, "different-logins-target")
+	clientID := seedMigrationRemoteClient(t, ctx, ti, "different-logins-upstream", sourceID, targetID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Different logins agent",
+	})
+	require.NoError(t, err)
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	fixtures := testrepo.New(ti.conn)
+	bindingIDs := map[uuid.UUID]uuid.UUID{}
+	for issuerID, person := range map[uuid.UUID]string{sourceID: "different-logins-first", targetID: "different-logins-second"} {
+		login, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+			SubjectUrn:            urn.NewUserSubject(person),
+			UserSessionIssuerID:   issuerID,
+			RemoteSessionClientID: clientID,
+			AccessTokenEncrypted:  "test-ciphertext",
+			Scopes:                []string{"openid"},
+		})
+		require.NoError(t, err)
+		bindingIDs[issuerID], err = fixtures.InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
+			ProjectID:             *authCtx.ProjectID,
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			PrincipalID:           agent.ID,
+			UserSessionIssuerID:   issuerID,
+			RemoteSessionClientID: clientID,
+			RemoteSessionID:       login.ID,
+			GrantGeneration:       login.GrantGeneration,
+			AttachedBySubjectID:   person,
+		})
+		require.NoError(t, err)
+	}
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.Equal(t, 1, preflight.PrincipalBindingConflictCount)
+	require.False(t, preflight.CanMigrate)
+
+	_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
+	for issuerID, bindingID := range bindingIDs {
+		bindingIssuerID, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingID)
+		require.NoError(t, err, "a refused merge keeps both attachments")
+		require.Equal(t, issuerID, bindingIssuerID)
+	}
 }
 
 func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
@@ -611,9 +758,11 @@ func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
 
 	organizationTarget, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "rbac-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
 	require.NoError(t, err)
+	// The preflight runs the consolidation and rolls it back, taking its
+	// locks, so it needs the same scope as the consolidation.
 	readCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
 	_, err = ti.service.GetIssuerMigratePreflight(readCtx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.ID, TargetID: organizationTarget.ID})
-	require.NoError(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.MigrateIssuer(readCtx, &orggen.MigrateIssuerPayload{SourceID: source.ID, TargetID: organizationTarget.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.MoveIssuer(readCtx, &orggen.MoveIssuerPayload{ID: source.ID})

@@ -326,7 +326,7 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 }
 
 func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, bool) {
-	//nolint:exhaustruct // Detail rows intentionally omit list-only timestamps.
+	//nolint:exhaustruct_v5 // Detail rows intentionally omit list-only timestamps.
 	return catalogSourceFromRow(repo.ListMCPRegistriesRow{
 		ID:                   row.ID,
 		Name:                 "",

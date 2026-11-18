@@ -139,6 +139,20 @@ type UpdateShadowMCPInventoryServerNameRequestBody struct {
 	Name      string `form:"name" json:"name" xml:"name"`
 }
 
+// SetShadowMCPOfficialServerRequestBody is the type of the "access" service
+// "setShadowMCPOfficialServer" endpoint HTTP request body.
+type SetShadowMCPOfficialServerRequestBody struct {
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The Shadow MCP server's URL.
+	ServerURL string `form:"server_url" json:"server_url" xml:"server_url"`
+	// The MCP server to link as the official version. Omit it to remove the link.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Switch the link off: keep direct connections to the Shadow MCP server
+	// working under the ordinary Shadow MCP rules instead of blocking them.
+	// Requires mcp_server_id.
+	AllowDirectAccess bool `form:"allow_direct_access" json:"allow_direct_access" xml:"allow_direct_access"`
+}
+
 // ResolveShadowMCPInventoryRequestRequestBody is the type of the "access"
 // service "resolveShadowMCPInventoryRequest" endpoint HTTP request body.
 type ResolveShadowMCPInventoryRequestRequestBody struct {
@@ -230,6 +244,12 @@ type CreateTemporaryGrantRequestBody struct {
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 	// Why the access is needed, recorded in the audit log.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Denied authorization challenges this grant answers. Each must be an
+	// unresolved deny of this scope by this principal that the grant's selector
+	// covers and that no exclusion still blocks; they are resolved as
+	// temporary_grant in the same transaction. Only accepted with a grant to one
+	// member (user:<id>).
+	ChallengeIds []string `form:"challenge_ids,omitempty" json:"challenge_ids,omitempty" xml:"challenge_ids,omitempty"`
 }
 
 // RenewTemporaryGrantRequestBody is the type of the "access" service
@@ -558,6 +578,13 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
+	// The MCP server linked as this Shadow MCP server's official version. While
+	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
+	// and the block points agents here.
+	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to link. Present only while no official server is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 }
 
 // ListShadowMCPInventoryUsersResponseBody is the type of the "access" service
@@ -5470,6 +5497,196 @@ type UpdateShadowMCPInventoryServerNameGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetShadowMCPOfficialServerUnauthorizedResponseBody is the type of the
+// "access" service "setShadowMCPOfficialServer" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetShadowMCPOfficialServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerForbiddenResponseBody is the type of the "access"
+// service "setShadowMCPOfficialServer" endpoint HTTP response body for the
+// "forbidden" error.
+type SetShadowMCPOfficialServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerBadRequestResponseBody is the type of the "access"
+// service "setShadowMCPOfficialServer" endpoint HTTP response body for the
+// "bad_request" error.
+type SetShadowMCPOfficialServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerNotFoundResponseBody is the type of the "access"
+// service "setShadowMCPOfficialServer" endpoint HTTP response body for the
+// "not_found" error.
+type SetShadowMCPOfficialServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerConflictResponseBody is the type of the "access"
+// service "setShadowMCPOfficialServer" endpoint HTTP response body for the
+// "conflict" error.
+type SetShadowMCPOfficialServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerUnsupportedMediaResponseBody is the type of the
+// "access" service "setShadowMCPOfficialServer" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetShadowMCPOfficialServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerInvalidResponseBody is the type of the "access"
+// service "setShadowMCPOfficialServer" endpoint HTTP response body for the
+// "invalid" error.
+type SetShadowMCPOfficialServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerInvariantViolationResponseBody is the type of the
+// "access" service "setShadowMCPOfficialServer" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetShadowMCPOfficialServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerUnexpectedResponseBody is the type of the "access"
+// service "setShadowMCPOfficialServer" endpoint HTTP response body for the
+// "unexpected" error.
+type SetShadowMCPOfficialServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetShadowMCPOfficialServerGatewayErrorResponseBody is the type of the
+// "access" service "setShadowMCPOfficialServer" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetShadowMCPOfficialServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListShadowMCPInventoryUsersUnauthorizedResponseBody is the type of the
 // "access" service "listShadowMCPInventoryUsers" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -9567,6 +9784,9 @@ type ScopeDefinitionResponseBody struct {
 	// agents cannot hold; those are ignored for the role's agent members rather
 	// than granted.
 	AgentEligible *bool `form:"agent_eligible,omitempty" json:"agent_eligible,omitempty" xml:"agent_eligible,omitempty"`
+	// Whether an administrator can give this scope for a limited time with
+	// createTemporaryGrant.
+	TemporaryGrantable *bool `form:"temporary_grantable,omitempty" json:"temporary_grantable,omitempty" xml:"temporary_grantable,omitempty"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -9691,6 +9911,13 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
+	// The MCP server linked as this Shadow MCP server's official version. While
+	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
+	// and the block points agents here.
+	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to link. Present only while no official server is linked.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 }
 
 // ShadowMCPAccessSummaryResponseBody is used to define fields on response body
@@ -9756,6 +9983,34 @@ type ShadowMCPInventoryApprovalRequestResponseBody struct {
 	// differing from what the latest approval rested on. Absent when nothing has
 	// drifted; cleared only by a new decision.
 	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
+}
+
+// ShadowMCPOfficialServerResponseBody is used to define fields on response
+// body types.
+type ShadowMCPOfficialServerResponseBody struct {
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The official server's display name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The official server's slug, when it has one.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Where agents connect. A gateway's address when the server is a gateway
+	// member. Absent while the server has no endpoint.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The gateway that serves the official server, when url is a gateway's address.
+	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
+	// True while the link is switched off: direct connections to the Shadow MCP
+	// server follow the ordinary Shadow MCP rules instead of being blocked.
+	DirectAccessAllowed *bool `form:"direct_access_allowed,omitempty" json:"direct_access_allowed,omitempty" xml:"direct_access_allowed,omitempty"`
+}
+
+// ShadowMCPSuggestedOfficialServerResponseBody is used to define fields on
+// response body types.
+type ShadowMCPSuggestedOfficialServerResponseBody struct {
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The server's display name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The server's slug, when it has one.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
@@ -10031,6 +10286,22 @@ type AuthzChallengeResponseBody struct {
 	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrantResponseBody `form:"resolution_temporary_grant,omitempty" json:"resolution_temporary_grant,omitempty" xml:"resolution_temporary_grant,omitempty"`
+}
+
+// ChallengeTemporaryGrantResponseBody is used to define fields on response
+// body types.
+type ChallengeTemporaryGrantResponseBody struct {
+	// Temporary grant ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// active: authorizing requests. expired: its deadline passed, or the same
+	// access was given again later as a new grant. revoked: ended early, so the
+	// grant no longer exists.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// When the grant stops, or stopped, authorizing new requests. Absent once
+	// revoked, and once the same access was given again later.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // ChallengeBucketResponseBody is used to define fields on response body types.
@@ -10080,6 +10351,8 @@ type ChallengeBucketResponseBody struct {
 	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrantResponseBody `form:"resolution_temporary_grant,omitempty" json:"resolution_temporary_grant,omitempty" xml:"resolution_temporary_grant,omitempty"`
 }
 
 // ChallengeResolutionResponseBody is used to define fields on response body
@@ -10381,6 +10654,19 @@ func NewUpdateShadowMCPInventoryServerNameRequestBody(p *access.UpdateShadowMCPI
 	return body
 }
 
+// NewSetShadowMCPOfficialServerRequestBody builds the HTTP request body from
+// the payload of the "setShadowMCPOfficialServer" endpoint of the "access"
+// service.
+func NewSetShadowMCPOfficialServerRequestBody(p *access.SetShadowMCPOfficialServerPayload) *SetShadowMCPOfficialServerRequestBody {
+	body := &SetShadowMCPOfficialServerRequestBody{
+		ProjectID:         p.ProjectID,
+		ServerURL:         p.ServerURL,
+		McpServerID:       p.McpServerID,
+		AllowDirectAccess: p.AllowDirectAccess,
+	}
+	return body
+}
+
 // NewResolveShadowMCPInventoryRequestRequestBody builds the HTTP request body
 // from the payload of the "resolveShadowMCPInventoryRequest" endpoint of the
 // "access" service.
@@ -10479,6 +10765,12 @@ func NewCreateTemporaryGrantRequestBody(p *access.CreateTemporaryGrantPayload) *
 	}
 	if p.Selector != nil {
 		body.Selector = marshalAccessSelectorToSelectorRequestBody(p.Selector)
+	}
+	if p.ChallengeIds != nil {
+		body.ChallengeIds = make([]string, len(p.ChallengeIds))
+		for i, val := range p.ChallengeIds {
+			body.ChallengeIds[i] = val
+		}
 	}
 	return body
 }
@@ -14465,6 +14757,12 @@ func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCP
 	for i, val := range body.BlockedPolicyIds {
 		v.BlockedPolicyIds[i] = val
 	}
+	if body.OfficialServer != nil {
+		v.OfficialServer = unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(body.OfficialServer)
+	}
+	if body.SuggestedOfficialServer != nil {
+		v.SuggestedOfficialServer = unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer(body.SuggestedOfficialServer)
+	}
 
 	return v
 }
@@ -14758,6 +15056,156 @@ func NewUpdateShadowMCPInventoryServerNameUnexpected(body *UpdateShadowMCPInvent
 // NewUpdateShadowMCPInventoryServerNameGatewayError builds a access service
 // updateShadowMCPInventoryServerName endpoint gateway_error error.
 func NewUpdateShadowMCPInventoryServerNameGatewayError(body *UpdateShadowMCPInventoryServerNameGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerUnauthorized builds a access service
+// setShadowMCPOfficialServer endpoint unauthorized error.
+func NewSetShadowMCPOfficialServerUnauthorized(body *SetShadowMCPOfficialServerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerForbidden builds a access service
+// setShadowMCPOfficialServer endpoint forbidden error.
+func NewSetShadowMCPOfficialServerForbidden(body *SetShadowMCPOfficialServerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerBadRequest builds a access service
+// setShadowMCPOfficialServer endpoint bad_request error.
+func NewSetShadowMCPOfficialServerBadRequest(body *SetShadowMCPOfficialServerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerNotFound builds a access service
+// setShadowMCPOfficialServer endpoint not_found error.
+func NewSetShadowMCPOfficialServerNotFound(body *SetShadowMCPOfficialServerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerConflict builds a access service
+// setShadowMCPOfficialServer endpoint conflict error.
+func NewSetShadowMCPOfficialServerConflict(body *SetShadowMCPOfficialServerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerUnsupportedMedia builds a access service
+// setShadowMCPOfficialServer endpoint unsupported_media error.
+func NewSetShadowMCPOfficialServerUnsupportedMedia(body *SetShadowMCPOfficialServerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerInvalid builds a access service
+// setShadowMCPOfficialServer endpoint invalid error.
+func NewSetShadowMCPOfficialServerInvalid(body *SetShadowMCPOfficialServerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerInvariantViolation builds a access service
+// setShadowMCPOfficialServer endpoint invariant_violation error.
+func NewSetShadowMCPOfficialServerInvariantViolation(body *SetShadowMCPOfficialServerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerUnexpected builds a access service
+// setShadowMCPOfficialServer endpoint unexpected error.
+func NewSetShadowMCPOfficialServerUnexpected(body *SetShadowMCPOfficialServerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetShadowMCPOfficialServerGatewayError builds a access service
+// setShadowMCPOfficialServer endpoint gateway_error error.
+func NewSetShadowMCPOfficialServerGatewayError(body *SetShadowMCPOfficialServerGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -18781,6 +19229,16 @@ func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventory
 	}
 	if body.ApprovalRequest != nil {
 		if err2 := ValidateShadowMCPInventoryApprovalRequestResponseBody(body.ApprovalRequest); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.OfficialServer != nil {
+		if err2 := ValidateShadowMCPOfficialServerResponseBody(body.OfficialServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.SuggestedOfficialServer != nil {
+		if err2 := ValidateShadowMCPSuggestedOfficialServerResponseBody(body.SuggestedOfficialServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -25339,6 +25797,248 @@ func ValidateUpdateShadowMCPInventoryServerNameGatewayErrorResponseBody(body *Up
 	return
 }
 
+// ValidateSetShadowMCPOfficialServerUnauthorizedResponseBody runs the
+// validations defined on setShadowMCPOfficialServer_unauthorized_response_body
+func ValidateSetShadowMCPOfficialServerUnauthorizedResponseBody(body *SetShadowMCPOfficialServerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerForbiddenResponseBody runs the validations
+// defined on setShadowMCPOfficialServer_forbidden_response_body
+func ValidateSetShadowMCPOfficialServerForbiddenResponseBody(body *SetShadowMCPOfficialServerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerBadRequestResponseBody runs the
+// validations defined on setShadowMCPOfficialServer_bad_request_response_body
+func ValidateSetShadowMCPOfficialServerBadRequestResponseBody(body *SetShadowMCPOfficialServerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerNotFoundResponseBody runs the validations
+// defined on setShadowMCPOfficialServer_not_found_response_body
+func ValidateSetShadowMCPOfficialServerNotFoundResponseBody(body *SetShadowMCPOfficialServerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerConflictResponseBody runs the validations
+// defined on setShadowMCPOfficialServer_conflict_response_body
+func ValidateSetShadowMCPOfficialServerConflictResponseBody(body *SetShadowMCPOfficialServerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerUnsupportedMediaResponseBody runs the
+// validations defined on
+// setShadowMCPOfficialServer_unsupported_media_response_body
+func ValidateSetShadowMCPOfficialServerUnsupportedMediaResponseBody(body *SetShadowMCPOfficialServerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerInvalidResponseBody runs the validations
+// defined on setShadowMCPOfficialServer_invalid_response_body
+func ValidateSetShadowMCPOfficialServerInvalidResponseBody(body *SetShadowMCPOfficialServerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerInvariantViolationResponseBody runs the
+// validations defined on
+// setShadowMCPOfficialServer_invariant_violation_response_body
+func ValidateSetShadowMCPOfficialServerInvariantViolationResponseBody(body *SetShadowMCPOfficialServerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerUnexpectedResponseBody runs the
+// validations defined on setShadowMCPOfficialServer_unexpected_response_body
+func ValidateSetShadowMCPOfficialServerUnexpectedResponseBody(body *SetShadowMCPOfficialServerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetShadowMCPOfficialServerGatewayErrorResponseBody runs the
+// validations defined on setShadowMCPOfficialServer_gateway_error_response_body
+func ValidateSetShadowMCPOfficialServerGatewayErrorResponseBody(body *SetShadowMCPOfficialServerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListShadowMCPInventoryUsersUnauthorizedResponseBody runs the
 // validations defined on listShadowMCPInventoryUsers_unauthorized_response_body
 func ValidateListShadowMCPInventoryUsersUnauthorizedResponseBody(body *ListShadowMCPInventoryUsersUnauthorizedResponseBody) (err error) {
@@ -30219,8 +30919,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest" || *body.Scope == "channels:connect" || *body.Scope == "channels:admin" || *body.Scope == "channels:read_all" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "memory:read" || *body.Scope == "memory:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "memory:read", "memory:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -30266,8 +30966,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:blocked_read" || body.Scope == "org:admin" || body.Scope == "org:blocked_admin" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest" || body.Scope == "project:read" || body.Scope == "project:blocked_read" || body.Scope == "project:write" || body.Scope == "project:blocked_write" || body.Scope == "mcp:read" || body.Scope == "mcp:blocked_read" || body.Scope == "mcp:write" || body.Scope == "mcp:blocked_write" || body.Scope == "mcp:connect" || body.Scope == "mcp:blocked_connect" || body.Scope == "mcp:auth" || body.Scope == "mcp:blocked_auth" || body.Scope == "environment:read" || body.Scope == "environment:blocked_read" || body.Scope == "environment:write" || body.Scope == "environment:blocked_write" || body.Scope == "skill:read" || body.Scope == "skill:blocked_read" || body.Scope == "skill:write" || body.Scope == "skill:blocked_write" || body.Scope == "plugin:write" || body.Scope == "plugin:blocked_write" || body.Scope == "assistant:read" || body.Scope == "assistant:blocked_read" || body.Scope == "assistant:write" || body.Scope == "assistant:blocked_write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "risk_policy:block" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "inference:execute" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:blocked_read" || body.Scope == "workload:write" || body.Scope == "workload:blocked_write") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:blocked_read" || body.Scope == "org:admin" || body.Scope == "org:blocked_admin" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest" || body.Scope == "channels:connect" || body.Scope == "channels:admin" || body.Scope == "channels:read_all" || body.Scope == "project:read" || body.Scope == "project:blocked_read" || body.Scope == "project:write" || body.Scope == "project:blocked_write" || body.Scope == "mcp:read" || body.Scope == "mcp:blocked_read" || body.Scope == "mcp:write" || body.Scope == "mcp:blocked_write" || body.Scope == "mcp:connect" || body.Scope == "mcp:blocked_connect" || body.Scope == "mcp:auth" || body.Scope == "mcp:blocked_auth" || body.Scope == "environment:read" || body.Scope == "environment:blocked_read" || body.Scope == "environment:write" || body.Scope == "environment:blocked_write" || body.Scope == "skill:read" || body.Scope == "skill:blocked_read" || body.Scope == "skill:write" || body.Scope == "skill:blocked_write" || body.Scope == "plugin:write" || body.Scope == "plugin:blocked_write" || body.Scope == "assistant:read" || body.Scope == "assistant:blocked_read" || body.Scope == "assistant:write" || body.Scope == "assistant:blocked_write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "risk_policy:block" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "memory:read" || body.Scope == "memory:write" || body.Scope == "inference:execute" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:blocked_read" || body.Scope == "workload:write" || body.Scope == "workload:blocked_write") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "memory:read", "memory:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -30737,6 +31437,9 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 	if body.AgentEligible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_eligible", "body"))
 	}
+	if body.TemporaryGrantable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary_grantable", "body"))
+	}
 	if body.Sensitive == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sensitive", "body"))
 	}
@@ -30744,8 +31447,8 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("sub_scopes", "body"))
 	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "org:device_agent_sync" || *body.Slug == "org:hooks_ingest" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "mcp:auth" || *body.Slug == "mcp:blocked_auth" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "skill:read" || *body.Slug == "skill:blocked_read" || *body.Slug == "skill:write" || *body.Slug == "skill:blocked_write" || *body.Slug == "plugin:write" || *body.Slug == "plugin:blocked_write" || *body.Slug == "assistant:read" || *body.Slug == "assistant:blocked_read" || *body.Slug == "assistant:write" || *body.Slug == "assistant:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass" || *body.Slug == "risk_policy:block" || *body.Slug == "chat:read" || *body.Slug == "chat:write" || *body.Slug == "inference:execute" || *body.Slug == "log:read" || *body.Slug == "agent:read" || *body.Slug == "agent:write" || *body.Slug == "agent:authorize" || *body.Slug == "agent:transfer" || *body.Slug == "workload:read" || *body.Slug == "workload:blocked_read" || *body.Slug == "workload:write" || *body.Slug == "workload:blocked_write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "org:device_agent_sync" || *body.Slug == "org:hooks_ingest" || *body.Slug == "channels:connect" || *body.Slug == "channels:admin" || *body.Slug == "channels:read_all" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "mcp:auth" || *body.Slug == "mcp:blocked_auth" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "skill:read" || *body.Slug == "skill:blocked_read" || *body.Slug == "skill:write" || *body.Slug == "skill:blocked_write" || *body.Slug == "plugin:write" || *body.Slug == "plugin:blocked_write" || *body.Slug == "assistant:read" || *body.Slug == "assistant:blocked_read" || *body.Slug == "assistant:write" || *body.Slug == "assistant:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass" || *body.Slug == "risk_policy:block" || *body.Slug == "chat:read" || *body.Slug == "chat:write" || *body.Slug == "memory:read" || *body.Slug == "memory:write" || *body.Slug == "inference:execute" || *body.Slug == "log:read" || *body.Slug == "agent:read" || *body.Slug == "agent:write" || *body.Slug == "agent:authorize" || *body.Slug == "agent:transfer" || *body.Slug == "workload:read" || *body.Slug == "workload:blocked_read" || *body.Slug == "workload:write" || *body.Slug == "workload:blocked_write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "memory:read", "memory:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
 		}
 	}
 	if body.ResourceType != nil {
@@ -30789,8 +31492,8 @@ func ValidateScopeTaskResponseBody(body *ScopeTaskResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
 	}
 	for _, e := range body.Scopes {
-		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "org:device_agent_sync" || e == "org:hooks_ingest" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "mcp:auth" || e == "mcp:blocked_auth" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "inference:execute" || e == "log:read" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
+		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "org:device_agent_sync" || e == "org:hooks_ingest" || e == "channels:connect" || e == "channels:admin" || e == "channels:read_all" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "mcp:auth" || e == "mcp:blocked_auth" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "memory:read" || e == "memory:write" || e == "inference:execute" || e == "log:read" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "memory:read", "memory:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
 		}
 	}
 	return
@@ -30888,13 +31591,13 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest" || *body.Scope == "channels:connect" || *body.Scope == "channels:admin" || *body.Scope == "channels:read_all" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "memory:read" || *body.Scope == "memory:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "memory:read", "memory:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "org:device_agent_sync" || e == "org:hooks_ingest" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "mcp:auth" || e == "mcp:blocked_auth" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "inference:execute" || e == "log:read" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
+		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "org:device_agent_sync" || e == "org:hooks_ingest" || e == "channels:connect" || e == "channels:admin" || e == "channels:read_all" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "mcp:auth" || e == "mcp:blocked_auth" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "memory:read" || e == "memory:write" || e == "inference:execute" || e == "log:read" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "memory:read", "memory:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -30984,6 +31687,16 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 	}
 	if body.ApprovalRequest != nil {
 		if err2 := ValidateShadowMCPInventoryApprovalRequestResponseBody(body.ApprovalRequest); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.OfficialServer != nil {
+		if err2 := ValidateShadowMCPOfficialServerResponseBody(body.OfficialServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.SuggestedOfficialServer != nil {
+		if err2 := ValidateShadowMCPSuggestedOfficialServerResponseBody(body.SuggestedOfficialServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -31098,6 +31811,39 @@ func ValidateShadowMCPInventoryApprovalRequestResponseBody(body *ShadowMCPInvent
 	}
 	if body.EvidenceChangedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateShadowMCPOfficialServerResponseBody runs the validations defined on
+// ShadowMCPOfficialServerResponseBody
+func ValidateShadowMCPOfficialServerResponseBody(body *ShadowMCPOfficialServerResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.DirectAccessAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("direct_access_allowed", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateShadowMCPSuggestedOfficialServerResponseBody runs the validations
+// defined on ShadowMCPSuggestedOfficialServerResponseBody
+func ValidateShadowMCPSuggestedOfficialServerResponseBody(body *ShadowMCPSuggestedOfficialServerResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }
@@ -31525,9 +32271,37 @@ func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_at", *body.ResolvedAt, goa.FormatDateTime))
 	}
 	if body.ResolutionType != nil {
-		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "temporary_grant" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "temporary_grant", "dismissed"}))
 		}
+	}
+	if body.ResolutionTemporaryGrant != nil {
+		if err2 := ValidateChallengeTemporaryGrantResponseBody(body.ResolutionTemporaryGrant); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateChallengeTemporaryGrantResponseBody runs the validations defined on
+// ChallengeTemporaryGrantResponseBody
+func ValidateChallengeTemporaryGrantResponseBody(body *ChallengeTemporaryGrantResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "active" || *body.Status == "expired" || *body.Status == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "expired", "revoked"}))
+		}
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -31610,8 +32384,13 @@ func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_at", *body.ResolvedAt, goa.FormatDateTime))
 	}
 	if body.ResolutionType != nil {
-		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "temporary_grant" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "temporary_grant", "dismissed"}))
+		}
+	}
+	if body.ResolutionTemporaryGrant != nil {
+		if err2 := ValidateChallengeTemporaryGrantResponseBody(body.ResolutionTemporaryGrant); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -31645,8 +32424,8 @@ func ValidateChallengeResolutionResponseBody(body *ChallengeResolutionResponseBo
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.ResolutionType != nil {
-		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "temporary_grant" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "temporary_grant", "dismissed"}))
 		}
 	}
 	if body.CreatedAt != nil {

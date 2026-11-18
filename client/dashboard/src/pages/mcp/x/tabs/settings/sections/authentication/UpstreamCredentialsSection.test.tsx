@@ -71,13 +71,13 @@ describe("UpstreamCredentialsSection", () => {
     renderSection({ remoteMcpServerId: "remote-1" });
 
     expect(mocks.probed).toHaveBeenCalledWith("remote-1", true);
-    expect(screen.getByText(/it asks for sign-in/)).toBeTruthy();
+    expect(screen.getByText(/every tool call fails/)).toBeTruthy();
   });
 
   it.each([
     ["configured", "Credentials set up"],
-    ["setup_incomplete", "Authentication setup incomplete"],
-    ["no_auth_required", "No authentication required"],
+    ["setup_incomplete", "Setup incomplete"],
+    ["no_auth_required", "No authentication"],
   ])("states the %s status without a control to change it", (status, label) => {
     mocks.authentication = { ...mocks.authentication, status };
     renderSection({ remoteMcpServerId: "remote-1" });
@@ -92,8 +92,8 @@ describe("UpstreamCredentialsSection", () => {
     mocks.probe = "authentication-required";
     renderSection({ remoteMcpServerId: "remote-1" });
 
-    expect(screen.getByText("Authentication setup incomplete")).toBeTruthy();
-    expect(screen.getByText(/it asks for sign-in/)).toBeTruthy();
+    expect(screen.getByText("Setup incomplete")).toBeTruthy();
+    expect(screen.getByText(/every tool call fails/)).toBeTruthy();
   });
 
   it("leaves the derived status alone for people who cannot change it", () => {
@@ -102,7 +102,7 @@ describe("UpstreamCredentialsSection", () => {
     renderSection({ remoteMcpServerId: "remote-1" });
 
     expect(mocks.probed).toHaveBeenCalledWith("remote-1", false);
-    expect(screen.getByText("No authentication required")).toBeTruthy();
+    expect(screen.getByText("No authentication")).toBeTruthy();
     expect(screen.queryByText("Add credential")).toBeNull();
   });
 
@@ -111,7 +111,7 @@ describe("UpstreamCredentialsSection", () => {
     renderSection({ remoteMcpServerId: "remote-1" });
 
     expect(screen.getByText("Status unavailable")).toBeTruthy();
-    expect(screen.queryByText("No authentication required")).toBeNull();
+    expect(screen.queryByText("No authentication")).toBeNull();
   });
 
   it("does not probe a server with no remote upstream", () => {

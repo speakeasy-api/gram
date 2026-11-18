@@ -58,6 +58,9 @@ const mocks = vi.hoisted(() => ({
   nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
+  // The registrations the runtime requires of a server, by server id. A
+  // server left out requires every registration its issuer lists.
+  requiredClientIds: {} as Record<string, string[]>,
   serverAuth: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
@@ -65,6 +68,13 @@ const mocks = vi.hoisted(() => ({
   plugins: vi.fn(),
   getPlugin: vi.fn(),
   listPolicyGrants: vi.fn(),
+  // The organization's custom domain, if any.
+  customDomains: [] as {
+    domain: string;
+    ipAllowlist: string[];
+    verified: boolean;
+    activated: boolean;
+  }[],
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -93,6 +103,14 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 }));
 vi.mock("@gram/client/react-query/remoteSessionsAttachBinding.js", () => ({
   useRemoteSessionsAttachBindingMutation: () => ({ mutateAsync: mocks.attach }),
+}));
+vi.mock("@gram/client/react-query/listDomains.js", () => ({
+  useListDomains: () => ({
+    data: { domains: mocks.customDomains },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("@gram/client/react-query/remoteSessionsDetachBinding.js", () => ({
   useRemoteSessionsDetachBindingMutation: () => ({ mutateAsync: vi.fn() }),
@@ -175,6 +193,25 @@ vi.mock("@/contexts/Sdk", () => ({
       listBindings: async () => ({ items: await mocks.bindings() }),
       attachBinding: mocks.attach,
       detachBinding: mocks.detach,
+      // The runtime requires every registration the issuer lists unless a
+      // test says otherwise.
+      // Read through the issuer list's own data without recording a call,
+      // so tests that count or inspect those calls are unaffected.
+      listServerClientAssociations: async (request: {
+        gramProject?: string;
+        mcpServerId: string;
+      }) => {
+        const pinned = mocks.requiredClientIds[request.mcpServerId];
+        if (pinned) return { associations: [], requiredClientIds: pinned };
+        const read = mocks.sessionClients.getMockImplementation();
+        const clients = ((read
+          ? await read({ gramProject: request.gramProject })
+          : []) ?? []) as Array<{ id: string }>;
+        return {
+          associations: [],
+          requiredClientIds: clients.map((client) => client.id),
+        };
+      },
     },
     remoteSessionClients: {
       list: async (request: object) => [
@@ -462,6 +499,7 @@ afterEach(() => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.requiredClientIds = {};
   mocks.projectId = "project_one";
   mocks.canFederate = true;
   mocks.canReadWorkloads = true;
@@ -515,6 +553,7 @@ beforeEach(() => {
   mocks.plugins.mockReturnValue([]);
   mocks.getPlugin.mockReset();
   mocks.listPolicyGrants.mockResolvedValue([]);
+  mocks.customDomains = [];
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.checkPolicyGrants.mockImplementation(answerChecks());
@@ -720,6 +759,28 @@ describe("Provisioning a new agent", () => {
       ),
     );
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("quotes the custom domain when its IP allowlist locks the platform host", async () => {
+    mocks.customDomains = [
+      {
+        domain: "mcp.example.com",
+        ipAllowlist: ["203.0.113.0/24"],
+        verified: true,
+        activated: true,
+      },
+    ];
+    fireEvent.click(await reachCredentialStep());
+
+    expect((await screen.findByLabelText("Claude Code")).textContent).toContain(
+      "https://mcp.example.com/agent-mcp/agent_new",
+    );
+    // The setup command is still minted on the platform host: the browser
+    // need not be inside the allowlist.
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
+    expect(String(mocks.fetch.mock.calls[0]?.[0])).not.toContain(
+      "mcp.example.com",
+    );
   });
 
   it("does not ask about the sign-in grant before a server is chosen", async () => {
@@ -1049,6 +1110,28 @@ describe("Federating a platform's own tokens", () => {
     expect(
       screen.getByText(/need permission to manage workload identities/),
     ).toBeTruthy();
+  });
+
+  it("says up front that a platform's link needs permission to trust it", () => {
+    // The Claude Tag button and shared links name the platform. Without
+    // workload:write the Agent sign-in step refuses the setup, so the reader
+    // learns it before choosing servers and signing in to them.
+    mocks.canFederate = false;
+    mocks.canReadWorkloads = false;
+    setup("claude-tag");
+    expect(
+      screen.getByText(/Setting up Claude Tag needs permission/),
+    ).toBeTruthy();
+  });
+
+  it("adds no permission notice for someone who can trust a platform", () => {
+    mocks.platforms.mockReturnValue([platform]);
+    setup("claude-tag");
+    expect(
+      screen.queryByText(
+        /needs permission to manage workload identities, and your role/,
+      ),
+    ).toBeNull();
   });
 
   it("offers the API key alone, with no error, to someone who cannot read the catalog", async () => {
@@ -1496,7 +1579,9 @@ describe("Connecting a GKE cluster", () => {
       { target: { value: "GitHub" } },
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "Change issuer" }),
+      await screen.findByRole("button", {
+        name: "Change MCP Authentication Provider",
+      }),
     );
 
     await waitFor(() =>
@@ -3885,6 +3970,8 @@ describe("The MCP sign-in tab", () => {
 
     await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.extendAgentKeys).not.toHaveBeenCalled();
+    // The question sits inside the server's row, which opens to answer it.
+    fireEvent.click(await screen.findByRole("button", { name: /^Tracker/ }));
     fireEvent.click(
       await screen.findByRole("combobox", {
         name: "Credential the key uses on Tracker",
@@ -4254,6 +4341,31 @@ describe("Servers that sign in as a person", () => {
       undefined,
       expect.anything(),
     );
+  });
+
+  it("asks only for the sign-ins the runtime requires of a server on a shared issuer", async () => {
+    // Without enforcement the issuer lists another server's registration
+    // too, which the creator never connected. The runtime requires only
+    // Linear's own, so Linear is ready and only its connection is attached.
+    mocks.sessionClients.mockResolvedValue([
+      { id: "client_linear", credentialOwner: "subject" },
+      { id: "client_other", credentialOwner: "subject" },
+    ]);
+    mocks.requiredClientIds = { server_linear: ["client_linear"] };
+    mocks.sessions.mockResolvedValue([
+      { ...mine, remoteSessionClientId: "client_linear" },
+    ]);
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("button", { name: /Linear.*Your connection/ });
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.attach).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Continue locked when a server's auth cannot be read", async () => {

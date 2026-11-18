@@ -1760,13 +1760,26 @@ SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE 
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: UpdateChatSummary :one
--- Persist an on-demand LLM session summary. Project-scoped so a summarize write
--- can never touch another project's chat. Returns the updated row timestamps.
+-- Persist an LLM session summary. Project-scoped so a summarize write can
+-- never touch another project's chat. summary_redacted records whether the
+-- summary was built from the risk-redacted transcript; team memory reads only
+-- redacted summaries. covered_through is the newest message the summary read:
+-- when a newer message landed while the summary was generated, the summary is
+-- stamped with covered_through instead of NOW() so the chat still reads as
+-- changed and is summarized again. Otherwise summary_generated_at is the write
+-- time, which the sweep's daily cap counts. Returns the updated row timestamps.
 UPDATE chats
 SET summary = @summary,
-    summary_generated_at = NOW(),
+    summary_generated_at = CASE
+      WHEN sqlc.narg(covered_through)::timestamptz IS NOT NULL AND EXISTS (
+        SELECT 1 FROM chat_messages m
+        WHERE m.chat_id = chats.id AND m.created_at > sqlc.narg(covered_through)::timestamptz
+      ) THEN sqlc.narg(covered_through)::timestamptz
+      ELSE NOW()
+    END,
+    summary_redacted = @summary_redacted,
     updated_at = NOW()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+WHERE chats.id = @id AND chats.project_id = @project_id AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
 -- name: GetToolCallSummaryContext :one
@@ -1976,8 +1989,53 @@ WHERE c.project_id = @project_id
   AND m.created_at <= @time_end;
 
 -- name: GetChatMetricsSummary :one
--- Aggregate the requested chat window first so resolution selection does not
--- sort unrelated project history for empty or narrow windows.
+-- Starts from the project's messages in the window, which
+-- chat_messages_project_id_created_at_idx serves as a range scan, so this step
+-- grows with the messages in the window rather than with the project's whole
+-- chat history. The latest resolution is then one LIMIT 1 lookup per active
+-- chat, which chat_resolutions_chat_id_created_at_idx serves as an index
+-- probe. Unlike the join it replaces, this shape stays cheap when the planner
+-- underestimates the window's rows, which happens when created_at statistics
+-- lag behind recent inserts. Postgres still picks the access paths by cost.
+WITH window_chats AS MATERIALIZED (
+  SELECT
+    m.chat_id,
+    MIN(m.created_at) AS first_message_at,
+    MAX(m.created_at) AS last_message_at
+  FROM chat_messages m
+  WHERE m.project_id = @project_id::uuid
+    AND m.created_at >= @time_start
+    AND m.created_at <= @time_end
+  GROUP BY m.chat_id
+),
+chat_stats AS (
+  SELECT
+    wc.chat_id,
+    EXTRACT(EPOCH FROM (wc.last_message_at - wc.first_message_at)) * 1000 AS duration_ms
+  FROM window_chats wc
+  INNER JOIN chats c ON c.id = wc.chat_id
+  WHERE c.project_id = @project_id::uuid
+    AND c.deleted IS FALSE
+)
+SELECT
+  COUNT(*)::bigint as total_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolution.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolution.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolution.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
+FROM chat_stats
+LEFT JOIN LATERAL (
+  SELECT cr.resolution
+  FROM chat_resolutions cr
+  WHERE cr.chat_id = chat_stats.chat_id
+    AND cr.project_id = @project_id::uuid
+  ORDER BY cr.created_at DESC
+  LIMIT 1
+) latest_resolution ON TRUE;
+
+-- name: ReferenceChatMetricsSummary :one
+-- Test fixture: the chats-first form GetChatMetricsSummary replaced. Tests
+-- compare the two on the same data to show the rewrite keeps its results.
 WITH chat_stats AS MATERIALIZED (
   SELECT
     c.id as chat_id,
@@ -2360,3 +2418,26 @@ SELECT pg_advisory_lock(@lock_key::bigint);
 
 -- name: ReleaseToolCallSummaryLock :exec
 SELECT pg_advisory_unlock(@lock_key::bigint);
+
+-- name: MarkChatSummaryEmpty :exec
+-- Records that a chat had nothing to summarize, so it reads as covered until
+-- new messages arrive. Project-scoped like UpdateChatSummary.
+UPDATE chats
+SET summary = NULL,
+    summary_generated_at = NOW(),
+    summary_redacted = TRUE,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetChatMemorySummaryEligibility :one
+-- Whether the background summary judge may summarize a chat: live, not
+-- excluded from memory, and not a session of a personal account or of an
+-- account whose type is not known yet. Matches the team memory readers' rule.
+SELECT (
+  c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND (ua.id IS NULL OR (ua.account_type IS NOT NULL AND ua.account_type <> 'personal'))
+)::boolean AS eligible
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = @id AND c.project_id = @project_id;

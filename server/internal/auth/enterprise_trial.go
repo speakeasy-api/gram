@@ -31,7 +31,9 @@ const enterpriseTrialDays int32 = 14
 
 // OrganizationFeatureSeeder enables baseline organization entitlements. The
 // dependency travels as a function because the productfeatures package that
-// implements it imports auth.
+// implements it imports auth. The service takes one seeder for organizations
+// it creates and one for organizations that already exist, since some
+// defaults apply only at creation.
 type OrganizationFeatureSeeder func(ctx context.Context, tx pgx.Tx, organizationID string) error
 
 // EnterpriseTrialBundleSeeder enables the additional entitlements an enterprise

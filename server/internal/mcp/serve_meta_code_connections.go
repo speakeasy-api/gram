@@ -122,7 +122,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	}
 	now := time.Now()
 	expires := now.Add(10 * time.Minute)
-	ticket := AuthnChallengeState{ //nolint:exhaustruct // The entry ticket carries only routing and identity binding; browser login supplies consent state.
+	ticket := AuthnChallengeState{ //nolint:exhaustruct_v5 // The entry ticket carries only routing and identity binding; browser login supplies consent state.
 		ID: uuid.NewString(), UserSessionIssuerID: gate.userSessionIssuerID,
 		Endpoint: ref, CreatedAt: now, FirstParty: true,
 		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true, CatalogID: uuid.Nil, CredentialID: uuid.Nil, ClientID: "", CatalogComplete: false, CatalogCanceled: false, ReviewReady: false},
@@ -288,7 +288,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 		state.Authentication, state.Instructions = connectionRouteFailure(err, codeConnectAvailable(gate))
 		return state
 	}
-	verdict, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
+	verdict, _, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
 	now = time.Now().UTC()
 	state.CheckedAt = &now
 	switch verdict {

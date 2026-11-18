@@ -66,9 +66,8 @@ var ScopeCategories = []ScopeCategory{
 
 // ScopeEntry is what a person needs to know about one scope before granting
 // it: a short name, what it allows, where it sits in the dashboard, and
-// whether it deserves a warning. The authorization semantics (expansions,
-// exclusions, visibility, agent eligibility) stay in scopes.go and the agent
-// runtime registry; the catalogue only describes them.
+// whether it deserves a warning. Entries are derived from Model, which also
+// holds the authorization semantics the catalogue only describes.
 type ScopeEntry struct {
 	Scope Scope
 
@@ -103,57 +102,10 @@ func (e ScopeEntry) SubScopes() []string {
 }
 
 // scopeCatalog lists every scope a role can hold, in the order the catalogue
-// presents them. ScopeRoot is deliberately absent: it is the engine's own
-// bypass, never a grant a person reads about.
-var scopeCatalog = []ScopeEntry{
-	{Scope: ScopeOrgRead, Label: "View organization", Category: ScopeCategoryOrg, ResourceType: "org", Description: "View organization settings and members.", Sensitivity: SensitivityNone},
-	{Scope: ScopeOrgBlockedRead, Label: "Exception: view organization", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Store exceptions for organization read access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeOrgAdmin, Label: "Manage organization", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Manage organization settings, members, roles and access. Includes removing members and changing what every role can do.", Sensitivity: SensitivityDestructiveAdmin},
-	{Scope: ScopeOrgBlockedAdmin, Label: "Exception: manage organization", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Store exceptions for organization admin access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeOrgDeviceAgentSync, Label: "Sync device agent plugins", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Let an agent's device agent sync the plugins assigned to it.", Sensitivity: SensitivityNone},
-	{Scope: ScopeOrgHooksIngest, Label: "Send hook events", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Let an agent send AI-tool hook events and telemetry.", Sensitivity: SensitivityNone},
-	{Scope: ScopeProjectRead, Label: "View projects", Category: ScopeCategoryProject, ResourceType: "project", Description: "View projects and project-related resources.", Sensitivity: SensitivityNone},
-	{Scope: ScopeProjectBlockedRead, Label: "Exception: view projects", Category: ScopeCategoryProject, ResourceType: "project", Description: "Store exceptions for project read access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeProjectWrite, Label: "Manage projects", Category: ScopeCategoryProject, ResourceType: "project", Description: "Create and modify projects and project-related resources.", Sensitivity: SensitivityNone},
-	{Scope: ScopeProjectBlockedWrite, Label: "Exception: manage projects", Category: ScopeCategoryProject, ResourceType: "project", Description: "Store exceptions for project write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPRead, Label: "View MCP servers", Category: ScopeCategoryMCP, ResourceType: "mcp", Description: "View MCP servers and their configuration.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPBlockedRead, Label: "Exception: view MCP servers", Category: ScopeCategoryMCP, ResourceType: "mcp", Description: "Store exceptions for MCP read access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPWrite, Label: "Manage MCP servers", Category: ScopeCategoryMCP, ResourceType: "mcp", Description: "Create, change and delete MCP servers and their configuration.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPBlockedWrite, Label: "Exception: manage MCP servers", Category: ScopeCategoryMCP, ResourceType: "mcp", Description: "Store exceptions for MCP write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPConnect, Label: "Connect to MCP servers", Category: ScopeCategoryMCP, ResourceType: "mcp", Description: "Connect to MCP servers and call their tools.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPBlockedConnect, Label: "Exception: connect to MCP servers", Category: ScopeCategoryMCP, ResourceType: "mcp", Description: "Store exceptions for MCP connect access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPAuth, Label: "Use shared auth clients", Category: ScopeCategoryMCPAuthClient, ResourceType: "mcp_auth_client", Description: "Use an upstream auth client to reach MCP servers. Applies on every server that shares the client.", Sensitivity: SensitivityNone},
-	{Scope: ScopeMCPBlockedAuth, Label: "Exception: use shared auth clients", Category: ScopeCategoryMCPAuthClient, ResourceType: "mcp_auth_client", Description: "Store exceptions for auth client use.", Sensitivity: SensitivityNone},
-	{Scope: ScopeEnvironmentRead, Label: "View environments", Category: ScopeCategoryEnvironment, ResourceType: "environment", Description: "View environments and their entries within the project, including secret values.", Sensitivity: SensitivityNone},
-	{Scope: ScopeEnvironmentBlockedRead, Label: "Exception: view environments", Category: ScopeCategoryEnvironment, ResourceType: "environment", Description: "Store exceptions for environment read access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeEnvironmentWrite, Label: "Manage environments", Category: ScopeCategoryEnvironment, ResourceType: "environment", Description: "Add, edit, clone, and remove environments within the project.", Sensitivity: SensitivityNone},
-	{Scope: ScopeEnvironmentBlockedWrite, Label: "Exception: manage environments", Category: ScopeCategoryEnvironment, ResourceType: "environment", Description: "Store exceptions for environment write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeSkillRead, Label: "View skills", Category: ScopeCategorySkill, ResourceType: "skill", Description: "View skills within the project.", Sensitivity: SensitivityNone},
-	{Scope: ScopeSkillBlockedRead, Label: "Exception: view skills", Category: ScopeCategorySkill, ResourceType: "skill", Description: "Store exceptions for skill read access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeSkillWrite, Label: "Manage skills", Category: ScopeCategorySkill, ResourceType: "skill", Description: "Create and modify skills within the project.", Sensitivity: SensitivityNone},
-	{Scope: ScopeSkillBlockedWrite, Label: "Exception: manage skills", Category: ScopeCategorySkill, ResourceType: "skill", Description: "Store exceptions for skill write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopePluginWrite, Label: "Publish plugins", Category: ScopeCategoryPlugin, ResourceType: "project", Description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", Sensitivity: SensitivityNone},
-	{Scope: ScopePluginBlockedWrite, Label: "Exception: publish plugins", Category: ScopeCategoryPlugin, ResourceType: "project", Description: "Store exceptions for plugin write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeAssistantRead, Label: "View assistants", Category: ScopeCategoryAssistant, ResourceType: "assistant", Description: "View and interact with assistants within the project.", Sensitivity: SensitivityNone},
-	{Scope: ScopeAssistantBlockedRead, Label: "Exception: view assistants", Category: ScopeCategoryAssistant, ResourceType: "assistant", Description: "Store exceptions for assistant read access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeAssistantWrite, Label: "Manage assistants", Category: ScopeCategoryAssistant, ResourceType: "assistant", Description: "Create and modify assistants within the project.", Sensitivity: SensitivityNone},
-	{Scope: ScopeAssistantBlockedWrite, Label: "Exception: manage assistants", Category: ScopeCategoryAssistant, ResourceType: "assistant", Description: "Store exceptions for assistant write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeRiskPolicyEvaluate, Label: "Evaluate risk policies", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Put the holder in the named risk policy's audience, so the policy is evaluated against their requests unless a bypass grant for the same policy exempts the request.", Sensitivity: SensitivityNone},
-	{Scope: ScopeRiskPolicyBypass, Label: "Bypass risk policies", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Exempt the holder from the named risk policy for the exact server the grant names, by URL or identity. It only subtracts from a matching evaluate grant and never puts anyone in a policy's audience.", Sensitivity: SensitivityNone},
-	{Scope: ScopeRiskPolicyBlock, Label: "Block shadow MCP servers", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Block specific shadow MCP servers under allow-by-default risk policies.", Sensitivity: SensitivityNone},
-	{Scope: ScopeChatRead, Label: "View agent sessions", Category: ScopeCategorySession, ResourceType: "chat", Description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", Sensitivity: SensitivityConversations},
-	{Scope: ScopeChatWrite, Label: "Manage agent sessions", Category: ScopeCategorySession, ResourceType: "chat", Description: "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own.", Sensitivity: SensitivityConversations},
-	{Scope: ScopeInferenceExecute, Label: "Run inference", Category: ScopeCategoryInference, ResourceType: "inference", Description: "Run model inference without accessing chat transcripts.", Sensitivity: SensitivityNone},
-	{Scope: ScopeLogRead, Label: "View tool logs", Category: ScopeCategoryLog, ResourceType: "project", Description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", Sensitivity: SensitivityToolLogs},
-	{Scope: ScopeAgentRead, Label: "View agents", Category: ScopeCategoryAgent, ResourceType: "agent", Description: "View agents and their settings.", Sensitivity: SensitivityNone},
-	{Scope: ScopeAgentWrite, Label: "Manage agents", Category: ScopeCategoryAgent, ResourceType: "agent", Description: "Create, configure, and manage agents.", Sensitivity: SensitivityNone},
-	{Scope: ScopeAgentAuthorize, Label: "Authorize agent credentials", Category: ScopeCategoryAgent, ResourceType: "agent", Description: "Authorize agents and manage their credentials.", Sensitivity: SensitivityNone},
-	{Scope: ScopeAgentTransfer, Label: "Transfer agent ownership", Category: ScopeCategoryAgent, ResourceType: "agent", Description: "Hand an agent to another owner. The previous owner loses control of it.", Sensitivity: SensitivityNone},
-	{Scope: ScopeWorkloadRead, Label: "View workload identities", Category: ScopeCategoryWorkload, ResourceType: "workload", Description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", Sensitivity: SensitivityNone},
-	{Scope: ScopeWorkloadBlockedRead, Label: "Exception: view workload identities", Category: ScopeCategoryWorkload, ResourceType: "workload", Description: "Store exceptions for workload read access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeWorkloadWrite, Label: "Manage workload identities", Category: ScopeCategoryWorkload, ResourceType: "workload", Description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", Sensitivity: SensitivityNone},
-	{Scope: ScopeWorkloadBlockedWrite, Label: "Exception: manage workload identities", Category: ScopeCategoryWorkload, ResourceType: "workload", Description: "Store exceptions for workload write access.", Sensitivity: SensitivityNone},
-}
+// presents them: by category, then as declared in Model, each block after its
+// permission. ScopeRoot is deliberately absent: it is the engine's own bypass,
+// never a grant a person reads about.
+var scopeCatalog = Model.deriveCatalog()
 
 var scopeCatalogByScope = func() map[Scope]ScopeEntry {
 	out := make(map[Scope]ScopeEntry, len(scopeCatalog))

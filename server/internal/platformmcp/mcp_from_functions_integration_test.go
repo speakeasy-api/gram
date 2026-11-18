@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -37,6 +36,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -404,13 +404,14 @@ func TestCreateMCPFromFunctionsNeverReturnsDatabaseErrorText(t *testing.T) {
 	broken.Close()
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-db-failure", Version: "0.0.1"}, nil))
-	registerCreateMCPFromFunctionsTool(registrar, service)
+	registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
+	registerCreateMCPFromFunctionsTool(registrar, service, true)
 	descriptor := registrar.Descriptors()[0]
 	ctx = ContextWithPrincipal(ctx, fixture.principal)
 
 	for _, confirmed := range []bool{true, false} {
 		arguments, err := json.Marshal(map[string]any{
-			"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+			"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
 			"idempotency_key": uuid.NewString(), "confirmed": confirmed,
 		})
 		require.NoError(t, err)
@@ -524,7 +525,7 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	engine := authz.NewEngine(logger, fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	revokerPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), fixture.conn, testenv.NewEncryptionClient(t), revokerPolicy, nil)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), fixture.conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, fixture.conn, testenv.NewEncryptionClient(t)), revokerPolicy, nil)
 	toolsetService := toolsets.NewService(logger, tracerProvider, nil, fixture.conn, sessionManager, nil, engine, audit.NewLogger(), nil, false, revoker)
 	serverService := mcpservers.NewService(logger, tracerProvider, fixture.conn, sessionManager, engine, audit.NewLogger(), nil, nil, false, nil, nil, networkaccess.DenyAllChecker{})
 	orgSlug := projectOrganizationSlug(ctx, fixture.conn, fixture.principal.OrganizationID)
@@ -573,9 +574,6 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	require.Equal(t, dashboardToolset.DefaultEnvironmentSlug, toolToolset.DefaultEnvironmentSlug)
 	require.Equal(t, dashboardToolset.Description, toolToolset.Description)
 	require.Equal(t, dashboardToolset.ToolSelectionMode, toolToolset.ToolSelectionMode)
-	toolAlias, err := legacyalias.Get(ctx, fixture.conn, fixture.project.ID, toolToolset.ID)
-	require.NoError(t, err)
-	require.Equal(t, legacyalias.None(), toolAlias, "the toolset has no legacy alias")
 	toolEndpoints, err := mcpendpointsrepo.New(fixture.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: fixture.project.ID, McpServerID: toolToolset.ID})
 	require.NoError(t, err)
 	require.Len(t, toolEndpoints, 1, "the canonical server gets one platform endpoint")
@@ -603,7 +601,8 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 
 	describe := func(service *MCPToolExposureService) Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-manifest", Version: "0.0.1"}, nil))
-		registerCreateMCPFromFunctionsTool(registrar, service)
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
+		registerCreateMCPFromFunctionsTool(registrar, service, true)
 		descriptors := registrar.Descriptors()
 		require.Len(t, descriptors, 1)
 		return descriptors[0]
@@ -622,9 +621,37 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 	require.Contains(t, unavailable.Description, "everyone holding that plugin receives it", "the first-server exception is named")
 	require.Contains(t, unavailable.Description, "requested, not confirmed delivered")
 
-	refusal := invokeUnavailable(t, unavailable, map[string]any{
-		"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+	refusal := invokeUnavailable(t, ContextWithPrincipal(t.Context(), fixture.principal), unavailable, map[string]any{
+		"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
 	require.Contains(t, refusal, "Creating an MCP server from a project's functions")
+}
+
+// A deployment that runs with Functions disabled keeps the tool in the
+// catalogue with the same manifest and refuses it, even with the tool
+// exposure service composed.
+func TestCreateMCPFromFunctionsRefusesWhenFunctionsDisabled(t *testing.T) {
+	t.Parallel()
+	_, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_disabled")
+	require.True(t, fixture.service.valid())
+
+	describe := func(functionsAvailable bool) Descriptor {
+		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-disabled", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
+		registerCreateMCPFromFunctionsTool(registrar, fixture.service, functionsAvailable)
+		descriptors := registrar.Descriptors()
+		require.Len(t, descriptors, 1)
+		return descriptors[0]
+	}
+	live, disabled := describe(true), describe(false)
+	require.Equal(t, live.Description, disabled.Description)
+	require.Equal(t, live.Meta, disabled.Meta)
+	require.Equal(t, live.InputSchema, disabled.InputSchema)
+
+	refusal := invokeUnavailable(t, ContextWithPrincipal(t.Context(), fixture.principal), disabled, map[string]any{
+		"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+		"idempotency_key": uuid.NewString(), "confirmed": true,
+	})
+	require.Contains(t, refusal, unavailableCreateMCPFromFunctionsMessage)
 }

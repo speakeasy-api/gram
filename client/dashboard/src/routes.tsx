@@ -148,6 +148,12 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  channels: {
+    title: "Channels",
+    url: "channels",
+    icon: "messages-square",
+    stage: "beta",
+  },
   assistants: {
     title: "Assistants",
     url: "assistants",
@@ -254,6 +260,12 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
           },
+          // Okta applications that match catalog servers. Rolled out behind
+          // okta-mcp-import, which the page checks.
+          okta: {
+            title: "Sync from Okta",
+            url: "sync-from-okta",
+          },
         },
       },
       // The single catalog entry point, and a tab of the MCP index rather than
@@ -289,11 +301,19 @@ const ROUTE_STRUCTURE = {
 
       // The Organization Gateway. A static segment beside `add`,
       // `catalog` and `sources`, with the same latent toolset-slug collision.
-      // It lives under MCP rather than the organization settings because it
-      // is opened from the head of the MCP Servers list.
+      // It lives under MCP rather than the organization settings because the
+      // Project Gateway, opened from the head of the MCP Servers list, shares
+      // its page.
       organizationGateway: {
         title: "Organization Gateway",
         url: "organization-gateway",
+      },
+      // The Organization Gateway limited to this project's servers. It is
+      // opened from the head of the MCP Servers list and is on and off with
+      // the Organization Gateway.
+      projectGateway: {
+        title: "Project Gateway",
+        url: "project-gateway",
       },
       // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
       // no slug of its own — routing identity lives on its mcp_endpoints.
@@ -443,8 +463,35 @@ const ROUTE_STRUCTURE = {
     title: "MCP Sessions",
     url: "mcp-sessions",
     icon: "users",
+    subPages: {
+      // One MCP Authentication Provider, chosen with the header's picker.
+      // The index opens the one an old `?issuerId=` link names, else the one
+      // picked last, else the organization's default, else the first.
+      provider: {
+        title: "MCP Authentication Provider",
+        url: ":issuerId",
+        subPages: {
+          connections: { title: "Connections", url: "connections" },
+          mcpServers: { title: "MCP servers", url: "mcp-servers" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+      // The provider list and its detail page before the picker. Static
+      // segments outrank `:issuerId`, so these still resolve.
+      configuration: {
+        title: "Configuration",
+        url: "configuration",
+        legacyRedirect: true,
+        subPages: {
+          issuerDetail: {
+            title: "MCP Authentication Provider",
+            url: ":issuerId",
+            legacyRedirect: true,
+          },
+        },
+      },
+    },
   },
-
   remoteIdentityProviders: {
     title: "Authorization Servers",
     url: "remote-identity-providers",
@@ -511,7 +558,7 @@ const ROUTE_STRUCTURE = {
         title: "Agents",
         url: "agents",
         icon: "bot",
-        stage: "preview",
+        stage: "beta",
         subPages: {
           new: {
             title: "New Agent Identity",
@@ -717,8 +764,9 @@ const ROUTE_STRUCTURE = {
   },
   // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
   // and is not in the nav. Its section URLs stay because tickets, bookmarks
-  // and block messages link to them: every index page redirects to
-  // Guardrails, and the tool and server detail pages beneath keep rendering.
+  // and block messages link to them: the MCPs index redirects to the Shadow
+  // MCP page, the other indexes to the Shadow AI targets tab of Guardrails,
+  // and the tool and server detail pages beneath keep rendering.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.
@@ -762,8 +810,8 @@ const ROUTE_STRUCTURE = {
       mcps: {
         title: "MCPs",
         url: "mcps",
-        // The MCPs index was the approvals queue; it lands on the MCP
-        // approvals tab of Guardrails rather than the policies list.
+        // The MCPs index was the approvals queue; it lands on the Shadow MCP
+        // page below. The server detail pages beneath it render.
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -773,14 +821,17 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  // The Shadow MCP paths predate the section and are sitting in bookmarks and
-  // tickets, so they redirect permanently rather than 404. The end-user
-  // request URLs (/shadow-mcp/request, /risk-policy-bypass/request) are
-  // top-level routes in App.tsx, are quoted verbatim in block messages
-  // already in people's terminals, and are deliberately left alone.
+  // Shadow MCP: the MCP server inventory and its approvals, beside
+  // Guardrails in the nav. Server detail pages live under the Shadow AI
+  // section above; the older /shadow-mcp/:serverSlug links redirect there.
+  // The end-user request URLs (/shadow-mcp/request,
+  // /risk-policy-bypass/request) are top-level routes in App.tsx, are quoted
+  // verbatim in block messages already in people's terminals, and are
+  // deliberately left alone.
   shadowMCP: {
     title: "Shadow MCP",
     url: "shadow-mcp",
+    icon: "eye-off",
     subPages: {
       detail: {
         title: "Shadow MCP Server",
@@ -1151,15 +1202,13 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "webhook",
     stage: "beta",
   },
-  // Rolled out behind gram-user-session-issuer-dashboard, which the root
-  // checks; the sidebar hides the entry while it is off.
   userSessionIssuers: {
-    title: "Speakeasy Authorization Servers",
+    title: "MCP Authentication",
     url: "user-session-issuers",
     icon: "key-round",
     subPages: {
       issuerDetail: {
-        title: "Speakeasy Authorization Server",
+        title: "MCP Authentication Provider",
         url: ":issuerId",
       },
     },

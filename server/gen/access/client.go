@@ -40,6 +40,7 @@ type Client struct {
 	ListShadowMCPInventoryEndpoint               goa.Endpoint
 	GetShadowMCPInventoryServerEndpoint          goa.Endpoint
 	UpdateShadowMCPInventoryServerNameEndpoint   goa.Endpoint
+	SetShadowMCPOfficialServerEndpoint           goa.Endpoint
 	ListShadowMCPInventoryUsersEndpoint          goa.Endpoint
 	ListShadowMCPInventoryServersForUserEndpoint goa.Endpoint
 	ResolveShadowMCPInventoryRequestEndpoint     goa.Endpoint
@@ -63,7 +64,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, listDirectoryPeople, syncDirectoryGroups, setDirectoryRoleMapping, setDirectoryRoleMappings, deleteDirectoryRoleMapping, previewDirectoryRoleSetup, applyDirectoryRoleSetup, listDirectoryReviewItems, resolveDirectoryReviewItem, getDirectoryReviewSettings, updateDirectoryReviewSettings, listScopes, listAgentPolicyScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess, createTemporaryGrant, listTemporaryGrants, renewTemporaryGrant, revokeTemporaryGrant goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, listDirectoryPeople, syncDirectoryGroups, setDirectoryRoleMapping, setDirectoryRoleMappings, deleteDirectoryRoleMapping, previewDirectoryRoleSetup, applyDirectoryRoleSetup, listDirectoryReviewItems, resolveDirectoryReviewItem, getDirectoryReviewSettings, updateDirectoryReviewSettings, listScopes, listAgentPolicyScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, setShadowMCPOfficialServer, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess, createTemporaryGrant, listTemporaryGrants, renewTemporaryGrant, revokeTemporaryGrant goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -90,6 +91,7 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirec
 		ListShadowMCPInventoryEndpoint:               listShadowMCPInventory,
 		GetShadowMCPInventoryServerEndpoint:          getShadowMCPInventoryServer,
 		UpdateShadowMCPInventoryServerNameEndpoint:   updateShadowMCPInventoryServerName,
+		SetShadowMCPOfficialServerEndpoint:           setShadowMCPOfficialServer,
 		ListShadowMCPInventoryUsersEndpoint:          listShadowMCPInventoryUsers,
 		ListShadowMCPInventoryServersForUserEndpoint: listShadowMCPInventoryServersForUser,
 		ResolveShadowMCPInventoryRequestEndpoint:     resolveShadowMCPInventoryRequest,
@@ -665,6 +667,25 @@ func (c *Client) GetShadowMCPInventoryServer(ctx context.Context, p *GetShadowMC
 //   - error: internal error
 func (c *Client) UpdateShadowMCPInventoryServerName(ctx context.Context, p *UpdateShadowMCPInventoryServerNamePayload) (err error) {
 	_, err = c.UpdateShadowMCPInventoryServerNameEndpoint(ctx, p)
+	return
+}
+
+// SetShadowMCPOfficialServer calls the "setShadowMCPOfficialServer" endpoint
+// of the "access" service.
+// SetShadowMCPOfficialServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetShadowMCPOfficialServer(ctx context.Context, p *SetShadowMCPOfficialServerPayload) (err error) {
+	_, err = c.SetShadowMCPOfficialServerEndpoint(ctx, p)
 	return
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/wide"
 )
@@ -50,7 +52,9 @@ func ParsePlatformHosts(rawHosts []string) (map[string]string, error) {
 
 // Middleware classifies each request by host: the server URL's host and the
 // extra platformHosts (from ParsePlatformHosts) are first-party, and every
-// other host must be an active custom domain.
+// other host must be an active custom domain. Restricted domains require a
+// resolved public client IP. CORS preflights are
+// answered upstream and intentionally do not pass through this gate.
 func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL, platformHosts map[string]string) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
 	logger = logger.With(attr.SlogComponent("custom_domains_middleware"))
@@ -135,6 +139,14 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				return
 			}
 
+			if len(domain.IpAllowlist) > 0 {
+				resolved, ok := requestip.FromContext(ctx)
+				if !ok || !allowlistedIP(resolved.Addr, domain.IpAllowlist) {
+					http.Error(w, "client IP is not allowed", http.StatusForbidden)
+					return
+				}
+			}
+
 			ctx = WithContext(ctx, &Context{
 				OrganizationID: domain.OrganizationID,
 				Domain:         domain.Domain,
@@ -151,4 +163,21 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// allowlistedIP rejects unresolved addresses and ignores unusable stored entries.
+func allowlistedIP(addr netip.Addr, entries []string) bool {
+	if !addr.IsValid() {
+		return false
+	}
+	addr = addr.Unmap()
+	for _, entry := range entries {
+		if prefix, err := netip.ParsePrefix(entry); err == nil && prefix.Contains(addr) {
+			return true
+		}
+		if allowed, err := netip.ParseAddr(entry); err == nil && allowed.Unmap() == addr {
+			return true
+		}
+	}
+	return false
 }
