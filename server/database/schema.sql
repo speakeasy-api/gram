@@ -18036,3 +18036,103 @@ COMMENT ON COLUMN memory_eval_runs.deleted IS '@access: confidential';
 CREATE INDEX IF NOT EXISTS memory_eval_runs_created_at_idx
 ON memory_eval_runs (created_at DESC, id DESC)
 WHERE deleted IS FALSE;
+
+-- Inference endpoint profiles: where an organization's AI harnesses (Claude
+-- Code, Codex) send inference, such as Amazon Bedrock, Google Vertex AI or an
+-- internal gateway. The control plane renders the profile a person resolves to
+-- into the device agent's tool_config on agent.getPlugins (device-agent
+-- ADR-0032). Org-scoped like device_agent_configurations: the device agent
+-- policy is per organization, not per project. A profile never carries a
+-- credential; developers authenticate with the identity their organization
+-- already gives them.
+CREATE TABLE IF NOT EXISTS inference_profiles (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND char_length(name) <= 100),
+  -- 'bedrock', 'vertex' or 'gateway'; validated in application code.
+  provider TEXT NOT NULL,
+  -- Provider settings: region, aws_profile, gcp_project_id, base_url and model
+  -- pins (default, opus, sonnet, haiku). Shape validated in application code.
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT inference_profiles_pkey PRIMARY KEY (id),
+  -- Tenancy-pinning key for inference_profile_rules' composite FK. A
+  -- table-level constraint because the table is new, so there is no
+  -- online-index concern.
+  CONSTRAINT inference_profiles_organization_id_id_key UNIQUE (organization_id, id),
+  CONSTRAINT inference_profiles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN inference_profiles.id IS '@access: confidential';
+COMMENT ON COLUMN inference_profiles.organization_id IS '@access: confidential';
+COMMENT ON COLUMN inference_profiles.name IS 'Administrator-chosen display name.
+@access: opaque-confidential';
+COMMENT ON COLUMN inference_profiles.provider IS '@access: confidential';
+COMMENT ON COLUMN inference_profiles.settings IS 'Customer-configured cloud region, AWS profile name, GCP project id, gateway URL and model ids. Never a credential.
+@access: restricted';
+COMMENT ON COLUMN inference_profiles.created_at IS '@access: confidential';
+COMMENT ON COLUMN inference_profiles.updated_at IS '@access: confidential';
+COMMENT ON COLUMN inference_profiles.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN inference_profiles.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS inference_profiles_organization_id_name_key
+ON inference_profiles (organization_id, lower(name))
+WHERE deleted IS FALSE;
+
+-- Binds an inference profile to a principal, optionally for one harness. For
+-- each harness the most specific matching rule wins; position breaks ties
+-- within a level (lower first).
+CREATE TABLE IF NOT EXISTS inference_profile_rules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  profile_id uuid NOT NULL,
+
+  -- user:<id>, user:all, email:<addr>, role:<slug>, directory_group:<id> or
+  -- directory_attribute:<key>:<value>; validated in application code.
+  principal_urn TEXT NOT NULL CHECK (principal_urn <> ''),
+  -- 'claude_code' or 'codex'; NULL applies to every harness. Validated in
+  -- application code.
+  harness TEXT,
+  position integer NOT NULL DEFAULT 0,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT inference_profile_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT inference_profile_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite so a rule can never point at another organization's profile. No
+  -- delete action: profiles are only soft-deleted (their rules with them), and
+  -- the organization cascade removes both in one statement. ON DELETE SET NULL
+  -- would null the NOT NULL organization_id.
+  CONSTRAINT inference_profile_rules_organization_id_profile_id_fkey FOREIGN KEY (organization_id, profile_id) REFERENCES inference_profiles (organization_id, id)
+);
+
+COMMENT ON COLUMN inference_profile_rules.id IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.organization_id IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.profile_id IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.principal_urn IS 'Principal the rule targets; an email principal carries a person''s address.
+@access: confidential-pii';
+COMMENT ON COLUMN inference_profile_rules.harness IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.position IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.created_at IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.updated_at IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN inference_profile_rules.deleted IS '@access: confidential';
+
+-- One live rule per principal and harness; NULLS NOT DISTINCT so two
+-- all-harness rules for one principal collide too.
+CREATE UNIQUE INDEX IF NOT EXISTS inference_profile_rules_org_principal_harness_key
+ON inference_profile_rules (organization_id, principal_urn, harness) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS inference_profile_rules_organization_id_profile_id_idx
+ON inference_profile_rules (organization_id, profile_id)
+WHERE deleted IS FALSE;
