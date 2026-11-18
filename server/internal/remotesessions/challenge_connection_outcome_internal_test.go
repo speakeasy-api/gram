@@ -229,6 +229,7 @@ func TestExchangeSigningFailureIsNotAnAddress(t *testing.T) {
 	t.Parallel()
 
 	err := &tokenExchangeRequestError{err: &tokenEndpointSigningError{err: &net.DNSError{Err: "no such host", Name: "db.example.invalid", IsNotFound: true}}}
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, exchangeHappened(err, false))
 	page := httptest.NewRecorder()
 	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
 		return exchangeFailureAnswer(t.Context(), testenv.NewLogger(t), err, false, func() string { return "idp.example.com" })
