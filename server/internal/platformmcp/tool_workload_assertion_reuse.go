@@ -293,6 +293,8 @@ func workloadTrustPolicyToolResult(err error) (*mcp.CallToolResult, bool) {
 			result.Code, result.Message = "permission_denied", "A user identity and workload:read are required."
 		case oops.CodeForbidden, oops.CodeNotFound:
 			result.Code, result.Message = "not_found", "That project is not available to you."
+		default:
+			// Unknown failures retain the bounded unavailable response.
 		}
 	}
 	contents, marshalErr := json.Marshal(result)
