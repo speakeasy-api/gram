@@ -80,6 +80,9 @@ func (r cubeRow) value(facet Facet) string {
 	case FacetPeople:
 		return r.Subject
 	case FacetNetworks:
+		if r.Subject != "" {
+			return ""
+		}
 		return r.Network
 	case FacetApps:
 		return r.App
@@ -207,10 +210,6 @@ func countCube(cube []cubeRow, f Filters) Counts {
 	for _, facet := range Facets {
 		byValue := map[string]uint64{}
 		for _, row := range cube {
-			// Attempts with a known person are listed by person, not network.
-			if facet == FacetNetworks && (row.Subject != "" || row.Network == "") {
-				continue
-			}
 			// Only apps and people have a meaning for empty: unlisted, and no known person.
 			if facet != FacetApps && facet != FacetPeople && row.value(facet) == "" {
 				continue

@@ -473,3 +473,22 @@ func TestList_ASignInAndARenewalWithTheSameReasonNeverFold(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.ElementsMatch(t, []string{string(attemptlog.StepSignIn), string(attemptlog.StepSignInRenewal)}, []string{rows[0].Step, rows[1].Step})
 }
+
+func TestList_ANetworkFilterKeepsAttemptsWithNoKnownPersonLikeItsCount(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	known := f.attempt(f.org, f.project, f.server, f.now.Add(-2*time.Hour))
+	f.row(known, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Second, person("u1")).DeviceKey = "net1"
+	anonymous := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour))
+	f.row(anonymous, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Second).DeviceKey = "net1"
+	f.insert()
+
+	filters := attemptlog.Filters{Networks: []string{"net1"}}
+	rows := list(t, f, f.scope(), filters)
+	require.Len(t, rows, 1)
+	require.Equal(t, anonymous.ID(), rows[0].ID)
+	counts, err := attemptlog.Count(t.Context(), f.ch, f.scope(), filters, f.now)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), counts.Total)
+	require.Equal(t, []attemptlog.FacetValue{{Value: "net1", Attempts: 1}}, counts.Facets[attemptlog.FacetNetworks])
+}

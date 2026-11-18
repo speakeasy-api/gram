@@ -331,7 +331,8 @@ func filterSQL(f Filters) (string, []any) {
 	add("a_server", f.ServerIDs)
 	add("d_member", f.MemberIDs)
 	add("a_subject", f.People)
-	add("a_device", f.Networks)
+	// A network stands for attempts with no known person, as in its counts.
+	add("if(a_subject = '', a_device, '')", f.Networks)
 	add("d_app", f.Apps)
 	add("d_app_version", f.AppVersions)
 	add("d_reason", f.Reasons)
