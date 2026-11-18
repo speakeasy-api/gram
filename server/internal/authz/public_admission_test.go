@@ -88,7 +88,7 @@ func TestMandatoryPublicAuthClientAdmission(t *testing.T) {
 			require.Equal(t, MandatoryDenyReasonUnauthenticated, decision.Reason)
 		}
 	}
-	_, err := anonymous.DecideAuthClientAdmission("org_1", MandatoryServerPublic, MCPCheck(ScopeMCPConnect, "server_1", "project_1"))
+	_, err := anonymous.DecideAuthClientAdmission("org_1", MandatoryServerPublic, MCPServer(MCPServerIDFrom("server_1"), ProjectIDFrom("project_1")).Connect())
 	require.Error(t, err)
 }
 
