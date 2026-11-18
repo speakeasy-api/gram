@@ -23,7 +23,7 @@ import { useProjectProviders } from "../providers";
 import { ArrowRight, ChevronDown, Globe, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { connectionHealthNow, useAttempt } from "./api";
+import { connectionHealthNow, useAttempt, useAttemptBelongs } from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { OutcomeLabel } from "./AttemptsTable";
 import { logsSearch, RETENTION_MS } from "./filters";
@@ -59,12 +59,10 @@ export function AttemptDetailSheet({
   const query = useAttempt(reference);
   const found = query.data?.attempt;
   // The lookup is project-wide; an attempt from elsewhere does not open here.
-  const elsewhere =
-    !!found &&
-    ((!!found.userSessionIssuerId &&
-      found.userSessionIssuerId !== providerId) ||
-      (!!lockedServerId && found.server?.id !== lockedServerId));
-  const attempt = elsewhere ? undefined : found;
+  const belongs = useAttemptBelongs(found, providerId, lockedServerId);
+  const elsewhere = !!found && belongs === "no";
+  const attempt = belongs === "yes" ? found : undefined;
+  const isPending = query.isPending || (!!found && belongs === "pending");
   return (
     <Sheet
       open={!!reference}
@@ -89,7 +87,7 @@ export function AttemptDetailSheet({
               </SheetDescription>
             </SheetHeader>
             <div className="p-6">
-              {query.isPending ? (
+              {isPending ? (
                 <div className="space-y-3">
                   <Skeleton className="h-6 w-2/3" />
                   <Skeleton className="h-24 w-full" />

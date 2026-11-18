@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import {
   CONNECTION_HEALTH_QUERY_ROOT,
   connectionHealthNow,
+  useAttemptBelongs,
   useAttempt,
   useAttemptCounts,
   useConnectionAttempts,
@@ -247,13 +248,8 @@ export function ConnectionLogsView({
   const reference = useAttempt(isReference ? search.trim() : null);
   // A reference is looked up project-wide; keep it only if it belongs here.
   const referenced = reference.data?.attempt;
-  const referenceHere =
-    referenced &&
-    (!referenced.userSessionIssuerId ||
-      referenced.userSessionIssuerId === providerId) &&
-    (!lockedServer || referenced.server?.id === lockedServer.id)
-      ? referenced
-      : undefined;
+  const belongs = useAttemptBelongs(referenced, providerId, lockedServer?.id);
+  const referenceHere = belongs === "yes" ? referenced : undefined;
 
   const optionsById = useMemo(() => optionsFrom(facets), [facets]);
 
@@ -350,7 +346,7 @@ export function ConnectionLogsView({
   const countText = !loggingEnabled
     ? null
     : isReference
-      ? reference.isPending
+      ? reference.isPending || (!!referenced && belongs === "pending")
         ? null
         : rows[0]
           ? rows[0].count > 1
@@ -390,7 +386,9 @@ export function ConnectionLogsView({
   const isError = isReference
     ? reference.isError
     : list.isError || countsFailed;
-  const isPending = isReference ? reference.isPending : list.isPending;
+  const isPending = isReference
+    ? reference.isPending || (!!referenced && belongs === "pending")
+    : list.isPending;
   if (!loggingEnabled) {
     body = (
       <InlineEmptyState

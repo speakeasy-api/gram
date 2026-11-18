@@ -9,6 +9,7 @@ import {
   type UseInfiniteQueryResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   fixtureGetSuspectedProblem,
   fixtureListSuspectedProblems,
@@ -18,6 +19,7 @@ import type {
   ActiveKillswitch,
   AttemptCountsResponse,
   AttemptFilters,
+  AttemptRow,
   DeniedClientsResponse,
   GetAttemptResponse,
   GetSuspectedProblemResponse,
@@ -215,6 +217,40 @@ export function useDeniedClients(
     throwOnError: false,
   });
 }
+
+/**
+ * Whether a looked-up attempt belongs to this provider (and locked server).
+ * An attempt with no provider of its own belongs to the servers it reached.
+ */
+export function useAttemptBelongs(
+  attempt: (AttemptRow & { userSessionIssuerId?: string }) | undefined,
+  providerId: string,
+  lockedServerId?: string,
+): "yes" | "no" | "pending" {
+  const needsServers =
+    !!attempt && !attempt.userSessionIssuerId && !!attempt.server;
+  const [window] = useState(() => {
+    const now = connectionHealthNow();
+    return {
+      from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      to: now.toISOString(),
+    };
+  });
+  const counts = useAttemptCounts({ providerId }, window, NO_FILTERS, {
+    enabled: needsServers,
+  });
+  if (!attempt) return "pending";
+  if (lockedServerId && attempt.server?.id !== lockedServerId) return "no";
+  if (attempt.userSessionIssuerId)
+    return attempt.userSessionIssuerId === providerId ? "yes" : "no";
+  if (!attempt.server) return "yes";
+  if (counts.isError) return "yes";
+  const servers = counts.data?.facets?.servers;
+  if (!servers) return "pending";
+  return servers.some((s) => s.value === attempt.server?.id) ? "yes" : "no";
+}
+
+const NO_FILTERS: AttemptFilters = {};
 
 /** Suspected problems are made-up sample data until their API ships. */
 export const SUSPECTED_PROBLEMS_ARE_SAMPLE = true;
