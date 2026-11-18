@@ -1,6 +1,4 @@
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { isShadowMCPModePolicy } from "@/pages/security/policy-type";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
@@ -10,11 +8,8 @@ import type { LauncherCandidate } from "./types";
 
 /**
  * Risk policies (Guardrails). Admin-only; the caller gates `enabled`.
- * Prompt-based policies are hidden behind the same feature flag the
- * Guardrails page reads (pages/security/PolicyCenter.tsx), so the palette
- * never offers a policy the page would not list. The policy behind the
- * Shadow MCP page's "blocked by default" setting is left out for the same
- * reason: Guardrails does not list it.
+ * The policy behind the Shadow MCP page's "blocked by default" setting is
+ * excluded because Guardrails does not list it.
  */
 export function usePolicyCandidates({
   enabled,
@@ -23,9 +18,6 @@ export function usePolicyCandidates({
 }): LauncherCandidate[] {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const telemetry = useTelemetry();
-  const promptPoliciesEnabled =
-    telemetry.isFeatureEnabled(FEATURE_FLAGS.promptPolicies) ?? false;
   const gramProject = useProjectSlugForRequests();
   // Keyed by project: the SDK folds gramProject into the query key, so
   // omitting it would share one cache entry across projects. Never throws:
@@ -39,10 +31,6 @@ export function usePolicyCandidates({
   return useMemo(
     () =>
       (data?.policies ?? [])
-        .filter(
-          (policy) =>
-            promptPoliciesEnabled || policy.policyType !== "prompt_based",
-        )
         .filter((policy) => !isShadowMCPModePolicy(policy))
         .map((policy): LauncherCandidate => ({
           id: `policy:${policy.id}`,
@@ -60,6 +48,6 @@ export function usePolicyCandidates({
             );
           },
         })),
-    [data, promptPoliciesEnabled, routes, navigate],
+    [data, routes, navigate],
   );
 }
