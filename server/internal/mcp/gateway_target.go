@@ -50,6 +50,19 @@ func gatewayTargetFromEndpoint(endpoint *ResolvedMcpEndpoint) (gatewayTarget, er
 	}, nil
 }
 
+func (t gatewayTarget) authorizationTarget(projectID uuid.UUID) (*AgentAuthorizationTarget, bool) {
+	if t.kind != gatewayKindStored || t.id == uuid.Nil || projectID == uuid.Nil {
+		return nil, false
+	}
+	return &AgentAuthorizationTarget{
+		Scope:               authz.ScopeMCPConnect,
+		OrganizationID:      t.organizationID,
+		ProjectID:           projectID,
+		UserSessionIssuerID: t.userSessionIssuerID,
+		MCPResourceID:       t.id,
+	}, true
+}
+
 // admits reports only whether the credential may enter this gateway. It does
 // not authorize any member.
 func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, storedMachineAccess bool) (bool, error) {
@@ -70,7 +83,11 @@ func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, storedM
 		return true, nil
 	case gatewayCallerWorkload:
 		// The workload credential ceiling must authorize this gateway target.
-		admitted, err := authz.GrantsAuthorize(caller.ceiling, authz.MCPCheck(authz.ScopeMCPConnect, t.id.String(), projectID.String()))
+		check, ok := t.authorizationTarget(projectID)
+		if !ok {
+			return false, nil
+		}
+		admitted, err := authz.GrantsAuthorize(caller.ceiling, authz.MCPCheck(check.Scope, check.MCPResourceID.String(), check.ProjectID.String()))
 		if err != nil {
 			return false, fmt.Errorf("authorize workload gateway target: %w", err)
 		}

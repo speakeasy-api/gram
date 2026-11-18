@@ -96,14 +96,7 @@ func (s *Service) admitGatewayCaller(
 	if err != nil {
 		return ctx, nil, err
 	}
-	storedMachineAccess := false
-	if caller.kind != gatewayCallerPerson && target.kind == gatewayKindStored && s.features != nil {
-		storedMachineAccess, err = s.features.IsFlagEnabledLocal(ctx, feature.FlagStoredGatewayMachineAccess, target.organizationID, nil, nil)
-		if err != nil {
-			logger.WarnContext(ctx, "check stored gateway machine access rollout", attr.SlogError(err))
-			storedMachineAccess = false
-		}
-	}
+	storedMachineAccess := caller.kind != gatewayCallerPerson && s.storedGatewayMachineAccessEnabled(ctx, logger, target)
 	admitted, err := target.admits(caller, endpoint.ProjectID, storedMachineAccess)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("evaluate gateway target: %w", err)
@@ -127,6 +120,18 @@ func (s *Service) admitGatewayCaller(
 		authentication: authentication,
 		toolSelection:  toolSelection,
 	}, nil
+}
+
+func (s *Service) storedGatewayMachineAccessEnabled(ctx context.Context, logger *slog.Logger, target gatewayTarget) bool {
+	if target.kind != gatewayKindStored || s.features == nil {
+		return false
+	}
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagStoredGatewayMachineAccess, target.organizationID, nil, nil)
+	if err != nil {
+		logger.WarnContext(ctx, "check stored gateway machine access rollout", attr.SlogError(err))
+		return false
+	}
+	return enabled
 }
 
 func gatewayCallerFromContext(ctx context.Context, subject urn.SessionSubject) (gatewayCaller, error) {

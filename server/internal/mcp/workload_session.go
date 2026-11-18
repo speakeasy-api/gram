@@ -109,6 +109,13 @@ func loadWorkloadSessionCredential(
 	delegatedGrantsVersion pgtype.Int4,
 ) (workloadSessionCredential, error) {
 	return checkWorkloadSessionCredential(endpoint.OrganizationID, subject, storedSubject, organizationID, delegatedGrants, delegatedGrantsVersion, func(version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
+		if gateway, err := gatewayTargetFromEndpoint(endpoint); err == nil {
+			target, ok := gateway.authorizationTarget(endpoint.ProjectID)
+			if !ok {
+				return nil, errors.New("gateway cannot carry a workload session policy")
+			}
+			return encodeAgentSessionPolicy(*target, version)
+		}
 		target, ok := agentAuthorizationTarget(endpoint)
 		if !ok {
 			return nil, errors.New("endpoint cannot carry an agent session policy")
