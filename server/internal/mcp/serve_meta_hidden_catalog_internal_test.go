@@ -82,3 +82,32 @@ func TestCatalogNotApprovedMessageSeparatesSkippedFromAdded(t *testing.T) {
 	}
 	require.Equal(t, catalogMemberNotApproved, catalog.notApprovedMessage(moved), "a server approved under another project was neither skipped nor added")
 }
+
+func TestConnectionStatusExplainsHiddenMembersOutsideTheApproval(t *testing.T) {
+	t.Parallel()
+	approved := metaMember{serverID: uuid.New(), projectID: uuid.New(), slug: "docs", name: "Docs"}
+	added := metaMember{serverID: uuid.New(), projectID: uuid.New(), slug: "added", name: "Added"}
+	gate := &metaGateContext{
+		catalog: &connectionCatalog{
+			Members:        map[string]connectionCatalogMember{approved.slug: {ServerID: approved.serverID, ProjectID: approved.projectID}},
+			ShownServerIDs: []uuid.UUID{approved.serverID},
+		},
+		catalogRef:    &toolfilter.CatalogReference{ID: uuid.New(), Mode: toolfilter.CatalogModeLive, AllTools: true},
+		hiddenMembers: []metaMember{approved, added},
+	}
+	body, err := (&Service{}).handleMetaConnectionStatusCall(t.Context(), testenv.NewLogger(t), gate, nil, &rawRequest{})
+	require.NoError(t, err)
+
+	var rpc struct {
+		Result toolCallResult `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(body, &rpc))
+	var status metamcp.ConnectionStatusResult
+	require.NoError(t, json.Unmarshal(rpc.Result.StructuredContent, &status))
+	require.Equal(t, []metamcp.ConnectionStatusServer{
+		{Slug: "docs", Name: "Docs", Status: metamcp.SignInHidden},
+		{Slug: "added", Name: "Added", Status: metamcp.SignInHidden, Detail: catalogMemberAddedSinceConsent},
+	}, status.Servers)
+	require.Contains(t, status.Text(), "- Added: hidden by the user ("+catalogMemberAddedSinceConsent+")")
+	require.Contains(t, status.Text(), "- Docs: hidden by the user\n")
+}

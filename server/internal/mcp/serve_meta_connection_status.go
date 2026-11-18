@@ -60,12 +60,20 @@ func (s *Service) handleMetaConnectionStatusCall(
 		}
 	}
 
+	// A hidden member outside the approval also says why showing it again
+	// will not make it usable.
 	for _, member := range gate.hiddenMembers {
+		detail := ""
+		if gate.catalog != nil {
+			if _, unapproved := gate.catalog.approvedMembers([]metaMember{member}); len(unapproved) > 0 {
+				detail = gate.catalog.notApprovedMessage(member.serverID)
+			}
+		}
 		servers = append(servers, metamcp.ConnectionStatusServer{
 			Slug:      member.slug,
 			Name:      member.name,
 			Status:    metamcp.SignInHidden,
-			Detail:    "",
+			Detail:    detail,
 			Reconnect: false,
 			Outage:    nil,
 		})

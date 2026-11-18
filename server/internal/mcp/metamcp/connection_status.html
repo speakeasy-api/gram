@@ -72,7 +72,7 @@
         li.append(state);
       } else if (s.status === "hidden") {
         hidden++;
-        state.textContent = "Hidden by you";
+        state.textContent = s.detail ? "Hidden by you · " + s.detail : "Hidden by you";
         li.append(state);
         if (data.connectUrl && !agent) {
           const btn = document.createElement("button");
