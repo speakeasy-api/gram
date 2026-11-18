@@ -37,7 +37,17 @@ export function usePolicyCandidates({
           kind: "policy",
           title: policy.name,
           detail: `Guardrail · ${policy.action}`,
-          keywords: ["risk", "policy", "guardrail", policy.id],
+          keywords:
+            policy.policyType === "prompt_based"
+              ? [
+                  "risk",
+                  "policy",
+                  "guardrail",
+                  "prompt",
+                  "prompt-based",
+                  policy.id,
+                ]
+              : ["risk", "policy", "guardrail", policy.id],
           verbs: ["open"],
           icon: "shield-check",
           group: "Guardrails",

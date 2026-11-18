@@ -70,7 +70,7 @@ type SuggestRiskPolicyOutput struct {
 
 const (
 	suggestRiskPolicyMinDescriptionRunes = 3
-	suggestRiskPolicyNextStep            = "Show the draft to the administrator in plain words: what it detects, what happens when it fires, how severe findings are, and that it is enabled as soon as it is created unless enabled is false. After they confirm, call create_risk_policy with project_slug, idempotency_key and either the preset id plus any agreed overrides, or the draft's fields with policy_type, name and enabled. Presets that require approved email domains need approved_email_domains before they detect anything. Then read the policy back with get_risk_policy."
+	suggestRiskPolicyNextStep            = "Show the draft to the administrator in plain words: what it detects, what happens when it fires, how severe findings are, and that it is enabled as soon as it is created unless enabled is false. For a block policy, explain that users cannot bypass it themselves; they can submit a request that requires administrator approval. After they confirm, call create_risk_policy with project_slug, idempotency_key and either the preset id plus any agreed overrides, or the draft's fields with policy_type, name and enabled. Presets that require approved email domains need approved_email_domains before they detect anything. Then read the policy back with get_risk_policy."
 )
 
 func registerRiskPresetTools(reg *Registrar) {

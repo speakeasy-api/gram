@@ -241,6 +241,8 @@ func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
 	require.NotEmpty(t, suggestion.Draft.Prompt)
 	require.Greater(t, suggestion.Confidence, 0.0)
 	require.Contains(t, suggestion.NextStep, "create_risk_policy")
+	require.Contains(t, suggestion.NextStep, "users cannot bypass it themselves")
+	require.Contains(t, suggestion.NextStep, "requires administrator approval")
 
 	_, err = suggest.Invoke(ctx, json.RawMessage(`{"description":"     "}`))
 	var refusal *ToolRefusalError
