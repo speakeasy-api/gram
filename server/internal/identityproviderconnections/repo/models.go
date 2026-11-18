@@ -157,6 +157,10 @@ type RemoteSessionClient struct {
 	ClientID string
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
+	// @access: secret-restricted
+	ClientSecretOrgEncrypted pgtype.Text
+	// @access: confidential
+	ClientSecretGeneration int64
 	// @access: confidential
 	ClientIDIssuedAt pgtype.Timestamptz
 	// @access: confidential
@@ -197,6 +201,8 @@ type RemoteSessionClient struct {
 	CredentialOwner string
 	// @access: opaque-confidential
 	DisplayName pgtype.Text
+	// @access: confidential
+	ForwardClientName bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
@@ -59,4 +60,46 @@ func TestTypedCacheObjectStoreIfAbsentPreservesFirstValue(t *testing.T) {
 	got, err := objects.Get(t.Context(), "outcome")
 	require.NoError(t, err)
 	require.Equal(t, "success", got.Value)
+}
+
+func TestTypedCacheObjectGetAndDeleteMarking(t *testing.T) {
+	t.Parallel()
+
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	adapter := cache.NewRedisCacheAdapter(client)
+	objects := cache.NewTypedObjectCache[conditionalTestObject](testenv.NewLogger(t), adapter, cache.SuffixNone)
+
+	_, err := objects.GetAndDeleteMarking(t.Context(), "missing", "marker-missing", time.Minute)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss)
+	require.False(t, mr.Exists("marker-missing"), "nothing was consumed, so nothing is reserved")
+
+	require.NoError(t, objects.Store(t.Context(), conditionalTestObject{Key: "key", Value: "value"}))
+	got, err := objects.GetAndDeleteMarking(t.Context(), "key", "marker", time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, "value", got.Value)
+
+	_, err = objects.Get(t.Context(), "key")
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "consumed")
+	won, err := adapter.Add(t.Context(), "marker", time.Minute)
+	require.NoError(t, err)
+	require.False(t, won, "the marker was set with the consume")
+}
+
+func TestTypedCacheObjectInvalidMarkerLifetimePreservesValue(t *testing.T) {
+	t.Parallel()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	objects := cache.NewTypedObjectCache[conditionalTestObject](testenv.NewLogger(t), cache.NewRedisCacheAdapter(client), cache.SuffixNone)
+	require.NoError(t, objects.Store(t.Context(), conditionalTestObject{Key: "key", Value: "value"}))
+	for _, ttl := range []time.Duration{-time.Second, 0, time.Microsecond} {
+		_, err := objects.GetAndDeleteMarking(t.Context(), "key", "marker", ttl)
+		require.ErrorContains(t, err, "at least one millisecond")
+		got, err := objects.Get(t.Context(), "key")
+		require.NoError(t, err)
+		require.Equal(t, "value", got.Value)
+		require.False(t, mr.Exists("marker"))
+	}
 }

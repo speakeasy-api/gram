@@ -2,6 +2,7 @@ import { AlertTriangle, Check, ChevronRight, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Checkbox } from "@/components/ui/Checkbox";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -229,7 +230,13 @@ export function ToolSelectionPanel({
           tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
         };
       })
-      .filter((s) => s.tools.length > 0);
+      .filter((s) => {
+        // Keep discovery status and recovery controls visible even when the
+        // tool being searched for has not been loaded yet.
+        return (
+          s.status === "loading" || s.status === "error" || s.tools.length > 0
+        );
+      });
   }, [servers, q]);
 
   useEffect(() => {
@@ -579,8 +586,13 @@ function ServerRow({
   let expandedBody: React.ReactNode;
   if (isLoading) {
     expandedBody = (
-      <div className="text-muted-foreground px-8 py-3 text-sm">
-        Loading tools…
+      <div role="status" className="px-8 py-3">
+        <span className="sr-only">Loading tools…</span>
+        <Skeleton>
+          <div className="h-5 w-full" />
+          <div className="h-5 w-full" />
+          <div className="h-5 w-full" />
+        </Skeleton>
       </div>
     );
   } else if (isError) {

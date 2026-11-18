@@ -26,7 +26,7 @@ type SearchGramDocsToolOutput struct {
 	TrustedLinks []string `json:"trusted_links,omitempty"`
 }
 
-const searchSpeakeasyDocsDescription = "Search the reviewed Speakeasy setup guides and return up to five cited excerpts. Constraints: the guides are a pinned, reviewed set — this tool never reads the live web, a provider's pages, or unreviewed search results. Every excerpt carries its source, version, observation date, and canonical links, plus the speakeasy:// URI of the full guide; read that for the complete steps. If the result is guide_unavailable or an excerpt is marked stale, tell the user what is missing and hand them the canonical links. Never invent setup steps that an excerpt does not state."
+const searchSpeakeasyDocsDescription = "Search the reviewed Speakeasy setup guides for how-to and setup questions; returns up to five cited excerpts. Never use it to find a Platform tool, read organization data or act: call the matching tool, or search_platform_tools when listed. The guides are a pinned, reviewed set, not the live web. Each excerpt cites its source, version, links and the speakeasy:// URI of the full guide; read that for complete steps. On guide_unavailable or a stale excerpt, say what is missing and give its links. Never invent steps an excerpt lacks."
 
 func registerSearchDocsTool(reg *Registrar, index DocsIndex, budget OperationBudget) {
 	addTool(reg, &mcp.Tool{

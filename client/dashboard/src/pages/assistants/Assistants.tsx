@@ -11,12 +11,13 @@ import {
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { Action, MoreActions } from "@/components/ui/MoreActions";
+import type { Action } from "@/components/ui/MoreActions";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Text } from "@/components/ui/Text";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
-import { Assistant } from "@gram/client/models/components/assistant.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import {
   invalidateAllAssistantsList,
@@ -24,11 +25,11 @@ import {
 } from "@gram/client/react-query/assistantsList.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
-import { MouseEvent, useMemo, useState } from "react";
+import type { MouseEvent } from "react";
+import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -36,6 +37,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { AssistantsAuditLog } from "./AssistantAuditLog";
 import { assistantAttachedServerSlugs } from "./assistantServers";
 import { TriggersPanel } from "../triggers/Triggers";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const TOP_LEVEL_TABS = ["assistants", "triggers", "audit"] as const;
 
@@ -212,12 +214,14 @@ function AssistantsBody({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Stack align="center" justify="center" className="py-16">
-        <Icon
-          name="loader-circle"
-          className="text-muted-foreground h-6 w-6 animate-spin"
-        />
-      </Stack>
+      <div
+        role="status"
+        aria-label="Loading assistants"
+        className="grid grid-cols-1 gap-6 xl:grid-cols-2"
+      >
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
     );
   }
 

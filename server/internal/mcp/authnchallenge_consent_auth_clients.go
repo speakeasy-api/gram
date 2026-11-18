@@ -9,6 +9,7 @@ package mcp
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -179,8 +180,11 @@ func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID
 // choose from, their state, and which one is selected: the person's pick when
 // it is still usable, otherwise the client they last approved for the server,
 // otherwise the first usable one in the fixed preselection order. Nothing is
-// selected that cannot be approved now.
-func (s *Service) consentAuthChoices(ctx context.Context, organizationID string, subject urn.SessionSubject, servers []consentAuthServer, cards []remoteSessionCard, picked map[uuid.UUID]uuid.UUID) (map[uuid.UUID]*consentServerAuth, error) {
+// selected that cannot be approved now. With deferPersonal, personal and
+// identity-provider clients the resolver accepts are left in
+// consentClientConnect for the caller to judge, as a browserless caller has
+// no consent cards; cards is then unused.
+func (s *Service) consentAuthChoices(ctx context.Context, organizationID string, subject urn.SessionSubject, servers []consentAuthServer, cards []remoteSessionCard, picked map[uuid.UUID]uuid.UUID, deferPersonal bool) (map[uuid.UUID]*consentServerAuth, error) {
 	if len(servers) == 0 {
 		return map[uuid.UUID]*consentServerAuth{}, nil
 	}
@@ -189,7 +193,7 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		ids = append(ids, server.id)
 	}
 	queries := upstreamclientsrepo.New(s.db)
-	rows, err := queries.ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: ids})
+	offers, err := s.configuredAuthOffers(ctx, organizationID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("list consent auth clients: %w", err)
 	}
@@ -199,12 +203,9 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		return nil, fmt.Errorf("list remembered auth clients: %w", err)
 	}
 	for _, row := range rememberedRows {
-		remembered[row.McpServerID] = row.AuthClientID
-	}
-
-	byServer := map[uuid.UUID][]upstreamclientsrepo.ListServerConsentAuthClientsRow{}
-	for _, row := range rows {
-		byServer[row.McpServerID] = append(byServer[row.McpServerID], row)
+		if row.AuthClientID.Valid {
+			remembered[row.McpServerID] = row.AuthClientID.UUID
+		}
 	}
 
 	// A personal connection or identity-provider sign-in belongs to a person;
@@ -213,27 +214,21 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 
 	choices := make(map[uuid.UUID]*consentServerAuth, len(servers))
 	for _, server := range servers {
-		serverRows := byServer[server.id]
+		offer, known := offers[server.id]
 		auth := &consentServerAuth{ServerID: server.id, Status: consentAuthChoose, Options: nil}
 		choices[server.id] = auth
 
-		var requires *bool
-		if len(serverRows) > 0 && serverRows[0].RequiresUpstreamAuth.Valid {
-			requires = &serverRows[0].RequiresUpstreamAuth.Bool
-		}
-		offered := slices.DeleteFunc(slices.Clone(serverRows), func(row upstreamclientsrepo.ListServerConsentAuthClientsRow) bool {
-			return !row.AuthClientID.Valid
-		})
+		offered := offer.clients
 		switch {
-		case requires != nil && !*requires:
-			auth.Status = consentAuthNoAuth
-			continue
-		case len(offered) == 0 && requires != nil:
+		case len(offered) > 0:
+		case !known || offer.pending:
+			// Upstream credentials no auth client records yet are incomplete
+			// setup, never a server needing none.
 			auth.Status = consentAuthSetupIncomplete
 			continue
-		case len(offered) == 0:
-			// Undecided with nothing offered serves without upstream
-			// authentication, as the resolver does.
+		default:
+			// A server offering no enabled client needs no upstream
+			// authentication.
 			auth.Status = consentAuthNoAuth
 			continue
 		}
@@ -264,6 +259,8 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 			switch {
 			case res.outcome == authClientGap:
 				option.State = consentClientSetup
+			case (clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA) && deferPersonal:
+				option.State = consentClientConnect
 			case clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA:
 				option.State, option.ConnectClientID = personalReadiness(clientType, row.RemoteSessionClientID, cards)
 			}
@@ -293,24 +290,28 @@ func personalReadiness(clientType string, registrationID uuid.NullUUID, cards []
 			continue
 		}
 		status := cardStatus(card)
+		if status == gatewayServerUnavailable && card.reconnectsDespiteOutage() {
+			status = gatewayServerReconnect
+		}
 		if clientType == authz.AuthClientTypeEMA {
 			switch status {
-			case gatewayServerChained, gatewayServerChainPending:
+			case gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
 				return consentClientReady, ""
 			case gatewayServerReconnect:
 				return consentClientReconnect, card.ClientID
 			case gatewayServerNotConnected:
 				return consentClientConnect, card.ClientID
-			case gatewayServerConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
+			case gatewayServerConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNoAccess:
 			}
 			return consentClientSetup, ""
 		}
 		switch status {
-		case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending:
+		case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
+			// An outage leaves the connection in place: it can still be chosen.
 			return consentClientReady, ""
 		case gatewayServerReconnect:
 			return consentClientReconnect, card.ClientID
-		case gatewayServerNotConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
+		case gatewayServerNotConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNoAccess:
 		}
 		return consentClientConnect, card.ClientID
 	}
@@ -378,11 +379,21 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
 	serverID := endpoint.McpServerID.UUID
-	choices, err := s.consentAuthChoices(withMandatoryAdmission(subjectCtx), endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked})
+	choices, err := s.consentAuthChoices(withMandatoryAdmission(subjectCtx), endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked}, false)
 	if err != nil {
 		return nil, err
 	}
 	return choices[serverID], nil
+}
+
+// errConsentNoUsableConnection refuses an approval no connection could serve.
+var errConsentNoUsableConnection = errors.New("no connection can serve this approval")
+
+// consentCardsApprovable is the rule for approving through service cards.
+func consentCardsApprovable(cards []remoteSessionCard) bool {
+	return len(cards) == 0 || slices.ContainsFunc(cards, func(card remoteSessionCard) bool {
+		return (card.Connected && !card.Unavailable) || card.Chained
+	})
 }
 
 // consentDirectAuthClientPick validates the credential posted with a direct
@@ -390,26 +401,36 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 // the grant's typed pick. The registration it names replaces the card-derived
 // pick in upstreamPicks; a headers-only client removes it. A pick that is no
 // longer usable, or a missing one where a choice is required, is
-// errConsentConfigurationChanged. It returns nil where the page offers no
-// typed choice.
+// errConsentConfigurationChanged. With no typed choice, cards decide a person's direct-server approval.
 func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, posted string, upstreamPicks map[uuid.UUID]uuid.UUID, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
 	picked := uuid.Nil
 	if posted != "" {
 		parsed, err := uuid.Parse(posted)
-		if err != nil {
+		if err != nil || parsed == uuid.Nil {
 			return nil, errConsentConfigurationChanged
 		}
 		picked = parsed
 	}
 	auth, err := s.directConsentAuthChoice(ctx, endpoint, challengeState, cards, picked)
-	if err != nil || auth == nil {
+	if err != nil {
 		return nil, err
+	}
+	if auth == nil {
+		// An agent's attached connection is stored under its owner, so its own cards can't decide.
+		agent := challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindAgent
+		if !endpoint.MetaMcpServerID.Valid && !agent && !consentCardsApprovable(cards) {
+			return nil, errConsentNoUsableConnection
+		}
+		return nil, nil
 	}
 	if !auth.Approvable() {
 		return nil, errConsentConfigurationChanged
 	}
 	selected := auth.Selected()
 	if selected == nil {
+		if picked != uuid.Nil {
+			return nil, errConsentConfigurationChanged
+		}
 		// No upstream authentication: nothing to pick, and no card's client
 		// is recorded for the server.
 		delete(upstreamPicks, endpoint.McpServerID.UUID)
@@ -455,7 +476,91 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 			}
 		}
 	}
-	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked)
+	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
+}
+
+// gatewayConsentServiceChoices offers a choice between a member's connected services where typed auth clients are not enforced.
+// It selects the page's pick, else the person's last approved service, else the first, preferring one not in an outage.
+func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
+	choices := map[uuid.UUID]*consentServerAuth{}
+	outages := map[uuid.UUID]bool{}
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		if member.backend != metaMemberBackendProxied {
+			continue
+		}
+		var options []consentAuthClientOption
+		for _, card := range cards {
+			if !usableConsentCard(card) || !cardServesMember(card, member) {
+				continue
+			}
+			id, err := uuid.Parse(card.ClientID)
+			if err != nil {
+				continue
+			}
+			clientType := authz.AuthClientTypeRemoteSession
+			if card.Chained && !card.Connected {
+				clientType = authz.AuthClientTypeEMA
+			}
+			name := card.IssuerDisplay
+			if card.ConnectedAs != "" {
+				name += " (" + card.ConnectedAs + ")"
+			}
+			options = append(options, consentAuthClientOption{ID: id, Name: name, Type: clientType, State: consentClientReady, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: id, Valid: true}})
+			if card.Unavailable {
+				outages[id] = true
+			}
+		}
+		if len(options) < 2 {
+			continue
+		}
+		choices[member.serverID] = &consentServerAuth{ServerID: member.serverID, Status: consentAuthChoose, Options: options}
+		ids = append(ids, member.serverID)
+	}
+	if len(choices) == 0 {
+		return choices, nil
+	}
+	rows, err := upstreamclientsrepo.New(s.db).ListRememberedAuthClients(ctx, upstreamclientsrepo.ListRememberedAuthClientsParams{SubjectUrn: subject.String(), OrganizationID: endpoint.OrganizationID, McpServerIds: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list remembered upstream clients: %w", err)
+	}
+	remembered := make(map[uuid.UUID]uuid.UUID, len(rows))
+	for _, row := range rows {
+		if row.RemoteSessionClientID.Valid {
+			remembered[row.McpServerID] = row.RemoteSessionClientID.UUID
+		}
+	}
+	query := r.URL.Query()
+	for _, member := range members {
+		auth := choices[member.serverID]
+		if auth == nil {
+			continue
+		}
+		picked := uuid.Nil
+		if id, err := uuid.Parse(query.Get(gatewayAuthClientParam + member.slug)); err == nil {
+			picked = id
+		}
+		selectConsentAuthClient(auth, picked, remembered[member.serverID])
+		if selected := auth.Selected(); selected != nil && outages[selected.ID] && selected.ID != picked && selected.ID != remembered[member.serverID] {
+			// A default lands on a working connection when there is one.
+			if healthy := slices.IndexFunc(auth.Options, func(o consentAuthClientOption) bool { return !outages[o.ID] }); healthy >= 0 {
+				selected.Selected = false
+				auth.Options[healthy].Selected = true
+			}
+		}
+	}
+	return choices, nil
+}
+
+// selectedServices is the service each choice selects.
+func selectedServices(choices map[uuid.UUID]*consentServerAuth) map[uuid.UUID]uuid.UUID {
+	selected := make(map[uuid.UUID]uuid.UUID, len(choices))
+	for serverID, auth := range choices {
+		if option := auth.Selected(); option != nil {
+			selected[serverID] = option.ID
+		}
+	}
+	return selected
 }
 
 // resolveMemberAuthChoice is the resolution a gateway member's credential

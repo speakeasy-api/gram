@@ -50,8 +50,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesDomainAndUserHeaders(
 		OrganizationID: ac.ActiveOrganizationID, Domain: "hosted-" + uuid.NewString()[:8] + ".example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
 	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: an addressable domain without exercising domain provisioning.
-	_, err = ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
+	err = pluginsrepo.New(ti.conn).ActivateCustomDomainFixture(ctx, domain.ID)
 	require.NoError(t, err)
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.Slug)
 
@@ -108,8 +107,8 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesPrimaryEndpoint(t *te
 	require.Equal(t, "https://app.getgram.ai/mcp/"+toolset.Slug, config.MCPServers["Hosted"].URL)
 }
 
-// A canonical wrapper that lost its endpoint keeps the toolset's address.
-func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddress(t *testing.T) {
+// A canonical wrapper that lost its endpoint has no address, so its entry is left out.
+func TestPluginsService_PublishPlugins_EndpointlessHostedEntryLeftOut(t *testing.T) {
 	t.Parallel()
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
@@ -125,7 +124,13 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	require.Contains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "https://app.getgram.ai/mcp/"+toolset.Slug)
+	raw, ok := mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]
+	require.True(t, ok, "publish must push .mcp.json")
+	var config struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &config))
+	require.NotContains(t, config.MCPServers, "Hosted")
 }
 
 func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testing.T) {
@@ -173,10 +178,11 @@ func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testin
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code, "the canonical wrapper owns hosting state, so a disabled server cannot be added through its toolset")
 
-	aliasOnly := createUnwrappedTestToolset(t, ctx, ti.conn, "alias-only")
-	createCanonicalWrapper(t, ctx, ti, aliasOnly, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(aliasOnly.ID.String()), Policy: "required"})
-	require.NoError(t, err, "an enabled server without an endpoint still serves on its legacy slug")
+	endpointless := createUnwrappedTestToolset(t, ctx, ti.conn, "endpointless-enabled")
+	createCanonicalWrapper(t, ctx, ti, endpointless, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(endpointless.ID.String()), Policy: "required"})
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code, "an enabled server without an endpoint has no address")
 }
 
 // A server that holds a toolset's id without being its canonical wrapper does not lend its metadata to the toolset environment.

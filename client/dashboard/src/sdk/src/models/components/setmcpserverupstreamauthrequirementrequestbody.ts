@@ -11,7 +11,7 @@ export type SetMcpServerUpstreamAuthRequirementRequestBody = {
    */
   mcpServerId: string;
   /**
-   * Whether the upstream needs authentication.
+   * Ignored.
    */
   requiresUpstreamAuth: boolean;
 };

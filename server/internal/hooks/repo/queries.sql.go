@@ -572,6 +572,45 @@ func (q *Queries) LinkChatActingAgent(ctx context.Context, arg LinkChatActingAge
 	return result.RowsAffected(), nil
 }
 
+const linkChatOwner = `-- name: LinkChatOwner :execrows
+UPDATE chats
+SET user_id = $1
+  , external_user_id = $2
+  , updated_at = NOW()
+WHERE id = $3
+  AND project_id = $4
+  AND COALESCE(user_id, '') = ''
+  AND COALESCE(external_user_id, '') = ''
+  AND agent_id IS NULL
+  AND deleted IS FALSE
+`
+
+type LinkChatOwnerParams struct {
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Backfills the human owner of a session whose chat row was created before the
+// session's identity was known: a shared plugin key with no self-reported email
+// creates the chat ownerless when its first prompt beats the first OTEL export.
+// Fill-once and only for a chat with no owner at all, so it never replaces an
+// identity chat creation recorded, and never names a person on a session an
+// agent key produced.
+func (q *Queries) LinkChatOwner(ctx context.Context, arg LinkChatOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatOwner,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
 UPDATE chats
 SET user_account_id = $1
@@ -600,6 +639,43 @@ func (q *Queries) LinkChatUserAccount(ctx context.Context, arg LinkChatUserAccou
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listChatExternalMessageIDs = `-- name: ListChatExternalMessageIDs :many
+SELECT external_message_id::text
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2
+  AND external_message_id = ANY($3::text[])
+`
+
+type ListChatExternalMessageIDsParams struct {
+	ChatID             uuid.UUID
+	ProjectID          uuid.NullUUID
+	ExternalMessageIds []string
+}
+
+// Which of these external message ids the chat already holds. The Claude
+// transcript upload uses it to tell the prompts it stores for the first time
+// from those a per-event hook stored before it.
+func (q *Queries) ListChatExternalMessageIDs(ctx context.Context, arg ListChatExternalMessageIDsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listChatExternalMessageIDs, arg.ChatID, arg.ProjectID, arg.ExternalMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var external_message_id string
+		if err := rows.Scan(&external_message_id); err != nil {
+			return nil, err
+		}
+		items = append(items, external_message_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many

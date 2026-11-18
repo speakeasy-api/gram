@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -100,7 +101,7 @@ func TestProxy_Get_DrainClosesListenStreamWithRetry(t *testing.T) {
 	t.Parallel()
 
 	upstream := newHeldSSEUpstream(t)
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
 
@@ -123,7 +124,7 @@ func TestProxy_Get_DrainStartedBeforeStreamClosesItImmediately(t *testing.T) {
 	t.Parallel()
 
 	upstream := newHeldSSEUpstream(t)
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	drain.Start(time.Hour)
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
@@ -140,7 +141,7 @@ func TestProxy_Post_DrainEndsSubscriptionsListenWithCompletion(t *testing.T) {
 	t.Parallel()
 
 	upstream := newHeldSSEUpstream(t)
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
 
@@ -189,7 +190,7 @@ func TestProxy_Post_DrainLeavesToolCallStreamOpen(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	p := newProxyForTest(t, upstream.URL)
 	p.Drain = drain
 
@@ -244,7 +245,7 @@ func TestProxy_Get_RecordsShutdownStreamEnd(t *testing.T) {
 
 	upstream := newHeldSSEUpstream(t)
 	reader := sdkmetric.NewManualReader()
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
 	p.Metrics = proxy.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
@@ -383,7 +384,7 @@ func TestProxy_Post_DrainEndsStreamOnceResponseIsRelayed(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	drain.Start(time.Hour)
 	p := newProxyForTest(t, upstream.URL)
 	p.Drain = drain
@@ -401,7 +402,7 @@ func TestProxy_Post_InterruptAnswersPendingStreamAndCancelsUpstream(t *testing.T
 	upstream := newPendingUpstream(t, true)
 	reader := sdkmetric.NewManualReader()
 	failures := &mockToolsCallFailureInterceptor{}
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
 	p.Metrics = proxy.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
@@ -448,7 +449,7 @@ func TestProxy_Post_InterruptBeforeHeadersAnswersWithJSONError(t *testing.T) {
 	t.Parallel()
 
 	upstream := newPendingUpstream(t, false)
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
 
@@ -471,7 +472,7 @@ func TestProxy_Post_InterruptSkipsUpstreamCancelUnder20260728(t *testing.T) {
 	t.Parallel()
 
 	upstream := newPendingUpstream(t, true)
-	drain := proxy.NewDrain()
+	drain := shutdowndrain.New()
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
 

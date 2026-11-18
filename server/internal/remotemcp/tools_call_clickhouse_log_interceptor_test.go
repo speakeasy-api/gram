@@ -191,7 +191,9 @@ func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 		require.NoError(t, err)
 		require.Equal(t, "agent", actorType)
 		require.Equal(t, agentID, actorID)
-		require.Equal(t, "approver-id", authorizerID)
+		// An agent's API key is a shared credential, so its issuer is not
+		// recorded as someone the agent acts for.
+		require.Empty(t, authorizerID)
 		// Raw rows can become visible before their materialized-view projection.
 		require.Eventually(t, func() bool {
 			var summarizedAgentID string

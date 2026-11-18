@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { MAX_FILTER_VALUES } from "./exploreModel";
 import { customDateRangeBounds } from "@/components/filters/filter-schema";

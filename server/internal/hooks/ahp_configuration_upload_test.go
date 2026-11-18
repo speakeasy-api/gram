@@ -96,6 +96,7 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 			options := ahpclient.Options{
 				Source: "urn:test:discovery", Harness: ahp.Harness{Name: "test", Version: "1"},
 				Events: capability.Host{
+					TurnStart:          capability.TurnStart{Deny: true},
 					UserMessageInbound: capability.UserMessageInbound{Deny: true},
 					ToolBefore:         capability.ToolBefore{Deny: true},
 					SessionStart:       capability.SessionStart{Observe: true},
@@ -120,7 +121,7 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 				}
 				unapproved, err := ahpclient.New(registration.Value, unapprovedOptions)
 				require.NoError(t, err)
-				for _, name := range []event.Type{event.UserMessageInbound, event.ToolBefore, event.SessionStart, event.SessionEnd, event.TurnEnd, event.ModelResponseAfter, event.ToolAfter} {
+				for _, name := range []event.Type{event.TurnStart, event.UserMessageInbound, event.ToolBefore, event.SessionStart, event.SessionEnd, event.TurnEnd, event.ModelResponseAfter, event.ToolAfter} {
 					require.False(t, unapproved.Subscribes(name), "%s approval must skip the entire backend: %s", approval, name)
 				}
 				require.NoError(t, unapproved.Close())
@@ -153,6 +154,7 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 			client, err := ahpclient.New(registration.Value, options)
 			require.NoError(t, err)
 			defer func() { require.NoError(t, client.Close()) }()
+			require.True(t, client.Subscribes(event.TurnStart))
 			require.True(t, client.Subscribes(event.UserMessageInbound))
 			// Existing explicit registrations bypass discovery and its authorization hook.
 			var explicit map[string]any

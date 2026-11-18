@@ -22,6 +22,10 @@ import (
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
+// speakeasyHomepageURL is the author and homepage URL written into generated
+// plugin manifests and marketplace metadata.
+const speakeasyHomepageURL = "https://speakeasy.com"
+
 // ServerEnvConfig represents a user-facing environment variable required by a server.
 type ServerEnvConfig struct {
 	VariableName string
@@ -118,6 +122,9 @@ type GenerateConfig struct {
 	// SPEAKEASY_AI_HOOKS_* env credentials, a previously cached key, or the baked
 	// org-wide key instead of opening a browser.
 	BrowserLogin bool
+	// InstallRoute is baked into the hooks speakeasy.json so hook events
+	// report how the plugin was distributed. See the InstallRoute* values.
+	InstallRoute string
 	// HooksOrgName overrides the org name used to derive the observability
 	// plugin directory slugs (Claude/Cursor/Codex). The publish path sets it to
 	// the published hooks config's org name when it carries the hooks subtree
@@ -159,6 +166,7 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		MarketplaceName:  "",
 		HooksOrgName:     "",
 		BrowserLogin:     false,
+		InstallRoute:     InstallRouteMarketplace,
 		InstallFailOpen:  false,
 	}
 	out := make(map[string][]byte)
@@ -212,6 +220,7 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
 		BrowserLogin:    true,
+		InstallRoute:    InstallRouteDogfood,
 		InstallFailOpen: false,
 	}
 	files := make(map[string][]byte)
@@ -394,7 +403,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "56"
+const hooksGeneratorVersion = "63"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -406,7 +415,7 @@ const (
 	fingerprintHooksKeySentinel = "gram_fingerprint_hooks_key"
 )
 
-// mcpSharedFingerprintKey is the reserved key under which MCPFingerprints stores
+// mcpSharedFingerprintKey is the reserved key under which publishMCPFingerprints stores
 // the hash of the shared marketplace/README files. Plugin slugs are kebab-case
 // and never collide with it. When per-plugin publishing lands, shared files will
 // be assembled per plugin and this reserved entry can be reworked away.
@@ -419,12 +428,13 @@ const (
 	// of repeating "platform-mcp" twice. Cursor and Codex packages keep a
 	// client suffix because all five package roots share one repository.
 	platformMCPPluginName         = "speakeasy"
-	platformMCPDisplayName        = "Platform MCP"
+	platformMCPDisplayName        = "Speakeasy Platform"
 	platformMCPServerName         = "platform"
 	platformMCPCursorPluginName   = "speakeasy-cursor"
 	platformMCPCodexPluginName    = "speakeasy-codex"
 	platformMCPPluginRoot         = platformMCPPluginName
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
+	platformMCPPrivacyPolicyURL   = "https://www.speakeasy.com/privacy-policy"
 	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName
 	platformMCPCodexPluginRoot    = platformMCPCodexPluginName
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/" + platformMCPPluginName
@@ -439,24 +449,24 @@ const (
 //go:embed platform_mcp_skills/*/SKILL.md
 var platformMCPSkillsFS embed.FS
 
-// MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
-// plugins that would be generated for the given plugins — a map of plugin slug ->
-// stable hash, plus a reserved mcpSharedFingerprintKey entry covering the shared
-// marketplace/README files. It deliberately excludes the observability (hooks)
-// subtree: that plugin rolls out on its own manual hooksGeneratorVersion signal,
-// so MCP-content and hooks changes move independently.
+// platformMCPClaudeIcon is the Speakeasy mark the Claude plugin directory uses
+// as the listing icon. The directory reads .claude-plugin/icon.png and wants a
+// square PNG of 512 to 2048 px under 2 MB.
 //
-// includeObservability must mirror the project's observability setting: the
-// shared manifests list the observability entry only when it is on, so a
-// disabled project's fingerprints must be computed without it.
-//
-// Fingerprints are stored per plugin (rather than as one aggregate) so a future
-// per-plugin publish flow can decide independently which plugins have unpublished
-// changes without a schema migration; today the rollout treats the MCP component
-// as changed when any entry differs. Per-publish fields (manifest version and
-// injected API keys) are normalized out so the same MCP configuration and
-// mcpGeneratorVersion always produce the same fingerprints.
-func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig, includeObservability bool) (map[string]string, error) {
+//go:embed platform_mcp_assets/icon.png
+var platformMCPClaudeIcon []byte
+
+// PluginMCPFingerprint returns one plugin's entry of publishMCPFingerprints without
+// generating the rest of the project: the fingerprint a publish would record
+// for this plugin's MCP files under cfg.
+func PluginMCPFingerprint(p PluginInfo, cfg GenerateConfig, includeObservability bool) (string, error) {
+	return pluginMCPFingerprint(p, fingerprintConfig(cfg, includeObservability))
+}
+
+// fingerprintConfig normalizes the per-publish fields of cfg (manifest version
+// and injected API keys) so the same MCP configuration always fingerprints the
+// same way.
+func fingerprintConfig(cfg GenerateConfig, includeObservability bool) GenerateConfig {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
 	// Published repos that include observability carry a hooks key. Normalize
@@ -468,22 +478,17 @@ func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig, includeObservabil
 	} else {
 		cfg.HooksAPIKey = ""
 	}
+	return cfg
+}
 
-	out := make(map[string]string, len(plugins)+2)
-	for _, p := range plugins {
-		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
-		}
-		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
-	}
-	shared, err := generateSharedFiles(plugins, cfg)
+// pluginMCPFingerprint hashes one plugin's generated MCP files under an
+// already-normalized fingerprint config.
+func pluginMCPFingerprint(p PluginInfo, cfg GenerateConfig) (string, error) {
+	files, err := generateMCPFiles([]PluginInfo{p}, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("generate shared files for fingerprint: %w", err)
+		return "", fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
 	}
-	out[mcpSharedFingerprintKey] = hashFiles(mcpGeneratorVersion, shared)
-
-	return out, nil
+	return hashFiles(mcpGeneratorVersion, files), nil
 }
 
 // hashFiles returns a stable sha256 over a salt plus the sorted (path, content)
@@ -728,6 +733,53 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 // observability entry is listed first (so it's the first thing team admins see)
 // and only when a hooks key is configured, matching generateHooksFiles.
 func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	entries := make([]sharedPluginEntry, 0, len(plugins))
+	for _, p := range plugins {
+		entries = append(entries, sharedPluginEntryFor(p, cfg))
+	}
+	return generateSharedFilesFromEntries(entries, cfg)
+}
+
+// sharedPluginEntry is everything the shared marketplace manifests and README
+// read from one plugin. A publish builds it from the plugin's live state, or,
+// for a plugin whose auto sync is off, from the files it was last published
+// with, so the manifests keep listing it as published.
+type sharedPluginEntry struct {
+	Slug        string
+	Name        string
+	Description string
+
+	// ServerCount is shown in the README's plugin table.
+	ServerCount int
+
+	// CodexAuthentication is the plugin's Codex marketplace authentication
+	// policy: ON_INSTALL when installing it prompts for a credential,
+	// otherwise ON_USE.
+	CodexAuthentication string
+
+	// AgentPluginsPackage reports whether the plugin ships the portable Agent
+	// Plugins package, which is what Copilot lists.
+	AgentPluginsPackage bool
+}
+
+func sharedPluginEntryFor(p PluginInfo, cfg GenerateConfig) sharedPluginEntry {
+	return sharedPluginEntry{
+		Slug:                p.Slug,
+		Name:                p.Name,
+		Description:         p.Description,
+		ServerCount:         len(p.Servers),
+		CodexAuthentication: codexAuthPolicy(p, cfg),
+		// Copilot consumes feature plugins through the portable Agent Plugins
+		// 1.0 package, which generateMCPFiles omits for plugins that fail the
+		// portability gate. Re-run the same classification here so the manifest
+		// never advertises a directory that was never written — Copilot
+		// resolves an entry's source eagerly and a dangling one breaks the
+		// whole catalog.
+		AgentPluginsPackage: classifyAgentPlugin(p).Compatible,
+	}
+}
+
+func generateSharedFilesFromEntries(plugins []sharedPluginEntry, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
@@ -792,15 +844,10 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 			},
 			Policy: codexMarketplacePolicy{
 				Installation:   "AVAILABLE",
-				Authentication: codexAuthPolicy(p, cfg),
+				Authentication: p.CodexAuthentication,
 			},
 		})
-		// Copilot consumes feature plugins through the portable Agent Plugins 1.0
-		// package, which generateMCPFiles omits for plugins that fail the
-		// portability gate. Re-run the same classification here so the manifest
-		// never advertises a directory that was never written — Copilot resolves
-		// an entry's source eagerly and a dangling one breaks the whole catalog.
-		if classifyAgentPlugin(p).Compatible {
+		if p.AgentPluginsPackage {
 			copilotPlugins = append(copilotPlugins, marketplaceEntry{
 				Name:        p.Slug,
 				DisplayName: p.Name,
@@ -900,11 +947,11 @@ func claudeCodeSettingsSnippet(marketplaceName, marketplaceURL, plugin string) s
 	return fmt.Sprintf("```json\n{\n  \"env\": {\n    \"FORCE_AUTOUPDATE_PLUGINS\": \"1\"\n  },\n  \"extraKnownMarketplaces\": {\n    \"%s\": {\n      \"autoUpdate\": true,\n      \"source\": {\n        \"source\": \"git\",\n        \"url\": \"%s\"\n      }\n    }\n  },\n  \"enabledPlugins\": {\n    \"%s@%s\": true\n  }\n}\n```\n\n", marketplaceName, marketplaceURL, plugin, marketplaceName)
 }
 
-func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
+func generateReadme(plugins []sharedPluginEntry, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
-	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
+	b.WriteString("This repository contains plugin packages managed by [Speakeasy](" + speakeasyHomepageURL + "). ")
 	b.WriteString("Each plugin bundles MCP servers for distribution via supported coding agent marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Admin access.** Collaborators are granted admin permission so they can connect this repository to a platform marketplace — several of those setup flows, including Cursor's \"Serve marketplace from Cursor\", are only available to repository admins. Collaborators added before admin became the default keep their original permission until they are re-added from Speakeasy.\n")
@@ -923,7 +970,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 			if desc == "" {
 				desc = "—"
 			}
-			fmt.Fprintf(&b, "| %s | %s | %d |\n", escapeMarkdownCell(p.Name), escapeMarkdownCell(desc), len(p.Servers))
+			fmt.Fprintf(&b, "| %s | %s | %d |\n", escapeMarkdownCell(p.Name), escapeMarkdownCell(desc), p.ServerCount)
 		}
 		b.WriteString("\n")
 	}
@@ -1285,6 +1332,73 @@ func hooksOptionalSubtreePrefixes(orgName string) []string {
 	}
 }
 
+// allHooksSubtreePrefixes is every directory prefix the hooks subtree may
+// occupy for orgName, required and optional.
+func allHooksSubtreePrefixes(orgName string) []string {
+	return slices.Concat(hooksSubtreePrefixes(orgName), hooksOptionalSubtreePrefixes(orgName))
+}
+
+// pluginSubtreePrefixes returns the repo directory prefixes one feature
+// plugin's MCP packages occupy, one per platform layout generateMCPFiles
+// writes: Claude (<slug>/), Cursor, Codex, OpenCode, and the portable Agent
+// Plugins package. A publish copies a plugin whose auto sync is off verbatim
+// by these prefixes, the same way carryHooksSubtree carries the hooks subtree,
+// so the copy does not depend on which files the live state would generate.
+func pluginSubtreePrefixes(slug string) []string {
+	return []string{
+		slug + "/",
+		cursorPluginRoot + "/" + slug + "-cursor/",
+		slug + "-codex/",
+		opencodePluginRoot + "/" + slug + "/",
+		agentPluginRoot + "/" + slug + "/",
+	}
+}
+
+// reservedPackageDirs maps each repo directory a marketplace publishes outside
+// its feature plugins to what publishes there: the per-platform package roots,
+// the Platform MCP plugin, and the observability plugin under each org name
+// its directories may derive from.
+func reservedPackageDirs(orgNames []string) map[string]string {
+	reserved := map[string]string{
+		cursorPluginRoot + "/":   "the marketplace's Cursor packages",
+		opencodePluginRoot + "/": "the marketplace's OpenCode packages",
+		agentPluginRoot + "/":    "the marketplace's Agent Plugins packages",
+	}
+	for _, platformPackage := range platformMCPPackages {
+		reserved[platformPackage.root+"/"] = "the Speakeasy Platform MCP plugin"
+	}
+	for _, orgName := range orgNames {
+		for _, dir := range allHooksSubtreePrefixes(orgName) {
+			reserved[dir] = "the observability plugin"
+		}
+	}
+	return reserved
+}
+
+// pluginSlugPackageCollision refuses a slug whose package directories would be
+// ones another of the project's plugins, or the marketplace itself, already
+// publishes into: plugin foo's Codex package
+// and plugin foo-codex's Claude package would both be foo-codex/. others are
+// the project's other live slugs; a slug equal to one of them is left to the
+// unique slug check. orgNames are as for reservedPackageDirs.
+func pluginSlugPackageCollision(slug string, others []string, orgNames []string) error {
+	taken := reservedPackageDirs(orgNames)
+	for _, other := range others {
+		if other == slug {
+			continue
+		}
+		for _, dir := range pluginSubtreePrefixes(other) {
+			taken[dir] = "plugin " + other
+		}
+	}
+	for _, dir := range pluginSubtreePrefixes(slug) {
+		if holder, ok := taken[dir]; ok {
+			return &pluginSlugUnavailableError{slug: slug, dir: dir, holder: holder}
+		}
+	}
+	return nil
+}
+
 // generateClaudeObservabilityPlugin emits the per-org observability plugin
 // containing Speakeasy hooks for Claude Code. The generated runtime configuration
 // carries the org's hooks-scoped API key so no per-machine setup is required.
@@ -1304,13 +1418,14 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		name = ClaudeObservabilitySlug(cfg)
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        name,
-		DisplayName: cfg.OrgName + " Observability",
-		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  nil,
+		Name:             name,
+		DisplayName:      cfg.OrgName + " Observability",
+		Description:      "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+		Version:          hooksManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: speakeasyHomepageURL},
+		Homepage:         speakeasyHomepageURL,
+		UserConfig:       nil,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -1368,7 +1483,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     hooksManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
-		Homepage:    "https://getgram.ai",
+		Homepage:    speakeasyHomepageURL,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -2105,6 +2220,12 @@ const AGENT_END_WAIT_MS = 2000
 // How long a run whose agent_end was sent without its final message ignores a
 // late llm_output, so that output is not cached where nothing will consume it.
 const ENDED_RUN_TTL_MS = 60000
+// How many tool calls the shim remembers between before_tool_call and their
+// result. A Gateway whose runs never end must not grow the record forever.
+const OPEN_CALLS_CAP = 1024
+// How long a call whose result the shim reported at agent_end ignores a late
+// after_tool_call, so that the call is not reported twice.
+const SETTLED_CALL_TTL_MS = 60000
 // The relay resolves the org's fail-open posture in-process; shim-level
 // fail-closed covers the binary being unavailable (mirrors cursor failClosed).
 const FAIL_CLOSED = true
@@ -2114,9 +2235,12 @@ export default {
   name: "Speakeasy Observability",
   description: "Speakeasy observability hooks for OpenClaw.",
   register(api) {
-    const child = spawn(COMMAND[0], [...COMMAND.slice(1)], {
-      stdio: ["pipe", "pipe", "inherit"],
-    })
+    // The daemon starts on the first hook, not here. Some OpenClaw releases
+    // load plugins inside short-lived CLI commands such as plugins install,
+    // and a daemon started at register kept those commands from exiting.
+    let child = null
+    // Set at gateway_stop: no hook may start a daemon after shutdown.
+    let stopped = false
     let seq = 0
     const pending = new Map()
     // agent_end carries no final message or usage; cache the turn's
@@ -2126,28 +2250,89 @@ export default {
     // llm_output, so an agent_end with nothing to splice waits briefly for it.
     const pendingEnds = new Map()
     const endedRuns = new Set()
+    // Tool calls that sent before_tool_call and no after_tool_call yet, by
+    // toolCallId. OpenClaw's Codex harness fires after_tool_call for an MCP
+    // tool only from Codex's PostToolUse, which a failed call never gets, so a
+    // failed gateway call would stay pending forever. At agent_end the shim
+    // reports each open call of the run from its result in the transcript.
+    const openCalls = new Map()
+    const settledCalls = new Set()
 
-    createInterface({ input: child.stdout }).on("line", (line) => {
-      if (!line.trim()) return
-      let reply
-      try {
-        reply = JSON.parse(line)
-      } catch {
-        return
+    // The daemon keeps the host process alive only while a reply is pending,
+    // so a CLI command that fired a hook can still exit once it is answered.
+    const holdHost = (hold) => {
+      for (const handle of [child, child?.stdin, child?.stdout]) {
+        if (hold) handle?.ref?.()
+        else handle?.unref?.()
       }
-      const resolve = pending.get(reply.seq)
+    }
+    const settle = (id, reply) => {
+      const resolve = pending.get(id)
       if (!resolve) return
-      pending.delete(reply.seq)
+      pending.delete(id)
+      if (pending.size === 0) holdHost(false)
       resolve(reply)
-    })
-    child.on("exit", () => {
-      // An exited consumer cannot evaluate gates: resolve as timed out so
-      // FAIL_CLOSED applies instead of silently allowing.
-      for (const [, resolve] of pending) resolve({ timedOut: true })
-      pending.clear()
-    })
+    }
+
+    const startDaemon = () => {
+      const daemon = spawn(COMMAND[0], [...COMMAND.slice(1)], {
+        stdio: ["pipe", "pipe", "inherit"],
+      })
+      createInterface({ input: daemon.stdout }).on("line", (line) => {
+        if (!line.trim()) return
+        let reply
+        try {
+          reply = JSON.parse(line)
+        } catch {
+          return
+        }
+        settle(reply.seq, reply)
+      })
+      daemon.on("exit", () => {
+        // An exited consumer cannot evaluate gates: resolve as timed out so
+        // FAIL_CLOSED applies instead of silently allowing.
+        for (const id of [...pending.keys()]) settle(id, { timedOut: true })
+      })
+      return daemon
+    }
+
+    // The MCP servers in the live OpenClaw config, so the daemon can tell
+    // which URL a <server>__<tool> call reached. Only each entry's name and
+    // its URL without userinfo, query or fragment leave the process: headers,
+    // env and command carry credentials and are never read. A failed config
+    // read sends no servers rather than breaking the hook.
+    const configuredMcpServers = () => {
+      try {
+        const config = api.runtime?.config?.current?.() ?? api.config
+        const servers = config?.mcp?.servers
+        if (servers == null || typeof servers !== "object") return []
+        const out = []
+        for (const [name, server] of Object.entries(servers)) {
+          if (server == null || typeof server !== "object" || server.enabled === false) continue
+          if (typeof server.url !== "string") continue
+          let url
+          try {
+            url = new URL(server.url)
+          } catch {
+            continue
+          }
+          url.username = ""
+          url.password = ""
+          url.search = ""
+          url.hash = ""
+          out.push({ name, url: url.toString() })
+        }
+        return out
+      } catch {
+        return []
+      }
+    }
 
     const call = (hook, event, ctx, timeoutMs) => {
+      if (child === null) {
+        if (stopped) return Promise.resolve({ timedOut: true })
+        child = startDaemon()
+      }
       if (child.exitCode !== null || !child.stdin?.writable) {
         return Promise.resolve({ timedOut: true })
       }
@@ -2156,12 +2341,15 @@ export default {
       // as soon as the shim gives up (observe frames omit it).
       const frame = { seq: id, hook, event, ctx }
       if (timeoutMs !== undefined) frame.timeoutMs = timeoutMs
+      if (hook === "before_tool_call" || hook === "after_tool_call") {
+        const mcpServers = configuredMcpServers()
+        if (mcpServers.length > 0) frame.mcpServers = mcpServers
+      }
       child.stdin.write(JSON.stringify(frame) + "\n")
       return new Promise((resolve) => {
         pending.set(id, resolve)
-        const timer = setTimeout(() => {
-          if (pending.delete(id)) resolve({ timedOut: true })
-        }, timeoutMs ?? DEFAULT_TIMEOUT_MS)
+        holdHost(true)
+        const timer = setTimeout(() => settle(id, { timedOut: true }), timeoutMs ?? DEFAULT_TIMEOUT_MS)
         if (typeof timer.unref === "function") timer.unref()
       })
     }
@@ -2203,9 +2391,67 @@ export default {
       return { block: true, blockReason: reason }
     }
 
+    const toolCallIdOf = (event, ctx) => event?.toolCallId ?? ctx?.toolCallId
+
+    const openCall = (event, ctx) => {
+      const toolCallId = toolCallIdOf(event, ctx)
+      if (typeof toolCallId !== "string" || toolCallId === "") return
+      if (openCalls.size >= OPEN_CALLS_CAP) openCalls.delete(openCalls.keys().next().value)
+      const runId = event?.runId ?? ctx?.runId
+      openCalls.set(toolCallId, {
+        runKey: runId ?? "",
+        sessionKey: ctx?.sessionId ?? "",
+        event: { toolName: event?.toolName, params: event?.params, runId, toolCallId },
+        ctx,
+      })
+    }
+
+    // The text of a transcript tool result, which carries a failed call's error.
+    const toolResultText = (message) => {
+      const content = message?.content
+      if (typeof content === "string") return content
+      if (!Array.isArray(content)) return ""
+      return content
+        .filter((part) => part?.type === "text" && typeof part.text === "string")
+        .map((part) => part.text)
+        .join("\n")
+    }
+
+    // At agent_end, reports every call of the run that is still waiting for
+    // its after_tool_call, from the call's result in the run's transcript: a
+    // failed result is sent as a failure with its text as the error. A call
+    // with no result in the transcript is not reported, because its outcome
+    // is unknown.
+    const settleOpenCalls = (rawEvent, ctx) => {
+      const runKey = rawEvent?.runId ?? ctx?.runId ?? ""
+      const sessionKey = ctx?.sessionId ?? ""
+      const results = new Map()
+      for (const message of Array.isArray(rawEvent?.messages) ? rawEvent.messages : []) {
+        if (message?.role === "toolResult" && typeof message.toolCallId === "string") results.set(message.toolCallId, message)
+      }
+      for (const [toolCallId, open] of [...openCalls]) {
+        const sameRun = runKey !== "" && open.runKey === runKey
+        const sameSession = (runKey === "" || open.runKey === "") && sessionKey !== "" && open.sessionKey === sessionKey
+        if (!sameRun && !sameSession) continue
+        openCalls.delete(toolCallId)
+        const message = results.get(toolCallId)
+        if (message === undefined) continue
+        settledCalls.add(toolCallId)
+        setTimeout(() => settledCalls.delete(toolCallId), SETTLED_CALL_TTL_MS).unref?.()
+        const result = { content: message.content }
+        if (message.details !== undefined) result.details = message.details
+        const after = { ...open.event, result }
+        if (message.isError === true) after.error = toolResultText(message) || "Tool call failed"
+        void call("after_tool_call", after, open.ctx)
+      }
+    }
+
     for (const hook of HOOKS) {
       const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
       api.on(hook, (rawEvent, ctx) => {
+        // A Gateway that loaded the plugin while running fires no gateway_start,
+        // so its shutdown may be the first hook: never start the daemon for it.
+        if (hook === "gateway_stop" && child === null) return
         const event = slimEvent(hook, rawEvent)
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
@@ -2224,6 +2470,7 @@ export default {
           return
         }
         if (hook === "agent_end") {
+          settleOpenCalls(rawEvent, ctx)
           // Consume exactly the entry that served the splice: deleting the
           // other candidate key could destroy a concurrent turn's pending entry.
           const runKey = event?.runId ?? ctx?.runId ?? ""
@@ -2250,20 +2497,34 @@ export default {
           void call(hook, spliced, sanitizeCtx(hook, ctx))
           return
         }
+        if (hook === "after_tool_call") {
+          const toolCallId = toolCallIdOf(event, ctx)
+          openCalls.delete(toolCallId)
+          // agent_end already reported this call from its transcript result.
+          if (settledCalls.delete(toolCallId)) return
+        }
         if (gateTimeoutMs === undefined) {
           void call(hook, event, sanitizeCtx(hook, ctx))
           return
         }
+        if (hook === "before_tool_call") openCall(event, ctx)
         return call(hook, event, sanitizeCtx(hook, ctx), gateTimeoutMs).then((reply) => {
           // An output-less reply is the daemon's legitimate "no decision";
           // only a shim timeout or daemon-reported error may fail closed.
-          if ((reply?.timedOut || reply?.error) && FAIL_CLOSED) return failClosedResult(hook, event)
-          return reply?.output
+          const decision = (reply?.timedOut || reply?.error) && FAIL_CLOSED ? failClosedResult(hook, event) : reply?.output
+          // A blocked call never runs, so it has no result to wait for.
+          if (hook === "before_tool_call" && decision?.block === true) openCalls.delete(toolCallIdOf(event, ctx))
+          return decision
         })
       })
     }
 
     api.on("gateway_stop", () => {
+      stopped = true
+      // A deferred agent_end would otherwise fire after shutdown.
+      for (const { timer } of pendingEnds.values()) clearTimeout(timer)
+      pendingEnds.clear()
+      if (child === null) return
       try {
         child.stdin.end()
         child.kill()
@@ -3002,23 +3263,26 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 	return []byte(b.String())
 }
 
+// platformMCPPackages are the Platform MCP plugin's package directories, one
+// per client platform.
+var platformMCPPackages = []struct {
+	root     string
+	platform string
+}{
+	{root: platformMCPPluginRoot, platform: "claude"},
+	{root: platformMCPCursorPluginRoot, platform: "cursor"},
+	{root: platformMCPCodexPluginRoot, platform: "codex"},
+	{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
+	{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
+}
+
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
 	platformURL, err := platformMCPURL(cfg.ServerURL)
 	if err != nil {
 		return err
 	}
 
-	packages := []struct {
-		root     string
-		platform string
-	}{
-		{root: platformMCPPluginRoot, platform: "claude"},
-		{root: platformMCPCursorPluginRoot, platform: "cursor"},
-		{root: platformMCPCodexPluginRoot, platform: "codex"},
-		{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
-		{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
-	}
-	for _, packageSpec := range packages {
+	for _, packageSpec := range platformMCPPackages {
 		packageFiles, err := generatePlatformMCPPackageForClient(cfg, platformURL.String(), packageSpec.platform)
 		if err != nil {
 			return err
@@ -3086,18 +3350,20 @@ func emitPlatformMCPSkills(files map[string][]byte) error {
 func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	meta, err := marshalJSON(claudePluginMeta{
-		Name:        platformMCPPluginName,
-		DisplayName: platformMCPDisplayName,
-		Description: platformMCPDescription,
-		Version:     platformMCPManifestVersion(cfg),
-		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
-		Homepage:    "https://www.speakeasy.com/product/gram",
-		UserConfig:  nil,
+		Name:             platformMCPPluginName,
+		DisplayName:      platformMCPDisplayName,
+		Description:      platformMCPDescription,
+		Version:          platformMCPManifestVersion(cfg),
+		Author:           pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:         "https://www.speakeasy.com/product/gram",
+		UserConfig:       nil,
+		PrivacyPolicyURL: platformMCPPrivacyPolicyURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
 	}
 	files[".claude-plugin/plugin.json"] = meta
+	files[".claude-plugin/icon.png"] = bytes.Clone(platformMCPClaudeIcon)
 
 	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
 		platformMCPServerName: {
@@ -3305,13 +3571,14 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        p.Slug,
-		DisplayName: p.Name,
-		Description: p.Description,
-		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  userConfigPtr,
+		Name:             p.Slug,
+		DisplayName:      p.Name,
+		Description:      p.Description,
+		Version:          pluginManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: speakeasyHomepageURL},
+		Homepage:         speakeasyHomepageURL,
+		UserConfig:       userConfigPtr,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3384,7 +3651,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
-		Homepage:    "https://getgram.ai",
+		Homepage:    speakeasyHomepageURL,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3620,6 +3887,10 @@ type claudePluginMeta struct {
 	Author      pluginAuthor               `json:"author"`
 	Homepage    string                     `json:"homepage"`
 	UserConfig  map[string]userConfigEntry `json:"userConfig,omitempty"`
+	// PrivacyPolicyURL is read by the Claude plugin directory review; only the
+	// first-party Platform MCP package is listed there, so customer and
+	// observability packages leave it empty.
+	PrivacyPolicyURL string `json:"privacyPolicyUrl,omitempty"`
 }
 
 type userConfigEntry struct {
@@ -3852,4 +4123,18 @@ func marshalJSON(v any) ([]byte, error) {
 	// dogfood mirrors are formatted by hk (oxfmt), which enforces a trailing
 	// newline -- the render must match byte-for-byte.
 	return append(b, '\n'), nil
+}
+
+// hooksPackagesCollide reports whether an org-derived observability package
+// would overwrite a feature plugin's package, such as after an org rename.
+func hooksPackagesCollide(infos []PluginInfo, orgName string) bool {
+	hooks := allHooksSubtreePrefixes(orgName)
+	for _, info := range infos {
+		for _, dir := range pluginSubtreePrefixes(info.Slug) {
+			if slices.Contains(hooks, dir) {
+				return true
+			}
+		}
+	}
+	return false
 }

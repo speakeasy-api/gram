@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -19,9 +20,11 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -45,6 +48,8 @@ type chainedRefreshFixture struct {
 	clientID     string
 	refreshToken string
 	resourceKey  string
+	userIssuer   uuid.UUID
+	serverID     uuid.UUID
 }
 
 func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixture) {
@@ -136,6 +141,7 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 		ti: ti, org: org, human: human, idpIssuer: idpIssuer, idpClient: idpClient,
 		configHash: remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient),
 		slug:       slug, clientID: client.ClientID, refreshToken: refreshToken, resourceKey: resourceKey,
+		userIssuer: userIssuer.ID, serverID: serverID,
 	}
 }
 
@@ -283,4 +289,113 @@ func TestHandleToken_ChainedRefreshWithColdDiscoveryCacheProceeds(t *testing.T) 
 	require.NoError(t, f.ti.cacheAdapter.Delete(ctx, f.resourceKey))
 	res := f.refresh(t, ctx)
 	require.Equal(t, http.StatusOK, res.code, "without cached discovery the refresh cannot name the runtime's binding, so it proceeds: %s", res.body)
+}
+
+// callEndpoint initializes the fixture's endpoint as the human with a live
+// session, so the real chainer, delegation service and gate answer it.
+func (f chainedRefreshFixture) callEndpoint(t *testing.T, ctx context.Context) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	subject := urn.NewUserSubject(f.human)
+	seedUserMCPConnectGrant(t, ctx, f.ti.conn, f.org, f.human, f.serverID.String())
+	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: urn.NewUserSessionIssuer(f.userIssuer).String(),
+		Issuer:   f.ti.serverURL.String() + "/mcp/" + f.slug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	persistTestUserSession(t, f.ti, f.userIssuer, subject, jti)
+	return servePublicHTTP(t, context.Background(), f.ti, f.slug, makeInitializeBody(), token, nil)
+}
+
+// A failing company sign-in reaches the person as plain text with no reason
+// code, through the real chainer, for each state of the retained delegation.
+func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
+	t.Parallel()
+	const (
+		retryMessage = "Company sign-in for this server is temporarily unavailable. Try again in a moment."
+		adminMessage = "Company sign-in for this server isn't working. Contact your administrator."
+	)
+	setState := func(t *testing.T, ctx context.Context, f chainedRefreshFixture, state remotesessions_repo.SetTrustedDelegationStateFixtureParams) {
+		t.Helper()
+		state.OrganizationID, state.ClientID = f.org, f.idpClient
+		affected, err := remotesessions_repo.New(f.ti.conn).SetTrustedDelegationStateFixture(ctx, state)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, affected)
+	}
+	for _, tc := range []struct {
+		name    string
+		arrange func(*testing.T, context.Context, chainedRefreshFixture)
+		code    oops.Code
+		message string
+	}{
+		{
+			name: "paused after the provider refused",
+			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
+				t.Helper()
+				setState(t, ctx, f, remotesessions_repo.SetTrustedDelegationStateFixtureParams{
+					ObservationStatus: conv.ToPGText("configuration_failure"),
+					RetryAfter:        conv.ToPGTimestamptz(time.Now().Add(5 * time.Minute)),
+				})
+			},
+			code: oops.CodeForbidden, message: adminMessage,
+		},
+		{
+			name: "erased after an invalid identity",
+			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
+				t.Helper()
+				setState(t, ctx, f, remotesessions_repo.SetTrustedDelegationStateFixtureParams{ObservationStatus: conv.ToPGText("configuration_failure")})
+			},
+			code: oops.CodeUnauthorized, message: reconnectDescription,
+		},
+		{
+			name: "renewal in flight",
+			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
+				t.Helper()
+				setState(t, ctx, f, remotesessions_repo.SetTrustedDelegationStateFixtureParams{RefreshClaimID: uuid.NullUUID{UUID: uuid.New(), Valid: true}})
+			},
+			code: oops.CodeUnavailable, message: retryMessage,
+		},
+		{
+			name: "claim with nothing running",
+			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
+				t.Helper()
+				// Resolve clears an expired assertion first, which would touch the row.
+				_, err := remotesessions_repo.New(f.ti.conn).ClearExpiredTrustedDelegationAssertion(ctx, remotesessions_repo.ClearExpiredTrustedDelegationAssertionParams{OrganizationID: f.org, ClientID: f.idpClient, IssuerID: f.idpIssuer, SubjectUrn: urn.NewUserSubject(f.human).String()})
+				require.NoError(t, err)
+				setState(t, ctx, f, remotesessions_repo.SetTrustedDelegationStateFixtureParams{
+					RefreshClaimID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+					UpdatedAt:      conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+				})
+			},
+			code: oops.CodeUnauthorized, message: reconnectDescription,
+		},
+		{
+			name: "registration changed",
+			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
+				t.Helper()
+				rotated, err := f.ti.enc.Encrypt([]byte("rotated-secret"))
+				require.NoError(t, err)
+				_, err = remotesessions_repo.New(f.ti.conn).UpdateOrganizationRemoteSessionClient(ctx, remotesessions_repo.UpdateOrganizationRemoteSessionClientParams{
+					ClientSecretEncrypted: conv.ToPGText(rotated), ID: f.idpClient, OrganizationID: conv.ToPGText(f.org),
+				})
+				require.NoError(t, err)
+			},
+			code: oops.CodeUnauthorized, message: reconnectDescription,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, f := newChainedRefreshFixture(t)
+			f.retainDelegation(t, ctx, "durable_credential_present")
+			tc.arrange(t, ctx, f)
+			w, err := f.callEndpoint(t, ctx)
+			require.Equal(t, tc.message, requireOopsCode(t, err, tc.code))
+			if tc.code == oops.CodeUnauthorized {
+				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`, "the client is sent to sign in")
+			} else {
+				require.Empty(t, w.Header().Get("WWW-Authenticate"))
+			}
+		})
+	}
 }

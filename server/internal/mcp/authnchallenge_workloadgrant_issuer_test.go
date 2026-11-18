@@ -73,14 +73,15 @@ func (f workloadGrantFixture) seedToolsetOnUserSessionIssuer(t *testing.T, issue
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, f.ti, toolsetRow, slug, "private", uuid.NullUUID{UUID: issuerID, Valid: true})
+	toolset := hostToolset(t, ctx, f.ti, toolsetRow, slug, "private", uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	return &mcp.ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(toolset.ID).String(),
+		AudienceURN:         urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		OrganizationID:      f.fx.orgID,
 		ProjectID:           f.fx.target.ProjectID,
 		RouteBase:           mcproute.MCP,
 		Slug:                slug,
+		McpServerID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		UserSessionIssuerID: issuerID,
 	}
@@ -300,7 +301,7 @@ func TestSharedAuthorizationServer_ClientAuthenticatedAssertionStillRequiresReso
 
 	w := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
 	require.Empty(t, f.workloadSessions(t))
 }
 

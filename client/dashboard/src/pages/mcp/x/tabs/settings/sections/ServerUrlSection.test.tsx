@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -55,9 +56,6 @@ vi.mock("@/hooks/useRootMcpEndpoint", () => ({
     setRootMcpEndpoint: vi.fn(),
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ domains: { goTo: vi.fn() } }),
-}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useSlugs: () => ({ orgSlug: "acme" }),
@@ -80,6 +78,37 @@ const slugValidation = vi.hoisted(() => vi.fn((..._args: unknown[]) => null));
 vi.mock("../../../useMcpEndpointSlugValidation", () => ({
   useMcpEndpointSlugValidation: slugValidation,
 }));
+const usageImpact = vi.hoisted(() => ({
+  current: {
+    data: {
+      serverName: "Example server",
+      signInRequired: true,
+      sharedSignIn: false,
+      activeConnectionCount: 2,
+      activeSubjectCount: 1,
+      sharedConnectionCount: 0,
+      subjects: [
+        {
+          subjectUrn: "user:alice",
+          subjectType: "user",
+          displayName: "Alice",
+          connectionCount: 2,
+          clientNames: [],
+          sharedSignIn: false,
+        },
+      ],
+      subjectsTruncated: false,
+    },
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    fetchStatus: "idle",
+  },
+}));
+vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
+  useMcpServerUsageImpact: () => usageImpact.current,
+}));
+const updateEndpoint = vi.hoisted(() => vi.fn());
 const deleteEndpoint = vi.hoisted(() => vi.fn());
 vi.mock("@gram/client/react-query/deleteMcpEndpoint.js", () => ({
   useDeleteMcpEndpointMutation: () => ({
@@ -91,7 +120,7 @@ vi.mock("@gram/client/react-query/updateMcpEndpoint.js", () => ({
   useUpdateMcpEndpointMutation: () => ({
     isPending: false,
     isError: false,
-    mutate: vi.fn(),
+    mutate: updateEndpoint,
   }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -123,6 +152,13 @@ const customEndpoint = {
   customDomainId: "domain-1",
 } as McpEndpoint;
 
+function confirmWithServerName(buttonName: string) {
+  fireEvent.change(screen.getByLabelText("Type the server name to confirm"), {
+    target: { value: "Example server" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: buttonName }));
+}
+
 function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
   render(
     <TooltipProvider>
@@ -133,12 +169,14 @@ function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
         mcpServer={mcpServer}
       />
     </TooltipProvider>,
+    { wrapper: MemoryRouter },
   );
 }
 
 afterEach(() => {
   cleanup();
   deleteEndpoint.mockReset();
+  updateEndpoint.mockReset();
   networkIngress.current = undefined;
   domainsOverride.current = undefined;
   domainsError.current = false;
@@ -161,9 +199,75 @@ describe("ServerUrlSection", () => {
 
     expect(screen.getAllByLabelText("Remove address")).toHaveLength(2);
     fireEvent.click(screen.getAllByLabelText("Remove address")[1]!);
+    expect(screen.getByText("Alice")).toBeTruthy();
+    expect(deleteEndpoint).not.toHaveBeenCalled();
+    confirmWithServerName("Remove address");
     expect(deleteEndpoint).toHaveBeenCalledWith({
       request: { id: "endpoint-3" },
     });
+  });
+
+  it("shows who is connected and waits for the server name before renaming an address", () => {
+    renderSection(hosted(), [platformEndpoint]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "renamed" },
+    });
+    fireEvent.click(screen.getByLabelText("Save address"));
+    expect(screen.getByText("Change this address?")).toBeTruthy();
+    expect(screen.getByText(/2 active connections from 1 caller/)).toBeTruthy();
+    const confirm = screen.getByRole("button", { name: "Change address" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect(updateEndpoint).not.toHaveBeenCalled();
+
+    confirmWithServerName("Change address");
+    expect(updateEndpoint).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an unprefixed platform address as it is until edited", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    const input = screen.getByPlaceholderText("endpoint") as HTMLInputElement;
+    expect(input.value).toBe("example");
+    const save = screen.getByLabelText("Save address") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(updateEndpoint).not.toHaveBeenCalled();
+  });
+
+  it("keeps Save disabled when an address is cleared", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "  " },
+    });
+    const save = screen.getByLabelText("Save address") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+  });
+
+  it("adds the organization prefix when renaming an unprefixed platform address", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "renamed" },
+    });
+    expect(
+      screen.getByText(/This saves as .*\/mcp\/acme-renamed\./),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Save address"));
+    confirmWithServerName("Change address");
+    expect(updateEndpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          updateMcpEndpointForm: expect.objectContaining({
+            id: "endpoint-5",
+            slug: "acme-renamed",
+          }),
+        },
+      }),
+    );
   });
 
   it("confirms before removing the last address that can serve", () => {
@@ -233,35 +337,6 @@ describe("ServerUrlSection", () => {
     expect(screen.getByText("No custom address")).toBeTruthy();
   });
 
-  it("shows the legacy Speakeasy address a custom-domain alias still serves", () => {
-    renderSection(
-      server({
-        id: "toolset-1",
-        toolsetId: "toolset-1",
-        legacyPlatformSlug: "example",
-      }),
-      [customEndpoint],
-    );
-
-    expect(screen.queryByText("No hosted address")).toBeNull();
-    expect(screen.getByText(/\/mcp\/example$/)).toBeTruthy();
-    expect(screen.getByLabelText("Add hosted address")).toBeTruthy();
-    cleanup();
-
-    renderSection(
-      server({
-        id: "server-2",
-        toolsetId: "toolset-1",
-        legacyPlatformSlug: "example",
-      }),
-      [customEndpoint],
-    );
-    expect(
-      screen.queryByText(/\/mcp\/example$/),
-      "only the canonical server shows the legacy address",
-    ).toBeNull();
-  });
-
   it("lets a hosted server add another platform address", () => {
     renderSection(hosted(), [platformEndpoint]);
 
@@ -314,7 +389,7 @@ describe("ServerUrlSection", () => {
     );
 
     fireEvent.click(screen.getByLabelText("Remove address"));
-    fireEvent.click(screen.getByRole("button", { name: "Remove address" }));
+    confirmWithServerName("Remove address");
     expect(deleteEndpoint).toHaveBeenCalledWith({
       request: { id: "endpoint-1" },
     });
@@ -365,11 +440,10 @@ describe("ServerUrlSection", () => {
       "domain-1",
       "example",
       true,
-      "toolset-1",
     );
   });
 
-  it("checks a new hosted address against the server so its own legacy alias reads as available", () => {
+  it("checks a new hosted address without naming the server", () => {
     renderSection(hosted(), [platformEndpoint]);
     slugValidation.mockClear();
 
@@ -379,7 +453,6 @@ describe("ServerUrlSection", () => {
       null,
       undefined,
       false,
-      "toolset-1",
     );
   });
 });

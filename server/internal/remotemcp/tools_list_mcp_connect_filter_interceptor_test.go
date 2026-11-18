@@ -375,3 +375,237 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsUnclassifiedGrantedTool(t *te
 	require.Len(t, resp.Result.Tools, 1)
 	require.Equal(t, "tool_a", resp.Result.Tools[0].Name)
 }
+
+func TestToolsListMCPConnectFilterInterceptor_Inspection(t *testing.T) {
+	t.Parallel()
+
+	onServer := authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}
+	connectToSearch := authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+		"resource_kind": "mcp",
+		"resource_id":   testServerID,
+		"tool":          "search_tickets",
+	})
+	// mcp:read does not imply mcp:connect, so read holders that list tools
+	// also hold the matching connect grant the explicit-connect backfill adds.
+	connectOnServer := authz.NewGrantWithSelector(authz.ScopeMCPConnect, onServer)
+	blockDelete := authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, authz.Selector{
+		"resource_kind": "mcp",
+		"resource_id":   testServerID,
+		"tool":          "delete_ticket",
+	})
+
+	tests := []struct {
+		name       string
+		grants     []authz.Grant
+		inspect    bool
+		wantMarked bool
+	}{
+		{
+			name:       "mcp:read keeps and marks the tools it would drop",
+			grants:     []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPRead, onServer), connectOnServer, blockDelete},
+			inspect:    true,
+			wantMarked: true,
+		},
+		{
+			// A read block takes write away too, so the holder is left with
+			// connect alone and gets the filtered list.
+			name: "mcp:write blocked by a read block no longer inspects",
+			grants: []authz.Grant{
+				authz.NewGrantWithSelector(authz.ScopeMCPWrite, onServer),
+				authz.NewGrantWithSelector(authz.ScopeMCPBlockedRead, onServer),
+				connectToSearch,
+				blockDelete,
+			},
+			inspect:    true,
+			wantMarked: false,
+		},
+		{
+			name:       "connect alone still drops them when inspection is requested",
+			grants:     []authz.Grant{connectToSearch},
+			inspect:    true,
+			wantMarked: false,
+		},
+		{
+			name:       "an ordinary client with mcp:read still gets the filtered list",
+			grants:     []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPRead, onServer), connectOnServer, blockDelete},
+			inspect:    false,
+			wantMarked: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+			ctx = authztest.WithExactGrants(t, ctx, tt.grants...)
+			interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+
+			resp := newToolsListResponse(t, []*mcp.Tool{
+				{Name: "search_tickets", InputSchema: map[string]any{}},
+				{Name: "delete_ticket", InputSchema: map[string]any{}},
+			})
+			params := &mcp.ListToolsParams{Cursor: "", Meta: nil}
+			if tt.inspect {
+				params.Meta = mcp.Meta{remotemcp.ToolsListInspectMetaKey: true}
+			}
+			resp.Request = &proxy.ToolsListRequest{Params: params, UserRequest: nil}
+
+			require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
+
+			require.Equal(t, "search_tickets", resp.Result.Tools[0].Name)
+			require.NotContains(t, resp.Result.Tools[0].Meta, remotemcp.ToolUnavailableMetaKey)
+			if !tt.wantMarked {
+				require.Len(t, resp.Result.Tools, 1)
+				return
+			}
+			require.Len(t, resp.Result.Tools, 2)
+			require.Equal(t, "delete_ticket", resp.Result.Tools[1].Name)
+			require.Equal(t, true, resp.Result.Tools[1].Meta[remotemcp.ToolUnavailableMetaKey])
+
+			rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+			require.True(t, ok)
+			require.Contains(t, string(rpcResp.Result), remotemcp.ToolUnavailableMetaKey, "the mark must reach the wire")
+		})
+	}
+}
+
+func TestToolsListReservedMetaInterceptor_RemovesAnUpstreamMark(t *testing.T) {
+	t.Parallel()
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "ghost", InputSchema: map[string]any{}, Meta: mcp.Meta{remotemcp.ToolUnavailableMetaKey: true, "other": "kept"}},
+		{Name: "plain", InputSchema: map[string]any{}},
+	})
+	require.NoError(t, remotemcp.ToolsListReservedMetaInterceptor{}.InterceptToolsListResponse(t.Context(), resp))
+
+	require.NotContains(t, resp.Result.Tools[0].Meta, remotemcp.ToolUnavailableMetaKey)
+	require.Equal(t, "kept", resp.Result.Tools[0].Meta["other"])
+
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+	require.NotContains(t, string(rpcResp.Result), remotemcp.ToolUnavailableMetaKey)
+}
+
+func TestToolsListReservedMetaInterceptor_LeavesOtherListingsUntouched(t *testing.T) {
+	t.Parallel()
+
+	const payload = `{"tools":[{"name":"plain","inputSchema":{},"x-extension":true}]}`
+	resp := newToolsListResponseFromWire(t, payload)
+	require.NoError(t, remotemcp.ToolsListReservedMetaInterceptor{}.InterceptToolsListResponse(t.Context(), resp))
+
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+	require.JSONEq(t, payload, string(rpcResp.Result))
+}
+
+func TestToolsListMCPConnectFilterInterceptor_InspectionReasons(t *testing.T) {
+	t.Parallel()
+
+	// Each case gives the caller mcp:read on the server, which inspection
+	// needs, plus an explicit mcp:connect narrowed to the case: read no
+	// longer implies connect.
+	tests := []struct {
+		name         string
+		grants       []authz.Grant
+		dispositions map[string]string
+		wantReason   remotemcp.ToolUnavailableReason
+	}{
+		{
+			name: "an explicit block rule reports blocked",
+			grants: []authz.Grant{
+				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "tool": "locked_tool"}),
+			},
+			dispositions: nil,
+			wantReason:   remotemcp.ToolUnavailableReasonBlocked,
+		},
+		{
+			name: "a disposition-scoped grant reports read_only",
+			grants: []authz.Grant{
+				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "disposition": "read_only"}),
+			},
+			dispositions: map[string]string{"open_tool": "read_only", "locked_tool": "destructive"},
+			wantReason:   remotemcp.ToolUnavailableReasonReadOnly,
+		},
+		{
+			name: "a grant limited to another disposition reports not_granted",
+			grants: []authz.Grant{
+				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "disposition": "idempotent"}),
+			},
+			dispositions: map[string]string{"open_tool": "idempotent", "locked_tool": "destructive"},
+			wantReason:   remotemcp.ToolUnavailableReasonNotGranted,
+		},
+		{
+			name: "no grant covering the tool reports not_granted",
+			grants: []authz.Grant{
+				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "tool": "open_tool"}),
+			},
+			dispositions: map[string]string{"open_tool": "read_only", "locked_tool": "destructive"},
+			wantReason:   remotemcp.ToolUnavailableReasonNotGranted,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+			ctx = authztest.WithExactGrants(t, ctx, tt.grants...)
+			resolver := fakeToolDispositionResolver{dispositions: tt.dispositions}
+			interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+			resp := newToolsListResponse(t, []*mcp.Tool{
+				{Name: "open_tool", InputSchema: map[string]any{}},
+				{Name: "locked_tool", InputSchema: map[string]any{}},
+			})
+			resp.Request = &proxy.ToolsListRequest{
+				Params:      &mcp.ListToolsParams{Cursor: "", Meta: mcp.Meta{remotemcp.ToolsListInspectMetaKey: true}},
+				UserRequest: nil,
+			}
+
+			require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
+
+			require.Len(t, resp.Result.Tools, 2)
+			require.Equal(t, "open_tool", resp.Result.Tools[0].Name)
+			require.NotContains(t, resp.Result.Tools[0].Meta, remotemcp.ToolUnavailableMetaKey)
+			require.NotContains(t, resp.Result.Tools[0].Meta, remotemcp.ToolUnavailableReasonMetaKey)
+
+			require.Equal(t, "locked_tool", resp.Result.Tools[1].Name)
+			require.Equal(t, true, resp.Result.Tools[1].Meta[remotemcp.ToolUnavailableMetaKey])
+			require.Equal(t, string(tt.wantReason), resp.Result.Tools[1].Meta[remotemcp.ToolUnavailableReasonMetaKey])
+
+			rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+			require.True(t, ok)
+			var wire struct {
+				Tools []struct {
+					Name string         `json:"name"`
+					Meta map[string]any `json:"_meta"`
+				} `json:"tools"`
+			}
+			require.NoError(t, json.Unmarshal(rpcResp.Result, &wire))
+			require.Equal(t, string(tt.wantReason), wire.Tools[1].Meta[remotemcp.ToolUnavailableReasonMetaKey], "the reason must reach the wire")
+		})
+	}
+}
+
+func TestToolsListReservedMetaInterceptor_RemovesAnUpstreamReason(t *testing.T) {
+	t.Parallel()
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "ghost", InputSchema: map[string]any{}, Meta: mcp.Meta{remotemcp.ToolUnavailableReasonMetaKey: "blocked", "other": "kept"}},
+		{Name: "plain", InputSchema: map[string]any{}},
+	})
+	require.NoError(t, remotemcp.ToolsListReservedMetaInterceptor{}.InterceptToolsListResponse(t.Context(), resp))
+
+	require.NotContains(t, resp.Result.Tools[0].Meta, remotemcp.ToolUnavailableReasonMetaKey)
+	require.Equal(t, "kept", resp.Result.Tools[0].Meta["other"])
+
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+	require.NotContains(t, string(rpcResp.Result), remotemcp.ToolUnavailableReasonMetaKey)
+}

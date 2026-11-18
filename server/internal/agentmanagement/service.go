@@ -338,7 +338,14 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 
 func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error {
 	_, err := s.mutate(ctx, payload.AgentID, audit.ActionAgentDelete, func(ctx context.Context, q *repo.Queries, human HumanContext, before repo.Agent) (repo.Agent, error) {
-		return q.DeleteAgent(ctx, repo.DeleteAgentParams{OrganizationID: human.Auth.ActiveOrganizationID, ID: before.ID})
+		after, err := q.DeleteAgent(ctx, repo.DeleteAgentParams{OrganizationID: human.Auth.ActiveOrganizationID, ID: before.ID})
+		if err != nil {
+			return after, fmt.Errorf("delete agent: %w", err)
+		}
+		if err := q.DeleteAgentPrincipalGrants(ctx, repo.DeleteAgentPrincipalGrantsParams{OrganizationID: human.Auth.ActiveOrganizationID, AgentID: before.ID}); err != nil {
+			return after, fmt.Errorf("delete agent grants: %w", err)
+		}
+		return after, nil
 	})
 	return err
 }

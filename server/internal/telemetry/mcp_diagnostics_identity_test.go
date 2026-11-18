@@ -199,7 +199,7 @@ func TestServerReads_LeaveToolsetRowsOfOtherServers(t *testing.T) {
 	require.Equal(t, uint64(2), counts.ActiveUsersCount)
 
 	summary, err := ti.chClient.GetOverviewSummary(ctx, telemetryRepo.GetOverviewSummaryParams{
-		GramProjectID:       projectID,
+		GramProjectIDs:      []string{projectID},
 		TimeStart:           start,
 		TimeEnd:             end,
 		ToolsetSlug:         slug,

@@ -446,7 +446,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil)
+	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, hooksErrorFormatter)
 	// Only these methods accept device-agent tokens.
 	server.Cursor = deviceagenttoken.BearerChallenge(server.Cursor)
 	server.Codex = deviceagenttoken.BearerChallenge(server.Codex)

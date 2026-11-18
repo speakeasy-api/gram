@@ -16,6 +16,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -166,6 +169,13 @@ func (f *fixture) record(userIssuerID, credentialID uuid.UUID) int64 {
 // picked a client for each server in picks.
 func (f *fixture) recordPicked(userIssuerID, credentialID uuid.UUID, picks map[uuid.UUID]uuid.UUID) int64 {
 	f.t.Helper()
+	return f.recordPickedFrom(userIssuerID, credentialID, picks, false)
+}
+
+// recordPickedFrom is recordPicked, deciding as issuance does for an organization
+// enforcing upstream auth when typedOnly is set.
+func (f *fixture) recordPickedFrom(userIssuerID, credentialID uuid.UUID, picks map[uuid.UUID]uuid.UUID, typedOnly bool) int64 {
+	f.t.Helper()
 	servers, clients := []uuid.UUID{}, []uuid.UUID{}
 	for serverID, clientID := range picks {
 		servers = append(servers, serverID)
@@ -179,6 +189,7 @@ func (f *fixture) recordPicked(userIssuerID, credentialID uuid.UUID, picks map[u
 		PickedMcpServerIds:  servers,
 		PickedClientIds:     clients,
 		PickedAuthClientIds: nil,
+		TypedOnly:           typedOnly,
 	})
 	require.NoError(f.t, err)
 	return n
@@ -368,6 +379,70 @@ func TestRunBackfillsLiveCredentials(t *testing.T) {
 	require.Len(t, rerun.Gaps, 1)
 }
 
+// A credential issued for the servers approved at consent has choices for those
+// servers only. What the rest of its issuer's reach could be decided as is
+// counted apart from a credential that is missing its choices.
+func TestRunCountsAConsentScopedCredentialsUndecidedReachApart(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	client := f.client(issuer)
+	approved := f.server(issuer, client)
+	f.server(issuer, client)
+	f.server(issuer)
+
+	scoped := f.session(issuer)
+	require.NoError(t, f.q.ApproveConsentCatalogFixture(t.Context(), ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
+	_, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuer,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        scoped,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  []uuid.UUID{},
+		PickedClientIds:     []uuid.UUID{},
+		PickedAuthClientIds: nil,
+		ScopeMcpServerIds:   []uuid.UUID{approved},
+		TypedOnly:           false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{approved: client}, f.selections(scoped))
+
+	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.Pairs[OutcomeSelected])
+	require.Equal(t, 1, preview.Pairs[OutcomeClient])
+	require.Equal(t, 1, preview.Pairs[OutcomeNoAuth])
+	require.Equal(t, 2, preview.ConsentScoped, "the servers outside the approved catalog are not missing choices")
+
+	unscoped := f.session(issuer)
+	preview, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 3, preview.Pairs[OutcomeClient])
+	require.Equal(t, 2, preview.Pairs[OutcomeNoAuth])
+	require.Equal(t, 2, preview.ConsentScoped, "a credential with no consent catalog is missing every choice")
+	require.Empty(t, f.selections(unscoped))
+}
+
+// A no-auth choice recorded for an approved server stops serving once the
+// server is given a client, and a run replaces it. That pair is pending, not
+// outside what the credential was issued for.
+func TestRunKeepsAConsentScopedCredentialsReplaceableChoicePending(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	approved := f.server(issuer)
+
+	scoped := f.session(issuer)
+	require.NoError(t, f.q.ApproveConsentCatalogFixture(t.Context(), ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
+	require.Equal(t, int64(1), f.record(issuer, scoped))
+	f.associate(approved, f.client(issuer))
+
+	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.Pairs[OutcomeClient])
+	require.Zero(t, preview.ConsentScoped)
+}
+
 func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -375,13 +450,13 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 		row  ListUpstreamClientSelectionCoverageRow
 		want Outcome
 	}{
-		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, ChoseClient: true, EligibleClients: 2, AssociatedClients: 2}, OutcomeSelected},
-		{"chosen client no longer usable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, ChoseClient: true, EligibleClients: 1, AssociatedClients: 1}, OutcomeUnusableClient},
-		{"no-auth choice the server's new client makes unusable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, ChoseClient: false, EligibleClients: 1, AssociatedClients: 1}, OutcomeClient},
-		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2}, OutcomeClient},
-		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2}, OutcomeAmbiguous},
-		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1}, OutcomeUnreachableClient},
-		{"no associated client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0}, OutcomeNoAuth},
+		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: true, ChoseClient: true, EligibleClients: 2, AssociatedClients: 2}, OutcomeSelected},
+		{"chosen client no longer usable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, ChoseClient: true, EligibleClients: 1, AssociatedClients: 1}, OutcomeUnusableClient},
+		{"no-auth choice the server's new client makes unusable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, ChoseClient: false, EligibleClients: 1, AssociatedClients: 1}, OutcomeClient},
+		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 1, AssociatedClients: 2}, OutcomeClient},
+		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 2, AssociatedClients: 2}, OutcomeAmbiguous},
+		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 0, AssociatedClients: 1}, OutcomeUnreachableClient},
+		{"no associated client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Recorded: false, Selected: false, EligibleClients: 0, AssociatedClients: 0}, OutcomeNoAuth},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -553,6 +628,352 @@ func (f *fixture) namedAuthClient(credentialID, serverID uuid.UUID) GetSelection
 	row, err := f.q.GetSelectionAuthClientFixture(f.t.Context(), GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerID: serverID})
 	require.NoError(f.t, err)
 	return row
+}
+
+// enforce turns on upstream auth enforcement for organizationID.
+func (f *fixture) enforce(organizationID string) {
+	f.t.Helper()
+	_, err := productfeaturesrepo.New(f.pool).EnableFeature(f.t.Context(), productfeaturesrepo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(f.t, err)
+}
+
+// detachAuthClients soft-deletes every auth client link of serverID, which is
+// what a detach leaves for these statements to read. The associations stay.
+func (f *fixture) detachAuthClients(serverID uuid.UUID) {
+	f.t.Helper()
+	require.NoError(f.t, authclientbackfill.New(f.pool).SoftDeleteServerAuthClientLinksFixture(f.t.Context(), serverID))
+}
+
+func TestRecordUpstreamClientSelectionsFromTypedState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an association whose auth client was detached decides nothing", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		inherited := f.client(issuer)
+		server := f.server(issuer, inherited)
+		f.authClient("remote_session", inherited, server)
+		f.detachAuthClients(server)
+
+		fromAssociations := f.session(issuer)
+		f.record(issuer, fromAssociations)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: inherited}, f.selections(fromAssociations), "without enforcement the choice follows the association")
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
+		named := f.namedAuthClient(credential, server)
+		require.True(t, named.NoAuth)
+		require.False(t, named.AuthClientID.Valid)
+	})
+
+	t.Run("an offered client the issuer binds is chosen without an association", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer)
+		authClient := f.authClient("remote_session", registration, server)
+
+		fromAssociations := f.session(issuer)
+		f.record(issuer, fromAssociations)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(fromAssociations), "without enforcement no association means no client")
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("an offered client the issuer does not bind is left to a person", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client()
+		server := f.server(issuer)
+		authClient := f.authClient("service_account", registration, server)
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Empty(t, f.selections(credential), "no-auth is not recorded while the server offers an OAuth client")
+
+		n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuer,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        credential,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  []uuid.UUID{server},
+			PickedClientIds:     []uuid.UUID{registration},
+			PickedAuthClientIds: []uuid.UUID{authClient},
+			TypedOnly:           true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID, "a pick on the consent page does not need the binding")
+	})
+
+	t.Run("the one bound client of several offered is chosen", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		bound, unbound := f.client(issuer), f.client()
+		server := f.server(issuer)
+		authClient := f.authClient("remote_session", bound, server)
+		f.authClient("remote_session", unbound, server)
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: bound}, f.selections(credential), "a dashboard mint has no consent page to pick on")
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("several bound clients are left to a pick among them", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		first, second, inherited := f.client(issuer), f.client(issuer), f.client(issuer)
+		server := f.server(issuer, inherited)
+		f.authClient("remote_session", first, server)
+		picked := f.authClient("remote_session", second, server)
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Empty(t, f.selections(credential), "nothing is guessed")
+
+		f.recordPickedFrom(issuer, credential, map[uuid.UUID]uuid.UUID{server: inherited}, true)
+		require.Empty(t, f.selections(credential), "a pick the server offers no auth client for is not recorded")
+
+		f.recordPickedFrom(issuer, credential, map[uuid.UUID]uuid.UUID{server: second}, true)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: picked, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("a server whose only OAuth client is disabled needs none", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer, registration)
+		authClient := f.authClient("remote_session", registration, server)
+		require.NoError(t, authclientbackfill.New(f.pool).SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: authClient}))
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
+		require.True(t, f.namedAuthClient(credential, server).NoAuth)
+	})
+
+	t.Run("an offered EMA client is recorded only from an explicit pick", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer)
+		registration := f.client(issuer)
+		ema := f.authClient("ema", registration, server)
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Empty(t, f.selections(credential), "neither no-auth nor the EMA client is recorded without a pick")
+
+		n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuer,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        credential,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  []uuid.UUID{server},
+			PickedClientIds:     []uuid.UUID{registration},
+			PickedAuthClientIds: []uuid.UUID{ema},
+			TypedOnly:           true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: ema, Valid: true}, f.namedAuthClient(credential, server).AuthClientID, "an explicit pick records the EMA client")
+	})
+
+	t.Run("a registration two offered clients share is left to a pick", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer)
+		f.authClient("remote_session", registration, server)
+		f.authClient("service_account", registration, server)
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Empty(t, f.selections(credential), "a choice of the shared registration would name neither client")
+	})
+
+	t.Run("a no-auth choice still names the server's headers beside an association", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer, f.client(issuer))
+		f.staticAuthorization(server)
+		headers := f.authClient("static_credential", uuid.Nil, server)
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		named := f.namedAuthClient(credential, server)
+		require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID)
+		require.False(t, named.NoAuth, "the association's client is not recorded in its place")
+	})
+}
+
+// A run for an enforcing organization predicts and writes what issuance records
+// there, and counts the result as covered.
+func TestRunReadsTypedStateUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a no-auth choice beside a leftover association is covered", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer, registration)
+		f.authClient("remote_session", registration, server)
+		f.detachAuthClients(server)
+		f.enforce(f.orgID)
+		credential := f.session(issuer)
+
+		predicted, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Equal(t, 1, predicted.Pairs[OutcomeNoAuth])
+		require.Empty(t, predicted.Gaps)
+
+		applied, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), applied.Written)
+		require.Empty(t, applied.Gaps)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
+
+		settled, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Equal(t, 1, settled.Pairs[OutcomeSelected])
+		require.Len(t, settled.Pairs, 1, "no other outcome")
+		require.Equal(t, 1, settled.FullyCovered)
+	})
+
+	t.Run("a client chosen from the offers is covered without an association", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer)
+		f.authClient("remote_session", f.client(issuer), server)
+		f.enforce(f.orgID)
+		f.session(issuer)
+
+		predicted, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Equal(t, 1, predicted.Pairs[OutcomeClient])
+		require.Len(t, predicted.Pairs, 1, "no other outcome")
+
+		_, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
+		require.NoError(t, err)
+		settled, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Equal(t, 1, settled.Pairs[OutcomeSelected])
+		require.Len(t, settled.Pairs, 1, "no other outcome")
+		require.Empty(t, settled.Gaps)
+	})
+
+	t.Run("an offered client the issuer does not bind is a gap", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer)
+		f.authClient("remote_session", f.client(), server)
+		f.enforce(f.orgID)
+		credential := f.session(issuer)
+
+		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
+		require.NoError(t, err)
+		require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: server, Outcome: OutcomeUnreachableClient}}, report.Gaps)
+		require.Empty(t, f.selections(credential))
+	})
+
+	t.Run("a choice whose registration was deleted is not covered", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer)
+		f.authClient("remote_session", registration, server)
+		f.enforce(f.orgID)
+		credential := f.session(issuer)
+		_, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
+		require.NoError(t, err)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+
+		_, err = remotesessionsrepo.New(f.pool).DeleteRemoteSessionClient(t.Context(), remotesessionsrepo.DeleteRemoteSessionClientParams{ID: registration, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}})
+		require.NoError(t, err)
+		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Zero(t, report.Pairs[OutcomeSelected], "the resolver refuses a choice whose registration is gone")
+		require.Len(t, report.Gaps, 1)
+		require.Equal(t, credential, report.Gaps[0].CredentialID)
+	})
+
+	t.Run("a run across organizations reads each one's enforcement", func(t *testing.T) {
+		t.Parallel()
+		enforcing := newFixture(t)
+		other := *enforcing
+		other.orgID, other.projectID = "org_"+uuid.NewString(), uuid.New()
+		require.NoError(t, other.q.SeedOrganizationFixture(t.Context(), other.orgID))
+		require.NoError(t, other.q.SeedProjectFixture(t.Context(), SeedProjectFixtureParams{ID: other.projectID, Slug: "p-" + other.projectID.String()[:8], OrganizationID: other.orgID}))
+		enforcing.enforce(enforcing.orgID)
+
+		seed := func(f *fixture) (uuid.UUID, uuid.UUID, uuid.UUID) {
+			issuer := f.projectIssuer()
+			registration := f.client(issuer)
+			server := f.server(issuer, registration)
+			f.authClient("remote_session", registration, server)
+			f.detachAuthClients(server)
+			return f.session(issuer), server, registration
+		}
+		enforcedCredential, enforcedServer, _ := seed(enforcing)
+		plainCredential, plainServer, plainRegistration := seed(&other)
+
+		_, err := Run(t.Context(), enforcing.pool, Options{OrganizationID: "", Apply: true})
+		require.NoError(t, err)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{enforcedServer: uuid.Nil}, enforcing.selections(enforcedCredential))
+		require.Equal(t, map[uuid.UUID]uuid.UUID{plainServer: plainRegistration}, other.selections(plainCredential))
+	})
+
+	// Rolling enforcement back and running the migration upgrades the no-auth
+	// choice to the association's client, which never names an auth client. When
+	// enforcement returns the credential has to reconnect; nothing replaces a
+	// client choice.
+	t.Run("a run during a rollback leaves the credential to reconnect once enforcement returns", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer, registration)
+		f.authClient("remote_session", registration, server)
+		f.detachAuthClients(server)
+		f.enforce(f.orgID)
+		credential := f.session(issuer)
+		_, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
+		require.NoError(t, err)
+
+		_, err = productfeaturesrepo.New(f.pool).DeleteFeature(t.Context(), productfeaturesrepo.DeleteFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+		require.NoError(t, err)
+		rolledBack, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Equal(t, 1, rolledBack.Pairs[OutcomeClient], "the association makes the no-auth choice stale")
+		require.Len(t, rolledBack.Pairs, 1, "no other outcome")
+		_, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
+		require.NoError(t, err)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+
+		f.enforce(f.orgID)
+		enforcedAgain, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: server, Outcome: OutcomeUnusableClient}}, enforcedAgain.Gaps)
+	})
 }
 
 func TestRecordUpstreamClientSelectionsCapturesTheAuthClient(t *testing.T) {
@@ -759,4 +1180,119 @@ func TestExplicitHeaderPickIsNeverReplaced(t *testing.T) {
 	named := f.namedAuthClient(credential, server)
 	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID, "the backfill keeps the explicit choice")
 	require.False(t, f.selection(issuer, credential, server).RemoteSessionClientID.Valid)
+}
+
+// A dashboard mint picks nothing. On a server whose only client is a static
+// credential an administrator added, the no-auth choice it records names that
+// client: its headers are the server's own configuration, not a copy of the
+// source's headers, so they are never compared with them.
+func TestIssuanceWithoutAPickNamesTheAdminHeaderClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	headers := uuid.New()
+	require.NoError(t, f.q.SeedLinkedHeaderAuthClientFixture(t.Context(), SeedLinkedHeaderAuthClientFixtureParams{
+		ID:             headers,
+		OrganizationID: f.orgID,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		McpServerID:    server,
+	}))
+	credential := f.session(issuer)
+
+	require.Equal(t, int64(1), f.record(issuer, credential))
+	named := f.namedAuthClient(credential, server)
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID)
+	require.False(t, named.NoAuth)
+	require.True(t, f.selection(issuer, credential, server).Usable)
+}
+
+// The auth client backfill maps an unmapped no-auth choice onto the static
+// credential an administrator added, the same client issuance names.
+func TestBackfillMapsANoAuthChoiceOntoTheAdminHeaderClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	credential := f.session(issuer)
+	require.Equal(t, int64(1), f.record(issuer, credential))
+	require.False(t, f.namedAuthClient(credential, server).AuthClientID.Valid)
+
+	headers := uuid.New()
+	require.NoError(t, f.q.SeedLinkedHeaderAuthClientFixture(t.Context(), SeedLinkedHeaderAuthClientFixtureParams{
+		ID:             headers,
+		OrganizationID: f.orgID,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		McpServerID:    server,
+	}))
+	report, err := authclientbackfill.Run(t.Context(), f.pool, authclientbackfill.Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.Empty(t, report.PhaseErrors)
+	require.Equal(t, 1, report.SelectionsMapped)
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+}
+
+func TestListLiveUserSessionCredentialsExcludesDeletedOwnershipAndForeignSessionTenant(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	projectIssuer, organizationIssuer := f.projectIssuer(), f.organizationIssuer()
+	projectCredential := f.session(projectIssuer)
+	legacyCredential := uuid.New()
+	foreignCredential := uuid.New()
+	foreignOrganization := "org_" + uuid.NewString()
+	require.NoError(t, f.q.SeedOrganizationFixture(ctx, foreignOrganization))
+	for _, row := range []struct {
+		credential   uuid.UUID
+		organization pgtype.Text
+	}{
+		{credential: legacyCredential, organization: pgtype.Text{String: "", Valid: false}},
+		{credential: foreignCredential, organization: pgtype.Text{String: foreignOrganization, Valid: true}},
+	} {
+		require.NoError(t, f.q.SeedUserSessionFixture(ctx, SeedUserSessionFixtureParams{
+			ID: row.credential, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: row.organization,
+			UserSessionIssuerID: organizationIssuer, SubjectUrn: urn.NewUserSubject("live-scope-" + row.credential.String()), Jti: row.credential.String(),
+			RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true}, CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}))
+	}
+	params := ListLiveUserSessionCredentialsParams{OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: defaultPageSize, IssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	rows, err := f.q.ListLiveUserSessionCredentials(ctx, params)
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.CredentialID)
+	}
+	require.ElementsMatch(t, []uuid.UUID{projectCredential, legacyCredential}, ids)
+	require.NoError(t, authclientbackfill.New(f.pool).SoftDeleteProjectFixture(ctx, f.projectID))
+	rows, err = f.q.ListLiveUserSessionCredentials(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "NULL-project organization issuers remain live when a project is deleted")
+	require.Equal(t, legacyCredential, rows[0].CredentialID)
+	require.NoError(t, f.q.SoftDeleteUserSessionIssuerFixture(ctx, organizationIssuer))
+	rows, err = f.q.ListLiveUserSessionCredentials(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestReconcileIssuerScopeEmptyDoesNotRecordOrMap(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.organizationIssuer()
+	registration := f.client(issuer)
+	server := f.server(issuer, registration)
+	existing, missing := f.session(issuer), f.session(issuer)
+	// This existing OAuth choice is deliberately unmapped before maintenance.
+	require.NoError(t, authclientbackfill.New(f.pool).SeedOAuthSelectionFixture(t.Context(), authclientbackfill.SeedOAuthSelectionFixtureParams{OrganizationID: f.orgID, ProjectID: f.projectID, CredentialID: existing, McpServerID: server, RemoteSessionClientID: registration}))
+	tx := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, authclientbackfill.LockEMAWriterScope(t.Context(), tx, f.orgID, []uuid.UUID{f.projectID}))
+	require.NoError(t, authclientbackfill.PreflightServerAssociations(t.Context(), tx, f.orgID, server))
+	require.NoError(t, authclientbackfill.SyncServerAssociations(t.Context(), tx, f.orgID, server))
+	skipped, err := ReconcileIssuerScopeInLockedTransaction(t.Context(), tx, f.orgID, issuer, []uuid.UUID{}, nil)
+	require.NoError(t, err)
+	require.Zero(t, skipped)
+	require.NoError(t, tx.Commit(t.Context()))
+	require.False(t, f.namedAuthClient(existing, server).AuthClientID.Valid)
+	choices, err := f.q.ListSelectionsFixture(t.Context(), ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: missing})
+	require.NoError(t, err)
+	require.Empty(t, choices)
 }

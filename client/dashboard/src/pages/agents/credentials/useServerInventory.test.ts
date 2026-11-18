@@ -23,11 +23,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
 vi.mock("@tanstack/react-query", () => ({
-  useQueries: () => [
-    { data: { activity: mocks.activity }, refetch: mocks.refetch },
-  ],
+  useQueries: () => [{ data: undefined, refetch: mocks.refetch }],
+  useQuery: () => ({
+    data: { projects: [{ projectId: "project", activity: mocks.activity }] },
+    refetch: mocks.refetch,
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ user: { id: "user" } }),
   useOrganization: () => ({
     projects: [{ id: "project", name: "Example project", slug: "example" }],
   }),

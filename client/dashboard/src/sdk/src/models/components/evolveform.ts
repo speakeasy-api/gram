@@ -5,11 +5,6 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  AddExternalMCPForm,
-  AddExternalMCPForm$Outbound,
-  AddExternalMCPForm$outboundSchema,
-} from "./addexternalmcpform.js";
-import {
   AddFunctionsForm,
   AddFunctionsForm$Outbound,
   AddFunctionsForm$outboundSchema,
@@ -31,10 +26,6 @@ export type EvolveForm = {
    */
   deploymentId?: string | undefined;
   /**
-   * The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.
-   */
-  excludeExternalMcps?: Array<string> | undefined;
-  /**
    * The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.
    */
   excludeFunctions?: Array<string> | undefined;
@@ -50,10 +41,6 @@ export type EvolveForm = {
    * If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
    */
   nonBlocking?: boolean | undefined;
-  /**
-   * The external MCP servers to upsert in the new deployment.
-   */
-  upsertExternalMcps?: Array<AddExternalMCPForm> | undefined;
   /**
    * The tool functions to upsert in the new deployment.
    */
@@ -71,12 +58,10 @@ export type EvolveForm = {
 /** @internal */
 export type EvolveForm$Outbound = {
   deployment_id?: string | undefined;
-  exclude_external_mcps?: Array<string> | undefined;
   exclude_functions?: Array<string> | undefined;
   exclude_openapiv3_assets?: Array<string> | undefined;
   exclude_packages?: Array<string> | undefined;
   non_blocking?: boolean | undefined;
-  upsert_external_mcps?: Array<AddExternalMCPForm$Outbound> | undefined;
   upsert_functions?: Array<AddFunctionsForm$Outbound> | undefined;
   upsert_openapiv3_assets?:
     | Array<AddOpenAPIv3DeploymentAssetForm$Outbound>
@@ -91,12 +76,10 @@ export const EvolveForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     deploymentId: z.optional(z.string()),
-    excludeExternalMcps: z.optional(z.array(z.string())),
     excludeFunctions: z.optional(z.array(z.string())),
     excludeOpenapiv3Assets: z.optional(z.array(z.string())),
     excludePackages: z.optional(z.array(z.string())),
     nonBlocking: z.optional(z.boolean()),
-    upsertExternalMcps: z.optional(z.array(AddExternalMCPForm$outboundSchema)),
     upsertFunctions: z.optional(z.array(AddFunctionsForm$outboundSchema)),
     upsertOpenapiv3Assets: z.optional(
       z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema),
@@ -106,12 +89,10 @@ export const EvolveForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       deploymentId: "deployment_id",
-      excludeExternalMcps: "exclude_external_mcps",
       excludeFunctions: "exclude_functions",
       excludeOpenapiv3Assets: "exclude_openapiv3_assets",
       excludePackages: "exclude_packages",
       nonBlocking: "non_blocking",
-      upsertExternalMcps: "upsert_external_mcps",
       upsertFunctions: "upsert_functions",
       upsertOpenapiv3Assets: "upsert_openapiv3_assets",
       upsertPackages: "upsert_packages",

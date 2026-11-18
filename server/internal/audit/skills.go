@@ -95,6 +95,7 @@ type LogSkillCreateEvent struct {
 
 func (l *Logger) LogSkillCreate(ctx context.Context, dbtx repo.DBTX, event LogSkillCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -147,6 +148,7 @@ func (l *Logger) LogSkillAddVersion(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -206,6 +208,7 @@ func (l *Logger) logSkillSuggestion(ctx context.Context, dbtx repo.DBTX, action 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -259,6 +262,7 @@ func (l *Logger) logSkillUpdate(ctx context.Context, dbtx repo.DBTX, action Acti
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -330,6 +334,7 @@ func (l *Logger) LogSkillArchive(ctx context.Context, dbtx repo.DBTX, event LogS
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -379,6 +384,7 @@ func (l *Logger) logSkillDistribution(ctx context.Context, dbtx repo.DBTX, actio
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -471,6 +477,7 @@ func (l *Logger) logSkillShareLink(ctx context.Context, dbtx repo.DBTX, action A
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -571,6 +578,7 @@ func (l *Logger) logSkillLink(ctx context.Context, dbtx repo.DBTX, action Action
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,

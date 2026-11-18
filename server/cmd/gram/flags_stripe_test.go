@@ -27,6 +27,13 @@ func TestStripeFlagsAreAvailableInEveryServerProcess(t *testing.T) {
 			_, tomlSourceable := apiKey.(altsrc.FlagInputSourceExtension)
 			require.False(t, tomlSourceable, "Stripe API key must be env-only")
 
+			publishableKey := requireFlag(t, command.Flags, "stripe-publishable-key")
+			_, tomlSourceable = publishableKey.(altsrc.FlagInputSourceExtension)
+			require.False(t, tomlSourceable, "Stripe publishable key must be env-only")
+			publishableFlag, ok := publishableKey.(*cli.StringFlag)
+			require.True(t, ok)
+			require.Equal(t, []string{"STRIPE_PUBLISHABLE_KEY"}, publishableFlag.EnvVars)
+
 			webhookSecret := requireFlag(t, command.Flags, "stripe-webhook-secret")
 			_, tomlSourceable = webhookSecret.(altsrc.FlagInputSourceExtension)
 			require.False(t, tomlSourceable, "Stripe webhook secret must be env-only")

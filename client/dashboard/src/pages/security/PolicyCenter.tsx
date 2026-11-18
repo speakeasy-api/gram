@@ -39,11 +39,12 @@ import {
   Plus,
   Shield,
   Ellipsis,
-  Loader2,
   ChevronRight,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Fragment,
   useState,
@@ -83,7 +84,7 @@ import {
 import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
-import { useDetectionRulesStore } from "./detection-rules-data";
+import type { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -616,7 +617,7 @@ export default function PolicyCenter(): JSX.Element {
 }
 
 // Layout route wrapper: the policy list and the policy detail subpage render
-// through this Outlet (see routes.tsx policyCenter).
+// through this Outlet (see route-pages.tsx policyCenter).
 export function PolicyCenterRoot(): JSX.Element {
   return <Outlet />;
 }
@@ -815,7 +816,7 @@ function PolicyCenterContent() {
         <Button.Text className="flex gap-2">
           {createMutation.isPending ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="mr-0" />
               Creating...
             </>
           ) : (
@@ -911,7 +912,9 @@ function PolicyCenterContent() {
     {
       key: "actions",
       header: "",
-      width: "0.3fr",
+      // Fixed so the trigger is never clipped: cells hide overflow, and a
+      // fractional track shrinks below the button on narrower screens.
+      width: "72px",
       render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
@@ -988,7 +991,7 @@ function PolicyCenterContent() {
     {
       key: "actions",
       header: "",
-      width: "0.4fr",
+      width: "120px",
       render: (row) => (
         <Button
           variant="tertiary"
@@ -1043,11 +1046,7 @@ function PolicyCenterContent() {
     />
   );
   if (isLoading) {
-    policiesBody = (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </div>
-    );
+    policiesBody = <SkeletonTable label="Loading policies" />;
   } else if (policyRows.length === 0) {
     policiesBody = policiesEmptyState;
   }
@@ -1112,11 +1111,7 @@ function PolicyCenterContent() {
       />
     );
   if (quarantinesLoading) {
-    quarantinesBody = (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </div>
-    );
+    quarantinesBody = <SkeletonTable label="Loading session quarantines" />;
   } else if (quarantinesError) {
     quarantinesBody = (
       <div className="border-border flex flex-col items-center gap-3 border py-12 text-center">

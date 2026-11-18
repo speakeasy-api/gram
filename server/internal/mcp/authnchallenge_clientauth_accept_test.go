@@ -418,4 +418,44 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
 	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Equal(t, []string{oauthwire.GrantProfileIDJAG}, meta.GrantProfiles)
+
+	// Only admitted client ID metadata document clients may exchange an ID-JAG.
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
+	meta = loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
+	require.Empty(t, meta.GrantProfiles)
+}
+
+// A trusted issuer without a jwks_uri cannot have its assertions verified.
+func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuerJWKS(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	remoteIssuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "metadata-id-jag-" + uuid.NewString(),
+		Issuer:                            "https://identity.example.test",
+		JwksUri:                           pgtype.Text{},
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	issuer, err := usersessions_repo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessions_repo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         "metadata-id-jag-" + uuid.NewString(),
+		AuthnChallengeMode:           "chain",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
+
+	require.Empty(t, loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String).GrantProfiles)
 }

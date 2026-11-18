@@ -155,7 +155,7 @@ func resolveConcurrently(t *testing.T, slugSuffix string, upstream *rotatingUpst
 	for i := range concurrentRefreshCallers {
 		wg.Go(func() {
 			<-start
-			tokens[i], errs[i] = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+			tokens[i], errs[i] = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		})
 	}
 
@@ -189,7 +189,7 @@ func TestResolveAccessToken_ConcurrentRefresh_AllCallersGetUsableToken(t *testin
 
 	// Asserted before the count so it shows up even on a failing run: every
 	// stranded caller was turned away from a session usable the whole time.
-	repaired, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	repaired, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, repaired, "the winning rotation should have left the session usable")
 

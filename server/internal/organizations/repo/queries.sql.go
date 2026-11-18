@@ -636,6 +636,36 @@ func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg De
 	return err
 }
 
+const deleteRetiredOnboardingPlaybookSteps = `-- name: DeleteRetiredOnboardingPlaybookSteps :execrows
+DELETE FROM onboarding_playbook_steps ps
+USING onboarding_steps s
+WHERE s.id = ps.step_id
+  AND s.slug = ANY($1::text[])
+  AND EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      JOIN onboarding_steps successor ON successor.id = listed.step_id
+      WHERE listed.playbook_id = ps.playbook_id
+        AND successor.slug = $2::text
+        AND successor.deleted_at IS NULL
+  )
+`
+
+type DeleteRetiredOnboardingPlaybookStepsParams struct {
+	RetiredSlugs  []string
+	SuccessorSlug string
+}
+
+// Drops the retired slugs' steps from every playbook that lists the successor
+// slug. After the repoint, that is every playbook that listed one.
+func (q *Queries) DeleteRetiredOnboardingPlaybookSteps(ctx context.Context, arg DeleteRetiredOnboardingPlaybookStepsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRetiredOnboardingPlaybookSteps, arg.RetiredSlugs, arg.SuccessorSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const disableOrganizationByWorkosID = `-- name: DisableOrganizationByWorkosID :execrows
 UPDATE organization_metadata
 SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
@@ -1309,41 +1339,41 @@ func (q *Queries) GetRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Conte
 }
 
 const getSetupTaskCompletionFacts = `-- name: GetSetupTaskCompletionFacts :one
-WITH default_project AS (
-    SELECT id
-    FROM projects
-    WHERE organization_id = $1
-      AND deleted IS FALSE
-    ORDER BY created_at, id
-    LIMIT 1
-)
 SELECT
     COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
     (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
-    EXISTS (
-        SELECT 1
-        FROM plugin_github_connections
-        JOIN default_project ON default_project.id = plugin_github_connections.project_id
-        WHERE NULLIF(plugin_github_connections.marketplace_token, '') IS NOT NULL
-    ) AS marketplace_published,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3
         FROM organization_features
         WHERE organization_features.organization_id = $1
           AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
           AND organization_features.deleted IS FALSE
-    )::boolean AS logging_enabled
+    )::boolean AS logging_enabled,
+    -- Any message stored from a Claude transcript upload (Cowork sessions
+    -- shipped on Stop) in one of the organization's projects. Served by the
+    -- partial chat_messages_claude_transcript_project_idx.
+    EXISTS (
+        SELECT 1
+        FROM chat_messages
+        WHERE chat_messages.origin = 'claude-transcript'
+          AND chat_messages.project_id IN (
+              SELECT projects.id
+              FROM projects
+              WHERE projects.organization_id = $1
+                AND projects.deleted IS FALSE
+          )
+    ) AS claude_transcript_captured
 FROM organization_metadata
 WHERE organization_metadata.id = $1
 `
 
 type GetSetupTaskCompletionFactsRow struct {
-	SsoConfigured        bool
-	DsyncConfigured      bool
-	DomainVerified       bool
-	MarketplacePublished bool
-	LoggingEnabled       bool
+	SsoConfigured            bool
+	DsyncConfigured          bool
+	DomainVerified           bool
+	LoggingEnabled           bool
+	ClaudeTranscriptCaptured bool
 }
 
 func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationID string) (GetSetupTaskCompletionFactsRow, error) {
@@ -1353,8 +1383,8 @@ func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationI
 		&i.SsoConfigured,
 		&i.DsyncConfigured,
 		&i.DomainVerified,
-		&i.MarketplacePublished,
 		&i.LoggingEnabled,
+		&i.ClaudeTranscriptCaptured,
 	)
 	return i, err
 }
@@ -2753,6 +2783,49 @@ type RemoveVerifiedDomainByWorkosIDParams struct {
 func (q *Queries) RemoveVerifiedDomainByWorkosID(ctx context.Context, arg RemoveVerifiedDomainByWorkosIDParams) error {
 	_, err := q.db.Exec(ctx, removeVerifiedDomainByWorkosID, arg.Domain, arg.WorkosLastEventID, arg.WorkosID)
 	return err
+}
+
+const repointRetiredOnboardingPlaybookSteps = `-- name: RepointRetiredOnboardingPlaybookSteps :execrows
+WITH successor AS (
+    SELECT onboarding_steps.id
+    FROM onboarding_steps
+    WHERE onboarding_steps.slug = $1::text
+      AND onboarding_steps.deleted_at IS NULL
+),
+firsts AS (
+    SELECT DISTINCT ON (ps.playbook_id) ps.playbook_id, ps.step_id
+    FROM onboarding_playbook_steps ps
+    JOIN onboarding_steps s ON s.id = ps.step_id
+    WHERE s.slug = ANY($2::text[])
+    ORDER BY ps.playbook_id, ps.position
+)
+UPDATE onboarding_playbook_steps ps
+SET step_id = successor.id, updated_at = clock_timestamp()
+FROM firsts, successor
+WHERE ps.playbook_id = firsts.playbook_id
+  AND ps.step_id = firsts.step_id
+  AND NOT EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      WHERE listed.playbook_id = ps.playbook_id
+        AND listed.step_id = successor.id
+  )
+`
+
+type RepointRetiredOnboardingPlaybookStepsParams struct {
+	SuccessorSlug string
+	RetiredSlugs  []string
+}
+
+// Moves each playbook's first step among the retired slugs onto the successor
+// slug, keeping its position, unless the playbook already lists the
+// successor. Retired slugs match whether or not they are retired yet.
+func (q *Queries) RepointRetiredOnboardingPlaybookSteps(ctx context.Context, arg RepointRetiredOnboardingPlaybookStepsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repointRetiredOnboardingPlaybookSteps, arg.SuccessorSlug, arg.RetiredSlugs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const retireCollidingOrganizationRoleAssignments = `-- name: RetireCollidingOrganizationRoleAssignments :exec

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
@@ -10,7 +11,7 @@ import {
   type RotateTunneledMcpServerKeyData,
 } from "@/pages/sources/tunneled-mcp/hooks";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
-import { KeyRound, Loader2, RotateCcw } from "lucide-react";
+import { KeyRound, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -110,7 +111,7 @@ export function TunnelKeySection({
   return (
     <SettingsSection id={MCP_TUNNEL_KEY_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Tunnel Key</SettingsSection.Title>
+        <SettingsSection.Title>Tunnel key</SettingsSection.Title>
         <SettingsSection.Description>
           Tunnel agents authenticate to this source with its key. Rotation
           replaces the key; running agents must be restarted with the
@@ -193,7 +194,7 @@ export function TunnelKeySection({
                 >
                   {rotate.isPending ? (
                     <Button.LeftIcon>
-                      <Loader2 className="size-4 animate-spin" />
+                      <Spinner className="mr-0 size-4" />
                     </Button.LeftIcon>
                   ) : null}
                   <Button.Text>

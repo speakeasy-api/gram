@@ -32,6 +32,7 @@ type LogSpendRuleCreateEvent struct {
 func (l *Logger) LogSpendRuleCreate(ctx context.Context, dbtx repo.DBTX, event LogSpendRuleCreateEvent) error {
 	action := ActionSpendRuleCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -83,6 +84,7 @@ func (l *Logger) LogSpendRuleUpdate(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -120,6 +122,7 @@ type LogSpendRuleArchiveEvent struct {
 func (l *Logger) LogSpendRuleArchive(ctx context.Context, dbtx repo.DBTX, event LogSpendRuleArchiveEvent) error {
 	action := ActionSpendRuleArchive
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

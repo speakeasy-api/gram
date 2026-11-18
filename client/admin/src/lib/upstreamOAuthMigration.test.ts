@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
@@ -17,6 +18,7 @@ function status(
     unresolvedServers: [],
     credentials: 0,
     pendingSelections: 0,
+    consentScopedSelections: 0,
     reconnectCredentials: 0,
     authClients:
       authClientsComplete === undefined
@@ -76,15 +78,6 @@ describe("needsMigrationRun", () => {
     expect(needsMigrationRun(s)).toBe(false);
   });
 
-  it("includes an organization with servers to mark", () => {
-    const s = status(true, false);
-    if (s.authClients) {
-      s.authClients.pendingClients = 0;
-      s.authClients.pendingMarkedServers = 1;
-    }
-    expect(needsMigrationRun(s)).toBe(true);
-  });
-
   it("includes an organization with headers to update or a failed phase", () => {
     const headers = status(true, false);
     const failed = status(true, false);
@@ -129,9 +122,22 @@ describe("needsMigrationRun", () => {
       complete: false,
       targets: 1,
       pendingVersions: 2,
+      unexercisedVersions: 0,
       gaps: [],
     };
     expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("skips an organization whose profiles no turn has used yet", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: true,
+      targets: 1,
+      pendingVersions: 0,
+      unexercisedVersions: 2,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
   });
 
   it("skips an organization whose only profile gaps need configuring", () => {
@@ -140,6 +146,7 @@ describe("needsMigrationRun", () => {
       complete: false,
       targets: 1,
       pendingVersions: 0,
+      unexercisedVersions: 0,
       gaps: [
         {
           executionContext: "userless",
@@ -158,6 +165,7 @@ describe("needsMigrationRun", () => {
       complete: false,
       targets: 1,
       pendingVersions: 2,
+      unexercisedVersions: 0,
       gaps: [],
     };
     expect(needsMigrationRun(s)).toBe(false);

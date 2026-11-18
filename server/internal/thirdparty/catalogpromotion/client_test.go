@@ -27,6 +27,39 @@ func testClient(t *testing.T, handler http.HandlerFunc) *client {
 	return c
 }
 
+// answerMissingGuide answers the existing-guide lookup as absent from a
+// readable guides directory, reporting whether the request was part of it.
+func answerMissingGuide(w http.ResponseWriter, r *http.Request) bool {
+	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/contents/guides":
+		_, _ = w.Write([]byte(`[{"type":"dir","name":"other"}]`))
+		return true
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/example/guides/contents/"):
+		w.WriteHeader(http.StatusNotFound)
+		return true
+	default:
+		return false
+	}
+}
+
+// answerNoGuide answers the existing-guide and open-pull-request lookups as
+// absent, reporting whether the request was one of them.
+func answerNoGuide(w http.ResponseWriter, r *http.Request) bool {
+	switch {
+	case answerMissingGuide(w, r):
+		return true
+	case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
+		_, _ = w.Write([]byte(`[]`))
+		return true
+	default:
+		return false
+	}
+}
+
+func testGuide() Guide {
+	return Guide{Slug: "example", Name: "Example", RemoteURL: "https://mcp.example.com/mcp", DocumentationURL: "https://docs.example.com/mcp", AuthMode: "none"}
+}
+
 func TestEnsureGuideRecoversAfterAmbiguousCreate(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
@@ -40,6 +73,9 @@ func TestEnsureGuideRecoversAfterAmbiguousCreate(t *testing.T) {
 		defer mu.Unlock()
 		authorizations = append(authorizations, r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
+		if answerNoGuide(w, r) {
+			return
+		}
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/issues":
 			if created == nil {
@@ -83,9 +119,9 @@ func TestEnsureGuideRecoversAfterAmbiguousCreate(t *testing.T) {
 	guide := Guide{Slug: "example", Name: "Example", Description: "Public service", RemoteURL: "https://mcp.example.com/mcp", DocumentationURL: "https://docs.example.com/mcp", AuthMode: "none", AuthDiscovery: catalogauth.Discovery{AuthSetup: "none", Status: "not_required"}}
 	_, err := c.EnsureGuide(t.Context(), guide)
 	require.ErrorContains(t, err, "HTTP 502")
-	issueURL, err := c.EnsureGuide(t.Context(), guide)
+	result, err := c.EnsureGuide(t.Context(), guide)
 	require.NoError(t, err)
-	require.Equal(t, "https://github.com/example/guides/issues/42", issueURL)
+	require.Equal(t, GuideResult{URL: "https://github.com/example/guides/issues/42", Outcome: OutcomeRequested}, result)
 	// The label is gone after factory completion, but its event prevents reruns.
 	_, err = c.EnsureGuide(t.Context(), guide)
 	require.NoError(t, err)
@@ -165,6 +201,9 @@ func TestEnsureGuideDoesNotCreateAfterLookupFailure(t *testing.T) {
 func TestEnsureGuideRequiresFactoryTriggerAcknowledgement(t *testing.T) {
 	t.Parallel()
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if answerNoGuide(w, r) {
+			return
+		}
 		if r.Method == http.MethodPost && r.URL.Path == "/repos/example/guides/issues" {
 			_, _ = w.Write([]byte(`{"number":42,"state":"open"}`))
 			return
@@ -179,6 +218,9 @@ func TestEnsureGuideRequiresFactoryTriggerAcknowledgement(t *testing.T) {
 func TestEnsureGuideDoesNotReportUntriggeredClosedIssueAsQueued(t *testing.T) {
 	t.Parallel()
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if answerNoGuide(w, r) {
+			return
+		}
 		if r.Method == http.MethodPost && r.URL.Path == "/repos/example/guides/issues" {
 			_, _ = w.Write([]byte(`{"number":42,"state":"closed"}`))
 			return
@@ -192,6 +234,293 @@ func TestEnsureGuideDoesNotReportUntriggeredClosedIssueAsQueued(t *testing.T) {
 	require.ErrorContains(t, err, "closed before the factory trigger")
 	kind, _ := Classify(err)
 	require.Equal(t, ErrorPermanent, kind)
+}
+
+func TestEnsureGuideSkipsPublishedGuide(t *testing.T) {
+	t.Parallel()
+	var writes, pulls atomic.Int32
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method != http.MethodGet:
+			writes.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.URL.Path == "/repos/example/guides/issues":
+			_, _ = w.Write([]byte(`[]`))
+		case r.URL.Path == "/repos/example/guides/contents/guides/example/meta.yaml":
+			_, _ = w.Write([]byte(`{"type":"file","name":"meta.yaml"}`))
+		case r.URL.Path == "/repos/example/guides/pulls":
+			pulls.Add(1)
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	result, err := c.EnsureGuide(t.Context(), testGuide())
+	require.NoError(t, err)
+	require.Equal(t, GuideResult{URL: "https://github.com/example/guides/tree/HEAD/guides/example", Outcome: OutcomeExistingGuide}, result)
+	require.Zero(t, writes.Load(), "a published guide must not file or trigger a request")
+	require.Zero(t, pulls.Load(), "a published guide needs no pull request lookup")
+}
+
+func TestEnsureGuideWaitsForOpenGuidePullRequest(t *testing.T) {
+	t.Parallel()
+	var writes atomic.Int32
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method != http.MethodGet:
+			writes.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.URL.Path == "/repos/example/guides/issues":
+			_, _ = w.Write([]byte(`[]`))
+		case answerMissingGuide(w, r):
+		case r.URL.Path == "/repos/example/guides/pulls":
+			_, _ = w.Write([]byte(`[{"number":7},{"number":9}]`))
+		case r.URL.Path == "/repos/example/guides/pulls/7/files":
+			_, _ = w.Write([]byte(`[{"filename":"guides/example-enterprise/meta.yaml"},{"filename":"doctrine/shared.md"}]`))
+		case r.URL.Path == "/repos/example/guides/pulls/9/files":
+			_, _ = w.Write([]byte(`[{"filename":"guides/example/external.md"}]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	result, err := c.EnsureGuide(t.Context(), testGuide())
+	require.NoError(t, err)
+	require.Equal(t, GuideResult{URL: "https://github.com/example/guides/pull/9", Outcome: OutcomeGuideInReview}, result)
+	require.Zero(t, writes.Load(), "an open guide pull request must not file or trigger a request")
+}
+
+func TestEnsureGuideIgnoresPullRequestForSimilarSlug(t *testing.T) {
+	t.Parallel()
+	var creates atomic.Int32
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/issues":
+			_, _ = w.Write([]byte(`[]`))
+		case answerMissingGuide(w, r):
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
+			_, _ = w.Write([]byte(`[{"number":7}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls/7/files":
+			_, _ = w.Write([]byte(`[{"filename":"guides/example-other/meta.yaml"},{"filename":"guides/examples.md"}]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/example/guides/issues":
+			creates.Add(1)
+			_, _ = w.Write([]byte(`{"number":42,"state":"open"}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events"):
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/labels"):
+			_, _ = w.Write([]byte(`[{"name":"guide:draft"}]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	result, err := c.EnsureGuide(t.Context(), testGuide())
+	require.NoError(t, err)
+	require.Equal(t, OutcomeRequested, result.Outcome)
+	require.EqualValues(t, 1, creates.Load())
+}
+
+func TestEnsureGuideKeepsOwnIssueWhenFactoryPullRequestIsOpen(t *testing.T) {
+	t.Parallel()
+	guide := testGuide()
+	var lookups, writes atomic.Int32
+	var body string
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method != http.MethodGet:
+			writes.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.URL.Path == "/repos/example/guides/issues":
+			if err := json.NewEncoder(w).Encode([]githubIssue{{Number: 42, Body: body, State: "open"}}); err != nil {
+				t.Error(err)
+			}
+		case strings.HasSuffix(r.URL.Path, "/events"):
+			_, _ = w.Write([]byte(`[{"event":"labeled","label":{"name":"guide:draft"}}]`))
+		default:
+			// The factory's own pull request must not turn this into guide_in_review.
+			lookups.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+	body = expectedIssueBody(t, guide)
+	result, err := c.EnsureGuide(t.Context(), guide)
+	require.NoError(t, err)
+	require.Equal(t, GuideResult{URL: "https://github.com/example/guides/issues/42", Outcome: OutcomeRequested}, result)
+	require.Zero(t, lookups.Load())
+	require.Zero(t, writes.Load(), "an already triggered issue must not be labelled again")
+}
+
+func TestEnsureGuideLookupAccessFailureNeedsAttention(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/repos/example/guides/contents/guides/example/meta.yaml", "/repos/example/guides/contents/guides", "/repos/example/guides/pulls"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			var writes atomic.Int32
+			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method != http.MethodGet:
+					writes.Add(1)
+					w.WriteHeader(http.StatusInternalServerError)
+				case r.URL.Path == path:
+					w.WriteHeader(http.StatusForbidden)
+				case answerNoGuide(w, r):
+				default:
+					_, _ = w.Write([]byte(`[]`))
+				}
+			})
+			_, err := c.EnsureGuide(t.Context(), testGuide())
+			require.ErrorContains(t, err, "HTTP 403")
+			kind, _ := Classify(err)
+			require.Equal(t, ErrorConfiguration, kind)
+			require.Zero(t, writes.Load(), "a failed lookup must not file a request")
+		})
+	}
+}
+
+func TestEnsureGuideMissingContentsAccessNeedsAttention(t *testing.T) {
+	t.Parallel()
+	var writes, pulls atomic.Int32
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method != http.MethodGet:
+			writes.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.URL.Path == "/repos/example/guides/issues":
+			_, _ = w.Write([]byte(`[]`))
+		case strings.HasPrefix(r.URL.Path, "/repos/example/guides/contents/"):
+			// A token without Contents read gets 404 for every path, the
+			// guides directory included, not 403.
+			w.WriteHeader(http.StatusNotFound)
+		case r.URL.Path == "/repos/example/guides/pulls":
+			pulls.Add(1)
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	_, err := c.EnsureGuide(t.Context(), testGuide())
+	require.ErrorContains(t, err, "HTTP 404")
+	kind, _ := Classify(err)
+	require.Equal(t, ErrorConfiguration, kind)
+	require.Zero(t, writes.Load(), "unreadable contents must not file a request")
+	require.Zero(t, pulls.Load(), "unreadable contents must stop before the pull request lookup")
+}
+
+func TestEnsureGuideJudgesPullRequestOnGitHubFileListingLimit(t *testing.T) {
+	t.Parallel()
+	var creates, filePages atomic.Int32
+	page := make([]pullRequestFile, pageSize)
+	for i := range page {
+		page[i] = pullRequestFile{Filename: "guides/other/research.md", PreviousFilename: ""}
+	}
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/issues":
+			_, _ = w.Write([]byte(`[]`))
+		case answerMissingGuide(w, r):
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
+			_, _ = w.Write([]byte(`[{"number":7,"head":{"sha":"abc"}}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls/7/files":
+			// Exactly 3000 files: GitHub lists no more, and none is this guide's.
+			filePages.Add(1)
+			if err := json.NewEncoder(w).Encode(page); err != nil {
+				t.Error(err)
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/example/guides/issues":
+			creates.Add(1)
+			_, _ = w.Write([]byte(`{"number":42,"state":"open"}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events"):
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/labels"):
+			_, _ = w.Write([]byte(`[{"name":"guide:draft"}]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	result, err := c.EnsureGuide(t.Context(), testGuide())
+	require.NoError(t, err)
+	require.Equal(t, OutcomeRequested, result.Outcome)
+	require.EqualValues(t, maxPullRequestFilePages, filePages.Load())
+	require.EqualValues(t, 1, creates.Load())
+}
+
+func TestOpenGuidePullRequestReusesFilesForUnchangedHead(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	pulls := `[{"number":7,"head":{"sha":"first"}}]`
+	filesRequests := 0
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
+			_, _ = w.Write([]byte(pulls))
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls/7/files":
+			filesRequests++
+			_, _ = w.Write([]byte(`[{"filename":"guides/example/meta.yaml"}]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	setPulls := func(value string) {
+		mu.Lock()
+		defer mu.Unlock()
+		pulls = value
+	}
+	requests := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return filesRequests
+	}
+
+	for range 2 {
+		number, err := c.openGuidePullRequest(t.Context(), "example")
+		require.NoError(t, err)
+		require.Equal(t, 7, number)
+	}
+	require.Equal(t, 1, requests(), "an unchanged head reuses the file listing")
+
+	setPulls(`[{"number":7,"head":{"sha":"second"}}]`)
+	number, err := c.openGuidePullRequest(t.Context(), "example")
+	require.NoError(t, err)
+	require.Equal(t, 7, number)
+	require.Equal(t, 2, requests(), "a new head lists the files again")
+
+	setPulls(`[]`)
+	number, err = c.openGuidePullRequest(t.Context(), "example")
+	require.NoError(t, err)
+	require.Zero(t, number)
+	c.pullsMu.Lock()
+	defer c.pullsMu.Unlock()
+	require.Empty(t, c.pullFolders, "pull requests that are no longer open are forgotten")
+}
+
+// expectedIssueBody captures the issue body EnsureGuide would create for guide.
+func expectedIssueBody(t *testing.T, guide Guide) string {
+	t.Helper()
+	bodies := make(chan string, 1)
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if answerNoGuide(w, r) {
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/repos/example/guides/issues" {
+			var input createIssueRequest
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Error(err)
+			}
+			bodies <- input.Body
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		_, _ = w.Write([]byte(`[]`))
+	})
+	_, err := c.EnsureGuide(t.Context(), guide)
+	require.Error(t, err)
+	return <-bodies
 }
 
 func TestMissingConfigurationNeedsAttention(t *testing.T) {

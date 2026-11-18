@@ -388,12 +388,8 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, err
 	}
 
-	// Only a registration a dynamic registration could reproduce is replaced:
-	// a CIMD client's client_id is its document URL, a managed client's
-	// registration belongs to its identity provider connection, a
-	// private_key_jwt client's is bound to a key set, and a self client's uses
-	// a grant the replacement registration does not request.
-	if current.ClientIDMetadataUri.Valid || current.IdentityProviderConnectionID.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT || CredentialOwner(current.CredentialOwner) == CredentialOwnerSelf {
+	// Only a registration a dynamic registration could reproduce is replaced.
+	if !canReregister(current.ClientIDMetadataUri, current.IdentityProviderConnectionID, current.TokenEndpointAuthMethod, current.CredentialOwner) {
 		return zero, ErrClientNotRotatable
 	}
 	endpoint := strings.TrimSpace(row.IssuerRegistrationEndpoint.String)

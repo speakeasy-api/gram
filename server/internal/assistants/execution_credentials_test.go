@@ -21,6 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -40,7 +43,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	seedProjectRead(t, db, "user-1", project)
 	seedProjectRead(t, db, "user-2", project)
 	core := newProvisioningCore(t, db)
-	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Credentials", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Credentials", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}})
 	require.NoError(t, err)
@@ -86,7 +89,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 			require.NoError(t, err)
 			subject = urn.NewWorkloadSubject(issuerID, externalSubject)
 		}
-		return sessions.ResolveAccessTokens(caller, project, "org-test", issuer.ID, subject)
+		return sessions.ResolveAccessTokens(caller, remotesessions.RefreshAttribution{}, project, "org-test", issuer.ID, subject)
 	}
 	callers := map[string]context.Context{}
 	for _, user := range []string{"user-1", "user-2"} {
@@ -138,4 +141,24 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	require.NoError(t, err)
 	_, err = resolve(workload)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "revoking the owner's session also revokes cron upstream access")
+}
+
+func TestBindExecutionProfileFailsTheTurnOnlyUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "execution_profile_bind")
+	require.NoError(t, err)
+	ctx := t.Context()
+	project := newProvisioningProject(t, db, "execution-profile-bind")
+	core := newProvisioningCore(t, db)
+	// A target with no trigger cannot bind.
+	target := executionprofiles.Target{OrganizationID: "org-test", ProjectID: project, AssistantID: uuid.New(), TriggerID: uuid.Nil, Context: executionprofiles.ContextUserless}
+
+	version, err := core.bindExecutionProfile(ctx, target)
+	require.NoError(t, err, "the upstream client choice serves the turn, so it runs unbound")
+	require.False(t, version.Valid)
+
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: "org-test", FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	_, err = core.bindExecutionProfile(ctx, target)
+	require.Error(t, err, "an unbound turn has no choice to serve any proxied server with")
 }

@@ -48,10 +48,11 @@ type Service interface {
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
 	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
-	// Create a checkout link for upgrading to the business plan
-	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
-	// Create a Stripe Checkout link for starting PAYG billing
-	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res string, err error)
+	// Read the current status of a Stripe Checkout session owned by the active
+	// organization
+	GetStripeCheckoutStatus(context.Context, *GetStripeCheckoutStatusPayload) (res *GetStripeCheckoutStatusResult, err error)
+	// Create an embedded Stripe Checkout session for starting PAYG billing
+	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res *StripeEmbeddedCheckout, err error)
 	// Get the live lifecycle state of the organization's Stripe PAYG subscription
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *StripeSubscription, err error)
 	// Get exact billable usage and estimated cost for the organization's live paid
@@ -90,7 +91,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"getPeriodUsage", "getMeterUsage", "getSpendBreakdown", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+var MethodNames = [19]string{"getPeriodUsage", "getMeterUsage", "getSpendBreakdown", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "getStripeCheckoutStatus", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -105,12 +106,6 @@ type CancelStripeSubscriptionPayload struct {
 	SessionToken *string
 }
 
-// CreateCheckoutPayload is the payload type of the usage service
-// createCheckout method.
-type CreateCheckoutPayload struct {
-	SessionToken *string
-}
-
 // CreateCustomerSessionPayload is the payload type of the usage service
 // createCustomerSession method.
 type CreateCustomerSessionPayload struct {
@@ -121,6 +116,9 @@ type CreateCustomerSessionPayload struct {
 // createStripeCheckout method.
 type CreateStripeCheckoutPayload struct {
 	SessionToken *string
+	// Appearance for new embedded Checkout sessions; existing sessions retain
+	// their original theme.
+	Theme string
 }
 
 // CreateStripePortalSessionPayload is the payload type of the usage service
@@ -184,6 +182,24 @@ type GetSpendBreakdownPayload struct {
 	// later than three calendar months after from, clamped to the target month's
 	// last day.
 	To *string
+}
+
+// GetStripeCheckoutStatusPayload is the payload type of the usage service
+// getStripeCheckoutStatus method.
+type GetStripeCheckoutStatusPayload struct {
+	SessionToken *string
+	// Stripe Checkout session identifier
+	SessionID string
+}
+
+// GetStripeCheckoutStatusResult is the result type of the usage service
+// getStripeCheckoutStatus method.
+type GetStripeCheckoutStatusResult struct {
+	Status        string
+	PaymentStatus string
+	// Whether this completed session and its own subscription are ready for
+	// billing activation; local webhook persistence is still required
+	BillingReady bool
 }
 
 // GetStripeSubscriptionPayload is the payload type of the usage service
@@ -400,6 +416,15 @@ type SpendProduct struct {
 	CostUsd string
 	// Dense UTC daily product buckets, including in-progress and future days
 	Buckets []*SpendBucket
+}
+
+// StripeEmbeddedCheckout is the result type of the usage service
+// createStripeCheckout method.
+type StripeEmbeddedCheckout struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret string
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey string
 }
 
 // StripeSubscription is the result type of the usage service

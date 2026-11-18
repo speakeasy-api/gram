@@ -1,11 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import SkillDetailRoot from "./SkillDetailRoot";
-
-const testState = vi.hoisted(() => ({
-  pathname: "/skills/skill_a",
-}));
 
 vi.mock("@/components/page-layout", () => ({
   Page: () => null,
@@ -19,15 +15,8 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
     isPending: false,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: {
-      Link: ({ children }: { children: ReactNode }) => <>{children}</>,
-      detail: {
-        href: (id: string) => `/skills/${id}`,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("react-router", async () => {
   const actual =
@@ -38,22 +27,25 @@ vi.mock("react-router", async () => {
       <div data-testid="navigate">{to}</div>
     ),
     Outlet: () => null,
-    useLocation: () => testState,
-    useParams: () => ({ skillId: "skill_a" }),
   };
-});
-
-beforeEach(() => {
-  testState.pathname = "/skills/skill_a";
 });
 
 afterEach(cleanup);
 
 describe("SkillDetailRoot", () => {
   it("redirects the base route to overview", () => {
-    render(<SkillDetailRoot />);
+    render(
+      <MemoryRouter initialEntries={["/org/projects/project/skills/skill_a"]}>
+        <Routes>
+          <Route
+            path="/org/projects/project/skills/:skillId"
+            element={<SkillDetailRoot />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId("navigate").textContent).toBe(
-      "/skills/skill_a/overview",
+      "/org/projects/project/skills/skill_a/overview",
     );
   });
 });

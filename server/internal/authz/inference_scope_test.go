@@ -35,7 +35,7 @@ func TestInferenceExecuteRequiresExplicitProjectGrant(t *testing.T) {
 			require.NotEqual(t, string(ScopeInferenceExecute), g.Scope, role)
 		}
 	}
-	require.NoError(t, ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{{Scope: string(ScopeInferenceExecute)}}))
+	require.NoError(t, ValidateGrantSource(GrantSourceRoles, []*RoleGrant{{Scope: string(ScopeInferenceExecute)}}))
 }
 
 func TestInferenceSelector(t *testing.T) {

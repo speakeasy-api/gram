@@ -1030,9 +1030,9 @@ type ExternalMCPServerEntryResponseBody struct {
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
-	// Number of tools the server exposes
+	// Number of declared tools, when catalog evidence is available
 	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
-	// Whether every tool on the server is read-only
+	// Whether every declared tool is read-only, when catalog evidence is available
 	IsReadOnly *bool `form:"is_read_only,omitempty" json:"is_read_only,omitempty" xml:"is_read_only,omitempty"`
 	// Whether the server's OAuth authorization server advertises a dynamic client
 	// registration endpoint (RFC 7591). False alone does not establish that manual
@@ -3348,12 +3348,6 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
-	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
-	}
-	if body.IsReadOnly == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("is_read_only", "body"))
 	}
 	if body.SupportsDcr == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("supports_dcr", "body"))

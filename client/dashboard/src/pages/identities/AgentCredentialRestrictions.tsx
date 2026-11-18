@@ -32,6 +32,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
+import { useAgentPolicyGrants } from "./useAgentPolicyGrants";
 
 const TYPE_PREFIX = "type:";
 
@@ -62,13 +63,7 @@ function ManagerRestrictions({ agent }: { agent: ManagedAgent }): JSX.Element {
   const { hasScope } = useRBAC();
   const [adding, setAdding] = useState(false);
   const [choice, setChoice] = useState("");
-  const grants = useQuery({
-    queryKey: ["agent-policy-grants", organization.id, agent.id],
-    queryFn: ({ signal }) =>
-      sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, { signal }),
-    retry: false,
-    throwOnError: false,
-  });
+  const grants = useAgentPolicyGrants(agent);
   // Naming one credential needs the organization's list; without it, kinds
   // of credential can still be blocked.
   const clients = useAllAuthClients({ enabled: hasScope("org:read") });

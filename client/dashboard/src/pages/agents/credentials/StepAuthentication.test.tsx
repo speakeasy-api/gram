@@ -1,20 +1,54 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import { StepAuthentication } from "./StepAuthentication";
 import type { InventoryServer } from "./useServerInventory";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: { details: { overview: { href: (id: string) => `/mcp/${id}` } } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+
+const popup = vi.hoisted(() => ({
+  onComplete: undefined as
+    | undefined
+    | ((reason: "popup-closed" | "focus") => void | Promise<void>),
+}));
+// The real popup hook, with its completion callback kept so a test can say
+// the popup closed.
+vi.mock("@/components/sessions/useOAuthPopup", async (importOriginal) => {
+  const real =
+    await importOriginal<
+      typeof import("@/components/sessions/useOAuthPopup")
+    >();
+  return {
+    useOAuthPopup: (
+      onComplete: (reason: "popup-closed" | "focus") => void | Promise<void>,
+    ) => {
+      popup.onComplete = onComplete;
+      return real.useOAuthPopup(onComplete);
+    },
+  };
+});
+
+// The picker reads the server's credentials itself; here it only has to show
+// where it sits.
+vi.mock("./KeyCredentialChoice", () => ({
+  KeyCredentialChoice: ({ serverName }: { serverName: string }) => (
+    <div>Credential picker for {serverName}</div>
+  ),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
 }));
-vi.mock("../AgentKeyServers", () => ({ ServerAccounts: () => null }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -44,10 +78,9 @@ const expired = {
 } as RemoteSession;
 
 describe("authentication assignment warnings", () => {
-  it("warns about an expired delegated assignment even when the editor has a live account", () => {
+  it("shows the editor's live account when the agent's assignment has ended, since saving assigns it", () => {
     render(
       <StepAuthentication
-        agent={{ id: "agent_one" } as ManagedAgent}
         servers={[server]}
         allServers
         onRemove={vi.fn<(id: string) => void>()}
@@ -61,14 +94,35 @@ describe("authentication assignment warnings", () => {
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
-    expect(screen.getByRole("alert").textContent).toContain("Example server");
-    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByText("Your connection").length).toBeGreaterThan(0);
+  });
+  it("waits for the editor's own connection before judging an ended assignment", () => {
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([[server.id, { status: "checking" }]]),
+          assignedByServer: new Map([
+            [server.id, { status: "ended", sessions: [expired] }],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByText("Checking connection…").length).toBeGreaterThan(
+      0,
+    );
   });
   it("keeps a valid delegated assignment clear of candidate warnings", () => {
     render(
       <StepAuthentication
-        agent={{ id: "agent_one" } as ManagedAgent}
         servers={[server]}
         allServers
         onRemove={vi.fn<(id: string) => void>()}
@@ -80,8 +134,93 @@ describe("authentication assignment warnings", () => {
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("a server still missing other sign-ins", () => {
+  it("names them on the row, not only that it requires a connection", () => {
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [
+              server.id,
+              {
+                status: "missing",
+                signIns: [
+                  { id: "stripe", credentialOwner: "subject", name: "Stripe" },
+                  { id: "vercel", credentialOwner: "subject", name: "Vercel" },
+                ],
+              },
+            ],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    );
+    expect(
+      screen.getByText("Still needs a connection to Stripe and Vercel."),
+    ).toBeTruthy();
+  });
+});
+
+describe("the credential the agent's keys use", () => {
+  const remote = { ...server, kind: "Remote" } as InventoryServer;
+  const row = (value: string | undefined) =>
+    render(
+      <StepAuthentication
+        servers={[remote]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        credentialChoice={{
+          show: () => true,
+          value: () => value,
+          onChange: vi.fn<(serverId: string, authClientId: string) => void>(),
+        }}
+        connections={{
+          byServer: new Map([[remote.id, { status: "missing" }]]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+  it("asks only once the server's row is open", () => {
+    row("account");
+    expect(
+      screen.queryByText("Credential picker for Example server"),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    );
+    expect(
+      screen.getByText("Credential picker for Example server"),
+    ).toBeTruthy();
+  });
+
+  it("needs no personal connection once a shared credential is chosen", () => {
+    row("token_shared");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Shared credential/ }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Connect account" }),
+    ).toBeNull();
+    expect(screen.getByText(/No personal connection is needed/)).toBeTruthy();
   });
 });
 
@@ -127,8 +266,15 @@ describe("create connection reauthentication", () => {
             refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
           }}
         />,
+        { wrapper: MemoryRouter },
       );
-      // The only row, so it starts expanded.
+      // Rows start closed; the badge alone says how it signs in.
+      expect(
+        screen.queryByRole("button", {
+          name: status === "missing" ? "Connect account" : "Reauthenticate",
+        }),
+      ).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
       fireEvent.click(
         screen.getByRole("button", {
           name: status === "missing" ? "Connect account" : "Reauthenticate",
@@ -141,4 +287,63 @@ describe("create connection reauthentication", () => {
       expect(url.searchParams.get("existing")).toBe("keep");
     },
   );
+});
+
+describe("saving after a connection", () => {
+  const fakePopup = () =>
+    ({
+      closed: false,
+      opener: null,
+      location: { href: "" },
+      focus: () => {},
+      close: () => {},
+    }) as unknown as Window;
+  const connectable = { ...server, connectUrl: "https://example.test/connect" };
+  function row(status: "missing" | "ready", onConnected: () => void) {
+    return (
+      <StepAuthentication
+        servers={[connectable]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        onConnected={onConnected}
+        connections={{
+          byServer: new Map([
+            [
+              connectable.id,
+              status === "ready"
+                ? { status: "ready", sessions: [mine] }
+                : { status: "missing" },
+            ],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />
+    );
+  }
+
+  it("saves once the reader's connection is ready after the sign-in popup closes", async () => {
+    vi.spyOn(window, "open").mockReturnValue(fakePopup());
+    const onConnected = vi.fn<() => void>();
+    const view = render(row("missing", onConnected), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+    // The refetch the popup's close starts reads the new connection.
+    view.rerender(row("ready", onConnected));
+    await act(async () => {
+      await popup.onComplete?.("popup-closed");
+    });
+    await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not save when the popup closes without a connection", async () => {
+    vi.spyOn(window, "open").mockReturnValue(fakePopup());
+    const onConnected = vi.fn<() => void>();
+    render(row("missing", onConnected), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+    await act(async () => {
+      await popup.onComplete?.("popup-closed");
+    });
+    expect(onConnected).not.toHaveBeenCalled();
+  });
 });

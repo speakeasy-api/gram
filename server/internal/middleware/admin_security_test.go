@@ -426,7 +426,7 @@ func TestRewriteAdminCookie_AddsSecureWhenMissing(t *testing.T) {
 
 func TestAdminOriginCheckBrowserErrorPages(t *testing.T) {
 	t.Parallel()
-	for _, path := range []string{"/admin-mcp/connect", "/admin-mcp/proposals/example"} {
+	for _, path := range []string{"/admin-mcp/connect"} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 			handler := AdminOriginCheck(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import CreateFromSource from "./CreateFromSource";
 const api = vi.hoisted(() => ({
@@ -28,12 +29,12 @@ vi.mock("@/components/page-templates", () => ({
     <div>{children}</div>
   ),
 }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     toolsets: { create: api.create, updateBySlug: api.update },
     mcpServers: { create: api.wrapper },
   }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/components/side-panel/side-panel-context", () => ({
   useSidePanel: () => ({ openPanel: vi.fn() }),
@@ -70,9 +71,6 @@ vi.mock("@/hooks/toolTypes", () => ({
     },
   }),
 }));
-vi.mock("react-router", () => ({
-  useSearchParams: () => [new URLSearchParams()],
-}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 beforeEach(() => {
   vi.resetAllMocks();
@@ -90,7 +88,11 @@ afterEach(cleanup);
 it.each(["click", "Enter", " "])(
   "locks the retained source against %s activation during recovery",
   async (activation) => {
-    render(<CreateFromSource />);
+    render(
+      <MemoryRouter>
+        <CreateFromSource />
+      </MemoryRouter>,
+    );
     const first = screen.getByRole("button", { name: /First source/ });
     const second = screen.getByRole("button", { name: /Second source/ });
     fireEvent.click(first);

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { describe, expect, it } from "vitest";
 import { exactCandidate, exclusionOptions } from "./exclusion-options";

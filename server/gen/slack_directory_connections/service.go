@@ -38,6 +38,10 @@ type Service interface {
 	SetMapping(context.Context, *SetMappingPayload) (res *SlackDirectoryMember, err error)
 	// Begin implements begin.
 	Begin(context.Context, *BeginPayload) (res *BeginResult, err error)
+	// Choose the project whose managed assistant answers Speakeasy app mentions
+	// and direct messages in a connected workspace. Omit project_id to clear it. A
+	// project can be the default for at most one workspace.
+	SetDefaultProject(context.Context, *SetDefaultProjectPayload) (res *SlackDirectoryConnection, err error)
 	// Disconnect implements disconnect.
 	Disconnect(context.Context, *DisconnectPayload) (res *SlackDirectoryConnection, err error)
 }
@@ -62,7 +66,7 @@ const ServiceName = "slackDirectoryConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"list", "sync", "listMembers", "listPersonAccounts", "getMember", "setMapping", "begin", "disconnect"}
+var MethodNames = [9]string{"list", "sync", "listMembers", "listPersonAccounts", "getMember", "setMapping", "begin", "setDefaultProject", "disconnect"}
 
 // BeginPayload is the payload type of the slackDirectoryConnections service
 // begin method.
@@ -168,6 +172,16 @@ type ListResult struct {
 	AuthorizationConfigured bool
 }
 
+// SetDefaultProjectPayload is the payload type of the
+// slackDirectoryConnections service setDefaultProject method.
+type SetDefaultProjectPayload struct {
+	SessionToken *string
+	// Durable organization workspace connection ID.
+	ID string
+	// Project in the organization. Omit to clear the default project.
+	ProjectID *string
+}
+
 // SetMappingPayload is the payload type of the slackDirectoryConnections
 // service setMapping method.
 type SetMappingPayload struct {
@@ -183,7 +197,7 @@ type SetMappingPayload struct {
 }
 
 // SlackDirectoryConnection is the result type of the slackDirectoryConnections
-// service disconnect method.
+// service setDefaultProject method.
 type SlackDirectoryConnection struct {
 	// Durable organization workspace connection ID.
 	ID string
@@ -225,6 +239,9 @@ type SlackDirectoryConnection struct {
 	LastFullSyncSucceededAt *string
 	// Last connection change timestamp.
 	UpdatedAt string
+	// Project whose managed assistant answers Speakeasy app mentions and direct
+	// messages in this workspace.
+	DefaultProjectID *string
 }
 
 // SlackDirectoryMember is the result type of the slackDirectoryConnections

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ToolUsageTargetSummary } from "@gram/client/models/components/toolusagetargetsummary.js";
 import { targetScope } from "./targetScope";

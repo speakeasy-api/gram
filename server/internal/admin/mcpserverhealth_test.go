@@ -14,6 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -309,8 +310,8 @@ func (f healthFixture) seedUserSession(t *testing.T, userIssuerID uuid.UUID, sub
 func (f healthFixture) backdateUserSession(t *testing.T, sessionID uuid.UUID, createdAt time.Time) {
 	t.Helper()
 
-	//nolint:glint // notestingrawsql: No writer backdates a session; the in-window count needs one issued before the window.
-	_, err := f.conn.Exec(t.Context(), `UPDATE user_sessions SET created_at = $1 WHERE id = $2`, createdAt, sessionID)
+	// No writer backdates a session; the in-window count needs one issued before the window.
+	err := adminrepo.New(f.conn).AdminBackdateUserSessionFixture(t.Context(), adminrepo.AdminBackdateUserSessionFixtureParams{CreatedAt: conv.ToPGTimestamptz(createdAt), ID: sessionID})
 	require.NoError(t, err)
 }
 
@@ -789,7 +790,8 @@ func TestDescribeMcpServerHealth_ReportsUpstreamAuthClients(t *testing.T) {
 	got, err := f.describe(t, serverID, 14)
 	require.NoError(t, err)
 	require.NotNil(t, got.UpstreamAuth)
-	require.Equal(t, "undecided", got.UpstreamAuth.Status)
+	require.Equal(t, "no_auth_required", got.UpstreamAuth.Status)
+	require.False(t, got.UpstreamAuth.RequiresUpstreamAuth)
 	require.Empty(t, got.UpstreamAuth.AuthClients)
 
 	fixtures := testrepo.New(f.conn)
@@ -806,6 +808,8 @@ func TestDescribeMcpServerHealth_ReportsUpstreamAuthClients(t *testing.T) {
 
 	got, err = f.describe(t, serverID, 14)
 	require.NoError(t, err)
+	require.Equal(t, "configured", got.UpstreamAuth.Status)
+	require.True(t, got.UpstreamAuth.RequiresUpstreamAuth)
 	require.Len(t, got.UpstreamAuth.AuthClients, 1)
 	client := got.UpstreamAuth.AuthClients[0]
 	require.Equal(t, clientID.String(), client.ID)

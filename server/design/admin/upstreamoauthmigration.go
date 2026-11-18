@@ -41,6 +41,9 @@ var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus"
 	Attribute("unresolved_servers", ArrayOf(AdminUpstreamOAuthMigrationServer), "Servers whose upstream OAuth client must be associated by an administrator.")
 	Attribute("credentials", Int64, "Live user session credentials scanned.")
 	Attribute("pending_selections", Int64, "Credential choices the configuration decides that are not yet recorded.")
+	// Optional: replicas older than it omit it during a rolling deploy, and a
+	// client must still read the rest.
+	Attribute("consent_scoped_selections", Int64, "Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent when the serving replica predates the field, which is not a reported zero.")
 	Attribute("reconnect_credentials", Int64, "Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.")
 	Attribute("auth_clients", AdminUpstreamOAuthMigrationAuthClients, "Where the organization stands in recording typed auth clients. Separate from migrated: it never gates the upstream OAuth cutover. Absent when its check failed.")
 	Attribute("execution_profiles", AdminUpstreamOAuthMigrationExecutionProfiles, "Where the organization stands in recording the auth client choices its assistants' turns use. Separate from migrated. Absent when its check failed.")
@@ -61,7 +64,7 @@ var AdminUpstreamOAuthMigrationExecutionProfileGap = Type("AdminUpstreamOAuthMig
 	Required("execution_context", "reason", "servers")
 
 	Attribute("execution_context", String, "user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.")
-	Attribute("reason", String, "Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client), setup_incomplete (it needs upstream authentication and offers no auth client) or upstream_auth_undecided (it offers no auth client and an administrator has not decided whether it needs upstream authentication).")
+	Attribute("reason", String, "Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet).")
 	Attribute("servers", Int64, "Profile and server pairs with no choice for this reason.")
 })
 
@@ -69,9 +72,12 @@ var AdminUpstreamOAuthMigrationExecutionProfiles = Type("AdminUpstreamOAuthMigra
 	Description("Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.")
 	Required("complete", "targets", "pending_versions", "gaps")
 
-	Attribute("complete", Boolean, "Whether every profile is recorded and holds a choice for every server its assistant reaches.")
+	Attribute("complete", Boolean, "Whether every profile that is pending is recorded and each holds a choice for every server its assistant reaches.")
 	Attribute("targets", Int64, "Assistant and trigger pairs, each with a profile per execution context.")
 	Attribute("pending_versions", Int64, "Profile versions not yet recorded.")
+	// Optional: replicas older than it omit it during a rolling deploy, and a
+	// client must still read the rest.
+	Attribute("unexercised_versions", Int64, "Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent when the serving replica predates the field, which is not a reported zero.")
 	Attribute("gaps", ArrayOf(AdminUpstreamOAuthMigrationExecutionProfileGap), "Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server's auth clients.")
 })
 
@@ -138,9 +144,9 @@ var AdminUpstreamOAuthMigrationAuthClients = Type("AdminUpstreamOAuthMigrationAu
 	// The selection fields are optional: replicas older than them omit them
 	// during a rolling deploy, and a client must still read the rest.
 
-	Attribute("complete", Boolean, "Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.")
+	Attribute("complete", Boolean, "Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, and no phase failed.")
 	Attribute("in_progress", Boolean, "Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.")
-	Attribute("pending_marked_servers", Int64, "Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.")
+	Attribute("pending_marked_servers", Int64, "Deprecated: always 0. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.")
 	Attribute("associations", Int64, "Configured identities and server links decided.")
 	Attribute("pending_clients", Int64, "Auth clients not yet recorded.")
 	Attribute("pending_links", Int64, "Server to auth client links not yet recorded.")
@@ -169,11 +175,11 @@ var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func
 	Attribute("selections_written", Int64, "Credential choices recorded.")
 	Attribute("auth_clients_written", Int64, "Typed auth clients recorded.")
 	Attribute("auth_client_links_written", Int64, "Server to auth client links recorded.")
-	Attribute("servers_marked_requiring_upstream_auth", Int64, "Servers marked as needing upstream authentication because they offer a backfilled auth client.")
+	Attribute("servers_marked_requiring_upstream_auth", Int64, "Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.")
 	Attribute("selections_mapped", Int64, "Credential choices this run named a typed auth client on.")
 	Attribute("execution_profile_versions_written", Int64, "Execution-selection profile versions this run recorded.")
 	Attribute("auth_permission_grants_written", Int64, "Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.")
-	Attribute("auth_clients_error", String, "Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.")
+	Attribute("auth_clients_error", String, "Why recording typed auth clients failed, when it did. For an organization enforcing upstream auth, the run recorded no credential choices, since those are decided from the typed auth clients. Otherwise the upstream OAuth migration itself is unaffected.")
 	Attribute("status", AdminUpstreamOAuthMigrationStatus, "The organization's status after the run.")
 })
 

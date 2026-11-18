@@ -43,6 +43,7 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     mcpServers: { listForOrg: state.inventory },
     access: {
@@ -108,14 +109,6 @@ vi.mock("@/components/member-facepile", () => ({
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ access: { roles: { href: () => "/access/roles" } } }),
-  useRoutes: () => ({
-    mcp: {
-      details: { overview: { href: (slug: string) => `/servers/${slug}` } },
-    },
-  }),
 }));
 vi.mock("./PersonServerAssignment", () => ({
   ServerAssignment: ({ server }: { server: { name: string } }) => (
@@ -283,11 +276,19 @@ it("removes only this role’s grants without creating a block or removing other
   state.audience.mockResolvedValue({
     version: "v2",
     entries: [
+      // Manage does not include connect, so the role holds both, as the
+      // explicit-connect backfill left every manage grant.
       {
         ...other,
         principalUrn: role.principalUrn,
         displayName: role.name,
         level: "manage",
+      },
+      {
+        ...other,
+        principalUrn: role.principalUrn,
+        displayName: role.name,
+        level: "use",
       },
       other,
     ],

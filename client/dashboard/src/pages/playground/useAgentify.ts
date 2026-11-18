@@ -1,5 +1,7 @@
-import { ContextType, createContext, useContext } from "react";
-import { SdkFramework, SdkLanguage, OPENAI_AGENTS_SDK } from "../sdk/examples";
+import type { ContextType } from "react";
+import { createContext, useContext } from "react";
+import type { SdkFramework, SdkLanguage } from "../sdk/examples";
+import { OPENAI_AGENTS_SDK } from "../sdk/examples";
 
 export const AgentifyContext = createContext<{
   lang: SdkLanguage;

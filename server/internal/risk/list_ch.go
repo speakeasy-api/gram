@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -250,7 +251,7 @@ func (s *Service) listRiskResultsByChatFromClickHouse(ctx context.Context, authC
 			s.logger.WarnContext(ctx, "enrich risk chat titles", attr.SlogError(err))
 		}
 		for _, row := range titleRows {
-			titles[row.ID] = conv.FromPGText[string](row.Title)
+			titles[row.ID] = displayChatTitle(row)
 		}
 	}
 
@@ -308,7 +309,7 @@ func (s *Service) listDisplayEnrichment(ctx context.Context, organizationID stri
 			s.logger.WarnContext(ctx, "enrich risk listing chat titles", attr.SlogError(err))
 		}
 		for _, row := range rows {
-			if title := conv.FromPGText[string](row.Title); title != nil {
+			if title := displayChatTitle(row); title != nil {
 				titles[row.ID] = *title
 			}
 		}
@@ -427,4 +428,13 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		// key on it.
 		CreatedAt: row.MessageCreatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+// displayChatTitle is a chat's stored title as the chat pages show it, so a
+// cron run reads under its job name; nil when the chat has no title.
+func displayChatTitle(row repo.ListChatTitlesByIDsRow) *string {
+	if !row.Title.Valid {
+		return nil
+	}
+	return new(chattitle.Display(row.Title.String, row.TitleManuallySet))
 }

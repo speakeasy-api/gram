@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	templatesrepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -77,7 +76,7 @@ func TestExecuteInstanceTool_ScanCannotConsumeExecutionPayload(t *testing.T) {
 func TestInstanceResponsePayloadScansUTF8DespiteBinaryContentType(t *testing.T) {
 	t.Parallel()
 
-	payload := instanceResponsePayload(gateway.ToolKindHTTP, "image/png", []byte("person@example.com"))
+	payload := instanceResponsePayload("image/png", []byte("person@example.com"))
 
 	require.Equal(t, mcpriskscan.PayloadAvailable, payload.Availability())
 	require.Equal(t, "person@example.com", string(payload.Bytes()))
@@ -87,7 +86,7 @@ func TestInstanceResponsePayloadScansTextAroundInvalidUTF8(t *testing.T) {
 	t.Parallel()
 
 	body := append([]byte("person@example.com"), 0xff)
-	payload := instanceResponsePayload(gateway.ToolKindHTTP, "application/octet-stream", body)
+	payload := instanceResponsePayload("application/octet-stream", body)
 
 	require.Equal(t, mcpriskscan.PayloadAvailable, payload.Availability())
 	require.Equal(t, "person@example.com\uFFFD", string(payload.Bytes()))
@@ -96,7 +95,7 @@ func TestInstanceResponsePayloadScansTextAroundInvalidUTF8(t *testing.T) {
 func TestInstanceResponsePayloadRejectsEventStream(t *testing.T) {
 	t.Parallel()
 
-	payload := instanceResponsePayload(gateway.ToolKindHTTP, "text/event-stream; charset=utf-8", []byte("data: partial\n\n"))
+	payload := instanceResponsePayload("text/event-stream; charset=utf-8", []byte("data: partial\n\n"))
 
 	require.Equal(t, mcpriskscan.PayloadUnavailable, payload.Availability())
 	require.Nil(t, payload.Bytes())

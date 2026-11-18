@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import {
   invalidateAllMembers,
   useMembers,
@@ -17,9 +22,18 @@ import {
 } from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { rolesCoveringScope } from "./roleSuggestions";
+import { ConfirmSensitiveAccess } from "./ConfirmSensitiveAccess";
+import { CreateRoleDialog } from "./CreateRoleDialog";
+import { permissionsAddedByRoles } from "./reviewGrants";
+import { RolePermissionPreview } from "./RolePermissionPreview";
+import {
+  breadthLabel,
+  suggestRolesForScope,
+  type RoleSuggestions,
+  type SuggestedRole,
+} from "./roleSuggestions";
+import { scopeLabel, tasksNeeding } from "./scopeCatalogue";
 
 interface GrantAccessDialogProps {
   /** User id of the member who requested access (from the email deep link). */
@@ -46,6 +60,9 @@ function memberInitials(member: AccessMember): string {
  * One-click grant dialog opened from an access request email deep link
  * (?grant_user=<id>&scope=<scope>). Shows the requester and the roles whose
  * grants satisfy the requested scope; assigning a role is a single click.
+ * Roles that give exactly the permission come first; roles that give more say
+ * what else they add, and a role with only this permission can be created in
+ * place when none fits.
  */
 export function GrantAccessDialog({
   userId,
@@ -55,6 +72,13 @@ export function GrantAccessDialog({
   onClose,
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
+  const [creatingRole, setCreatingRole] = useState(false);
+  // A role that adds sensitive access is previewed before it is assigned,
+  // and the preview waits for an acknowledgement. The acknowledgement is of
+  // one set of sensitive permissions, keyed by their slugs, so a catalogue
+  // read again that marks more of them sensitive asks again.
+  const [confirming, setConfirming] = useState<Role | null>(null);
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const {
     data: membersData,
@@ -68,16 +92,29 @@ export function GrantAccessDialog({
     isError: rolesError,
     refetch: refetchRoles,
   } = useRoles();
+  const {
+    catalogue,
+    tasks,
+    isLoading: scopesLoading,
+    isError: scopesError,
+    refetch: refetchScopes,
+  } = useScopeCatalogue();
 
   const member = useMemo(
     () => membersData?.members?.find((m) => m.id === userId) ?? null,
     [membersData?.members, userId],
   );
 
-  const suggestedRoles = useMemo(
+  const suggestions = useMemo(
     () =>
-      rolesCoveringScope(rolesData?.roles ?? [], scope, resourceId, projectId),
-    [rolesData?.roles, scope, resourceId, projectId],
+      suggestRolesForScope(
+        rolesData?.roles ?? [],
+        scope,
+        catalogue,
+        resourceId,
+        projectId,
+      ),
+    [rolesData?.roles, scope, catalogue, resourceId, projectId],
   );
 
   const updateMemberRoles = useUpdateMemberRolesMutation({
@@ -106,9 +143,40 @@ export function GrantAccessDialog({
     );
   };
 
-  const isLoading = membersLoading || rolesLoading;
-  const loadFailed = membersError || rolesError;
+  // What a role adds to what the member's roles already give: a permission
+  // they hold everywhere is not added, one they hold on one project and the
+  // role gives everywhere is. Manage Roles makes the same comparison.
+  const memberRoles = useMemo(() => {
+    const byId = new Map((rolesData?.roles ?? []).map((r) => [r.id, r]));
+    return (member?.roleIds ?? []).flatMap((id) => {
+      const role = byId.get(id);
+      return role ? [role] : [];
+    });
+  }, [rolesData?.roles, member?.roleIds]);
+  const addedBy = (role: Role) =>
+    permissionsAddedByRoles(memberRoles, [...memberRoles, role], catalogue);
+
+  const requestAssign = (role: Role) => {
+    if (addedBy(role).sensitive.length > 0) {
+      setConfirmedFor(null);
+      setConfirming(role);
+      return;
+    }
+    assignRole(role.id);
+  };
+  const confirmingAdds = confirming ? addedBy(confirming) : null;
+  const sensitiveKey = confirmingAdds?.sensitive.join(" ") ?? null;
+  const confirmed = sensitiveKey !== null && confirmedFor === sensitiveKey;
+
+  const isLoading = membersLoading || rolesLoading || scopesLoading;
+  // Suggestions and sensitivity warnings are read off the catalogue, so a
+  // failed catalogue fetch is a failed dialog, not an empty one.
+  const loadFailed = membersError || rolesError || scopesError;
   const granted = assignedRoleId !== null && updateMemberRoles.isSuccess;
+  const label = scopeLabel(catalogue, scope);
+  const entry = catalogue.get(scope);
+  const partOf = tasksNeeding(catalogue, tasks, scope);
+  const labelFor = (slug: string) => scopeLabel(catalogue, slug);
 
   return (
     <Dialog
@@ -124,21 +192,52 @@ export function GrantAccessDialog({
               rows alike, so the copy names the permission without assuming a
               request. */}
           <Dialog.Description>
-            Assign a role that includes the{" "}
-            <span className="font-mono text-xs">{scope}</span> permission.
+            Assign a role that includes <strong>{label}</strong>{" "}
+            <span className="font-mono text-xs">{scope}</span>.
+            {entry?.description ? ` ${entry.description}` : ""}
           </Dialog.Description>
         </Dialog.Header>
 
+        {partOf.length > 0 && (
+          <ul className="space-y-1">
+            {partOf.map((task) => {
+              const alsoNeeds = task.scopes.filter((s) => s !== scope);
+              return (
+                <li key={task.slug}>
+                  <Text muted small>
+                    Part of <strong>{task.label}</strong>
+                    {alsoNeeds.length > 0 && (
+                      <>
+                        , which also needs{" "}
+                        {alsoNeeds
+                          .map((s) => scopeLabel(catalogue, s))
+                          .join(", ")}
+                      </>
+                    )}
+                    .
+                  </Text>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
         {isLoading && (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+          <div
+            role="status"
+            aria-label="Loading members, roles and permissions"
+            className="space-y-2"
+          >
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
           </div>
         )}
 
         {loadFailed && (
           <div className="flex flex-col items-center gap-3 py-4">
             <Text variant="body" className="text-destructive text-sm">
-              Failed to load members and roles.
+              Failed to load members, roles and permissions.
             </Text>
             <Button
               variant="secondary"
@@ -146,6 +245,7 @@ export function GrantAccessDialog({
               onClick={() => {
                 if (membersError) void refetchMembers();
                 if (rolesError) void refetchRoles();
+                if (scopesError) refetchScopes();
               }}
             >
               Retry
@@ -159,7 +259,7 @@ export function GrantAccessDialog({
           </Text>
         )}
 
-        {member && !loadFailed && (
+        {member && !isLoading && !loadFailed && (
           <div className="space-y-4 py-2">
             <div className="border-border flex items-center gap-3 border p-3">
               <Avatar className="h-9 w-9">
@@ -187,18 +287,21 @@ export function GrantAccessDialog({
                   Access granted
                 </div>
                 <Text muted small>
-                  {member.name} now has the requested permission.
+                  {member.name} now has {label}.
                 </Text>
               </div>
             ) : (
               <RoleSuggestionList
                 member={member}
                 scope={scope}
-                suggestedRoles={suggestedRoles}
+                label={label}
+                suggestions={suggestions}
+                labelFor={labelFor}
                 pendingRoleId={
                   updateMemberRoles.isPending ? assignedRoleId : null
                 }
-                onAssign={assignRole}
+                onAssign={requestAssign}
+                onCreateRole={() => setCreatingRole(true)}
               />
             )}
 
@@ -216,6 +319,68 @@ export function GrantAccessDialog({
           </div>
         )}
       </Dialog.Content>
+
+      {creatingRole && (
+        <CreateRoleDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setCreatingRole(false);
+          }}
+          defaultName={label}
+          defaultScopes={[scope as Scope]}
+          defaultResource={{ resourceId, projectId }}
+          hideAssignments
+          onRoleCreated={(role) => assignRole(role.id)}
+        />
+      )}
+
+      {confirming && member && confirmingAdds && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setConfirming(null);
+          }}
+        >
+          <Dialog.Content className="sm:max-w-md">
+            <Dialog.Header>
+              <Dialog.Title>
+                Assign &ldquo;{confirming.name}&rdquo; to {member.name}
+              </Dialog.Title>
+              <Dialog.Description>
+                Check what the role adds before it is assigned.
+              </Dialog.Description>
+            </Dialog.Header>
+            <RolePermissionPreview
+              lead="This role adds"
+              summary={confirmingAdds}
+              labelFor={labelFor}
+            />
+            <ConfirmSensitiveAccess
+              checked={confirmed}
+              onCheckedChange={(next) =>
+                setConfirmedFor(next ? sensitiveKey : null)
+              }
+            >
+              I reviewed the sensitive permissions above and want {member.name}{" "}
+              to have them.
+            </ConfirmSensitiveAccess>
+            <Dialog.Footer>
+              <Button variant="secondary" onClick={() => setConfirming(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={!confirmed}
+                onClick={() => {
+                  assignRole(confirming.id);
+                  setConfirming(null);
+                }}
+              >
+                Assign role
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
+      )}
     </Dialog>
   );
 }
@@ -223,69 +388,129 @@ export function GrantAccessDialog({
 function RoleSuggestionList({
   member,
   scope,
-  suggestedRoles,
+  label,
+  suggestions,
+  labelFor,
   pendingRoleId,
   onAssign,
+  onCreateRole,
 }: {
   member: AccessMember;
   scope: string;
-  suggestedRoles: ReturnType<typeof rolesCoveringScope>;
+  label: string;
+  suggestions: RoleSuggestions;
+  labelFor: (slug: string) => string;
   pendingRoleId: string | null;
-  onAssign: (roleId: string) => void;
+  onAssign: (role: Role) => void;
+  onCreateRole: () => void;
 }): JSX.Element {
-  if (suggestedRoles.length === 0) {
+  const { exact, broader } = suggestions;
+  const nothingFits = exact.length === 0;
+
+  const renderRole = (
+    { role, breadth }: SuggestedRole,
+    extra?: { count: number; sensitive: string[] },
+  ) => {
+    const alreadyAssigned = member.roleIds.includes(role.id);
+    const reach = breadthLabel(scope, breadth);
     return (
-      <Text muted small>
-        No existing role includes <span className="font-mono">{scope}</span>.
-        Create a role with that permission on the Roles tab, then assign it.
-      </Text>
+      <li
+        key={role.id}
+        className="border-border flex items-center justify-between gap-3 border px-3 py-2"
+      >
+        <div className="min-w-0 space-y-0.5">
+          <Text variant="body" className="text-sm font-medium">
+            <RoleLink roleId={role.id}>{role.name}</RoleLink>
+          </Text>
+          {role.description && (
+            <Text muted small className="truncate">
+              {role.description}
+            </Text>
+          )}
+          {reach && (
+            <Text muted small>
+              Grants {label} {reach}.
+            </Text>
+          )}
+          {extra && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Text muted small>
+                Also grants {extra.count} more{" "}
+                {extra.count === 1 ? "permission" : "permissions"}
+                {extra.sensitive.length > 0 ? ", including" : ""}
+              </Text>
+              {extra.sensitive.map((slug) => (
+                <Badge key={slug} variant="warning">
+                  {labelFor(slug)}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+        {alreadyAssigned ? (
+          <Badge variant="neutral">Assigned</Badge>
+        ) : (
+          <Button
+            variant={extra ? "secondary" : "primary"}
+            size="sm"
+            onClick={() => onAssign(role)}
+            disabled={pendingRoleId !== null}
+          >
+            {pendingRoleId === role.id && (
+              <Button.LeftIcon>
+                <Spinner className="mr-0" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>Assign</Button.Text>
+          </Button>
+        )}
+      </li>
     );
-  }
+  };
 
   return (
-    <div className="space-y-2">
-      <Text muted small>
-        Roles that include this permission:
-      </Text>
-      <ul className="space-y-1.5">
-        {suggestedRoles.map((role) => {
-          const alreadyAssigned = member.roleIds.includes(role.id);
-          return (
-            <li
-              key={role.id}
-              className="border-border flex items-center justify-between gap-3 border px-3 py-2"
-            >
-              <div className="min-w-0">
-                <Text variant="body" className="text-sm font-medium">
-                  <RoleLink roleId={role.id}>{role.name}</RoleLink>
-                </Text>
-                {role.description && (
-                  <Text muted small className="truncate">
-                    {role.description}
-                  </Text>
-                )}
-              </div>
-              {alreadyAssigned ? (
-                <Badge variant="neutral">Assigned</Badge>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => onAssign(role.id)}
-                  disabled={pendingRoleId !== null}
-                >
-                  {pendingRoleId === role.id && (
-                    <Button.LeftIcon>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    </Button.LeftIcon>
-                  )}
-                  <Button.Text>Assign</Button.Text>
-                </Button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+    <div className="space-y-3">
+      {exact.length > 0 && (
+        <div className="space-y-2">
+          <Text muted small>
+            Roles that give exactly this:
+          </Text>
+          <ul className="space-y-1.5">
+            {exact.map((item) => renderRole(item))}
+          </ul>
+        </div>
+      )}
+
+      {nothingFits && (
+        <Text muted small>
+          No existing role gives only {label}.
+        </Text>
+      )}
+
+      <Button
+        variant={nothingFits ? "primary" : "secondary"}
+        size="sm"
+        onClick={onCreateRole}
+        disabled={pendingRoleId !== null}
+      >
+        Create a role with only this permission
+      </Button>
+
+      {broader.length > 0 && (
+        <div className="space-y-2">
+          <Text muted small>
+            Roles that give more than this:
+          </Text>
+          <ul className="space-y-1.5">
+            {broader.map((item) =>
+              renderRole(item, {
+                count: item.extraScopes.length,
+                sensitive: item.extraSensitive,
+              }),
+            )}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import type { ExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { mcpServerRouteParam } from "@/lib/sources";
 import {
   isCanonicalHostedWrapper,
@@ -8,19 +7,13 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerToolsetSummary } from "@gram/client/models/components/mcpservertoolsetsummary.js";
 import type { useRoutes } from "@/routes";
 
-export type McpServerKind =
-  | "hosted"
-  | "remote"
-  | "tunneled"
-  | "unproxied"
-  | "built_in";
+export type McpServerKind = "hosted" | "remote" | "tunneled" | "unproxied";
 
 export const MCP_SERVER_KIND_LABEL: Record<McpServerKind, string> = {
   hosted: "Hosted",
   remote: "Remote",
   tunneled: "Tunneled",
   unproxied: "Unproxied",
-  built_in: "Built-in",
 };
 
 export interface ListedMcpServer {
@@ -30,7 +23,6 @@ export interface ListedMcpServer {
 
 /** How Speakeasy reaches the server; undefined for a row with no backend. */
 function mcpServerKind(server: McpServer): McpServerKind | undefined {
-  if (server.builtinBackend) return "built_in";
   if (server.unproxiedMcpServerId) return "unproxied";
   if (server.tunneledMcpServerId) return "tunneled";
   if (server.remoteMcpServerId) return "remote";
@@ -60,15 +52,6 @@ export function listedMcpServers(servers: McpServer[]): ListedMcpServer[] {
   return listed;
 }
 
-/** The toolset summary when this row hosts its toolset. */
-function standInToolset(
-  server: McpServer,
-): McpServerToolsetSummary | undefined {
-  return mcpServerKind(server) === "hosted" && standsInForToolset(server)
-    ? server.toolset
-    : undefined;
-}
-
 export function mcpServerDisplayName(server: McpServer): string {
   // A canonical server's name is its toolset's; any other server is renamed on its own row.
   const preferred = isCanonicalHostedWrapper(server)
@@ -82,8 +65,6 @@ export function hostedToolCountLabel(
   toolset: McpServerToolsetSummary | undefined,
 ): string | undefined {
   if (!toolset) return undefined;
-  // A proxy can't list its tools until someone signs in, so no count is true.
-  if (toolset.externalMcpProxyOnly) return "Tools listed once you sign in";
   return `${toolset.toolCount} ${toolset.toolCount === 1 ? "tool" : "tools"}`;
 }
 
@@ -91,14 +72,6 @@ export function hostedToolCountLabel(
 export function mcpServerHref(
   routes: ReturnType<typeof useRoutes>,
   server: McpServer,
-  oauthStatus: ExternalMcpOAuthConfigStatus,
 ): string {
-  const param = mcpServerRouteParam(server);
-  if (oauthStatus !== "required-unconfigured") {
-    return routes.mcp.details.overview.href(param);
-  }
-  // A hosted server's sign-in setup is a section of its settings.
-  return standInToolset(server)
-    ? `${routes.mcp.details.settings.href(param)}#authentication`
-    : routes.mcp.details.settings.href(param);
+  return routes.mcp.details.overview.href(mcpServerRouteParam(server));
 }

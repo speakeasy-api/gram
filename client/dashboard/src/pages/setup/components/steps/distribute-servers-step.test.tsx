@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DistributeServersStep } from "./distribute-servers-step";
 
@@ -58,9 +59,9 @@ vi.mock("../step-container", () => ({
     </>
   ),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => serverState.client }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { catalog: { Link: () => null } } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => serverState.client,
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
@@ -119,7 +120,11 @@ beforeEach(() => {
 });
 
 function renderStep(onComplete: () => void) {
-  render(<DistributeServersStep onComplete={onComplete} />);
+  render(
+    <MemoryRouter>
+      <DistributeServersStep onComplete={onComplete} />
+    </MemoryRouter>,
+  );
 }
 
 describe("DistributeServersStep", () => {

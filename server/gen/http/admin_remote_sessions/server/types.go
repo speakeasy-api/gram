@@ -262,8 +262,8 @@ type UpdateGlobalClientRequestBody struct {
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Replace the upstream OAuth audience sent for this client. Omit to leave
-	// unchanged.
+	// Replace the upstream OAuth audience sent for this client. Pass an empty
+	// string to clear it. Omit to leave unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 }
 
@@ -667,12 +667,20 @@ type CreateGlobalClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -749,12 +757,20 @@ type GetGlobalClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -823,12 +839,20 @@ type UpdateGlobalClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -4193,12 +4217,20 @@ type RemoteSessionClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -4658,7 +4690,9 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
@@ -4728,7 +4762,9 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
@@ -4777,7 +4813,9 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
@@ -7771,7 +7809,7 @@ func ValidateUpdateGlobalClientRequestBody(body *UpdateGlobalClientRequestBody) 
 		}
 	}
 	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]*$"))
 	}
 	if body.Audience != nil {
 		if utf8.RuneCountInString(*body.Audience) > 512 {

@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -152,7 +151,6 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	assetStorage := assetstest.NewTestBlobStore(t)
 	enc := testenv.NewEncryptionClient(t)
 	funcs := functionstest.NewOrchestrator(t, assetStorage)
-	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	auditLogger := audit.NewLogger()
 	f := &feature.InMemory{}
@@ -165,7 +163,7 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
-		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
+		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, auditLogger),
 		&background.WorkerOptions{PluginPublisher: pluginPublisher},
 	)
 	t.Cleanup(func() {

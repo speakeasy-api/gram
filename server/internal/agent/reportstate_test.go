@@ -273,6 +273,42 @@ func TestReportState_RateLimitedPerDevice(t *testing.T) {
 	requireCode(t, err, oops.CodeRateLimitExceeded)
 }
 
+// Rotating the serial gets a fresh per-device budget, so the reports that add
+// a row are also capped per organization; a stored device keeps reporting.
+func TestReportState_NewDevicesRateLimitedPerOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ti.service.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(ti.redis), "test-report-state-"+uuid.NewString(), ratelimit.PerMinute(10)))
+	ti.service.WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(ti.redis), "test-report-state-new-"+uuid.NewString(), ratelimit.PerMinute(2)))
+
+	_, err := ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, "SERIAL00001"))
+	require.NoError(t, err)
+	_, err = ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, "SERIAL00002"))
+	require.NoError(t, err)
+	_, err = ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, "SERIAL00003"))
+	requireCode(t, err, oops.CodeRateLimitExceeded)
+	require.Len(t, stateReports(t, ti), 2, "the refused report added no row")
+
+	// Replacing a stored report is not charged, and serials match
+	// case-insensitively as the upsert does.
+	_, err = ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, "serial00001"))
+	require.NoError(t, err)
+	require.Len(t, stateReports(t, ti), 2)
+}
+
+// A serial-less machine dedups on email, so its repeat report is not new.
+func TestReportState_SerialLessRepeatIsNotANewDevice(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ti.service.WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(ti.redis), "test-report-state-new-"+uuid.NewString(), ratelimit.PerMinute(1)))
+
+	_, err := ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, ""))
+	require.NoError(t, err)
+	_, err = ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, ""))
+	require.NoError(t, err)
+	require.Len(t, stateReports(t, ti), 1)
+}
+
 // A report that is acknowledged but not stored still spends the budget.
 func TestReportState_NonEndpointReportsAreRateLimited(t *testing.T) {
 	t.Parallel()

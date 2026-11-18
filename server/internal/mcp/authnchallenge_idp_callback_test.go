@@ -30,6 +30,7 @@ func seedIDPCallbackChallenge(t *testing.T, ctx context.Context, ti *testInstanc
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
+			McpServerID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 			CustomDomainID: toolset.CustomDomainID,
 		},
 		ClientID:            "test-client",
@@ -77,7 +78,7 @@ func TestHandleIDPCallback_SyncsMembershipsBeforeAccessCheck(t *testing.T) {
 	require.Equal(t, http.StatusFound, w.Code)
 
 	require.Equal(t, []string{"CompleteIDPLogin", "IsOrganizationMember"}, mock.calls)
-	require.Equal(t, []identity.IDPLoginOptions{{SkipMembershipSync: false}}, mock.loginOptions)
+	require.Equal(t, []identity.IDPLoginOptions{{SkipMembershipSync: false, Attribution: nil}}, mock.loginOptions)
 	require.Equal(t, []string{mock.upsertResult}, mock.memberChecks, "the gate must judge the user the bootstrap resolved")
 }
 
@@ -148,6 +149,7 @@ func TestHandleIDPCallback_RetiredRouteBaseRejected(t *testing.T) {
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
+			McpServerID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 			CustomDomainID: toolset.CustomDomainID,
 			RouteBase:      "x/mcp",
 		},

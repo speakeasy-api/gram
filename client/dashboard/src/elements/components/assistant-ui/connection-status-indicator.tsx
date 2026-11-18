@@ -8,7 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Loader2Icon, WifiOffIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { FC } from "react";
+import type { FC } from "react";
 
 interface ConnectionStatusIndicatorProps {
   className?: string;

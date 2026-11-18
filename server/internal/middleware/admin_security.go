@@ -88,18 +88,15 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// These cookie-authenticated navigation routes retain the same origin
-			// enforcement, but explain the refusal in the browser. Machine routes
+			// This cookie-authenticated navigation route retains the same origin
+			// enforcement, but explains the refusal in the browser. Machine routes
 			// and the rest of the admin API retain their own response contracts.
-			proposalID, proposal := strings.CutPrefix(r.URL.Path, "/admin-mcp/proposals/")
-			proposal = proposal && proposalID != "" && !strings.Contains(proposalID, "/")
-			if r.URL.Path == "/admin-mcp/connect" || proposal {
+			if r.URL.Path == "/admin-mcp/connect" {
 				_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
 					Recovery:       nil,
 					Setup:          false,
 					Status:         http.StatusForbidden,
 					Reason:         oauthui.ReasonSessionChanged,
-					Approval:       proposal,
 					ErrorID:        "",
 					Code:           http.StatusText(http.StatusForbidden),
 					Description:    "forbidden: origin not allowed",
@@ -108,6 +105,7 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 					ClientID:       "",
 					ClientIDOrigin: "",
 					ServerName:     "",
+					ProviderName:   "",
 				})
 				return
 			}

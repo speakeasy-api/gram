@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -16,11 +17,16 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// errMemberToolsetDenied reports a hosted member whose own private toolset the
+// caller may not connect to. It is a refusal, not a failure to evaluate one.
+var errMemberToolsetDenied = errors.New("member toolset connect denied")
+
 // derivedMemberAuth reports whether a derived gateway can authenticate the
 // member, and whether that takes the upstream OAuth token a person gets by
 // connecting it through the gateway, by memberNeedsSignIn. It checks
 // capability, not whether a person has connected yet: an OAuth member stays
-// supported so they can connect it.
+// supported so they can connect it. A member whose private toolset the caller
+// may not connect to returns errMemberToolsetDenied.
 func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
 	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
@@ -38,6 +44,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 				StaticValue:            row.Value.String,
 				ValueFromRequestHeader: row.ValueFromRequestHeader.String,
 				IsRequired:             row.IsRequired,
+				IsSecret:               row.IsSecret,
 			})
 		}
 		supported, needsOAuth := remoteMemberAuth(headers, oauth)
@@ -63,9 +70,14 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return false, false, nil
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset, hosting.Public)
-	if err != nil || !allowed {
+	// Admission runs this for every member, so it records no authorization
+	// check; a call that names the member records it (findNamedMember).
+	allowed, err := s.memberToolsetConnectAllowed(authz.WithoutChallenges(ctx), shadow, shadowSurface, true, &toolset, hosting.Public)
+	if err != nil {
 		return false, false, err
+	}
+	if !allowed {
+		return false, false, errMemberToolsetDenied
 	}
 
 	environment := toolset.DefaultEnvironmentSlug.String
@@ -100,6 +112,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 		remoteSessionIssuerID: member.remoteSessionIssuerID,
 		securityKeys:          nil,
 		Token:                 "gateway-oauth-capability",
+		shared:                false,
 	}}
 	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	return satisfied, satisfied, err

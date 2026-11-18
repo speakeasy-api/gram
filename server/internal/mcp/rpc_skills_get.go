@@ -24,13 +24,19 @@ func handleSkillsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	}
 
 	scope, ok := hostedSkillScope(ctx, logger, db, payload)
+	return getServedSkill(ctx, logger, resolver, scope, ok, req, params.URI, serverInfoHostedToolset)
+}
 
+// getServedSkill answers an already parsed skills/get for uri from the skills
+// the scope serves, under the given server identity. A surface with no scope
+// (ok false) serves no skill at any URI.
+func getServedSkill(ctx context.Context, logger *slog.Logger, resolver *mcpskills.Resolver, scope mcpskills.Scope, ok bool, req *rawRequest, uri string, identity serverInfo) (json.RawMessage, error) {
 	if !ok {
-		return nil, skillNotFound(ctx, logger, mcpskills.ErrSkillNotFound, params.URI)
+		return nil, skillNotFound(ctx, logger, mcpskills.ErrSkillNotFound, uri)
 	}
-	entry, err := resolver.Get(ctx, scope, params.URI)
+	entry, err := resolver.Get(ctx, scope, uri)
 	if errors.Is(err, mcpskills.ErrSkillNotFound) {
-		return nil, skillNotFound(ctx, logger, err, params.URI)
+		return nil, skillNotFound(ctx, logger, err, uri)
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get skill").LogError(ctx, logger)
@@ -38,5 +44,5 @@ func handleSkillsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 
 	// Whether the URI resolves at all depends on the caller's organization
 	// membership, so the entry is private to the caller.
-	return marshalSkillsGet(ctx, logger, req.ID, *entry, serverInfoHostedToolset)
+	return marshalSkillsGet(ctx, logger, req.ID, *entry, identity)
 }

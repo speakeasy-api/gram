@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,9 +15,14 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	adminHTTP "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -105,12 +111,14 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "assistant", action: "assistant:run"})
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "trial", subjectName: pgtype.Text{String: "Test Trial", Valid: true}, action: "trial:extend"})
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", actorID: "system", actorType: "system", subjectType: "organization", action: "system:update"})
+	// Catalogue curation is hidden from customer feeds but stays visible to staff.
+	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", isInternal: true, subjectType: "catalog_promotion", action: "catalog-promotion:archive", surface: pgtype.Text{String: "admin", Valid: true}})
 
 	result, err := svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: "org_activity_target"})
 	require.NoError(t, err)
-	require.Len(t, result.Logs, 5)
+	require.Len(t, result.Logs, 6)
 
-	var full, system *gen.AuditLog
+	var full, system *gen.AdminAuditLog
 	for _, log := range result.Logs {
 		if log.ID == wanted.String() {
 			full = log
@@ -119,6 +127,8 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 			system = log
 		}
 		require.NotEqual(t, "other:create", log.Action)
+		require.NotNil(t, log.IsInternal)
+		require.Equal(t, log.Action == "catalog-promotion:archive", *log.IsInternal)
 	}
 	require.NotNil(t, full)
 	require.Equal(t, project.ID.String(), *full.ProjectID)
@@ -251,7 +261,7 @@ func TestAdminActivityLog_ResponseMapping(t *testing.T) {
 	for _, metadata := range [][]byte{nil, {}, []byte("null"), []byte("[]"), []byte(`"metadata"`), []byte("1"), []byte("true")} {
 		row := base
 		row.Metadata = metadata
-		log, err := adminActivityLog(row)
+		log, err := adminActivityLog(row, audit.CategoryConfiguration)
 		require.NoError(t, err)
 		require.Equal(t, "2026-08-25T12:34:56Z", log.CreatedAt)
 		require.Equal(t, "unknown", log.ActingSurface)
@@ -266,7 +276,7 @@ func TestAdminActivityLog_ResponseMapping(t *testing.T) {
 
 			row := base
 			row.Metadata = metadata
-			_, err := adminActivityLog(row)
+			_, err := adminActivityLog(row, audit.CategoryConfiguration)
 			require.ErrorContains(t, err, "unmarshal metadata")
 		})
 	}
@@ -291,6 +301,7 @@ func TestListOrganizationActivity(t *testing.T) {
 }
 
 type activitySeed struct {
+	isInternal                     bool
 	organizationID                 string
 	projectID                      uuid.NullUUID
 	actorID, actorType             string
@@ -299,6 +310,7 @@ type activitySeed struct {
 	subjectName, subjectSlug       pgtype.Text
 	before, after, metadata        []byte
 	surface, clientID              pgtype.Text
+	security                       bool
 }
 
 func insertActivity(t *testing.T, ctx context.Context, conn *pgxpool.Pool, seed activitySeed) uuid.UUID {
@@ -312,12 +324,19 @@ func insertActivity(t *testing.T, ctx context.Context, conn *pgxpool.Pool, seed 
 	if seed.subjectID == "" {
 		seed.subjectID = uuid.NewString()
 	}
-	row, err := auditrepo.New(conn).InsertAuditLog(ctx, auditrepo.InsertAuditLogParams{
+	params := auditrepo.InsertAuditLogParams{
+		IsInternal:     seed.isInternal,
 		OrganizationID: seed.organizationID, ProjectID: seed.projectID, ActorID: seed.actorID, ActorType: seed.actorType,
 		ActorDisplayName: seed.actorName, ActorSlug: seed.actorSlug, Action: seed.action, SubjectID: seed.subjectID,
 		SubjectType: seed.subjectType, SubjectDisplayName: seed.subjectName, SubjectSlug: seed.subjectSlug,
 		BeforeSnapshot: seed.before, AfterSnapshot: seed.after, Metadata: seed.metadata, ActingSurface: seed.surface, ActingClientID: seed.clientID,
-	})
+	}
+	if seed.security {
+		row, err := securityrepo.New(conn).InsertSecurityAuditLog(ctx, securityrepo.InsertSecurityAuditLogParams(params))
+		require.NoError(t, err)
+		return row.ID
+	}
+	row, err := auditrepo.New(conn).InsertAuditLog(ctx, params)
 	require.NoError(t, err)
 	return row.ID
 }
@@ -406,6 +425,81 @@ func TestListOrganizationActivityFiltered_Predicates(t *testing.T) {
 	missing, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID, ActingSurface: new("not_recorded")})
 	require.NoError(t, err)
 	require.Empty(t, missing.Logs)
+}
+
+// Staff see both logs in one timeline, including security entries the
+// customer audit log page leaves out.
+func TestListOrganizationActivityFiltered_IncludesEveryCategory(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_categories", name: "Categories", slug: "activity-categories"})
+	security := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_categories", actorID: "kit-runtime", actorType: "system", subjectType: "workload_admission", action: "workload-admission:admit", security: true})
+	configuration := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_categories", subjectType: "project", action: "project:update"})
+
+	result, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: "org_activity_categories"})
+	require.NoError(t, err)
+	categories := make(map[string]string, len(result.Logs))
+	for _, log := range result.Logs {
+		categories[log.ID] = conv.PtrValOrEmpty(log.Category, "")
+	}
+	require.Equal(t, map[string]string{security.String(): "security", configuration.String(): "configuration"}, categories)
+}
+
+// Each log pages by its own seq, so paging the merged timeline must return
+// every entry of both exactly once, newest first, whichever log runs out first.
+func TestListOrganizationActivity_PagesAcrossBothLogs(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_activity_merged_pages"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Merged", slug: "activity-merged-pages"})
+
+	// 70 configuration entries an hour apart, and 40 security entries placed
+	// between the newest 40 of them, so the security log is exhausted while
+	// configuration entries remain.
+	base := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+	want := map[string]time.Time{}
+	for i := range 70 {
+		id := insertActivity(t, ctx, conn, activitySeed{organizationID: orgID, subjectType: "project", action: "project:update"})
+		at := base.Add(time.Duration(i) * time.Hour)
+		require.NoError(t, auditrepo.New(conn).UpdateAuditLogCreatedAtForTesting(ctx, auditrepo.UpdateAuditLogCreatedAtForTestingParams{
+			CreatedAt: pgtype.Timestamptz{Time: at, Valid: true}, Ids: []uuid.UUID{id},
+		}))
+		want[id.String()] = at
+	}
+	for i := range 40 {
+		id := insertActivity(t, ctx, conn, activitySeed{organizationID: orgID, subjectType: "workload_admission", action: "workload-admission:admit", security: true})
+		at := base.Add(time.Duration(30+i)*time.Hour + 30*time.Minute)
+		require.NoError(t, audittestrepo.New(conn).BackdateSecurityAuditLog(ctx, audittestrepo.BackdateSecurityAuditLogParams{
+			CreatedAt: pgtype.Timestamptz{Time: at, Valid: true}, ID: id,
+		}))
+		want[id.String()] = at
+	}
+
+	var seen []string
+	var cursor *string
+	for page := 0; ; page++ {
+		require.Less(t, page, 5, "pagination must terminate")
+		result, err := svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: orgID, Cursor: cursor})
+		require.NoError(t, err)
+		require.LessOrEqual(t, len(result.Logs), 50)
+		for _, log := range result.Logs {
+			seen = append(seen, log.ID)
+		}
+		if result.NextCursor == nil {
+			break
+		}
+		cursor = result.NextCursor
+	}
+
+	require.Len(t, seen, len(want))
+	unique := map[string]bool{}
+	for i, id := range seen {
+		require.False(t, unique[id], "entry %s listed twice", id)
+		unique[id] = true
+		if i > 0 {
+			require.False(t, want[id].After(want[seen[i-1]]), "entries are newest first")
+		}
+	}
 }
 
 func TestListOrganizationActivityFiltered_ProjectIsolation(t *testing.T) {
@@ -540,5 +634,26 @@ func TestListOrganizationActivityFiltered_PaginationAndDelegation(t *testing.T) 
 		if cursor == nil {
 			break
 		}
+	}
+}
+
+func TestInternalClassificationResponse(t *testing.T) {
+	t.Parallel()
+	for _, internal := range []bool{false, true} {
+		log, err := adminActivityLog(auditrepo.ListAuditLogsRow{IsInternal: internal}, audit.CategoryConfiguration)
+		require.NoError(t, err)
+		require.NotNil(t, log.IsInternal)
+		require.Equal(t, internal, *log.IsInternal)
+		recorder := httptest.NewRecorder()
+		result := &gen.AdminListOrganizationActivityResult{Logs: []*gen.AdminAuditLog{log}, NextCursor: nil}
+		require.NoError(t, adminHTTP.EncodeListOrganizationActivityResponse(goahttp.ResponseEncoder)(t.Context(), recorder, result))
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var body struct {
+			Logs []map[string]any `json:"logs"`
+		}
+		require.NoError(t, json.NewDecoder(recorder.Body).Decode(&body))
+		require.Len(t, body.Logs, 1)
+		require.Contains(t, body.Logs[0], "is_internal")
+		require.Equal(t, internal, body.Logs[0]["is_internal"])
 	}
 }

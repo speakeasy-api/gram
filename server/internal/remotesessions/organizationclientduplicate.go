@@ -278,6 +278,7 @@ func (s *Service) duplicateCIMDClient(ctx context.Context, logger *slog.Logger, 
 	}
 
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
+		ForwardClientName:     source.ForwardClientName,
 		ID:                    clientID,
 		ProjectID:             source.ProjectID,
 		OrganizationID:        conv.ToPGTextEmpty(organizationID),
@@ -341,6 +342,7 @@ func (s *Service) duplicateCredentialClient(
 	}
 
 	params := repo.CreateRemoteSessionClientParams{
+		ForwardClientName:               source.ForwardClientName,
 		ProjectID:                       source.ProjectID,
 		OrganizationID:                  conv.ToPGTextEmpty(organizationID),
 		RemoteSessionIssuerID:           source.RemoteSessionIssuerID,

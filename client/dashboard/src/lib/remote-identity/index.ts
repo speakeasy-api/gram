@@ -18,7 +18,7 @@ export {
 
 export { REDACTED_SECRET } from "./model/secret";
 
-export { normalizeScopes } from "./model/clientConfiguration";
+export { providerUrlLabel } from "./model/provider";
 
 export {
   headerDraftErrors,
@@ -46,14 +46,14 @@ export {
 
 export { useAllRemoteSessionClients } from "./queries/useAllRemoteSessionClients";
 export { useRemoteSessionIssuersByIds } from "./queries/useRemoteSessionIssuersByIds";
-export { resetAllProtectedResourceMetadata } from "./queries/useProtectedResourceMetadata";
+export {
+  resetAllProtectedResourceMetadata,
+  useProtectedResourceMetadata,
+} from "./queries/useProtectedResourceMetadata";
 export { useUpstreamProbe } from "./queries/useUpstreamProbe";
 
 export { AgentIdentityRow } from "./components/CredentialFields";
-export {
-  IdentityExplainerCallout,
-  IdentityExplainerDialog,
-} from "./components/IdentityExplainer";
+export { IdentityExplainerCallout } from "./components/IdentityExplainer";
 export { identityModeCards } from "./components/IdentityModeCards";
 export { IssuerLink } from "./components/ProviderLink";
 export { UserIdentityRow } from "./components/ProviderRow";

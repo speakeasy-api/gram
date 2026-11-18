@@ -1,0 +1,146 @@
+package networkingress_test
+
+import (
+	"regexp"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
+)
+
+func TestProductionNamer(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	namer := networkingress.ProductionNamer{}
+	require.Equal(t, "speakeasy", must(namer.Hostname(ctx, "speakeasy")))
+	require.True(t, must(namer.OwnsHostname(ctx, "speakeasy")))
+	require.False(t, must(namer.OwnsHostname(ctx, "local-ab12-speakeasy")), "production never manages a local stack's service")
+	_, err := namer.Hostname(ctx, "local-ab12-speakeasy")
+	require.ErrorIs(t, err, networkingress.ErrReservedHostname, "production reserves the local- prefix")
+	require.Equal(t, "svc:speakeasy", must(namer.ServiceName(ctx, "speakeasy")))
+	require.Equal(t, "Speakeasy private MCP ingress", must(namer.ServiceComment(ctx)))
+	require.Equal(t, "speakeasy-gw-0", must(namer.MachineName(ctx, 0)))
+	ingressID := uuid.MustParse("1a2b3c4d-0000-4000-8000-000000000000")
+	require.Equal(t, "Speakeasy gateway 1a2b3c4d slot 2", must(namer.AuthKeyDescription(ctx, ingressID, 2)))
+}
+
+func TestLocalNamer(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	namer, err := networkingress.NewLocalNamer("ab12")
+	require.NoError(t, err)
+	require.Equal(t, "local-ab12-speakeasy", must(namer.Hostname(ctx, "speakeasy")))
+	require.Equal(t, "local-ab12-speakeasy", must(namer.Hostname(ctx, "local-ab12-speakeasy")), "an owned hostname is not prefixed twice")
+	require.Equal(t, "svc:local-ab12-speakeasy", must(namer.ServiceName(ctx, "local-ab12-speakeasy")))
+	_, err = namer.ServiceName(ctx, "speakeasy")
+	require.Error(t, err, "a service the stack does not own cannot even be named")
+	require.Equal(t, "Speakeasy local development (local-ab12)", must(namer.ServiceComment(ctx)))
+	require.Equal(t, "speakeasy-gw-local-ab12-3", must(namer.MachineName(ctx, 3)))
+	require.Equal(t, "Speakeasy local ab12 1a2b3c4d slot 1", must(namer.AuthKeyDescription(ctx, uuid.MustParse("1a2b3c4d-0000-4000-8000-000000000000"), 1)))
+
+	require.True(t, must(namer.OwnsHostname(ctx, "local-ab12-speakeasy")))
+	require.False(t, must(namer.OwnsHostname(ctx, "speakeasy")), "production's hostnames are never owned")
+	require.False(t, must(namer.OwnsHostname(ctx, "local-ab12")), "the bare qualifier is not a hostname this stack created")
+	require.False(t, must(namer.OwnsHostname(ctx, "local-ab123-speakeasy")), "another stack's qualifier is not a prefix match")
+
+	for _, devID := range []string{"", "AB12", "ab-12", "ab12ab12a", "ab 1"} {
+		_, err := networkingress.NewLocalNamer(devID)
+		require.Error(t, err, "development id %q", devID)
+	}
+}
+
+func TestNewNamer(t *testing.T) {
+	t.Parallel()
+
+	namer, err := networkingress.NewNamer("prod", "", "")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.ProductionNamer{}, namer)
+
+	namer, err = networkingress.NewNamer("local", "ab12", "")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.LocalNamer{}, namer)
+
+	for _, environment := range []string{"dev", "prod", ""} {
+		_, err := networkingress.NewNamer(environment, "ab12", "")
+		require.ErrorIs(t, err, networkingress.ErrDevIDOutsideLocal, "environment %q", environment)
+	}
+
+	namer, err = networkingress.NewNamer("dev", "", "dev")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.QualifiedNamer{}, namer)
+
+	_, err = networkingress.NewNamer("local", "ab12", "dev")
+	require.ErrorIs(t, err, networkingress.ErrQualifierInLocal)
+
+	_, err = networkingress.NewNamer("local", "", "dev")
+	require.ErrorIs(t, err, networkingress.ErrQualifierInLocal, "the API server, which skips the development id check, still refuses a local qualifier")
+
+	_, err = networkingress.NewNamer("dev", "", "Dev")
+	require.Error(t, err, "an invalid qualifier is refused")
+}
+
+func TestQualifiedNamer(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	namer, err := networkingress.NewQualifiedNamer("dev")
+	require.NoError(t, err)
+	require.Equal(t, "speakeasy-gw-dev-0", must(namer.MachineName(ctx, 0)))
+	require.Equal(t, "Speakeasy private MCP ingress (dev)", must(namer.ServiceComment(ctx)))
+	ingressID := uuid.MustParse("1a2b3c4d-0000-4000-8000-000000000000")
+	require.Equal(t, "Speakeasy gateway dev 1a2b3c4d slot 2", must(namer.AuthKeyDescription(ctx, ingressID, 2)))
+
+	// Hostnames, services and ownership stay production's.
+	require.Equal(t, "speakeasy", must(namer.Hostname(ctx, "speakeasy")))
+	require.Equal(t, "svc:speakeasy", must(namer.ServiceName(ctx, "speakeasy")))
+	require.True(t, must(namer.OwnsHostname(ctx, "speakeasy")))
+	require.False(t, must(namer.OwnsHostname(ctx, "local-ab12-speakeasy")), "a deployed environment never manages a local stack's service")
+	_, err = namer.Hostname(ctx, "local-ab12-speakeasy")
+	require.ErrorIs(t, err, networkingress.ErrReservedHostname)
+}
+
+func TestNewQualifiedNamerRejectsInvalidQualifiers(t *testing.T) {
+	t.Parallel()
+
+	for _, qualifier := range []string{"", "Dev", "de-v", "dev12345a", "de v", "local", "localdev"} {
+		t.Run(qualifier, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := networkingress.NewQualifiedNamer(qualifier)
+			require.Error(t, err)
+		})
+	}
+}
+
+// authKeyDescriptionPattern is what Tailscale accepts for an auth key
+// description: letters, digits and spaces, at most 50 characters.
+var authKeyDescriptionPattern = regexp.MustCompile(`^[A-Za-z0-9 ]{1,50}$`)
+
+func TestAuthKeyDescriptionsAreAcceptedByTailscale(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	// The longest development id and slot give the longest descriptions.
+	local, err := networkingress.NewLocalNamer("abcd1234")
+	require.NoError(t, err)
+	qualified, err := networkingress.NewQualifiedNamer("abcd1234")
+	require.NoError(t, err)
+	for _, namer := range []networkingress.Namer{networkingress.ProductionNamer{}, local, qualified} {
+		for _, slot := range []int32{0, 1000} {
+			description := must(namer.AuthKeyDescription(ctx, uuid.New(), slot))
+			require.Regexp(t, authKeyDescriptionPattern, description)
+		}
+	}
+}
+
+// must unwraps a Namer result whose implementation cannot fail.
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}

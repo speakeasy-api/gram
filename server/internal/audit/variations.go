@@ -54,6 +54,7 @@ func (l *Logger) LogVariationUpdateGlobal(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -100,6 +101,7 @@ func (l *Logger) LogVariationDeleteGlobal(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

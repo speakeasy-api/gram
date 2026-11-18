@@ -120,7 +120,7 @@ var RegisteredTemplates = []Template{
 	OpenRouterInternalCreditsThreshold{OrganizationName: "", ThresholdPercent: "", Exhausted: false},
 	CustomDomainUnhealthy{Email: "", Domain: "", IssueMessage: "", DomainLink: ""},
 	WeeklyUsageSummary{OrganizationName: "", CycleEndDate: "", DaysRemaining: "", UsageThroughDate: "", StorageTokens: "", StorageChangePercent: "", ScanningTokens: "", ScanningChangePercent: "", EgressGib: "", EgressChangePercent: "", ShowEstimatedSpend: "", StorageCostUSD: "", ScanningCostUSD: "", EgressCostUSD: "", TotalCostUSD: "", ViewUsageURL: ""},
-	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: ""},
+	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: "", PermissionLabel: "", PermissionScope: "", PermissionDescription: ""},
 	TrialEndingSoon{OrganizationName: "", TrialEndDate: "", ActionURL: ""},
 	AccessPaused{OrganizationName: "", ActionURL: ""},
 	PaygActivated{OrganizationName: "", TumPricePerMillionUsd: "", ActionURL: ""},

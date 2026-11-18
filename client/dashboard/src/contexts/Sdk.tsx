@@ -7,7 +7,7 @@ import {
 } from "@/lib/route-errors";
 import { useLocation, useParams } from "react-router";
 
-import { Gram } from "@gram/client";
+import type { Gram } from "@gram/client";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { handleError } from "@/lib/errors";
 import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
@@ -32,7 +32,7 @@ export const useSdkClient = (): Gram => {
 };
 
 // Preserve QueryClient across HMR to prevent cache loss
-const createQueryClient = () =>
+export const createQueryClient = (): QueryClient =>
   new QueryClient({
     // A Speakeasy API 401 means the session is dead (expired, revoked, or — in
     // local dev — overwritten by another worktree's stack, since the cookie is

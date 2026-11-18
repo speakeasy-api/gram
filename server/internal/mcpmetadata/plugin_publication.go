@@ -77,7 +77,12 @@ func hasPluginMembershipForBackend(ctx context.Context, queries *pluginsrepo.Que
 // requestPluginPublicationForBackend records a durable package refresh in the
 // metadata transaction when a plugin carries the metadata's server.
 func (s *Service) requestPluginPublicationForBackend(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, backend *resolvedMetadataBackend) error {
+	// Without outbox emission there is no need to probe membership, but
+	// the package-content lock must still serialize this mutation with a pause.
 	if !s.publicationRequests.Enabled {
+		if err := s.publicationRequests.Project(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+			return fmt.Errorf("lock plugin package content: %w", err)
+		}
 		return nil
 	}
 	attached, err := hasPluginMembershipForBackend(ctx, pluginsrepo.New(tx), authCtx, backend)

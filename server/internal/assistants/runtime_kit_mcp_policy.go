@@ -1,8 +1,8 @@
 package assistants
 
-import "errors"
+import "fmt"
 
-var ErrKitMCPDesiredSetUnsupported = errors.New("kit cannot reconcile an explicit MCP desired set on resume: additive updates cannot remove omitted servers; revoke authority and retire the runtime before changing its configured set")
+var ErrKitMCPDesiredSetUnsupported = fmt.Errorf("%w: kit cannot reconcile an explicit MCP desired set on resume; the runtime is replaced with the new set", errKitRuntimeUnrecoverable)
 
 // validateKitMCPStartup distinguishes initial configuration from reconciliation.
 // The turn API's non-nil list is a desired set, not an additive update command.

@@ -1,4 +1,11 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -113,6 +120,108 @@ afterEach(() => {
 });
 
 describe("ConsentToolsApp", () => {
+  it("discards the old snapshot immediately when the direct identity changes", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-a" checked>
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-b">
+    `,
+    );
+    const { button } = renderApp();
+    await waitFor(() => expect(button.disabled).toBe(false));
+    const oldAttempt = formFieldValues("tool_inventory_id")[0];
+    expect(
+      transportCtor.mock.calls[0]![1].requestInit.headers[
+        "Gram-Consent-Auth-Client"
+      ],
+    ).toBe("client-a");
+    let finish!: (value: { tools: { name: string }[] }) => void;
+    listTools.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const next = document.querySelector<HTMLInputElement>(
+      'input[value="client-b"]',
+    )!;
+    next.checked = true;
+    fireEvent.change(next);
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+    await waitFor(() => expect(transportCtor).toHaveBeenCalledTimes(2));
+    expect(
+      transportCtor.mock.calls[1]![1].requestInit.headers[
+        "Gram-Consent-Auth-Client"
+      ],
+    ).toBe("client-b");
+    await act(async () => finish({ tools: [{ name: "new_identity_tool" }] }));
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(formFieldValues("tool_inventory_id")[0]).not.toBe(oldAttempt);
+  });
+
+  it("ignores an old in-flight inventory after the direct identity changes", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-a" checked>
+      <input type="radio" name="auth_client" form="consent-approve-form" value="client-b">
+    `,
+    );
+    let finishOld!: (value: { tools: { name: string }[] }) => void;
+    listTools.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOld = resolve;
+        }),
+    );
+    const { button } = renderApp();
+    await waitFor(() => expect(listTools).toHaveBeenCalledOnce());
+    const next = document.querySelector<HTMLInputElement>(
+      'input[value="client-b"]',
+    )!;
+    next.checked = true;
+    fireEvent.change(next);
+    await waitFor(() => expect(button.disabled).toBe(false));
+    const attempt = formFieldValues("tool_inventory_id")[0];
+    await act(async () => finishOld({ tools: [{ name: "stale_tool" }] }));
+    expect(formFieldValues("tool_inventory_id")).toEqual([attempt]);
+    await openPicker(userEvent.setup());
+    expect(screen.queryByText("stale_tool")).toBeNull();
+  });
+
+  it("keeps the captured gateway inventory when member identities change", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<input type="radio" name="auth_client.docs" value="member-client">',
+    );
+    const { button } = renderApp({ gateway: true });
+    await waitFor(() => expect(button.disabled).toBe(false));
+    const input = document.querySelector<HTMLInputElement>(
+      'input[name="auth_client.docs"]',
+    )!;
+    input.checked = true;
+    fireEvent.change(input);
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_inventory_id")).toEqual(["server-attempt"]);
+    expect(transportCtor).not.toHaveBeenCalled();
+  });
+
+  it("reads a single hidden direct identity", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<input type="hidden" name="auth_client" form="consent-approve-form" value="client-only">',
+    );
+    const { button } = renderApp();
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(
+      transportCtor.mock.calls[0]![1].requestInit.headers[
+        "Gram-Consent-Auth-Client"
+      ],
+    ).toBe("client-only");
+  });
+
   it("performs an MCP session with the consent headers and enables approval", async () => {
     const { button } = renderApp();
     await waitFor(() => expect(button.disabled).toBe(false));

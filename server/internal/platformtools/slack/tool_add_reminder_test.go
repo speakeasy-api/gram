@@ -25,7 +25,6 @@ func TestAddReminderTool_RequiresUserToken(t *testing.T) {
 	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackBotTokenEnvVar: "xoxb-bot-only"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"text":"ping","time":"in 5 minutes"}`), io.Discard)
@@ -61,7 +60,6 @@ func TestAddReminderTool_CallsRemindersAddWithRecurrence(t *testing.T) {
 	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackUserTokenEnvVar: "xoxp-user-token"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{
@@ -93,7 +91,6 @@ func TestAddReminderTool_RequiresTextAndTime(t *testing.T) {
 	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackUserTokenEnvVar: "xoxp-user-token"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"time":"in 5 minutes"}`), io.Discard)

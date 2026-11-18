@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useOrganization } from "@/contexts/Auth";
 import {
   clientTypeHint,
@@ -310,9 +311,11 @@ function AudienceEditor({
 
   if (audience.isLoading) {
     return (
-      <Text muted small>
-        Loading who can use this credential…
-      </Text>
+      <Skeleton label="Loading who can use this credential">
+        <div className="h-5 w-48" />
+        <div className="h-9 w-full" />
+        <div className="h-9 w-full" />
+      </Skeleton>
     );
   }
   if (audience.isError || !audience.data) {

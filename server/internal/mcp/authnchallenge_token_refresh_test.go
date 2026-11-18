@@ -30,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -89,7 +91,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	otherToolset := hostLegacyToolset(t, ctx, ti, otherToolsetRow, otherSlug, "private", noIssuer())
+	otherToolset := hostToolset(t, ctx, ti, otherToolsetRow, otherSlug, "private", noIssuer())
 	otherToolset = setToolsetIssuer(t, ctx, ti.conn, otherToolset.ProjectID, otherToolset, issuer.ID)
 
 	otherEndpoint := performRefresh(otherSlug, client.ClientID, refreshToken)
@@ -101,7 +103,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	}
 	require.NoError(t, json.Unmarshal([]byte(otherEndpoint.body), &otherResponse))
 	require.Equal(t, response["refresh_token"], otherResponse.RefreshToken)
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(otherResponse.AccessToken, urn.NewToolset(otherToolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(otherResponse.AccessToken, urn.NewUserSessionIssuer(otherToolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	require.Equal(t, ti.serverURL.JoinPath("mcp", otherSlug).String(), claims.Issuer)
 
@@ -279,7 +281,7 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	issuer := ti.serverURL.JoinPath("mcp", fx.toolset.McpSlug.String).String()
 	accessToken, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:   session.SubjectUrn,
-		Audience:  urn.NewToolset(fx.toolset.ID).String(),
+		Audience:  urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:    issuer,
 		ExpiresAt: &session.ExpiresAt.Time,
 		ClientID:  fx.client.ClientID,
@@ -287,11 +289,12 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	endpoint := &mcp.ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
+		AudienceURN:         urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
 		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
+		McpServerID:         uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
 	}
@@ -332,7 +335,7 @@ func TestHandleToken_AgentRefreshPreservesCredentialProfile(t *testing.T) {
 	require.Equal(t, http.StatusOK, result.code, result.body)
 	var response tokenResponseFixture
 	require.NoError(t, json.Unmarshal([]byte(result.body), &response))
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 
 	rotated, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
@@ -356,7 +359,7 @@ func TestHandleToken_AgentRefreshReplayDeniesDirectlyRevokedSuccessor(t *testing
 	require.Equal(t, http.StatusOK, winner.code, winner.body)
 	var response tokenResponseFixture
 	require.NoError(t, json.Unmarshal([]byte(winner.body), &response))
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	successor, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
@@ -604,15 +607,15 @@ func TestHandleToken_RefreshReplayExpiresBackToInvalidGrant(t *testing.T) {
 	require.NoError(t, first.err)
 	require.Equal(t, http.StatusOK, first.code, first.body)
 
-	replayKey, lockKey := refreshReplayKeys(issuer.ID, refreshToken)
-	// Both keys expire at the grace boundary. Removing them models the state
-	// after that TTL without making the test wait for wall-clock expiration.
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
+	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
 	expired := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, expired.err)
 	require.Equal(t, http.StatusBadRequest, expired.code)
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, expired.body)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
 }
 
 func TestHandleToken_RefreshRotationAdoptsCachedWinnerAfterLockLoss(t *testing.T) {
@@ -985,4 +988,13 @@ func refreshReplayKeys(issuerID uuid.UUID, refreshToken string) (replayKey, lock
 	refreshHash := sha256.Sum256([]byte(refreshToken))
 	replayKey = "userSessionRefreshReplay:" + issuerID.String() + ":" + base64.RawURLEncoding.EncodeToString(refreshHash[:])
 	return replayKey, "lock:" + replayKey
+}
+
+// expireRefreshReplay removes the replay entry and lock a refresh left behind,
+// as the grace TTL would, without waiting for wall-clock expiration.
+func expireRefreshReplay(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, refreshToken string) {
+	t.Helper()
+	replayKey, lockKey := refreshReplayKeys(issuerID, refreshToken)
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
 }

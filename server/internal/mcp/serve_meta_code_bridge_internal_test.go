@@ -50,9 +50,9 @@ func NewTestMetaCodeBackend(t *testing.T, ctx context.Context, service *Service,
 	require.NoError(t, err)
 	_, err = accessrepo.New(service.db).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: auth.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 	require.NoError(t, err)
-	ctx, members, err := service.resolveMetaMemberSnapshot(ctx, service.logger, mandatorySurfaceGatewayMember, auth.ActiveOrganizationID, gatewayID, *auth.ProjectID)
+	ctx, members, denied, err := service.resolveMetaMemberSnapshot(ctx, service.logger, mandatorySurfaceGatewayMember, auth.ActiveOrganizationID, gatewayID, *auth.ProjectID)
 	require.NoError(t, err)
-	gate := &metaGateContext{projectID: *auth.ProjectID, metaServerID: gatewayID, organizationID: auth.ActiveOrganizationID, authenticated: true, userID: auth.UserID, sessionID: uuid.NewString(), protocolVersion: mcpversions.Resolution{InEffect: mcpversions.DefaultInEffect}}
+	gate := &metaGateContext{projectID: *auth.ProjectID, metaServerID: gatewayID, organizationID: auth.ActiveOrganizationID, authenticated: true, userID: auth.UserID, sessionID: uuid.NewString(), protocolVersion: mcpversions.Resolution{InEffect: mcpversions.DefaultInEffect}, deniedMembers: denied}
 	server, err := metamcprepo.New(service.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{ID: gatewayID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	endpoints, err := endpointrepo.New(service.db).ListMCPEndpointsByMetaMCPServerID(ctx, endpointrepo.ListMCPEndpointsByMetaMCPServerIDParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gatewayID})

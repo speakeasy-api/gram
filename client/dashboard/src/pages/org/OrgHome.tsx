@@ -24,6 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
@@ -38,6 +39,7 @@ import {
   getInitials,
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
+import { OrgHomeNoAccess } from "@/pages/org/OrgHomeNoAccess";
 import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -102,9 +104,12 @@ export default function OrgHome(): JSX.Element {
       {/* fullWidth + noPadding so the welcome banner can run edge to edge;
           everything else re-applies the page column below. */}
       <Page.Body fullWidth noPadding className="gap-0">
+        {/* No project:read here: an unscoped check passes for a grant on any
+            single project, which kept project-only members on this page. */}
         <RequireScope
-          scope={["org:read", "project:read", "org:admin"]}
+          scope={["org:read", "org:admin"]}
           level="page"
+          fallback={<OrgHomeNoAccess />}
         >
           <OrgHomeInner />
         </RequireScope>
@@ -1139,8 +1144,6 @@ function RecentChallengesCompact() {
     [agents.data, agents.isError],
   );
 
-  if (isLoading) return null;
-
   return (
     <Card.Dashboard
       bodyClassName={buckets.length === 0 ? undefined : "p-0"}
@@ -1153,7 +1156,13 @@ function RecentChallengesCompact() {
         </orgRoutes.access.challenges.Link>
       }
     >
-      {buckets.length === 0 ? (
+      {isLoading ? (
+        <Skeleton label="Loading challenges">
+          <div className="h-8 w-full" />
+          <div className="h-8 w-full" />
+          <div className="h-8 w-full" />
+        </Skeleton>
+      ) : buckets.length === 0 ? (
         // Compact copy rather than the full-page ChallengesEmptyState — inside
         // a rail card its illustration and framing box read as a second card.
         <Text muted small>

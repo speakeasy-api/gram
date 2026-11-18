@@ -18,8 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -102,14 +102,6 @@ func (s *Service) resolveHealthServer(ctx context.Context, organizationID, rawPr
 		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	if row.UrlSlug == "" && row.ToolsetID.Valid && row.ToolsetWrapperCount <= 1 {
-		alias, err := legacyalias.Get(ctx, s.db, projectID, row.ToolsetID.UUID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "read mcp server alias").LogError(ctx, s.logger, logAttrs...)
-		}
-		row.UrlSlug = alias.Slug.String
-	}
-
 	return &healthServer{queries: queries, projectID: projectID, row: row, bucket: bucket, logAttrs: logAttrs}, nil
 }
 
@@ -123,6 +115,17 @@ func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.Desc
 	result, err := s.buildMCPServerHealth(ctx, target.queries, payload.OrganizationID, target.projectID, target.row, from)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server health").LogError(ctx, s.logger, target.logAttrs...)
+	}
+	if healthServerSource(target.row) == "remote" {
+		scopes, err := s.scopes.Describe(ctx, remotemcp.StaffScopeTarget{OrganizationID: payload.OrganizationID, ProjectID: target.projectID, McpServerID: target.row.ID})
+		switch {
+		case errors.Is(err, remotemcp.ErrNotRemoteBacked):
+			// The remote row was deleted under a live server: no resource to report.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read mcp server resource scopes").LogError(ctx, s.logger, target.logAttrs...)
+		default:
+			result.ResourceScopes = adminResourceScopes(scopes)
+		}
 	}
 	return result, nil
 }
@@ -199,6 +202,7 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 		Correlation:       healthCorrelation(server),
 		LegacyAuth:        nil,
 		UserSessionIssuer: nil,
+		ResourceScopes:    nil,
 		UpstreamAuth:      nil,
 	}
 

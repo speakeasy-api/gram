@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -62,6 +63,15 @@ func (f selectionFixture) issue(t *testing.T, ctx context.Context, slug string, 
 // server in picks.
 func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug string, issuerID uuid.UUID, subject urn.SessionSubject, picks map[uuid.UUID]uuid.UUID) string {
 	t.Helper()
+	enforced, err := authenforcement.ReadEnforced(ctx, f.ti.conn, f.orgID)
+	require.NoError(t, err)
+	return f.issueFrom(t, ctx, slug, issuerID, subject, picks, enforced)
+}
+
+// issueFrom is issuePicked with what the recorded choices are decided from set
+// by the caller: issuance decides typedOnly from the organization's enforcement.
+func (f selectionFixture) issueFrom(t *testing.T, ctx context.Context, slug string, issuerID uuid.UUID, subject urn.SessionSubject, picks map[uuid.UUID]uuid.UUID, typedOnly bool) string {
+	t.Helper()
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
@@ -88,6 +98,7 @@ func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug st
 		PickedMcpServerIds:  servers,
 		PickedClientIds:     clients,
 		PickedAuthClientIds: nil,
+		TypedOnly:           typedOnly,
 	})
 	require.NoError(t, err)
 	return token
@@ -424,4 +435,31 @@ func TestUpstreamClientSelection_RecordsTypedConsentPicks(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: registration, Valid: true}, byServer[oauthServer.ID].RegistrationID)
 	require.Equal(t, uuid.NullUUID{UUID: staticToken, Valid: true}, byServer[headerServer.ID].AuthClientID)
 	require.False(t, byServer[headerServer.ID].RegistrationID.Valid)
+}
+
+func TestUpstreamClientSelection_EmptyScopeRecordsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "empty-scope-" + uuid.NewString()
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	subject := createTestUser(t, ctx, f.ti, "scope-user-"+uuid.NewString())
+	jti := uuid.NewString()
+	persistTestUserSession(t, f.ti, issuerID, subject, jti)
+	q := usersessions_repo.New(f.ti.conn)
+	session, err := q.GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+	require.NoError(t, err)
+	params := usersessions_repo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuerID, CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID: session.CredentialID, Source: upstreamclients.SelectionSourceIssuance,
+		ScopeMcpServerIds: []uuid.UUID{},
+	}
+	n, err := q.RecordUpstreamClientSelections(ctx, params)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	params.ScopeMcpServerIds = []uuid.UUID{server.ID}
+	n, err = q.RecordUpstreamClientSelections(ctx, params)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n, "the empty scope, rather than an ineligible server, prevented recording")
 }

@@ -81,6 +81,7 @@ type LogRiskPolicyCreateEvent struct {
 func (l *Logger) LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyCreateEvent) error {
 	action := ActionRiskPolicyCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -133,6 +134,7 @@ func (l *Logger) LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -171,6 +173,7 @@ type LogRiskPolicyDeleteEvent struct {
 func (l *Logger) LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyDeleteEvent) error {
 	action := ActionRiskPolicyDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -209,6 +212,7 @@ type LogRiskPolicyTriggerEvent struct {
 func (l *Logger) LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyTriggerEvent) error {
 	action := ActionRiskPolicyTrigger
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -260,6 +264,7 @@ func (l *Logger) logRiskPolicyEvalReview(ctx context.Context, dbtx repo.DBTX, ac
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -332,6 +337,7 @@ func (l *Logger) logRiskPolicyBypassRequest(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -371,6 +377,7 @@ type LogRiskPolicyChallengeAcknowledgeEvent struct {
 // warn (challenge) policy. Log-safe fields only — never the matched value.
 func (l *Logger) LogRiskPolicyChallengeAcknowledge(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyChallengeAcknowledgeEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -456,6 +463,7 @@ func (l *Logger) logRiskPolicyApproval(ctx context.Context, dbtx repo.DBTX, acti
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

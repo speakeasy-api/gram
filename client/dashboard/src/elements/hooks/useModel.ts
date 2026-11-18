@@ -1,6 +1,6 @@
 import { getApiUrl } from "@/elements/lib/api";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { LanguageModel } from "ai";
+import type { LanguageModel } from "ai";
 import { useAuth } from "./useAuth";
 import { useElements } from "./useElements";
 

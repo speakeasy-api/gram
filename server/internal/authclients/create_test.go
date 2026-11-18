@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -211,18 +212,11 @@ func TestAttachAuthClientRefusesServersItCannotServe(t *testing.T) {
 	ctx, ti := newTestService(t)
 	_, otherProject := seedOtherOrganization(t, ctx, ti.conn)
 	foreignServer := seedServer(t, ctx, ti.conn, otherProject, visibility.Private)
-	noAuth := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
 	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Project token")
 	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
 
-	_, err := ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: noAuth.id.String(), RequiresUpstreamAuth: false})
-	require.NoError(t, err)
-
-	_, err = ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: clientID.String(), McpServerID: foreignServer.id.String()})
+	_, err := ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: clientID.String(), McpServerID: foreignServer.id.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-
-	_, err = ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: clientID.String(), McpServerID: noAuth.id.String()})
-	requireOopsCode(t, err, oops.CodeConflict)
 }
 
 func TestAttachProjectClientRefusesServerInAnotherProject(t *testing.T) {
@@ -397,4 +391,52 @@ func TestCreateAuthClientLocksServersInOneOrder(t *testing.T) {
 	require.NoError(t, err, "the create holds no server while it waits, so nothing deadlocks")
 	require.NoError(t, tx.Commit(ctx))
 	require.NoError(t, <-created)
+}
+
+func TestListMcpServerChoicesOffersWhatAnAgentKeyCanUse(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	static, err := ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType:   authz.AuthClientTypeStaticCredential,
+		Name:         "Team token",
+		Headers:      []*gen.AuthClientHeaderInput{{Name: "X-Api-Key", IsSecret: true, Value: new("sk-value")}},
+		McpServerIds: []string{server.id.String()},
+	})
+	require.NoError(t, err)
+	_, err = ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType:   authz.AuthClientTypePassThrough,
+		Name:         "Caller token",
+		Headers:      []*gen.AuthClientHeaderInput{{Name: "Authorization", ValueFromRequestHeader: new("X-Caller-Token")}},
+		McpServerIds: []string{server.id.String()},
+	})
+	require.NoError(t, err)
+
+	personal := seedRegistration(t, ctx, ti.conn, ti.organizationID, ti.projectID, "subject")
+	_, err = ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType:            authz.AuthClientTypeRemoteSession,
+		Name:                  "Personal connection",
+		ProjectID:             new(ti.projectID.String()),
+		RemoteSessionClientID: new(personal.String()),
+		McpServerIds:          []string{server.id.String()},
+	})
+	require.NoError(t, err)
+	disabled, err := ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType:   authz.AuthClientTypeStaticCredential,
+		Name:         "Disabled team token",
+		Headers:      []*gen.AuthClientHeaderInput{{Name: "X-Api-Key", IsSecret: true, Value: new("sk-disabled")}},
+		McpServerIds: []string{server.id.String()},
+	})
+	require.NoError(t, err)
+	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: disabled.ID, Enabled: new(false)})
+	require.NoError(t, err)
+
+	connectCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, server.id.String()))
+	listed, err := ti.service.ListMcpServerAuthClientChoices(connectCtx, &gen.ListMcpServerAuthClientChoicesPayload{McpServerID: server.id.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Choices, 1, "only enabled shared credentials are offered, never personal or pass-through clients")
+	require.Equal(t, static.ID, listed.Choices[0].ID)
 }

@@ -4259,7 +4259,13 @@ type DeleteGatewayErrorResponseBody struct {
 
 // AgentSessionResponseBody is used to define fields on response body types.
 type AgentSessionResponseBody struct {
-	ID               *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Who signed in: the agent itself, or a workload that federation assigns to
+	// the agent.
+	SubjectKind *string `form:"subject_kind,omitempty" json:"subject_kind,omitempty" xml:"subject_kind,omitempty"`
+	// The workload's subject as its platform issued it. Set only when subject_kind
+	// is workload.
+	WorkloadSubject  *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	IssuerID         *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
 	IssuerSlug       *string `form:"issuer_slug,omitempty" json:"issuer_slug,omitempty" xml:"issuer_slug,omitempty"`
@@ -13789,8 +13795,16 @@ func ValidateAgentSessionResponseBody(body *AgentSessionResponseBody) (err error
 	if body.RefreshExpiresAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("refresh_expires_at", "body"))
 	}
+	if body.SubjectKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_kind", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SubjectKind != nil {
+		if !(*body.SubjectKind == "agent" || *body.SubjectKind == "workload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.subject_kind", *body.SubjectKind, []any{"agent", "workload"}))
+		}
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))

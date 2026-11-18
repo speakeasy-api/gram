@@ -51,29 +51,24 @@ const (
 	// resolver, so no client was evaluated.
 	mandatoryReasonResolverOff = "resolver_off"
 
-	// mandatoryReasonNoConnectionOwner is a personal client used by a session
-	// that represents no user.
-	mandatoryReasonNoConnectionOwner = "no_connection_owner"
-
 	mandatoryShadowTimeout = 250 * time.Millisecond
 
-	mandatoryShadowLogTTL  = 10 * time.Minute
-	mandatoryShadowLogSize = 4096
+	onceLogTTL  = 10 * time.Minute
+	onceLogSize = 4096
 )
 
-// mandatoryShadowLog dedupes disagreement logs: the counter has every
-// occurrence, the log names each distinct one.
-type mandatoryShadowLog struct {
+// onceLog keeps one log line per key per window; counters see every occurrence.
+type onceLog struct {
 	mu   sync.Mutex
 	seen *expirable.LRU[string, struct{}]
 }
 
-func newMandatoryShadowLog() *mandatoryShadowLog {
-	return &mandatoryShadowLog{mu: sync.Mutex{}, seen: expirable.NewLRU[string, struct{}](mandatoryShadowLogSize, nil, mandatoryShadowLogTTL)}
+func newOnceLog() *onceLog {
+	return &onceLog{mu: sync.Mutex{}, seen: expirable.NewLRU[string, struct{}](onceLogSize, nil, onceLogTTL)}
 }
 
 // first reports whether key is new, and remembers it.
-func (l *mandatoryShadowLog) first(key string) bool {
+func (l *onceLog) first(key string) bool {
 	if l == nil {
 		return true
 	}
@@ -183,15 +178,22 @@ func isAccessDenial(err error) bool {
 	return errors.As(err, &shareable) && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeNotFound)
 }
 
-// shadowAuthClientUse records the check for using a resolved client. A
-// personal client a non-user session uses has no connection owner to check
-// yet, so it is recorded as skipped rather than as an invalid check.
-func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, owner string) {
-	if clientType == authClientTypeRemoteSession && owner == "" {
-		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
+// shadowAuthClientUse records the decision for using a resolved client, the
+// one enforcement makes, against today's decision. permit carries its
+// resolved connection owner.
+func (s *Service) shadowAuthClientUse(ctx context.Context, legacyAllowed bool, permit authClientPermitRequest) {
+	m := s.newMandatoryShadow(ctx, permit.OrganizationID)
+	if m == nil {
 		return
 	}
-	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, owner))
+	use := mandatoryAuthClientCheck(permit.ProjectID, permit.ClientID, permit.RegistrationID, permit.ClientType, permit.connectionOwner())
+	m.recordDecision(ctx, mandatorySurfaceAuthClient, legacyAllowed, use, func() (authz.MandatoryDecision, error) {
+		// The visibility read is bounded like the shadow's admission, so the
+		// shadow never adds unbounded latency to the request it observes.
+		decideCtx, cancel := context.WithTimeout(ctx, mandatoryShadowTimeout)
+		defer cancel()
+		return decideAuthClientUse(decideCtx, m.authorization, permit, s.mandatoryServerVisibility)
+	})
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A

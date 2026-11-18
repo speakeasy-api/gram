@@ -115,6 +115,17 @@ func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance) hooks
 		AgentID:          agent.ID,
 	}))
 
+	admitWorkloads(t, ti)
+
+	token, _, err := ti.service.deviceAgentTokens.Mint(authCtx.ActiveOrganizationID, urn.NewWorkloadPrincipal(issuerID, subject), time.Now())
+	require.NoError(t, err)
+	return hooksWorkload{actor: actor, token: token, projectSlug: *authCtx.ProjectSlug, organizationID: authCtx.ActiveOrganizationID, issuerID: issuerID, subject: subject}
+}
+
+// admitWorkloads gives the service an engine that admits workload sessions,
+// which the default test engine does not.
+func admitWorkloads(t *testing.T, ti *testInstance) {
+	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
 		DevMode:                          false,
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
@@ -123,10 +134,6 @@ func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance) hooks
 	})
 	ti.service.authz = engine
 	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, engine)
-
-	token, _, err := ti.service.deviceAgentTokens.Mint(authCtx.ActiveOrganizationID, urn.NewWorkloadPrincipal(issuerID, subject), time.Now())
-	require.NoError(t, err)
-	return hooksWorkload{actor: actor, token: token, projectSlug: *authCtx.ProjectSlug, organizationID: authCtx.ActiveOrganizationID, issuerID: issuerID, subject: subject}
 }
 
 // authenticateWorkload runs the device-agent token requirement Goa runs for

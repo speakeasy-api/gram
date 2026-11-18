@@ -4,6 +4,10 @@ import {
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { ShareBar } from "@/components/chart/ShareBar";
+import {
+  isCostUnknown,
+  UNKNOWN_COST_EXPLANATION,
+} from "@/pages/chatLogs/claudeUsage";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
@@ -82,6 +86,10 @@ export default function IdentityOverview(): JSX.Element {
   const unsupported = !hasMetricsSubject(identity);
   const metricsUnavailable = unsupported || metricsQuery.isError;
   const metricsTileValue = metricsUnavailable ? "—" : undefined;
+  // Tokens with no cost: this identity's agents do not report cost, and $0
+  // would read as a free period.
+  const spendUnknown =
+    !metricsUnavailable && metrics !== undefined && isCostUnknown(metrics);
   const metricsTileTooltip = unsupported
     ? "This identity carries no identifier the usage endpoint can key on."
     : metricsQuery.isError
@@ -299,11 +307,15 @@ export default function IdentityOverview(): JSX.Element {
               <StatTile
                 title="Spend"
                 subtext={
-                  metricsUnavailable ? undefined : standingFor("totalCost")
+                  metricsUnavailable || spendUnknown
+                    ? undefined
+                    : standingFor("totalCost")
                 }
                 value={metrics?.totalCost ?? 0}
-                displayValue={metricsTileValue}
-                tooltip={metricsTileTooltip}
+                displayValue={spendUnknown ? "—" : metricsTileValue}
+                tooltip={
+                  spendUnknown ? UNKNOWN_COST_EXPLANATION : metricsTileTooltip
+                }
                 format="currency"
                 tone="neutral"
                 icon="credit-card"

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { AnalyticsQueryResult } from "@gram/client/models/components/analyticsqueryresult.js";
 import { groupLabel, signalSeries } from "./explorationModel";

@@ -47,6 +47,7 @@ func (l *Logger) LogDirectoryRoleMappingSet(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -93,6 +94,7 @@ func (l *Logger) LogDirectoryRoleMappingDelete(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

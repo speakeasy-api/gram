@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/sheet";
 import { promotionReason, promotionTimestamp } from "./registryPromotionLabels";
 import { RegistryPromotionDocs } from "./RegistryPromotionDocs";
+import { PromotionSlugGuideHint } from "./PromotionSlugGuideHint";
+import { slugGuideHint } from "./registryPromotionGuides";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
 
@@ -372,7 +374,9 @@ export function RegistryPromotionSheet({
                       aria-describedby={
                         field === "publicTitle"
                           ? "promotion-title-length"
-                          : undefined
+                          : field === "docsSlug"
+                            ? "promotion-slug-guide"
+                            : undefined
                       }
                       maxLength={INPUT_MAX_LENGTHS[field]}
                       onChange={(event) => change(field, event.target.value)}
@@ -392,6 +396,12 @@ export function RegistryPromotionSheet({
                         </p>
                       )}
                     </div>
+                  )}
+                  {field === "docsSlug" && (
+                    <PromotionSlugGuideHint
+                      id="promotion-slug-guide"
+                      hint={slugGuideHint(candidate, form.docsSlug)}
+                    />
                   )}
                 </div>
               ))}

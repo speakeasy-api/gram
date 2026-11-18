@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Re-read connections when OAuth closes or the dashboard regains focus. */
 export function useOAuthPopup(
   onComplete: (reason: "popup-closed" | "focus") => void | Promise<void>,
 ): {
-  open: (url: string | (() => Promise<string>)) => boolean;
+  open: (
+    url: string | (() => Promise<string>),
+    options?: { name?: string; features?: string },
+  ) => boolean;
+  cancel: () => void;
+  isClosed: () => boolean;
   blocked: boolean;
 } {
   const callback = useRef(onComplete);
@@ -13,6 +18,15 @@ export function useOAuthPopup(
   const inFlight = useRef(0);
   const preparing = useRef(false);
   const [blocked, setBlocked] = useState(false);
+  const cancel = useCallback(() => {
+    popup.current?.close();
+    popup.current = null;
+    preparing.current = false;
+  }, []);
+  const isClosed = useCallback(
+    () => !popup.current || popup.current.closed,
+    [],
+  );
   useEffect(() => {
     const notify = async (reason: "popup-closed" | "focus") => {
       if (reason === "focus" && inFlight.current > 0) return;
@@ -49,15 +63,17 @@ export function useOAuthPopup(
   }, []);
   return {
     blocked,
-    open: (url) => {
+    cancel,
+    isClosed,
+    open: (url, options) => {
       if (popup.current) {
         if (!popup.current.closed) popup.current.focus();
         return false;
       }
       const child = window.open(
         "about:blank",
-        "speakeasy-connection",
-        "popup=yes,width=560,height=720",
+        options?.name ?? "speakeasy-connection",
+        options?.features ?? "popup=yes,width=560,height=720",
       );
       setBlocked(!child);
       if (!child) return false;
@@ -71,13 +87,13 @@ export function useOAuthPopup(
         void Promise.resolve()
           .then(url)
           .then((destination) => {
+            if (popup.current !== child) return;
             if (!child.closed) child.location.href = destination;
             preparing.current = false;
           })
           .catch(() => {
-            preparing.current = false;
-            popup.current = null;
-            child.close();
+            if (popup.current !== child) return;
+            cancel();
           });
       }
       child.focus();

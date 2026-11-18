@@ -23,9 +23,13 @@ import (
 )
 
 type GetMyInstallInstructionsInput struct {
-	ProjectID    string                 `json:"project_id,omitempty" jsonschema:"optional project ID that owns the target; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
-	Plugin       string                 `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name; mutually exclusive with mcp_id"`
-	MCPID        string                 `json:"mcp_id,omitempty" jsonschema:"exact configured MCP ID; mutually exclusive with plugin"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to use the organization's Default project"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
+	Plugin    string `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name"`
+	// MCPID names its own project, so a server added through setup can be
+	// named without a find_mcp read, which the ChatGPT catalogue does not have.
+	MCPID        string                 `json:"mcp_id,omitempty" jsonschema:"exact MCP server ID: the id find_mcp or get_mcp returns, or the mcp_id setup returned; it names its own project, so the project may be omitted"`
 	ClientFamily OnboardingClientFamily `json:"client_family" jsonschema:"client receiving the installation guidance"`
 }
 
@@ -53,27 +57,33 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if !s.valid() || s.authorization == nil || !validOnboardingClient(input.ClientFamily) {
 		return GetMyInstallInstructionsOutput{}, ErrUnavailable
 	}
-	if (strings.TrimSpace(input.Plugin) == "") == (strings.TrimSpace(input.MCPID) == "") {
+	targets := 0
+	for _, target := range []string{input.Plugin, input.MCPID} {
+		if strings.TrimSpace(target) != "" {
+			targets++
+		}
+	}
+	if targets != 1 {
 		return GetMyInstallInstructionsOutput{}, ErrPluginProjectNotFound
 	}
-	projectID, err := s.installProjectID(ctx, principal, input.ProjectID)
+	projectID, err := s.installProjectID(ctx, principal, input)
 	if err != nil {
 		return GetMyInstallInstructionsOutput{}, err
 	}
 	if strings.TrimSpace(input.Plugin) != "" {
-		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectID: projectID.String(), Plugin: input.Plugin, MembershipLimit: 0, MembershipCursor: ""})
+		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectSlug: "", ProjectID: projectID.String(), Plugin: input.Plugin, MembershipLimit: 0, MembershipCursor: ""})
 		if err != nil {
 			return GetMyInstallInstructionsOutput{}, err
 		}
 		return s.pluginInstallInstructions(ctx, principal.OrganizationID, input.ClientFamily, plugin.Plugin.Name)
 	}
 
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetMyInstallInstructionsOutput{}, err
+	}
 	mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
 	if err != nil {
 		return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
-	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return GetMyInstallInstructionsOutput{}, err
 	}
 	row, err := platformrepo.New(s.db).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
 		OrganizationID: principal.OrganizationID,
@@ -118,14 +128,33 @@ func (s *PluginsService) memberLinkBases(ctx context.Context, organizationID str
 
 // installProjectID parses the named project ID, or resolves the organization's
 // default project when none is named.
-func (s *PluginsService) installProjectID(ctx context.Context, principal Principal, projectID string) (uuid.UUID, error) {
-	projectID = strings.TrimSpace(projectID)
+func (s *PluginsService) installProjectID(ctx context.Context, principal Principal, input GetMyInstallInstructionsInput) (uuid.UUID, error) {
+	projectID := strings.TrimSpace(input.ProjectID)
 	if projectID != "" {
 		parsed, err := uuid.Parse(projectID)
 		if err != nil {
 			return uuid.Nil, ErrPluginProjectNotFound
 		}
 		return parsed, nil
+	}
+	// An MCP server belongs to one project, so naming it is enough even in a
+	// project other than the default one.
+	if mcpID := strings.TrimSpace(input.MCPID); mcpID != "" {
+		parsed, err := uuid.Parse(mcpID)
+		if err != nil {
+			return uuid.Nil, ErrInstallTargetNotFound
+		}
+		project, err := platformrepo.New(s.db).GetPlatformMCPServerProject(ctx, platformrepo.GetPlatformMCPServerProjectParams{
+			OrganizationID: principal.OrganizationID,
+			McpServerID:    parsed,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, ErrInstallTargetNotFound
+		}
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("resolve platform mcp install server project: %w", err)
+		}
+		return project, nil
 	}
 	row, err := platformrepo.New(s.db).ResolvePlatformMCPProjectBySlug(ctx, platformrepo.ResolvePlatformMCPProjectBySlugParams{
 		OrganizationID: principal.OrganizationID,

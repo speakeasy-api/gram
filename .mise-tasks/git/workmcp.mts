@@ -4,7 +4,11 @@
 //MISE hide=true
 //MISE description="Configure this worktree's Platform MCP for coding harnesses"
 
-//USAGE flag "--server-url <url>" env="GRAM_SERVER_URL" required_unless="--remove" help="Worktree server URL"
+// Not marked required: mise validates required flags before it loads [env],
+// so GRAM_SERVER_URL from mise.toml is not visible to the check (and mise
+// strips a value exported by `mise activate`). The value is still filled in
+// at runtime, and main() asserts it.
+//USAGE flag "--server-url <url>" env="GRAM_SERVER_URL" help="Worktree server URL"
 //USAGE flag "--out-file <file>" default=".opencode/opencode.jsonc" help="Local OpenCode config to update"
 //USAGE flag "--remove" help="Remove external MCP registrations before deleting this worktree"
 //USAGE flag "--worktree <dir>" help="Target worktree for --remove (defaults to this worktree)"

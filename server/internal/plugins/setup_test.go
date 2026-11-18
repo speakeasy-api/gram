@@ -82,12 +82,22 @@ type capturePublishSignaler struct {
 type capturedPublishSignal struct {
 	projectID       uuid.UUID
 	createdByUserID string
+	// sync marks a manual sync, which also publishes the pending changes of
+	// plugins whose auto sync is off.
+	sync bool
 }
 
 func (c *capturePublishSignaler) SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.signals = append(c.signals, capturedPublishSignal{projectID: projectID, createdByUserID: createdByUserID})
+	return nil
+}
+
+func (c *capturePublishSignaler) SignalPluginSync(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.signals = append(c.signals, capturedPublishSignal{projectID: projectID, createdByUserID: createdByUserID, sync: true})
 	return nil
 }
 
@@ -363,12 +373,10 @@ func setTestToolsetVisibility(t *testing.T, ctx context.Context, conn *pgxpool.P
 	testenv.SetHostedMCP(t, ctx, conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: visibility, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
 }
 
-// createUnwrappedTestToolset creates a toolset with no MCP server that still carries a legacy /mcp/<slug> alias.
+// createUnwrappedTestToolset creates a toolset with no MCP server.
 func createUnwrappedTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
-	ts := createRawTestToolset(t, ctx, conn, name)
-	testenv.SetLegacyAlias(t, ctx, conn, ts.ProjectID, ts.ID, ts.Slug, uuid.NullUUID{})
-	return ts
+	return createRawTestToolset(t, ctx, conn, name)
 }
 
 // createRawTestToolset creates a bare toolset row; callers address it at its slug.

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -76,6 +78,71 @@ func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen
 	}
 
 	return &gen.ListRiskPolicyBypassRequestsResult{Requests: requests}, nil
+}
+
+// GetRiskPolicyBypassRequestTarget describes what a request access link asks
+// for, so the requester can see which server and tool they are asking about
+// before they explain why. It reads the token without redeeming it, and binds
+// it to the caller exactly like CreateRiskPolicyBypassRequest: same org, and
+// the original requester when one was recorded.
+func (s *Service) GetRiskPolicyBypassRequestTarget(ctx context.Context, payload *gen.GetRiskPolicyBypassRequestTargetPayload) (*gen.GetRiskPolicyBypassRequestTargetResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if strings.TrimSpace(s.jwtSecret) == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "risk policy bypass request tokens are not configured").LogError(ctx, s.logger)
+	}
+
+	claims, err := parsePolicyBypassRequestToken(ctx, s.cache, s.jwtSecret, payload.RequestToken)
+	if err != nil {
+		if errors.Is(err, errPolicyBypassRequestStoreUnavailable) {
+			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy bypass request").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request token")
+	}
+	if claims.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if claims.RequesterUserID != "" && claims.RequesterUserID != authCtx.UserID {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	return policyBypassRequestTargetView(claims), nil
+}
+
+// policyBypassRequestTargetView reduces the token's evidence to what the
+// request page shows. The URL goes through the inventory canonicalization so
+// credentials, query strings, and fragments the agent observed never reach the
+// page. The agent's identifier is only shown for servers without a URL; it is
+// the configured server name for Claude Code and Codex and the launch command
+// for Cursor, so it is not labeled as either. A launch command can carry
+// credentials as flags, env assignments, or URL query strings, so it goes
+// through the same redaction the approval queue applies to stored commands.
+func policyBypassRequestTargetView(claims *policyBypassRequestClaims) *gen.GetRiskPolicyBypassRequestTargetResult {
+	evidence := shadowmcp.NormalizeAccessEvidence(shadowmcp.AccessEvidence{
+		FullURL:        conv.PtrValOr(claims.ObservedFullURL, ""),
+		URLHost:        conv.PtrValOr(claims.ObservedURLHost, ""),
+		ServerIdentity: conv.PtrValOr(claims.ObservedServerIdentity, ""),
+	})
+	serverURL := normalizedShadowMCPServerURL(evidence.FullURL)
+	serverIdentifier := ""
+	if serverURL == "" && evidence.URLHost == "" {
+		serverIdentifier = identity.RedactCommand(evidence.ServerIdentity)
+	}
+
+	expiresAt := ""
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+
+	return &gen.GetRiskPolicyBypassRequestTargetResult{
+		ServerName:       conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ObservedName, ""))),
+		ServerURL:        conv.PtrEmpty(serverURL),
+		ServerIdentifier: conv.PtrEmpty(serverIdentifier),
+		ToolName:         conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ToolName, ""))),
+		ExpiresAt:        expiresAt,
+	}
 }
 
 func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *gen.CreateRiskPolicyBypassRequestPayload) (*gen.PolicyBypassRedemption, error) {
@@ -141,12 +208,11 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	}
 
 	// A shadow-MCP block on a URL-identified server redeems into the MCP
-	// approval workflow when it is available: the ask attaches as a requester
-	// on the server's single review — deduplicated by canonical URL, evidence
-	// gathered — instead of minting a per-user bypass row. The legacy bypass
-	// request remains only for what the workflow cannot key: identity-only
-	// servers with no observed URL, and organizations without the approval
-	// feature (a forbidden intake error is that signal, not a failure).
+	// approval workflow: the ask attaches as a requester on the server's
+	// single review — deduplicated by canonical URL, evidence gathered —
+	// instead of minting a per-user bypass row. The legacy bypass request
+	// remains only for what the workflow cannot key: identity-only servers
+	// with no observed URL, and URLs that are not http(s).
 	if s.approvalIntake != nil && target.Kind == PolicyBypassTargetKindShadowMCPServer {
 		// Only http(s) URLs are admittable: the approval intake rejects every
 		// other scheme, and the block evaluator will happily mint a ws:// (or
@@ -183,19 +249,14 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 				conv.PtrValOrEmpty(authCtx.Email, ""),
 				note,
 			)
-			switch {
-			case err == nil:
-				return &gen.PolicyBypassRedemption{
-					Kind:   "approval_request",
-					ID:     admittedID,
-					Status: admittedStatus,
-				}, nil
-			case oopsCodeIs(err, oops.CodeForbidden):
-				// The approval workflow is not enabled for this organization;
-				// fall through to the legacy bypass request.
-			default:
+			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "admit blocked server into approval workflow").LogError(ctx, s.logger)
 			}
+			return &gen.PolicyBypassRedemption{
+				Kind:   "approval_request",
+				ID:     admittedID,
+				Status: admittedStatus,
+			}, nil
 		}
 	}
 
@@ -251,12 +312,6 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		ID:     row.ID.String(),
 		Status: row.Status,
 	}, nil
-}
-
-// oopsCodeIs reports whether err carries the given shareable error code.
-func oopsCodeIs(err error, code oops.Code) bool {
-	var shareable *oops.ShareableError
-	return errors.As(err, &shareable) && shareable.Code == code
 }
 
 // serverURLSupportsApprovalIntake reports whether a blocked server's URL is

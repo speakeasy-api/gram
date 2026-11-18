@@ -36,7 +36,7 @@ func (p *TemporalPluginPublisher) Describe(ctx context.Context, projectID uuid.U
 	if p.TemporalEnv == nil {
 		return publishstatus.Status{}, errors.New("plugin publisher has no temporal environment")
 	}
-	id := pluginPublishWorkflowID(PluginPublishParams{ProjectID: projectID, CreatedByUserID: "", CommitMessage: "", SkipIfUnchanged: false})
+	id := pluginPublishWorkflowID(PluginPublishParams{ProjectID: projectID, CreatedByUserID: "", CommitMessage: "", SkipIfUnchanged: false, IncludePausedPlugins: false})
 	resp, err := p.TemporalEnv.Client().DescribeWorkflowExecution(ctx, id, "")
 	if err != nil {
 		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {

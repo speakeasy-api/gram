@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 
 import { OrgWelcomeBanner } from "./OrgWelcomeBanner";
 
@@ -111,19 +112,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
     isPending: overview.isPending,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    home: { href: () => "/acme" },
-    setup: { href: () => "/acme/setup" },
-    headless: { href: () => "/acme/headless" },
-  }),
-  useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
-    exploreDemo: { href: () => "/explore-demo" },
-    home: { href: () => `/acme/projects/${projectSlug}` },
-    guide: { href: () => `/acme/projects/${projectSlug}/guide` },
-  }),
-}));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   Link: ({
     to,
     children,
@@ -158,6 +148,9 @@ vi.mock("./orgHomeAnnouncements", async (importOriginal) => {
       announcementOn.current ? TEST_ANNOUNCEMENT : null,
   };
 });
+
+const renderBanner = () =>
+  render(<OrgWelcomeBanner />, { wrapper: MemoryRouter });
 
 const hrefFor = (cta: string) =>
   screen.getByText(cta).closest("a")?.getAttribute("href");
@@ -210,7 +203,7 @@ afterEach(() => {
 
 describe("OrgWelcomeBanner", () => {
   it("paints the brand mesh on the hero", () => {
-    const { container } = render(<OrgWelcomeBanner />);
+    const { container } = renderBanner();
     const section = container.querySelector("section");
     expect(section?.className).toContain("bg-gradient-to-br");
     expect(section?.className).toContain("from-card");
@@ -219,7 +212,7 @@ describe("OrgWelcomeBanner", () => {
   it("trial admin: demo, guide, enterprise — no announcement", () => {
     announcementOn.current = true;
     trial.current = activeTrial();
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Open the guide")).toBe("/guide");
@@ -235,7 +228,7 @@ describe("OrgWelcomeBanner", () => {
     trial.current = activeTrial();
     isAdmin.current = false;
     setupEligible.current = false;
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Open the guide")).toBe("/guide");
@@ -244,7 +237,7 @@ describe("OrgWelcomeBanner", () => {
   });
 
   it("non-trial admin, zero data: guide and enterprise", () => {
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(screen.queryByText("Enter demo org")).toBeNull();
     expect(hrefFor("Open the guide")).toBe("/guide");
@@ -254,7 +247,7 @@ describe("OrgWelcomeBanner", () => {
 
   it("non-trial admin, has data: platform MCP and enterprise", () => {
     withData();
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(hrefFor("Set up Platform MCP")).toBe(
       "/acme/headless?entrySource=organization_home",
@@ -269,7 +262,7 @@ describe("OrgWelcomeBanner", () => {
   it("substitutes guide when Platform MCP is off", () => {
     withData();
     platformMcpEnabled.current = false;
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(screen.queryByText("Set up Platform MCP")).toBeNull();
     expect(hrefFor("Open the guide")).toBe("/guide");
@@ -279,7 +272,7 @@ describe("OrgWelcomeBanner", () => {
     isAdmin.current = false;
     setupEligible.current = false;
     member.enabled = true;
-    const { rerender } = render(<OrgWelcomeBanner />);
+    const { rerender } = renderBanner();
 
     expect(hrefFor("Connect your agent")).toBe(
       "/acme/headless?entrySource=organization_home",
@@ -312,7 +305,7 @@ describe("OrgWelcomeBanner", () => {
     setupEligible.current = false;
     member.enabled = true;
     member.grantLoading = true;
-    const { rerender } = render(<OrgWelcomeBanner />);
+    const { rerender } = renderBanner();
     expect(member.queryEnabled).toBe(false);
     expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
 
@@ -335,7 +328,7 @@ describe("OrgWelcomeBanner", () => {
     member.enabled = true;
     member.connectionAuthorized = true;
     member.connectionAuthState = "active";
-    const { rerender } = render(<OrgWelcomeBanner />);
+    const { rerender } = renderBanner();
     expect(member.queryEnabled).toBe(true);
     expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
 
@@ -349,7 +342,7 @@ describe("OrgWelcomeBanner", () => {
   it("non-trial member, zero data: guide only", () => {
     isAdmin.current = false;
     setupEligible.current = false;
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(hrefFor("Open the guide")).toBe("/guide");
     expect(screen.queryByText("Begin rollout")).toBeNull();
@@ -363,7 +356,7 @@ describe("OrgWelcomeBanner", () => {
     isAdmin.current = false;
     setupEligible.current = false;
     withData();
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(hrefFor("Open project")).toBe("/acme/projects/alpha");
     expect(screen.getByText("Alpha")).toBeTruthy();
@@ -372,7 +365,7 @@ describe("OrgWelcomeBanner", () => {
 
   it("treats an expired trial as non-trial", () => {
     trial.current = expiredTrial();
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(screen.queryByText("Enter demo org")).toBeNull();
     expect(hrefFor("Open the guide")).toBe("/guide");
@@ -382,7 +375,7 @@ describe("OrgWelcomeBanner", () => {
     announcementOn.current = true;
     isAdmin.current = false;
     setupEligible.current = false;
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(screen.getByText("Announcement")).toBeTruthy();
     expect(hrefFor(TEST_ANNOUNCEMENT.cta)).toBe("/explore-demo");
@@ -390,7 +383,7 @@ describe("OrgWelcomeBanner", () => {
 
   it("appends the announcement as a third card for a non-trial admin", () => {
     announcementOn.current = true;
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(hrefFor("Open the guide")).toBe("/guide");
     expect(hrefFor("Begin rollout")).toBe("/acme/setup");
@@ -399,7 +392,7 @@ describe("OrgWelcomeBanner", () => {
 
   it("records a Platform MCP impression and selection from org home", () => {
     withData();
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(recordCta.mutate).toHaveBeenCalledWith({
       request: {
@@ -424,7 +417,7 @@ describe("OrgWelcomeBanner", () => {
 
   it("records rollout intent when the setup card is clicked", () => {
     trial.current = activeTrial();
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(screen.getByText("Assignable · resumable")).toBeTruthy();
     fireEvent.click(screen.getByText("Begin rollout"));
@@ -437,7 +430,7 @@ describe("OrgWelcomeBanner", () => {
   it("shows resume copy after rollout intent is recorded", () => {
     trial.current = activeTrial();
     localStorage.setItem("gram-org-welcome-rollout-started:acme", "true");
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(screen.getByText("Continue enterprise rollout")).toBeTruthy();
     expect(hrefFor("Resume rollout")).toBe("/acme/setup");
@@ -446,7 +439,7 @@ describe("OrgWelcomeBanner", () => {
   it("drops the setup card when the org cannot run the wizard", () => {
     trial.current = activeTrial();
     setupEligible.current = false;
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(screen.queryByText("Begin rollout")).toBeNull();
     expect(screen.getByText("Enter demo org")).toBeTruthy();
@@ -454,7 +447,7 @@ describe("OrgWelcomeBanner", () => {
 
   it("treats an org with no projects as zero data", () => {
     projects.current = [];
-    render(<OrgWelcomeBanner />);
+    renderBanner();
 
     expect(hrefFor("Open the guide")).toBe("/guide");
     expect(
@@ -477,12 +470,12 @@ describe("OrgWelcomeBanner", () => {
       { id: "p2", name: "Default", slug: "default" },
     ];
 
-    render(<OrgWelcomeBanner />);
+    renderBanner();
     expect(hrefFor("Open project")).toBe("/acme/projects/default");
 
     cleanup();
     localStorage.setItem("preferredProject", "alpha");
-    render(<OrgWelcomeBanner />);
+    renderBanner();
     expect(hrefFor("Open project")).toBe("/acme/projects/alpha");
   });
 
@@ -490,7 +483,7 @@ describe("OrgWelcomeBanner", () => {
     announcementOn.current = true;
     isAdmin.current = false;
     setupEligible.current = false;
-    const { container } = render(<OrgWelcomeBanner />);
+    const { container } = renderBanner();
 
     fireEvent.click(screen.getByLabelText("Dismiss announcement"));
 
@@ -510,7 +503,7 @@ describe("OrgWelcomeBanner", () => {
   it("keeps two cards on a 2-col grid and three on a 3-col grid", () => {
     isAdmin.current = false;
     setupEligible.current = false;
-    const two = render(<OrgWelcomeBanner />);
+    const two = renderBanner();
     expect(
       [...two.container.querySelectorAll("div")].some((el) =>
         el.className.includes("lg:grid-cols-2"),
@@ -521,7 +514,7 @@ describe("OrgWelcomeBanner", () => {
     trial.current = activeTrial();
     isAdmin.current = true;
     setupEligible.current = true;
-    const three = render(<OrgWelcomeBanner />);
+    const three = renderBanner();
     expect(
       [...three.container.querySelectorAll("div")].some((el) =>
         el.className.includes("lg:grid-cols-3"),

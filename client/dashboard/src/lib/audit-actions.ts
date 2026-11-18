@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = [
   "slack-directory-connection:authorize",
   "slack-directory-connection:disconnect",
   "slack-directory-connection:sync",
+  "slack-directory-connection:set-default-project",
   "slack-identity-mapping:confirm",
   "slack-identity-mapping:reassign",
   "slack-identity-mapping:reconfirm",
@@ -21,8 +22,13 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "access_grant:create_temporary",
+  "access_grant:renew_temporary",
+  "access_grant:revoke_temporary",
+  "agent:connection_attach",
   "agent:connection_block_create",
   "agent:connection_block_delete",
+  "agent:connection_detach",
   "agent:create",
   "agent:delete",
   "agent:owner_loss",
@@ -53,7 +59,10 @@ export const AUDIT_ACTIONS = [
   "auth-client:update-audience",
   "auth-client:update-headers",
   "assistant:identity_provision",
+  "assistant:runtime_switch",
   "assistant:tool_call",
+  "assistant:update_execution_profile",
+  "assistant:update_reasoning_effort",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
   "aws_iam_credential:update",
@@ -69,6 +78,8 @@ export const AUDIT_ACTIONS = [
   "catalog-promotion:reject",
   "catalog-promotion:restore",
   "catalog-promotion:retry-docs",
+  "channels:update_access",
+  "channels:update_settings",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -76,15 +87,19 @@ export const AUDIT_ACTIONS = [
   "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
+  "custom_domains:reconcile",
   "custom_domains:update",
   "dashboard:create",
   "dashboard:delete",
   "dashboard:layout",
   "dashboard:update",
+  "data_encryption_key:create",
+  "data_encryption_key:retire",
   "data_export_route:create",
   "data_export_route:delete",
   "data_export_route:pause",
   "data_export_route:resume",
+  "data_export_route:test",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -121,6 +136,9 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:verify",
   "internal_session_issuer:disable",
   "internal_session_issuer:enable",
+  "issuance-selection-profile:create",
+  "issuance-selection-profile:delete",
+  "issuance-selection-profile:update",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -153,6 +171,7 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
   "mcp_metadata:update",
+  "memory_memo:create",
   "meta-mcp:add_member",
   "meta-mcp:create",
   "meta-mcp:delete",
@@ -196,6 +215,17 @@ export const AUDIT_ACTIONS = [
   "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
+  "organization_encryption_config:complete_switch",
+  "organization_encryption_config:create",
+  "organization_encryption_config:resume",
+  "organization_encryption_config:rollback_switch",
+  "organization_encryption_config:suspend",
+  "organization_encryption_config:switch_key",
+  "organization_encryption_transition:clear_platform_copies",
+  "organization_encryption_transition:enroll",
+  "organization_encryption_transition:finalize",
+  "organization_encryption_transition:rollback",
+  "organization_encryption_transition:start_org_kms",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
@@ -234,6 +264,7 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:delete",
   "remote-mcp:update",
   "remote-session-client:attach-json-web-key-set",
+  "remote-session-client:attach-mcp-server",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
@@ -303,6 +334,7 @@ export const AUDIT_ACTIONS = [
   "spend_rule:archive",
   "spend_rule:create",
   "spend_rule:update",
+  "team_memory:read",
   "template:create",
   "template:delete",
   "template:update",
@@ -313,6 +345,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:migrate_to_remote_mcp",
+  "toolset:move_legacy_alias",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -388,6 +421,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "authorized Slack workspace";
     case "slack-directory-connection:disconnect":
       return "disconnected Slack workspace";
+    case "slack-directory-connection:set-default-project":
+      return "changed the default project for Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:revoke_sign_ins":
@@ -400,7 +435,17 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated access role";
     case "access_role:delete":
       return "deleted access role";
+    case "access_grant:create_temporary":
+      return "gave temporary access to";
+    case "access_grant:renew_temporary":
+      return "renewed temporary access for";
+    case "access_grant:revoke_temporary":
+      return "revoked temporary access for";
 
+    case "agent:connection_attach":
+      return "granted their connection to agent";
+    case "agent:connection_detach":
+      return "removed their connection from agent";
     case "agent:connection_block_create":
       return "blocked connection access for agent";
     case "agent:connection_block_delete":
@@ -470,8 +515,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "changed who can use auth client";
     case "assistant:identity_provision":
       return "gave a dedicated agent to assistant";
+    case "assistant:runtime_switch":
+      return "changed the runtime of assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
+    case "assistant:update_reasoning_effort":
+      return "changed the reasoning effort of assistant";
+    case "assistant:update_execution_profile":
+      return "changed the upstream credentials of assistant";
 
     case "aws_iam_credential:create":
       return "added AWS IAM credential";
@@ -533,6 +584,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled Speakeasy signing with issuer";
     case "internal_session_issuer:disable":
       return "disabled Speakeasy signing with issuer";
+    case "issuance-selection-profile:create":
+      return "set the upstream credentials of headless caller";
+    case "issuance-selection-profile:update":
+      return "changed the upstream credentials of headless caller";
+    case "issuance-selection-profile:delete":
+      return "removed the upstream credential choices of headless caller";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":
@@ -562,6 +619,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored catalog promotion candidate";
     case "catalog-promotion:retry-docs":
       return "retried setup documentation for";
+    case "channels:update_access":
+      return "changed Channels access for";
+    case "channels:update_settings":
+      return "changed Channels availability for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -579,6 +640,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated custom domain";
     case "custom_domains:delete":
       return "removed custom domain";
+    case "custom_domains:reconcile":
+      return "reconciled custom domain";
 
     case "data_export_route:create":
       return "created data export route";
@@ -590,6 +653,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "paused data export route";
     case "data_export_route:resume":
       return "resumed data export route";
+    case "data_export_route:test":
+      return "sent a test event for data export route";
 
     case "network_ingress:create":
       return "created private network ingress";
@@ -891,6 +956,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a JSON Web Key Set to";
     case "remote-session-client:detach-json-web-key-set":
       return "detached a JSON Web Key Set from";
+    case "remote-session-client:attach-mcp-server":
+      return "attached an MCP server to";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
@@ -1015,6 +1082,11 @@ export function staticActionPhrase(action: AuditAction): string {
     case "spend_rule:archive":
       return "archived spend rule";
 
+    case "team_memory:read":
+      return "read team memory for";
+    case "memory_memo:create":
+      return "saved team memo";
+
     case "template:create":
       return "created template";
     case "template:update":
@@ -1042,6 +1114,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detached an OAuth proxy from";
     case "toolset:migrate_to_remote_mcp":
       return "migrated the external MCP server";
+    case "toolset:move_legacy_alias":
+      return "moved the legacy address";
 
     case "trigger-instance:create":
       return "created trigger";
@@ -1117,6 +1191,35 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created a device join token for";
     case "workload-device-join-token:redeem":
       return "enrolled a device with a join token for";
+
+    case "data_encryption_key:create":
+      return "created a data encryption key for";
+    case "data_encryption_key:retire":
+      return "retired a data encryption key for";
+    case "organization_encryption_config:create":
+      return "set up";
+    case "organization_encryption_config:switch_key":
+      return "started a key switch for";
+    case "organization_encryption_config:complete_switch":
+      return "completed the key switch for";
+    case "organization_encryption_config:rollback_switch":
+      return "rolled back the key switch for";
+    case "organization_encryption_config:suspend":
+      return "suspended";
+    case "organization_encryption_config:resume":
+      return "resumed";
+    // Internal staff-only entries; the subject names the use case being moved,
+    // as "Organization encryption: <use case>".
+    case "organization_encryption_transition:enroll":
+      return "enrolled";
+    case "organization_encryption_transition:rollback":
+      return "rolled back";
+    case "organization_encryption_transition:finalize":
+      return "finalized";
+    case "organization_encryption_transition:start_org_kms":
+      return "started using organization keys for";
+    case "organization_encryption_transition:clear_platform_copies":
+      return "cleared platform-key copies for";
 
     default:
       return assertNever(action);

@@ -29,6 +29,22 @@ export const ExpectedRuntimeVersion = {
 export type ExpectedRuntimeVersion = ClosedEnum<typeof ExpectedRuntimeVersion>;
 
 /**
+ * The reasoning effort used by the assistant.
+ */
+export const UpdateAssistantFormReasoningEffort = {
+  None: "none",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+} as const;
+/**
+ * The reasoning effort used by the assistant.
+ */
+export type UpdateAssistantFormReasoningEffort = ClosedEnum<
+  typeof UpdateAssistantFormReasoningEffort
+>;
+
+/**
  * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
  */
 export const UpdateAssistantFormRuntimeVersion = {
@@ -86,6 +102,10 @@ export type UpdateAssistantForm = {
    */
   name?: string | undefined;
   /**
+   * The reasoning effort used by the assistant.
+   */
+  reasoningEffort?: UpdateAssistantFormReasoningEffort | undefined;
+  /**
    * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
    */
   runtimeVersion?: UpdateAssistantFormRuntimeVersion | undefined;
@@ -109,6 +129,11 @@ export const ExpectedRuntimeVersion$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ExpectedRuntimeVersion);
 
 /** @internal */
+export const UpdateAssistantFormReasoningEffort$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateAssistantFormReasoningEffort
+> = z.enum(UpdateAssistantFormReasoningEffort);
+
+/** @internal */
 export const UpdateAssistantFormRuntimeVersion$outboundSchema: z.ZodMiniEnum<
   typeof UpdateAssistantFormRuntimeVersion
 > = z.enum(UpdateAssistantFormRuntimeVersion);
@@ -127,6 +152,7 @@ export type UpdateAssistantForm$Outbound = {
   mcp_servers?: Array<AssistantMCPServerRef$Outbound> | undefined;
   model?: string | undefined;
   name?: string | undefined;
+  reasoning_effort?: string | undefined;
   runtime_version?: number | undefined;
   status?: string | undefined;
   toolsets?: Array<AssistantToolsetRef$Outbound> | undefined;
@@ -146,6 +172,9 @@ export const UpdateAssistantForm$outboundSchema: z.ZodMiniType<
     mcpServers: z.optional(z.array(AssistantMCPServerRef$outboundSchema)),
     model: z.optional(z.string()),
     name: z.optional(z.string()),
+    reasoningEffort: z.optional(
+      UpdateAssistantFormReasoningEffort$outboundSchema,
+    ),
     runtimeVersion: z.optional(
       UpdateAssistantFormRuntimeVersion$outboundSchema,
     ),
@@ -158,6 +187,7 @@ export const UpdateAssistantForm$outboundSchema: z.ZodMiniType<
       expectedRuntimeVersion: "expected_runtime_version",
       maxConcurrency: "max_concurrency",
       mcpServers: "mcp_servers",
+      reasoningEffort: "reasoning_effort",
       runtimeVersion: "runtime_version",
       warmTtlSeconds: "warm_ttl_seconds",
     });

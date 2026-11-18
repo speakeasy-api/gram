@@ -18,11 +18,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -164,6 +166,18 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 			}
 		}
 	}
+	// The inventory is fingerprinted without a proxied server's upstream
+	// issuer where typed auth clients choose upstream authentication, and with
+	// it elsewhere. A saved approval holds the form written when it was
+	// approved, so it is compared in both: switching mode alone asks nobody
+	// again. One approved under typed auth clients then keeps ignoring the
+	// upstream issuer, and its upstream clients, resource and permissions are
+	// still compared through the remote set. The other forms read the
+	// database, so they are computed before the consent client lock is taken.
+	var others reuseInventoryFingerprints
+	if reuse {
+		others = s.reuseInventoryFingerprints(ctx, endpoint, inventory)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin consent approval: %w", err)
@@ -188,7 +202,14 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 		if err != nil {
 			return nil, fmt.Errorf("read resource approval: %w", err)
 		}
-		if saved.InventoryHash != inventoryHash || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
+		s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+			organizationID: endpoint.OrganizationID,
+			serverID:       endpoint.McpServerID.UUID,
+			site:           upstreamIssuerReconsentSiteReuseResource,
+			consenter:      reconsentConsenter(state),
+			outcome:        upstreamIssuerReconsent(saved.InventoryHash, inventoryHash, others.otherSource, others.otherSourceErr),
+		})
+		if (saved.InventoryHash != inventoryHash && saved.InventoryHash != others.otherMode) || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
 			return nil, nil
 		}
 		selection, err = toolfilter.ParseSessionSelection(saved.ToolSelection)
@@ -273,9 +294,8 @@ func renderConsentReuse(w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, st
 }
 
 func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, rawAttempt string) (*consentToolInventory, error) {
-	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
-	if err != nil || !eligible {
-		return nil, err
+	if !consentToolPickerEligible(endpoint) {
+		return nil, nil
 	}
 	lockedDown, err := s.customDomainLockdownApplies(ctx, s.logger, endpoint.ProjectID)
 	if err != nil || lockedDown {
@@ -292,11 +312,18 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	if inventory.CompletedAt.IsZero() || time.Since(inventory.CompletedAt) > time.Minute {
 		return nil, nil
 	}
-	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+	backendHashes, err := s.consentBackendFingerprint(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	if inventory.BackendHash != backendHash {
+	s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+		organizationID: endpoint.OrganizationID,
+		serverID:       endpoint.McpServerID.UUID,
+		site:           upstreamIssuerReconsentSiteReuseInventory,
+		consenter:      reconsentConsenter(state),
+		outcome:        upstreamIssuerReconsent(inventory.BackendHash, backendHashes.decided, backendHashes.other, backendHashes.otherErr),
+	})
+	if inventory.BackendHash != backendHashes.decided {
 		return nil, nil
 	}
 	if endpoint.ToolsetID.Valid {
@@ -313,25 +340,85 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	return &inventory, nil
 }
 
+// consentBackendHashes are a server's consent backend fingerprint in the
+// organization's enforcement mode with its upstream issuer from each source,
+// and in the other enforcement mode.
+type consentBackendHashes struct {
+	// decided is the fingerprint from the source the organization's flag
+	// makes authoritative. It is the one stored and checked.
+	decided string
+
+	// other is the fingerprint from the other source, for the re-consent
+	// forecast.
+	other string
+
+	// otherErr is why other could not be computed.
+	otherErr error
+
+	// otherMode is decided in the other enforcement mode, which an approval
+	// saved before the mode changed still holds.
+	otherMode string
+}
+
 // consentBackendFingerprint binds discovery to access-relevant configuration.
 // Display names and update timestamps do not change the authorization surface.
-func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (string, error) {
+// Where typed auth clients choose upstream authentication, a proxied server's
+// upstream issuer decides nothing and is left out, so resynchronizing it
+// changes no evidence.
+func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (consentBackendHashes, error) {
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return consentBackendHashes{}, err
+	}
+	evidence, err := s.consentBackendEvidence(ctx, endpoint)
+	if err != nil {
+		return consentBackendHashes{}, err
+	}
+	return consentBackendHashes{
+		decided:   evidence.decided.forMode(enforced),
+		other:     evidence.other.forMode(enforced),
+		otherErr:  evidence.otherErr,
+		otherMode: evidence.decided.forMode(!enforced),
+	}, nil
+}
+
+// consentBackendConfigurations are an endpoint's consent backend fingerprints
+// in both enforcement modes, with the upstream issuer from each source.
+type consentBackendConfigurations struct {
+	// decided takes the upstream issuer from the source the organization's
+	// flag makes authoritative.
+	decided memberConfiguration
+
+	// other takes it from the other source.
+	other memberConfiguration
+
+	// otherErr is why other could not be computed.
+	otherErr error
+}
+
+// consentBackendEvidence fingerprints the endpoint's access-relevant
+// configuration in both modes and from both upstream issuer sources, from the
+// same reads. The typed form omits a proxied server's upstream issuer. A
+// hosted server is routed by that issuer, so both forms cover it.
+func (s *Service) consentBackendEvidence(ctx context.Context, endpoint *ResolvedMcpEndpoint) (consentBackendConfigurations, error) {
+	var none consentBackendConfigurations
 	evidence := map[string]any{"resource": endpoint.UpstreamResource, "toolset": endpoint.ToolsetID}
 	if !endpoint.McpServerID.Valid {
-		return consentEvidenceHash(evidence), nil
+		hash := consentEvidenceHash(evidence)
+		same := memberConfiguration{hash: hash, typedHash: hash}
+		return consentBackendConfigurations{decided: same, other: same, otherErr: nil}, nil
 	}
 	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID: endpoint.McpServerID.UUID, ProjectID: endpoint.ProjectID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("read consent backend: %w", err)
+		return none, fmt.Errorf("read consent backend: %w", err)
 	}
 	evidence["server"] = server.ID
 	evidence["remote"] = server.RemoteMcpServerID
 	evidence["tunnel"] = server.TunneledMcpServerID
 	evidence["toolset"] = server.ToolsetID
 	evidence["variation"] = server.ToolVariationsGroupID
-	evidence["issuer"] = server.RemoteSessionIssuerID
 	evidence["visibility"] = server.Visibility
 	evidence["network"] = server.NetworkAccessMode
 	if server.RemoteMcpServerID.Valid {
@@ -339,14 +426,37 @@ func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *Resol
 			ID: server.RemoteMcpServerID.UUID, ProjectID: endpoint.ProjectID,
 		})
 		if err != nil {
-			return "", fmt.Errorf("read consent remote backend: %w", err)
+			return none, fmt.Errorf("read consent remote backend: %w", err)
 		}
 		headerFingerprint, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ConfigurationFingerprint(ctx, remote.ID)
 		if err != nil {
-			return "", fmt.Errorf("read consent backend headers: %w", err)
+			return none, fmt.Errorf("read consent backend headers: %w", err)
 		}
 		evidence["url"] = remote.Url
 		evidence["headers"] = headerFingerprint
 	}
-	return consentEvidenceHash(evidence), nil
+	providerIDs, associationErr := mcpservers_repo.New(s.db).ListMCPServerAssociationProviders(ctx, mcpservers_repo.ListMCPServerAssociationProvidersParams{
+		ID: server.ID, ProjectID: endpoint.ProjectID,
+	})
+	typedHash := ""
+	if !server.ToolsetID.Valid {
+		typedHash = consentEvidenceHash(evidence)
+	}
+	withIssuer := func(issuer uuid.NullUUID) memberConfiguration {
+		evidence["issuer"] = issuer
+		hash := consentEvidenceHash(evidence)
+		if server.ToolsetID.Valid {
+			return memberConfiguration{hash: hash, typedHash: hash}
+		}
+		return memberConfiguration{hash: hash, typedHash: typedHash}
+	}
+	column := withIssuer(server.RemoteSessionIssuerID)
+	association := withIssuer(remotesessions.AssociationIssuerFromProviders(providerIDs).Provider)
+	if feature.UpstreamIssuerFromAssociations(ctx, s.features, endpoint.OrganizationID) {
+		if associationErr != nil {
+			return none, fmt.Errorf("read consent backend associations: %w", associationErr)
+		}
+		return consentBackendConfigurations{decided: association, other: column, otherErr: nil}, nil
+	}
+	return consentBackendConfigurations{decided: column, other: association, otherErr: associationErr}, nil
 }

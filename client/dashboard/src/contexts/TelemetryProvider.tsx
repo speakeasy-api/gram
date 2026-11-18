@@ -1,3 +1,7 @@
+import {
+  rememberLandingUtm,
+  setAnalyticsSessionIdSource,
+} from "@/lib/signup-attribution";
 import { getServerURL, isProdHost } from "@/lib/utils";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
@@ -61,6 +65,9 @@ export function isGramHost(serverURL: string): boolean {
   );
 }
 
+// Before the router can redirect away from the landing URL.
+rememberLandingUtm();
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
@@ -81,6 +88,7 @@ export const TelemetryProvider = (props: {
         },
         "speakeasy",
       );
+  setAnalyticsSessionIdSource(ph ? () => ph.get_session_id() : null);
 
   useEffect(() => {
     // Never start RUM on the public share page — the session replay and

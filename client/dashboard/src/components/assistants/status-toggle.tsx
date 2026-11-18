@@ -1,14 +1,12 @@
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
-import {
-  Assistant,
-  AssistantStatus,
-} from "@gram/client/models/components/assistant.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
+import { AssistantStatus } from "@gram/client/models/components/assistant.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
-import { MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { toast } from "sonner";
 
 function stopPropagation(e: MouseEvent<HTMLDivElement>) {

@@ -59,9 +59,9 @@ type deadlineBillingOperations struct {
 	deadline time.Time
 }
 
-func (f *deadlineBillingOperations) GetStripeSubscriptionByID(ctx context.Context, id string) (*stripeclient.SubscriptionState, error) {
+func (f *deadlineBillingOperations) GetStripeSubscriptionByID(ctx context.Context, id string, options ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	f.deadline, _ = ctx.Deadline()
-	return f.fakeBillingOperations.GetStripeSubscriptionByID(ctx, id)
+	return f.fakeBillingOperations.GetStripeSubscriptionByID(ctx, id, options...)
 }
 func TestExistingBillingEligibilityBoundsLookup(t *testing.T) {
 	t.Parallel()
@@ -70,6 +70,7 @@ func TestExistingBillingEligibilityBoundsLookup(t *testing.T) {
 	svc := &Service{billing: fake}
 	start := time.Now()
 	require.NoError(t, svc.requireExistingBillingEligibility(t.Context(), org))
+	require.Equal(t, [][]stripeclient.GetSubscriptionOption{nil}, fake.subscriptionLookupOptions)
 	require.False(t, fake.deadline.IsZero())
 	require.WithinDuration(t, start.Add(5*time.Second), fake.deadline, time.Second)
 }

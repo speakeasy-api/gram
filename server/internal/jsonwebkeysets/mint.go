@@ -31,6 +31,10 @@ const (
 
 const externalKeyProviderGcpKms = "gcp_kms"
 
+// externalKeyPurposeSign is external_keys.purpose for keys that can back a
+// JSON Web Key Set.
+const externalKeyPurposeSign = "sign"
+
 // mintRatePerMin and mintRateBurst bound how often one organization can mint a
 // key (set creation and key publication). Each mint calls GetPublicKey, a KMS
 // management-tier RPC whose quota sits far below the cryptographic operations'
@@ -105,6 +109,9 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 
 	if row.EmaIssuerManaged {
 		return nil, oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
+	}
+	if row.ExternalKey.Purpose != externalKeyPurposeSign {
+		return nil, oops.E(oops.CodeBadRequest, nil, "this key encrypts organization data and cannot back a JSON Web Key Set; choose a signing key").LogError(ctx, logger)
 	}
 	if row.ExternalKey.Provider != externalKeyProviderGcpKms {
 		return nil, oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)

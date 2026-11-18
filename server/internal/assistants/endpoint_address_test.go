@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -39,7 +40,7 @@ func (f hostedAttachmentFixture) moveHostedToDomain(t *testing.T, domainID uuid.
 
 func (f hostedAttachmentFixture) retirePlatformEndpoints(t *testing.T) {
 	t.Helper()
-	_, err := f.db.Exec(t.Context(), `UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = $1 AND project_id = $2`, f.remote.ID, f.projectID) //nolint:glint // notestingrawsql: retire the platform endpoint
+	err := assistantrepo.New(f.db).RetireMCPServerEndpointsFixture(t.Context(), assistantrepo.RetireMCPServerEndpointsFixtureParams{McpServerID: uuid.NullUUID{UUID: f.remote.ID, Valid: true}, ProjectID: f.projectID})
 	require.NoError(t, err)
 }
 
@@ -65,27 +66,24 @@ func TestAssistantHostedServerOnCustomDomainUsesEndpointURL(t *testing.T) {
 	}}, f.runtime(t))
 
 	record, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable, nil)
 	require.NoError(t, err, "a custom-domain endpoint is a Speakeasy-hosted endpoint")
 	f.assistant = record.ID
 	require.Equal(t, "https://mcp.example.test/mcp/org-test-billing-x1", f.runtime(t)[0].URL)
 }
 
-// A hosted server whose domain is not live keeps its legacy alias, but new attachments need a live endpoint.
-func TestAssistantHostedServerOnInactiveDomainKeepsLegacyAlias(t *testing.T) {
+// A hosted server whose only endpoint is on a domain that is not live has no address.
+func TestAssistantHostedServerOnInactiveDomainHasNoAddress(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "endpoint_addr_hosted_inactive")
 	domainID := f.customDomain(t, "org-test", "mcp.example.test", true, false)
 	f.moveHostedToDomain(t, domainID)
-	testenv.SetLegacyAlias(t, t.Context(), f.db, f.projectID, f.hosted.ID, "org-test-billing-x1", uuid.NullUUID{UUID: domainID, Valid: true})
 	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
 
-	servers := f.runtime(t)
-	require.Len(t, servers, 1)
-	require.Equal(t, "https://gram.test/mcp/org-test-billing-x1", servers[0].URL)
+	require.Empty(t, f.runtime(t))
 
 	_, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable, nil)
 	require.ErrorContains(t, err, "has no Speakeasy-hosted MCP endpoint")
 }
 
@@ -109,12 +107,12 @@ func TestAssistantServerDomainGate(t *testing.T) {
 			f.retirePlatformEndpoints(t)
 			f.addRemoteEndpoint(t, uuid.NullUUID{UUID: domainID, Valid: true}, "remote-on-domain")
 			if tc.drop {
-				_, err := f.db.Exec(t.Context(), `UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1`, domainID) //nolint:glint // notestingrawsql: soft-delete the domain
+				err := assistantrepo.New(f.db).SoftDeleteCustomDomainFixture(t.Context(), assistantrepo.SoftDeleteCustomDomainFixtureParams{ID: domainID, OrganizationID: "org-test"})
 				require.NoError(t, err)
 			}
 
 			_, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-				[]*types.AssistantMCPServerRef{{McpServerSlug: "remote"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
+				[]*types.AssistantMCPServerRef{{McpServerSlug: "remote"}}, 300, 1, StatusActive, false, allowAllMCPEnable, nil)
 			if tc.wantURL == "" {
 				require.ErrorContains(t, err, "has no Speakeasy-hosted MCP endpoint")
 				f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
@@ -136,7 +134,8 @@ func TestAssistantServerPrefersPlatformEndpoint(t *testing.T) {
 	f := newHostedAttachmentFixture(t, "endpoint_addr_prefers_platform")
 	domainID := f.customDomain(t, "org-test", "mcp.example.test", true, true)
 	f.addRemoteEndpoint(t, uuid.NullUUID{UUID: domainID, Valid: true}, "remote-on-domain")
-	_, err := f.db.Exec(t.Context(), `UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = 'remote-on-domain' AND project_id = $1`, f.projectID) //nolint:glint // notestingrawsql: make the domain endpoint the oldest
+	// Make the domain endpoint the oldest.
+	err := assistantrepo.New(f.db).BackdateMCPEndpointBySlugFixture(t.Context(), assistantrepo.BackdateMCPEndpointBySlugFixtureParams{Slug: "remote-on-domain", ProjectID: f.projectID})
 	require.NoError(t, err)
 	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
 

@@ -1,5 +1,7 @@
+import type { McpServerAuthentication } from "@gram/client/models/components/mcpserverauthentication.js";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { AuthClients } from "@gram/client/sdk/authclients.js";
 import type { RemoteSessions } from "@gram/client/sdk/remotesessions.js";
 import type { RemoteSessionClients } from "@gram/client/sdk/remotesessionclients.js";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
@@ -18,8 +20,20 @@ export type ServerConnection =
   | { status: "error" }
   /** The server asks for no personal upstream sign-in, so a key alone works. */
   | { status: "not-required" }
-  /** At least one upstream sign-in has no usable assigned or personal connection. */
-  | { status: "missing" }
+  /**
+   * At least one upstream sign-in has no usable assigned or personal
+   * connection. `signIns` lists each one, and `connected` counts the ones that
+   * do have a connection, so the reader is told what is left to connect
+   * rather than only that something is. `connectedNames` names the connected
+   * ones, so a sentence never guesses what they are. All are absent where the
+   * cause is not a sign-in, such as an assignment whose session is gone.
+   */
+  | {
+      status: "missing";
+      signIns?: ServerSignIn[];
+      connected?: number;
+      connectedNames?: (string | undefined)[];
+    }
   /** Every sign-in is connected, but one of them no longer works. */
   | { status: "ended"; sessions: RemoteSession[] }
   | { status: "ready"; sessions: RemoteSession[] };
@@ -37,18 +51,31 @@ export function userSubject(userId: string): string {
  * is what the attachment endpoint will accept. A client whose credential is
  * its own (`credential_owner: self`) is shared by every caller and needs no
  * person.
+ *
+ * With `anyOne`, the server is ready once any of its personal sign-ins has a
+ * working connection: under upstream auth enforcement the gateway lets a
+ * caller choose among a server's own sign-ins, so one serves. Without it,
+ * every sign-in is required, as the runtime requires each of a server's own
+ * registrations when upstream auth is not enforced.
  */
 export function serverConnection(
   issuerId: string,
-  clients: RemoteSessionClient[],
+  clients: ServerSignIn[],
   sessions: RemoteSession[],
   now: number = Date.now(),
+  { anyOne = false }: { anyOne?: boolean } = {},
 ): ServerConnection {
   const personal = clients.filter(
     (client) => client.credentialOwner !== "self",
   );
   if (personal.length === 0) return { status: "not-required" };
   const found: RemoteSession[] = [];
+  const missing: ServerSignIn[] = [];
+  // The sign-ins whose only connection has ended. They still need a person,
+  // so a server that also misses another sign-in lists them as outstanding
+  // rather than counting them as connected.
+  const ended: ServerSignIn[] = [];
+  const connectedClients: ServerSignIn[] = [];
   for (const client of personal) {
     const matching = sessions.filter(
       (candidate) =>
@@ -60,14 +87,118 @@ export function serverConnection(
       matching.find(
         (candidate) => connectionLifetime(candidate, now).kind !== "ended",
       ) ?? matching[0];
-    if (!session) return { status: "missing" };
+    if (!session) {
+      missing.push(client);
+      continue;
+    }
     found.push(session);
+    if (connectionLifetime(session, now).kind === "ended") {
+      ended.push(client);
+      continue;
+    }
+    connectedClients.push(client);
   }
+  if (anyOne) {
+    const working = found.filter(
+      (session) => connectionLifetime(session, now).kind !== "ended",
+    );
+    if (working.length > 0) return { status: "ready", sessions: working };
+    if (found.length > 0) return { status: "ended", sessions: found };
+    return { status: "missing", signIns: missing, connected: 0 };
+  }
+  if (missing.length > 0)
+    return {
+      status: "missing",
+      signIns: [...missing, ...ended],
+      connected: connectedClients.length,
+      ...(connectedClients.length > 0 && {
+        connectedNames: connectedClients.map((client) => client.name),
+      }),
+    };
   if (
     found.some((session) => connectionLifetime(session, now).kind === "ended")
   )
     return { status: "ended", sessions: found };
   return { status: "ready", sessions: found };
+}
+
+/**
+ * Whether a server may ask each person to sign in upstream, read from the
+ * server's own auth clients rather than from its user session issuer. An
+ * issuer is often shared across the organization, so the personal sign-ins it
+ * lists can belong to other servers: a server that offers only shared
+ * credentials needs no person, whatever its issuer lists.
+ *
+ * While setup is incomplete the server has upstream credentials that no auth
+ * client records yet, so the issuer's sign-ins stay the only signal.
+ */
+export function offersPersonalSignIn(
+  auth: Pick<McpServerAuthentication, "status" | "clients">,
+): boolean {
+  if (auth.status === "setup_incomplete") return true;
+  return auth.clients.some(
+    (client) => client.enabled && client.clientType === "remote_session",
+  );
+}
+
+/**
+ * An upstream sign-in a server asks for: its OAuth registration, who owns it,
+ * and, when known, the name a person recognizes it by, such as "Stripe".
+ */
+export type ServerSignIn = Pick<
+  RemoteSessionClient,
+  "id" | "credentialOwner"
+> & {
+  name?: string;
+};
+
+/**
+ * The names of the sign-ins a missing connection still needs, in the order the
+ * server asks for them, for a sentence such as "Still needs Stripe and Vercel".
+ * Two sign-ins that share a name read as "2 Linear sign-ins", and a sign-in
+ * with no known name counts as one more, so the total stays true.
+ */
+export function missingSignInNames(connection: ServerConnection | undefined): {
+  names: string[];
+  unnamed: number;
+} {
+  if (connection?.status !== "missing" || !connection.signIns)
+    return { names: [], unnamed: 0 };
+  const counts = new Map<string, number>();
+  for (const signIn of connection.signIns) {
+    if (signIn.name)
+      counts.set(signIn.name, (counts.get(signIn.name) ?? 0) + 1);
+  }
+  const names = [...counts].map(([name, count]) =>
+    count === 1 ? name : `${count} ${name} sign-ins`,
+  );
+  const unnamed = connection.signIns.filter((signIn) => !signIn.name).length;
+  return { names, unnamed };
+}
+
+/**
+ * The upstream sign-ins a server asks each person for, read from its own auth
+ * clients. Under upstream auth enforcement these decide which registration a
+ * call signs in through, so they are the answer even when the server shares
+ * its user session issuer with others: the issuer binds one registration,
+ * which can belong to another server. Undefined while the auth clients do
+ * not record the upstream yet, when the issuer's registrations stay the only
+ * signal: setup is incomplete, or a personal client names no registration.
+ */
+export function serverSignIns(
+  auth: Pick<McpServerAuthentication, "status" | "clients">,
+): ServerSignIn[] | undefined {
+  if (auth.status === "setup_incomplete") return undefined;
+  const personal = auth.clients.filter(
+    (client) => client.enabled && client.personal,
+  );
+  if (personal.some((client) => !client.remoteSessionClientId))
+    return undefined;
+  return personal.map((client) => ({
+    id: client.remoteSessionClientId!,
+    credentialOwner: "subject",
+    name: client.name,
+  }));
 }
 
 /** Whether a row can be chosen: the key will reach it without anyone signing in. */
@@ -80,17 +211,114 @@ export function connectionSelectable(
 }
 
 export interface ConnectionApi {
+  authClients: Pick<AuthClients, "getMcpServerAuthentication">;
   remoteSessions: Pick<
     RemoteSessions,
-    "list" | "listBindings" | "attachBinding" | "detachBinding"
+    | "list"
+    | "listBindings"
+    | "attachBinding"
+    | "detachBinding"
+    | "listServerClientAssociations"
   >;
   remoteSessionClients: Pick<RemoteSessionClients, "list">;
+}
+
+/**
+ * Sorts servers with an issuer by whether they may ask each person to sign
+ * in. One whose auth cannot be read gets nothing attached, as the wizard
+ * keeps its row locked: an unrelated sign-in is never attached on a guess.
+ */
+async function personalServers(
+  api: ConnectionApi,
+  servers: InventoryServer[],
+  signal?: AbortSignal,
+): Promise<{
+  personal: InventoryServer[];
+  unreadable: InventoryServer[];
+  /** The upstream sign-ins each personal server's own auth clients ask for. */
+  signIns: Map<string, ServerSignIn[] | undefined>;
+}> {
+  const signIns = new Map<string, ServerSignIn[] | undefined>();
+  const reads = await Promise.all(
+    servers.map(async (server) => {
+      if (!server.issuerId) return "shared" as const;
+      try {
+        const auth = await api.authClients.getMcpServerAuthentication(
+          { mcpServerId: server.id },
+          undefined,
+          { signal },
+        );
+        if (!offersPersonalSignIn(auth)) return "shared" as const;
+        signIns.set(server.id, serverSignIns(auth));
+        return "personal" as const;
+      } catch (failure) {
+        if (signal?.aborted) throw failure;
+        return "unreadable" as const;
+      }
+    }),
+  );
+  return {
+    personal: servers.filter((_, index) => reads[index] === "personal"),
+    unreadable: servers.filter((_, index) => reads[index] === "unreadable"),
+    signIns,
+  };
+}
+
+/**
+ * The registrations on a server's user session issuer that the selected
+ * servers sharing that issuer require, by the rule the runtime enforces
+ * (`required_client_ids`): a server needs its own registrations, not the ones
+ * other servers on a shared issuer bring. Without enforcement this is what the
+ * issuer's sign-ins narrow to.
+ */
+async function issuerSignInsRequired(
+  api: ConnectionApi,
+  personal: InventoryServer[],
+  issuer: InventoryServer,
+  signal?: AbortSignal,
+): Promise<ServerSignIn[]> {
+  const gramProject = issuer.projectSlug;
+  const sharing = personal.filter(
+    (server) =>
+      server.projectId === issuer.projectId &&
+      server.issuerId === issuer.issuerId,
+  );
+  // A hosted server needs every registration its issuer binds; only proxied
+  // servers narrow to their own.
+  const hosted = sharing.some(
+    (server) => server.kind !== "Remote" && server.kind !== "Tunneled",
+  );
+  const [clients, ...required] = await Promise.all([
+    collectPageItems(
+      api.remoteSessionClients.list(
+        { gramProject, userSessionIssuerId: issuer.issuerId! },
+        undefined,
+        { signal },
+      ),
+    ),
+    ...sharing
+      .filter(() => !hosted)
+      .map((server) =>
+        api.remoteSessions.listServerClientAssociations(
+          { gramProject, mcpServerId: server.id },
+          undefined,
+          { signal },
+        ),
+      ),
+  ]);
+  if (hosted) return clients;
+  const ids = new Set(required.flatMap((read) => read.requiredClientIds));
+  return clients.filter((client) => ids.has(client.id));
 }
 
 /**
  * Attach the caller's own connections, preserving every valid assignment.
  * Editors may replace stale assignments with their own usable session.
  * Bulk selection reports missing servers and continues with the rest.
+ *
+ * Under upstream auth enforcement the sign-ins come from each server's own
+ * auth clients: an issuer shared across the organization lists other
+ * servers' registrations, which the caller has no reason to have connected.
  */
 export async function attachOwnerConnections(
   api: ConnectionApi,
@@ -98,30 +326,62 @@ export async function attachOwnerConnections(
   servers: InventoryServer[],
   signal?: AbortSignal,
   skipMissing = false,
+  enforced = false,
 ): Promise<string[]> {
+  const { personal, unreadable, signIns } = await personalServers(
+    api,
+    servers,
+    signal,
+  );
+  /**
+   * The sign-ins the servers on one issuer ask for, from their own auth
+   * clients. Undefined without enforcement, or while any of them has not
+   * resolved its sign-ins (`serverSignIns`), when the issuer's registrations
+   * are still the answer.
+   */
+  const typedSignIns = (
+    issuer: InventoryServer,
+  ): ServerSignIn[] | undefined => {
+    if (!enforced) return undefined;
+    const reads = personal
+      .filter(
+        (server) =>
+          server.projectId === issuer.projectId &&
+          server.issuerId === issuer.issuerId,
+      )
+      .map((server) => signIns.get(server.id));
+    if (reads.some((read) => !read)) return undefined;
+    return [
+      ...new Map(reads.flatMap((read) => read!).map((c) => [c.id, c])).values(),
+    ];
+  };
+  if (unreadable[0] && !skipMissing)
+    throw new Error(
+      `Could not check how ${unreadable[0].name} signs in. Try again.`,
+    );
   const issuers = [
     ...new Map(
-      servers
-        .filter((server) => server.issuerId)
-        .map((server) => [`${server.projectId}:${server.issuerId}`, server]),
+      personal.map((server) => [
+        `${server.projectId}:${server.issuerId}`,
+        server,
+      ]),
     ).values(),
   ];
-  const missing = new Set<string>();
+  const missing = new Set(unreadable.map((server) => server.name));
   for (const server of issuers) {
     const gramProject = server.projectSlug;
     const userSessionIssuerId = server.issuerId!;
     const scope = { gramProject, principalId: agentId, userSessionIssuerId };
+    const typed = typedSignIns(server);
     const [clients, candidates, bindings] = await Promise.all([
-      collectPageItems(
-        api.remoteSessionClients.list(
-          { gramProject, userSessionIssuerId },
-          undefined,
-          { signal },
-        ),
-      ),
+      typed ?? issuerSignInsRequired(api, personal, server, signal),
       collectPageItems(api.remoteSessions.list(scope, undefined, { signal })),
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);
+    // Under enforcement one working sign-in serves a server, so the ones the
+    // caller never connected are skipped as long as another of that server's
+    // own serves. Servers sharing the issuer each need one of their own.
+    const served = new Set<string>();
     for (const client of clients) {
       if (client.credentialOwner === "self") continue;
       const current = bindings.items.filter(
@@ -135,13 +395,16 @@ export async function attachOwnerConnections(
             binding.remoteSession !== undefined &&
             connectionLifetime(binding.remoteSession).kind !== "ended",
         )
-      )
+      ) {
+        served.add(client.id);
         continue;
+      }
       const session = candidates.find(
         (candidate) =>
           candidate.remoteSessionClientId === client.id &&
           connectionLifetime(candidate).kind !== "ended",
       );
+      if (!session && typed) continue;
       if (!session && skipMissing) {
         missing.add(server.name);
         continue;
@@ -175,6 +438,25 @@ export async function attachOwnerConnections(
         undefined,
         { signal },
       );
+      served.add(client.id);
+    }
+    if (!typed) continue;
+    for (const sharing of personal) {
+      if (
+        sharing.projectId !== server.projectId ||
+        sharing.issuerId !== server.issuerId
+      )
+        continue;
+      const own = (signIns.get(sharing.id) ?? []).filter(
+        (client) => client.credentialOwner !== "self",
+      );
+      if (own.length === 0 || own.some((client) => served.has(client.id)))
+        continue;
+      if (!skipMissing)
+        throw new Error(
+          `Your connection to ${sharing.name} is no longer available. Sign in to it again, then retry.`,
+        );
+      missing.add(sharing.name);
     }
   }
   return [...missing];

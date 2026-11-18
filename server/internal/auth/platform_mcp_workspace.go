@@ -148,7 +148,7 @@ func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, nam
 	s.captureSignupTelemetry(ctx, user.Email, org.Name, org, createdViaPlatformMCP, map[string]string{
 		growthsignals.PropertySignupSource: createdViaPlatformMCP,
 		platformMCPClientProperty:          clientName,
-	})
+	}, nil)
 
 	return org.ID, org.Name, nil
 }

@@ -25,8 +25,8 @@ type Request struct {
 	// UserSessionJTI identifies the exact validated MCP grant. It never comes from caller input.
 	UserSessionJTI string
 
-	// UpstreamResource is the endpoint's upstream, compared to binding
-	// resources without a trailing slash.
+	// UpstreamResource is the endpoint's exact upstream identifier. Discovery
+	// may resolve an authorization resource; its identity is never slash-trimmed.
 	UpstreamResource string
 
 	// RemoteSessionIssuerID, when valid, restricts selection to bindings for

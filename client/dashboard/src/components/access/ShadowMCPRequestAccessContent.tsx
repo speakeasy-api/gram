@@ -1,13 +1,15 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { FullScreenPage } from "@/components/full-screen-page";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-query/riskCreatePolicyBypassRequest.js";
+import { useRiskGetPolicyBypassRequestTargetMutation } from "@gram/client/react-query/riskGetPolicyBypassRequestTarget.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { TextArea } from "@/components/ui/Textarea";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
 const NOTE_FIELD_ID = "request-access-note";
@@ -32,6 +34,18 @@ type RequestAccessState =
 
 type SubmissionResult = "idle" | "submitting" | "complete" | "error";
 
+/**
+ * What the link asks access to, as the server reads it from the token. Every
+ * field is optional: identity-only servers have no URL, and older links may
+ * not name the tool.
+ */
+type RequestTarget = {
+  serverName?: string | undefined;
+  serverUrl?: string | undefined;
+  serverIdentifier?: string | undefined;
+  toolName?: string | undefined;
+};
+
 export function ShadowMCPRequestAccessContent(): JSX.Element {
   const session = useSession();
   const requestToken = getRequestToken();
@@ -40,6 +54,11 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   const [note, setNote] = useState("");
   const { mutateAsync: createApprovalRequest } =
     useRiskCreatePolicyBypassRequestMutation();
+  // A failed lookup only hides the details, so it opts out of the global
+  // "Request failed" toast.
+  const { mutateAsync: fetchTarget } =
+    useRiskGetPolicyBypassRequestTargetMutation({ onError: () => {} });
+  const [target, setTarget] = useState<RequestTarget | null>(null);
 
   // The request token is a bearer credential delivered in the URL fragment
   // (see GeneratePolicyBypassRequestURL on the server) so it never hits server
@@ -77,6 +96,26 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
 
     window.location.href = buildLoginRedirectURL(window.location.pathname);
   }, [session.session, storedRequestToken]);
+
+  // Name the server and tool the link is about, so the requester knows what
+  // they are asking for. The lookup is a mutation because the token is a
+  // bearer secret carried in the POST body, so it runs once, imperatively. A
+  // failed lookup only hides the details: the request itself still works.
+  const targetFetchedRef = useRef(false);
+  useEffect(() => {
+    if (!storedRequestToken || !session.session) return;
+    if (targetFetchedRef.current) return;
+    targetFetchedRef.current = true;
+    fetchTarget({
+      request: {
+        getRiskPolicyBypassRequestTargetRequestBody: {
+          requestToken: storedRequestToken,
+        },
+      },
+    })
+      .then((result) => setTarget(result))
+      .catch(() => setTarget(null));
+  }, [fetchTarget, session.session, storedRequestToken]);
 
   // The ask is submitted from the button, not on arrival: the note is the
   // point of this page, and a page that files the request as it loads never
@@ -120,6 +159,7 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
     <FullScreenPage>
       <RequestAccessMessage
         state={state}
+        target={target}
         note={note}
         onNoteChange={setNote}
         onSubmit={() => void submit()}
@@ -157,12 +197,14 @@ function getRequestToken(): string | null {
 
 function RequestAccessMessage({
   state,
+  target,
   note,
   onNoteChange,
   onSubmit,
   onRetry,
 }: {
   state: RequestAccessState;
+  target: RequestTarget | null;
   note: string;
   onNoteChange: (value: string) => void;
   onSubmit: () => void;
@@ -182,6 +224,7 @@ function RequestAccessMessage({
             the server.
           </Text>
         </Stack>
+        {target && <RequestTargetDetails target={target} />}
         <Stack gap={1}>
           <label htmlFor={NOTE_FIELD_ID} className="text-sm font-medium">
             Why do you need this server?
@@ -211,7 +254,7 @@ function RequestAccessMessage({
         >
           {pending && (
             <Button.LeftIcon>
-              <Icon name="loader-circle" className="h-4 w-4 animate-spin" />
+              <Spinner className="mr-0 h-4 w-4" />
             </Button.LeftIcon>
           )}
           <Button.Text>{pending ? "Sending" : "Send request"}</Button.Text>
@@ -238,10 +281,7 @@ function RequestAccessMessage({
   if (state === "authenticating") {
     return (
       <Stack gap={3} align="center">
-        <Icon
-          name="loader-circle"
-          className="text-muted-foreground h-6 w-6 animate-spin"
-        />
+        <Spinner className="text-muted-foreground mr-0 h-6 w-6" />
         <Text muted small className="text-center">
           Redirecting to sign in...
         </Text>
@@ -288,13 +328,37 @@ function RequestAccessMessage({
 
   return (
     <Stack gap={3} align="center">
-      <Icon
-        name="loader-circle"
-        className="text-muted-foreground h-6 w-6 animate-spin"
-      />
+      <Spinner className="text-muted-foreground mr-0 h-6 w-6" />
       <Text muted small className="text-center">
         Preparing request...
       </Text>
     </Stack>
+  );
+}
+
+function RequestTargetDetails({ target }: { target: RequestTarget }) {
+  const rows = [
+    { label: "Server", value: target.serverName, code: false },
+    { label: "URL", value: target.serverUrl, code: true },
+    { label: "Identifier", value: target.serverIdentifier, code: true },
+    { label: "Tool", value: target.toolName, code: true },
+  ].filter((row) => !!row.value);
+  if (rows.length === 0) return null;
+
+  return (
+    <dl className="bg-muted/40 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 border p-3 text-sm">
+      {rows.map((row) => (
+        <Fragment key={row.label}>
+          <dt className="text-muted-foreground">{row.label}</dt>
+          <dd
+            className={
+              row.code ? "font-mono text-xs leading-5 break-all" : "break-words"
+            }
+          >
+            {row.value}
+          </dd>
+        </Fragment>
+      ))}
+    </dl>
   );
 }

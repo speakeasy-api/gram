@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const UPGRADE: &str = "gram-code-yamux";
 pub const MAX_FRAME: usize = (1 << 20) + 4096;
 pub const MAX_CALLBACK: usize = 1 << 20;

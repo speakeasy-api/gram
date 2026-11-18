@@ -27,9 +27,9 @@ INSERT INTO principal_grants
   (organization_id, principal_urn, scope, selectors)
 SELECT @organization_id::text, @principal_urn::text, scope,
        jsonb_build_object(
-         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
+         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN 'project'
                                ELSE split_part(scope, ':', 1) END,
-         'resource_id', CASE WHEN scope = 'log:read' THEN @project_id::text ELSE '*' END)
+         'resource_id', CASE WHEN scope IN ('log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN @project_id::text ELSE '*' END)
 FROM unnest(@scopes::text[]) AS scope;
 
 -- name: RolesInsertRoleAssignment :exec
@@ -291,13 +291,13 @@ INSERT INTO device_agent_state_reports
    generated_at, reported_at, applied_etag, applied_at, enforcement_halted,
    tools, degraded_tool_count, drift_counting_since, speakeasyd_version,
    speakeasy_version, os, arch, auto_update, update_channel)
-VALUES (@organization_id, @email, @serial_number::text, @hostname::text, 1,
+VALUES (@organization_id, @email, NULLIF(@serial_number::text, ''), @hostname::text, 1,
         now() - (@reported_ago::text)::interval,
         now() - (@reported_ago::text)::interval,
         @applied_etag::text, now() - (@applied_ago::text)::interval, FALSE,
         @tools::jsonb, @degraded_tool_count::integer,
         now() - interval '9 days', @speakeasyd_version::text,
-        @speakeasyd_version::text, 'darwin', 'arm64', 'automatic', 'stable');
+        @speakeasyd_version::text, @os::text, @arch::text, 'automatic', 'stable');
 
 -- name: RolesDeleteAIScanTargets :exec
 DELETE FROM ai_scan_targets WHERE organization_id = @organization_id;

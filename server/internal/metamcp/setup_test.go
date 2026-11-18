@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -29,6 +30,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -89,7 +91,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	codeModeEnabled := &atomic.Bool{}
 	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
-	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, codeModeSelection)
+	revokerPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), revokerPolicy, nil)
+	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, codeModeSelection, revoker)
 
 	return ctx, &testInstance{
 		codeModeEnabled: codeModeEnabled,
@@ -305,9 +310,9 @@ func createRemoteSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.
 }
 
 // stampAndWireMemberClient binds a client to the member server's own issuer and
-// stamps the server's denormalized remote_session_issuer_id, mirroring the state
-// AddMetaMcpMember's auto-attach reads from.
-func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID, remoteIssuerID, clientID uuid.UUID) {
+// stamps the server with it, mirroring the state AddMetaMcpMember's auto-attach
+// reads from.
+func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, serverID, clientID uuid.UUID) {
 	t.Helper()
 
 	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -321,10 +326,11 @@ func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
 	}))
-	stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
-		ID:                    serverID,
+	stamped, err := testrepo.New(conn).StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{
 		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)

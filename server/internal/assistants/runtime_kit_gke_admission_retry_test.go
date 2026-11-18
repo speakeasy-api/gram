@@ -82,7 +82,7 @@ func TestKitGKEColdAdmissionPodWaitRetryRejectsReplacement(t *testing.T) {
 			client.ReactionChain = client.ReactionChain[1:]
 			switch failure {
 			case "claim", "template", "secret":
-				gvr, name := gkeSandboxClaimGVR, kitGKEName(r)
+				gvr, name := kitClaimGVR, kitGKEName(r)
 				switch failure {
 				case "template":
 					gvr, name = kitTemplateGVR, kitGKETemplateName(kitGKEName(r))
@@ -105,7 +105,7 @@ func TestKitGKEColdAdmissionPodWaitRetryRejectsReplacement(t *testing.T) {
 				_, err = resource.Update(ctx, pod, metav1.UpdateOptions{})
 				require.NoError(t, err)
 			case "missing-claim":
-				require.NoError(t, client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Delete(ctx, kitGKEName(r), metav1.DeleteOptions{}))
+				require.NoError(t, client.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Delete(ctx, kitGKEName(r), metav1.DeleteOptions{}))
 			case "transient-api":
 				client.PrependReactor("get", "sandboxclaims", func(ktesting.Action) (bool, runtime.Object, error) {
 					return true, nil, fmt.Errorf("temporary API outage")

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -68,6 +69,7 @@ type testInstance struct {
 	service   *workloadpolicy.Service
 	conn      *pgxpool.Pool
 	orgID     string
+	orgSlug   string
 	projectID uuid.UUID
 	userID    string
 }
@@ -75,7 +77,16 @@ type testInstance struct {
 // newTestService builds the service against a cloned database and a dashboard
 // session context with admin grants. Its incidental context project is not an
 // explicit selection; resolve must ignore it unless the payload names a project.
+// It has no feature flags, so no catalog entry that is not enabled is offered.
 func newTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestServiceWithFlags(t, nil)
+}
+
+// newTestServiceWithFlags is newTestService evaluating feature flags with
+// flags.
+func newTestServiceWithFlags(t *testing.T, flags feature.Provider) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -95,12 +106,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
+	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient), flags)
 
 	return ctx, &testInstance{
 		service:   service,
 		conn:      conn,
 		orgID:     authCtx.ActiveOrganizationID,
+		orgSlug:   authCtx.OrganizationSlug,
 		projectID: *authCtx.ProjectID,
 		userID:    authCtx.UserID,
 	}

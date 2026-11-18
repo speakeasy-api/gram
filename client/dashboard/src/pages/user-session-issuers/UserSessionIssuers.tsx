@@ -14,29 +14,21 @@ import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { MoreHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Navigate, Outlet } from "react-router";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import {
   authorizationServerModeLabel,
   consolidationTargets,
 } from "./issuerDisplay";
 import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
-import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
-
-/** Route shell: the whole surface waits on its rollout flag. */
-export function UserSessionIssuersRoot(): JSX.Element | null {
-  const flag = useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard);
-  // Render nothing until flags resolve rather than flashing a redirect.
-  if (flag.status === "loading") return null;
-  if (flag.status !== "enabled") return <Navigate to=".." replace />;
-  return <Outlet />;
-}
+import {
+  retryFailedTiers,
+  useIssuerTier,
+  type IssuerTier,
+} from "./useIssuerTier";
 
 export function UserSessionIssuersPage(): JSX.Element {
   return (
@@ -47,6 +39,8 @@ export function UserSessionIssuersPage(): JSX.Element {
 }
 
 function UserSessionIssuersOverview(): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  const detailHref = orgRoutes.userSessionIssuers.issuerDetail.href;
   const organizationTier = useIssuerTier("organization");
   const projectTier = useIssuerTier("project");
   const [consolidateSource, setConsolidateSource] =
@@ -61,6 +55,7 @@ function UserSessionIssuersOverview(): JSX.Element {
   );
 
   const actions = {
+    detailHref,
     onMakeOrganizationWide: setPromoteTarget,
     onConsolidate: setConsolidateSource,
   };
@@ -68,13 +63,13 @@ function UserSessionIssuersOverview(): JSX.Element {
   return (
     <>
       <ResourceListPage
-        title="Speakeasy authorization servers"
+        title="MCP Authentication"
         description="Where people sign in to your MCP servers. Each one decides how sign-in works for every server that uses it."
       >
         <Stack gap={4} className="mb-6">
           <div>
             <Heading variant="h4" className="mb-2">
-              Organization-wide authorization servers
+              Organization-wide
             </Heading>
             <Text muted small className="max-w-2xl">
               Every project can use these.
@@ -83,8 +78,8 @@ function UserSessionIssuersOverview(): JSX.Element {
           <IssuerTable
             tier={organizationTier}
             showProject={false}
-            emptyHeading="No organization-wide authorization servers"
-            emptyDescription="Make a project's authorization server organization-wide to share it with every project."
+            emptyHeading="No organization-wide MCP Authentication Providers"
+            emptyDescription="Make a project's MCP Authentication Provider organization-wide to share it with every project."
             {...actions}
           />
         </Stack>
@@ -92,7 +87,7 @@ function UserSessionIssuersOverview(): JSX.Element {
         <Stack gap={4} className="mb-6">
           <div>
             <Heading variant="h4" className="mb-2">
-              Project authorization servers
+              Project-specific
             </Heading>
             <Text muted small className="max-w-2xl">
               Each serves the MCP servers of one project.
@@ -101,7 +96,7 @@ function UserSessionIssuersOverview(): JSX.Element {
           <IssuerTable
             tier={projectTier}
             showProject
-            emptyHeading="No project authorization servers"
+            emptyHeading="No project-specific MCP Authentication Providers"
             emptyDescription="Projects get one when they add sign-in to an MCP server."
             {...actions}
           />
@@ -133,20 +128,23 @@ function UserSessionIssuersOverview(): JSX.Element {
 function IssuerTable({
   tier,
   showProject,
+  scopeLabel,
   emptyHeading,
   emptyDescription,
+  detailHref,
   onMakeOrganizationWide,
   onConsolidate,
 }: {
-  tier: ReturnType<typeof useIssuerTier>;
+  tier: IssuerTier;
   showProject: boolean;
+  /** Adds a Scope column, for a list that mixes organization-wide and project ones. */
+  scopeLabel?: (issuer: UserSessionIssuer) => string;
   emptyHeading: string;
   emptyDescription: string;
+  detailHref: (issuerId: string) => string;
   onMakeOrganizationWide: (issuer: UserSessionIssuer) => void;
   onConsolidate: (issuer: UserSessionIssuer) => void;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
-
   if (tier.isLoading && tier.items.length === 0) {
     return <SkeletonTable />;
   }
@@ -154,7 +152,7 @@ function IssuerTable({
     return tier.isError ? (
       <InlineEmptyState
         icon="triangle-alert"
-        heading="Couldn't load authorization servers"
+        heading="Couldn't load MCP Authentication Providers"
         action={
           <Button variant="secondary" size="sm" onClick={tier.retry}>
             <Button.Text>Retry</Button.Text>
@@ -173,6 +171,7 @@ function IssuerTable({
   const headers = [
     { label: "Name" },
     ...(showProject ? [{ label: "Project" }] : []),
+    ...(scopeLabel ? [{ label: "Scope" }] : []),
     { label: "Mode" },
     { label: "" },
   ];
@@ -183,8 +182,8 @@ function IssuerTable({
         {tier.items.map((issuer) => (
           <DotRow
             key={issuer.id}
-            href={orgRoutes.userSessionIssuers.issuerDetail.href(issuer.id)}
-            ariaLabel={`View authorization server ${issuer.slug}`}
+            href={detailHref(issuer.id)}
+            ariaLabel={`View MCP Authentication Provider ${issuer.slug}`}
           >
             <td className="px-3 py-3">
               <Text
@@ -207,6 +206,13 @@ function IssuerTable({
                 </Text>
               </td>
             )}
+            {scopeLabel && (
+              <td className="px-3 py-3">
+                <Text small muted>
+                  {scopeLabel(issuer)}
+                </Text>
+              </td>
+            )}
             <td className="px-3 py-3">
               <Text small muted>
                 {authorizationServerModeLabel(issuer)}
@@ -225,7 +231,7 @@ function IssuerTable({
       {tier.isError ? (
         <Stack direction="horizontal" align="center" gap={3} className="py-2">
           <Text small className="text-destructive">
-            Couldn&apos;t load every authorization server.
+            Couldn&apos;t load every MCP Authentication Provider.
           </Text>
           <Button variant="tertiary" size="sm" onClick={tier.retry}>
             <Button.Text>Retry</Button.Text>

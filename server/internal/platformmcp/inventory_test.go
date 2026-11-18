@@ -257,14 +257,12 @@ func TestInventoryBackendKindRecognizesEveryConfiguredBackend(t *testing.T) {
 
 	backend := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	empty := uuid.NullUUID{}
-	none := pgtype.Text{}
-	require.Equal(t, MCPBackendRemote, inventoryBackendKind(backend, empty, empty, empty, none))
-	require.Equal(t, MCPBackendTunneled, inventoryBackendKind(empty, backend, empty, empty, none))
-	require.Equal(t, MCPBackendHosted, inventoryBackendKind(empty, empty, backend, empty, none))
-	require.Equal(t, MCPBackendUnproxied, inventoryBackendKind(empty, empty, empty, backend, none))
-	require.Equal(t, MCPBackendBuiltin, inventoryBackendKind(empty, empty, empty, empty, pgtype.Text{String: "approvals", Valid: true}))
-	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(empty, empty, empty, empty, none))
-	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(uuid.NullUUID{UUID: uuid.Nil, Valid: true}, empty, empty, empty, none))
+	require.Equal(t, MCPBackendRemote, inventoryBackendKind(backend, empty, empty, empty))
+	require.Equal(t, MCPBackendTunneled, inventoryBackendKind(empty, backend, empty, empty))
+	require.Equal(t, MCPBackendHosted, inventoryBackendKind(empty, empty, backend, empty))
+	require.Equal(t, MCPBackendUnproxied, inventoryBackendKind(empty, empty, empty, backend))
+	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(empty, empty, empty, empty))
+	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(uuid.NullUUID{UUID: uuid.Nil, Valid: true}, empty, empty, empty))
 }
 
 func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
@@ -296,7 +294,6 @@ func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 		"mcps", "next_cursor",
 		"id", "project_id", "project_name", "project_slug", "name", "slug", "version", "visibility", "effective_enabled", "enabled_state", "model", "backend_kind", "upstream_url",
 		"source", "kind", "provider", "reference",
-		"registration", "id", "status", "components_complete",
 		"readiness", "state", "checked_at", "expires_at",
 		"distributions", "plugin_id", "plugin_name", "plugin_slug", "state", "publication_state",
 		"operations", "dashboard_path",

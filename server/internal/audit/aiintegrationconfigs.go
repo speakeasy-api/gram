@@ -69,6 +69,7 @@ func (l *Logger) LogAIIntegrationUpsert(ctx context.Context, dbtx repo.DBTX, eve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 
@@ -120,6 +121,7 @@ func (l *Logger) LogAIIntegrationUpdateSchedule(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 
@@ -170,6 +172,7 @@ func (l *Logger) LogAIIntegrationRetrySchedule(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 
@@ -208,6 +211,7 @@ func (l *Logger) LogAIIntegrationDelete(ctx context.Context, dbtx repo.DBTX, eve
 	action := ActionAIIntegrationDelete
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 

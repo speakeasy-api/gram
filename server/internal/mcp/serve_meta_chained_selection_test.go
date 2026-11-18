@@ -18,10 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -142,7 +144,21 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	require.NoError(t, err)
 	fixtures := authclientbackfill.New(ti.conn)
 	registration := uuid.NullUUID{UUID: upstreamClient, Valid: true}
-	var typedClientID uuid.UUID
+	member, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: memberID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	// Backfilled EMA clients need a ready binding: discovery records metadata
+	// and reconciles the binding's exact resource before the next consent.
+	bindingID, err := fixtures.SeedEMABindingFixture(ctx, authclientbackfill.SeedEMABindingFixtureParams{
+		ProjectID:             *auth.ProjectID,
+		OrganizationID:        auth.ActiveOrganizationID,
+		UserSessionIssuerID:   member.UserSessionIssuerID.UUID,
+		RemoteSessionIssuerID: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient),
+		RemoteSessionClientID: registration,
+		Resource:              upstream.url,
+		RequestedScopes:       []string{},
+	})
+	require.NoError(t, err)
+	var typedClientID, emaClientID uuid.UUID
 	for _, kind := range []string{"remote_session", "ema"} {
 		id, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "backfill", RemoteSessionClientID: registration})
 		require.NoError(t, err)
@@ -151,9 +167,15 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 			typedClientID = id
 		}
 		if kind == "ema" {
+			emaClientID = id
 			require.NoError(t, fixtures.SeedAuthClientEMAFixture(ctx, authclientbackfill.SeedAuthClientEMAFixtureParams{AuthClientID: id, Resource: upstream.url}))
 		}
 	}
+	// Finish the same reconciliation as a normal EMA preparation writer before
+	// consent captures the server's authentication requirement.
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, authclientbackfill.SyncEMABinding(ctx, tx, auth.ActiveOrganizationID, bindingID))
+	require.NoError(t, tx.Commit(ctx))
 	ti.service.manual = true
 	chainer := &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream.url}
 	ti.service.SetIdentityChainer(chainer)
@@ -166,6 +188,15 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	require.Equal(t, memberSlug+"--note", inventory.Tools[0].Name)
 	require.Positive(t, chainer.acquireCount())
 	require.Zero(t, upstream.toolCalls())
+	emaState, err := fixtures.GetAuthClientFixture(ctx, emaClientID)
+	require.NoError(t, err)
+	emaLinks, err := fixtures.ListBackfillLinkedServersFixture(ctx, emaClientID)
+	require.NoError(t, err)
+	require.False(t, emaState.Deleted, "discovery must preserve the binding-backed EMA client")
+	require.Equal(t, []uuid.UUID{memberID}, emaLinks)
+	ema, err := fixtures.GetEMAFixture(ctx, emaClientID)
+	require.NoError(t, err)
+	require.Equal(t, upstream.url, ema.Resource)
 	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
 	require.NoError(t, err)

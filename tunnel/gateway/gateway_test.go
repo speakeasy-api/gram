@@ -73,6 +73,8 @@ func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
 		gw.ForwardHandler().ServeHTTP(rec, req)
 
 		require.Equal(t, http.StatusForbidden, rec.Code)
+		require.Equal(t, wire.TunnelErrorForwardRejected, rec.Header().Get(wire.HeaderTunnelError))
+		require.Equal(t, "forbidden\n", rec.Body.String())
 	}
 }
 
@@ -115,6 +117,8 @@ func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, wire.TunnelErrorForwardRejected, rec.Header().Get(wire.HeaderTunnelError))
+	require.Equal(t, "forbidden\n", rec.Body.String())
 }
 
 func TestParseServiceMetadata(t *testing.T) {

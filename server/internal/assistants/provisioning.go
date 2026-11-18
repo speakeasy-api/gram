@@ -130,6 +130,13 @@ func (s *ServiceCore) EnableManagedAssistant(
 		// Repair managed assistants provisioned before dashboard ingress existed:
 		// the trigger is provisioned lazily here so re-running enable is enough.
 		if err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+			// Repair any bound agent, including a suspended or revoked one, so
+			// the ceiling is in place when it becomes active again.
+			if provisionIdentity && existing.IdentityState != string(assistantidentity.NeverConfigured) {
+				if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, existing.ID, createdByUserID); err != nil {
+					return err
+				}
+			}
 			return s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, existing.ID, existing.Name)
 		}); err != nil {
 			return assistantRecord{}, fmt.Errorf("heal managed assistant dashboard trigger: %w", err)
@@ -321,6 +328,7 @@ func (s *ServiceCore) createManagedAssistant(
 		CreatedByUserID: createdBy,
 		Name:            name,
 		Model:           managedAssistantModel,
+		ReasoningEffort: "medium",
 		Instructions:    managedAssistantInstructions,
 		WarmTtlSeconds:  managedAssistantWarmTTLSeconds,
 		MaxConcurrency:  managedAssistantMaxConcurrency,
@@ -339,14 +347,20 @@ func (s *ServiceCore) createManagedAssistant(
 	}
 
 	if provisionIdentity {
-		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
 			return assistantRecord{}, fmt.Errorf("provision managed assistant identity: %w", err)
+		}
+		if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, record.ID, createdByUserID); err != nil {
+			return assistantRecord{}, err
 		}
 	}
 	if err := s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
 		return assistantRecord{}, err
 	}
 
+	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
+		return assistantRecord{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit managed assistant tx: %w", err)
 	}
@@ -367,6 +381,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { Chat } from "@ai-sdk/react";
 import {
   createUIMessageStream,

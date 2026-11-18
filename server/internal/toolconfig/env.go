@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/ettle/strcase"
@@ -155,17 +157,86 @@ func (m MCPClientIdentity) IsZero() bool {
 
 // ToolCallEnv holds the environment configuration for a tool call.
 // SystemEnv contains base values, UserConfig contains user overrides.
-// OAuthToken is an optional OAuth token for external MCP servers that require authentication.
 type ToolCallEnv struct {
 	SystemEnv  *CaseInsensitiveEnv
 	UserConfig *CaseInsensitiveEnv
-	OAuthToken string // OAuth token for external MCP servers (empty if not applicable)
 	GramEmail  string // Authenticated Speakeasy user's email (empty if not applicable)
 	// GramChatID is the authoritative assistant chat UUID when supplied by the caller.
 	GramChatID string
 	// MCPClient identifies the MCP caller, when the tool was called over MCP.
 	MCPClient MCPClientIdentity
+
+	// Credentials, when set, is filled with the credentials an HTTP tool call sent upstream.
+	Credentials *CredentialReport
 }
+
+// CredentialReport is what an HTTP tool call sent upstream to authenticate.
+type CredentialReport struct {
+	// Sent lists each credential the request carried, including a client secret whose grant failed.
+	Sent []AppliedCredential
+
+	// GrantFailure says why a client credentials grant failed. Empty when none did.
+	GrantFailure ClientGrantFailure
+
+	// CallerVariables lists the variables the tool call's own arguments set; a credential from one is the caller's.
+	CallerVariables []string
+
+	// ServerVariable is the user configuration variable the server URL came from, or "" for the tool's own URL or a system one.
+	ServerVariable string
+
+	// Challenges are the provider response's WWW-Authenticate values.
+	Challenges []string
+}
+
+// AppliedCredential is one credential an HTTP tool call used.
+type AppliedCredential struct {
+	// Variable is the environment variable the value came from.
+	Variable string
+
+	// System reports that the value came from SystemEnv rather than UserConfig.
+	System bool
+
+	// ClientGrant reports a client secret exchanged for a token, not sent as is.
+	ClientGrant bool
+
+	// Carrier is the request header that carried it, or "?" and the name of a query parameter.
+	Carrier string
+}
+
+// KeepCarried drops the credentials the final request no longer carried, as after a redirect
+// to another origin strips them.
+func (r *CredentialReport) KeepCarried(final *http.Request) {
+	if r == nil || final == nil {
+		return
+	}
+	r.Sent = slices.DeleteFunc(r.Sent, func(credential AppliedCredential) bool {
+		// A secret whose grant failed was never sent; it stands for the failed grant.
+		if credential.ClientGrant && r.GrantFailure != "" {
+			return false
+		}
+		if name, ok := strings.CutPrefix(credential.Carrier, "?"); ok {
+			return final.URL == nil || !final.URL.Query().Has(name)
+		}
+		return final.Header.Get(credential.Carrier) == ""
+	})
+}
+
+// ClientGrantFailure is why a client credentials token request failed.
+type ClientGrantFailure string
+
+const (
+	// ClientGrantRejected means the token endpoint refused the client (400, 401 or 403).
+	ClientGrantRejected ClientGrantFailure = "rejected"
+
+	// ClientGrantUnavailable means the token endpoint was unreachable, timed out, or answered 429 or 5xx.
+	ClientGrantUnavailable ClientGrantFailure = "unavailable"
+
+	// ClientGrantBlocked means the token URL resolves to an address Speakeasy may not call.
+	ClientGrantBlocked ClientGrantFailure = "blocked"
+
+	// ClientGrantMisconfigured means the token endpoint gave any other answer.
+	ClientGrantMisconfigured ClientGrantFailure = "misconfigured"
+)
 
 // Merged returns a case-insensitive view where UserConfig values override
 // SystemEnv values. Handles nil SystemEnv / UserConfig. Never returns nil.

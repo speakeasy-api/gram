@@ -748,6 +748,51 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	return coverage, nil
 }
 
+func (s *Service) ListFleetDevices(ctx context.Context, payload *gen.ListFleetDevicesPayload) (*gen.ListFleetDevicesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	result, err := s.reader.FleetDevices(ctx, FleetDevicesQuery{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Provider:       conv.PtrValOr(payload.Provider, ""),
+		InInventory:    payload.InInventory,
+		CoverageBucket: conv.PtrValOr(payload.CoverageBucket, ""),
+		PolicyState:    conv.PtrValOr(payload.PolicyState, ""),
+		UserIDs:        payload.UserIds,
+		UserEmails:     payload.UserEmails,
+		Cursor:         conv.PtrValOr(payload.Cursor, ""),
+		Limit:          payload.Limit,
+	})
+	switch {
+	case errors.Is(err, ErrInvalidCursor):
+		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "list fleet devices")
+	}
+	return result, nil
+}
+
+func (s *Service) GetFleetCoverage(ctx context.Context, payload *gen.GetFleetCoveragePayload) (*gen.FleetCoverage, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	coverage, err := s.reader.FleetCoverage(ctx, authCtx.ActiveOrganizationID, conv.PtrValOr(payload.Provider, ""))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute fleet coverage")
+	}
+	return coverage, nil
+}
+
 func snapshotFromConfig(cfg Config) audit.DeviceIntegrationSnapshot {
 	return audit.DeviceIntegrationSnapshot{
 		Provider:       cfg.Provider,

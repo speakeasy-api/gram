@@ -30,17 +30,19 @@ const (
 )
 
 type deviceCoverageReader interface {
-	Coverage(ctx context.Context, organizationID string, provider string) (*gen.DeviceIntegrationCoverage, error)
-	ManagedDevices(ctx context.Context, query deviceintegrations.ManagedDevicesQuery) (*gen.ListManagedDevicesResult, error)
+	FleetCoverage(ctx context.Context, organizationID string, provider string) (*gen.FleetCoverage, error)
+	FleetDevices(ctx context.Context, query deviceintegrations.FleetDevicesQuery) (*gen.ListFleetDevicesResult, error)
 }
 
 type deviceCoverageAuthorizer interface {
 	Require(ctx context.Context, checks ...authz.Check) error
 }
 
-// DeviceCoverageService serves the MDM coverage reads: how much of the fleet
-// runs the agent, and whether each device enforces the policy it was served.
-// Organization-scoped, like the dashboard's Device Agent pages.
+// DeviceCoverageService serves the fleet coverage reads: how much of the
+// fleet runs the agent, and whether each device enforces the policy it was
+// served. The fleet is every MDM device plus every agent machine no inventory
+// holds, so it answers with or without an MDM connected. Organization-scoped,
+// like the dashboard's Device Agent pages.
 type DeviceCoverageService struct {
 	reader     deviceCoverageReader
 	authorizer deviceCoverageAuthorizer
@@ -71,11 +73,17 @@ func (s *DeviceCoverageService) admit(ctx context.Context, principal Principal) 
 }
 
 type GetDeviceCoverageInput struct {
-	Provider string `json:"provider,omitempty" jsonschema:"one MDM provider, e.g. jamf or intune; omit for every connected inventory"`
+	Provider string `json:"provider,omitempty" jsonschema:"one MDM provider, e.g. jamf or intune, which leaves out agent-only machines; omit for the whole fleet"`
 }
 
 type DeviceCoverageOutput struct {
+	// MDMConnected is false when no MDM integration is connected. The gap
+	// buckets are then always 0, because nothing lists the devices without
+	// the agent.
+	MDMConnected bool  `json:"mdm_connected"`
 	TotalDevices int64 `json:"total_devices"`
+	// AgentOnlyDevices run the agent but are in no connected MDM inventory.
+	AgentOnlyDevices int64 `json:"agent_only_devices"`
 	// ActiveWindowMinutes is how recent an agent's sign of life must be for
 	// its device to count as running the agent.
 	ActiveWindowMinutes int `json:"active_window_minutes"`
@@ -99,8 +107,6 @@ type DeviceCoverageOutput struct {
 	PolicyOutdated    int64 `json:"policy_outdated"`
 	PolicyUnreported  int64 `json:"policy_unreported"`
 	EnforcementHalted int64 `json:"enforcement_halted"`
-	// UnmanagedAgentUsers run the agent but have no device in the inventory.
-	UnmanagedAgentUsers int64 `json:"unmanaged_agent_users"`
 }
 
 func (s *DeviceCoverageService) GetCoverage(ctx context.Context, principal Principal, input GetDeviceCoverageInput) (DeviceCoverageOutput, error) {
@@ -111,12 +117,14 @@ func (s *DeviceCoverageService) GetCoverage(ctx context.Context, principal Princ
 	if err != nil {
 		return DeviceCoverageOutput{}, err
 	}
-	coverage, err := s.reader.Coverage(ctx, principal.OrganizationID, provider)
+	coverage, err := s.reader.FleetCoverage(ctx, principal.OrganizationID, provider)
 	if err != nil {
 		return DeviceCoverageOutput{}, fmt.Errorf("read device coverage: %w", err)
 	}
 	return DeviceCoverageOutput{
+		MDMConnected:              coverage.MdmConnected,
 		TotalDevices:              coverage.TotalDevices,
+		AgentOnlyDevices:          coverage.AgentOnlyDevices,
 		ActiveWindowMinutes:       coverage.ActiveWindowMinutes,
 		Attestation:               coverage.Attestation,
 		AgentActive:               coverage.AgentActive,
@@ -131,15 +139,15 @@ func (s *DeviceCoverageService) GetCoverage(ctx context.Context, principal Princ
 		PolicyOutdated:            coverage.PolicyOutdated,
 		PolicyUnreported:          coverage.PolicyUnreported,
 		EnforcementHalted:         coverage.EnforcementHalted,
-		UnmanagedAgentUsers:       coverage.UnmanagedAgentUsers,
 	}, nil
 }
 
 type ListManagedDevicesInput struct {
-	Provider       string `json:"provider,omitempty" jsonschema:"one MDM provider, e.g. jamf or kandji; omit for every connected inventory"`
+	Provider       string `json:"provider,omitempty" jsonschema:"one MDM provider, e.g. jamf or kandji, which leaves out agent-only machines; omit for the whole fleet"`
+	InInventory    *bool  `json:"in_inventory,omitempty" jsonschema:"true for devices a connected MDM holds, false for machines only their agent reports; omit for both"`
 	CoverageBucket string `json:"coverage_bucket,omitempty" jsonschema:"only devices in this coverage bucket: agent_active, agent_stale, agent_other_device, no_agent, no_email, unresolved_email or missing"`
 	PolicyState    string `json:"policy_state,omitempty" jsonschema:"only agent_active devices in this policy state: attested, outdated, unreported or halted"`
-	UserEmail      string `json:"user_email,omitempty" jsonschema:"only devices assigned to this email, matched case-insensitively"`
+	UserEmail      string `json:"user_email,omitempty" jsonschema:"only devices of this user, the MDM's assigned user or the agent's, matched case-insensitively"`
 	Cursor         string `json:"cursor,omitempty" jsonschema:"next_cursor from the previous page"`
 	Limit          int    `json:"limit,omitempty" jsonschema:"page size, 1 to 100; defaults to 50"`
 }
@@ -150,9 +158,12 @@ type ManagedDeviceToolOutcome struct {
 }
 
 type ManagedDeviceSummary struct {
-	Hostname       string `json:"hostname,omitempty"`
-	SerialNumber   string `json:"serial_number,omitempty"`
-	Provider       string `json:"provider"`
+	Hostname     string `json:"hostname,omitempty"`
+	SerialNumber string `json:"serial_number,omitempty"`
+	// InInventory is false for a machine no connected MDM holds, which then
+	// has no provider, OS or check-in from an MDM.
+	InInventory    bool   `json:"in_inventory"`
+	Provider       string `json:"provider,omitempty"`
 	OSName         string `json:"os_name,omitempty"`
 	OSVersion      string `json:"os_version,omitempty"`
 	UserEmail      string `json:"user_email,omitempty"`
@@ -208,9 +219,10 @@ func (s *DeviceCoverageService) ListManagedDevices(ctx context.Context, principa
 		emails = []string{email}
 	}
 
-	result, err := s.reader.ManagedDevices(ctx, deviceintegrations.ManagedDevicesQuery{
+	result, err := s.reader.FleetDevices(ctx, deviceintegrations.FleetDevicesQuery{
 		OrganizationID: principal.OrganizationID,
 		Provider:       provider,
+		InInventory:    input.InInventory,
 		CoverageBucket: bucket,
 		PolicyState:    policyState,
 		UserIDs:        nil,
@@ -222,7 +234,7 @@ func (s *DeviceCoverageService) ListManagedDevices(ctx context.Context, principa
 		return ListManagedDevicesOutput{}, ErrDeviceCoverageInvalid
 	}
 	if err != nil {
-		return ListManagedDevicesOutput{}, fmt.Errorf("read managed devices: %w", err)
+		return ListManagedDevicesOutput{}, fmt.Errorf("read fleet devices: %w", err)
 	}
 
 	devices := make([]ManagedDeviceSummary, 0, len(result.Devices))
@@ -251,11 +263,12 @@ func knownProvider(provider string) (string, error) {
 // managedDeviceSummary keeps what an agent needs to explain a device's state
 // and leaves out row and MDM identifiers, which mean nothing outside the
 // dashboard.
-func managedDeviceSummary(device *gen.ManagedDevice) ManagedDeviceSummary {
+func managedDeviceSummary(device *gen.FleetDevice) ManagedDeviceSummary {
 	summary := ManagedDeviceSummary{
 		Hostname:         dereferenceString(device.Hostname),
 		SerialNumber:     dereferenceString(device.SerialNumber),
-		Provider:         device.Provider,
+		InInventory:      device.InInventory,
+		Provider:         dereferenceString(device.Provider),
 		OSName:           dereferenceString(device.OsName),
 		OSVersion:        dereferenceString(device.OsVersion),
 		UserEmail:        dereferenceString(device.UserEmail),

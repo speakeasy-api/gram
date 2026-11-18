@@ -69,6 +69,11 @@ type Config struct {
 	// fall back to the default server where a cached key could route them to
 	// another workspace.
 	ConfigError string
+	// InstallRoute names how this install was distributed (marketplace,
+	// download, agent install, the binary's own install command), so the
+	// server can tell install routes apart. SPEAKEASY_AI_HOOKS_INSTALL_ROUTE
+	// overrides it for managed installs.
+	InstallRoute string
 }
 
 // FileConfig is the on-disk schema of a plugin's speakeasy.json. Evolution is
@@ -84,6 +89,7 @@ type FileConfig struct {
 	AgentKey     bool   `json:"agent_key,omitempty"`
 	BrowserLogin bool   `json:"browser_login,omitempty"`
 	Nonblocking  bool   `json:"nonblocking,omitempty"`
+	InstallRoute string `json:"install_route,omitempty"`
 }
 
 // SplitInlineFlags extracts the deployment flags from a hook command's argv and
@@ -95,7 +101,7 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", InstallRoute: ""}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
@@ -111,6 +117,7 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 				cfg.AgentKey = fc.AgentKey
 				cfg.BrowserLogin = fc.BrowserLogin
 				cfg.Nonblocking = fc.Nonblocking
+				cfg.InstallRoute = fc.InstallRoute
 			} else {
 				cfg.ConfigError = err.Error()
 			}
@@ -206,6 +213,9 @@ func LoadConfig(defaults Config) Config {
 	}
 	if cfg.DebugLog == "" {
 		cfg.DebugLog = envDebugLog()
+	}
+	if v := Env("HOOKS_INSTALL_ROUTE"); v != "" {
+		cfg.InstallRoute = v
 	}
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 	cfg.SiteURL = strings.TrimRight(cfg.SiteURL, "/")

@@ -36,10 +36,14 @@ func TestBuildWithAuthClientHeadersDropsServerCredentials(t *testing.T) {
 	legacy := manager.Build(logger, server, uuid.NewString(), headers, mcpservers.VisibilityPrivate, "organization-id", "project-id", "", "", nil)
 	require.Equal(t, []proxy.ConfiguredHeader{
 		{Name: "Authorization", StaticValue: "Bearer server"},
-		{Name: "X-Api-Key", StaticValue: "server-key"},
+		{Name: "X-Api-Key", StaticValue: "server-key", IsSecret: true},
 		{Name: "X-Forwarded-Key", ValueFromRequestHeader: "X-Caller"},
 		{Name: "X-Workspace", StaticValue: "server-ws"},
 	}, legacy.Headers, "without a resolved client every server header is kept, in order")
+
+	for i, want := range []bool{true, true, false, false} {
+		require.Equal(t, want, HasConfiguredCredential(legacy.Headers[i:i+1]), legacy.Headers[i].Name)
+	}
 
 	none := manager.Build(logger, server, uuid.NewString(), headers, mcpservers.VisibilityPrivate, "organization-id", "project-id", "", "", nil, WithAuthClientHeaders(nil))
 	require.Equal(t, []proxy.ConfiguredHeader{{Name: "X-Workspace", StaticValue: "server-ws"}}, none.Headers, "a client with no headers still drops server credentials")

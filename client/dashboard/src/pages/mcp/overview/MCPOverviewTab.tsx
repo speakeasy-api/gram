@@ -1,15 +1,16 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  ObservabilityDisabledState,
+  ObservabilitySummaryTiles,
+} from "@/components/observe/ObservabilitySummaryTiles";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
-import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
-import { PluginStatusBanner } from "./PluginStatusBanner";
 import { RankedBarList } from "@/components/chart/RankedBarList";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { Text } from "@/components/ui/Text";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { TopUsersTable } from "./TopUsersTable";
@@ -35,24 +36,12 @@ function toolLabelFromUrn(urn: string): string {
   return parts[parts.length - 1] || urn;
 }
 
-function errorRate(summary: ObservabilitySummary): number {
-  return summary.totalToolCalls > 0
-    ? (summary.failedToolCalls / summary.totalToolCalls) * 100
-    : 0;
-}
-
 export function MCPOverviewTab({
   server,
   logsTarget,
-  showPluginBanner = true,
-  pluginServer = server,
 }: {
   server: HostedServerRef;
-  /** The identity plugin membership is keyed by, when it differs from `server`. */
-  pluginServer?: HostedServerRef;
   logsTarget?: ParsedTargetFilter | null;
-  /** Set false when the page already shows the marketplace banner above this. */
-  showPluginBanner?: boolean;
 }): React.JSX.Element {
   const client = useGramContext();
   const project = useProject();
@@ -71,31 +60,32 @@ export function MCPOverviewTab({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
 
-  const { data, isLoading, isError, isLogsDisabled } = useLogsEnabledErrorCheck(
-    useQuery<GetObservabilityOverviewResult>({
-      queryKey: [
-        "mcp-detail-overview",
-        server.kind,
-        server.id,
-        server.slug,
-        from.toISOString(),
-        to.toISOString(),
-      ],
-      queryFn: () =>
-        unwrapAsync(
-          telemetryGetObservabilityOverview(client, {
-            getObservabilityOverviewPayload: {
-              from,
-              to,
-              ...overviewScope(server),
-              includeTimeSeries: true,
-            },
-          }),
-        ),
-      placeholderData: keepPreviousData,
-      throwOnError: false,
-    }),
-  );
+  const { data, isLoading, isError, isLogsDisabled, refetch } =
+    useLogsEnabledErrorCheck(
+      useQuery<GetObservabilityOverviewResult>({
+        queryKey: [
+          "mcp-detail-overview",
+          server.kind,
+          server.id,
+          server.slug,
+          from.toISOString(),
+          to.toISOString(),
+        ],
+        queryFn: () =>
+          unwrapAsync(
+            telemetryGetObservabilityOverview(client, {
+              getObservabilityOverviewPayload: {
+                from,
+                to,
+                ...overviewScope(server),
+                includeTimeSeries: true,
+              },
+            }),
+          ),
+        placeholderData: keepPreviousData,
+        throwOnError: false,
+      }),
+    );
 
   // With keepPreviousData a failed refetch still has stale data to show, so
   // only fall back to the error state when there is nothing to render at all.
@@ -140,7 +130,6 @@ export function MCPOverviewTab({
     // Container queries, not viewport ones: the side panel narrows this column
     // without narrowing the window, and `lg:`/`xl:` would not notice.
     <Stack gap={6} className="@container mb-4">
-      {showPluginBanner && <PluginStatusBanner server={pluginServer} />}
       {!isLoading && !isLogsDisabled && (
         <MemberWorkflowCTA
           workflow="mcp_diagnostics"
@@ -165,77 +154,34 @@ export function MCPOverviewTab({
       </div>
 
       {isLogsDisabled && (
-        <div className="flex flex-col items-center justify-center border p-12 text-center">
-          <Text muted className="mb-1 block">
-            Observability is not enabled
-          </Text>
-          <Text muted small>
-            Enable logs for this organization to see usage for this MCP server.
-          </Text>
-        </div>
+        <ObservabilityDisabledState subject="this MCP server" />
       )}
       {!isLogsDisabled && showQueryError && (
-        <div className="flex flex-col items-center justify-center border p-12 text-center">
-          <Text muted className="mb-1 block">
-            Could not load usage data
-          </Text>
-          <Text muted small>
-            Something went wrong loading metrics for this MCP server. Try
-            refreshing the page or changing the time range.
-          </Text>
+        <div role="alert">
+          <InlineEmptyState
+            icon="triangle-alert"
+            heading="Couldn't load usage"
+            description="Check your connection, then try again."
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refetch()}
+              >
+                <Button.Text>Retry</Button.Text>
+              </Button>
+            }
+          />
         </div>
       )}
       {!isLogsDisabled && !showQueryError && (
         <>
-          <StatTileGroup>
-            {isLoading && !summary ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] flex-1" />
-              ))
-            ) : (
-              <>
-                <StatTile
-                  title="Tool calls"
-                  value={summary?.totalToolCalls ?? 0}
-                  tone="information"
-                  previousValue={comparison?.totalToolCalls}
-                  format="compact"
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Failed calls"
-                  value={summary?.failedToolCalls ?? 0}
-                  tone={
-                    (summary?.failedToolCalls ?? 0) > 0
-                      ? "destructive"
-                      : "neutral"
-                  }
-                  previousValue={comparison?.failedToolCalls}
-                  format="compact"
-                  invertDelta
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Error rate"
-                  value={summary ? errorRate(summary) : 0}
-                  previousValue={comparison ? errorRate(comparison) : undefined}
-                  format="percent"
-                  invertDelta
-                  thresholds={{ red: 10, amber: 5, inverted: true }}
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Avg latency"
-                  value={summary?.avgLatencyMs ?? 0}
-                  tone="information"
-                  previousValue={comparison?.avgLatencyMs}
-                  format="ms"
-                  invertDelta
-                  comparisonLabel="vs previous period"
-                />
-              </>
-            )}
-          </StatTileGroup>
+          <ObservabilitySummaryTiles
+            summary={summary}
+            comparison={comparison}
+            isLoading={isLoading}
+            callsTitle="Tool calls"
+          />
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"
@@ -244,6 +190,7 @@ export function MCPOverviewTab({
             timeRangeMs={timeRangeMs}
             expandedChart={expandedChart}
             onExpand={setExpandedChart}
+            isLoading={isLoading}
           />
 
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">

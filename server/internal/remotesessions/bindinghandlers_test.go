@@ -16,6 +16,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -191,11 +193,32 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	attach := &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()}
+	sessionAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
+	require.NoError(t, err)
+	agentAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionAttach)
+	require.NoError(t, err)
 	binding, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	again, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.Equal(t, binding.ID, again.ID)
+	// The agent's own history records each attachment the connection's does.
+	sessionAttachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
+	require.NoError(t, err)
+	agentAttachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionAttach)
+	require.NoError(t, err)
+	require.Positive(t, sessionAttachesAfter-sessionAttachesBefore)
+	require.Equal(t, sessionAttachesAfter-sessionAttachesBefore, agentAttachesAfter-agentAttachesBefore)
+	agentAttach, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionAttach, agent.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "agent", agentAttach.SubjectType)
+	require.Equal(t, agent.Name, agentAttach.SubjectDisplay)
+	require.Equal(t, auth.UserID, agentAttach.ActorID)
+	attachMetadata, err := audittest.DecodeAuditData(agentAttach.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, mine.ID.String(), attachMetadata["remote_session_id"])
+	require.Equal(t, binding.ID, attachMetadata["binding_id"])
+	require.Equal(t, "existing-account@example.com", attachMetadata["upstream_account"])
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	locked, err := repo.New(tx).LockPrincipalRemoteSessionBindings(ctx, repo.LockPrincipalRemoteSessionBindingsParams{
 		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config,
@@ -313,12 +336,63 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	_, err = ti.service.AttachBinding(ctx, attach)
 	requireOopsCode(t, err, oops.CodeConflict)
 	detach := &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: list.Items[0].ID}
+	agentDetachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionDetach)
+	require.NoError(t, err)
 	require.NoError(t, ti.service.DetachBinding(ctx, detach))
 	require.NoError(t, ti.service.DetachBinding(ctx, detach))
+	agentDetachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionDetach)
+	require.NoError(t, err)
+	require.Equal(t, agentDetachesBefore+1, agentDetachesAfter, "only the detach that removed the connection is recorded")
 	rebound, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.NotEqual(t, binding.ID, rebound.ID)
 	require.Equal(t, replacement.ID.String(), rebound.RemoteSessionID)
+}
+
+// A detach names the account the connection signed in as, falling back to the
+// upstream display name when the upstream reports no email.
+func TestDetachBindingRecordsUpstreamAccount(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Detach account agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "detach-account-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "detach-account-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "detach-account-client")
+	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
+	_, err = testrepo.New(ti.conn).SetAttachmentSourceIdentityFixture(ctx, testrepo.SetAttachmentSourceIdentityFixtureParams{ID: session.ID, UpstreamEmail: pgtype.Text{}, UpstreamDisplayName: conv.ToPGText("Display-only account"), IdentitySource: conv.ToPGText(remotesessions.IdentitySourceIDToken), UserSessionIssuerID: config})
+	require.NoError(t, err)
+
+	binding, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: session.ID.String()})
+	require.NoError(t, err)
+	attached, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionAttach, agent.ID.String())
+	require.NoError(t, err)
+	attachMetadata, err := audittest.DecodeAuditData(attached.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "Display-only account", attachMetadata["upstream_account"])
+
+	require.NoError(t, ti.service.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: binding.ID}))
+	detached, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionDetach, agent.ID.String())
+	require.NoError(t, err)
+	detachMetadata, err := audittest.DecodeAuditData(detached.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, binding.ID, detachMetadata["binding_id"])
+	require.Equal(t, "Display-only account", detachMetadata["upstream_account"])
 }
 
 // Exercise delegated edit and authorize permissions independently.

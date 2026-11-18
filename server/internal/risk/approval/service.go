@@ -160,25 +160,9 @@ func (s *Service) WatchURL() string {
 	return s.serverURL.JoinPath(WatchPath).String()
 }
 
-// MCPServerURL is the shared Approvals MCP server route agents call
-// request_approval on when their project has no approvals server.
+// MCPServerURL is the Approvals MCP server agents call request_approval on.
 func (s *Service) MCPServerURL() string {
 	return s.serverURL.JoinPath(MCPPath).String()
-}
-
-// MCPServerURLForProject is the approvals server agents in a project call
-// request_approval on: the project's own server when it has an endpoint,
-// which plugins already ship, else the shared route.
-func (s *Service) MCPServerURLForProject(ctx context.Context, projectID uuid.UUID) string {
-	server, err := repo.New(s.db).GetBuiltinMCPServer(ctx, repo.GetBuiltinMCPServerParams{ProjectID: projectID, BuiltinBackend: conv.ToPGText(BuiltinBackend)})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && server.EndpointSlug == "") {
-		return s.MCPServerURL()
-	}
-	if err != nil {
-		s.logger.WarnContext(ctx, "look up the project's approvals server", attr.SlogProjectID(projectID.String()), attr.SlogError(err))
-		return s.MCPServerURL()
-	}
-	return s.serverURL.JoinPath("mcp", server.EndpointSlug).String()
 }
 
 // HoldInput is one MCP tool call a require_approval policy covers.
@@ -323,7 +307,7 @@ func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, er
 	return HoldOutcome{
 		Allowed:     false,
 		Token:       row.Token,
-		UserMessage: s.holdMessage(missing.Name, call.ToolName, row, s.MCPServerURLForProject(ctx, call.ProjectID)),
+		UserMessage: s.holdMessage(missing.Name, call.ToolName, row),
 		Policy:      missing,
 	}, nil
 }
@@ -676,7 +660,7 @@ func (s *Service) EffectiveStatus(row repo.RiskPolicyApproval) Status {
 	return status
 }
 
-func (s *Service) holdMessage(policyName, toolName string, row repo.RiskPolicyApproval, serverURL string) string {
+func (s *Service) holdMessage(policyName, toolName string, row repo.RiskPolicyApproval) string {
 	if s.EffectiveStatus(row) == StatusPending {
 		return fmt.Sprintf(`Waiting: calling %s needs approval under risk policy %q, and approval was already requested.
 Request token: %s
@@ -687,7 +671,7 @@ Run the watcher from your request_approval result if it is not running. When it 
 Request token: %s
 1. Call request_approval on the %s MCP server (%s) with this token and a one-sentence reason.
 2. Start the watcher exactly as its result says (in Claude Code, with the Monitor tool). When it prints APPROVED, retry this exact call with the same arguments.`,
-		toolName, policyName, row.Token, MCPServerName, serverURL)
+		toolName, policyName, row.Token, MCPServerName, s.MCPServerURL())
 }
 
 // scopeDocument is the stored form of a requested or granted scope.

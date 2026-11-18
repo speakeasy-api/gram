@@ -19,9 +19,15 @@ type AuthorizeRequestBody struct {
 	CodeChallenge string `form:"code_challenge" json:"code_challenge" xml:"code_challenge"`
 	// PKCE challenge method. Only S256 is supported.
 	CodeChallengeMethod string `form:"code_challenge_method" json:"code_challenge_method" xml:"code_challenge_method"`
-	// Optional project slug to scope the minted key to. Defaults to the org's
-	// default (first) project when omitted.
+	// Optional project slug. For agent_user keys it is the project the key is
+	// scoped to; for producer keys it is only reported back to the CLI as its
+	// default project. Defaults to the org's default (first) project when omitted.
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// The kind of key redeem mints. agent_user (the default) is the device agent's
+	// per-user project-scoped key. producer is the organization-wide key the
+	// Speakeasy CLI uses, and requires org:admin, the same as creating one in the
+	// dashboard.
+	KeyScope string `form:"key_scope" json:"key_scope" xml:"key_scope"`
 }
 
 // RedeemRequestBody is the type of the "cliAuth" service "redeem" endpoint
@@ -47,8 +53,8 @@ type AuthorizeResponseBody struct {
 // RedeemResponseBody is the type of the "cliAuth" service "redeem" endpoint
 // HTTP response body.
 type RedeemResponseBody struct {
-	// The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly
-	// once.
+	// The raw gram_ API key, carrying the scope requested at authorize. Returned
+	// exactly once.
 	AccessToken *string `form:"access_token,omitempty" json:"access_token,omitempty" xml:"access_token,omitempty"`
 	// Email of the user the key was minted for.
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
@@ -423,6 +429,13 @@ func NewAuthorizeRequestBody(p *cliauth.AuthorizePayload) *AuthorizeRequestBody 
 		CodeChallenge:       p.CodeChallenge,
 		CodeChallengeMethod: p.CodeChallengeMethod,
 		ProjectSlug:         p.ProjectSlug,
+		KeyScope:            p.KeyScope,
+	}
+	{
+		var zero string
+		if body.KeyScope == zero {
+			body.KeyScope = "agent_user"
+		}
 	}
 	return body
 }

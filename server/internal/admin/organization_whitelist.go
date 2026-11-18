@@ -20,10 +20,10 @@ type OrganizationWhitelistState struct {
 	// OrganizationID is the canonical target.
 	OrganizationID string `json:"organization_id"`
 
-	// Name identifies the organization on the approval page.
+	// Name identifies the organization.
 	Name string `json:"name"`
 
-	// Slug identifies the organization on the approval page.
+	// Slug identifies the organization.
 	Slug string `json:"slug"`
 
 	// Whitelisted bypasses the dashboard's demo-access gate.
@@ -35,7 +35,7 @@ type OrganizationWhitelistState struct {
 	// DisabledAt is context only; whitelisting cannot enable a disabled organization.
 	DisabledAt *time.Time `json:"disabled_at"`
 
-	// UpdatedAt invalidates a proposal after intervening account changes.
+	// UpdatedAt is when the organization record last changed.
 	UpdatedAt time.Time `json:"updated_at"`
 }
 

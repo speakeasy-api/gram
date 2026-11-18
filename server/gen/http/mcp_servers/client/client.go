@@ -37,6 +37,10 @@ type Client struct {
 	// updateMcpServer endpoint.
 	UpdateMcpServerDoer goahttp.Doer
 
+	// SetSetupGuideCompleted Doer is the HTTP client used to make requests to the
+	// setSetupGuideCompleted endpoint.
+	SetSetupGuideCompletedDoer goahttp.Doer
+
 	// ListToolFilters Doer is the HTTP client used to make requests to the
 	// listToolFilters endpoint.
 	ListToolFiltersDoer goahttp.Doer
@@ -65,6 +69,10 @@ type Client struct {
 	// deleteMcpServer endpoint.
 	DeleteMcpServerDoer goahttp.Doer
 
+	// GetMcpServerUsageImpact Doer is the HTTP client used to make requests to the
+	// getMcpServerUsageImpact endpoint.
+	GetMcpServerUsageImpactDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -85,23 +93,25 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateMcpServerDoer:      doer,
-		GetMcpServerDoer:         doer,
-		ListMcpServersDoer:       doer,
-		ListMcpServersForOrgDoer: doer,
-		UpdateMcpServerDoer:      doer,
-		ListToolFiltersDoer:      doer,
-		SetToolMetadataBatchDoer: doer,
-		AddToolMetadataBatchDoer: doer,
-		ListToolMetadataDoer:     doer,
-		SetToolMetadataDoer:      doer,
-		DeleteToolMetadataDoer:   doer,
-		DeleteMcpServerDoer:      doer,
-		RestoreResponseBody:      restoreBody,
-		scheme:                   scheme,
-		host:                     host,
-		decoder:                  dec,
-		encoder:                  enc,
+		CreateMcpServerDoer:         doer,
+		GetMcpServerDoer:            doer,
+		ListMcpServersDoer:          doer,
+		ListMcpServersForOrgDoer:    doer,
+		UpdateMcpServerDoer:         doer,
+		SetSetupGuideCompletedDoer:  doer,
+		ListToolFiltersDoer:         doer,
+		SetToolMetadataBatchDoer:    doer,
+		AddToolMetadataBatchDoer:    doer,
+		ListToolMetadataDoer:        doer,
+		SetToolMetadataDoer:         doer,
+		DeleteToolMetadataDoer:      doer,
+		DeleteMcpServerDoer:         doer,
+		GetMcpServerUsageImpactDoer: doer,
+		RestoreResponseBody:         restoreBody,
+		scheme:                      scheme,
+		host:                        host,
+		decoder:                     dec,
+		encoder:                     enc,
 	}
 }
 
@@ -220,6 +230,30 @@ func (c *Client) UpdateMcpServer() goa.Endpoint {
 		resp, err := c.UpdateMcpServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpServers", "updateMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSetupGuideCompleted returns an endpoint that makes HTTP requests to the
+// mcpServers service setSetupGuideCompleted server.
+func (c *Client) SetSetupGuideCompleted() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSetupGuideCompletedRequest(c.encoder)
+		decodeResponse = DecodeSetSetupGuideCompletedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSetupGuideCompletedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSetupGuideCompletedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "setSetupGuideCompleted", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -388,6 +422,30 @@ func (c *Client) DeleteMcpServer() goa.Endpoint {
 		resp, err := c.DeleteMcpServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpServers", "deleteMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMcpServerUsageImpact returns an endpoint that makes HTTP requests to the
+// mcpServers service getMcpServerUsageImpact server.
+func (c *Client) GetMcpServerUsageImpact() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMcpServerUsageImpactRequest(c.encoder)
+		decodeResponse = DecodeGetMcpServerUsageImpactResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMcpServerUsageImpactRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMcpServerUsageImpactDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "getMcpServerUsageImpact", err)
 		}
 		return decodeResponse(resp)
 	}

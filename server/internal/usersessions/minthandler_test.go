@@ -80,7 +80,7 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
 		got.AccessToken,
-		urn.NewToolset(toolset.ID).String(),
+		urn.NewUserSessionIssuer(hostedIssuerID(t, ctx, ti, toolset)).String(),
 	)
 	require.NoError(t, err)
 
@@ -120,7 +120,7 @@ func TestListUserSessionsNamesDashboardMint(t *testing.T) {
 
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
 		minted.AccessToken,
-		urn.NewToolset(toolset.ID).String(),
+		urn.NewUserSessionIssuer(hostedIssuerID(t, ctx, ti, toolset)).String(),
 	)
 	require.NoError(t, err)
 
@@ -212,9 +212,8 @@ func createIssuerGatedMintToolset(t *testing.T, ctx context.Context, ti *testIns
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	// Served through the legacy alias by an endpointless canonical server.
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: uuid.MustParse(issuer.ID), Valid: true})
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: slug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 
 	linked, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)

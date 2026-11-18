@@ -20,7 +20,8 @@
       "args": [
         "-y",
         "@playwright/mcp@latest",
-        "--browser=chromium",
+        "--browser=chrome",
+        "--sandbox",
         "--viewport-size",
         "1920x1080",
         "--config",

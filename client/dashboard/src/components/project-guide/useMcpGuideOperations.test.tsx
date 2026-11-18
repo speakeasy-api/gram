@@ -1,6 +1,11 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  renderHook as baseRenderHook,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { ProjectGuideOperationReport } from "./projectGuideMachine";
 
@@ -14,7 +19,6 @@ const queryHooks = vi.hoisted(() => ({
 }));
 const workflowHook = vi.hoisted(() => vi.fn());
 const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
-const toolLogsAccess = vi.hoisted(() => ({ canView: true }));
 const refetchActivity = vi.hoisted(() =>
   vi.fn<
     () => Promise<{
@@ -71,22 +75,6 @@ vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
   invalidateAllGetMcpServerActivity: vi.fn(() => Promise.resolve()),
   useGetMcpServerActivity: queryHooks.serverActivity,
 }));
-vi.mock("@/components/observe/observeDeepLink", () => ({
-  useCanViewToolLogs: () => toolLogsAccess.canView,
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    home: { href: () => "/projects/request-project" },
-    logs: { href: () => "/projects/request-project/logs" },
-    mcp: {
-      details: {
-        overview: {
-          href: (slug: string) => `/projects/request-project/mcp/${slug}`,
-        },
-      },
-    },
-  }),
-}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
 }));
@@ -98,16 +86,14 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
 import { useMcpGuideOperations } from "./useMcpGuideOperations";
 import { markProjectGuideMcpServerSelected } from "./projectGuideStores";
 
-function catalogServer(
-  overrides: Partial<PulseMCPServer> = {},
-): PulseMCPServer {
+function catalogServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
   return {
     description: "Read-only test server",
     registryId: "registry",
-    registrySpecifier: "example/read-only",
+    registrySpecifier: "app.linear/mcp",
     version: "1.0.0",
     title: "Linear",
-    meta: { "com.pulsemcp/server": { isOfficial: true } },
+    meta: {},
     toolCount: 2,
     isReadOnly: true,
     supportsDcr: true,
@@ -118,7 +104,7 @@ function catalogServer(
       },
     ],
     ...overrides,
-  } as PulseMCPServer;
+  } as CatalogServer;
 }
 
 const SERVER = catalogServer();
@@ -146,7 +132,6 @@ beforeEach(() => {
     isError: false,
   });
   requestProject.slug = "request-project";
-  toolLogsAccess.canView = true;
   guideStore.specifier = undefined;
   queryHooks.catalog.mockReturnValue(
     queryResult({
@@ -267,6 +252,10 @@ function serverActivity(
   };
 }
 
+function renderHook<Result>(callback: () => Result) {
+  return baseRenderHook(callback, { wrapper: MemoryRouter });
+}
+
 describe("useMcpGuideOperations", () => {
   it("exposes curated catalog choices without installing a selection", () => {
     const { result } = renderHook(() => useMcpGuideOperations());
@@ -297,14 +286,32 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("rejects preferred display-title lookalikes with unapproved registry identifiers", () => {
+    queryHooks.catalog.mockReturnValue(
+      queryResult({
+        servers: [
+          catalogServer({
+            registrySpecifier: "example/linear",
+            title: "Linear",
+          }),
+          catalogServer({
+            registrySpecifier: "app.linear/mcp",
+            title: "Renamed Linear",
+          }),
+        ],
+      }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.registrySpecifier),
+    ).toEqual(["app.linear/mcp"]);
+  });
+
   it("excludes curated servers that require user-supplied credentials", () => {
     const apiKeyServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "api_key" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "manual",
     });
     queryHooks.catalog.mockReturnValue(
       queryResult({ servers: [catalogServer(), apiKeyServer] }),
@@ -312,6 +319,31 @@ describe("useMcpGuideOperations", () => {
 
     const { result } = renderHook(() => useMcpGuideOperations());
 
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
+  it("includes preferred explicit no-auth native records without a verification flag", () => {
+    const publicServer = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      authSetup: "none",
+    });
+    const sparse = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      meta: undefined,
+    });
+    const notPreferred = catalogServer({
+      title: "Other service",
+      registrySpecifier: "example/other",
+      authSetup: "none",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [publicServer, sparse, notPreferred] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
     expect(
       result.current.catalogServers?.map((server) => server.title),
     ).toEqual(["Linear"]);
@@ -341,11 +373,8 @@ describe("useMcpGuideOperations", () => {
   it("reports OAuth setup in the activity output", async () => {
     const oauthServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "oauth" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "dcr",
     });
     queryHooks.catalog.mockReturnValue(queryResult({ servers: [oauthServer] }));
 
@@ -635,7 +664,9 @@ describe("useMcpGuideOperations", () => {
     );
     expect(result.current.prompt).toMatch(/marked read-only/i);
     expect(result.current.prompt).toMatch(/do not create, update, or delete/i);
-    expect(result.current.toolLogsHref).toBe("/projects/request-project/logs");
+    expect(result.current.toolLogsHref).toBe(
+      "/org/projects/request-project/logs",
+    );
 
     expect(result.current.client).toBe("claude");
     expect(result.current.connectionPromptCopied).toBe(false);
@@ -792,36 +823,16 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
-  it("points at the server instead of Tool Logs without log:read", async () => {
-    toolLogsAccess.canView = false;
-    const { activityData, report, view, listenScope } = await listenForActivity(
-      [serverActivity()],
-    );
+  it("points every member at Tool Logs and the governed server", async () => {
+    const { view } = await listenForActivity([serverActivity()]);
 
-    expect(view.result.current.toolLogsHref).toBeUndefined();
+    // Tool Logs shows the caller's own calls without log:read, so the guide
+    // never has to fall back to the server's overview.
+    expect(view.result.current.toolLogsHref).toBe(
+      "/org/projects/request-project/logs",
+    );
     expect(view.result.current.mcpServerHref).toBe(
-      "/projects/request-project/mcp/linear-governed",
-    );
-
-    activityData.current = {
-      activity: [
-        serverActivity({
-          totalToolCalls: 2,
-          lastToolCallAt: new Date(Date.now() + 1_000),
-        }),
-      ],
-    };
-    view.rerender();
-
-    await waitFor(() =>
-      expect(report).toHaveBeenCalledWith({
-        type: "event",
-        scope: listenScope,
-        event: {
-          ...GOVERNED_CALL_EVENT,
-          note: "The first new call is counted in the server's activity.",
-        },
-      }),
+      "/org/projects/request-project/mcp/linear-governed/overview",
     );
   });
 

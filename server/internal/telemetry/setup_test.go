@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -60,7 +59,6 @@ type testInstance struct {
 	chConn             clickhouse.Conn
 	chClient           *repo.Queries
 	sessionManager     *sessions.Manager
-	featureFlags       *feature.InMemory
 	orgID              string
 	projectID          string
 	disabledLogsOrgID  string
@@ -90,7 +88,7 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -102,9 +100,13 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context should be set")
 
-	// log:read is held by no system role, so the admin fixture is granted it on
-	// its project explicitly, as an administrator would through a custom role.
-	ctx = authztest.WithAdminGrants(ctx, authz.NewGrant(authz.ScopeLogRead, authCtx.ProjectID.String()))
+	// log:read and chat:read are held by no system role, so the admin fixture is
+	// granted them on its project explicitly, as an administrator would through
+	// a custom role.
+	ctx = authztest.WithAdminGrants(ctx,
+		authz.NewGrant(authz.ScopeLogRead, authCtx.ProjectID.String()),
+		authz.NewGrant(authz.ScopeChatRead, authCtx.ProjectID.String()),
+	)
 
 	disabledLogsOrgID := uuid.New().String()
 	logsEnabled := func(_ context.Context, orgID string) (bool, error) {
@@ -131,9 +133,8 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	featureFlags := &feature.InMemory{}
 	coverage := telemetry.NewSupportCoverage(conn, chConn)
-	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
+	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	return ctx, &testInstance{
 		service:            svc,
@@ -144,7 +145,6 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 		chConn:             chConn,
 		chClient:           chClient,
 		sessionManager:     sessionManager,
-		featureFlags:       featureFlags,
 		orgID:              authCtx.ActiveOrganizationID,
 		projectID:          authCtx.ProjectID.String(),
 		disabledLogsOrgID:  disabledLogsOrgID,

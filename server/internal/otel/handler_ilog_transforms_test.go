@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
@@ -337,6 +338,64 @@ func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 	require.Equal(t, []string{testLogProjectID}, values[string(enrich.ProjectIDKey)])
 	require.Empty(t, values[string(enrich.DirectoryGroupNamesKey)], "a group the directory lookup did not find stays empty rather than taking the producer's")
 	require.Equal(t, []string{"claude-sonnet-4"}, values["model"], "the producer's own attributes stay")
+}
+
+// The relay and the CH writers tell a connection log by its provenance
+// source, so the transform has to carry the source through, and keep the
+// connection keys only for the recorder's source.
+func TestLogTransformHandlerCarriesProvenanceSourceAndGatesConnectionKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		source   string
+		keepKeys bool
+	}{
+		{source: dialect.ConnectionLogSource, keepKeys: true},
+		{source: ProvenanceSource, keepKeys: false},
+	} {
+		t.Run(tc.source, func(t *testing.T) {
+			t.Parallel()
+
+			inbound := (&otelv1.InboundLogRecord_builder{
+				RecordId: new("record-id"),
+				Scope:    (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(dialect.ConnectionLogScope)}).Build(),
+				Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+					Source:         new(tc.source),
+					OrganizationId: new(testLogOrganizationID),
+					ProjectId:      new(testLogProjectID),
+				}).Build(),
+				Attributes: []*otelv1.InboundLogRecord_KeyValue{
+					logStringAttribute("speakeasy.mcp_connection.outcome", "failed"),
+					logStringAttribute(string(enrich.ProjectIDKey), "forged-project"),
+				},
+			}).Build()
+
+			var published *otelv1.LogRecord
+			publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+			publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+				record, ok := args.Get(1).(*otelv1.LogRecord)
+				require.True(t, ok)
+				published = record
+			}).Return(gcp.NewSuccessPublishResult()).Once()
+			handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+
+			require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+			require.NotNil(t, published)
+			require.Equal(t, tc.source, published.GetProvenance().GetSource())
+			require.Equal(t, tc.keepKeys, isConnectionLogRecord(published))
+
+			values := make(map[string][]string)
+			for _, item := range published.GetAttributes() {
+				values[item.GetKey()] = append(values[item.GetKey()], item.GetValue().GetStringValue())
+			}
+			if tc.keepKeys {
+				require.Equal(t, []string{"failed"}, values["speakeasy.mcp_connection.outcome"])
+			} else {
+				require.Empty(t, values["speakeasy.mcp_connection.outcome"])
+			}
+			require.Equal(t, []string{testLogProjectID}, values[string(enrich.ProjectIDKey)], "no source may claim a tenant")
+		})
+	}
 }
 
 // A record may arrive at the size limit with its whole budget spent on an

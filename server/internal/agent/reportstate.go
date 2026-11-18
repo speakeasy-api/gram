@@ -34,6 +34,20 @@ func (s *Service) WithStateReportLimiter(limiter *ratelimit.Limiter) *Service {
 	return s
 }
 
+// NewStateReportRate bounds, per organization, the reports that add a row.
+// The per-device limit keys on a serial and email the caller supplies, so
+// without this a leaked org key could mint a fresh budget and a new row with
+// every request. The burst covers a fleet's first reports landing together;
+// a device refused here retries with backoff and is stored on a later try.
+var NewStateReportRate = ratelimit.PerMinute(120).WithBurst(2000)
+
+// WithNewStateReportLimiter sets the per-organization limit on reports that
+// add a row. Nil leaves it unlimited.
+func (s *Service) WithNewStateReportLimiter(limiter *ratelimit.Limiter) *Service {
+	s.newStateReportLimiter = limiter
+	return s
+}
+
 // Report enum values, matching device-agent ADR-0029. Values outside these
 // sets are stored as stateUnknown: a newer agent may send one this server
 // does not know, and rejecting the report would lose everything else in it.
@@ -115,6 +129,9 @@ func (s *Service) ReportState(ctx context.Context, payload *gen.ReportStatePaylo
 	if err != nil {
 		return nil, err
 	}
+	if err := s.allowNewStateReport(ctx, params); err != nil {
+		return nil, err
+	}
 	row, err := s.repo.UpsertDeviceAgentStateReport(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording device agent state report").LogError(ctx, s.logger)
@@ -146,6 +163,35 @@ func (s *Service) allowStateReport(ctx context.Context, organizationID, serial, 
 		return nil
 	case !res.Allowed:
 		return oops.E(oops.CodeRateLimitExceeded, nil, "too many state reports from this device; retry shortly")
+	}
+	return nil
+}
+
+// allowNewStateReport charges a report that would add a row to its
+// organization's budget; a report replacing a stored one passes. Like the
+// per-device limit, a limiter store outage fails open.
+func (s *Service) allowNewStateReport(ctx context.Context, params repo.UpsertDeviceAgentStateReportParams) error {
+	if s.newStateReportLimiter == nil {
+		return nil
+	}
+	found, err := s.repo.DeviceAgentStateReportExists(ctx, repo.DeviceAgentStateReportExistsParams{
+		OrganizationID: params.OrganizationID,
+		Email:          params.Email,
+		SerialNumber:   params.SerialNumber,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error checking device agent state report").LogError(ctx, s.logger)
+	}
+	if found {
+		return nil
+	}
+	res, err := s.newStateReportLimiter.Allow(ctx, params.OrganizationID)
+	switch {
+	case err != nil:
+		s.logger.WarnContext(ctx, "reportState new device rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(params.OrganizationID))
+		return nil
+	case !res.Allowed:
+		return oops.E(oops.CodeRateLimitExceeded, nil, "too many new devices reporting state for this organization; retry shortly")
 	}
 	return nil
 }

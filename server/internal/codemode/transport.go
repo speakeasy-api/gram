@@ -25,7 +25,7 @@ import (
 
 const (
 	// ProtocolVersion binds the Go coordinator to the dedicated runner protocol.
-	ProtocolVersion = 1
+	ProtocolVersion = 2
 	// maxFrameBytes allows a 1 MiB callback plus its JSON envelope.
 	maxFrameBytes = MaxResultBytes + 4096
 	// connectTimeout bounds runner admission and connection establishment.
@@ -258,7 +258,7 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, int, error)
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "gram-code-yamux")
-	req.Header.Set("Gram-Code-Protocol", "1")
+	req.Header.Set("Gram-Code-Protocol", fmt.Sprint(ProtocolVersion))
 	if err := req.Write(conn); err != nil {
 		return nil, 0, fmt.Errorf("write code upgrade: %w", err)
 	}

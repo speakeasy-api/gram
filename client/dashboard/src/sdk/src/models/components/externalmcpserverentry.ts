@@ -54,9 +54,9 @@ export type ExternalMCPServerEntry = {
    */
   iconUrl?: string | undefined;
   /**
-   * Whether every tool on the server is read-only
+   * Whether every declared tool is read-only, when catalog evidence is available
    */
-  isReadOnly: boolean;
+  isReadOnly?: boolean | undefined;
   /**
    * ID of the attached MCP server backing this server
    */
@@ -98,9 +98,9 @@ export type ExternalMCPServerEntry = {
    */
   title?: string | undefined;
   /**
-   * Number of tools the server exposes
+   * Number of declared tools, when catalog evidence is available
    */
-  toolCount: number;
+  toolCount?: number | undefined;
   /**
    * ID of the attached toolset backing this server
    */
@@ -124,7 +124,7 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
     auth_setup: z.optional(AuthSetup$inboundSchema),
     description: z.string(),
     icon_url: z.optional(z.string()),
-    is_read_only: z.boolean(),
+    is_read_only: z.optional(z.boolean()),
     mcp_server_id: z.optional(z.string()),
     meta: z.optional(z.any()),
     packages: z.optional(z.array(ExternalMCPPackage$inboundSchema)),
@@ -135,7 +135,7 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
     supports_cimd: z.optional(z.boolean()),
     supports_dcr: z.boolean(),
     title: z.optional(z.string()),
-    tool_count: z.int(),
+    tool_count: z.optional(z.int()),
     toolset_id: z.optional(z.string()),
     version: z.string(),
   }),

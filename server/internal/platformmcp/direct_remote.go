@@ -58,7 +58,9 @@ var (
 
 // DirectRemoteInspection is the bounded, non-secret projection of a direct
 // user-supplied remote MCP. It deliberately contains no response headers,
-// response body, OAuth metadata, credentials, or schemas.
+// response body, OAuth metadata, credentials, or schemas. ToolNames is nil when
+// the remote's tools were not listed, such as when it requires sign-in, and
+// non-nil (possibly empty) when they were.
 type DirectRemoteInspection struct {
 	CanonicalURL           string   `json:"canonical_url"`
 	Transport              string   `json:"transport"`
@@ -663,7 +665,7 @@ func directRemoteInspection(canonicalURL string, toolNames []string, authenticat
 	return DirectRemoteInspection{
 		CanonicalURL:           canonicalURL,
 		Transport:              "streamable-http",
-		ToolNames:              append([]string(nil), toolNames...),
+		ToolNames:              slices.Clone(toolNames),
 		ToolCount:              len(toolNames),
 		Authentication:         authentication,
 		OAuthDiscovery:         oauthDiscovery,

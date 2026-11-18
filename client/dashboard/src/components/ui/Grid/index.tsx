@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import {
   colSpanMapper,
   gapMapper,
@@ -5,13 +6,14 @@ import {
 } from "@/components/ui/lib/responsiveMappers";
 import { cn } from "@/lib/utils";
 import { getResponsiveClasses } from "@/components/ui/lib/responsiveUtils";
-import {
+import type {
   Columns,
   Gap,
   Padding,
   ResponsiveValue,
 } from "@/components/ui/lib/types";
-import { isValidElement, ReactElement } from "react";
+import type { ReactElement } from "react";
+import { isValidElement } from "react";
 
 export interface GridProps {
   /**

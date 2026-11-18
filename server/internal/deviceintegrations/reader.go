@@ -5,14 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	gen "github.com/speakeasy-api/gram/server/gen/device_integrations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 )
@@ -144,4 +147,120 @@ func (r *Reader) Coverage(ctx context.Context, organizationID string, provider s
 		PolicyUnreported:          counts.PolicyUnreported,
 		EnforcementHalted:         counts.EnforcementHalted,
 	}, nil
+}
+
+// FleetDevicesQuery selects one page of every device the organization can
+// see. InInventory nil means both kinds.
+type FleetDevicesQuery struct {
+	OrganizationID string
+	Provider       string
+	InInventory    *bool
+	CoverageBucket string
+	PolicyState    string
+	UserIDs        []string
+	UserEmails     []string
+	Cursor         string
+	Limit          int
+}
+
+// parseFleetDeviceID reads an id FleetDevices issued: its kind prefix, then
+// the row's UUID.
+func parseFleetDeviceID(id string) (uuid.UUID, error) {
+	kind, raw, ok := strings.Cut(id, ":")
+	if !ok || (kind != "mdm" && kind != "agent") {
+		return uuid.Nil, fmt.Errorf("%w: unknown device id kind", ErrInvalidCursor)
+	}
+	parsed, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: %w", ErrInvalidCursor, err)
+	}
+	return parsed, nil
+}
+
+func (r *Reader) FleetDevices(ctx context.Context, query FleetDevicesQuery) (*gen.ListFleetDevicesResult, error) {
+	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if query.Cursor != "" {
+		parsed, err := parseFleetDeviceID(query.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		cursor = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+	inInventory := pgtype.Bool{Bool: false, Valid: false}
+	if query.InInventory != nil {
+		inInventory = pgtype.Bool{Bool: *query.InInventory, Valid: true}
+	}
+
+	rows, err := r.repo.ListFleetDevices(ctx, repo.ListFleetDevicesParams{
+		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
+		DeviceLevel:    deviceLevelCoverage(ctx, r.logger, r.db, r.features, query.OrganizationID),
+		OrganizationID: query.OrganizationID,
+		Provider:       conv.ToPGTextEmpty(query.Provider),
+		InInventory:    inInventory,
+		CursorID:       cursor,
+		Bucket:         conv.ToPGTextEmpty(query.CoverageBucket),
+		PolicyState:    conv.ToPGTextEmpty(query.PolicyState),
+		UserIds:        nonBlank(query.UserIDs),
+		UserEmails:     nonBlank(query.UserEmails),
+		PageLimit:      int32(query.Limit), //nolint:gosec // callers bound limit to [1,200]
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list fleet devices: %w", err)
+	}
+
+	devices := make([]*gen.FleetDevice, 0, len(rows))
+	for _, row := range rows {
+		devices = append(devices, fleetDeviceView(ctx, r.logger, query.OrganizationID, row))
+	}
+	var nextCursor *string
+	if len(rows) == query.Limit {
+		last := fleetDeviceID(rows[len(rows)-1])
+		nextCursor = &last
+	}
+	return &gen.ListFleetDevicesResult{Devices: devices, NextCursor: nextCursor}, nil
+}
+
+// FleetCoverage summarizes every device the organization can see, optionally
+// one provider's inventory (empty for all, agent-only machines included).
+func (r *Reader) FleetCoverage(ctx context.Context, organizationID string, provider string) (*gen.FleetCoverage, error) {
+	counts, err := r.repo.GetFleetCoverageCounts(ctx, repo.GetFleetCoverageCountsParams{
+		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
+		DeviceLevel:    deviceLevelCoverage(ctx, r.logger, r.db, r.features, organizationID),
+		OrganizationID: organizationID,
+		Provider:       conv.ToPGTextEmpty(provider),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("compute fleet coverage: %w", err)
+	}
+
+	return &gen.FleetCoverage{
+		OrganizationID:      organizationID,
+		ActiveWindowMinutes: int(activeWindow / time.Minute),
+		MdmConnected:        counts.MdmConnected,
+		// An agent-only machine always answers for itself, so unlike
+		// Coverage the claim does not need device-level matching: it holds
+		// whenever every active device was matched on its own serial.
+		Attestation:               fleetAttestation(counts.AgentActive, counts.AgentActiveDeviceAttested),
+		AgentActive:               counts.AgentActive,
+		AgentActiveDeviceAttested: counts.AgentActiveDeviceAttested,
+		AgentStale:                counts.AgentStale,
+		AgentOtherDevice:          counts.AgentOtherDevice,
+		NoAgent:                   counts.NoAgent,
+		NoEmail:                   counts.NoEmail,
+		UnresolvedEmail:           counts.UnresolvedEmail,
+		Missing:                   counts.Missing,
+		AgentOnlyDevices:          counts.AgentOnly,
+		TotalDevices:              counts.Total,
+		PolicyAttested:            counts.PolicyAttested,
+		PolicyOutdated:            counts.PolicyOutdated,
+		PolicyUnreported:          counts.PolicyUnreported,
+		EnforcementHalted:         counts.EnforcementHalted,
+	}, nil
+}
+
+func fleetAttestation(active, deviceAttested int64) string {
+	if active > 0 && deviceAttested == active {
+		return string(providers.AttestationDevice)
+	}
+	return string(providers.AttestationUser)
 }

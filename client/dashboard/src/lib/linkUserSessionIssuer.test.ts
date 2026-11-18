@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { unrecognized } from "@gram/client/types/unrecognized.js";

@@ -37,22 +37,30 @@ export const SCOPE_ROWS: { key: ScopeKey; label: string; hint: string }[] = [
   { key: "manage", label: "Manage", hint: "Change its settings and access" },
 ];
 
+/** "view", "view and manage", "connect, view and manage". */
+export function lineLabels(lines: ScopeKey[]): string {
+  return listLabels(
+    SCOPE_ROWS.filter((line) => lines.includes(line.key)).map((line) =>
+      line.label.toLowerCase(),
+    ),
+  );
+}
+
 /**
  * The scopes whose grant satisfies a check for this one, itself included.
- * Mirrors scopeExpansions in authz/scopes.go: read and write both satisfy
- * connect, and write satisfies read.
+ * Mirrors scopeExpansions in authz/scopes.go: write satisfies read, and only
+ * connect satisfies connect.
  */
 const SATISFIED_BY: Record<ScopeKey, ScopeKey[]> = {
-  use: ["use", "view", "manage"],
+  use: ["use"],
   view: ["view", "manage"],
   manage: ["manage"],
 };
 
 /**
- * The level that takes one scope away. Each block stands on its own — see
- * scopeExpansions in authz/scopes.go, where the mcp:blocked_* scopes do not
- * satisfy one another — so closing connect leaves view and manage as they
- * were, and taking a principal off the server writes all three.
+ * The level that takes one scope away. Blocks follow SATISFIED_BY in
+ * reverse — see scopeExpansions in authz/scopes.go — so a view block also
+ * takes manage, while closing connect leaves view and manage as they were.
  */
 export const BLOCK_LEVEL: Record<ScopeKey, AudienceLevel> = {
   use: "blocked",
@@ -67,6 +75,22 @@ export { isUnnarrowed } from "./serverAudience";
 /** The scope a block level was written for, or null if it is not a block. */
 function blockedScope(level: AudienceLevel): ScopeKey | null {
   return SCOPE_ROWS.find((row) => BLOCK_LEVEL[row.key] === level)?.key ?? null;
+}
+
+/**
+ * The scopes a block at `level` closes that opening `scope` does not reopen.
+ * A view block also closes manage, so lifting it to allow view alone has to
+ * keep manage closed.
+ */
+export function closedBesides(
+  level: AudienceLevel,
+  scope: ScopeKey,
+): ScopeKey[] {
+  const blocked = blockedScope(level);
+  if (!blocked) return [];
+  return SATISFIED_BY[blocked].filter(
+    (key) => key !== scope && !SATISFIED_BY[key].includes(scope),
+  );
 }
 
 /** Everything that decides one scope for one principal. */
@@ -92,6 +116,12 @@ export interface ScopeCell {
   own?: ResourceAudienceEntry;
   /** This row's own block naming this server, the one this page can lift. */
   ownBlock?: ResourceAudienceEntry;
+  /**
+   * Every block of this row's own naming this server that takes this scope
+   * away: `ownBlock`, and a block on a scope this one satisfies (a view block
+   * on the manage line). Allowing the scope has to lift all of them.
+   */
+  ownBlocks: ResourceAudienceEntry[];
 }
 
 export interface AccessRow {
@@ -124,7 +154,14 @@ function reaches(entry: ResourceAudienceEntry, row: AccessRow): boolean {
 }
 
 function emptyCell(scope: ScopeKey, principalUrn: string): ScopeCell {
-  return { scope, principalUrn, grants: [], blocks: [], direct: [] };
+  return {
+    scope,
+    principalUrn,
+    grants: [],
+    blocks: [],
+    direct: [],
+    ownBlocks: [],
+  };
 }
 
 /**
@@ -215,8 +252,14 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
       const blocked = blockedScope(entry.level);
 
       if (blocked) {
-        // A block reaches the scope it names and nothing else.
-        row.cells[blocked].blocks.push(entry);
+        // A block reaches the scope it names and every scope that satisfies
+        // it: a view block takes manage as well.
+        for (const key of SATISFIED_BY[blocked]) {
+          row.cells[key].blocks.push(entry);
+          if (own && entry.appliesTo === "resource") {
+            row.cells[key].ownBlocks.push(entry);
+          }
+        }
         if (own && entry.appliesTo === "resource") {
           row.cells[blocked].ownBlock = entry;
         }
@@ -318,6 +361,13 @@ export interface ScopeState {
   subtracts: boolean;
   /** True when the line can be turned off here at all. */
   canRevoke: boolean;
+  /** True when no rule grants or blocks this line, so it has no effect. */
+  unset: boolean;
+  /**
+   * True when this row holds its own grant or block for this line on this
+   * server, which clearing deletes.
+   */
+  canClear: boolean;
   /** Another principal this line comes from, when one decides it. */
   via?: string;
   /** That principal's URN, so the name can link to it. */
@@ -450,10 +500,13 @@ export function scopeState(
       blocked: false,
       subtracts: false,
       canRevoke: false,
+      unset: false,
+      canClear: false,
       capped: false,
     };
   }
   const cell = row.cells[scope];
+  const canClear = cell.own !== undefined || cell.ownBlock !== undefined;
   const reachable = reachableTools(cell, catalog);
   const closed = isClosed(cell, reachable);
 
@@ -466,16 +519,20 @@ export function scopeState(
     // The row's own block decides the line, so naming another principal's
     // block beside it would only repeat the answer.
     const blocked = closedByOwnBlocks(cell, catalog);
+    const unset = cell.grants.length === 0 && cell.blocks.length === 0;
     return {
-      value: blocked ? "Blocked" : "No access",
+      value: blocked ? "Blocked" : unset ? "Not set" : "No access",
       granted: false,
       blocked,
       subtracts: false,
       canRevoke: false,
+      unset,
+      canClear,
       via: cancellingSelf || blocked ? undefined : cancelling?.displayName,
       viaPrincipalUrn:
         cancellingSelf || blocked ? undefined : cancelling?.principalUrn,
-      note: cancellingSelf && !blocked ? sourceNote(cancelling) : undefined,
+      note:
+        cancellingSelf && !blocked ? sourceNote(cancelling, scope) : undefined,
       // Any block this row can neither lift nor outrank caps it, whether it
       // closed the line outright or trimmed the last tool away.
       capped: cappingBlocks(row, cell).length > 0,
@@ -498,22 +555,28 @@ export function scopeState(
     blocked: false,
     subtracts: effectiveForeignGrants(row, scope).length > 0,
     canRevoke: true,
+    unset: false,
+    canClear,
     via: cell.own || grantingSelf ? undefined : granting?.displayName,
     viaPrincipalUrn:
       cell.own || grantingSelf ? undefined : granting?.principalUrn,
-    note: cell.own || !grantingSelf ? undefined : sourceNote(granting),
+    note: cell.own || !grantingSelf ? undefined : sourceNote(granting, scope),
     capped: cappingBlocks(row, cell).length > 0,
   };
 }
 
 /**
  * How to say where a rule of this row's own principal comes from, when it is
- * not the rule this page owns for this line. A rule covering every server
- * gets no note: this page answers for one server, and where else the rule
- * reaches is not what an administrator is reading here.
+ * not the rule this page owns for this line. Only a stronger line is named: a
+ * line granted by this row's own wider rule at the same level needs no note,
+ * while one granted through Manage would otherwise read as set on its own,
+ * and stay "Allowed" after it is cleared with nothing saying why.
  */
-function sourceNote(entry: ResourceAudienceEntry): string | undefined {
-  if (entry.appliesTo === "all_resources") return undefined;
+function sourceNote(
+  entry: ResourceAudienceEntry,
+  scope: ScopeKey,
+): string | undefined {
+  if (entry.level === scope) return undefined;
   const label = SCOPE_ROWS.find((row) => row.key === entry.level)?.label;
   return label ? `included in ${label}` : undefined;
 }

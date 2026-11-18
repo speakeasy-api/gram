@@ -1311,6 +1311,264 @@ func DecodeUpdateMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildSetSetupGuideCompletedRequest instantiates a HTTP request object with
+// method and path set to call the "mcpServers" service
+// "setSetupGuideCompleted" endpoint
+func (c *Client) BuildSetSetupGuideCompletedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSetupGuideCompletedMcpServersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "setSetupGuideCompleted", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSetupGuideCompletedRequest returns an encoder for requests sent to
+// the mcpServers setSetupGuideCompleted server.
+func EncodeSetSetupGuideCompletedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.SetSetupGuideCompletedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "setSetupGuideCompleted", "*mcpservers.SetSetupGuideCompletedPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetSetupGuideCompletedRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpServers", "setSetupGuideCompleted", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSetupGuideCompletedResponse returns a decoder for responses
+// returned by the mcpServers setSetupGuideCompleted endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetSetupGuideCompletedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeSetSetupGuideCompletedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSetupGuideCompletedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			res := NewSetSetupGuideCompletedMcpServerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetSetupGuideCompletedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSetupGuideCompletedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSetupGuideCompletedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSetupGuideCompletedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSetupGuideCompletedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSetupGuideCompletedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSetupGuideCompletedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSetupGuideCompletedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+				}
+				err = ValidateSetSetupGuideCompletedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+				}
+				return nil, NewSetSetupGuideCompletedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSetupGuideCompletedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+				}
+				err = ValidateSetSetupGuideCompletedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+				}
+				return nil, NewSetSetupGuideCompletedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "setSetupGuideCompleted", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSetupGuideCompletedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SetSetupGuideCompletedUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			err = ValidateSetSetupGuideCompletedUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setSetupGuideCompleted", err)
+			}
+			return nil, NewSetSetupGuideCompletedUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "setSetupGuideCompleted", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListToolFiltersRequest instantiates a HTTP request object with method
 // and path set to call the "mcpServers" service "listToolFilters" endpoint
 func (c *Client) BuildListToolFiltersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3092,6 +3350,263 @@ func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildGetMcpServerUsageImpactRequest instantiates a HTTP request object with
+// method and path set to call the "mcpServers" service
+// "getMcpServerUsageImpact" endpoint
+func (c *Client) BuildGetMcpServerUsageImpactRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMcpServerUsageImpactMcpServersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "getMcpServerUsageImpact", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMcpServerUsageImpactRequest returns an encoder for requests sent to
+// the mcpServers getMcpServerUsageImpact server.
+func EncodeGetMcpServerUsageImpactRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.GetMcpServerUsageImpactPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "getMcpServerUsageImpact", "*mcpservers.GetMcpServerUsageImpactPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMcpServerUsageImpactResponse returns a decoder for responses
+// returned by the mcpServers getMcpServerUsageImpact endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetMcpServerUsageImpactResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeGetMcpServerUsageImpactResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMcpServerUsageImpactResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			res := NewGetMcpServerUsageImpactMcpServerUsageImpactOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMcpServerUsageImpactUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMcpServerUsageImpactForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMcpServerUsageImpactBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMcpServerUsageImpactNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMcpServerUsageImpactConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMcpServerUsageImpactUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMcpServerUsageImpactInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMcpServerUsageImpactInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+				}
+				err = ValidateGetMcpServerUsageImpactInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+				}
+				return nil, NewGetMcpServerUsageImpactInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMcpServerUsageImpactUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+				}
+				err = ValidateGetMcpServerUsageImpactUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+				}
+				return nil, NewGetMcpServerUsageImpactUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "getMcpServerUsageImpact", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMcpServerUsageImpactGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetMcpServerUsageImpactUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			err = ValidateGetMcpServerUsageImpactUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServerUsageImpact", err)
+			}
+			return nil, NewGetMcpServerUsageImpactUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "getMcpServerUsageImpact", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary
 // builds a value of type *types.McpServerToolsetSummary from a value of type
 // *McpServerToolsetSummaryResponseBody.
@@ -3106,14 +3621,9 @@ func unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(
 		Description:           v.Description,
 		ToolCount:             *v.ToolCount,
 		ToolSelectionMode:     *v.ToolSelectionMode,
-		ExternalMcpProxyOnly:  *v.ExternalMcpProxyOnly,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		RegistrySpecifier:     v.RegistrySpecifier,
 		HostingMcpServerID:    v.HostingMcpServerID,
-	}
-	res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
-	for i, val := range v.ExternalMcpSlugs {
-		res.ExternalMcpSlugs[i] = val
 	}
 
 	return res
@@ -3136,12 +3646,12 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		ToolsetID:             v.ToolsetID,
 		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
-		BuiltinBackend:        v.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*v.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*v.NetworkAccessMode),
 		PrimaryEndpointID:     v.PrimaryEndpointID,
 		PrimaryEndpointURL:    v.PrimaryEndpointURL,
 		HasEndpoint:           v.HasEndpoint,
+		SetupGuideCompletedAt: v.SetupGuideCompletedAt,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
 	}
@@ -3229,6 +3739,28 @@ func unmarshalToolMetadataResponseBodyToTypesToolMetadata(v *ToolMetadataRespons
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
 		DeletedAt:       v.DeletedAt,
+	}
+
+	return res
+}
+
+// unmarshalMcpServerUsageSubjectResponseBodyToTypesMcpServerUsageSubject
+// builds a value of type *types.McpServerUsageSubject from a value of type
+// *McpServerUsageSubjectResponseBody.
+func unmarshalMcpServerUsageSubjectResponseBodyToTypesMcpServerUsageSubject(v *McpServerUsageSubjectResponseBody) *types.McpServerUsageSubject {
+	res := &types.McpServerUsageSubject{
+		SubjectUrn:      *v.SubjectUrn,
+		SubjectType:     *v.SubjectType,
+		DisplayName:     v.DisplayName,
+		Email:           v.Email,
+		PhotoURL:        v.PhotoURL,
+		ConnectionCount: *v.ConnectionCount,
+		LastUsedAt:      v.LastUsedAt,
+		SharedSignIn:    *v.SharedSignIn,
+	}
+	res.ClientNames = make([]string, len(v.ClientNames))
+	for i, val := range v.ClientNames {
+		res.ClientNames[i] = val
 	}
 
 	return res

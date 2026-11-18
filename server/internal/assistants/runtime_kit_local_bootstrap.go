@@ -32,6 +32,9 @@ func validateKitGatewayCommand(command, args []string, port int) error {
 }
 
 func validateKitBootstrap(b KitLocalBootstrap) error {
+	if _, err := kitReasoningEffort(b.ReasoningEffort); err != nil {
+		return err
+	}
 	if len(b.AgentsMD) == 0 || len(b.GatewayToken) == 0 {
 		return fmt.Errorf("kit requires global instructions and gateway bearer")
 	}
@@ -55,19 +58,20 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 	if json.Unmarshal(b.MCPJSON, &mcp) != nil || mcp.Servers == nil {
 		return fmt.Errorf("kit MCP config requires mcpServers object")
 	}
-	for _, raw := range mcp.Servers {
+	for name, raw := range mcp.Servers {
 		var server struct {
 			Type    string            `json:"type"`
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers,omitempty"`
 			Auth    struct {
-				Type          string `json:"type"`
-				TokenFile     string `json:"tokenFile"`
-				TokenEndpoint string `json:"tokenEndpoint"`
-				EndpointMode  string `json:"endpointMode"`
-				Grant         string `json:"grant"`
-				Resource      string `json:"resource"`
-				Scope         string `json:"scope"`
+				Type          string            `json:"type"`
+				TokenFile     string            `json:"tokenFile"`
+				TokenEndpoint string            `json:"tokenEndpoint"`
+				EndpointMode  string            `json:"endpointMode"`
+				Grant         string            `json:"grant"`
+				Resource      string            `json:"resource"`
+				Scope         string            `json:"scope"`
+				Extensions    map[string]string `json:"extensions,omitempty"`
 			} `json:"auth"`
 		}
 		decoder := json.NewDecoder(strings.NewReader(string(raw)))
@@ -77,6 +81,15 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		}
 		if server.Type != "streamable-http" || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
 			return fmt.Errorf("kit MCP requires the bound generic workload assertion")
+		}
+		// Built-in tokens are minted per project; attached servers bind their
+		// project through the endpoint and take no extensions.
+		if strings.HasPrefix(name, "builtin-") {
+			if len(server.Auth.Extensions) != 1 || server.Auth.Extensions["project_id"] != b.Workload.Identity.ProjectID.String() {
+				return fmt.Errorf("kit built-in MCP connections must name the workload project")
+			}
+		} else if len(server.Auth.Extensions) != 0 {
+			return fmt.Errorf("kit attached MCP connections must not carry extensions")
 		}
 		u, err := url.Parse(server.URL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" {
@@ -99,8 +112,25 @@ func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if b.Workload == nil {
 		return ""
 	}
-	return kitFileConfig + "model = " + strconv.Quote(b.Model) + "\n" +
+	effort, err := kitReasoningEffort(b.ReasoningEffort)
+	if err != nil {
+		return ""
+	}
+	return kitFileConfig + "model = " + strconv.Quote(b.Model) + "\nreasoning_effort = " + strconv.Quote(effort) + "\n" +
 		"[inference_providers.speakeasy]\nendpoint = " + strconv.Quote(b.InferenceEndpoint) + "\n" +
 		"[inference_providers.speakeasy.workload]\ntokenFile = " + strconv.Quote(b.AssertionFile) + "\nendpointMode = \"explicit\"\ngrant = \"jwtBearer\"\ntokenEndpoint = " + strconv.Quote(b.Workload.Audience+"/token") + "\nresource = \"urn:speakeasy:inference\"\n" +
 		"[inference_providers.speakeasy.workload.extensions]\nproject_id = " + strconv.Quote(b.Workload.Identity.ProjectID.String()) + "\n"
+}
+
+// Kit's provider and ACP contracts support only low, medium and high. In
+// particular, its "default" selector is not a request to disable reasoning.
+func kitReasoningEffort(effort string) (string, error) {
+	switch effort {
+	case "":
+		return "medium", nil
+	case "low", "medium", "high":
+		return effort, nil
+	default:
+		return "", fmt.Errorf("kit does not support reasoning effort %q; select low, medium or high", effort)
+	}
 }

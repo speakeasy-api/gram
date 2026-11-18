@@ -960,6 +960,7 @@ SELECT
   , (address.slug IS NOT NULL)::boolean AS has_endpoint
   , COALESCE(address.slug, '')::text AS endpoint_slug
   , address.custom_domain_id AS endpoint_custom_domain_id
+  , (address.custom_domain_id IS NOT NULL AND address.is_domain_root IS TRUE)::boolean AS endpoint_is_domain_root
   , COALESCE((
       SELECT array_agg(e.slug ORDER BY e.slug)
       FROM mcp_endpoints e
@@ -975,7 +976,7 @@ JOIN toolsets t
  AND t.organization_id = $1
  AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT e.slug, e.custom_domain_id
+  SELECT e.slug, e.custom_domain_id, e.is_domain_root
   FROM mcp_endpoints e
   LEFT JOIN custom_domains cd
     ON cd.id = e.custom_domain_id
@@ -988,7 +989,7 @@ LEFT JOIN LATERAL (
     AND e.deleted IS FALSE
     AND s.toolset_id IS NOT DISTINCT FROM s.id
     AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (e.custom_domain_id IS NULL) DESC, e.created_at, e.id
+  ORDER BY (e.custom_domain_id IS NOT NULL AND e.is_domain_root IS TRUE) DESC, (e.custom_domain_id IS NOT NULL) DESC, e.created_at, e.id
   LIMIT 1
 ) address ON TRUE
 WHERE s.id = ANY($2::uuid[])
@@ -1008,11 +1009,13 @@ type ListCanonicalHostingByToolsetIDsRow struct {
 	HasEndpoint            bool
 	EndpointSlug           string
 	EndpointCustomDomainID uuid.NullUUID
+	EndpointIsDomainRoot   bool
 	EndpointSlugs          []string
 }
 
 // The server row holding each toolset's id: its hosting state when it is the canonical wrapper, its preferred
-// address (the oldest platform endpoint, else the oldest endpoint on a verified, activated custom domain), and
+// address (endpointaddr.PrimaryEndpoint's order: a domain-root endpoint, then another endpoint on a verified,
+// activated custom domain, then a platform endpoint; oldest first), and
 // the slugs of all its live endpoints. A non-canonical row means the toolset's id was kept by a server that left it.
 func (q *Queries) ListCanonicalHostingByToolsetIDs(ctx context.Context, arg ListCanonicalHostingByToolsetIDsParams) ([]ListCanonicalHostingByToolsetIDsRow, error) {
 	rows, err := q.db.Query(ctx, listCanonicalHostingByToolsetIDs, arg.OrganizationID, arg.ToolsetIds)
@@ -1031,6 +1034,7 @@ func (q *Queries) ListCanonicalHostingByToolsetIDs(ctx context.Context, arg List
 			&i.HasEndpoint,
 			&i.EndpointSlug,
 			&i.EndpointCustomDomainID,
+			&i.EndpointIsDomainRoot,
 			&i.EndpointSlugs,
 		); err != nil {
 			return nil, err
@@ -1244,52 +1248,6 @@ func (q *Queries) LockToolsetByIDAndProject(ctx context.Context, arg LockToolset
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
-WITH latest_toolset_version AS (
-  SELECT tv.tool_urns
-  FROM toolsets t
-  JOIN toolset_versions tv ON tv.toolset_id = t.id
-  WHERE t.id = $1
-    AND t.project_id = $2
-    AND t.deleted IS FALSE
-    AND tv.deleted IS FALSE
-  ORDER BY tv.version DESC
-  LIMIT 1
-),
-active_deployment AS (
-  SELECT d.id
-  FROM deployments d
-  JOIN deployment_statuses ds ON ds.deployment_id = d.id
-  WHERE d.project_id = $2
-    AND ds.status = 'completed'
-  ORDER BY d.seq DESC
-  LIMIT 1
-)
-SELECT EXISTS (
-  SELECT 1
-  FROM latest_toolset_version tv
-  CROSS JOIN LATERAL unnest(tv.tool_urns) AS tool_urn(value)
-  JOIN external_mcp_tool_definitions etd ON etd.tool_urn = tool_urn.value
-  JOIN external_mcp_attachments ea ON ea.id = etd.external_mcp_attachment_id
-  WHERE ea.deployment_id = (SELECT id FROM active_deployment)
-    AND etd.type = 'proxy'
-    AND etd.deleted IS FALSE
-    AND ea.deleted IS FALSE
-)
-`
-
-type ToolsetHasExternalMCPProxyParams struct {
-	ToolsetID uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) ToolsetHasExternalMCPProxy(ctx context.Context, arg ToolsetHasExternalMCPProxyParams) (bool, error) {
-	row := q.db.QueryRow(ctx, toolsetHasExternalMCPProxy, arg.ToolsetID, arg.ProjectID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const updateToolset = `-- name: UpdateToolset :one

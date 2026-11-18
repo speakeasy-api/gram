@@ -24,5 +24,5 @@ func TestCodeInstructionsMatchDashboardCopy(t *testing.T) {
 	require.NoError(t, err)
 	// Only the file's final newline is not part of the served instructions.
 	require.True(t, strings.HasSuffix(string(canonical), "\n"), "builtin-gateway-code-instructions.txt must end with a newline")
-	require.Equal(t, ResolveDiscoveryInstructions(nil, DiscoveryModeCode), strings.TrimSuffix(string(canonical), "\n"))
+	require.Equal(t, ResolveDiscoveryInstructions(nil, DiscoveryModeCode, nil), strings.TrimSuffix(string(canonical), "\n"))
 }

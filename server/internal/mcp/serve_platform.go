@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"goa.design/goa/v3/security"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +20,7 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -44,8 +49,8 @@ const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
 const platformToolsetMaxBodyBytes = 1 << 20
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
-// only the assistant token is accepted, so user OAuth/API keys/chat sessions
-// are intentionally not honored here.
+// accepts runtime-bound assistant credentials, resource-bound workloads, and
+// principal-mode agent API keys. User OAuth, ordinary user API keys, and chat sessions are not accepted.
 func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -77,11 +82,37 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	authedCtx, _, err := s.assistantTokens.AuthorizeRuntime(ctx, token)
+	var authedCtx context.Context
+	workloadPlatform := false
+	if principalcredential.IsToken(token) {
+		// Turn credentials must retain their live assistant/thread binding.
+		// Generic principal authentication would discard that runtime fence.
+		authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+	} else if strings.HasPrefix(token, "gram_") {
+		authedCtx, err = s.auth.AuthorizeWithPostAuthenticationCheck(ctx, token, &security.APIKeyScheme{Name: constants.KeySecurityScheme, Scopes: nil, RequiredScopes: []string{"consumer"}}, func(ctx context.Context) error {
+			actor, ok := contextvalues.AuthenticatedActor(ctx)
+			mode, principalKey := contextvalues.APIKeyAuthorization(ctx)
+			if !ok || actor.Type != urn.PrincipalTypeAgent || !principalKey || mode != contextvalues.APIKeyAuthorizationModePrincipal {
+				return oops.C(oops.CodeUnauthorized)
+			}
+			return nil
+		})
+	} else {
+		authedCtx, workloadPlatform, err = s.authorizeWorkloadPlatform(ctx, token, platformtools.PlatformToolsetURL(s.serverURL, slug))
+		if !workloadPlatform {
+			authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+		}
+	}
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize platform toolset request").LogError(ctx, s.logger)
+		return fmt.Errorf("authorize platform agent: %w", err)
 	}
 	ctx = authedCtx
+	if project := r.Header.Get("Gram-Project"); project != "" && !workloadPlatform {
+		ctx, err = s.auth.Authorize(ctx, project, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: nil, RequiredScopes: nil})
+		if err != nil {
+			return err
+		}
+	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -123,10 +154,10 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 }
 
 // authorizePlatformToolset gates entry to a platform toolset before any work
-// runs. The managed-assistant toolset carries the dashboard egress tool and is
-// reserved for a project's managed assistant; any other assistant token for the
-// project is rejected as if the toolset did not exist, rather than relying on
-// downstream tools to refuse the call.
+// runs. The managed-assistant toolset carries the dashboard egress tool;
+// runtime-bound credentials remain restricted to the managed assistant. Ordinary
+// agent credentials instead use live agent policy and per-tool authorization;
+// neither runtime variant requires a managed-assistant row for those callers.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
 	switch slug {
 	case platformtools.ResearchToolsetSlug:
@@ -138,26 +169,38 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		// quietly grant them. If the runner is ever moved onto the assistant
 		// runtime, this is where its principal is checked.
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
+	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug, platformtools.SpeakeasySlackPlatformToolsetSlug:
 	default:
 		return nil
 	}
 
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
-	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	actor, agent := contextvalues.AuthenticatedActor(ctx)
+	principal, runtimeBound := contextvalues.GetAssistantPrincipal(ctx)
+	if runtimeBound || !agent || (actor.Type != urn.PrincipalTypeAgent && actor.Type != urn.PrincipalTypeWorkload) {
+		if !runtimeBound {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+
+		managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
+		}
+
+		if managed.ID != principal.AssistantID {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+
 	}
 
-	managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
-	}
-
-	if managed.ID != principal.AssistantID {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	// The Speakeasy Slack app toolset is not a rollout variant: the managed
+	// assistant has it alongside whichever variant it is on. Each call
+	// resolves the workspace that routes to the project, and fails when
+	// there is none.
+	if slug == platformtools.SpeakeasySlackPlatformToolsetSlug {
+		return nil
 	}
 
 	// The two managed-only toolsets are rollout variants of each other: an org
@@ -237,9 +280,19 @@ func (s *Service) handlePlatformToolsetRequest(
 		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion, s.platformSkillsEnabled(ctx, authCtx))
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case mcpversions.MethodToolsList:
-		return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
-	case mcpversions.MethodToolsCall:
+	case mcpversions.MethodToolsList, mcpversions.MethodToolsCall:
+		// Listing and calling run in the same acting context, so the tools a
+		// caller is offered are exactly the ones it may call.
+		if toolset.ActingContext != nil {
+			acting, err := toolset.ActingContext(ctx)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "prepare platform toolset request").LogError(ctx, s.logger)
+			}
+			ctx = acting
+		}
+		if req.Method == mcpversions.MethodToolsList {
+			return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
+		}
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
 	case mcpversions.MethodResourcesList:
 		// The platform toolset has resources only while it declares the
@@ -335,7 +388,7 @@ func (s *Service) listPlatformToolsetTools(
 		if extra.RequiredScope != "" && !grantedScopes[extra.RequiredScope] {
 			continue
 		}
-		entry := toolToListEntry(extra.Executor.Descriptor().ToTool(*authCtx.ProjectID))
+		entry := toolToListEntry(platformtools.DescriptorForContext(ctx, extra.Executor.Descriptor()).ToTool(*authCtx.ProjectID))
 		if entry != nil {
 			tools = append(tools, entry)
 		}
@@ -392,7 +445,7 @@ func (s *Service) callPlatformToolsetTool(
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogWarn(ctx, s.logger)
 	}
 
-	desc := matched.Executor.Descriptor()
+	desc := platformtools.DescriptorForContext(ctx, matched.Executor.Descriptor())
 	descriptor := &gateway.ToolDescriptor{
 		ID:               desc.SyntheticID(),
 		Name:             desc.Name,
@@ -412,7 +465,7 @@ func (s *Service) callPlatformToolsetTool(
 		InputSchema: desc.InputSchema,
 		// The toolset slice is authoritative; the runtime's URN registry can
 		// hold a differently scoped variant of the same tool.
-		Executor: matched.Executor,
+		Executor: platformtools.WithThreadFallback(matched.Executor, s.resolvePlatformThreadContext),
 	})
 
 	ctx, logger := o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
@@ -429,11 +482,11 @@ func (s *Service) callPlatformToolsetTool(
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  gramEmail,
 		GramChatID: chatIDHeader,
 		// Platform toolsets serve Speakeasy's own tools, never customer functions.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		Credentials: nil,
 	}
 
 	var mcpURL string
@@ -447,20 +500,25 @@ func (s *Service) callPlatformToolsetTool(
 	}
 
 	requestBodyBytes := params.Arguments
+	// Resolve selection once so execution and audit use the same target. This
+	// does not change caller identity; retain the original bytes for validation.
+	ctx, toolCallEnv, _, err := platformtools.PrepareThreadContext(ctx, desc, toolCallEnv, bytes.NewReader(requestBodyBytes), s.resolvePlatformThreadContext)
+	if err != nil {
+		return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+	}
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
 	platformToolsetSlug := toolset.Slug
-	chatID := chatIDHeader
+	chatID := toolCallEnv.GramChatID
 	if chatID == "" {
-		if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 			chatID = principal.ThreadID.String()
 		}
 	}
 
-	// Platform toolsets are runtime-only, so every call here is assistant-
-	// initiated; record the durable audit trail entry on dispatch, regardless
-	// of how the tool execution turns out.
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+	// Record dispatch for automatic or explicitly selected assistant targets,
+	// retaining the authenticated caller as actor regardless of tool outcome.
+	if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 		recordAssistantToolCallAudit(ctx, logger, s.auditLogger, s.db, assistantToolCallAudit{
 			organizationID: authCtx.ActiveOrganizationID,
 			projectID:      *authCtx.ProjectID,

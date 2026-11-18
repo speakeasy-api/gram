@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -208,7 +209,21 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
+// Require refuses the request unless the caller satisfies every check. A
+// single AnyOf check is evaluated as RequireAnyUnblocked. A probe is refused.
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
+	if alternatives, ok := singleAnyOf(checks); ok {
+		if checks[0].probe {
+			return e.mapError(ctx, InvalidCheck(checks[0].Scope, checks[0].ResourceID))
+		}
+		if len(alternatives) == 0 {
+			return e.mapError(ctx, ErrNoChecks)
+		}
+		return e.RequireAnyUnblocked(ctx, alternatives...)
+	}
+	if err := validateShape(checks, false); err != nil {
+		return e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -228,7 +243,14 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
-	return e.evaluateRequired(ctx, authorization, checks...)
+	// Only the caller's own refusal is explained to the client: a probe of
+	// some other principal's grants (EvaluateLoadedGrants) says nothing about
+	// what the caller lacks.
+	if err := e.evaluateRequired(ctx, authorization, checks...); err != nil {
+		recordDenial(ctx, err)
+		return e.mapError(ctx, err)
+	}
+	return nil
 }
 
 // EvaluateLoadedGrants evaluates explicit grants against checks without
@@ -241,17 +263,23 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
 		return oops.C(oops.CodeForbidden)
 	}
-	return e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...)
+	if err := e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...); err != nil {
+		return e.mapError(ctx, err)
+	}
+	return nil
 }
 
+// evaluateRequired returns the engine's own error types; callers map them
+// with mapError once they have decided whether the refusal is theirs to
+// explain.
 func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthorization, checks ...Check) error {
 	if len(checks) == 0 {
-		return e.mapError(ctx, ErrNoChecks)
+		return ErrNoChecks
 	}
 
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
-		if err := validateInput(check); err != nil {
+		if err := validateRequireInput(check); err != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequire,
 				Outcome:              authzrepo.OutcomeError,
@@ -263,7 +291,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
+			return err
 		}
 
 		evaluation, err := authorization.evaluate(check)
@@ -279,7 +307,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
+			return err
 		}
 		if evaluation.Grant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
@@ -300,7 +328,10 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, Denied(check.Scope, check.selector()))
+			if evaluation.Denied {
+				return deniedByBlock(check.Scope, check.selector())
+			}
+			return Denied(check.Scope, check.selector())
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
@@ -324,6 +355,9 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	if err != nil {
 		return err
 	}
+	if err := validateShape(checks, false); err != nil {
+		return e.mapError(ctx, err)
+	}
 	if !enforce {
 		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
@@ -340,7 +374,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	for _, check := range checks {
-		if err := validateInput(check); err != nil {
+		if err := validateRequireInput(check); err != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequireAny,
 				Outcome:              authzrepo.OutcomeError,
@@ -356,46 +390,39 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
-	anyDenied := false
-	for _, check := range checks {
-		evaluation, err := authorization.evaluate(check)
-		if err != nil {
-			challengeLogger{
-				Operation:            authzrepo.OperationRequireAny,
-				Outcome:              authzrepo.OutcomeError,
-				Reason:               authzrepo.ReasonInvalidCheck,
-				Checks:               checks,
-				Focus:                &check,
-				Matches:              nil,
-				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
-				FilterCandidateCount: 0,
-				FilterAllowedCount:   0,
-			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
-		}
-		if evaluation.Denied {
-			anyDenied = true
-			continue
-		}
-		if evaluation.Grant != nil {
-			challengeLogger{
-				Operation:            authzrepo.OperationRequireAny,
-				Outcome:              authzrepo.OutcomeAllow,
-				Reason:               authzrepo.ReasonGrantMatched,
-				Checks:               checks,
-				Focus:                &check,
-				Matches:              []grantMatch{{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check}},
-				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
-				FilterCandidateCount: 0,
-				FilterAllowedCount:   0,
-			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return nil
-		}
+	decision, err := authorization.decideAnyOf(checks)
+	if err != nil {
+		challengeLogger{
+			Operation:            authzrepo.OperationRequireAny,
+			Outcome:              authzrepo.OutcomeError,
+			Reason:               authzrepo.ReasonInvalidCheck,
+			Checks:               checks,
+			Focus:                &checks[decision.index],
+			Matches:              nil,
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: 0,
+			FilterAllowedCount:   0,
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+		return e.mapError(ctx, err)
+	}
+	if decision.allowed() {
+		challengeLogger{
+			Operation:            authzrepo.OperationRequireAny,
+			Outcome:              authzrepo.OutcomeAllow,
+			Reason:               authzrepo.ReasonGrantMatched,
+			Checks:               checks,
+			Focus:                &checks[decision.index],
+			Matches:              []grantMatch{{Grant: *decision.match.Grant, ViaCheck: *decision.match.Check}},
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: 0,
+			FilterAllowedCount:   0,
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+		return nil
 	}
 
 	reason := authzrepo.ReasonScopeUnsatisfied
 	switch {
-	case anyDenied:
+	case slices.Contains(decision.blocked, true):
 		reason = authzrepo.ReasonDenyGrant
 	case authorization.grantCount() == 0:
 		reason = authzrepo.ReasonNoGrants
@@ -411,7 +438,78 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	// The alternatives are equivalent to the handler but not to the person
+	// asking for access: explain the one that grants the least.
+	if suggested, ok := leastPrivilegedAlternative(checks, decision.blocked); ok {
+		recordDenial(ctx, Denied(suggested.Scope, suggested.selector()))
+	}
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
+}
+
+// resourceKindBreadth orders resource kinds by how much a grant on one covers:
+// an organization holds projects, a project holds everything else.
+func resourceKindBreadth(check Check) int {
+	kind := check.ResourceKind
+	if kind == "" {
+		kind = ResourceKindForScope(check.Scope)
+	}
+	switch kind {
+	case ResourceKindOrg:
+		return 2
+	case ResourceKindProject:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// leastPrivilegedAlternative picks, among the checks a RequireAny offered, the
+// one a client should ask to be granted. Alternatives a block refused are left
+// out, since granting them again changes nothing. Of the rest, a scope that
+// satisfies fewer of the other alternatives is narrower, then a scope checked
+// on a smaller kind of resource, then one that satisfies fewer scopes overall;
+// the handler's own order breaks any remaining tie.
+func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
+	type ranked struct {
+		check   Check
+		covers  int
+		breadth int
+		implies int
+		index   int
+	}
+	candidates := make([]ranked, 0, len(checks))
+	for i, check := range checks {
+		if blocked[i] {
+			continue
+		}
+		closure := ScopeImplicationClosure(check.Scope)
+		covers := 0
+		for j, other := range checks {
+			if j != i && slices.Contains(closure, other.Scope) {
+				covers++
+			}
+		}
+		candidates = append(candidates, ranked{
+			check:   check,
+			covers:  covers,
+			breadth: resourceKindBreadth(check),
+			implies: len(closure),
+			index:   i,
+		})
+	}
+	if len(candidates) == 0 {
+		var none Check
+		return none, false
+	}
+	best := slices.MinFunc(candidates, func(a, b ranked) int {
+		return cmp.Or(
+			cmp.Compare(a.covers, b.covers),
+			cmp.Compare(a.breadth, b.breadth),
+			cmp.Compare(a.implies, b.implies),
+			cmp.Compare(a.index, b.index),
+		)
+	})
+	return best.check, true
 }
 
 // Evaluate reports whether the caller satisfies every check, WITHOUT recording an
@@ -428,6 +526,9 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 // failures (missing prepared grants, invalid check); a merely unsatisfied check
 // yields (false, nil).
 func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
+	if err := validateShape(checks, true); err != nil {
+		return false, e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -460,10 +561,97 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	return true, nil
 }
 
+// Can reports whether the caller satisfies every check, without recording a
+// challenge: a false result is a branch, not a denial. It is Evaluate under
+// the name the typed API uses, and it also accepts a single AnyOf check.
+func (e *Engine) Can(ctx context.Context, checks ...Check) (bool, error) {
+	if alternatives, ok := singleAnyOf(checks); ok {
+		return e.canAnyOf(ctx, alternatives)
+	}
+	return e.Evaluate(ctx, checks...)
+}
+
+func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, error) {
+	if len(alternatives) == 0 {
+		return false, e.mapError(ctx, ErrNoChecks)
+	}
+	if err := validateShape(alternatives, true); err != nil {
+		return false, e.mapError(ctx, err)
+	}
+	enforce, err := e.ShouldEnforce(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !enforce {
+		return slices.ContainsFunc(alternatives, unenforcedAllows), nil
+	}
+	authorization, ok := grantAuthorizationFromContext(ctx)
+	if !ok {
+		return false, e.mapError(ctx, ErrMissingGrants)
+	}
+	for _, check := range alternatives {
+		if err := validateInput(check); err != nil {
+			return false, e.mapError(ctx, err)
+		}
+	}
+	blocked, err := firstUnoverriddenExclusion(authorization, alternatives)
+	if err != nil {
+		return false, e.mapError(ctx, err)
+	}
+	if blocked != nil {
+		return false, nil
+	}
+	decision, err := authorization.decideAnyOf(alternatives)
+	if err != nil {
+		return false, e.mapError(ctx, err)
+	}
+	return decision.allowed(), nil
+}
+
+// anyOfDecision is the outcome of evaluating alternatives in order, shared by
+// RequireAny and Can(AnyOf(...)) so the two cannot drift apart. Callers add
+// their own challenge logging and result mapping.
+type anyOfDecision struct {
+	// match is the evaluation of the first alternative a grant allows, nil when
+	// none does.
+	match *grantCheckEvaluation
+	// index is the alternative that matched, or the one that failed to evaluate.
+	index int
+	// blocked marks the alternatives a deny grant refused.
+	blocked []bool
+}
+
+func (d anyOfDecision) allowed() bool { return d.match != nil }
+
+// decideAnyOf evaluates the alternatives in order and stops at the first one a
+// grant allows. Alternatives a deny grant refuses are marked and skipped.
+func (a grantAuthorization) decideAnyOf(checks []Check) (anyOfDecision, error) {
+	decision := anyOfDecision{match: nil, index: 0, blocked: make([]bool, len(checks))}
+	for i, check := range checks {
+		decision.index = i
+		evaluation, err := a.evaluate(check)
+		if err != nil {
+			return decision, err
+		}
+		if evaluation.Denied {
+			decision.blocked[i] = true
+			continue
+		}
+		if evaluation.Grant != nil {
+			decision.match = &evaluation
+			return decision, nil
+		}
+	}
+	return decision, nil
+}
+
 // Filter evaluates each check and returns the resource IDs of those the caller
 // is authorized for. When RBAC is not enforced all resource IDs are returned
 // except those of auth-client checks, which are omitted.
 func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
+	if err := validateShape(checks, true); err != nil {
+		return nil, e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -571,6 +759,9 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 // (same as [Filter]); per-check logs are intentionally avoided so callers can
 // safely use this with large input sets like a full tools/list.
 func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
+	if err := validateShape(checks, true); err != nil {
+		return nil, e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -706,16 +897,18 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 // authorized against the acting user's grants.
 //
 // A missing session normally means an unauthenticated or internal path, which
-// is why it disables enforcement. Two surfaces are session-less by design and
-// act for a real user anyway: assistant-token auth, and the OAuth-authenticated
-// Platform MCP endpoint. Leaving either out would silently turn every scope
-// check they make into a no-op.
+// is why it disables enforcement. Three surfaces are session-less by design and
+// act for a real user anyway: assistant-token auth, the OAuth-authenticated
+// Platform MCP endpoint, and the Channels endpoint. Leaving any of them out
+// would silently turn every scope check they make into a no-op — Evaluate
+// returns true for every check when enforcement is off, so omitting a surface
+// here grants it everything rather than nothing.
 func enforcedWithoutSession(ctx context.Context) bool {
 	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
 		return true
 	}
 	surface, ok := contextvalues.GetActingSurface(ctx)
-	return ok && surface == contextvalues.ActingSurfacePlatformMCP
+	return ok && (surface == contextvalues.ActingSurfacePlatformMCP || surface == contextvalues.ActingSurfaceChannels)
 }
 
 // unenforcedAllows reports whether check passes where RBAC is not enforced.
@@ -729,14 +922,50 @@ func all(checks []Check, ok func(Check) bool) bool {
 }
 
 func validateInput(c Check) error {
+	if c.anyOf != nil {
+		return InvalidCheck(c.Scope, c.ResourceID)
+	}
 	switch c.ResourceID {
 	case "":
 		return InvalidCheck(c.Scope, c.ResourceID)
 	case WildcardResource:
 		return InvalidCheck(c.Scope, c.ResourceID)
 	default:
+		if err := validateRequiredDimensions(c); err != nil {
+			return err
+		}
 		return validateAuthClientCheck(c)
 	}
+}
+
+// validateRequireInput is validateInput for the Require family, which also
+// refuses a probe.
+func validateRequireInput(c Check) error {
+	if c.probe {
+		return InvalidCheck(c.Scope, c.ResourceID)
+	}
+	return validateInput(c)
+}
+
+// validateShape refuses request shapes the API never accepts, before the
+// unenforced short-circuit, so a misuse fails whether or not RBAC is enforced:
+// an AnyOf nested where a single check is expected, or a probe where only a
+// concrete check can be required.
+func validateShape(checks []Check, allowProbe bool) error {
+	for _, c := range checks {
+		if c.anyOf != nil || (c.probe && !allowProbe) {
+			return InvalidCheck(c.Scope, c.ResourceID)
+		}
+	}
+	return nil
+}
+
+// singleAnyOf returns the alternatives when checks is one AnyOf check.
+func singleAnyOf(checks []Check) ([]Check, bool) {
+	if len(checks) != 1 || checks[0].anyOf == nil {
+		return nil, false
+	}
+	return checks[0].anyOf, true
 }
 
 func (e *Engine) mapError(ctx context.Context, err error) error {

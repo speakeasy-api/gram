@@ -558,6 +558,27 @@ SET status = 'declined'
   , updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: ConfirmPendingRiskPolicyChallenge :one
+-- Claude Cowork confirmations: a person who sends a challenged prompt again,
+-- or allows a challenged tool call in Cowork's permission prompt, has seen the
+-- warning and chosen to go ahead. The pending challenge becomes a short-lived
+-- acknowledgement for that same call. Only a recent, still-pending challenge
+-- for the identical call qualifies.
+UPDATE risk_policy_challenges
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = clock_timestamp() + make_interval(secs => @grace_seconds::float8)
+  , updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND user_id = @user_id
+  AND risk_policy_id = @risk_policy_id
+  AND tool_name IS NOT DISTINCT FROM sqlc.narg(tool_name)::text
+  AND call_fingerprint IS NOT DISTINCT FROM sqlc.narg(call_fingerprint)::text
+  AND status = 'challenged'
+  AND challenged_at > clock_timestamp() - make_interval(secs => @window_seconds::float8)
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: GetActiveRiskPolicyAck :one
 -- Hook-time gate: is there a live acknowledgement for this concrete call
 -- (user, policy, tool, call_fingerprint)? The agent retries with NO token, so
@@ -1762,7 +1783,7 @@ WHERE ccp.id = ANY(@ids::uuid[])
 -- titles are read from Postgres at page render time rather than denormalized
 -- into ClickHouse, because titles are generated after the scan and would be
 -- stale at ingest.
-SELECT c.id, c.title
+SELECT c.id, c.title, c.title_manually_set
 FROM chats c
 WHERE c.project_id = @project_id
   AND c.id = ANY(@ids::uuid[])
@@ -2043,3 +2064,21 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: SetRiskPolicyApprovalConfigFixture :exec
+-- Test fixture: replaces only a policy's approval config, which no production
+-- query edits on its own.
+UPDATE risk_policies
+SET approval_config = @approval_config
+WHERE id = @id;
+
+-- name: LockExactRiskPolicyAudienceGrants :exec
+-- Locks existing exact audience grants against generic deletes and updates
+-- without blocking concurrent inserts.
+SELECT id
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors = @selectors
+ORDER BY id
+FOR UPDATE;

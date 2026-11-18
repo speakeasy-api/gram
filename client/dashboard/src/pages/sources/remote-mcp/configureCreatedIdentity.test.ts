@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";

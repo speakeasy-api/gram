@@ -113,9 +113,9 @@ func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgI
 	return "workos_org_" + name, nil
 }
 
-func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, _ string) (string, error) {
+func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error) {
 	m.createdMemberships = append(m.createdMemberships, createdMembershipRecord{WorkOSUserID: workosUserID, WorkOSOrgID: workosOrgID})
-	return "om_mock_" + workosUserID, nil
+	return &workos.Member{ID: "om_mock_" + workosUserID, RoleSlugs: []string{roleSlug}}, nil
 }
 
 func (m *mockWorkOSFetcher) GetOrgMembership(_ context.Context, workosUserID, workosOrgID string) (*workos.Member, error) {
@@ -208,7 +208,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedNewOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	ti.trialNotifier = trialNotifier

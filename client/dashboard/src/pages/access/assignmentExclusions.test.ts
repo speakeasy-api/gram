@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it } from "vitest";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { assignmentExclusions } from "./assignmentExclusions";

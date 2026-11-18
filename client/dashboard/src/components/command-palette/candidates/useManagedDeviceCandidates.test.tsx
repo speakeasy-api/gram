@@ -1,6 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { isSendable } from "./types";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -24,22 +23,19 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    deviceAgent: {
-      mdmDetail: {
-        href: (provider: string) =>
-          `/org/device-agent/mdm-integrations/${provider}`,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
-vi.mock("@gram/client/react-query/managedDevices.js", () => ({
-  buildManagedDevicesInfiniteQuery: (_sdk: unknown, request: unknown) => {
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: "/" }),
+}));
+vi.mock("@gram/client/react-query/fleetDevices.js", () => ({
+  buildFleetDevicesInfiniteQuery: (_sdk: unknown, request: unknown) => {
     mocks.requests.push(request);
-    return { queryKey: ["managedDevices"], queryFn: vi.fn() };
+    return { queryKey: ["fleetDevices"], queryFn: vi.fn() };
   },
 }));
 vi.mock("@tanstack/react-query", () => ({
@@ -88,14 +84,15 @@ describe("useManagedDeviceCandidates", () => {
     expect(mocks.requests.at(-1)).toEqual({ limit: 200 });
     expect(mocks.options.at(-1)).toMatchObject({
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
-      queryKey: ["managedDevices", "org-one"],
+      queryKey: ["fleetDevices", "org-one"],
     });
     expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
   });
 
-  it("finds devices by hostname or serial and keeps them away from the intent service", () => {
+  it("finds devices by hostname or serial", () => {
     mocks.query.data = {
       pages: [
         { result: { devices: [device("a")] } },
@@ -123,12 +120,9 @@ describe("useManagedDeviceCandidates", () => {
       keywords: ["device", "jamf", "SERIAL-a", "mdm-a", "a@example.com"],
       group: "Devices",
     });
-    expect(result.current.every((candidate) => !isSendable(candidate))).toBe(
-      true,
-    );
   });
 
-  it("opens the device's panel on its integration page", () => {
+  it("opens the device's panel on the Devices tab", () => {
     const linked = device("a");
     mocks.query.data = { pages: [{ result: { devices: [linked] } }] };
 
@@ -138,8 +132,32 @@ describe("useManagedDeviceCandidates", () => {
     void result.current[0]!.run("open");
 
     expect(mocks.navigate).toHaveBeenCalledWith(
-      "/org/device-agent/mdm-integrations/jamf?device=a",
+      "/org/device-agent/devices?device=a",
       { state: { device: linked } },
+    );
+  });
+
+  it("finds a machine only its agent reports", () => {
+    const agentOnly = device("agent:c", {
+      provider: undefined,
+      externalId: undefined,
+      inInventory: false,
+    });
+    mocks.query.data = { pages: [{ result: { devices: [agentOnly] } }] };
+
+    const { result } = renderHook(() =>
+      useManagedDeviceCandidates({ enabled: true }),
+    );
+
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0]).toMatchObject({
+      title: "agent:c-mbp",
+      keywords: ["device", "SERIAL-agent:c", "agent:c@example.com"],
+    });
+    void result.current[0]!.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/org/device-agent/devices?device=agent%3Ac",
+      { state: { device: agentOnly } },
     );
   });
 

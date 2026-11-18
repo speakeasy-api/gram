@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -266,8 +267,9 @@ func TestToolsetsService_UpdateToolset_InvalidEnvironment(t *testing.T) {
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "error finding environment")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
 	require.NoError(t, err)
@@ -671,7 +673,8 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	})
 	require.NoError(t, err)
 
-	// Second toolset in the org does not auto-enable.
+	// Second toolset in the org starts private without joining the Default
+	// plugin; disabling it sets up the false-to-true transition under test.
 	second, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Second Toolset",
@@ -682,7 +685,9 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.False(t, *second.McpEnabled)
+	require.True(t, *second.McpEnabled)
+	disabled := setHostedVisibility(t, ctx, ti, second, "disabled")
+	require.False(t, *disabled.McpEnabled)
 
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)

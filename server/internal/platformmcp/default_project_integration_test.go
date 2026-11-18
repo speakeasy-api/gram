@@ -154,12 +154,12 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, defaultProject.Slug, remote.ProjectSlug)
 
-		readiness, err := invokeTool[GetMCPReadinessToolOutput](t, callerCtx, reg, "get_mcp_readiness", map[string]any{"registration_id": remote.RegistrationID})
+		readiness, err := invokeTool[GetMCPReadinessToolOutput](t, callerCtx, reg, "get_mcp_readiness", map[string]any{"mcp_id": remote.MCPID})
 		require.NoError(t, err)
 		require.Equal(t, defaultProject.Slug, readiness.ProjectSlug)
-		require.Equal(t, remote.RegistrationID, readiness.RegistrationID)
+		require.Equal(t, remote.MCPID, readiness.MCPID)
 
-		attached, err := invokeTool[AttachPlatformMCPIdentityProviderToolOutput](t, callerCtx, reg, "attach_platform_mcp_identity_provider", map[string]any{"registration_id": remote.RegistrationID, "confirmed": true})
+		attached, err := invokeTool[AttachPlatformMCPIdentityProviderToolOutput](t, callerCtx, reg, "attach_platform_mcp_identity_provider", map[string]any{"mcp_id": remote.MCPID, "confirmed": true})
 		require.NoError(t, err)
 		require.Equal(t, defaultProject.Slug, attached.ProjectSlug)
 		require.True(t, attached.Attached)
@@ -176,7 +176,7 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, namedProject.Slug, remote.ProjectSlug)
 
-		readiness, err := invokeTool[GetMCPReadinessToolOutput](t, callerCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": namedProject.Slug, "registration_id": remote.RegistrationID})
+		readiness, err := invokeTool[GetMCPReadinessToolOutput](t, callerCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": namedProject.Slug, "mcp_id": remote.MCPID})
 		require.NoError(t, err)
 		require.Equal(t, namedProject.Slug, readiness.ProjectSlug)
 
@@ -188,7 +188,7 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 				return next(contextWithPrincipal(ctx, principal), method, req)
 			}
 		})
-		result, err := connectTestClient(t, reg.server).CallTool(ctx, &mcp.CallToolParams{Name: "attach_platform_mcp_identity_provider", Arguments: map[string]any{"project_slug": namedProject.Slug, "registration_id": remote.RegistrationID, "confirmed": true}})
+		result, err := connectTestClient(t, reg.server).CallTool(ctx, &mcp.CallToolParams{Name: "attach_platform_mcp_identity_provider", Arguments: map[string]any{"project_slug": namedProject.Slug, "mcp_id": remote.MCPID, "confirmed": true}})
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 		structured, err := json.Marshal(result.StructuredContent)
@@ -205,12 +205,12 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 
 	// An omitted project in an organization without a default project is refused.
 	{
-		registrationID := uuid.NewString()
+		mcpID := uuid.NewString()
 		for name, arguments := range map[string]map[string]any{
 			"register_catalog_mcp":                  {"provider_key": "provider", "catalog_ref": "reviewed/mcp", "idempotency_key": "missing-default"},
 			"register_remote_mcp":                   {"remote_url": "https://remote.example.test/mcp", "idempotency_key": "missing-default"},
-			"get_mcp_readiness":                     {"registration_id": registrationID},
-			"attach_platform_mcp_identity_provider": {"registration_id": registrationID, "confirmed": true},
+			"get_mcp_readiness":                     {"mcp_id": mcpID},
+			"attach_platform_mcp_identity_provider": {"mcp_id": mcpID, "confirmed": true},
 		} {
 			encoded, err := json.Marshal(arguments)
 			require.NoError(t, err)
@@ -248,6 +248,7 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
 		WithInstallLinks(serverURL, serverURL)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg.withProjects(&RegistrationStore{db: conn, icons: nil})
 	registerPluginTools(reg, service)
 
 	actorCtx := func(principal Principal) context.Context {
@@ -261,10 +262,77 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, omitted.Supported)
 
-	named, err := invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"project_id": defaultProject.ID.String(), "mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	named, err := invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"project_slug": defaultProject.Slug, "mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
 	require.NoError(t, err)
 	require.Equal(t, named, omitted)
 
-	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(namedPrincipal), reg, "get_my_install_instructions", map[string]any{"mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	// A plugin names no project, so it still needs the default project.
+	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(namedPrincipal), reg, "get_my_install_instructions", map[string]any{"plugin": "any-plugin", "client_family": string(OnboardingClientClaudeCode)})
 	require.Equal(t, "default_project_not_found", refusalCode(t, err))
+
+	// An MCP server names its own project, and another organization's server
+	// names none the caller can reach.
+	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(namedPrincipal), reg, "get_my_install_instructions", map[string]any{"mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	require.Equal(t, "not_found", refusalCode(t, err))
+}
+
+// A caller without find_mcp names the server by the mcp_id setup returned.
+// The server names its own project, so an organization without a default
+// project needs no project_slug, and mcp:connect still applies.
+func TestInstallInstructionsByMCPIDAlone(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_install_by_mcp_id")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var mcpID uuid.UUID
+	for _, row := range rows {
+		if row.ProjectID == project.ID {
+			mcpID = row.ID
+			break
+		}
+	}
+	require.NotEqual(t, uuid.Nil, mcpID)
+
+	serverURL, err := url.Parse(testCanonicalBaseURL)
+	require.NoError(t, err)
+	service := NewPluginsService(conn, allowBudget(), "install-by-mcp-id-key").
+		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
+		WithInstallLinks(serverURL, serverURL)
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg.withProjects(&RegistrationStore{db: conn, icons: nil})
+	registerPluginTools(reg, service)
+
+	actorCtx := func(grants ...authz.Grant) context.Context {
+		sessionID := "session-install-by-mcp-id-" + principal.UserID
+		actor := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org", SessionID: &sessionID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+		actor = authz.GrantsToContext(actor, grants)
+		return ContextWithPrincipal(actor, principal)
+	}
+	connect := authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())
+	install := func(ctx context.Context, arguments map[string]any) (GetMyInstallInstructionsOutput, error) {
+		arguments["client_family"] = string(OnboardingClientClaudeCode)
+		return invokeTool[GetMyInstallInstructionsOutput](t, ctx, reg, "get_my_install_instructions", arguments)
+	}
+
+	alone, err := install(actorCtx(connect), map[string]any{"mcp_id": mcpID.String()})
+	require.NoError(t, err, "the server's project is used, so no default project is needed")
+	require.True(t, alone.Supported)
+
+	named, err := install(actorCtx(connect), map[string]any{"project_slug": project.Slug, "mcp_id": mcpID.String()})
+	require.NoError(t, err)
+	require.Equal(t, named, alone)
+
+	_, err = install(actorCtx(), map[string]any{"mcp_id": mcpID.String()})
+	require.Error(t, err, "mcp:connect still applies")
+
+	_, err = install(actorCtx(connect), map[string]any{"mcp_id": uuid.NewString()})
+	require.Equal(t, "not_found", refusalCode(t, err), "an unknown mcp_id names no server")
+
+	_, err = install(actorCtx(connect), map[string]any{"mcp_id": mcpID.String(), "plugin": "any-plugin"})
+	require.Error(t, err, "exactly one target")
 }

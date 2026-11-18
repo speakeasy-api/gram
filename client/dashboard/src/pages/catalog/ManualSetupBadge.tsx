@@ -5,7 +5,7 @@ import {
   TooltipPortal,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import type { PulseMCPServer } from "./hooks";
+import type { CatalogServer } from "./hooks";
 import { serverSetupType } from "./hooks/serverMetadata";
 
 const MANUAL_SETUP_TOOLTIP =
@@ -18,7 +18,7 @@ export function ManualSetupBadge({
   server,
   className,
 }: {
-  server: PulseMCPServer;
+  server: CatalogServer;
   className?: string;
 }): JSX.Element | null {
   const setup = serverSetupType(server);

@@ -152,6 +152,21 @@ func (q *Queries) BackdateAssistantRuntimeUpdatedAt(ctx context.Context, arg Bac
 	return err
 }
 
+const backdateMCPEndpointBySlugFixture = `-- name: BackdateMCPEndpointBySlugFixture :exec
+UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = $1 AND project_id = $2
+`
+
+type BackdateMCPEndpointBySlugFixtureParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+// Test fixture: makes one endpoint a day older than when it was created.
+func (q *Queries) BackdateMCPEndpointBySlugFixture(ctx context.Context, arg BackdateMCPEndpointBySlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, backdateMCPEndpointBySlugFixture, arg.Slug, arg.ProjectID)
+	return err
+}
+
 const beginExpireAssistantRuntime = `-- name: BeginExpireAssistantRuntime :one
 UPDATE assistant_runtimes
 SET
@@ -584,6 +599,22 @@ func (q *Queries) ClearAssistantMcpServersForServers(ctx context.Context, arg Cl
 	return err
 }
 
+const clearAssistantReasoningEffortForTest = `-- name: ClearAssistantReasoningEffortForTest :exec
+UPDATE assistants SET reasoning_effort = NULL
+WHERE id = $1 AND project_id = $2
+`
+
+type ClearAssistantReasoningEffortForTestParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Test fixture only: simulate a legacy row during nullable column expansion.
+func (q *Queries) ClearAssistantReasoningEffortForTest(ctx context.Context, arg ClearAssistantReasoningEffortForTestParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantReasoningEffortForTest, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
 const completeAssistantMCPOAuthClientRegistration = `-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
 UPDATE assistant_mcp_oauth_clients AS clients
 SET
@@ -850,6 +881,7 @@ INSERT INTO assistants (
   created_by_user_id,
   name,
   model,
+  reasoning_effort,
   instructions,
   warm_ttl_seconds,
   max_concurrency,
@@ -860,12 +892,13 @@ INSERT INTO assistants (
   $3,
   $4,
   $5,
-  $6,
+  COALESCE(NULLIF($6::TEXT, ''), 'medium'),
   $7,
   $8,
-  $9
+  $9,
+  $10
 )
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 `
 
 type CreateAssistantParams struct {
@@ -874,6 +907,7 @@ type CreateAssistantParams struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort string
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -887,6 +921,7 @@ type CreateAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -904,6 +939,7 @@ func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams
 		arg.CreatedByUserID,
 		arg.Name,
 		arg.Model,
+		arg.ReasoningEffort,
 		arg.Instructions,
 		arg.WarmTtlSeconds,
 		arg.MaxConcurrency,
@@ -917,6 +953,7 @@ func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1144,7 +1181,7 @@ func (q *Queries) GetActiveAssistantRuntimeByThreadID(ctx context.Context, arg G
 }
 
 const getAssistant = `-- name: GetAssistant :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND project_id = $2
@@ -1163,6 +1200,7 @@ type GetAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1183,6 +1221,7 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1237,7 +1276,7 @@ func (q *Queries) GetAssistantForClientMetadataDocument(ctx context.Context, ass
 }
 
 const getAssistantForDispatch = `-- name: GetAssistantForDispatch :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND deleted IS FALSE
@@ -1250,6 +1289,7 @@ type GetAssistantForDispatchRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1270,6 +1310,7 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1283,7 +1324,7 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 }
 
 const getAssistantIgnoringDeleted = `-- name: GetAssistantIgnoringDeleted :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND project_id = $2
@@ -1301,6 +1342,7 @@ type GetAssistantIgnoringDeletedRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1321,6 +1363,7 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -1698,7 +1741,7 @@ func (q *Queries) GetKitRuntimeControlAuthority(ctx context.Context, arg GetKitR
 
 const getKitRuntimeSessionBinding = `-- name: GetKitRuntimeSessionBinding :one
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
-  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id AND m.role <> 'user') AS has_prior_transcript
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
@@ -1729,6 +1772,8 @@ type GetKitRuntimeSessionBindingRow struct {
 }
 
 // Existence only: never load any previous transcript contents into the guest.
+// Pending user input is the current turn; only a non-user message shows the
+// assistant took part in earlier turns.
 func (q *Queries) GetKitRuntimeSessionBinding(ctx context.Context, arg GetKitRuntimeSessionBindingParams) (GetKitRuntimeSessionBindingRow, error) {
 	row := q.db.QueryRow(ctx, getKitRuntimeSessionBinding,
 		arg.RuntimeID,
@@ -1850,7 +1895,7 @@ func (q *Queries) GetLiveKitRuntimeAuthority(ctx context.Context, arg GetLiveKit
 }
 
 const getManagedAssistantByProject = `-- name: GetManagedAssistantByProject :one
-SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.reasoning_effort, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
 FROM project_managed_assistants pma
 JOIN assistants a ON a.id = pma.assistant_id
 WHERE pma.project_id = $1
@@ -1864,6 +1909,7 @@ type GetManagedAssistantByProjectRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1887,6 +1933,7 @@ func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uu
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -2138,25 +2185,6 @@ func (q *Queries) KitInterruptPending(ctx context.Context, arg KitInterruptPendi
 	return pending, err
 }
 
-const kitProtocolHasPriorMessages = `-- name: KitProtocolHasPriorMessages :one
-SELECT EXISTS(SELECT 1 FROM chat_messages
-WHERE project_id= $1 AND chat_id= $2
-AND id <> ALL($3::uuid[])) AS has_prior
-`
-
-type KitProtocolHasPriorMessagesParams struct {
-	ProjectID         uuid.NullUUID
-	ChatID            uuid.UUID
-	CurrentMessageIds []uuid.UUID
-}
-
-func (q *Queries) KitProtocolHasPriorMessages(ctx context.Context, arg KitProtocolHasPriorMessagesParams) (bool, error) {
-	row := q.db.QueryRow(ctx, kitProtocolHasPriorMessages, arg.ProjectID, arg.ChatID, arg.CurrentMessageIds)
-	var has_prior bool
-	err := row.Scan(&has_prior)
-	return has_prior, err
-}
-
 const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -2171,6 +2199,12 @@ WHERE r.state = $1
     WHERE a.id = r.assistant_id
       AND a.project_id = r.project_id
       AND a.deleted IS TRUE
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = r.project_id
+      AND p.deleted IS TRUE
   )
 ORDER BY r.updated_at ASC
 `
@@ -2190,8 +2224,8 @@ type ListActiveAssistantRuntimesRow struct {
 // Returns live v2 runtime rows that carry backend metadata for runtime
 // reconciliation sweeps. Only `active` rows qualify: `starting` rows are
 // mid-boot, while expiring/stopped rows are already being torn down or await
-// re-admission. Rows orphaned by a deleted assistant belong to the
-// deleted-assistant janitor and are excluded here.
+// re-admission. Rows orphaned by a deleted assistant or project belong to the
+// inactivity janitor and are excluded here so maintenance cannot delay collection.
 func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesRow, error) {
 	rows, err := q.db.Query(ctx, listActiveAssistantRuntimes, activeState)
 	if err != nil {
@@ -2424,7 +2458,7 @@ func (q *Queries) ListAssistantRuntimesForSwitch(ctx context.Context, arg ListAs
 }
 
 const listAssistants = `-- name: ListAssistants :many
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -2438,6 +2472,7 @@ type ListAssistantsRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -2464,6 +2499,7 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 			&i.CreatedByUserID,
 			&i.Name,
 			&i.Model,
+			&i.ReasoningEffort,
 			&i.Instructions,
 			&i.WarmTtlSeconds,
 			&i.MaxConcurrency,
@@ -2804,6 +2840,12 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
             AND a.project_id = r.project_id
             AND a.deleted IS TRUE
         )
+        OR EXISTS (
+          SELECT 1
+          FROM projects p
+          WHERE p.id = r.project_id
+            AND p.deleted IS TRUE
+        )
       )
       AND NOT EXISTS (
         SELECT 1
@@ -2818,6 +2860,11 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
       AND r.deleted IS NOT TRUE
       AND r.ended IS NOT TRUE
       AND r.state = $3
+    )
+    OR (
+      r.runtime_version = 3
+      AND (r.deleted IS TRUE OR r.ended IS TRUE)
+      AND r.state <> 'switch_retiring'
     )
   )
 ORDER BY r.updated_at ASC
@@ -2844,18 +2891,23 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 }
 
 // Returns runtime rows that still carry backend metadata and are safe to
-// collect, in two cases:
+// collect, in three cases:
 //  1. Orphans: finalized (soft-deleted or ended; the state value is ignored
 //     since a tombstone can carry any state, e.g. one stamped by a racing
-//     turn) or under a soft-deleted assistant, whose owning assistant has had
-//     no runtime activity since @inactive_before — i.e. Stop/Reap never
-//     completed. A live row under a live assistant is never an orphan: an
-//     idle runtime keeps its VM until the assistant is deleted.
+//     turn) or under a soft-deleted assistant or project, whose owning
+//     assistant has had no runtime activity since @inactive_before — i.e.
+//     Stop/Reap never completed. A live row under a live assistant and project
+//     is never an orphan: inactivity alone does not discard its workspace.
 //  2. Superseded backend: a row on a backend the process no longer targets
 //     (backend <> @target_backend), parked at @stopped_state after its warm
 //     window. Collecting it frees the deprecated backend's resources so the
 //     next admit lands on the target backend. Active/starting/expiring rows
 //     are left to finish, so a live assistant is never disrupted mid-turn.
+//  3. Retired Kit runtimes: version 3 rows own every object and credential
+//     they name, and a new row never inherits their metadata, so collecting
+//     one cannot affect the assistant's current runtime. They skip the
+//     inactivity check, which a busy assistant would never satisfy. Rows still
+//     in switch_retiring belong to the pending switch retirement sweep.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
 		arg.InactiveBefore,
@@ -3155,9 +3207,8 @@ SELECT
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
-  -- legacyalias: drop with AIM-670.
-  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
+  (ep.domain IS NOT NULL AND ep.is_domain_root IS TRUE)::bool AS endpoint_is_domain_root,
   t.default_environment_slug,
   ams.environment_id,
   e.slug AS environment_slug
@@ -3173,7 +3224,7 @@ LEFT JOIN toolsets t
   AND t.project_id = $1
   AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT me.slug, cd.domain
+  SELECT me.slug, cd.domain, me.is_domain_root
   FROM mcp_endpoints me
   LEFT JOIN custom_domains cd
     ON cd.id = me.custom_domain_id
@@ -3185,7 +3236,15 @@ LEFT JOIN LATERAL (
     AND me.project_id = ms.project_id
     AND me.deleted IS FALSE
     AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (me.custom_domain_id IS NOT NULL), me.created_at, me.id
+  ORDER BY
+    CASE
+      WHEN t.id IS NULL THEN (me.custom_domain_id IS NOT NULL)::int
+      WHEN me.custom_domain_id IS NOT NULL AND me.is_domain_root IS TRUE THEN 0
+      WHEN me.custom_domain_id IS NOT NULL THEN 1
+      ELSE 2
+    END,
+    me.created_at,
+    me.id
   LIMIT 1
 ) ep ON TRUE
 LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = $1
@@ -3206,8 +3265,8 @@ type LoadAssistantMcpServersRow struct {
 	ToolsetSlug            pgtype.Text
 	Visibility             string
 	EndpointSlug           string
-	HostedToolset          bool
 	EndpointDomain         string
+	EndpointIsDomainRoot   bool
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -3215,10 +3274,10 @@ type LoadAssistantMcpServersRow struct {
 
 // Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
 // default environment, and sort first so they win runtime id
-// collisions. The address is the server's own endpoint: platform first, else
-// one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
-// A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
-// caller fills in from legacyalias until the toolset slug fallback is removed.
+// collisions. The address is the server's own endpoint on the platform or a verified, activated custom domain
+// (ListAddressableMCPEndpointsByMCPServerIDs): for a hosted row in endpointaddr.PrimaryEndpoint's order (domain
+// root, then another custom-domain endpoint, then platform), as its toolset view and plugins advertise, a domain
+// root at the bare domain; for any other row platform first, whose slug the assistant view reports.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
@@ -3235,8 +3294,8 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 			&i.ToolsetSlug,
 			&i.Visibility,
 			&i.EndpointSlug,
-			&i.HostedToolset,
 			&i.EndpointDomain,
+			&i.EndpointIsDomainRoot,
 			&i.DefaultEnvironmentSlug,
 			&i.EnvironmentID,
 			&i.EnvironmentSlug,
@@ -3348,6 +3407,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -3381,6 +3441,7 @@ type LoadAssistantThreadForBootstrapRow struct {
 	CreatedByUserID         pgtype.Text
 	Name                    string
 	Model                   string
+	ReasoningEffort         pgtype.Text
 	Instructions            string
 	WarmTtlSeconds          int64
 	MaxConcurrency          int64
@@ -3406,6 +3467,7 @@ func (q *Queries) LoadAssistantThreadForBootstrap(ctx context.Context, arg LoadA
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -3525,6 +3587,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -3578,6 +3641,7 @@ type LoadThreadContextRow struct {
 	CreatedByUserID          pgtype.Text
 	Name                     string
 	Model                    string
+	ReasoningEffort          pgtype.Text
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
@@ -3620,6 +3684,7 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -3657,6 +3722,7 @@ SELECT
   a.created_by_user_id,
   a.name,
   a.model,
+  a.reasoning_effort,
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
@@ -3709,6 +3775,7 @@ type LoadThreadContextV2Row struct {
 	CreatedByUserID          pgtype.Text
 	Name                     string
 	Model                    string
+	ReasoningEffort          pgtype.Text
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
@@ -3754,6 +3821,7 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -3772,6 +3840,33 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.WarmUntil,
 	)
 	return i, err
+}
+
+const lockKitLocalWorkloadSubject = `-- name: LockKitLocalWorkloadSubject :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes kit workload provisioning for one external subject across
+// projects. The key is the caller's canonical JSON encoding of the subject.
+func (q *Queries) LockKitLocalWorkloadSubject(ctx context.Context, subjectKey string) error {
+	_, err := q.db.Exec(ctx, lockKitLocalWorkloadSubject, subjectKey)
+	return err
+}
+
+const lockProjectForKitWorkload = `-- name: LockProjectForKitWorkload :one
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE
+`
+
+type LockProjectForKitWorkloadParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockProjectForKitWorkload(ctx context.Context, arg LockProjectForKitWorkloadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProjectForKitWorkload, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lookupActiveAssistantRuntimeV2 = `-- name: LookupActiveAssistantRuntimeV2 :one
@@ -4533,15 +4628,7 @@ SELECT t.id, t.slug, EXISTS (
     AND w.visibility = 'disabled'
     AND w.deleted IS FALSE
     AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
-)::bool AS enables_mcp, EXISTS (
-  SELECT 1
-  FROM mcp_servers w
-  WHERE w.id = t.id
-    AND w.toolset_id = t.id
-    AND w.project_id = t.project_id
-    AND w.visibility = 'disabled'
-    AND w.deleted IS FALSE
-)::bool AS disabled_wrapper
+)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
@@ -4568,16 +4655,14 @@ type ResolveToolsetsForWriteParams struct {
 }
 
 type ResolveToolsetsForWriteRow struct {
-	ID              uuid.UUID
-	Slug            string
-	EnablesMcp      bool
-	DisabledWrapper bool
+	ID         uuid.UUID
+	Slug       string
+	EnablesMcp bool
 }
 
 // Also locks the toolsets behind canonical wrappers named by slug, so server
 // attachments take the toolset lock before the server lock, as deletion does.
-// enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
-// legacyalias: drop disabled_wrapper with AIM-670.
+// enables_mcp needs an endpoint.
 // Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
 // locks when an MCP server concurrently switches to this toolset backend.
 func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolsetsForWriteParams) ([]ResolveToolsetsForWriteRow, error) {
@@ -4589,12 +4674,7 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 	var items []ResolveToolsetsForWriteRow
 	for rows.Next() {
 		var i ResolveToolsetsForWriteRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Slug,
-			&i.EnablesMcp,
-			&i.DisabledWrapper,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Slug, &i.EnablesMcp); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -4638,6 +4718,21 @@ type RetireAssistantRuntimesForSwitchParams struct {
 // Never rewrite a runtime's protocol. Authority checks must reject ended rows.
 func (q *Queries) RetireAssistantRuntimesForSwitch(ctx context.Context, arg RetireAssistantRuntimesForSwitchParams) error {
 	_, err := q.db.Exec(ctx, retireAssistantRuntimesForSwitch, arg.ProjectID, arg.AssistantID)
+	return err
+}
+
+const retireMCPServerEndpointsFixture = `-- name: RetireMCPServerEndpointsFixture :exec
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = $1 AND project_id = $2
+`
+
+type RetireMCPServerEndpointsFixtureParams struct {
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+// Test fixture: retires every endpoint of one MCP server.
+func (q *Queries) RetireMCPServerEndpointsFixture(ctx context.Context, arg RetireMCPServerEndpointsFixtureParams) error {
+	_, err := q.db.Exec(ctx, retireMCPServerEndpointsFixture, arg.McpServerID, arg.ProjectID)
 	return err
 }
 
@@ -4993,6 +5088,21 @@ func (q *Queries) SoftDeleteAssistantThread(ctx context.Context, arg SoftDeleteA
 	return err
 }
 
+const softDeleteCustomDomainFixture = `-- name: SoftDeleteCustomDomainFixture :exec
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1 AND organization_id = $2
+`
+
+type SoftDeleteCustomDomainFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: soft-deletes a custom domain under its endpoints.
+func (q *Queries) SoftDeleteCustomDomainFixture(ctx context.Context, arg SoftDeleteCustomDomainFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteCustomDomainFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const stopAssistantRuntime = `-- name: StopAssistantRuntime :exec
 UPDATE assistant_runtimes
 SET
@@ -5176,26 +5286,28 @@ UPDATE assistants
 SET
   name = COALESCE($1::TEXT, name),
   model = COALESCE($2::TEXT, model),
-  instructions = COALESCE($3::TEXT, instructions),
-  warm_ttl_seconds = COALESCE($4::BIGINT, warm_ttl_seconds),
-  max_concurrency = COALESCE($5::BIGINT, max_concurrency),
-  status = COALESCE($6::TEXT, status),
+  reasoning_effort = COALESCE($3::TEXT, reasoning_effort),
+  instructions = COALESCE($4::TEXT, instructions),
+  warm_ttl_seconds = COALESCE($5::BIGINT, warm_ttl_seconds),
+  max_concurrency = COALESCE($6::BIGINT, max_concurrency),
+  status = COALESCE($7::TEXT, status),
   updated_at = clock_timestamp()
-WHERE id = $7
-  AND project_id = $8
+WHERE id = $8
+  AND project_id = $9
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, reasoning_effort, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 `
 
 type UpdateAssistantParams struct {
-	Name           pgtype.Text
-	Model          pgtype.Text
-	Instructions   pgtype.Text
-	WarmTtlSeconds pgtype.Int8
-	MaxConcurrency pgtype.Int8
-	Status         pgtype.Text
-	AssistantID    uuid.UUID
-	ProjectID      uuid.UUID
+	Name            pgtype.Text
+	Model           pgtype.Text
+	ReasoningEffort pgtype.Text
+	Instructions    pgtype.Text
+	WarmTtlSeconds  pgtype.Int8
+	MaxConcurrency  pgtype.Int8
+	Status          pgtype.Text
+	AssistantID     uuid.UUID
+	ProjectID       uuid.UUID
 }
 
 type UpdateAssistantRow struct {
@@ -5205,6 +5317,7 @@ type UpdateAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -5219,6 +5332,7 @@ func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams
 	row := q.db.QueryRow(ctx, updateAssistant,
 		arg.Name,
 		arg.Model,
+		arg.ReasoningEffort,
 		arg.Instructions,
 		arg.WarmTtlSeconds,
 		arg.MaxConcurrency,
@@ -5234,6 +5348,7 @@ func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
+		&i.ReasoningEffort,
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
@@ -5267,11 +5382,14 @@ func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg Update
 }
 
 const upsertAssistantChat = `-- name: UpsertAssistantChat :exec
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES ($1, $2, $3, $4::TEXT, NULL, $5, NOW(), NOW())
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+VALUES ($1, $2, $3, $4::TEXT, NULL, $5, $6::TEXT, NOW(), NOW())
 ON CONFLICT (id) DO UPDATE SET
   user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  session_surface = COALESCE(chats.session_surface, EXCLUDED.session_surface),
   updated_at = NOW()
+WHERE chats.project_id = EXCLUDED.project_id
+  AND chats.organization_id = EXCLUDED.organization_id
 `
 
 type UpsertAssistantChatParams struct {
@@ -5280,6 +5398,7 @@ type UpsertAssistantChatParams struct {
 	OrganizationID string
 	UserID         pgtype.Text
 	Title          pgtype.Text
+	SessionSurface pgtype.Text
 }
 
 // user_id is the conversation owner — stamped on first insert so reads can
@@ -5289,6 +5408,12 @@ type UpsertAssistantChatParams struct {
 // retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 // backfilled on first owned send so dashboard ownership checks accept the
 // legitimate owner.
+//
+// session_surface is the server-derived product surface for sources that the
+// inference credential alone cannot tell apart (the Speakeasy Slack app runs on
+// the same assistants runtime as every other assistant). It is stamped from the
+// persisted thread source kind, never from a request header, and an existing
+// value is kept.
 func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantChatParams) error {
 	_, err := q.db.Exec(ctx, upsertAssistantChat,
 		arg.ChatID,
@@ -5296,6 +5421,7 @@ func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantCh
 		arg.OrganizationID,
 		arg.UserID,
 		arg.Title,
+		arg.SessionSurface,
 	)
 	return err
 }

@@ -5,10 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -47,13 +45,4 @@ func SetHostedMCP(t *testing.T, ctx context.Context, db testrepo.DBTX, projectID
 		require.NoError(t, err)
 		require.Equal(t, int64(1), rows, "toolset has no canonical MCP server")
 	}
-}
-
-// SetLegacyAlias sets the legacy /mcp/<slug> alias of a toolset; an empty slug clears it.
-func SetLegacyAlias(t *testing.T, ctx context.Context, db testrepo.DBTX, projectID, toolsetID uuid.UUID, slug string, customDomainID uuid.NullUUID) {
-	t.Helper()
-
-	require.NoError(t, legacyalias.SetFixture(ctx, db, projectID, toolsetID, legacyalias.Alias{
-		Slug: pgtype.Text{String: slug, Valid: slug != ""}, CustomDomainID: customDomainID,
-	}))
 }

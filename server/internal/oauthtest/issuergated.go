@@ -45,7 +45,7 @@ type IssuerGatedToolsetOpts struct {
 // IssuerGatedToolsetResult holds the rows created by CreateIssuerGatedToolset.
 type IssuerGatedToolsetResult struct {
 	Toolset toolsets_repo.Toolset
-	// McpSlug is the toolset's legacy /mcp/<slug> alias, which serves it.
+	// McpSlug is the slug of the platform endpoint that serves the toolset.
 	McpSlug             string
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionIssuer remotesessions_repo.RemoteSessionIssuer
@@ -136,6 +136,7 @@ func CreateIssuerGatedToolset(
 	require.NoError(t, err)
 
 	rsc, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		ForwardClientName:     false,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: rsi.ID,
@@ -152,7 +153,7 @@ func CreateIssuerGatedToolset(
 	})
 	require.NoError(t, err)
 
-	toolset := createLegacyHostedToolset(t, ctx, conn, authCtx, legacyHostedToolset{
+	toolset := createHostedToolset(t, ctx, conn, authCtx, hostedToolset{
 		name: "Issuer-Gated MCP " + suffix, slug: slug, description: "Test toolset bound to user_session_issuer",
 		public: opts.IsPublic, issuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
 	})

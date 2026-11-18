@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -1586,4 +1587,59 @@ func TestFindReceiptIsExistingOnlyAndUserScoped(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, receipt.ID, existing.ID)
+}
+
+// TestRegistrationStoreRecordsTypedAuthClientsForConfiguredHeaders proves the
+// catalog registration models the credential headers it writes: the server it
+// creates offers a typed auth client derived from them, without waiting for
+// the offline backfill.
+func TestRegistrationStoreRecordsTypedAuthClientsForConfiguredHeaders(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_typed")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	request := CatalogRegistrationRequest{
+		ProjectSlug:      project.Slug,
+		SourceKind:       "catalog",
+		CatalogProvider:  "fixture",
+		CatalogReference: "typed-reference",
+		IdempotencyKey:   "registration-typed-key",
+		InputHash:        catalogRegistrationInputHash(project.Slug, "catalog", "fixture", "typed-reference"),
+	}
+
+	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
+	require.NoError(t, err)
+
+	_, err = store.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{
+		remoteURL:   "https://typed.example.test/mcp",
+		displayName: "Typed MCP",
+		headers: []resolvedCatalogHeader{{
+			name:     "Authorization",
+			required: true,
+			secret:   true,
+		}},
+	})
+	require.NoError(t, err)
+
+	registration, err := platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       request.SourceKind,
+		CatalogProvider:  request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+	})
+	require.NoError(t, err)
+	require.True(t, registration.McpServerID.Valid)
+
+	offered, err := authclientbackfill.New(conn).ListServerAuthClientsFixture(ctx, registration.McpServerID.UUID)
+	require.NoError(t, err)
+	require.NotEmpty(t, offered,
+		"the configured credential header is offered through a typed auth client")
 }

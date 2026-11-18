@@ -204,6 +204,26 @@ func EffectiveAgent(ctx context.Context) (urn.Principal, bool) {
 	return zero, false
 }
 
+// EffectiveAgentID is EffectiveAgent as the agents table id, which capture
+// paths stamp onto the records an agent produces. It reads the server-set
+// actor rather than anything a client reports, because a client that could
+// name its own agent could attribute its activity to any agent in the
+// organization. An agent principal's id is validated as a canonical UUID when
+// the actor is parsed, so a parse failure here means the principal was
+// malformed and the record is left unattributed rather than stamped with a
+// guess.
+func EffectiveAgentID(ctx context.Context) (uuid.UUID, bool) {
+	agent, ok := EffectiveAgent(ctx)
+	if !ok {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(agent.ID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
 // APIKeyAuthorization returns the profile selected by trusted API-key
 // authentication. APIKeyID remains independent credential provenance.
 func APIKeyAuthorization(ctx context.Context) (APIKeyAuthorizationMode, bool) {
@@ -445,6 +465,14 @@ func GetMCPClientInfo(ctx context.Context) (MCPClientInfo, bool) {
 // carries a real user but no browser session, and the session is what tells
 // RBAC to enforce for every other human-driven surface.
 const ActingSurfacePlatformMCP = "platform_mcp"
+
+// ActingSurfaceChannels marks a call arriving through the Channels endpoint.
+// Channels shares the Platform MCP authorization server and account but is a
+// separate audience with its own permissions, so it carries its own surface.
+// It is named here for the same reason Platform MCP is: a Channels call
+// carries a real user and no browser session, and RBAC has to know that a
+// missing session on this surface means "enforce" rather than "internal path".
+const ActingSurfaceChannels = "channels"
 
 func SetActingSurface(ctx context.Context, value string) context.Context {
 	return context.WithValue(ctx, actingSurfaceContextKey, value)

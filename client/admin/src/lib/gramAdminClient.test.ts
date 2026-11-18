@@ -114,58 +114,63 @@ describe("generated admin boundary", () => {
     expect(request.headers.has("Cookie")).toBe(false);
   });
 
-  it("uses the guarded generated infinite activity operation and exposes its page shape", async () => {
-    const fetch = vi.fn().mockImplementation(() =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            logs: [
-              {
-                acting_surface: "platform_mcp",
-                action: "organization:settings_updated",
-                actor_id: "actor_1",
-                actor_type: "user",
-                created_at: "2026-03-12T15:30:00Z",
-                id: "log_1",
-                subject_id: "org_1",
-                subject_type: "organization",
-              },
-            ],
-            next_cursor: "opaque+/=",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
+  it.each([false, true, undefined])(
+    "decodes activity with is_internal=%s",
+    async (isInternal) => {
+      const fetch = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              logs: [
+                {
+                  acting_surface: "platform_mcp",
+                  action: "organization:settings_updated",
+                  actor_id: "actor_1",
+                  actor_type: "user",
+                  created_at: "2026-03-12T15:30:00Z",
+                  id: "log_1",
+                  is_internal: isInternal,
+                  subject_id: "org_1",
+                  subject_type: "organization",
+                },
+              ],
+              next_cursor: "opaque+/=",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
         ),
-      ),
-    );
-    vi.stubGlobal("fetch", fetch);
+      );
+      vi.stubGlobal("fetch", fetch);
 
-    const query = boundary.organizationActivityQuery("org explicit");
-    const firstPage = await query.queryFn?.({
-      pageParam: undefined,
-      signal: new AbortController().signal,
-    } as never);
+      const query = boundary.organizationActivityQuery("org explicit");
+      const firstPage = await query.queryFn?.({
+        pageParam: undefined,
+        signal: new AbortController().signal,
+      } as never);
 
-    expect(query.queryKey).toEqual(
-      queryKeyAdminListOrganizationActivityInfinite({
-        organizationId: "org explicit",
-      }),
-    );
-    expect(firstPage?.result.logs[0]?.createdAt).toEqual(
-      new Date("2026-03-12T15:30:00Z"),
-    );
-    expect(firstPage?.["~next"]).toEqual({ cursor: "opaque+/=" });
-    let url = new URL((fetch.mock.calls[0]![0] as Request).url);
-    expect(url.pathname).toBe("/admin/organization.activity");
-    expect(url.searchParams.get("organization_id")).toBe("org explicit");
-    expect(url.searchParams.has("cursor")).toBe(false);
+      expect(query.queryKey).toEqual(
+        queryKeyAdminListOrganizationActivityInfinite({
+          organizationId: "org explicit",
+        }),
+      );
+      expect(firstPage?.result.logs[0]?.isInternal).toBe(isInternal);
+      expect(firstPage?.result.logs[0]?.createdAt).toEqual(
+        new Date("2026-03-12T15:30:00Z"),
+      );
+      expect(firstPage?.["~next"]).toEqual({ cursor: "opaque+/=" });
+      let url = new URL((fetch.mock.calls[0]![0] as Request).url);
+      expect(url.pathname).toBe("/admin/organization.activity");
+      expect(url.searchParams.get("organization_id")).toBe("org explicit");
+      expect(url.searchParams.has("cursor")).toBe(false);
 
-    await query.queryFn?.({
-      pageParam: firstPage?.["~next"],
-      signal: new AbortController().signal,
-    } as never);
-    url = new URL((fetch.mock.calls[1]![0] as Request).url);
-    expect(url.searchParams.get("cursor")).toBe("opaque+/=");
-  });
+      await query.queryFn?.({
+        pageParam: firstPage?.["~next"],
+        signal: new AbortController().signal,
+      } as never);
+      url = new URL((fetch.mock.calls[1]![0] as Request).url);
+      expect(url.searchParams.get("cursor")).toBe("opaque+/=");
+    },
+  );
 
   it("keeps onboarding reads and writes same-origin and maps the generated contract", async () => {
     const body = {
@@ -1108,3 +1113,34 @@ it("shares candidate query cache for implicit and explicit active status", () =>
     boundary.registryPromotionCandidatesQuery({ limit: 25 }).queryKey,
   );
 });
+
+it.each(["{}", "not JSON"])(
+  "clears a cached registry crumb for an unnamed response %s",
+  async (dataJson) => {
+    const { registryEntryNameKey } = await import("@/lib/registryEntryName");
+    const id = "00000000-0000-4000-8000-000000000001";
+    const cache = new QueryClient();
+    cache.setQueryData(registryEntryNameKey(id), { name: "old name" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id,
+            data_json: dataJson,
+            updated_at: "opaque",
+            created_at: "opaque",
+            published: false,
+            issues: [],
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    await cache.fetchQuery(boundary.registryEntryQuery(id));
+    expect(cache.getQueryData(registryEntryNameKey(id))).toEqual({
+      name: undefined,
+    });
+    cache.clear();
+  },
+);

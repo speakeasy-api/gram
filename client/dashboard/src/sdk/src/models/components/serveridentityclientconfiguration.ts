@@ -21,7 +21,7 @@ export type ServerIdentityClientConfigurationTokenEndpointAuthMethod =
   ClosedEnum<typeof ServerIdentityClientConfigurationTokenEndpointAuthMethod>;
 
 /**
- * Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+ * Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id, client_secret and template_client_id and uses scope, audience, and token_endpoint_auth_method as registration preferences.
  */
 export type ServerIdentityClientConfiguration = {
   /**
@@ -40,6 +40,10 @@ export type ServerIdentityClientConfiguration = {
    * Each value must be an RFC 6749 scope token.
    */
   scope?: Array<string> | undefined;
+  /**
+   * An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template's stored client_secret, unless client_secret is supplied, and the callback the template's registration lists. client_id must equal the template's. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.
+   */
+  templateClientId?: string | undefined;
   /**
    * How the client authenticates at the provider token endpoint, or the preferred method for DCR.
    */
@@ -60,6 +64,7 @@ export type ServerIdentityClientConfiguration$Outbound = {
   client_id?: string | undefined;
   client_secret?: string | undefined;
   scope?: Array<string> | undefined;
+  template_client_id?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
 };
 
@@ -73,6 +78,7 @@ export const ServerIdentityClientConfiguration$outboundSchema: z.ZodMiniType<
     clientId: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
     scope: z.optional(z.array(z.string())),
+    templateClientId: z.optional(z.string()),
     tokenEndpointAuthMethod: z.optional(
       ServerIdentityClientConfigurationTokenEndpointAuthMethod$outboundSchema,
     ),
@@ -81,6 +87,7 @@ export const ServerIdentityClientConfiguration$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       clientId: "client_id",
       clientSecret: "client_secret",
+      templateClientId: "template_client_id",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
     });
   }),

@@ -18,6 +18,7 @@ const (
 	ActionRemoteSessionClientDuplicate               Action = "remote-session-client:duplicate"
 	ActionRemoteSessionClientUpdate                  Action = "remote-session-client:update"
 	ActionRemoteSessionClientDelete                  Action = "remote-session-client:delete"
+	ActionRemoteSessionClientAttachMcpServer         Action = "remote-session-client:attach-mcp-server"
 	ActionRemoteSessionClientDetachMcpServer         Action = "remote-session-client:detach-mcp-server"
 	ActionRemoteSessionClientRevokeSessions          Action = "remote-session-client:revoke-sessions"
 	ActionRemoteSessionClientAttachUserSessionIssuer Action = "remote-session-client:attach-user-session-issuer"
@@ -56,6 +57,7 @@ func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -141,6 +143,7 @@ func (l *Logger) LogRemoteSessionClientDuplicate(ctx context.Context, dbtx repo.
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -193,6 +196,7 @@ func (l *Logger) LogRemoteSessionClientUpdate(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -231,6 +235,7 @@ type LogRemoteSessionClientDeleteEvent struct {
 func (l *Logger) LogRemoteSessionClientDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDeleteEvent) error {
 	action := ActionRemoteSessionClientDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -268,14 +273,28 @@ type LogRemoteSessionClientDetachMcpServerEvent struct {
 	McpServerName          string
 }
 
+// LogRemoteSessionClientAttachMcpServerEvent describes an administrator
+// associating a remote_session_client with one MCP server.
+type LogRemoteSessionClientAttachMcpServerEvent LogRemoteSessionClientDetachMcpServerEvent
+
+// LogRemoteSessionClientAttachMcpServer records that a remote_session_client was
+// associated with an MCP server through an explicit attach. The affected MCP
+// server is captured in metadata so the audit trail names the server whose
+// authentication changed.
+func (l *Logger) LogRemoteSessionClientAttachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientAttachMcpServerEvent) error {
+	return l.logRemoteSessionClientMcpServerChange(ctx, dbtx, ActionRemoteSessionClientAttachMcpServer, LogRemoteSessionClientDetachMcpServerEvent(event))
+}
+
 // LogRemoteSessionClientDetachMcpServer records that a remote_session_client
 // was detached from an MCP server, either by an organization admin removing
 // the binding from the server's user session issuer or by removing the
 // server's own client association. The affected MCP server is captured in
 // metadata so the audit trail names the server whose authentication changed.
 func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDetachMcpServerEvent) error {
-	action := ActionRemoteSessionClientDetachMcpServer
+	return l.logRemoteSessionClientMcpServerChange(ctx, dbtx, ActionRemoteSessionClientDetachMcpServer, event)
+}
 
+func (l *Logger) logRemoteSessionClientMcpServerChange(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientDetachMcpServerEvent) error {
 	metadata, err := marshalAuditPayload(map[string]any{
 		"mcp_server_id":   event.McpServerURN.ID.String(),
 		"mcp_server_name": event.McpServerName,
@@ -285,6 +304,7 @@ func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -446,6 +466,7 @@ func (l *Logger) LogRemoteSessionClientRevokeSessions(ctx context.Context, dbtx 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -490,6 +511,7 @@ type remoteSessionClientAttachment struct {
 // and JSON Web Key Set writers cannot drift apart as the row shape changes.
 func remoteSessionClientAttachmentRow(a remoteSessionClientAttachment) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: a.organizationID,
 		ProjectID:      uuid.NullUUID{UUID: a.projectID, Valid: a.projectID != uuid.Nil},
 

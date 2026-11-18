@@ -24,6 +24,10 @@ type Client struct {
 	// endpoint.
 	GetGatewayDoer goahttp.Doer
 
+	// GetProjectGateway Doer is the HTTP client used to make requests to the
+	// getProjectGateway endpoint.
+	GetProjectGatewayDoer goahttp.Doer
+
 	// SendInvite Doer is the HTTP client used to make requests to the sendInvite
 	// endpoint.
 	SendInviteDoer goahttp.Doer
@@ -115,6 +119,7 @@ func NewClient(
 	return &Client{
 		GetDoer:                                doer,
 		GetGatewayDoer:                         doer,
+		GetProjectGatewayDoer:                  doer,
 		SendInviteDoer:                         doer,
 		RevokeInviteDoer:                       doer,
 		UpdateInviteRoleDoer:                   doer,
@@ -183,6 +188,30 @@ func (c *Client) GetGateway() goa.Endpoint {
 		resp, err := c.GetGatewayDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "getGateway", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProjectGateway returns an endpoint that makes HTTP requests to the
+// organizations service getProjectGateway server.
+func (c *Client) GetProjectGateway() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectGatewayRequest(c.encoder)
+		decodeResponse = DecodeGetProjectGatewayResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectGatewayRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectGatewayDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "getProjectGateway", err)
 		}
 		return decodeResponse(resp)
 	}

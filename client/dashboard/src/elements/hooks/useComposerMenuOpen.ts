@@ -1,4 +1,5 @@
-import { RefObject, useEffect } from "react";
+import type { RefObject } from "react";
+import { useEffect } from "react";
 
 /** Marks the Elements shadow host while a composer menu (slash commands, tool
  *  mentions) is open.

@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
@@ -78,9 +79,6 @@ type AuthorizationError struct {
 	// Reason selects an explanation independently of the public error code.
 	Reason Reason
 
-	// Approval identifies a staff change approval rather than a connection.
-	Approval bool
-
 	// ErrorID is the public service error identifier, when available.
 	ErrorID string
 
@@ -110,6 +108,9 @@ type AuthorizationError struct {
 	// ServerName names the MCP server the client was connecting to, as on the
 	// consent page. Empty when the request did not identify one.
 	ServerName string
+
+	// ProviderName names the sign-in provider on ReasonProviderUnavailable, when known.
+	ProviderName string
 }
 
 // Reason describes what the person can do about a browser failure.
@@ -132,7 +133,37 @@ const (
 	ReasonInvalidLink Reason = "invalid-link"
 	// ReasonUnavailable identifies a dependency failure independently of HTTP status.
 	ReasonUnavailable Reason = "unavailable"
+	// ReasonInternal identifies a Speakeasy-side fault independently of HTTP status.
+	ReasonInternal Reason = "internal"
+	// ReasonProviderUnavailable identifies a sign-in provider that is down or rate limiting.
+	ReasonProviderUnavailable Reason = "provider-unavailable"
+	// ReasonCheckFailed identifies a server connection check that failed on our side; retrying won't help.
+	ReasonCheckFailed Reason = "check-failed"
+	// ReasonCheckUnavailable identifies a server connection check stopped by a Speakeasy outage; retrying can help.
+	ReasonCheckUnavailable Reason = "check-unavailable"
+	// ReasonSignInRequired identifies a sign-in service that needs the person to sign in again.
+	ReasonSignInRequired Reason = "sign-in-required"
+	// ReasonCheckNotAllowed identifies a server connection check for a server the person has no access to.
+	ReasonCheckNotAllowed Reason = "check-not-allowed"
+	// ReasonSignInFailed identifies a sign-in service that could not sign the person in, for a reason it does not name.
+	ReasonSignInFailed Reason = "sign-in-failed"
+	// ReasonSignInUnavailable identifies a sign-in service that is down for now.
+	ReasonSignInUnavailable Reason = "sign-in-unavailable"
+	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
+	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
 )
+
+// check reports a failed server connection check, rather than a failed connection.
+func (r Reason) check() bool {
+	switch r {
+	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNotAllowed:
+		return true
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed:
+		return false
+	default:
+		return false
+	}
+}
 
 // errorKind groups OAuth error codes by who can act on them, which is what
 // the person reading the page needs to know.
@@ -148,8 +179,10 @@ const (
 	// errorKindNotAllowed: the client or person is refused by policy, which
 	// the organization's administrators control.
 	errorKindNotAllowed errorKind = "not-allowed"
-	// errorKindUnavailable: a Speakeasy-side failure that retrying may clear.
+	// errorKindUnavailable: a Speakeasy-side outage that retrying may clear.
 	errorKindUnavailable errorKind = "unavailable"
+	// errorKindInternal: a Speakeasy-side fault that retrying is not known to clear.
+	errorKindInternal errorKind = errorKind(ReasonInternal)
 	// errorKindOther: any code not classified above.
 	errorKindOther errorKind = "other"
 )
@@ -158,8 +191,13 @@ func classifyError(page AuthorizationError) errorKind {
 	if page.Reason != ReasonDefault {
 		return errorKind(page.Reason)
 	}
-	if page.Status >= http.StatusInternalServerError {
+	switch page.Status {
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		// A dependency failed for now; retrying can clear it.
 		return errorKindUnavailable
+	}
+	if page.Status >= http.StatusInternalServerError {
+		return errorKindInternal
 	}
 	if page.Status == http.StatusForbidden || page.Status == http.StatusUnauthorized {
 		return errorKindNotAllowed
@@ -186,8 +224,8 @@ type authorizationErrorView struct {
 	// Setup selects organization setup copy.
 	Setup bool
 
-	// Approval selects staff change approval wording.
-	Approval bool
+	// Check selects server connection check wording.
+	Check bool
 
 	// ErrorID preserves the public service error identifier.
 	ErrorID string
@@ -205,6 +243,9 @@ type authorizationErrorView struct {
 	ClientID       string
 	ClientIDOrigin string
 
+	// ProviderName mirrors AuthorizationError.
+	ProviderName string
+
 	// Code and Description are the OAuth error, shown under Technical details.
 	Code        string
 	Description string
@@ -215,9 +256,13 @@ type authorizationErrorView struct {
 	// Destination identifies the callback host or native application scheme.
 	Destination string
 
-	// Reference is the request's trace ID, which administrators and support
-	// can look up. Empty when the request is not traced.
-	Reference string
+	// ConnectionReference is the id of the stored connection row, which the person gives
+	// their administrator. Empty when no row will be stored.
+	ConnectionReference string
+
+	// TraceID is the request's trace ID, which support can look up. Empty when the
+	// request is not traced.
+	TraceID string
 
 	// Time is when the request was refused, in UTC.
 	Time string
@@ -238,7 +283,8 @@ func technicalDetailsText(view authorizationErrorView) string {
 	var text strings.Builder
 	text.WriteString("Speakeasy authorization error")
 	for _, field := range []struct{ label, value string }{
-		{"Reference", view.Reference},
+		{"Reference", view.ConnectionReference},
+		{"Trace ID", view.TraceID},
 		{"Error ID", view.ErrorID},
 		{"Time", view.Time},
 		{"Error", view.Code},
@@ -247,6 +293,7 @@ func technicalDetailsText(view authorizationErrorView) string {
 		{"MCP client ID", view.ClientID},
 		{"Client verified from", view.ClientIDOrigin},
 		{"MCP server", view.ServerName},
+		{"Sign-in provider", view.ProviderName},
 		{"Returns to", view.Destination},
 	} {
 		if field.value != "" {
@@ -310,9 +357,9 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 			}
 		}
 	}
-	reference := ""
+	traceIDText := ""
 	if traceID := trace.SpanContextFromContext(ctx).TraceID(); traceID.IsValid() {
-		reference = traceID.String()
+		traceIDText = traceID.String()
 	}
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
@@ -322,21 +369,23 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		Recovery:       page.Recovery,
 		Styles:         consentpage.Styles,
 		Setup:          page.Setup,
-		Approval:       page.Approval,
+		Check:          page.Reason.check(),
 		ErrorID:        page.ErrorID,
 		Kind:           classifyError(page),
 		ClientName:     page.ClientName,
 		ServerName:     page.ServerName,
 		ClientID:       page.ClientID,
 		ClientIDOrigin: page.ClientIDOrigin,
+		ProviderName:   page.ProviderName,
 		Code:           page.Code,
 		Description:    page.Description,
 		// Native application schemes require template.URL after scheme validation;
 		// html/template still escapes the attribute's contents.
-		CallbackURL: template.URL(page.CallbackURL), //nolint:gosec // G203: registered callback validated above; native schemes must remain clickable.
-		Destination: destination,
-		Reference:   reference,
-		Time:        time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+		CallbackURL:         template.URL(page.CallbackURL), //nolint:gosec // G203: registered callback validated above; native schemes must remain clickable.
+		Destination:         destination,
+		ConnectionReference: contextvalues.ConnectionReference(ctx),
+		TraceID:             traceIDText,
+		Time:                time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		// Built from the other fields below.
 		TechnicalDetails: "",
 		ScriptNonce:      base64.RawURLEncoding.EncodeToString(nonce),

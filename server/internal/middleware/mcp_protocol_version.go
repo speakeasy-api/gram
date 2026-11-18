@@ -34,7 +34,7 @@ import (
 // upstream untouched, so nothing here may mutate it.
 func MCPProtocolVersionTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isMCPJSONRPCEndpoint(r.URL.Path) {
+		if isMCPJSONRPCEndpoint(channelsClassificationPath(r)) {
 			if span := trace.SpanFromContext(r.Context()); span.IsRecording() {
 				if v := mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)); v != "" {
 					span.SetAttributes(attr.MCPNegotiatedProtocolVersion(v))
@@ -72,8 +72,12 @@ func isMCPJSONRPCEndpoint(path string) bool {
 
 	switch head, tail, _ := strings.Cut(rest, "/"); head {
 	case "mcp":
-		// /mcp/{mcpSlug} — the hosted toolset endpoint. A further slash means
-		// an OAuth or metadata sub-route, not the MCP endpoint itself.
+		// The trailing-slash runtime alias has no static callback or asset
+		// siblings. Even callback-shaped slugs on that route need protection.
+		if slug, trailingSlash := strings.CutSuffix(tail, "/"); trailingSlash {
+			return isEndpointSlug(slug)
+		}
+		// /mcp/{mcpSlug} shares its slashless shape with static browser routes.
 		// GET /mcp/remote_login_bind is the remote login browser hop. The consent
 		// page or the bind stop on another platform host navigates here.
 		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail) && tail != "remote_login_bind"
@@ -88,6 +92,8 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// beside it, and the tail is an agent id rather than a slug, so every
 		// one-segment tail here is the endpoint itself.
 		return isEndpointSlug(tail)
+	case "channels":
+		return isChannelsEndpoint(path, "mcp")
 	case "platform-mcp":
 		// POST /platform-mcp is Speakeasy's own platform MCP server
 		// (internal/platformmcp), served by the go-sdk's Streamable HTTP

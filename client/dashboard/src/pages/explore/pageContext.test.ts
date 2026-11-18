@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { describe, expect, it } from "vitest";
 import {

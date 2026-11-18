@@ -189,10 +189,120 @@ func deviceView(ctx context.Context, logger *slog.Logger, row repo.ListManagedDe
 		AgentLastSeenAt:  conv.PtrEmpty(conv.FromPGTimestamptz(row.AgentLastSeenAt)),
 		CoverageBucket:   row.CoverageBucket,
 		PolicyState:      conv.PtrEmpty(row.PolicyState),
-		AgentState:       agentStateView(ctx, logger, row),
+		AgentState:       agentStateView(ctx, logger, managedDeviceReport(row)),
 		MissingSince:     conv.PtrEmpty(conv.FromPGTimestamptz(row.MissingSince)),
 		FirstSeenAt:      row.FirstSeenAt.Time.UTC().Format(time.RFC3339),
 		LastSeenAt:       row.LastSeenAt.Time.UTC().Format(time.RFC3339),
+	}
+}
+
+// fleetDeviceID prefixes a fleet row's id with its kind, so an agent-only
+// machine's id cannot be mistaken for an MDM device's.
+func fleetDeviceID(row repo.ListFleetDevicesRow) string {
+	if row.InInventory {
+		return "mdm:" + row.RowID.String()
+	}
+	return "agent:" + row.RowID.String()
+}
+
+func fleetDeviceView(ctx context.Context, logger *slog.Logger, organizationID string, row repo.ListFleetDevicesRow) *gen.FleetDevice {
+	return &gen.FleetDevice{
+		ID:               fleetDeviceID(row),
+		InInventory:      row.InInventory,
+		Provider:         conv.PtrEmpty(row.Provider),
+		ExternalID:       conv.PtrEmpty(row.ExternalID),
+		SerialNumber:     pgTextPtr(row.SerialNumber),
+		Hostname:         pgTextPtr(row.Hostname),
+		OsName:           pgTextPtr(row.OsName),
+		OsVersion:        pgTextPtr(row.OsVersion),
+		UserEmail:        pgTextPtr(row.UserEmail),
+		UserID:           pgTextPtr(row.UserID),
+		MdmLastCheckInAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.MdmLastCheckInAt)),
+		AgentLastSeenAt:  conv.PtrEmpty(conv.FromPGTimestamptz(row.AgentLastSeenAt)),
+		CoverageBucket:   row.CoverageBucket,
+		PolicyState:      conv.PtrEmpty(row.PolicyState),
+		AgentState:       agentStateView(ctx, logger, fleetDeviceReport(organizationID, row)),
+		MissingSince:     conv.PtrEmpty(conv.FromPGTimestamptz(row.MissingSince)),
+		FirstSeenAt:      row.FirstSeenAt.Time.UTC().Format(time.RFC3339),
+		LastSeenAt:       row.LastSeenAt.Time.UTC().Format(time.RFC3339),
+	}
+}
+
+// deviceReport is the state report a device row carries, whichever query
+// produced the row.
+type deviceReport struct {
+	OrganizationID     string
+	HasReport          bool
+	BySerial           bool
+	ReportedAt         pgtype.Timestamptz
+	AppliedEtag        pgtype.Text
+	AppliedAt          pgtype.Timestamptz
+	EnforcementHalted  bool
+	CurrentBlocked     bool
+	SpeakeasydVersion  pgtype.Text
+	SpeakeasyVersion   pgtype.Text
+	SpeakeasyUIVersion pgtype.Text
+	Os                 pgtype.Text
+	Arch               pgtype.Text
+	Tools              []byte
+	DriftCountingSince pgtype.Timestamptz
+	AutoUpdate         pgtype.Text
+	UpdateChannel      pgtype.Text
+	PinnedTarget       pgtype.Text
+	LastRollbackAt     pgtype.Timestamptz
+	LastRollbackFrom   pgtype.Text
+	LastRollbackTo     pgtype.Text
+}
+
+func managedDeviceReport(row repo.ListManagedDevicesRow) deviceReport {
+	return deviceReport{
+		OrganizationID:     row.OrganizationID,
+		HasReport:          row.HasReport,
+		BySerial:           row.ReportBySerial,
+		ReportedAt:         row.ReportReportedAt,
+		AppliedEtag:        row.ReportAppliedEtag,
+		AppliedAt:          row.ReportAppliedAt,
+		EnforcementHalted:  row.ReportEnforcementHalted,
+		CurrentBlocked:     row.ReportCurrentBlocked,
+		SpeakeasydVersion:  row.ReportSpeakeasydVersion,
+		SpeakeasyVersion:   row.ReportSpeakeasyVersion,
+		SpeakeasyUIVersion: row.ReportSpeakeasyUiVersion,
+		Os:                 row.ReportOs,
+		Arch:               row.ReportArch,
+		Tools:              row.ReportTools,
+		DriftCountingSince: row.ReportDriftCountingSince,
+		AutoUpdate:         row.ReportAutoUpdate,
+		UpdateChannel:      row.ReportUpdateChannel,
+		PinnedTarget:       row.ReportPinnedTarget,
+		LastRollbackAt:     row.ReportLastRollbackAt,
+		LastRollbackFrom:   row.ReportLastRollbackFrom,
+		LastRollbackTo:     row.ReportLastRollbackTo,
+	}
+}
+
+func fleetDeviceReport(organizationID string, row repo.ListFleetDevicesRow) deviceReport {
+	return deviceReport{
+		OrganizationID:     organizationID,
+		HasReport:          row.HasReport,
+		BySerial:           row.ReportBySerial,
+		ReportedAt:         row.ReportReportedAt,
+		AppliedEtag:        row.ReportAppliedEtag,
+		AppliedAt:          row.ReportAppliedAt,
+		EnforcementHalted:  row.ReportEnforcementHalted,
+		CurrentBlocked:     row.ReportCurrentBlocked,
+		SpeakeasydVersion:  row.ReportSpeakeasydVersion,
+		SpeakeasyVersion:   row.ReportSpeakeasyVersion,
+		SpeakeasyUIVersion: row.ReportSpeakeasyUiVersion,
+		Os:                 row.ReportOs,
+		Arch:               row.ReportArch,
+		Tools:              row.ReportTools,
+		DriftCountingSince: row.ReportDriftCountingSince,
+		AutoUpdate:         row.ReportAutoUpdate,
+		UpdateChannel:      row.ReportUpdateChannel,
+		PinnedTarget:       row.ReportPinnedTarget,
+		LastRollbackAt:     row.ReportLastRollbackAt,
+		LastRollbackFrom:   row.ReportLastRollbackFrom,
+		LastRollbackTo:     row.ReportLastRollbackTo,
 	}
 }
 
@@ -209,13 +319,13 @@ type reportedTool struct {
 	DriftCorrections *int   `json:"drift_corrections,omitempty"`
 }
 
-func agentStateView(ctx context.Context, logger *slog.Logger, row repo.ListManagedDevicesRow) *gen.ManagedDeviceAgentState {
+func agentStateView(ctx context.Context, logger *slog.Logger, row deviceReport) *gen.ManagedDeviceAgentState {
 	if !row.HasReport {
 		return nil
 	}
 	var reported []reportedTool
-	if len(row.ReportTools) > 0 {
-		if err := json.Unmarshal(row.ReportTools, &reported); err != nil {
+	if len(row.Tools) > 0 {
+		if err := json.Unmarshal(row.Tools, &reported); err != nil {
 			// The agent service wrote this column, so this is a bug, not bad
 			// input. The rest of the row is still true, so the page renders it
 			// without the tools rather than failing.
@@ -237,22 +347,22 @@ func agentStateView(ctx context.Context, logger *slog.Logger, row repo.ListManag
 		})
 	}
 	return &gen.ManagedDeviceAgentState{
-		ReportedAt:         row.ReportReportedAt.Time.UTC().Format(time.RFC3339),
-		Attestation:        reportAttestation(row.ReportBySerial),
-		AppliedEtag:        pgTextPtr(row.ReportAppliedEtag),
-		AppliedAt:          conv.PtrEmpty(conv.FromPGTimestamptz(row.ReportAppliedAt)),
-		EnforcementHalted:  row.ReportEnforcementHalted,
-		CurrentBlocked:     row.ReportCurrentBlocked,
-		SpeakeasydVersion:  pgTextPtr(row.ReportSpeakeasydVersion),
-		SpeakeasyVersion:   pgTextPtr(row.ReportSpeakeasyVersion),
-		SpeakeasyUIVersion: pgTextPtr(row.ReportSpeakeasyUiVersion),
-		Os:                 pgTextPtr(row.ReportOs),
-		Arch:               pgTextPtr(row.ReportArch),
+		ReportedAt:         row.ReportedAt.Time.UTC().Format(time.RFC3339),
+		Attestation:        reportAttestation(row.BySerial),
+		AppliedEtag:        pgTextPtr(row.AppliedEtag),
+		AppliedAt:          conv.PtrEmpty(conv.FromPGTimestamptz(row.AppliedAt)),
+		EnforcementHalted:  row.EnforcementHalted,
+		CurrentBlocked:     row.CurrentBlocked,
+		SpeakeasydVersion:  pgTextPtr(row.SpeakeasydVersion),
+		SpeakeasyVersion:   pgTextPtr(row.SpeakeasyVersion),
+		SpeakeasyUIVersion: pgTextPtr(row.SpeakeasyUIVersion),
+		Os:                 pgTextPtr(row.Os),
+		Arch:               pgTextPtr(row.Arch),
 		Tools:              tools,
-		DriftCountingSince: conv.PtrEmpty(conv.FromPGTimestamptz(row.ReportDriftCountingSince)),
-		AutoUpdate:         pgTextPtr(row.ReportAutoUpdate),
-		UpdateChannel:      pgTextPtr(row.ReportUpdateChannel),
-		PinnedTarget:       pgTextPtr(row.ReportPinnedTarget),
+		DriftCountingSince: conv.PtrEmpty(conv.FromPGTimestamptz(row.DriftCountingSince)),
+		AutoUpdate:         pgTextPtr(row.AutoUpdate),
+		UpdateChannel:      pgTextPtr(row.UpdateChannel),
+		PinnedTarget:       pgTextPtr(row.PinnedTarget),
 		LastRollback:       rollbackView(row),
 	}
 }
@@ -267,13 +377,13 @@ func reportAttestation(bySerial bool) string {
 }
 
 // rollbackView is nil until the agent has rolled itself back.
-func rollbackView(row repo.ListManagedDevicesRow) *gen.ManagedDeviceRollback {
-	if !row.ReportLastRollbackAt.Valid {
+func rollbackView(row deviceReport) *gen.ManagedDeviceRollback {
+	if !row.LastRollbackAt.Valid {
 		return nil
 	}
 	return &gen.ManagedDeviceRollback{
-		At:   row.ReportLastRollbackAt.Time.UTC().Format(time.RFC3339),
-		From: pgTextPtr(row.ReportLastRollbackFrom),
-		To:   pgTextPtr(row.ReportLastRollbackTo),
+		At:   row.LastRollbackAt.Time.UTC().Format(time.RFC3339),
+		From: pgTextPtr(row.LastRollbackFrom),
+		To:   pgTextPtr(row.LastRollbackTo),
 	}
 }

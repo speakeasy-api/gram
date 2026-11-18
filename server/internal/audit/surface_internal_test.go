@@ -215,7 +215,7 @@ func TestSurfaceFromContext_MatchesDerivation(t *testing.T) {
 func TestKnownSurfaces_AreLowCardinality(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, knownSurfaces, 9)
+	require.Len(t, knownSurfaces, 10)
 	require.Contains(t, knownSurfaces, SurfaceUnknown)
 	require.Contains(t, knownSurfaces, SurfaceSystem)
 	require.Contains(t, knownSurfaces, SurfaceAdmin)

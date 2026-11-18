@@ -21,6 +21,13 @@ type Service interface {
 	// Rotate an API key. Agent-key rotation replaces immutable delegation and
 	// directly revokes the old row.
 	RotateKey(context.Context, *RotateKeyPayload) (res *Key, err error)
+	// Add mcp:connect grants to every live key the caller issued for an agent, so
+	// servers the agent is given reach the keys it already runs with. Each key's
+	// new policy is checked like issuance: the agent, its owner and the caller
+	// must all allow it. Keys issued by someone else are left as they are. The
+	// result lists only the keys this call changed: keys that already held the
+	// grants, expired keys and other people's keys are not in it.
+	ExtendAgentKeys(context.Context, *ExtendAgentKeysPayload) (res *ListKeysResult, err error)
 	// List all api keys for an organization
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
@@ -53,7 +60,7 @@ const ServiceName = "keys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createKey", "rotateKey", "listKeys", "revokeKey", "updateKeyPolicy", "verifyKey"}
+var MethodNames = [7]string{"createKey", "rotateKey", "extendAgentKeys", "listKeys", "revokeKey", "updateKeyPolicy", "verifyKey"}
 
 type APIKeyPolicyGrant struct {
 	// mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth
@@ -84,6 +91,15 @@ type AgentDelegatedGrant struct {
 type AgentDelegatedPolicy struct {
 	Requested []*AgentDelegatedGrant
 	Effective []*AgentDelegatedGrant
+}
+
+// The upstream credential an agent key uses on one MCP server.
+type AgentKeyAuthClientChoice struct {
+	// The MCP server.
+	McpServerID string
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string
 }
 
 type AgentPolicyGrantForm struct {
@@ -145,6 +161,35 @@ type CreateKeyPayload struct {
 	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
 	// client access is evaluated against. Not yet enforced. Requires org admin.
 	PolicyGrants []*APIKeyPolicyGrant
+	// For an agent key: the upstream credential the key uses on each MCP server it
+	// names. Where typed upstream authentication is enforced, the key is served on
+	// a server with the credential chosen here, checked again on every request.
+	// Shared credentials only: an agent reaches a person's own connection when it
+	// acts for them.
+	AuthClientChoices []*AgentKeyAuthClientChoice
+}
+
+// A server grant an agent key gains. Anything broader is a new delegation,
+// made by issuing a key.
+type ExtendAgentKeyGrantForm struct {
+	// The grant's scope
+	Scope string
+	// Grant effect
+	Effect   string
+	Selector *AgentPolicySelector
+}
+
+// ExtendAgentKeysPayload is the payload type of the keys service
+// extendAgentKeys method.
+type ExtendAgentKeysPayload struct {
+	SessionToken *string
+	// The agent whose keys gain the grants
+	AgentID string
+	// Server grants to add to each key
+	RequestedGrants []*ExtendAgentKeyGrantForm
+	// The upstream credential each key uses on the servers it gains, checked as at
+	// issuance. Recorded only on keys that gain that server.
+	AuthClientChoices []*AgentKeyAuthClientChoice
 }
 
 // Key is the result type of the keys service createKey method.
@@ -190,7 +235,7 @@ type ListKeysPayload struct {
 	SessionToken *string
 }
 
-// ListKeysResult is the result type of the keys service listKeys method.
+// ListKeysResult is the result type of the keys service extendAgentKeys method.
 type ListKeysResult struct {
 	Keys []*Key
 }

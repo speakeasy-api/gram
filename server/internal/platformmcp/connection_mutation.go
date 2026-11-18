@@ -26,6 +26,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -80,7 +81,9 @@ func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSe
 }
 
 type SetMCPAddressInput struct {
-	ProjectID       string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string                          `json:"-"`
 	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
 	TargetID        string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
 	EndpointID      string                          `json:"endpoint_id,omitempty" jsonschema:"exact endpoint ID from get_mcp_connection_settings to change; omit to add a new endpoint"`
@@ -92,7 +95,9 @@ type SetMCPAddressInput struct {
 }
 
 type SetMCPNetworkAccessInput struct {
-	ProjectID       string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string                          `json:"-"`
 	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
 	TargetID        string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
 	Mode            string                          `json:"mode" jsonschema:"requested network access: public_only, dual, or private_only"`
@@ -190,6 +195,12 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, EndpointID: input.EndpointID, Slug: input.Slug, CustomDomainID: input.CustomDomainID}
 	mutate := func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
+		// Endpoint mutations also lock their backing server after ingress.
+		// Match source/reach writers before lockAndCheck takes ingress.
+		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+			return connectionMutationReceipt{}, fmt.Errorf("lock address mutation writer scope: %w", err)
+		}
+
 		settings, err := s.lockAndCheck(ctx, tx, principal, project, kind, targetID, input.ExpectedVersion)
 		if err != nil {
 			return connectionMutationReceipt{}, err
@@ -265,6 +276,13 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, Mode: string(mode)}
 	mutate := func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
+		// Both preview and apply use this closure. Scope must precede ingress:
+		// ordinary source/reach writers already hold server rows when they
+		// request ingress, even if this mutation changes no issuer binding.
+		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+			return connectionMutationReceipt{}, fmt.Errorf("lock network mutation writer scope: %w", err)
+		}
+
 		var clearedRootDomainIDs []uuid.UUID
 		prepared, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
 		if err != nil {
@@ -333,7 +351,7 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 	projectID = strings.TrimSpace(projectID)
 	parsedProject, err := uuid.Parse(projectID)
 	if err != nil || (kind != MCPConnectionSettingsMCPServer && kind != MCPConnectionSettingsGateway) {
-		return fail(connectionMutationInvalid("Provide an explicit project ID, target ID, and target kind."))
+		return fail(connectionMutationInvalid("Provide a project slug, target ID, and target kind."))
 	}
 	parsedTarget, err := uuid.Parse(strings.TrimSpace(targetID))
 	if err != nil {
@@ -346,7 +364,7 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 	if err != nil {
 		return fail(fmt.Errorf("resolve live connection mutation project: %w", err))
 	}
-	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: project.ID.String()}); err != nil {
+	if err := s.authorizer.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, project.ID.String(), project.ID.String())); err != nil {
 		return fail(connectionMutationAuthorizationError(err, authz.ScopeMCPWrite))
 	}
 	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: principal.OrganizationID}); err != nil {

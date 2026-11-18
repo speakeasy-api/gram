@@ -397,6 +397,7 @@ func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 			spanTestStringAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.forged"),
 			spanTestStringAttribute(string(enrich.OrganizationIDKey), "forged-org"),
 			spanTestStringAttribute(string(enrich.DirectoryIDKey), "forged-directory"),
+			spanTestStringAttribute("speakeasy.mcp_connection.outcome", "forged-outcome"),
 		},
 	}).Build()
 
@@ -419,5 +420,6 @@ func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 	}
 	require.Equal(t, []string{"litellm"}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
 	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
+	require.Empty(t, values["speakeasy.mcp_connection.outcome"], "only the connection recorder writes these keys")
 	require.Empty(t, values[string(enrich.DirectoryIDKey)], "a directory id the lookup did not find stays empty rather than taking the producer's")
 }

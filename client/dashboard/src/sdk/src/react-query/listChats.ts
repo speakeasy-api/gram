@@ -128,6 +128,7 @@ export function setListChatsData(
       offset?: number | undefined;
       sortBy?: SortBy | undefined;
       sortOrder?: SortOrder | undefined;
+      pinnedFirst?: boolean | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
@@ -162,6 +163,7 @@ export function invalidateListChats(
       offset?: number | undefined;
       sortBy?: SortBy | undefined;
       sortOrder?: SortOrder | undefined;
+      pinnedFirst?: boolean | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;

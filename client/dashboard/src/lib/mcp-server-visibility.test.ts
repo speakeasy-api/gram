@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";

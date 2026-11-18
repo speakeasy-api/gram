@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -20,7 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 // admitLabelled admits channelOne at the organization tier with a label and
@@ -419,11 +422,13 @@ func TestUpdateSubject_RefusesAnotherOrganizationsAgent(t *testing.T) {
 	original := admitLabelled(t, ctx, ti, agentID)
 
 	otherOrg := "org_" + uuid.NewString()
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: another organization's rows are not reachable through the caller's API
-		ctx, `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'other', $1)`, otherOrg)
+	err := repo.New(ti.conn).CreateOrganizationFixture(ctx, repo.CreateOrganizationFixtureParams{ID: otherOrg, Name: "other", Slug: otherOrg})
 	require.NoError(t, err)
-	_, err = ti.conn.Exec( //nolint:glint // notestingrawsql: see above; an agent's owner must be a member of its organization
-		ctx, `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2)`, otherOrg, ti.userID)
+	// An agent's owner must be a member of its organization.
+	err = testrepo.New(ti.conn).CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{
+		OrganizationID: otherOrg,
+		UserID:         pgtype.Text{String: ti.userID, Valid: true},
+	})
 	require.NoError(t, err)
 
 	otherAgent, err := agentsRepo.New(ti.conn).CreateAgent(ctx, agentsRepo.CreateAgentParams{
@@ -446,22 +451,23 @@ func TestUpdateSubject_RefusesAnAdmissionOutsideTheCallersTenancy(t *testing.T) 
 	ctx, ti := newTestService(t)
 
 	otherOrg := "org_" + uuid.NewString()
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: another organization's rows are not reachable through the caller's API
-		ctx, `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'other', $1)`, otherOrg)
+	err := repo.New(ti.conn).CreateOrganizationFixture(ctx, repo.CreateOrganizationFixtureParams{ID: otherOrg, Name: "other", Slug: otherOrg})
 	require.NoError(t, err)
 
-	var otherAdmission uuid.UUID
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: see above
-		ctx, `
-		WITH issuer AS (
-		  INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri)
-		  VALUES ($1, 'other-ci', 'https://other.example.com', 'https://other.example.com/jwks')
-		  RETURNING id
-		)
-		INSERT INTO workload_identity_admissions (organization_id, workload_issuer_id, subject, name)
-		SELECT $1, id, 'repo:other/app', 'theirs' FROM issuer
-		RETURNING id
-	`, otherOrg).Scan(&otherAdmission)
+	otherIssuer, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: otherOrg,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "other-ci",
+		Issuer:         "https://other.example.com",
+		JwksUri:        "https://other.example.com/jwks",
+	})
+	require.NoError(t, err)
+	otherAdmission, err := repo.New(ti.conn).CreateNamedWorkloadAdmissionFixture(ctx, repo.CreateNamedWorkloadAdmissionFixtureParams{
+		OrganizationID:   otherOrg,
+		WorkloadIssuerID: otherIssuer,
+		Subject:          "repo:other/app",
+		Name:             pgtype.Text{String: "theirs", Valid: true},
+	})
 	require.NoError(t, err)
 
 	for _, id := range []string{otherAdmission.String(), uuid.NewString()} {
@@ -471,11 +477,9 @@ func TestUpdateSubject_RefusesAnAdmissionOutsideTheCallersTenancy(t *testing.T) 
 		requireOopsCode(t, err, oops.CodeNotFound)
 	}
 
-	var name string
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: asserting the row the API must not have touched
-		ctx, `SELECT name FROM workload_identity_admissions WHERE id = $1`, otherAdmission).Scan(&name)
+	name, err := repo.New(ti.conn).GetWorkloadAdmissionNameFixture(ctx, otherAdmission)
 	require.NoError(t, err)
-	require.Equal(t, "theirs", name)
+	require.Equal(t, "theirs", name.String)
 }
 
 func TestUpdateSubject_RefusesAWithdrawnAdmission(t *testing.T) {

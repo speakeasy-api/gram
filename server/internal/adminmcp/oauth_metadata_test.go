@@ -80,7 +80,7 @@ func TestStaffOAuthMetadataURLs(t *testing.T) {
 		require.Equal(t, []any{ScopeRead}, metadata["scopes_supported"], "writes are off by default")
 	}
 
-	oauth.writes = WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	oauth.writes = WriteConfig{Enabled: true}
 	rec := httptest.NewRecorder()
 	oauth.AuthorizationServerHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/admin-mcp/oauth", nil))
 	var metadata map[string]any

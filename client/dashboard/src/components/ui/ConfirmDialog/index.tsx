@@ -1,5 +1,6 @@
 import { Alert } from "@/components/ui/Alert";
 import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 
@@ -14,6 +15,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   pendingLabel = "Working…",
   onConfirm,
   isPending,
@@ -28,6 +30,8 @@ export function ConfirmDialog({
   title: string;
   description: React.ReactNode;
   confirmLabel: string;
+  // The button that backs out, when "Cancel" would misread ("Keep editing").
+  cancelLabel?: string;
   // Shown on the confirm button while the action runs. Name the action in
   // progress ("Deleting…") rather than leaving the generic default.
   pendingLabel?: string;
@@ -78,9 +82,9 @@ export function ConfirmDialog({
         {impact && (
           <div>
             {impact.isLoading ? (
-              <Text small muted>
-                Checking impact…
-              </Text>
+              <div role="status" aria-label="Checking impact">
+                <Skeleton className="h-5 w-3/4" />
+              </div>
             ) : (
               <>
                 <Text>{impact.summary}</Text>
@@ -119,7 +123,7 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            <Button.Text>Cancel</Button.Text>
+            <Button.Text>{cancelLabel}</Button.Text>
           </Button>
           <Button
             variant={confirmVariant}

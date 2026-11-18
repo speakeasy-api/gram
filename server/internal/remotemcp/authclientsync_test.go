@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -104,13 +106,17 @@ func storedHeaderValue(t *testing.T, ctx context.Context, ti *testInstance, head
 	return header.Value
 }
 
-func requiresUpstreamAuth(t *testing.T, ctx context.Context, ti *testInstance, mcpServerID string) pgtype.Bool {
+// upstreamAuthentication reads the server's upstream authentication as the
+// management API derives it.
+func upstreamAuthentication(t *testing.T, ctx context.Context, ti *testInstance, mcpServerID string) *types.McpServerAuthentication {
 	t.Helper()
 
-	decided, err := authclientbackfill.New(ti.conn).GetRequiresUpstreamAuthFixture(ctx, uuid.MustParse(mcpServerID))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	view, err := authclients.ReadServerAuthentication(ctx, ti.conn, authCtx.ActiveOrganizationID, uuid.MustParse(mcpServerID))
 	require.NoError(t, err)
 
-	return decided
+	return view
 }
 
 // createSourceAndServer provisions a remote source with an MCP server in front
@@ -170,7 +176,11 @@ func TestCreateServerHeader_RecordsTypedAuthClient(t *testing.T) {
 	require.True(t, copied.IsSecret)
 	require.Equal(t, storedHeaderValue(t, ctx, ti, headerID), copied.Value, "the copy does not carry the header's stored value")
 
-	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, requiresUpstreamAuth(t, ctx, ti, created.McpServer.ID))
+	// Normal setup, with no backfill run, leaves the server needing upstream
+	// authentication.
+	upstream := upstreamAuthentication(t, ctx, ti, created.McpServer.ID)
+	require.Equal(t, authclients.StatusConfigured, upstream.Status)
+	require.True(t, upstream.RequiresUpstreamAuth)
 }
 
 // A forwarded header yields a pass_through client, under a different stable id

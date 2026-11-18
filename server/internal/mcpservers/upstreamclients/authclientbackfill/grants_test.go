@@ -107,6 +107,9 @@ func TestRun_SharedClientGrantsMirrorServerAccess(t *testing.T) {
 	elsewhere := urn.NewPrincipal(urn.PrincipalTypeUser, "elsewhere")
 	f.grant(connects, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverID.String()})
 	f.grant(writes, authz.ScopeMCPWrite, authz.ProjectServersSelector(project))
+	// mcp:write does not imply connect; the explicit-connect backfill pairs it
+	// with this grant.
+	f.grant(writes, authz.ScopeMCPConnect, authz.ProjectServersSelector(project))
 	f.grant(oneTool, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverID.String(), authz.SelectorKeyTool: "search"})
 	f.grant(elsewhere, authz.ScopeMCPConnect, authz.ProjectServersSelector(uuid.NewString()))
 

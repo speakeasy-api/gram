@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsAgentID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsAgentID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsPinnedFirst string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -212,6 +212,15 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			}
 		}
 	}
+	var pinnedFirst bool
+	{
+		if chatListChatsPinnedFirst != "" {
+			pinnedFirst, err = strconv.ParseBool(chatListChatsPinnedFirst)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for pinnedFirst, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatListChatsSessionToken != "" {
@@ -249,6 +258,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
+	v.PinnedFirst = pinnedFirst
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -817,6 +827,79 @@ func BuildListSourcesPayload(chatListSourcesSessionToken string, chatListSources
 		}
 	}
 	v := &chat.ListSourcesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildCountByUserPayload builds the payload for the chat countByUser endpoint
+// from CLI flags.
+func BuildCountByUserPayload(chatCountByUserFrom string, chatCountByUserTo string, chatCountByUserLimit string, chatCountByUserSessionToken string, chatCountByUserProjectSlugInput string, chatCountByUserChatSessionsToken string) (*chat.CountByUserPayload, error) {
+	var err error
+	var from *string
+	{
+		if chatCountByUserFrom != "" {
+			from = &chatCountByUserFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatCountByUserTo != "" {
+			to = &chatCountByUserTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if chatCountByUserLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatCountByUserLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if chatCountByUserSessionToken != "" {
+			sessionToken = &chatCountByUserSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatCountByUserProjectSlugInput != "" {
+			projectSlugInput = &chatCountByUserProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatCountByUserChatSessionsToken != "" {
+			chatSessionsToken = &chatCountByUserChatSessionsToken
+		}
+	}
+	v := &chat.CountByUserPayload{}
+	v.From = from
+	v.To = to
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
