@@ -1,0 +1,23 @@
+server/migrations/atlas.sum
+  s_afc1de1cf6f6ef::t_defccee033f9e9 1,550
+server/database/schema.sql
+  s_afc1de1cf6f6ef::t_feb0935545564a 7229-7230
+server/migrations/20261118151715_chat-messages-drop-redundant-indexes.sql
+  s_afc1de1cf6f6ef::t_defccee033f9e9 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb63a8d0f1006c08d67861de57201e5842d6494c",
+  "prompts": {},
+  "sessions": {
+    "s_afc1de1cf6f6ef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "49dc2dfe-90af-4714-841b-c214b5ce4214",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
