@@ -1,6 +1,6 @@
 import { accountSetupUrls } from "@/pages/catalog/account-provider";
 import { StrictMode, type Dispatch, type PropsWithChildren } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +20,11 @@ vi.mock("@/contexts/Sdk", () => ({
       listMembers: mocks.members,
       addMember: mocks.addMember,
     },
+    mcpServers: { setSetupGuideCompleted: mocks.markCompleted },
   }),
+}));
+vi.mock("@/lib/mcp-server-visibility", () => ({
+  invalidateMcpServerQueries: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@gram/client/react-query/metaMcpMembers", () => ({
   invalidateAllMetaMcpMembers: vi.fn().mockResolvedValue(undefined),
@@ -48,6 +52,7 @@ const mocks = vi.hoisted(() => ({
   addMember: vi.fn(),
   configured: undefined as (() => Promise<void>) | undefined,
   headers: [] as RemoteMcpServerHeader[],
+  markCompleted: vi.fn(),
 }));
 vi.mock("canvas-confetti", () => ({ default: { create: mocks.create } }));
 vi.mock("@/contexts/Auth", () => ({
@@ -175,14 +180,14 @@ function Location() {
     <output aria-label="Current location">{useLocation().pathname}</output>
   );
 }
-function Setup() {
+function Setup({ mcpServer = server }: { mcpServer?: McpServer }) {
   return (
     <StrictMode>
       <MemoryRouter initialEntries={[mocks.entry]}>
         <Routes>
           <Route
             path="/setup"
-            element={<ProviderSetupPage mcpServer={server} />}
+            element={<ProviderSetupPage mcpServer={mcpServer} />}
           />
           <Route path="*" element={null} />
         </Routes>
@@ -247,6 +252,7 @@ beforeEach(() => {
   mocks.create.mockReturnValue(mocks.fire);
   mocks.members.mockResolvedValue({ members: [] });
   mocks.addMember.mockResolvedValue({});
+  mocks.markCompleted.mockResolvedValue(server);
   mocks.provider = "github";
   mocks.oktaUrl = "https://example.okta.com/mcp";
   mocks.snowflakeUrl =
@@ -301,8 +307,10 @@ describe("provider setup completion celebration", () => {
       expect(canvas.hidden).toBe(false);
       expect(mocks.fire).toHaveBeenCalledTimes(1);
       await user.click(completeButton());
-      expect(screen.getByLabelText("Current location").textContent).toBe(
-        "/overview",
+      await waitFor(() =>
+        expect(screen.getByLabelText("Current location").textContent).toBe(
+          "/overview",
+        ),
       );
       expect(mocks.fire.reset).toHaveBeenCalledTimes(1);
     },
@@ -348,8 +356,10 @@ describe("provider setup completion celebration", () => {
     expect(completeButton().disabled).toBe(false);
     expect(draw).not.toHaveBeenCalled();
     await user.click(completeButton());
-    expect(screen.getByLabelText("Current location").textContent).toBe(
-      "/overview",
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current location").textContent).toBe(
+        "/overview",
+      ),
     );
   });
 
@@ -517,8 +527,71 @@ it.each([
     });
     validate();
     await userEvent.click(completeButton());
-    expect(screen.getByLabelText("Current location").textContent).toBe(
-      customize ? "/policy/new" : "/gateway/gateway-id",
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current location").textContent).toBe(
+        customize ? "/policy/new" : "/gateway/gateway-id",
+      ),
     );
   },
 );
+
+describe("recorded setup completion", () => {
+  it("records completion once, then opens Overview", async () => {
+    render(<Setup />);
+    validate();
+    await userEvent.click(completeButton());
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current location").textContent).toBe(
+        "/overview",
+      ),
+    );
+    expect(mocks.markCompleted).toHaveBeenCalledTimes(1);
+    expect(mocks.markCompleted).toHaveBeenCalledWith({
+      setSetupGuideCompletedRequestBody: { id: server.id, completed: true },
+    });
+  });
+
+  it("stays on Connect and test when setup status can't be saved, then retries", async () => {
+    mocks.markCompleted.mockRejectedValueOnce(new Error("unavailable"));
+    render(<Setup />);
+    validate();
+    await userEvent.click(completeButton());
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Unable to save setup status.",
+    );
+    expect(screen.getByLabelText("Current location").textContent).toBe(
+      "/setup",
+    );
+    expect(completeButton().disabled).toBe(false);
+    await userEvent.click(completeButton());
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current location").textContent).toBe(
+        "/overview",
+      ),
+    );
+    expect(screen.queryByText("Unable to save setup status.")).toBeNull();
+    expect(mocks.markCompleted).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["slack", "github", "salesforce", "snowflake", "okta"] as const)(
+    "reopens a completed %s setup on Connect and test",
+    (provider) => {
+      mocks.provider = provider;
+      mocks.initialStep = "begin";
+      render(
+        <Setup mcpServer={{ ...server, setupGuideCompletedAt: new Date() }} />,
+      );
+      expect(
+        screen.getByRole("heading", { name: "Connect and test" }),
+      ).toBeDefined();
+      const plan = screen.getByRole("button", { name: /Setup plan$/ });
+      expect(plan.textContent).toBe("Setup plan");
+    },
+  );
+
+  it("opens an unfinished setup where its progress left off", () => {
+    mocks.initialStep = "begin";
+    render(<Setup />);
+    expect(screen.getByRole("heading", { name: "Setup plan" })).toBeDefined();
+  });
+});

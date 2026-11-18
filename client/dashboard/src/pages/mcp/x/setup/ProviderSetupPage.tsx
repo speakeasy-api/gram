@@ -16,7 +16,8 @@ import {
   salesforceInstanceConfiguration,
 } from "@/pages/catalog/provider-setup/salesforce";
 import type { State } from "@/pages/catalog/provider-setup/state";
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useState } from "react";
+import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { useProviderConnection } from "./useProviderConnection";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
@@ -26,7 +27,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer";
 import { SetupContext } from "@/pages/catalog/provider-setup/setup-context";
-import { names, reduce } from "@/pages/catalog/provider-setup/state";
+import { names, reduce, steps } from "@/pages/catalog/provider-setup/state";
 import { GuideSetupPage } from "./GuideSetupPage";
 import {
   type SetupProvider,
@@ -259,7 +260,7 @@ function RetainedProviderSetup({
         ? routes.mcp.gateway.overview.href(gatewayId)
         : overviewHref;
   const [s, dispatch] = useReducer(reduce, storageKey, (key) => {
-    return loadProviderProgress(
+    const progress = loadProviderProgress(
       provider,
       key,
       initialValues,
@@ -272,11 +273,19 @@ function RetainedProviderSetup({
           })
         : undefined,
     );
+    // A completed setup reopens on its connection check, not the plan.
+    if (!mcpServer.setupGuideCompletedAt) return progress;
+    return {
+      ...progress,
+      step: "test",
+      done: steps(progress)
+        .map((step) => step.id)
+        .filter((id) => id !== "test"),
+    };
   });
   useEffect(() => {
     saveProviderProgress(storageKey, s);
-    if (s.screen === "success")
-      void navigate(completionHref, { replace: true });
+    if (s.screen === "success") void navigate(completionHref);
   }, [storageKey, s, completionHref, navigate]);
   // Each step starts at the top of the Setup page. The page body is bound
   // too, so target the detail frame's scroller nested inside it.
@@ -346,9 +355,41 @@ function LiveSetupConnection({
   const settingsHref =
     routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
     "#authentication";
+  const [completing, setCompleting] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  // Record completion before leaving so a reopened Setup starts at its
+  // connection check; a failed write keeps the user here to retry.
+  const complete = async () => {
+    setCompleting(true);
+    setCompletionError(null);
+    try {
+      await sdk.mcpServers.setSetupGuideCompleted({
+        setSetupGuideCompletedRequestBody: {
+          id: mcpServer.id,
+          completed: true,
+        },
+      });
+    } catch {
+      setCompletionError("Unable to save setup status.");
+      setCompleting(false);
+      return;
+    }
+    void invalidateMcpServerQueries(cache);
+    dispatch({ type: "complete" });
+  };
   return (
     <SetupContext
-      value={{ s, dispatch: live.dispatch, live: { ...live, settingsHref } }}
+      value={{
+        s,
+        dispatch: live.dispatch,
+        live: {
+          ...live,
+          settingsHref,
+          complete: () => void complete(),
+          completing,
+          completionError,
+        },
+      }}
     >
       <SetupBody serverUrl={serverUrl} serverName={serverName} />
     </SetupContext>

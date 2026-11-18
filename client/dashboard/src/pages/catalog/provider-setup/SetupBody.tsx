@@ -64,7 +64,12 @@ export function SetupBody({
   const { s, dispatch, live } = useSetup();
   const name = names[s.provider];
   const complete = ready(s) && s.authorized && s.tested;
-  const canComplete = complete && !live.pending && !live.loading && !live.error;
+  const canComplete =
+    complete &&
+    !live.pending &&
+    !live.loading &&
+    !live.error &&
+    !live.completing;
   const { canvasRef, burst } = useConfettiBurst();
   // Initial validation is already complete when reopening; only celebrate a new pass.
   const celebratedValidation = useRef(complete);
@@ -159,6 +164,11 @@ export function SetupBody({
               )}
             </Alert>
           )}
+          {s.step === "test" && live.completionError && (
+            <Alert variant="error" className="mt-5">
+              <p>{live.completionError}</p>
+            </Alert>
+          )}
           <>
             <div className="mt-[30px] flex justify-end gap-2 border-t pt-[22px]">
               {s.step !== "begin" && (
@@ -173,9 +183,13 @@ export function SetupBody({
                 <Button
                   variant="primary"
                   disabled={!canComplete}
-                  onClick={() => dispatch({ type: "complete" })}
+                  onClick={
+                    live.complete ?? (() => dispatch({ type: "complete" }))
+                  }
                 >
-                  <Button.Text>Complete setup</Button.Text>
+                  <Button.Text>
+                    {live.completing ? "Completing…" : "Complete setup"}
+                  </Button.Text>
                 </Button>
               ) : (
                 <Button
