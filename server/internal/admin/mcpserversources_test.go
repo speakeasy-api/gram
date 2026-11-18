@@ -6,21 +6,31 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	mcpregistryrepo "github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestProjectMCPServerSources_Ownership(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"wrong organization", "wrong project", "wrong server", "disabled organization", "deleted project", "deleted server", "deleted toolset", "foreign toolset"} {
 		t.Run(change, func(t *testing.T) {
 			t.Parallel()
 			ctx, svc, conn := newTestAdminService(t)
 			seedOrg(t, ctx, conn, orgFixture{id: "org_sources", name: "Sources", slug: "sources"})
 			projectID := seedProject(t, ctx, conn, "org_sources", "sources")
-			toolsetID := seedToolset(t, ctx, conn, "org_sources", projectID, "sources", false)
+			toolsetProjectID := projectID
+			if change == "foreign toolset" {
+				toolsetProjectID = seedProject(t, ctx, conn, "org_sources", "other")
+			}
+			toolsetID := seedToolset(t, ctx, conn, "org_sources", toolsetProjectID, "sources", false)
 			serverID := seedMCPServer(t, ctx, conn, projectID, toolsetID, "sources")
 			orgID := "org_sources"
-			var query string
-			var id any
 			switch change {
 			case "wrong organization":
 				orgID = "org_other"
@@ -29,20 +39,15 @@ func TestProjectMCPServerSources_Ownership(t *testing.T) {
 			case "wrong server":
 				serverID = uuid.New()
 			case "disabled organization":
-				query, id = "UPDATE organization_metadata SET disabled_at = now() WHERE id = $1", orgID
-			case "deleted project":
-				query, id = "UPDATE projects SET deleted_at = now() WHERE id = $1", projectID
-			case "deleted server":
-				query, id = "UPDATE mcp_servers SET deleted_at = now() WHERE id = $1", serverID
-			case "deleted toolset":
-				query, id = "UPDATE toolsets SET deleted_at = now() WHERE id = $1", toolsetID
-			case "foreign toolset":
-				other := seedProject(t, ctx, conn, orgID, "other")
-				_, err := conn.Exec(ctx, "UPDATE toolsets SET project_id = $1 WHERE id = $2", other, toolsetID)
+				_, err := repo.New(conn).AdminDisableOrganization(ctx, orgID)
 				require.NoError(t, err)
-			}
-			if query != "" {
-				_, err := conn.Exec(ctx, query, id)
+			case "deleted project":
+				_, err := projectsrepo.New(conn).DeleteProject(ctx, projectID)
+				require.NoError(t, err)
+			case "deleted server":
+				deleteMCPServer(t, ctx, conn, projectID, serverID)
+			case "deleted toolset":
+				_, err := toolsetsrepo.New(conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{ProjectID: projectID, Slug: "sources"})
 				require.NoError(t, err)
 			}
 			_, err := svc.projectMCPServerSources(ctx, orgID, projectID, serverID)
@@ -67,23 +72,25 @@ func TestProjectMCPServerSources_EffectiveMembershipAndAssetOwnership(t *testing
 	var selected []string
 	var expected uuid.UUID
 	for _, name := range []string{"selected", "excluded", "foreign", "deleted"} {
-		assetID, documentID := uuid.New(), uuid.New()
+		assetID := uuid.New()
 		owner := projectID
 		if name == "foreign" {
 			owner = otherProject
 		}
-		_, err := conn.Exec(ctx, `INSERT INTO assets (id, project_id, name, url, kind, content_type, content_length, sha256) VALUES ($1,$2,$3,$4,'openapiv3','application/yaml',1,$3)`, assetID, owner, name, "s3://sources/"+name)
+		err := testrepo.New(conn).InsertDeploymentAssetFixture(ctx, testrepo.InsertDeploymentAssetFixtureParams{ID: assetID, ProjectID: uuid.NullUUID{UUID: owner, Valid: true}, Name: name, Url: "s3://sources/" + name, Kind: "openapiv3", ContentType: "application/yaml", Sha256: name})
 		require.NoError(t, err)
 		if name == "deleted" {
-			_, err = conn.Exec(ctx, "UPDATE assets SET deleted_at = now() WHERE id = $1", assetID)
+			err = mcpregistryrepo.New(conn).SoftDeleteAssetFixture(ctx, assetID)
 			require.NoError(t, err)
 		}
-		_, err = conn.Exec(ctx, `INSERT INTO deployments_openapiv3_assets (id, deployment_id, asset_id, name, slug) VALUES ($1,$2,$3,$4,$4)`, documentID, deploymentID, assetID, name)
+		document, err := deploymentsrepo.New(conn).UpsertDeploymentOpenAPIv3Asset(ctx, deploymentsrepo.UpsertDeploymentOpenAPIv3AssetParams{DeploymentID: deploymentID, AssetID: assetID, Name: name, Slug: name})
 		require.NoError(t, err)
 		for _, suffix := range []string{"one", "two"} {
 			toolName := name + "_" + suffix
 			toolURN := "tools:http:sources:" + toolName
-			_, err = conn.Exec(ctx, `INSERT INTO http_tool_definitions (project_id, deployment_id, openapiv3_document_id, tool_urn, name, summary, description, server_env_var, http_method, path, schema_version, schema) VALUES ($1,$2,$3,$4,$5,'','','SERVER_URL','GET','/','1','{}')`, projectID, deploymentID, documentID, toolURN, toolName)
+			tool, err := urn.ParseTool(toolURN)
+			require.NoError(t, err)
+			_, err = deploymentsrepo.New(conn).CreateOpenAPIv3ToolDefinition(ctx, deploymentsrepo.CreateOpenAPIv3ToolDefinitionParams{ProjectID: projectID, DeploymentID: deploymentID, Openapiv3DocumentID: uuid.NullUUID{UUID: document.ID, Valid: true}, ToolUrn: tool, Name: toolName, ServerEnvVar: "SERVER_URL", HttpMethod: "GET", Path: "/", SchemaVersion: "1", Schema: []byte("{}"), Tags: []string{}, Security: []byte("[]"), HeaderSettings: []byte("{}"), QuerySettings: []byte("{}"), PathSettings: []byte("{}")})
 			require.NoError(t, err)
 			if name != "excluded" {
 				selected = append(selected, toolURN)
@@ -93,12 +100,12 @@ func TestProjectMCPServerSources_EffectiveMembershipAndAssetOwnership(t *testing
 			expected = assetID
 		}
 	}
-	_, err := conn.Exec(ctx, `INSERT INTO toolset_versions (toolset_id, version, tool_urns) VALUES ($1,1,$2)`, toolsetID, selected)
+	err := testrepo.New(conn).InsertToolsetVersionFixture(ctx, testrepo.InsertToolsetVersionFixtureParams{ToolsetID: toolsetID, ProjectID: projectID, OrganizationID: orgID, Version: 1, ToolUrns: selected})
 	require.NoError(t, err)
 	sources, err := svc.projectMCPServerSources(ctx, orgID, projectID, serverID)
 	require.NoError(t, err)
 	require.Equal(t, []adminOpenAPISource{{AssetID: expected, Name: "selected", URL: "s3://sources/selected", ContentType: "application/yaml"}}, sources)
-	_, err = conn.Exec(ctx, `INSERT INTO toolset_versions (toolset_id, version, tool_urns) VALUES ($1,2,'{}')`, toolsetID)
+	err = testrepo.New(conn).InsertToolsetVersionFixture(ctx, testrepo.InsertToolsetVersionFixtureParams{ToolsetID: toolsetID, ProjectID: projectID, OrganizationID: orgID, Version: 2, ToolUrns: []string{}})
 	require.NoError(t, err)
 	sources, err = svc.projectMCPServerSources(ctx, orgID, projectID, serverID)
 	require.NoError(t, err)
@@ -112,7 +119,7 @@ func TestProjectMCPServerSources_NonToolsetBackend(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Sources", slug: "sources"})
 	projectID := seedProject(t, ctx, conn, orgID, "sources")
 	serverID := uuid.New()
-	_, err := conn.Exec(ctx, `INSERT INTO mcp_servers (id, project_id, builtin_backend, visibility) VALUES ($1,$2,'approvals','private')`, serverID, projectID)
+	err := testrepo.New(conn).InsertRetiredApprovalsServerFixture(ctx, testrepo.InsertRetiredApprovalsServerFixtureParams{ID: serverID, ProjectID: projectID})
 	require.NoError(t, err)
 	sources, err := svc.projectMCPServerSources(ctx, orgID, projectID, serverID)
 	require.NoError(t, err)

@@ -278,7 +278,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,

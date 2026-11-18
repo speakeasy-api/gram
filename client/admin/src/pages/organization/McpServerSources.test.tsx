@@ -16,7 +16,6 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:source");
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
     this: HTMLAnchorElement,
   ) {
@@ -31,6 +30,7 @@ afterEach(() => {
 });
 
 it("lists sources and downloads bytes using the exact scoped admin target", async () => {
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   fetchMock.mockResolvedValueOnce(
     Response.json({
       sources: [
@@ -50,7 +50,7 @@ it("lists sources and downloads bytes using the exact scoped admin target", asyn
   await waitFor(() =>
     expect(click).toHaveBeenCalledWith("Example API.yaml", "blob:source"),
   );
-  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:source");
+  expect(revoke).toHaveBeenCalledWith("blob:source");
   const [listPath, listInit] = fetchMock.mock.calls[0]!;
   expect(listPath).toBe(
     "/admin/mcpServerSources?organization_id=org_example&project_id=proj_example&mcp_server_id=srv_example",

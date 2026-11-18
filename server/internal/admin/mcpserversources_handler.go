@@ -12,7 +12,9 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -96,7 +98,7 @@ func (s *Service) downloadMCPServerSource(ctx context.Context, w http.ResponseWr
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "sandbox")
 	if _, err := io.Copy(w, body); err != nil {
-		s.logger.ErrorContext(ctx, "stream source asset failed", "error", err)
+		s.logger.ErrorContext(ctx, "stream source asset failed", attr.SlogError(err))
 		// Headers may already be committed: abort rather than append a JSON error
 		// to a truncated attachment and make it look like a successful download.
 		panic(http.ErrAbortHandler)

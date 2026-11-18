@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
 	"io"
 	"maps"
 	"mime"
@@ -13,10 +12,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestMCPServerSourcesRoutesRequireStaff(t *testing.T) {
@@ -166,15 +170,16 @@ func TestMCPServerSourcesRoutesMembership(t *testing.T) {
 	deploymentID := seedCompletedDeployment(t, ctx, conn, orgID, projectID)
 	includedID, excludedID := uuid.New(), uuid.New()
 	for name, assetID := range map[string]uuid.UUID{"included": includedID, "excluded": excludedID} {
-		documentID := uuid.New()
-		_, err := conn.Exec(ctx, `INSERT INTO assets (id, project_id, name, url, kind, content_type, content_length, sha256) VALUES ($1,$2,$3,$4,'openapiv3','application/yaml',1,$3)`, assetID, projectID, name, "gs://source-routes/"+name)
+		err := testrepo.New(conn).InsertDeploymentAssetFixture(ctx, testrepo.InsertDeploymentAssetFixtureParams{ID: assetID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, Name: name, Url: "gs://source-routes/" + name, Kind: "openapiv3", ContentType: "application/yaml", Sha256: name})
 		require.NoError(t, err)
-		_, err = conn.Exec(ctx, `INSERT INTO deployments_openapiv3_assets (id, deployment_id, asset_id, name, slug) VALUES ($1,$2,$3,$4,$4)`, documentID, deploymentID, assetID, name)
+		document, err := deploymentsrepo.New(conn).UpsertDeploymentOpenAPIv3Asset(ctx, deploymentsrepo.UpsertDeploymentOpenAPIv3AssetParams{DeploymentID: deploymentID, AssetID: assetID, Name: name, Slug: name})
 		require.NoError(t, err)
-		_, err = conn.Exec(ctx, `INSERT INTO http_tool_definitions (project_id, deployment_id, openapiv3_document_id, tool_urn, name, summary, description, server_env_var, http_method, path, schema_version, schema) VALUES ($1,$2,$3,$4,$5,'','','SERVER_URL','GET','/','1','{}')`, projectID, deploymentID, documentID, "tools:http:sources:"+name, name)
+		tool, err := urn.ParseTool("tools:http:sources:" + name)
+		require.NoError(t, err)
+		_, err = deploymentsrepo.New(conn).CreateOpenAPIv3ToolDefinition(ctx, deploymentsrepo.CreateOpenAPIv3ToolDefinitionParams{ProjectID: projectID, DeploymentID: deploymentID, Openapiv3DocumentID: uuid.NullUUID{UUID: document.ID, Valid: true}, ToolUrn: tool, Name: name, ServerEnvVar: "SERVER_URL", HttpMethod: "GET", Path: "/", SchemaVersion: "1", Schema: []byte("{}"), Tags: []string{}, Security: []byte("[]"), HeaderSettings: []byte("{}"), QuerySettings: []byte("{}"), PathSettings: []byte("{}")})
 		require.NoError(t, err)
 	}
-	_, err := conn.Exec(ctx, `INSERT INTO toolset_versions (toolset_id, version, tool_urns) VALUES ($1,1,$2)`, toolsetID, []string{"tools:http:sources:included"})
+	err := testrepo.New(conn).InsertToolsetVersionFixture(ctx, testrepo.InsertToolsetVersionFixtureParams{ToolsetID: toolsetID, ProjectID: projectID, OrganizationID: orgID, Version: 1, ToolUrns: []string{"tools:http:sources:included"}})
 	require.NoError(t, err)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
 	store := &sourceBlobReader{body: &sourceReadCloser{Reader: strings.NewReader("original source")}}
@@ -208,7 +213,7 @@ func TestMCPServerSourcesRoutesMembership(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, rejected.Code, rejected.Body.String())
 	require.Nil(t, store.opened)
 	query.Set("organization_id", orgID)
-	_, err = conn.Exec(ctx, `INSERT INTO toolset_versions (toolset_id, version, tool_urns) VALUES ($1,2,'{}')`, toolsetID)
+	err = testrepo.New(conn).InsertToolsetVersionFixture(ctx, testrepo.InsertToolsetVersionFixtureParams{ToolsetID: toolsetID, ProjectID: projectID, OrganizationID: orgID, Version: 2, ToolUrns: []string{}})
 	require.NoError(t, err)
 	listed = request("/admin/mcpServerSources", query)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
