@@ -17,7 +17,7 @@ export const REPRESENTED_USER = "$represented_user";
 export type CredentialScope = "mcp:auth" | "mcp:blocked_auth";
 
 /** The selector fields a credential rule can carry. */
-export type CredentialSelector = {
+type CredentialSelector = {
   resourceKind: string;
   resourceId: string;
   clientType?: string | undefined;
@@ -54,7 +54,7 @@ export type CredentialRow =
   | { kind: "type"; clientType: string }
   | { kind: "client"; clientId: string; clientType: string };
 
-export type CredentialCellState =
+type CredentialCellState =
   | "on"
   | "inherited"
   | "blocked"
@@ -83,7 +83,7 @@ const wild = (value: string | undefined) => value == null || value === "*";
  * tier can show. A personal allow written for the represented user is still a
  * tier rule: it is what the engine enforces for any personal credential.
  */
-export function credentialTierKey(selector: CredentialSelector): string | null {
+function credentialTierKey(selector: CredentialSelector): string | null {
   if (
     selector.resourceKind !== "mcp_auth_client" ||
     selector.projectId != null ||
@@ -125,7 +125,7 @@ export function credentialRuleKey(rule: CredentialRule): string {
 }
 
 /** The selector a tier rule is written with. */
-export function tierSelector(
+function tierSelector(
   row: CredentialRow,
   scope: CredentialScope,
 ): CredentialSelector {
@@ -164,7 +164,7 @@ function holds(
 }
 
 /** The wider rows a row inherits from, nearest first. */
-export function credentialAncestors(row: CredentialRow): CredentialRow[] {
+function credentialAncestors(row: CredentialRow): CredentialRow[] {
   switch (row.kind) {
     case "all":
       return [];

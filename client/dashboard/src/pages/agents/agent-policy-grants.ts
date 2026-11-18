@@ -180,7 +180,7 @@ function constrainedDimensions(
 }
 
 /** Whether a selector reaches every resource of its kind, with nothing narrowing it. */
-export function isAgentPolicySelectorUnrestricted(
+function isAgentPolicySelectorUnrestricted(
   selector: AgentPolicySelector,
 ): boolean {
   return (
@@ -336,7 +336,7 @@ export interface AgentPolicyView {
  * nor rewrites it.
  */
 export const AGENT_CREDENTIAL_BLOCK_SCOPE = "mcp:blocked_auth";
-export const AGENT_CREDENTIAL_SCOPE = "mcp:auth";
+const AGENT_CREDENTIAL_SCOPE = "mcp:auth";
 
 export function isAgentCredentialScope(scope: string): boolean {
   return (
