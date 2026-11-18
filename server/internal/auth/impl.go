@@ -159,6 +159,7 @@ type Service struct {
 	orgRepo              *orgRepo.Queries
 	authzProvisioner     *authz.Provisioner
 	organizationSeeder   OrganizationFeatureSeeder
+	newOrgSeeder         OrganizationFeatureSeeder
 	trialBundleSeeder    EnterpriseTrialBundleSeeder
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
@@ -189,6 +190,7 @@ func NewService(
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
 	organizationSeeder OrganizationFeatureSeeder,
+	newOrgSeeder OrganizationFeatureSeeder,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
 	trialNotifier trialemails.Notifier,
@@ -222,6 +224,7 @@ func NewService(
 		orgRepo:              orgRepo.New(db),
 		authzProvisioner:     authzProvisioner,
 		organizationSeeder:   organizationSeeder,
+		newOrgSeeder:         newOrgSeeder,
 		trialBundleSeeder:    trialBundleSeeder,
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
@@ -275,7 +278,7 @@ func loginNonceBindingMiddleware(env string) func(http.Handler) http.Handler {
 				return
 			}
 
-			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+			//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 			http.SetCookie(w, &http.Cookie{
 				Name:     nonceBindingCookie,
 				Value:    binding,
@@ -302,7 +305,7 @@ func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Clear the cookie regardless of outcome — it's single-use.
-		//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+		//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 		http.SetCookie(w, &http.Cookie{
 			Name:     nonceBindingCookie,
 			Value:    "",
@@ -1674,10 +1677,10 @@ func (s *Service) persistProvisionedOrganization(
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
 	}
 
-	if s.organizationSeeder == nil {
-		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
+	if s.newOrgSeeder == nil {
+		return orgRepo.OrganizationMetadatum{}, errors.New("new organization feature seeder is not configured")
 	}
-	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
+	if err := s.newOrgSeeder(ctx, tx, org.ID); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
 

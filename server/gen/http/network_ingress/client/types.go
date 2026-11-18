@@ -16,11 +16,11 @@ import (
 // "createIngress" endpoint HTTP request body.
 type CreateIngressRequestBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
-	// Lowercase DNS label
-	Hostname          string `form:"hostname" json:"hostname" xml:"hostname"`
-	OauthClientID     string `form:"oauth_client_id" json:"oauth_client_id" xml:"oauth_client_id"`
-	OauthClientSecret string `form:"oauth_client_secret" json:"oauth_client_secret" xml:"oauth_client_secret"`
-	IdentityRequired  *bool  `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
+	// Lowercase DNS label; defaults to speakeasy
+	Hostname          *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	OauthClientID     string  `form:"oauth_client_id" json:"oauth_client_id" xml:"oauth_client_id"`
+	OauthClientSecret string  `form:"oauth_client_secret" json:"oauth_client_secret" xml:"oauth_client_secret"`
+	IdentityRequired  *bool   `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
 }
 
 // UpdateIngressRequestBody is the type of the "networkIngress" service
@@ -42,6 +42,10 @@ type RotateCredentialsRequestBody struct {
 // "getIngress" endpoint HTTP response body.
 type GetIngressResponseBody struct {
 	Ingress *NetworkIngressResponseBody `form:"ingress,omitempty" json:"ingress,omitempty" xml:"ingress,omitempty"`
+	// Tailscale tag this environment's gateway nodes and services carry. The
+	// organization's tailnet policy must own it, auto-approve the connection's
+	// service for it, and the OAuth client must be scoped to it.
+	GatewayTag *string `form:"gateway_tag,omitempty" json:"gateway_tag,omitempty" xml:"gateway_tag,omitempty"`
 }
 
 // CreateIngressResponseBody is the type of the "networkIngress" service
@@ -55,6 +59,10 @@ type CreateIngressResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -70,7 +78,12 @@ type CreateIngressResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -88,6 +101,10 @@ type UpdateIngressResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -103,7 +120,12 @@ type UpdateIngressResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -121,6 +143,10 @@ type RotateCredentialsResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -136,7 +162,12 @@ type RotateCredentialsResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -163,6 +194,10 @@ type CheckHealthResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -178,7 +213,12 @@ type CheckHealthResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -1527,6 +1567,10 @@ type NetworkIngressResponseBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Private DNS label advertised by the provider
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Pinned endpoint namespace
 	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -1542,7 +1586,12 @@ type NetworkIngressResponseBody struct {
 	// Observed private DNS name
 	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
 	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
 	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
 	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
 	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -1586,7 +1635,9 @@ func NewRotateCredentialsRequestBody(p *networkingress.RotateCredentialsPayload)
 // NewGetIngressNetworkIngressResultOK builds a "networkIngress" service
 // "getIngress" endpoint result from a HTTP "OK" response.
 func NewGetIngressNetworkIngressResultOK(body *GetIngressResponseBody) *networkingress.NetworkIngressResult {
-	v := &networkingress.NetworkIngressResult{}
+	v := &networkingress.NetworkIngressResult{
+		GatewayTag: *body.GatewayTag,
+	}
 	if body.Ingress != nil {
 		v.Ingress = unmarshalNetworkIngressResponseBodyToNetworkingressNetworkIngress(body.Ingress)
 	}
@@ -1752,6 +1803,7 @@ func NewCreateIngressNetworkIngressOK(body *CreateIngressResponseBody) *networki
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -1760,6 +1812,7 @@ func NewCreateIngressNetworkIngressOK(body *CreateIngressResponseBody) *networki
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
@@ -1927,6 +1980,7 @@ func NewUpdateIngressNetworkIngressOK(body *UpdateIngressResponseBody) *networki
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -1935,6 +1989,7 @@ func NewUpdateIngressNetworkIngressOK(body *UpdateIngressResponseBody) *networki
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
@@ -2102,6 +2157,7 @@ func NewRotateCredentialsNetworkIngressOK(body *RotateCredentialsResponseBody) *
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -2110,6 +2166,7 @@ func NewRotateCredentialsNetworkIngressOK(body *RotateCredentialsResponseBody) *
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
@@ -2590,6 +2647,7 @@ func NewCheckHealthNetworkIngressOK(body *CheckHealthResponseBody) *networkingre
 		OrganizationID:        *body.OrganizationID,
 		Provider:              *body.Provider,
 		Hostname:              *body.Hostname,
+		Runtime:               *body.Runtime,
 		EndpointNamespaceKind: *body.EndpointNamespaceKind,
 		CustomDomainID:        body.CustomDomainID,
 		Enabled:               *body.Enabled,
@@ -2598,6 +2656,7 @@ func NewCheckHealthNetworkIngressOK(body *CheckHealthResponseBody) *networkingre
 		Status:                *body.Status,
 		DNSName:               body.DNSName,
 		LastError:             body.LastError,
+		StatusDetail:          body.StatusDetail,
 		HealthCheckedAt:       body.HealthCheckedAt,
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
@@ -2775,6 +2834,9 @@ func NewCheckHealthGatewayError(body *CheckHealthGatewayErrorResponseBody) *goa.
 // ValidateGetIngressResponseBody runs the validations defined on
 // GetIngressResponseBody
 func ValidateGetIngressResponseBody(body *GetIngressResponseBody) (err error) {
+	if body.GatewayTag == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_tag", "body"))
+	}
 	if body.Ingress != nil {
 		if err2 := ValidateNetworkIngressResponseBody(body.Ingress); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -2797,6 +2859,9 @@ func ValidateCreateIngressResponseBody(body *CreateIngressResponseBody) (err err
 	}
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
+	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
 	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
@@ -2825,6 +2890,11 @@ func ValidateCreateIngressResponseBody(body *CreateIngressResponseBody) (err err
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -2865,6 +2935,9 @@ func ValidateUpdateIngressResponseBody(body *UpdateIngressResponseBody) (err err
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -2892,6 +2965,11 @@ func ValidateUpdateIngressResponseBody(body *UpdateIngressResponseBody) (err err
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -2932,6 +3010,9 @@ func ValidateRotateCredentialsResponseBody(body *RotateCredentialsResponseBody) 
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -2959,6 +3040,11 @@ func ValidateRotateCredentialsResponseBody(body *RotateCredentialsResponseBody) 
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -3017,6 +3103,9 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -3044,6 +3133,11 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {
@@ -4788,6 +4882,9 @@ func ValidateNetworkIngressResponseBody(body *NetworkIngressResponseBody) (err e
 	if body.Hostname == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
 	if body.EndpointNamespaceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
 	}
@@ -4815,6 +4912,11 @@ func ValidateNetworkIngressResponseBody(body *NetworkIngressResponseBody) (err e
 	if body.Provider != nil {
 		if !(*body.Provider == "tailscale") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.Runtime != nil {
+		if !(*body.Runtime == "gateway" || *body.Runtime == "operator") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime", *body.Runtime, []any{"gateway", "operator"}))
 		}
 	}
 	if body.EndpointNamespaceKind != nil {

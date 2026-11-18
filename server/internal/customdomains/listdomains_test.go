@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
 
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -47,6 +48,31 @@ func TestListDomains_ReturnsConfiguredDomain(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Domains, 1)
 	require.Equal(t, "docs.example.com", result.Domains[0].Domain)
+	require.False(t, result.Domains[0].IsReconciling)
+}
+
+func TestListDomains_ReportsActiveReconciliation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "docs.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+	ti.temporal.reconcileStatus = enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	result, err := ti.service.ListDomains(ctx, &gen.ListDomainsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Domains, 1)
+	require.True(t, result.Domains[0].IsReconciling)
+	require.Equal(t, "applying", result.Domains[0].ReconciliationStatus)
 }
 
 func TestListDomains_ForbiddenWithoutOrgReadGrant(t *testing.T) {

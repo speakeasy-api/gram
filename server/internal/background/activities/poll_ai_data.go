@@ -25,6 +25,7 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
+	geminivault "github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 // ErrTypeAIUsagePollFailed is the Temporal application error type emitted
@@ -65,6 +66,7 @@ type PollAIData struct {
 	codexCostImporter             *aiintegrations.CodexCostImportService
 	chatgptConversationImporter   *aiintegrations.ChatGPTConversationImportService
 	codexCloudImporter            *aiintegrations.CodexCloudImportService
+	geminiImporter                *aiintegrations.GeminiImportService
 }
 
 func NewPollAIData(
@@ -107,6 +109,9 @@ func NewPollAIData(
 			"page":     page,
 		})
 	}
+	geminiHeartbeat := func(ctx context.Context, scope string, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{"schedule": aiintegrations.ScheduleGeminiCompliance, "scope": scope, "page": page})
+	}
 	return &PollAIData{
 		logger:       logger.With(attr.SlogComponent("activities.poll_ai_data")),
 		integrations: store,
@@ -122,6 +127,7 @@ func NewPollAIData(
 		codexCostImporter:             aiintegrations.NewCodexCostImportService(logger, store, telemetryLogger, guardianPolicy, codexHeartbeat),
 		chatgptConversationImporter:   aiintegrations.NewChatGPTConversationImportService(logger, store, db, guardianPolicy, chatWriter, chatgptHeartbeat),
 		codexCloudImporter:            aiintegrations.NewCodexCloudImportService(logger, store, db, guardianPolicy, chatWriter, codexCloudHeartbeat),
+		geminiImporter:                aiintegrations.NewGeminiImportService(logger, db, guardianPolicy, chatWriter, geminiHeartbeat),
 	}
 }
 
@@ -245,6 +251,22 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
 			return fmt.Errorf("record codex compliance schedule success: %w", err)
 		}
+	case aiintegrations.ScheduleGeminiCompliance:
+		if cfg.Provider != aiintegrations.ProviderGeminiCompliance {
+			return oops.E(oops.CodeInvalid, nil, "gemini compliance schedule cannot run for provider %s", cfg.Provider)
+		}
+		// A bounded download can exceed the activity's one-minute heartbeat
+		// timeout. Keep the activity alive during network I/O and XML parsing,
+		// not only between artifacts/pages.
+		stopHeartbeat := startActivityHeartbeat(ctx)
+		defer stopHeartbeat()
+		result, err := p.geminiImporter.SyncGemini(ctx, cfg, endTime)
+		if err != nil {
+			return fmt.Errorf("sync Gemini conversation data: %w", err)
+		}
+		if err := p.integrations.RecordGeminiPollSuccess(ctx, cfg.SyncID, result.Watermark, result.Cursor, endTime, result.Pending); err != nil {
+			return fmt.Errorf("record Gemini compliance schedule success: %w", err)
+		}
 	case aiintegrations.ScheduleChatGPTCompliance:
 		if cfg.Provider != aiintegrations.ProviderChatGPTCompliance {
 			return oops.E(oops.CodeInvalid, nil, "chatgpt compliance schedule cannot run for provider %s", cfg.Provider)
@@ -286,6 +308,22 @@ func providerDetail(body string) string {
 }
 
 func shareablePollError(schedule string, cause error) error {
+	if providerErr, ok := errors.AsType[*geminivault.HTTPError](cause); ok {
+		if providerErr.CredentialsRejected() {
+			return oops.E(oops.CodeUnauthorized, cause, "Google rejected the configured service account credentials; check the key, the domain-wide delegation scopes, and the delegated user")
+		}
+		switch providerErr.StatusCode {
+		case 401:
+			return oops.E(oops.CodeUnauthorized, cause, "Google Vault rejected the configured service account credentials")
+		case 403:
+			return oops.E(oops.CodeForbidden, cause, "Google Vault access denied; check domain-wide delegation, delegated user permissions, and matter access")
+		case 404:
+			return oops.E(oops.CodeNotFound, cause, "Google Vault matter or export not found; check the configured matter UUID")
+		case 400, 422:
+			return oops.E(oops.CodeInvalid, cause, "Google Vault rejected the export request; check credentials, matter access, and Gemini retention settings")
+		}
+	}
+
 	if contentErr, ok := errors.AsType[*aiintegrations.CodexCostContentError](cause); ok {
 		return oops.E(oops.CodeUnexpected, cause, "%s", contentErr.ShareableMessage())
 	}
@@ -378,6 +416,8 @@ func shareablePollError(schedule string, cause error) error {
 		message = "sync chatgpt conversation data"
 	case aiintegrations.ScheduleCodexCloudSessions:
 		message = "sync codex cloud session data"
+	case aiintegrations.ScheduleGeminiCompliance:
+		message = "sync gemini conversation data"
 	}
 	return oops.E(oops.CodeUnexpected, cause, "%s", message)
 }
@@ -388,6 +428,9 @@ func shareablePollError(schedule string, cause error) error {
 // configuration. Those are configuration problems for the user to fix, so
 // the run stops on the first attempt and the schedule pauses after a few.
 func pollRejectedByProvider(err error) bool {
+	if providerErr, ok := errors.AsType[*geminivault.HTTPError](err); ok {
+		return providerRejectedStatus(providerErr.StatusCode)
+	}
 	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {
 		return providerRejectedStatus(cursorErr.StatusCode)
 	}
@@ -467,6 +510,9 @@ func pollUnavailableHTTPStatus(err error) int {
 	var codexErr *codexapi.HTTPError
 	if errors.As(err, &codexErr) && statusUnavailable(codexErr.StatusCode) {
 		return codexErr.StatusCode
+	}
+	if providerErr, ok := errors.AsType[*geminivault.HTTPError](err); ok && statusUnavailable(providerErr.StatusCode) {
+		return providerErr.StatusCode
 	}
 	return 0
 }

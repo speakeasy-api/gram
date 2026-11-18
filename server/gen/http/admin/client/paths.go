@@ -546,3 +546,83 @@ func GetProjectRedeployPreviewAdminPath() string {
 func RedeployProjectAdminPath() string {
 	return "/admin/project.redeploy"
 }
+
+// ListCustomDomainsAdminPath returns the URL path to the admin service listCustomDomains HTTP endpoint.
+func ListCustomDomainsAdminPath() string {
+	return "/admin/customDomains.list"
+}
+
+// ListPlatformExternalCredentialsAdminPath returns the URL path to the admin service listPlatformExternalCredentials HTTP endpoint.
+func ListPlatformExternalCredentialsAdminPath() string {
+	return "/admin/externalCredentials.list"
+}
+
+// GetGcpIamPlatformCredentialAdminPath returns the URL path to the admin service getGcpIamPlatformCredential HTTP endpoint.
+func GetGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.getGcpIam"
+}
+
+// CreateGcpIamPlatformCredentialAdminPath returns the URL path to the admin service createGcpIamPlatformCredential HTTP endpoint.
+func CreateGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.createGcpIam"
+}
+
+// UpdateGcpIamPlatformCredentialAdminPath returns the URL path to the admin service updateGcpIamPlatformCredential HTTP endpoint.
+func UpdateGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.updateGcpIam"
+}
+
+// VerifyGcpIamPlatformCredentialAdminPath returns the URL path to the admin service verifyGcpIamPlatformCredential HTTP endpoint.
+func VerifyGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.verifyGcpIam"
+}
+
+// DeleteGcpIamPlatformCredentialAdminPath returns the URL path to the admin service deleteGcpIamPlatformCredential HTTP endpoint.
+func DeleteGcpIamPlatformCredentialAdminPath() string {
+	return "/admin/externalCredentials.deleteGcpIam"
+}
+
+// GetMemoryEvalOptionsAdminPath returns the URL path to the admin service getMemoryEvalOptions HTTP endpoint.
+func GetMemoryEvalOptionsAdminPath() string {
+	return "/admin/memoryEval.options"
+}
+
+// ListMemoryEvalRunsAdminPath returns the URL path to the admin service listMemoryEvalRuns HTTP endpoint.
+func ListMemoryEvalRunsAdminPath() string {
+	return "/admin/memoryEval.runs"
+}
+
+// GetMemoryEvalRunAdminPath returns the URL path to the admin service getMemoryEvalRun HTTP endpoint.
+func GetMemoryEvalRunAdminPath() string {
+	return "/admin/memoryEval.run"
+}
+
+// StartMemoryEvalRunAdminPath returns the URL path to the admin service startMemoryEvalRun HTTP endpoint.
+func StartMemoryEvalRunAdminPath() string {
+	return "/admin/memoryEval.start"
+}
+
+// ListAssistantOrganizationsAdminPath returns the URL path to the admin service listAssistantOrganizations HTTP endpoint.
+func ListAssistantOrganizationsAdminPath() string {
+	return "/admin/assistants.organizations"
+}
+
+// RepairOrganizationAssistantAgentNamesAdminPath returns the URL path to the admin service repairOrganizationAssistantAgentNames HTTP endpoint.
+func RepairOrganizationAssistantAgentNamesAdminPath() string {
+	return "/admin/organization.repairAssistantAgentNames"
+}
+
+// ListOrganizationAssistantsAdminPath returns the URL path to the admin service listOrganizationAssistants HTTP endpoint.
+func ListOrganizationAssistantsAdminPath() string {
+	return "/admin/organization.assistants"
+}
+
+// MigrateOrganizationAssistantIdentitiesAdminPath returns the URL path to the admin service migrateOrganizationAssistantIdentities HTTP endpoint.
+func MigrateOrganizationAssistantIdentitiesAdminPath() string {
+	return "/admin/organization.migrateAssistantIdentities"
+}
+
+// MigrateOrganizationAssistantsToKitAdminPath returns the URL path to the admin service migrateOrganizationAssistantsToKit HTTP endpoint.
+func MigrateOrganizationAssistantsToKitAdminPath() string {
+	return "/admin/organization.migrateAssistantsToKit"
+}

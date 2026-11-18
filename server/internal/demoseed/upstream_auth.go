@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -41,11 +42,37 @@ import (
 // migration run, completes it.
 func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
 	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
-	if err := checkLegacyUpstreamAuth(ctx, db, organizationID); err != nil {
+	// Only the associations can be checked before the backfills. The seed
+	// enforces upstream auth, and under enforcement a credential choice counts
+	// only once the server offers a typed auth client for it, which the auth
+	// client backfill below records. Checking the choices here would read every
+	// client choice as unusable_client, because the project delete at the start
+	// of the run removed the typed rows. upstreamAuthReadiness checks them
+	// after the backfills.
+	if err := checkUpstreamAssociations(ctx, db, organizationID); err != nil {
 		return err
 	}
 
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	if err := recordTypedUpstreamAuth(ctx, logger, db, organizationID); err != nil {
+		return err
+	}
+
+	return upstreamAuthReadiness(ctx, logger, db, organizationID)
+}
+
+// recordTypedUpstreamAuth records the typed auth clients, their server links,
+// header copies, mapped credential choices and default grants, and the
+// assistant execution profiles, with the backfills the admin migration runs,
+// in the same order.
+func recordTypedUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
+	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
+	// The selection backfill reads the organization's enforcement state on its
+	// own; the auth client backfill is told it, as the admin migration does.
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	if err != nil {
+		return fmt.Errorf("record typed auth clients: %w", err)
+	}
+	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: enforced})
 	if err != nil {
 		return fmt.Errorf("record typed auth clients: %w", err)
 	}
@@ -63,13 +90,22 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.SelectionsMapped, clients.GrantsWritten, profiles.VersionsWritten,
 	), attr.SlogOrganizationID(organizationID))
 
-	return upstreamAuthReadiness(ctx, logger, db, organizationID)
+	return nil
 }
 
 // checkLegacyUpstreamAuth fails when the seed left an association or a
 // credential choice for the legacy backfills to decide: the seed writes those
 // itself, exactly as issuance and the server editor would have.
 func checkLegacyUpstreamAuth(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
+	if err := checkUpstreamAssociations(ctx, db, organizationID); err != nil {
+		return err
+	}
+	return checkUpstreamSelections(ctx, db, organizationID)
+}
+
+// checkUpstreamAssociations fails when the seed left a server's upstream OAuth
+// client association for the association backfill to decide.
+func checkUpstreamAssociations(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
 	var problems []string
 
 	associations, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
@@ -90,6 +126,19 @@ func checkLegacyUpstreamAuth(ctx context.Context, db *pgxpool.Pool, organization
 		}
 	}
 
+	if len(problems) > 0 {
+		return fmt.Errorf("demo seed wrote incomplete upstream OAuth client associations for its MCP servers: %s", strings.Join(problems, "; "))
+	}
+	return nil
+}
+
+// checkUpstreamSelections fails when a credential's client choice is left to
+// decide or unusable. The selection backfill reads the organization's
+// enforcement state, so under enforcement it only passes once the typed auth
+// clients are recorded.
+func checkUpstreamSelections(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
+	var problems []string
+
 	selections, err := selectionbackfill.Run(ctx, db, selectionbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
 	if err != nil {
 		return fmt.Errorf("check upstream oauth client selections: %w", err)
@@ -98,11 +147,11 @@ func checkLegacyUpstreamAuth(ctx context.Context, db *pgxpool.Pool, organization
 		problems = append(problems, fmt.Sprintf("%d credential client choices left to record", pending))
 	}
 	for _, gap := range selections.Gaps {
-		problems = append(problems, fmt.Sprintf("credential %s choice for server %s is %s", gap.CredentialID, gap.MCPServerID, gap.Outcome))
+		problems = append(problems, fmt.Sprintf("credential %s on server %s: %s", gap.CredentialID, gap.MCPServerID, describeSelectionGap(gap.Outcome)))
 	}
 
 	if len(problems) > 0 {
-		return fmt.Errorf("demo seed left legacy upstream auth incomplete: %s", strings.Join(problems, "; "))
+		return fmt.Errorf("demo seed sign-in credentials have no usable upstream client on some MCP servers: %s", strings.Join(problems, "; "))
 	}
 	return nil
 }
@@ -126,7 +175,11 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 		}
 	}
 
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	if err != nil {
+		return fmt.Errorf("check typed auth clients: %w", err)
+	}
+	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: enforced})
 	if err != nil {
 		return fmt.Errorf("check typed auth clients: %w", err)
 	}
@@ -163,6 +216,24 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 		return errors.New("demo seed left typed upstream auth incomplete: " + strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+// describeSelectionGap says why a credential has no usable client choice on a
+// server, keeping the outcome name so the message matches the backfill's
+// report.
+func describeSelectionGap(outcome selectionbackfill.Outcome) string {
+	var why string
+	switch outcome {
+	case selectionbackfill.OutcomeUnusableClient:
+		why = "its chosen client is not offered by the server (detached, deleted, unbound from the issuer, or no typed auth client under enforcement)"
+	case selectionbackfill.OutcomeAmbiguous:
+		why = "the server offers several eligible clients, so only a person can choose"
+	case selectionbackfill.OutcomeUnreachableClient:
+		why = "none of the server's clients is bound to the credential's issuer"
+	default:
+		return string(outcome)
+	}
+	return fmt.Sprintf("%s (%s)", why, outcome)
 }
 
 // seededSelectorWrites admits the seeded organization's upstream_client

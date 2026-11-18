@@ -4,7 +4,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -15,6 +18,10 @@ const (
 	errCodeNonceRead    = "ENC-3"
 	errCodeGCMOpen      = "ENC-4"
 	errCodeBase64Decode = "ENC-5"
+
+	// errCodeCiphertextShort means the decoded value is shorter than a GCM
+	// nonce, so it cannot be a ciphertext.
+	errCodeCiphertextShort = "ENC-6"
 )
 
 type encryptionError struct {
@@ -63,6 +70,20 @@ func (e *decryptionError) Unwrap() error {
 	return e.inner
 }
 
+// ErrorCode returns the ENC-* code of an error from Encrypt or Decrypt, so
+// callers can record why a value failed without recording the value.
+func ErrorCode(err error) (string, bool) {
+	if decErr, ok := errors.AsType[*decryptionError](err); ok {
+		return decErr.code, true
+	}
+
+	if encErr, ok := errors.AsType[*encryptionError](err); ok {
+		return encErr.code, true
+	}
+
+	return "", false
+}
+
 type Client struct {
 	key []byte
 }
@@ -80,6 +101,16 @@ func NewWithBytes(key []byte) (*Client, error) {
 		return nil, fmt.Errorf("invalid AES-256 key size: %d bytes", len(key))
 	}
 	return &Client{key: key}, nil
+}
+
+// fingerprintHexChars is how much of the key's SHA-256 a fingerprint shows:
+// enough to tell keys apart across pods, far too little to recover anything.
+const fingerprintHexChars = 8
+
+// Fingerprint names the key without revealing it, so logs can show which key a pod holds.
+func (e *Client) Fingerprint() string {
+	sum := sha256.Sum256(e.key)
+	return hex.EncodeToString(sum[:])[:fingerprintHexChars]
 }
 
 // Encrypt encrypts the plaintext using AES-GCM and returns a base64 encoded string
@@ -122,7 +153,7 @@ func (e *Client) Decrypt(ciphertextStr string) (string, error) {
 
 	nonceSize := gcm.NonceSize()
 	if len(ciphertext) < nonceSize {
-		return "", fmt.Errorf("ciphertext too short")
+		return "", newDecryptionError(errCodeCiphertextShort, errors.New("ciphertext too short"))
 	}
 
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]

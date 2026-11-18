@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 )
 
 func TestNetworkIngressProviderDefaultsDisabled(t *testing.T) {
@@ -232,4 +234,57 @@ func TestValidatePrivateServerConfig(t *testing.T) {
 	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "", false))
 	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "key", true))
 	require.NoError(t, validatePrivateServerConfig(true, ":8443", "cert", "key", false))
+}
+
+func TestTailnetGatewayRegistersOnlyTheEncryptionSettingsItReads(t *testing.T) {
+	t.Parallel()
+	names := map[string]bool{}
+	for _, flag := range newTailnetGatewayCommand().Flags {
+		names[flag.Names()[0]] = true
+	}
+	require.True(t, names[orgEncryptionCredentialIDFlag], "the gateway decrypts with the organization's key")
+	require.False(t, names[orgEncryptionSwitchGracePeriodFlag], "key switching is the provisioner's, not the gateway's")
+	require.False(t, names[orgEncryptionManagedKeyRetention])
+}
+
+func TestLocalDevelopmentNamerRequiresADevelopmentID(t *testing.T) {
+	t.Parallel()
+
+	_, err := localDevelopmentNamer("local", "", "")
+	require.ErrorContains(t, err, "GRAM_NETWORK_INGRESS_DEV_ID", "a local stack must not fall back to production names")
+
+	namer, err := localDevelopmentNamer("local", "ab12", "")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.LocalNamer{}, namer)
+
+	namer, err = localDevelopmentNamer("prod", "", "")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.ProductionNamer{}, namer)
+
+	_, err = localDevelopmentNamer("prod", "ab12", "")
+	require.ErrorIs(t, err, networkingress.ErrDevIDOutsideLocal)
+
+	namer, err = localDevelopmentNamer("dev", "", "dev")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.QualifiedNamer{}, namer)
+}
+
+func TestGatewayNameQualifierReachesReconcilerAndGateway(t *testing.T) {
+	t.Parallel()
+
+	commands := map[string][]cli.Flag{
+		"network-ingress-worker": networkIngressProviderFlags(),
+		"tailnet-gateway":        newTailnetGatewayCommand().Flags,
+	}
+	for name, flags := range commands {
+		var envVars []string
+		for _, flag := range flags {
+			if flag.Names()[0] == networkIngressGatewayNameQualifierFlag {
+				stringFlag, ok := flag.(*cli.StringFlag)
+				require.True(t, ok)
+				envVars = stringFlag.EnvVars
+			}
+		}
+		require.Equal(t, []string{"GRAM_NETWORK_INGRESS_GATEWAY_NAME_QUALIFIER"}, envVars, "%s reads the qualifier", name)
+	}
 }

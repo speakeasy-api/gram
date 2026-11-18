@@ -5,16 +5,19 @@ import { Spinner } from "@/components/ui/Spinner";
 import { FieldError } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ScopeBadge } from "@/lib/remote-identity";
+import { useRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { AuthRow, RowSave } from "./AuthRow";
 import type { AuthTarget } from "./authTarget";
 import { ChangeIssuerConfirmDialog } from "./ChangeIssuerConfirmDialog";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 export function UserSessionIssuerField({
   target,
@@ -41,6 +44,7 @@ export function UserSessionIssuerField({
   }, [currentIssuerId]);
 
   const update = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async (userSessionIssuerId: string) => {
       if (!target.linkUserSessionIssuer) {
         throw new Error("This authentication target cannot change issuers");
@@ -55,7 +59,7 @@ export function UserSessionIssuerField({
         invalidateAllUserSessionIssuer(queryClient, { refetchType: "all" }),
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
-      toast.success("User session issuer updated");
+      toast.success("MCP Authentication Provider updated");
     },
   });
 
@@ -67,29 +71,33 @@ export function UserSessionIssuerField({
   } else if (isError) {
     control = (
       <FieldError>
-        Failed to load user session issuers. Refresh the page to try again.
+        Failed to load MCP Authentication Providers. Refresh the page to try
+        again.
       </FieldError>
     );
   } else if (issuers.length === 0) {
     control = (
       <Text muted small>
-        No existing organization or project issuers are available.
+        No MCP Authentication Provider is available yet.
       </Text>
     );
   } else {
     control = (
-      <div className="flex flex-wrap items-center gap-2">
-        <UserSessionIssuerSelect
-          issuers={issuers}
-          value={selectedIssuerId}
-          onValueChange={setDraftIssuerId}
-          disabled={update.isPending}
-        />
-        {selectedIssuer ? (
-          <ScopeBadge
-            projectId={selectedIssuer.projectId}
-            organizationId={selectedIssuer.organizationId}
+      // A fixed width, so the row doesn't shift as the chosen name changes.
+      <div className="flex items-center justify-end gap-2">
+        <div className="w-full max-w-md min-w-0 [&_[data-slot=select-value]]:truncate">
+          <UserSessionIssuerSelect
+            issuers={issuers}
+            value={selectedIssuerId}
+            onValueChange={setDraftIssuerId}
+            disabled={update.isPending}
           />
+        </div>
+        {currentIssuerId ? (
+          // The provider's settings are the organization's to read.
+          <RequireScope scope={["org:read", "org:admin"]} level="section">
+            <OpenProviderLink issuerId={currentIssuerId} />
+          </RequireScope>
         ) : null}
       </div>
     );
@@ -99,14 +107,14 @@ export function UserSessionIssuerField({
 
   return (
     <AuthRow
-      label="User session issuer"
-      hint="Chooses the authorization policy shared by clients connecting to this server."
+      label="MCP Authentication Provider"
+      hint="Where people sign in to this server. Its settings apply to every server that uses it."
     >
       {control}
       {update.isError && !confirmOpen ? (
         <FieldError>{update.error.message}</FieldError>
       ) : null}
-      <RowSave visible={dirty}>
+      <RowSave visible={dirty} className="justify-end">
         <RequireScope
           scope="mcp:write"
           resourceId={target.permissionResourceId}
@@ -148,5 +156,24 @@ export function UserSessionIssuerField({
         />
       ) : null}
     </AuthRow>
+  );
+}
+
+/** Opens the server's MCP Authentication Provider, where its settings live. */
+function OpenProviderLink({ issuerId }: { issuerId: string }): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      asChild
+      aria-label="Open MCP Authentication Provider settings"
+    >
+      <Link to={routes.mcpSessions.provider.settings.href(issuerId)}>
+        <Button.LeftIcon>
+          <Settings className="size-4" aria-hidden="true" />
+        </Button.LeftIcon>
+      </Link>
+    </Button>
   );
 }

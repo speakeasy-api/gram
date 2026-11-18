@@ -85,6 +85,7 @@ func (s *seeder) chPurgeAndTelemetry(ctx context.Context, ch driver.Conn) error 
 		{"cursor hook rows", s.chCursorHookRows},
 		{"work units scores", s.chWorkUnitRows},
 		{"hooks fleet rows", s.chHookFleetRows},
+		{"agent owner session rows", s.chOwnerSessionRows},
 	}
 	for _, ins := range inserts {
 		if err := s.chInsertTelemetry(ctx, ch, ins.rows()); err != nil {
@@ -108,6 +109,8 @@ var chPurgeProjectTables = []string{
 	"attribute_keys",
 	"shadow_mcp_inventory_urls",
 	"mcp_network_traffic_hourly_summaries",
+	// No server the seed writes is tunnelled any more; the purge still clears
+	// the snapshots earlier seeds wrote.
 	"tunnel_metric_snapshots",
 }
 
@@ -266,14 +269,17 @@ var chRolesJSON = []string{
 
 // chIdentityAttrs is the WorkOS-style identity block (division through
 // hostname) a row carries for demo user idx.
-func chIdentityAttrs(idx int) string {
-	u := demoUsers[idx]
+func chIdentityAttrs(idx int) string { return chUserIdentityAttrs(demoUsers[idx], chRolesJSON[idx]) }
+
+// chUserIdentityAttrs is chIdentityAttrs for any member, with roles as the
+// user.roles JSON array.
+func chUserIdentityAttrs(u demoUser, roles string) string {
 	return `,"user.attributes.division_name":"` + u.division + `"` +
 		`,"user.attributes.department_name":"` + u.department + `"` +
 		`,"user.attributes.job_title":"` + u.title + `"` +
 		`,"user.attributes.employee_type":"` + u.empType + `"` +
 		`,"user.attributes.cost_center_name":"` + u.costCenter + `"` +
-		`,"user.roles":` + chRolesJSON[idx] +
+		`,"user.roles":` + roles +
 		`,"user.groups":["` + u.team + `"]` +
 		`,"gram.hook.hostname":"` + u.hostname + `"`
 }
@@ -338,12 +344,12 @@ func (s *seeder) chTranscriptRows(ctx context.Context, ch driver.Conn) error {
 	if err := ch.Exec(ctx, `
 		INSERT INTO agent_events
 		  (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
-		   record_id, session_id, event_id, raw_event_name, source, surface,
+		   record_id, session_id, event_id, raw_event_name, source, surface, product, client,
 		   user_id, user_email, provider, model, attributes, resource_attributes, scope_attributes)
 		SELECT ?, toString(gram_project_id), time_unix_nano, observed_time_unix_nano,
 		       concat('transcript:', toString(attributes.gram.chat.message.id)), chat_id,
 		       concat('transcript:', toString(attributes.gram.chat.message.id)), 'session.observed',
-		       'transcript', hook_source, user_id, user_email, 'anthropic',
+		       'transcript', hook_source, 'claude', 'web', user_id, user_email, 'anthropic',
 		       toString(attributes.gen_ai.response.model), '{}', '{}', '{}'
 		FROM telemetry_logs
 		WHERE gram_project_id = toUUID(?)
@@ -474,7 +480,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
 				// How the gateway signed the call in upstream: the person's
-				// own Linear connection, the shared engineering token, or
+				// own Per-User OAuth connection, the shared service token, or
 				// nothing for calls recorded before the gateway named it, so
 				// the Tool Logs row shows all three renderings. The ids are
 				// seeded auth clients, so the id a row names resolves to one.
@@ -485,10 +491,10 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.auth_client.type":"static_credential","gram.auth_client.id":"` + s.det("auth-client-github-token").String() + `"`
 				}
 			}
-			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
+			attrs += `,"gram.toolset.slug":"openapi-server"`
 			// The serving wrapper's id; every seventh chat models calls recorded before stamping.
 			if i%7 != 0 {
-				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.det("mcpserver-ops").String(), s.toolset1().String()) + `"`
+				attrs += `,"gram.mcp_server.id":"` + s.toolset1().String() + `"`
 			}
 			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
 				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +
@@ -612,7 +618,7 @@ func (s *seeder) chUnattributedToolRows() []chTelemetryRow {
 			traceID:      s.chTrace("unattributed-" + strconv.Itoa(i)),
 			attributes: `{"gram.tool.urn":"` + toolURN(toolName) + `"` +
 				`,"gram.tool.name":"` + toolName + `"` +
-				`,"gram.toolset.slug":"acme-support-tools"` +
+				`,"gram.toolset.slug":"openapi-server"` +
 				`,"http.response.status_code":200` +
 				`,"http.server.request.duration":0.42` +
 				`,"gram.project.id":"` + s.projectID().String() + `"` +
@@ -882,7 +888,7 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 				`,"gram.mcp.skill.id":"` + s.skillID(pos).String() + `"` +
 				`,"gram.mcp.skill.version_id":"` + versionID.String() + `"` +
 				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +
-				`,"gram.toolset.slug":"acme-support-tools"` +
+				`,"gram.toolset.slug":"openapi-server"` +
 				`,"gram.mcp_server.id":"` + s.toolset1().String() + `"` +
 				`,"gram.mcp_endpoint.id":"` + s.det("endpoint-hosted-acme-support-tools").String() + `"` +
 				`,"http.response.status_code":200` +

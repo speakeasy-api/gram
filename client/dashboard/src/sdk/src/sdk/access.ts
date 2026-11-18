@@ -41,6 +41,7 @@ import { accessRevokeTemporaryGrant } from "../funcs/accessRevokeTemporaryGrant.
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
 import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
+import { accessSetShadowMCPOfficialServer } from "../funcs/accessSetShadowMCPOfficialServer.js";
 import { accessSyncDirectoryGroups } from "../funcs/accessSyncDirectoryGroups.js";
 import { accessUpdateDirectoryReviewSettings } from "../funcs/accessUpdateDirectoryReviewSettings.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
@@ -236,6 +237,10 @@ import {
   SetResourceAudienceRequest,
   SetResourceAudienceSecurity,
 } from "../models/operations/setresourceaudience.js";
+import {
+  SetShadowMCPOfficialServerRequest,
+  SetShadowMCPOfficialServerSecurity,
+} from "../models/operations/setshadowmcpofficialserver.js";
 import {
   SyncDirectoryGroupsRequest,
   SyncDirectoryGroupsSecurity,
@@ -993,6 +998,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ResourceAudienceResult> {
     return unwrapAsync(accessSetResourceAudience(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setShadowMCPOfficialServer access
+   *
+   * @remarks
+   * Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async setShadowMCPOfficialServer(
+    request: SetShadowMCPOfficialServerRequest,
+    security?: SetShadowMCPOfficialServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessSetShadowMCPOfficialServer(
       this,
       request,
       security,

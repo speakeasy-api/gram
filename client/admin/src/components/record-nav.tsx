@@ -1,10 +1,12 @@
 import type { AriaAttributes, JSX } from "react";
 import {
+  BotIcon,
   BuildingIcon,
   ListChecksIcon,
   ChevronLeftIcon,
   CreditCardIcon,
   FolderIcon,
+  GlobeIcon,
   HistoryIcon,
   LayoutGridIcon,
   ServerIcon,
@@ -105,6 +107,14 @@ export function RecordNav({
   });
   const onMcpServers = !!matchRoute({
     to: "/organizations/$idOrSlug/mcp-servers",
+    params: { idOrSlug },
+  });
+  const onAssistants = !!matchRoute({
+    to: "/organizations/$idOrSlug/assistants",
+    params: { idOrSlug },
+  });
+  const onCustomDomain = !!matchRoute({
+    to: "/organizations/$idOrSlug/custom-domain",
     params: { idOrSlug },
   });
   const onBilling = !!matchRoute({
@@ -279,6 +289,40 @@ export function RecordNav({
                 >
                   <ServerIcon />
                   <span>MCP Servers</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onAssistants}
+                tooltip="Assistants"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/assistants"
+                  params={{ idOrSlug }}
+                  {...currentProps(onAssistants)}
+                >
+                  <BotIcon />
+                  <span>Assistants</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onCustomDomain}
+                tooltip="Custom domain"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/custom-domain"
+                  params={{ idOrSlug }}
+                  {...currentProps(onCustomDomain)}
+                >
+                  <GlobeIcon />
+                  <span>Custom domain</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

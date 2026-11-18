@@ -252,6 +252,20 @@ func TestReceiptCardSaysWhatHappened(t *testing.T) {
 	require.Contains(t, preview, "Preview, not applied")
 }
 
+func TestReceiptCardShowsAFailedTestEvent(t *testing.T) {
+	t.Parallel()
+
+	for _, outcome := range []string{"refused", "not_found", "unreachable", "error"} {
+		rendered := genericCardHTML(t, "Send a Data Export Test Event", cardKindReceipt, map[string]any{"outcome": outcome, "message": "The destination refused the test event."})
+		require.NotContains(t, rendered, ">Done<", outcome)
+		require.Contains(t, rendered, ">Not accepted<", outcome)
+		require.Contains(t, rendered, "The destination refused the test event.", outcome)
+	}
+
+	accepted := genericCardHTML(t, "Send a Data Export Test Event", cardKindReceipt, map[string]any{"outcome": "accepted", "message": "The destination accepted the test event."})
+	require.Contains(t, accepted, ">Done<")
+}
+
 func TestUnavailableResultDrawsAnUnavailableCard(t *testing.T) {
 	t.Parallel()
 

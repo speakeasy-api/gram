@@ -1,3 +1,4 @@
+import { queryOptions } from "@tanstack/react-query";
 import { detectPlatform } from "@tanstack/react-hotkeys";
 import {
   act,
@@ -21,6 +22,7 @@ import { renderRouteTree } from "@/test/harness";
 type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
+  listCustomDomains: vi.fn(),
   getSession: vi.fn(),
   listUsers: vi
     .fn()
@@ -49,6 +51,18 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 vi.mock("@/pages/organization/Onboarding", () => ({
   OnboardingRoute: () => <h1>Tenant onboarding</h1>,
 }));
+
+vi.mock("@/lib/adminQueries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/adminQueries")>();
+  return {
+    ...actual,
+    adminListCustomDomainsQuery: (request = {}) =>
+      queryOptions({
+        queryKey: ["customDomains", request],
+        queryFn: () => mocks.listCustomDomains(request),
+      }),
+  };
+});
 
 const ORG = anOrganization({
   id: "org_01JQ",
@@ -92,6 +106,15 @@ function pressTheShortcut(): void {
 
 function palette(): HTMLElement {
   return screen.getByRole("dialog");
+}
+
+// The record header's heading. The sidebar, the breadcrumb, and the details
+// row repeat the organization's name, so a text query matches several elements
+// at once and only passes during a render where exactly one of them is up.
+// The heading is the one copy, and it shows once the organization query the
+// palette shares with the record layout has resolved.
+function recordHeading(): Promise<HTMLElement> {
+  return screen.findByRole("heading", { name: ORG.name });
 }
 
 // Record rows are matched anchored throughout. Each one is followed by its own
@@ -154,6 +177,8 @@ async function renderWithSubmitCaptured(): Promise<void> {
 }
 
 beforeEach(() => {
+  mocks.listCustomDomains.mockReset();
+  mocks.listCustomDomains.mockResolvedValue({ customDomains: [] });
   submitted = [];
   connectedAtSubmit = [];
   router = undefined;
@@ -257,7 +282,9 @@ describe("CommandPalette", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Search organizations and pages" }),
+      screen.getByRole("button", {
+        name: "Search organizations, custom domains, and pages",
+      }),
     );
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -348,10 +375,11 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     typeAndDebounce("umbrella");
 
-    const result = await within(palette()).findByRole("option", {
-      name: /^Umbrella Freight/,
+    // "Disabled" is part of the option's name, beside the slug. Reading
+    // textContent would also pass on a copy of the word outside that option.
+    await within(palette()).findByRole("option", {
+      name: /^Umbrella Freight\b.*\bDisabled\b/,
     });
-    expect(result.textContent).toContain("Disabled");
   });
 
   it("asks for one term per burst of typing", async () => {
@@ -625,9 +653,7 @@ describe("CommandPalette", () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
-    // The group is headed by the record, so it waits on the same query the
-    // sidebar reads.
-    await screen.findByText(ORG.name);
+    await recordHeading();
 
     pressTheShortcut();
     await screen.findByRole("dialog");
@@ -652,7 +678,7 @@ describe("CommandPalette", () => {
       const { router } = await renderRouteTree(routeTree, {
         initialPath: `/organizations/${idOrSlug}`,
       });
-      await screen.findByText(ORG.name);
+      await recordHeading();
       pressTheShortcut();
       await screen.findByRole("dialog");
       type(keyword);
@@ -705,5 +731,66 @@ describe("CommandPalette", () => {
     expect(
       within(reopened).queryByRole("option", { name: /^Northwind Logistics/ }),
     ).toBeNull();
+  });
+});
+
+describe("custom domain search", () => {
+  it("waits until the palette opens and a search is entered", async () => {
+    await renderWithSubmitCaptured();
+    expect(mocks.listCustomDomains).not.toHaveBeenCalled();
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    // Open, but still idle: the inventory is fetched only once a term is in
+    // the box. Asserting before the dialog is up passes either way.
+    expect(mocks.listCustomDomains).not.toHaveBeenCalled();
+    type("example.test");
+    await waitFor(() => expect(mocks.listCustomDomains).toHaveBeenCalledOnce());
+  });
+
+  it("matches a domain beyond the display limit and opens its own organization", async () => {
+    mocks.listCustomDomains.mockResolvedValue({
+      customDomains: [
+        ...Array.from({ length: 20 }, (_, i) => ({
+          id: `other_${i}`,
+          domain: `other${i}.example.test`,
+          organizationId: OTHER.id,
+          organizationName: OTHER.name,
+          organizationSlug: OTHER.slug,
+        })),
+        {
+          id: "domain_1",
+          domain: "mcp.example.test",
+          organizationId: ORG.id,
+          organizationName: ORG.name,
+          organizationSlug: ORG.slug,
+        },
+      ],
+    });
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type("MCP.EXAMPLE");
+    fireEvent.click(
+      await within(palette()).findByRole("option", {
+        name: /mcp.example.test/,
+      }),
+    );
+    await waitFor(() =>
+      expect(router?.state.location.pathname).toBe(
+        `/organizations/${ORG.slug}/custom-domain`,
+      ),
+    );
+  });
+
+  it("isolates a failed domain search from organization results", async () => {
+    mocks.listCustomDomains.mockRejectedValue(new Error("unavailable"));
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type(ORG.name);
+    await within(palette()).findByText("Could not search custom domains.");
+    expect(
+      await within(palette()).findByRole("option", {
+        name: new RegExp(`^${ORG.name}`),
+      }),
+    ).toBeTruthy();
   });
 });

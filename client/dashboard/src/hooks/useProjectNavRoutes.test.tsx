@@ -9,6 +9,7 @@ import { useProjectNavRoutes } from "./useProjectNavRoutes";
 const testState = vi.hoisted(() => ({
   projectId: "project_a",
   orgMemoryEnabled: false,
+  assistantsAvailable: true,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
@@ -29,6 +30,10 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization_a" }),
 }));
 
+vi.mock("./useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => testState.assistantsAvailable,
+}));
+
 vi.mock("./useOrgMemoryDeveloperToggle", () => ({
   useOrgMemoryDeveloperToggle: () => [testState.orgMemoryEnabled, vi.fn()],
 }));
@@ -46,11 +51,13 @@ function unavailableFeatureFlag(
 beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
+  testState.assistantsAvailable = true;
   testState.productFeatures = {
     isSuccess: true,
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
+    [FEATURE_FLAGS.channels]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
@@ -66,6 +73,16 @@ const renderNav = () =>
   renderHook(() => useProjectNavRoutes(), { wrapper: MemoryRouter });
 
 describe("useProjectNavRoutes", () => {
+  it("keeps Channels out of navigation and Command K even when its flag is on", () => {
+    testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
+    const { result } = renderNav();
+    expect(
+      result.current.some(
+        (entry) => entry.route.href() === routes.channels.href(),
+      ),
+    ).toBe(false);
+  });
+
   it("removes Signals Intelligence when entitlement is disabled or a refresh fails", () => {
     testState.productFeatures.data.signalsIntelligenceEnabled = true;
     const { result, rerender } = renderNav();
@@ -140,6 +157,17 @@ describe("useProjectNavRoutes", () => {
     expect(sessions?.scope).toEqual(["project:read"]);
   });
 
+  it("keeps Tool Logs reachable for members who can read their own logs", () => {
+    const { result } = renderNav();
+    const logs = result.current.find(
+      (entry) => entry.route.href() === routes.logs.href(),
+    );
+    // Without log:read the page shows the member's own sessions and agents,
+    // so neither the sidebar nor Command K may hide it behind that scope.
+    expect(logs?.scope).toEqual(["project:read"]);
+    expect(logs?.resourceId).toBe("project_a");
+  });
+
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderNav();
     const navRoutes = result.current.map((entry) => entry.route.href());
@@ -157,13 +185,15 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("leaves Shadow AI and Shadow MCP out of nav; they live in Guardrails", () => {
+  it("lists Shadow MCP after Guardrails, and keeps Shadow AI out", () => {
     const { result } = renderNav();
 
     const titles = result.current.map((entry) => entry.route.title);
+    expect(titles.indexOf("Shadow MCP")).toBe(titles.indexOf("Guardrails") + 1);
     expect(titles).not.toContain("Shadow AI");
-    expect(titles).not.toContain("Shadow MCP");
-    expect(titles).toContain("Guardrails");
+    expect(
+      result.current.find((entry) => entry.route.title === "Shadow MCP")?.scope,
+    ).toEqual(["org:admin"]);
   });
 
   it("leaves Approval Requests out of nav", () => {
@@ -208,6 +238,7 @@ describe("useProjectNavRoutes", () => {
     "keeps standard navigation while rollout flags are %s",
     (status) => {
       testState.featureFlags = {
+        [FEATURE_FLAGS.channels]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
@@ -249,6 +280,7 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
+      [FEATURE_FLAGS.channels]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 
@@ -285,5 +317,14 @@ describe("useProjectNavRoutes", () => {
         }),
       ]),
     );
+  });
+  it("hides the Project Assistant and Assistants on a deployment without assistants", () => {
+    testState.assistantsAvailable = false;
+    const { result } = renderNav();
+    const navRoutes = result.current.map((entry) => entry.route.href());
+
+    expect(navRoutes).not.toContain(routes.chat.href());
+    expect(navRoutes).not.toContain(routes.assistants.href());
+    expect(navRoutes).toContain(routes.home.href());
   });
 });

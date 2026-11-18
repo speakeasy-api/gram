@@ -1,15 +1,17 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-const pathname = vi.hoisted(() => ({ current: "/" }));
+const location = vi.hoisted(() => ({ pathname: "/", search: "" }));
 vi.mock("react-router", () => ({
-  useLocation: () => ({ pathname: pathname.current }),
+  useLocation: () => location,
 }));
 
 import { useNavArea } from "./useNavArea";
 
 function areaAt(path: string) {
-  pathname.current = path;
+  const url = new URL(path, "https://example.test");
+  location.pathname = url.pathname;
+  location.search = url.search;
   return renderHook(() => useNavArea()).result.current;
 }
 
@@ -24,6 +26,13 @@ describe("useNavArea", () => {
     "/org/projects/proj/remote-identity-providers/provider/clients/client/sessions",
   ])("puts %s in Identity", (path) => {
     expect(areaAt(path)).toBe("Identity");
+  });
+
+  it("keeps Channels in the MCP Gateway area, including a selected thread", () => {
+    expect(areaAt("/org/projects/proj/channels")).toBe("MCP Gateway");
+    expect(areaAt("/org/projects/proj/channels?thread=thread-1")).toBe(
+      "MCP Gateway",
+    );
   });
 
   it("leaves ungrouped project pages without an area", () => {

@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Optional feedback values use documented zero values.
+//nolint:exhaustruct_v5 // Optional feedback values use documented zero values.
 package platformmcp
 
 import (
@@ -393,6 +393,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"create_data_export":                    {},
 	pauseDataExportToolName:                 {},
 	resumeDataExportToolName:                {},
+	sendDataExportTestEventToolName:         {},
 	"list_recent_tool_calls":                {},
 	"search_users":                          {},
 	"get_user_metrics_summary":              {},

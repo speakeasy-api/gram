@@ -87,6 +87,7 @@ import {
   useIssuerDuplicatePreflight,
   type RemoteSessionIssuerDuplicateMatch,
 } from "./useIssuerDuplicatePreflight";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 type Mode = "select" | "new";
 
@@ -315,6 +316,7 @@ export function AttachRemoteIdentityProviderSheet({
     mode === "select" ? !!selectedIssuerId : issuerUrl.trim().length > 0;
 
   const attachMutation = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async (): Promise<{
       unsupportedDcrAuthMethod: string | null;
     }> => {
@@ -845,7 +847,7 @@ export function AttachRemoteIdentityProviderSheet({
           <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
             <Stack gap={4}>
               <SectionHeading
-                title="Authorization Server"
+                title="Authorization server"
                 description="The upstream OAuth authorization server Speakeasy delegates to."
               />
               {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
@@ -989,7 +991,7 @@ export function AttachRemoteIdentityProviderSheet({
             {issuerResolved && (
               <Stack gap={4} className="border-t pt-6">
                 <SectionHeading
-                  title="Session Client"
+                  title="Session client"
                   description="The OAuth client Speakeasy registers and uses with this authorization server."
                 />
                 {clientSectionBody}

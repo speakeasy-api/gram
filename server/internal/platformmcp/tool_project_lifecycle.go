@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -58,7 +58,7 @@ func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleServ
 		Name:  renameProjectToolName,
 		Title: "Rename a Project",
 		Description: "Change the display name of one exact project. Nothing else changes: the project's slug stays the same, so dashboard links and anything addressing the project by slug keep working, and its MCP servers, skills, plugins, and their audiences are untouched. " +
-			"Supply the project ID from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name. " +
+			"Supply the project's slug from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name. " +
 			"Needs write access to that exact project, as in the dashboard; without it the call is refused with the missing permission, and the refusal is the same whether or not the project exists.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, ToolMeta{

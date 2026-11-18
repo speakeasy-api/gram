@@ -676,6 +676,26 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateShadowMCPInventoryServerName", "type": "mutation"}`)
 	})
 
+	Method("setShadowMCPOfficialServer", func() {
+		Description("Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetShadowMCPOfficialServerForm)
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.setShadowMCPOfficialServer")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetShadowMCPOfficialServer", "type": "mutation"}`)
+	})
+
 	Method("listShadowMCPInventoryUsers", func() {
 		Description("List users with observed telemetry usage for one project-scoped Shadow MCP server URL.")
 		Security(security.Session)
@@ -1411,7 +1431,7 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "label", "description", "resource_type", "category", "visibility", "agent_eligible", "sensitive", "sub_scopes")
+	Required("slug", "label", "description", "resource_type", "category", "visibility", "agent_eligible", "temporary_grantable", "sensitive", "sub_scopes")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
@@ -1438,6 +1458,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 		Enum("user_visible", "internal")
 	})
 	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
+	Attribute("temporary_grantable", Boolean, "Whether an administrator can give this scope for a limited time with createTemporaryGrant.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
 		Enum(conv.AnySlice(authz.ExclusionScopeNames())...)
@@ -1800,6 +1821,46 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
+	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
+		Description("The MCP server linked as this Shadow MCP server's official version. While the link is on, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+	})
+	Attribute("suggested_official_server", ShadowMCPSuggestedOfficialServerModel, func() {
+		Description("A project MCP server that proxies to the same upstream URL, offered as the server to link. Present only while no official server is linked.")
+	})
+})
+
+var ShadowMCPSuggestedOfficialServerModel = Type("ShadowMCPSuggestedOfficialServer", func() {
+	Description("A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.")
+	Required("mcp_server_id", "name")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The server's display name.")
+	Attribute("slug", String, "The server's slug, when it has one.")
+})
+
+var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
+	Description("The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.")
+	Required("mcp_server_id", "name", "direct_access_allowed")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The official server's display name.")
+	Attribute("slug", String, "The official server's slug, when it has one.")
+	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
+	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
+	Attribute("direct_access_allowed", Boolean, "True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.")
+})
+
+var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func() {
+	Required("project_id", "server_url", "allow_direct_access")
+
+	Attribute("project_id", String, func() { Format(FormatUUID) })
+	Attribute("server_url", String, "The Shadow MCP server's URL.", func() { Format(FormatURI) })
+	Attribute("mcp_server_id", String, "The MCP server to link as the official version. Omit it to remove the link.", func() { Format(FormatUUID) })
+	Attribute("allow_direct_access", Boolean, "Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
@@ -2035,10 +2096,25 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	})
 	Attribute("resolution_type", String, func() {
 		Description("How the challenge was resolved.")
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("resolved_by", String, "URN of the admin who resolved.")
 	Attribute("resolution_role_slug", String, "Role slug assigned (when resolution_type=role_assigned).")
+	Attribute("resolution_temporary_grant", ChallengeTemporaryGrantModel, "The temporary grant given (when resolution_type=temporary_grant).")
+})
+
+var ChallengeTemporaryGrantModel = Type("ChallengeTemporaryGrant", func() {
+	Required("id", "status")
+
+	Attribute("id", String, "Temporary grant ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, "active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.", func() {
+		Enum("active", "expired", "revoked")
+	})
+	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests. Absent once revoked, and once the same access was given again later.", func() {
+		Format(FormatDateTime)
+	})
 })
 
 var ListChallengesResult = Type("ListChallengesResult", func() {
@@ -2097,10 +2173,11 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	})
 	Attribute("resolution_type", String, func() {
 		Description("How the bucket was resolved.")
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("resolved_by", String, "URN of the admin who resolved.")
 	Attribute("resolution_role_slug", String, "Role slug assigned (when resolution_type=role_assigned).")
+	Attribute("resolution_temporary_grant", ChallengeTemporaryGrantModel, "The temporary grant given (when resolution_type=temporary_grant).")
 })
 
 var ListChallengeBucketsResult = Type("ListChallengeBucketsResult", func() {
@@ -2139,7 +2216,7 @@ var ChallengeResolutionModel = Type("ChallengeResolution", func() {
 	Attribute("resource_kind", String, "Resource kind.")
 	Attribute("resource_id", String, "Resource ID.")
 	Attribute("resolution_type", String, func() {
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("role_slug", String, "Assigned role slug.")
 	Attribute("resolved_by", String, "Admin who resolved.")
@@ -2159,7 +2236,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")
@@ -2506,6 +2583,9 @@ var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
 	})
 	Attribute("reason", String, "Why the access is needed, recorded in the audit log.", func() {
 		MaxLength(1000)
+	})
+	Attribute("challenge_ids", ArrayOf(String), "Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).", func() {
+		MaxLength(200)
 	})
 })
 

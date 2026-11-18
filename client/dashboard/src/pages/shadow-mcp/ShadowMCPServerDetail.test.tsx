@@ -41,6 +41,21 @@ vi.mock("react-router", async (importOriginal) => ({
   }),
 }));
 
+// The panel runs its own connection check and has its own tests; here a
+// marker records that the page hands it the server.
+vi.mock("@/components/shadow-mcp/OfficialServerPanel", () => ({
+  OfficialServerPanel: ({
+    server,
+  }: {
+    server: { canonicalServerUrl: string };
+  }) => (
+    <div
+      data-testid="official-server-panel"
+      data-server-url={server.canonicalServerUrl}
+    />
+  ),
+}));
+
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
   useProjectSlugForRequests: () => "default",
@@ -57,7 +72,12 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-vi.mock("@/components/page-layout", () => {
+vi.mock("@/components/page-layout", async () => {
+  // The real trail, so the breadcrumb test reads the links a user would see.
+  const { PageHeader } = await vi.importActual<
+    typeof import("@/components/page-header")
+  >("@/components/page-header");
+
   function Page({ children }: { children: ReactNode }) {
     return <div>{children}</div>;
   }
@@ -65,7 +85,7 @@ vi.mock("@/components/page-layout", () => {
   function Header({ children }: { children?: ReactNode }) {
     return <div>{children}</div>;
   }
-  Header.Breadcrumbs = () => null;
+  Header.Breadcrumbs = PageHeader.Breadcrumbs;
 
   function Body({ children }: { children: ReactNode }) {
     return <main>{children}</main>;
@@ -93,6 +113,7 @@ vi.mock("@/components/page-layout", () => {
 });
 
 vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({}),
   useProject: mocks.useProject,
 }));
 
@@ -389,7 +410,11 @@ function inventoryServer(
 const render = (ui: ReactElement) =>
   renderView(ui, {
     wrapper: ({ children }) => (
-      <MemoryRouter initialEntries={["/acme/projects/default/shadow-mcp"]}>
+      <MemoryRouter
+        initialEntries={[
+          "/acme/projects/default/shadow-ai/mcps/github-example-com-mcp-d8860eea",
+        ]}
+      >
         {children}
       </MemoryRouter>
     ),
@@ -495,6 +520,12 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByText("alex@example.com")).toBeTruthy();
     expect(screen.getByText("15 calls")).toBeTruthy();
     expect(screen.getByText("sam@example.com")).toBeTruthy();
+    // Making the server official is offered on the same page.
+    expect(
+      screen
+        .getByTestId("official-server-panel")
+        .getAttribute("data-server-url"),
+    ).toBe("https://github.example.com/mcp");
 
     expect(mocks.useShadowMCPInventoryServer).toHaveBeenCalledWith(
       {
@@ -513,6 +544,23 @@ describe("ShadowMCPServerDetail", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  // The page is opened from the Shadow MCP page, and the sidebar highlights
+  // Shadow MCP, so the trail leads back there rather than through the Shadow
+  // AI section its URL still carries.
+  it("leads the breadcrumb back to the Shadow MCP page", () => {
+    renderDetailPage();
+
+    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(
+      within(trail)
+        .getByRole("link", { name: "Shadow MCP" })
+        .getAttribute("href"),
+    ).toBe("/acme/projects/default/shadow-mcp");
+    expect(within(trail).getByText("GitHub MCP")).toBeTruthy();
+    expect(within(trail).queryByText("Shadow AI")).toBeNull();
+    expect(within(trail).queryByText("MCPs")).toBeNull();
   });
 
   it("renders user sources and only links email-backed users to their employee page", () => {

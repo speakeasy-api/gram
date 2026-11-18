@@ -44,7 +44,7 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 		return nil, nil
 	}
 
-	remoteRows, err := listPluginMCPServers(ctx, db, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	remoteRows, err := repo.New(db).ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, fmt.Errorf("list remote plugin servers: %w", err)
 	}
@@ -113,7 +113,8 @@ func requireHTTPS(rawURL string) error {
 const deviceMCPServerNamePrefix = "speakeasy-"
 
 // deviceMCPServerName returns the prefixed, slugified name (from slug, else
-// displayName). The result is a valid key in Claude Code, Codex and Cursor configs.
+// displayName). The result is a valid key in Claude Code, Codex, Cursor and
+// Vibe configs.
 func deviceMCPServerName(slug, displayName string) string {
 	name := slugifyMCPServerName(slug)
 	if name == "" {

@@ -183,7 +183,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -233,7 +233,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -263,7 +263,7 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -289,7 +289,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -389,7 +389,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 	}
 
-	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
+	if err := s.lockIssuerReference(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
 		return nil, err
 	}
 
@@ -579,7 +579,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
 
@@ -810,7 +810,7 @@ func (s *Service) ListMetaMcpMembers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -849,7 +849,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -908,7 +908,7 @@ func (s *Service) UpdateMetaMcpMember(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -976,7 +976,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
 
@@ -1041,7 +1041,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 // lockIssuerReference validates an optional user session issuer reference and
 // locks the issuer row for the duration of the transaction so a concurrent
 // issuer delete cannot race the attach. A null issuer id is a no-op.
-func (s *Service) lockIssuerReference(ctx context.Context, txRepo *repo.Queries, projectID uuid.UUID, issuerID uuid.NullUUID) error {
+func (s *Service) lockIssuerReference(ctx context.Context, txRepo *repo.Queries, organizationID string, projectID uuid.UUID, issuerID uuid.NullUUID) error {
 	if !issuerID.Valid {
 		return nil
 	}
@@ -1049,9 +1049,10 @@ func (s *Service) lockIssuerReference(ctx context.Context, txRepo *repo.Queries,
 	if _, err := txRepo.LockUserSessionIssuerForMetaMCP(ctx, repo.LockUserSessionIssuerForMetaMCPParams{
 		UserSessionIssuerID: issuerID.UUID,
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeInvalid, err, "user_session_issuer_id does not reference a live issuer in this project").LogError(ctx, s.logger)
+			return oops.E(oops.CodeInvalid, err, "%s", ErrIssuerNotInProject.Error()).LogError(ctx, s.logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock user session issuer").LogError(ctx, s.logger)
 	}

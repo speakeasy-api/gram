@@ -309,6 +309,12 @@ type ProbeURLResponseBody struct {
 	// unreachable; currently timeout, rate_limited, server_error, dns_error,
 	// tls_error, guardian_rejected, or transport_error.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// How Speakeasy can register as a client with the server's sign-in provider.
+	// Present only when authentication is required and the challenge advertised
+	// protected resource metadata: dcr (dynamic client registration), cimd (client
+	// ID metadata document), manual (a client must be registered by hand), or
+	// unknown (the provider's metadata could not be read).
+	SignInSetup *string `form:"sign_in_setup,omitempty" json:"sign_in_setup,omitempty" xml:"sign_in_setup,omitempty"`
 }
 
 // VerifyURLResponseBody is the type of the "remoteMcp" service "verifyURL"
@@ -3390,10 +3396,7 @@ type McpServerResponseBody struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
-	// The slug of an older Speakeasy-hosted address of this hosted server: its
-	// legacy custom-domain address, which the Speakeasy domain also answers under
-	// the same access rules. Absent when a platform endpoint or another alias
-	// holds that slug.
+	// Deprecated: always absent.
 	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -3430,6 +3433,9 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -3447,19 +3453,12 @@ type McpServerToolsetSummaryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The toolset's description, if any
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Number of tools the toolset serves: deployment-backed tools (HTTP, function,
-	// external MCP) that resolve in the project's latest completed deployment,
-	// plus its prompt templates and registered platform tools. External MCP proxy
-	// tools are excluded.
+	// Number of tools the toolset serves: deployment-backed tools (HTTP and
+	// function) that resolve in the project's latest completed deployment, plus
+	// its prompt templates and registered platform tools.
 	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
 	// The toolset's tool selection mode
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The distinct slugs of the external MCP sources the toolset's configured
-	// tools come from, sorted
-	ExternalMcpSlugs []string `form:"external_mcp_slugs" json:"external_mcp_slugs" xml:"external_mcp_slugs"`
-	// Whether every configured tool is an external MCP proxy tool, so the real
-	// tool count is unknown until a user signs in
-	ExternalMcpProxyOnly bool `form:"external_mcp_proxy_only" json:"external_mcp_proxy_only" xml:"external_mcp_proxy_only"`
 	// The ID of the external OAuth server attached to the toolset, if any
 	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
 	// The registry specifier the toolset originated from, if any
@@ -3756,6 +3755,7 @@ func NewProbeURLResponseBody(res *remotemcp.ProbeURLResult) *ProbeURLResponseBod
 		ProtectedResourceMetadataURL: res.ProtectedResourceMetadataURL,
 		HTTPStatus:                   res.HTTPStatus,
 		Reason:                       res.Reason,
+		SignInSetup:                  res.SignInSetup,
 	}
 	return body
 }

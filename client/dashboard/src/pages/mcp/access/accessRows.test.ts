@@ -93,17 +93,21 @@ describe("grouping", () => {
 });
 
 describe("scope resolution", () => {
-  it("counts a stronger scope as granting the weaker ones it satisfies", () => {
+  it("counts manage as granting view, and neither as granting connect", () => {
     const row = rowFor([entry({ level: "manage" })]);
 
-    for (const scope of ["use", "view", "manage"] as const) {
-      expect(scopeState(row, scope, catalog).granted).toBe(true);
-    }
+    expect(scopeState(row, "manage", catalog).granted).toBe(true);
+    expect(scopeState(row, "view", catalog).granted).toBe(true);
+    // Connect is granted on its own: mcp:read and mcp:write do not imply it.
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
+    expect(
+      scopeState(rowFor([entry({ level: "view" })]), "use", catalog).granted,
+    ).toBe(false);
   });
 
-  it("takes away only the scope a block names", () => {
-    // The mcp:blocked_* scopes are independent, so closing connect leaves
-    // view and manage exactly as the role left them.
+  it("takes away only connect when connect is blocked", () => {
+    // Connect is implied by neither view nor manage, so closing it leaves
+    // both exactly as the role left them.
     const row = rowFor([
       role("Engineering", { level: "manage" }),
       role("Engineering", { appliesTo: "resource", level: "blocked" }),
@@ -112,6 +116,29 @@ describe("scope resolution", () => {
     expect(scopeState(row, "use", catalog).granted).toBe(false);
     expect(scopeState(row, "view", catalog).granted).toBe(true);
     expect(scopeState(row, "manage", catalog).granted).toBe(true);
+  });
+
+  it("takes manage away with a view block, since manage includes view", () => {
+    const row = rowFor([
+      role("Engineering", { level: "manage" }),
+      role("Engineering", { level: "use" }),
+      role("Engineering", { appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).granted).toBe(false);
+    expect(scopeState(row, "manage", catalog).granted).toBe(false);
+    // Connect is implied by neither, so the view block leaves it.
+    expect(scopeState(row, "use", catalog).granted).toBe(true);
+  });
+
+  it("leaves view standing under a manage block", () => {
+    const row = rowFor([
+      role("Engineering", { level: "manage" }),
+      role("Engineering", { appliesTo: "resource", level: "blocked_manage" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).granted).toBe(true);
+    expect(scopeState(row, "manage", catalog).granted).toBe(false);
   });
 
   it("honours a block that covers every server, which this page cannot lift", () => {
@@ -126,12 +153,12 @@ describe("scope resolution", () => {
   });
 
   it("unions the tools two grants open", () => {
-    const row = rowFor([
+    const person = personIn([
       entry({ level: "use", tools: ["a"] }),
-      entry({ principalUrn: "user:u1", level: "view", tools: ["b"] }),
+      role("R1", { appliesTo: "resource", level: "use", tools: ["b"] }),
     ]);
 
-    expect(reachableTools(row.cells.use, catalog)).toEqual(["a", "b"]);
+    expect(reachableTools(person.cells.use, catalog)).toEqual(["a", "b"]);
   });
 
   it("unions the tools two blocks take away", () => {
@@ -167,11 +194,11 @@ describe("scope resolution", () => {
     expect(scopeState(row, "use", catalog).value).toBe("1 tool");
   });
 
-  it("does not claim every tool for a narrowed stronger grant", () => {
-    // Manage over two tools satisfies a connect check for those two only.
+  it("opens no tools through a narrowed manage grant", () => {
+    // Manage does not satisfy a connect check, narrowed or not.
     const row = rowFor([entry({ level: "manage", tools: ["a", "b"] })]);
 
-    expect(scopeState(row, "use", catalog).value).toBe("2 tools");
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
   });
 
   it("falls back to naming the rule when the server publishes no catalogue", () => {
@@ -303,7 +330,7 @@ describe("a person and the roles they are in", () => {
 
   it("names another principal over the row's own wider rule", () => {
     const person = personIn([
-      role("Admin", { level: "manage" }),
+      role("Admin", { level: "use", appliesTo: "resource" }),
       entry({ principalUrn: "user:u1", appliesTo: "all_resources" }),
     ]);
     const state = scopeState(person, "use", catalog);
@@ -317,6 +344,7 @@ describe("a person and the roles they are in", () => {
     // the write paths need it to know a block is required.
     const person = personIn([
       role("Admin", { level: "manage" }),
+      role("Admin", { level: "use" }),
       entry({ principalUrn: "user:u1", level: "use" }),
     ]);
 

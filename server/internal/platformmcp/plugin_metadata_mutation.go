@@ -89,7 +89,9 @@ func (e *PluginMetadataMutationError) Error() string { return e.Message }
 func (e *PluginMetadataMutationError) Unwrap() error { return e.Cause }
 
 type CreatePluginInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID the plugin is created in"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	Name            string `json:"name" jsonschema:"administrator-facing plugin name; at most 256 bytes"`
 	Slug            string `json:"slug,omitempty" jsonschema:"optional slug of at most 60 lowercase letters, digits, and hyphens; derived from name when omitted. It becomes the plugin's permanent install name and does not change when the plugin is renamed"`
 	Description     string `json:"description,omitempty" jsonschema:"optional plugin description; at most 1024 bytes"`
@@ -99,7 +101,9 @@ type CreatePluginInput struct {
 }
 
 type RenamePluginInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string `json:"-"`
 	Plugin         string `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
 	Name           string `json:"name" jsonschema:"new administrator-facing plugin name; at most 256 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact rename"`
@@ -107,7 +111,9 @@ type RenamePluginInput struct {
 }
 
 type SetPluginAutoSyncInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	Plugin          string `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
 	AutoSyncEnabled bool   `json:"auto_sync_enabled" jsonschema:"true to publish the plugin's changes to the marketplace on their own; false to hold them until someone syncs by hand"`
 	IdempotencyKey  string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact change"`
@@ -320,13 +326,14 @@ func (s *PluginsService) createPlugin(ctx context.Context, principal Principal, 
 		Name: input.Name, Slug: input.Slug, Description: input.Description, AutoSyncEnabled: autoSyncOff,
 	}
 	mutation := plugindelivery.CreatePluginMutation{
-		OrganizationID:  principal.OrganizationID,
-		ProjectID:       project.ID,
-		Name:            input.Name,
-		Slug:            optionalString(input.Slug),
-		Description:     optionalString(input.Description),
-		AutoSyncEnabled: input.AutoSyncEnabled,
-		Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+		OrganizationID:        principal.OrganizationID,
+		ProjectID:             project.ID,
+		Name:                  input.Name,
+		Slug:                  optionalString(input.Slug),
+		Description:           optionalString(input.Description),
+		AutoSyncEnabled:       input.AutoSyncEnabled,
+		AutoAddServersEnabled: nil,
+		Actor:                 plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationCreatePlugin, key, normalized, nil, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		created, err := s.metadataCore.CreateInTransaction(ctx, tx, mutation)
@@ -369,15 +376,17 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 			return PluginMetadataReceiptResult{}, err
 		}
 		renamed, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
-			OrganizationID:  principal.OrganizationID,
-			ProjectID:       project.ID,
-			PluginID:        ref.ID,
-			Name:            &input.Name,
-			Slug:            nil,
-			Description:     nil,
-			KeepDescription: true,
-			AutoSyncEnabled: nil,
-			Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+			OrganizationID:        principal.OrganizationID,
+			ProjectID:             project.ID,
+			PluginID:              ref.ID,
+			Name:                  &input.Name,
+			Slug:                  nil,
+			Description:           nil,
+			KeepDescription:       true,
+			AutoSyncEnabled:       nil,
+			AutoAddServersEnabled: nil,
+			DeliveryGuard:         nil,
+			Actor:                 plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 		})
 		if err != nil {
 			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)
@@ -454,15 +463,17 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 			}
 		}
 		updated, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
-			OrganizationID:  principal.OrganizationID,
-			ProjectID:       project.ID,
-			PluginID:        ref.ID,
-			Name:            nil,
-			Slug:            nil,
-			Description:     nil,
-			KeepDescription: true,
-			AutoSyncEnabled: &input.AutoSyncEnabled,
-			Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+			OrganizationID:        principal.OrganizationID,
+			ProjectID:             project.ID,
+			PluginID:              ref.ID,
+			Name:                  nil,
+			Slug:                  nil,
+			Description:           nil,
+			KeepDescription:       true,
+			AutoSyncEnabled:       &input.AutoSyncEnabled,
+			AutoAddServersEnabled: nil,
+			DeliveryGuard:         nil,
+			Actor:                 plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 		})
 		if err != nil {
 			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)

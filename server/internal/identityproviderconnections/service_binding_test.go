@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/stretchr/testify/require"
@@ -56,7 +57,7 @@ func (c bindingClient) VerifyScopes(ctx context.Context, scopes []string) (*okta
 }
 func newBindingService(t *testing.T) (context.Context, *serviceInstance) {
 	t.Helper()
-	return newTestServiceWithClientFactory(t, nil, 0, func(base okta.ClientFactory) okta.ClientFactory { return bindingFactory{ClientFactory: base} })
+	return newTestServiceWithClientFactory(t, 0, func(base okta.ClientFactory) okta.ClientFactory { return bindingFactory{ClientFactory: base} })
 }
 func rejectBindingReads(si *serviceInstance) {
 	si.oktaFakes.Fake(fullOrgURL).SetMethodError("ListApps", &okta.APIError{StatusCode: http.StatusUnauthorized, ErrorCode: "invalid_client"})
@@ -90,7 +91,7 @@ func TestReplaceClientSecret_RolledBackBindingPreservesSecretAndPin(t *testing.T
 	verified := verifiedOINConnection(t, ctx, si)
 	require.False(t, verified.DpopRequired)
 	fake.SetBearerOnly(false)
-	fake.RequireClientSecret(oinOtherSecret, si.enc)
+	fake.RequireClientSecret(oinOtherSecret)
 	rejectBindingReads(si)
 	_, err := si.svc.ReplaceClientSecret(ctx, &gen.ReplaceClientSecretPayload{ID: verified.ID, ClientSecret: oinOtherSecret})
 	require.Error(t, err)
@@ -100,7 +101,7 @@ func TestReplaceClientSecret_RolledBackBindingPreservesSecretAndPin(t *testing.T
 	require.True(t, fetched.Connection.DpopRequired, "same client's binding observation survives rollback")
 	fake.SetMethodError("ListApps", nil)
 	fake.SetBearerOnly(true)
-	fake.RequireClientSecret(oinSecret, si.enc)
+	fake.RequireClientSecret(oinSecret)
 	retried, err := si.svc.Verify(ctx, &gen.VerifyPayload{ID: verified.ID})
 	require.NoError(t, err)
 	require.Contains(t, retried.VerificationReasons, identityproviderconnections.ReasonDPoPNotBound)
@@ -123,7 +124,7 @@ func TestSync_PrivateKeyDoesNotAcquireCredentialLease(t *testing.T) {
 	ctx, si := newBindingService(t)
 	verified := verifiedConnection(t, ctx, si)
 	id := mustParseUUID(t, verified.ID)
-	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn.conn, bindingFactory{ClientFactory: si.oktaFakes})
+	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn.conn, bindingFactory{ClientFactory: si.oktaFakes}, clientsecretstest.New(t, si.conn.conn, si.enc))
 	require.NoError(t, syncer.Run(ctx, id, false))
 	run, err := oktaapplications.LatestRun(ctx, si.conn.conn, si.orgID, id)
 	require.NoError(t, err)

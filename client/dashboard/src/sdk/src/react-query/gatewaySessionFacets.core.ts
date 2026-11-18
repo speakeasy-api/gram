@@ -50,6 +50,7 @@ export function buildGatewaySessionFacetsQuery(
   return {
     queryKey: queryKeyGatewaySessionFacets({
       gatewayId: request?.gatewayId,
+      projectId: request?.projectId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
     }),
@@ -80,6 +81,7 @@ export function buildGatewaySessionFacetsQuery(
 export function queryKeyGatewaySessionFacets(
   parameters: {
     gatewayId?: string | undefined;
+    projectId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
   },

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -168,7 +169,7 @@ func requireLiveAgentBindings(t *testing.T, ctx context.Context, ti *testInstanc
 // which need no encryption, registration or tunnels.
 func identityCommitter(t *testing.T, ti *testInstance) *remotesessions.IdentityCommitter {
 	t.Helper()
-	return remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, nil, audit.NewLogger(), nil, nil, nil, nil)
+	return remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, nil, clientsecretstest.New(t, ti.conn, nil), audit.NewLogger(), nil, nil, nil, nil)
 }
 
 // lockIdentityCommit prepares plan and runs it through Lock, skipping

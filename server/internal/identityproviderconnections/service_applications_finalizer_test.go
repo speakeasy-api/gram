@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	apprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
@@ -227,7 +228,7 @@ func TestApplicationsSync_FinalizeFailure_InFlightRun(t *testing.T) {
 	runSync(t, ctx, newSyncer(t, si), id)
 	setFixtures(si, []okta.App{fixtureApp(appB, "Late app", "oidc_client")}, nil, nil)
 	client := &finalizerBlockingClient{Client: si.oktaFakes.Fake(fullOrgURL), entered: make(chan struct{}), release: make(chan struct{})}
-	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn.conn, finalizerClientFactory{ClientFactory: si.oktaFakes, client: client})
+	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn.conn, finalizerClientFactory{ClientFactory: si.oktaFakes, client: client}, clientsecretstest.New(t, si.conn.conn, si.enc))
 	done := make(chan error, 1)
 	go func() { done <- syncer.Run(ctx, id, false) }()
 	select {

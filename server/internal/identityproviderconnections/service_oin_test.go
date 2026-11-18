@@ -3,7 +3,6 @@ package identityproviderconnections_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -22,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	orgencryptionrepo "github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -54,7 +55,7 @@ func submitOIN(ctx context.Context, si *serviceInstance, id, secret string) (*ge
 func verifiedOINConnection(t *testing.T, ctx context.Context, si *serviceInstance) *gen.OktaIdentityProviderConnection {
 	t.Helper()
 
-	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinSecret, si.enc)
+	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinSecret)
 	created := createOINConnection(t, ctx, si)
 	submitted, err := submitOIN(ctx, si, created.ID, oinSecret)
 	require.NoError(t, err)
@@ -65,12 +66,15 @@ func verifiedOINConnection(t *testing.T, ctx context.Context, si *serviceInstanc
 func storedOINSecret(t *testing.T, ctx context.Context, si *serviceInstance, id string) string {
 	t.Helper()
 
-	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, id))
+	row, err := repo.New(si.conn.conn).GetManagedClient(ctx, repo.GetManagedClientParams{
+		OrganizationID:               conv.ToPGText(si.orgID),
+		IdentityProviderConnectionID: conv.ToNullUUID(mustParseUUID(t, id)),
+	})
 	require.NoError(t, err)
-	if managed.ClientSecretEncrypted == "" {
+	if !row.RemoteSessionClient.ClientSecretEncrypted.Valid {
 		return ""
 	}
-	plaintext, err := si.enc.Decrypt(managed.ClientSecretEncrypted)
+	plaintext, err := si.enc.Decrypt(row.RemoteSessionClient.ClientSecretEncrypted.String)
 	require.NoError(t, err)
 	return plaintext
 }
@@ -123,7 +127,7 @@ func TestCreate_OINProvisionsSecretClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.TokenEndpointAuthMethodBasic, managed.AuthMethod)
 	require.False(t, managed.JSONWebKeySetID.Valid)
-	require.Empty(t, managed.ClientSecretEncrypted)
+	require.Empty(t, storedOINSecret(t, ctx, si, created.ID))
 }
 
 func TestCreate_OINRequiresClientSecretBasicDiscovery(t *testing.T) {
@@ -171,7 +175,7 @@ func TestSubmitClientID_OINWrongSecretIsNotPersisted(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 
-	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinSecret, si.enc)
+	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinSecret)
 	created := createOINConnection(t, ctx, si)
 	_, err := submitOIN(ctx, si, created.ID, oinOtherSecret)
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
@@ -190,7 +194,7 @@ func TestSubmitClientID_OINVerifiesWithBearerToken(t *testing.T) {
 	ctx, si := newTestService(t)
 
 	fake := si.oktaFakes.Fake(fullOrgURL)
-	fake.RequireClientSecret(oinSecret, si.enc)
+	fake.RequireClientSecret(oinSecret)
 	fake.SetBearerOnly(true)
 	created := createOINConnection(t, ctx, si)
 
@@ -212,7 +216,7 @@ func TestReplaceClientSecret_OINVerifiesNewSecret(t *testing.T) {
 	ctx, si := newTestService(t)
 	verified := verifiedOINConnection(t, ctx, si)
 
-	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinOtherSecret, si.enc)
+	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinOtherSecret)
 	replaced, err := si.svc.ReplaceClientSecret(ctx, &gen.ReplaceClientSecretPayload{SessionToken: nil, ID: verified.ID, ClientSecret: oinOtherSecret})
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusVerified, replaced.Status)
@@ -277,7 +281,7 @@ func TestVerify_OINSecretRejectedRecordsReason(t *testing.T) {
 	verified := verifiedOINConnection(t, ctx, si)
 
 	// The secret was rotated in Okta without updating Speakeasy.
-	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinOtherSecret, si.enc)
+	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinOtherSecret)
 	_, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: verified.ID})
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 
@@ -316,22 +320,52 @@ func TestVerify_OINOnceDPoPBoundRefusesBearer(t *testing.T) {
 	require.True(t, reverified.DpopRequired, "the pin survives a Bearer-only verification")
 }
 
-// failingDecrypter cannot decrypt anything, as when the encryption key changed.
-type failingDecrypter struct{}
-
-func (failingDecrypter) Decrypt(string) (string, error) {
-	return "", errors.New("cipher: message authentication failed")
-}
-
 func TestVerify_OINUndecryptableSecretIsNotUnreachable(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	verified := verifiedOINConnection(t, ctx, si)
 
-	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinSecret, failingDecrypter{})
-	_, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: verified.ID})
+	// A stored copy the platform key cannot open, as when the key changed.
+	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, verified.ID))
+	require.NoError(t, err)
+	require.NoError(t, remotesessionsrepo.New(si.conn.conn).SetOrganizationRemoteSessionClientCredentialsFixture(ctx, remotesessionsrepo.SetOrganizationRemoteSessionClientCredentialsFixtureParams{
+		ClientID:              pgtype.Text{},
+		ClientSecretEncrypted: conv.ToPGText("not-a-platform-ciphertext"),
+		ID:                    managed.ClientRowID,
+		OrganizationID:        conv.ToPGText(si.orgID),
+	}))
+
+	_, err = si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: verified.ID})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 	require.ErrorContains(t, err, "the stored client secret could not be read; replace it")
+}
+
+func TestVerify_OINKeyOutageIsRetryableAndKeepsStatus(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	verified := verifiedOINConnection(t, ctx, si)
+
+	// The organization's client secrets are past platform_key and this
+	// process has no organization encryption to open them with.
+	_, err := orgencryptionrepo.New(si.conn.conn).CreateEncryptionTransition(ctx, orgencryptionrepo.CreateEncryptionTransitionParams{
+		OrganizationID:          si.orgID,
+		UseCase:                 string(orgencryption.UseCaseOAuthClientSecrets),
+		State:                   string(orgencryption.TransitionStateDualWrite),
+		PlatformCopiesClearedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	// Another process reads the transition state with nothing cached.
+	fresh := si.build(si.provisioner)
+	_, err = fresh.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: verified.ID})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.ErrorContains(t, err, "encryption key is unavailable")
+	require.NotContains(t, err.Error(), "replace it", "a key outage never asks the admin to replace the secret")
+
+	fetched, err := fresh.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &verified.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusVerified, fetched.Connection.Status, "a key outage never marks the connection broken")
+	require.Equal(t, verified.LastError, fetched.Connection.LastError, "a key outage is never recorded as an Okta or credential failure")
 }
 
 func TestCreate_AbandonsOINOrphanWithoutKeySet(t *testing.T) {
@@ -343,10 +377,8 @@ func TestCreate_AbandonsOINOrphanWithoutKeySet(t *testing.T) {
 	managed, err := si.provisioner.ProvisionClient(ctx, secretParams(si.orgID, orphanID, issuerID))
 	require.NoError(t, err)
 	require.False(t, managed.JSONWebKeySetID.Valid)
-	secret, err := si.enc.Encrypt([]byte(oinSecret))
-	require.NoError(t, err)
 	dbtx := testenv.BeginTx(t, ctx, si.conn.conn)
-	_, err = si.provisioner.SetClientID(ctx, dbtx, setClientIDParams(si.orgID, orphanID, secret))
+	_, err = si.provisioner.SetClientID(ctx, dbtx, setClientIDParams(si.orgID, orphanID, oinSecret))
 	require.NoError(t, err)
 	require.NoError(t, dbtx.Commit(ctx))
 

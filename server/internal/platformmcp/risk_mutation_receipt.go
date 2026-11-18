@@ -134,14 +134,39 @@ func NewRiskMutationReceiptStore(db *pgxpool.Pool) *RiskMutationReceiptStore {
 // completed input from its stored result without charging, and commits
 // receipt + domain + audit atomically. Any callback, completion, or commit failure rolls all three back.
 func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, charge func(context.Context) error, mutate RiskMutationTransaction) (OperationReceipt, error) {
-	if s == nil || s.db == nil || s.now == nil || mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || !riskMutationOperation(request.Operation) {
-		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request is invalid.", Cause: ErrRiskMutationInvalid}
+	if mutate == nil {
+		return OperationReceipt{}, invalidRiskMutationReceiptRequest()
+	}
+	execution, err := s.execution(principal, project, request, mutate)
+	if err != nil {
+		return OperationReceipt{}, err
+	}
+	return executeChargedMutationReceipt(ctx, charge, execution)
+}
+
+// CheckPreview refuses a preview whose idempotency key Execute would refuse
+// for the same request. It only reads: nothing is stored or charged.
+func (s *RiskMutationReceiptStore) CheckPreview(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest) error {
+	execution, err := s.execution(principal, project, request, nil)
+	if err != nil {
+		return err
+	}
+	return checkPreviewReceipt(ctx, execution)
+}
+
+func invalidRiskMutationReceiptRequest() error {
+	return &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request is invalid.", Cause: ErrRiskMutationInvalid}
+}
+
+func (s *RiskMutationReceiptStore) execution(principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, mutate RiskMutationTransaction) (mutationReceiptExecution[RiskMutationReceiptResult], error) {
+	if s == nil || s.db == nil || s.now == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || !riskMutationOperation(request.Operation) {
+		return mutationReceiptExecution[RiskMutationReceiptResult]{}, invalidRiskMutationReceiptRequest()
 	}
 	inputHash, err := riskMutationInputHash(request.Operation, request.Input)
 	if err != nil {
-		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request could not be normalized.", Cause: ErrRiskMutationInvalid}
+		return mutationReceiptExecution[RiskMutationReceiptResult]{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request could not be normalized.", Cause: ErrRiskMutationInvalid}
 	}
-	return executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[RiskMutationReceiptResult]{
+	return mutationReceiptExecution[RiskMutationReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: request.Operation, IdempotencyKey: request.IdempotencyKey, InputHash: inputHash, Label: "risk mutation",
 		Invalid: func(cause error) error {
 			return &RiskMutationError{Code: "invalid_request", Message: "The risk mutation caller identity is invalid.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationInvalid, cause)}
@@ -158,13 +183,16 @@ func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Princi
 			return encodeRiskMutationResult(request.Operation, result)
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+			if mutate == nil {
+				return nil, ErrRiskMutationInvalid
+			}
 			result, err := mutate(ctx, tx)
 			if err != nil {
 				return nil, fmt.Errorf("apply risk mutation transaction: %w", err)
 			}
 			return result, nil
 		},
-	})
+	}, nil
 }
 
 func riskMutationInputHash(operation string, normalized any) (string, error) {

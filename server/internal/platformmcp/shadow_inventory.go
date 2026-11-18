@@ -11,7 +11,6 @@ import (
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -41,13 +40,17 @@ type shadowReviewReader interface {
 }
 
 type ListShadowMCPInventoryInput struct {
-	ProjectID string `json:"project_id" jsonschema:"explicit project ID returned by list_projects"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by the preceding list_shadow_mcp_inventory page"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"maximum targets to return; server clamps this to 50"`
 }
 
 type GetShadowMCPReviewInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID used to list this target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	TargetReference string `json:"target_reference" jsonschema:"short-lived opaque target reference returned by list_shadow_mcp_inventory"`
 }
 
@@ -129,8 +132,6 @@ type ShadowInventoryService struct {
 	projects                  riskProjectResolver
 	inventory                 shadowInventoryReader
 	reviews                   shadowReviewReader
-	flags                     feature.Provider
-	organizations             OrganizationSlugResolver
 	budget                    OperationBudget
 	references                *subjectReferenceCodec
 	versions                  *shadowDecisionVersionCodec
@@ -138,7 +139,7 @@ type ShadowInventoryService struct {
 	distributionAdmissionRead distributionAdmissionReader
 }
 
-func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowReviewReader, flags feature.Provider, organizations OrganizationSlugResolver, dbQueries *platformrepo.Queries, budget OperationBudget, keyMaterial string) (*ShadowInventoryService, error) {
+func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowReviewReader, dbQueries *platformrepo.Queries, budget OperationBudget, keyMaterial string) (*ShadowInventoryService, error) {
 	codec, err := newSubjectReferenceCodec(keyMaterial)
 	if err != nil {
 		return nil, ErrShadowInventoryUnavailable
@@ -147,12 +148,12 @@ func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowRev
 	if err != nil {
 		return nil, ErrShadowInventoryUnavailable
 	}
-	if dbReader == nil || reviews == nil || flags == nil || organizations == nil || dbQueries == nil || !budget.valid() {
+	if dbReader == nil || reviews == nil || dbQueries == nil || !budget.valid() {
 		return nil, ErrShadowInventoryUnavailable
 	}
 	return &ShadowInventoryService{
 		projects: postgresRiskProjectResolver{queries: dbQueries}, inventory: dbReader, reviews: reviews,
-		flags: flags, organizations: organizations, budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil,
+		budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil,
 	}, nil
 }
 
@@ -164,7 +165,7 @@ func (s *ShadowInventoryService) WithDistributionAdmissionReads(read distributio
 }
 
 func (s *ShadowInventoryService) valid() bool {
-	return s != nil && s.projects != nil && s.inventory != nil && s.reviews != nil && s.flags != nil && s.organizations != nil && s.budget.valid() && s.references != nil && s.versions != nil && s.now != nil
+	return s != nil && s.projects != nil && s.inventory != nil && s.reviews != nil && s.budget.valid() && s.references != nil && s.versions != nil && s.now != nil
 }
 
 func (s *ShadowInventoryService) List(ctx context.Context, principal Principal, input ListShadowMCPInventoryInput) (ListShadowMCPInventoryOutput, error) {
@@ -175,7 +176,7 @@ func (s *ShadowInventoryService) List(ctx context.Context, principal Principal, 
 	if err != nil {
 		return ListShadowMCPInventoryOutput{}, mapShadowProjectError(err)
 	}
-	if err := s.admit(ctx, principal, project); err != nil {
+	if err := s.budget.Allow(ctx, principal); err != nil {
 		return ListShadowMCPInventoryOutput{}, err
 	}
 	limit := input.Limit
@@ -265,7 +266,7 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 	if err != nil {
 		return GetShadowMCPReviewOutput{}, mapShadowProjectError(err)
 	}
-	if err := s.admit(ctx, principal, project); err != nil {
+	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetShadowMCPReviewOutput{}, err
 	}
 	targetKind, targetKey, err := s.ResolveTargetReference(principal, project.ID.String(), input.TargetReference)
@@ -307,24 +308,6 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 		return GetShadowMCPReviewOutput{}, ErrShadowInventoryUnavailable
 	}
 	return output, nil
-}
-
-func (s *ShadowInventoryService) admit(ctx context.Context, principal Principal, project ResolvedProject) error {
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || organizationSlug == "" {
-		return ErrShadowInventoryUnavailable
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagMCPApproval, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, ""))
-	if err != nil {
-		return ErrShadowInventoryUnavailable
-	}
-	if evaluation != feature.EvaluationEnabled {
-		return ErrShadowInventoryUnavailable
-	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (s *ShadowInventoryService) projectTarget(principal Principal, project ResolvedProject, row *accessgen.ShadowMCPInventoryServer) (ShadowMCPTargetSummary, error) {

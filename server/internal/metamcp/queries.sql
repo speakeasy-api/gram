@@ -1,11 +1,14 @@
 -- name: LockUserSessionIssuerForMetaMCP :one
--- Lock a live user session issuer in the caller's project. Meta MCP
--- create/update hold this lock while validating the reference so a concurrent
--- issuer delete cannot race the attach.
+-- Lock a live issuer owned by the caller's project or shared by its organization.
+-- Gateway create/update hold this lock while validating the reference so a
+-- concurrent issuer delete cannot race the attach.
 SELECT id
 FROM user_session_issuers
 WHERE id = @user_session_issuer_id
-  AND project_id = @project_id::uuid
+  AND (
+    project_id = @project_id::uuid
+    OR (project_id IS NULL AND organization_id = @organization_id::text)
+  )
   AND deleted IS FALSE
 FOR UPDATE;
 
@@ -698,15 +701,12 @@ ORDER BY i.id, members.mcp_server_id;
 
 -- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
 -- Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
--- matching unless a live endpoint now holds the slug in that namespace (callers also
--- drop ones a legacy toolset alias holds); the existence check mirrors the global
--- unique index, so it is not project-scoped.
+-- matching unless a live endpoint now holds the slug in that namespace; the
+-- existence check mirrors the global unique index, so it is not project-scoped.
 SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
-    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
-    e.custom_domain_id,
     e.deleted,
     e.is_domain_root,
     cd.domain AS custom_domain,

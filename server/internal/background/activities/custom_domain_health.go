@@ -23,7 +23,6 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/email"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 )
@@ -34,7 +33,6 @@ const CustomDomainHealthCheckMaxAttempts = 3
 type CustomDomainInfrastructureChecker interface {
 	CheckCustomDomainInfrastructure(ctx context.Context, check k8s.CustomDomainInfrastructureCheck) (k8s.CustomDomainInfrastructureHealth, error)
 	ListManagedCustomDomainResources(ctx context.Context) ([]k8s.ManagedCustomDomainResource, error)
-	Provisioner(kind k8s.ProvisionerKind) k8s.CustomDomainProvisioner
 }
 
 type CustomDomainHealth struct {
@@ -42,9 +40,9 @@ type CustomDomainHealth struct {
 	logger           *slog.Logger
 	infrastructure   CustomDomainInfrastructureChecker
 	resolver         dns.Resolver
-	probe            func(ctx context.Context, domain string) error
 	expectedTarget   string
 	expectedARecords []netip.Addr
+	targetSuffix     string
 	emails           *email.Service
 	orgHosts         *orghost.Resolver
 }
@@ -73,23 +71,15 @@ type NotifyCustomDomainUnhealthyArgs struct {
 	CheckedAt      time.Time
 }
 
-func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, orgHosts *orghost.Resolver, guardianPolicy *guardian.Policy) *CustomDomainHealth {
-	probe := func(ctx context.Context, domain string) error {
-		return errors.New("custom domain https probe is not configured")
-	}
-	if guardianPolicy != nil {
-		probe = func(ctx context.Context, domain string) error {
-			return probeCustomDomainHTTPS(ctx, guardianPolicy.Client(), domain)
-		}
-	}
+func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, targetSuffix string, emails *email.Service, orgHosts *orghost.Resolver) *CustomDomainHealth {
 	return &CustomDomainHealth{
 		db:               db,
 		logger:           logger,
 		infrastructure:   infrastructure,
 		resolver:         dns.NewNetResolver(),
-		probe:            probe,
 		expectedTarget:   expectedTarget,
 		expectedARecords: expectedARecords,
+		targetSuffix:     targetSuffix,
 		emails:           emails,
 		orgHosts:         orgHosts,
 	}
@@ -97,11 +87,6 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 
 func (c *CustomDomainHealth) SetResolver(resolver dns.Resolver) {
 	c.resolver = resolver
-}
-
-// SetProbe replaces the HTTPS probe. Intended for testing.
-func (c *CustomDomainHealth) SetProbe(probe func(ctx context.Context, domain string) error) {
-	c.probe = probe
 }
 
 func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsForHealthCheckArgs) ([]CustomDomainHealthCheckTarget, error) {
@@ -122,13 +107,14 @@ func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsFor
 	return targets, nil
 }
 
+// Check records one domain's DNS observation and infrastructure health and
+// returns the unhealthy alert to send, if any. It never deactivates or
+// unverifies a domain: TXT proves ownership, and DNS that points elsewhere
+// (a domain verified ahead of a migration, a proxy we cannot see through, or
+// DNS moved away later) keeps its ingress and certificate until an
+// organization administrator deletes the domain.
 func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) (NotifyCustomDomainUnhealthyArgs, error) {
 	var noNotification NotifyCustomDomainUnhealthyArgs
-
-	if c.expectedTarget == "" && len(c.expectedARecords) == 0 {
-		c.logger.WarnContext(ctx, "skipping custom domain health check: no expected CNAME target or A records configured")
-		return noNotification, nil
-	}
 
 	repository := customdomainsrepo.New(c.db)
 	domain, err := repository.GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
@@ -142,10 +128,11 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		return noNotification, fmt.Errorf("get custom domain for health check: %w", err)
 	}
 
-	// Backfill rows created before DNS target tokens existed. Nothing checks
-	// the per-domain target yet, so a failure must not fail the health check.
-	backfillDNSTargetToken(ctx, c.logger, c.db, domain.OrganizationID, domain.ID, domain.Domain, domain.DnsTargetToken)
-
+	if !domain.Activated || !domain.Verified {
+		return noNotification, nil
+	}
+	token := backfillDNSTargetToken(ctx, c.logger, c.db, domain.OrganizationID, domain.ID, domain.Domain, domain.DnsTargetToken)
+	domainTarget, _ := customdomains.DNSTarget(c.targetSuffix, token)
 	route, err := repository.GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
 		ID:             domain.ID,
 		OrganizationID: domain.OrganizationID,
@@ -172,60 +159,42 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		Status:               customdomains.HealthStatusHealthy,
 		Issue:                "",
 		CertificateExpiresAt: nil,
+		DNSConfiguration:     "",
 	}
-	routingIssue, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, c.expectedTarget, c.expectedARecords)
-	if routingErr == nil && routingIssue == customdomains.HealthIssueDNSTargetMismatch {
-		// DNS shape says the domain points elsewhere, but proxied/CDN setups
-		// legitimately do that. If the domain still answers HTTPS, traffic is
-		// routing and the domain is healthy.
-		if probeErr := c.probe(ctx, domain.Domain); probeErr == nil {
-			routingIssue = ""
-		} else {
-			c.logger.InfoContext(ctx, "custom domain https probe failed after dns mismatch", attr.SlogURLDomain(domain.Domain), attr.SlogError(probeErr))
-		}
-	}
-	switch {
-	case routingErr != nil:
+	dnsObservation, dnsErr := customdomains.ObserveDNS(ctx, c.resolver, domain.Domain, customdomains.DNSRoutingTargets{SharedCNAME: c.expectedTarget, DomainTarget: domainTarget, TargetSuffix: c.targetSuffix, ARecords: c.expectedARecords})
+	if dnsErr != nil {
+		// A transient resolver failure (timeout, SERVFAIL) would otherwise
+		// replace the last good observation until the next sweep, so retry and
+		// record check_failed only once the retries are spent.
 		if !isFinalHealthCheckAttempt(ctx) {
-			return noNotification, fmt.Errorf("check custom domain routing: %w", routingErr)
+			return noNotification, fmt.Errorf("observe custom domain DNS: %w", dnsErr)
 		}
-		c.logger.WarnContext(ctx, "custom domain routing health check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(routingErr))
+		c.logger.WarnContext(ctx, "custom domain DNS audit incomplete", attr.SlogURLDomain(domain.Domain), attr.SlogError(dnsErr))
+	}
+	infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
+		Domain: domain.Domain, ResourceName: domain.IngressName.String,
+		RootResourceName: rootResourceName, WellKnownRootResourceName: wellKnownRootResourceName,
+		CertSecretName: domain.CertSecretName.String, ProvisionerKind: k8s.ProvisionerKind(domain.ProvisionerKind),
+	})
+	observation.DNSConfiguration = dnsObservation.Status
+	if infrastructureErr != nil {
+		if !isFinalHealthCheckAttempt(ctx) {
+			return noNotification, fmt.Errorf("check custom domain infrastructure: %w", infrastructureErr)
+		}
+		c.logger.WarnContext(ctx, "custom domain infrastructure check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(infrastructureErr))
 		observation.Status = customdomains.HealthStatusUnhealthy
 		observation.Issue = customdomains.HealthIssueCheckFailed
 		preserveCertificateExpiry = true
-	case routingIssue != "":
-		observation.Status = customdomains.HealthStatusUnhealthy
-		observation.Issue = routingIssue
-		preserveCertificateExpiry = true
-	default:
-		infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
-			Domain:                    domain.Domain,
-			ResourceName:              domain.IngressName.String,
-			RootResourceName:          rootResourceName,
-			WellKnownRootResourceName: wellKnownRootResourceName,
-			CertSecretName:            domain.CertSecretName.String,
-			ProvisionerKind:           k8s.ProvisionerKind(domain.ProvisionerKind),
-		})
-		if infrastructureErr != nil {
-			if !isFinalHealthCheckAttempt(ctx) {
-				return noNotification, fmt.Errorf("check custom domain infrastructure: %w", infrastructureErr)
-			}
-			c.logger.WarnContext(ctx, "custom domain infrastructure health check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(infrastructureErr))
+	} else {
+		observation.CertificateExpiresAt = infrastructureHealth.CertificateExpiresAt
+		if infrastructureHealth.Issue != "" {
 			observation.Status = customdomains.HealthStatusUnhealthy
-			observation.Issue = customdomains.HealthIssueCheckFailed
-			preserveCertificateExpiry = true
-		} else {
-			observation.CertificateExpiresAt = infrastructureHealth.CertificateExpiresAt
-			if infrastructureHealth.Issue != "" {
-				observation.Status = customdomains.HealthStatusUnhealthy
-				observation.Issue = customdomains.HealthIssue(infrastructureHealth.Issue)
-			}
+			observation.Issue = customdomains.HealthIssue(infrastructureHealth.Issue)
 		}
 	}
 
 	var notification NotifyCustomDomainUnhealthyArgs
 	var next customdomains.HealthState
-	autoDisabled := false
 	if err := pgx.BeginFunc(ctx, c.db, func(tx pgx.Tx) error {
 		repository := customdomainsrepo.New(tx)
 		lockedDomain, err := repository.LockCustomDomainByIDAndOrganization(ctx, customdomainsrepo.LockCustomDomainByIDAndOrganizationParams{
@@ -237,6 +206,9 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		}
 		if err != nil {
 			return fmt.Errorf("lock custom domain for health update: %w", err)
+		}
+		if !lockedDomain.Activated || !lockedDomain.Verified {
+			return nil
 		}
 		current := customDomainHealthState(lockedDomain)
 		if preserveCertificateExpiry {
@@ -265,30 +237,26 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 				CheckedAt:      args.CheckedAt,
 			}
 		}
+		if current.CheckedAt != nil && !args.CheckedAt.After(*current.CheckedAt) {
+			return nil
+		}
 		_, err = repository.UpdateCustomDomainHealth(ctx, customdomainsrepo.UpdateCustomDomainHealthParams{
-			HealthStatus:         conv.ToPGText(string(next.Status)),
-			HealthIssue:          conv.ToPGTextEmpty(string(next.Issue)),
-			CheckedAt:            conv.ToPGTimestamptz(*next.CheckedAt),
-			UnhealthySince:       conv.PtrToPGTimestamptz(next.UnhealthySince),
-			CertificateExpiresAt: conv.PtrToPGTimestamptz(next.CertificateExpiresAt),
-			ConsecutiveFailures:  pgtype.Int4{Int32: next.ConsecutiveFailures, Valid: true},
-			ID:                   domain.ID,
-			OrganizationID:       args.OrganizationID,
+			DnsCheckedAt:           conv.ToPGTimestamptz(args.CheckedAt),
+			DnsConfigurationStatus: conv.ToPGText(string(dnsObservation.Status)),
+			DnsRoutingMethod:       conv.ToPGText(string(dnsObservation.Method)),
+			HealthStatus:           conv.ToPGText(string(next.Status)),
+			HealthIssue:            conv.ToPGTextEmpty(string(next.Issue)),
+			CheckedAt:              conv.ToPGTimestamptz(*next.CheckedAt),
+			UnhealthySince:         conv.PtrToPGTimestamptz(next.UnhealthySince),
+			CertificateExpiresAt:   conv.PtrToPGTimestamptz(next.CertificateExpiresAt),
+			ConsecutiveFailures:    pgtype.Int4{Int32: next.ConsecutiveFailures, Valid: true},
+			ID:                     domain.ID,
+			OrganizationID:         args.OrganizationID,
 		})
 		if err != nil {
 			return fmt.Errorf("update custom domain health: %w", err)
 		}
-		if customdomains.ShouldAutoDisable(next, args.CheckedAt) {
-			// Disable under the same row lock that persisted the decision so
-			// a recovery cannot commit in between; k8s teardown waits for commit.
-			if _, err := repository.DisableCustomDomainForHealth(ctx, customdomainsrepo.DisableCustomDomainForHealthParams{
-				ID:             domain.ID,
-				OrganizationID: args.OrganizationID,
-			}); err != nil {
-				return fmt.Errorf("disable custom domain after failed health checks: %w", err)
-			}
-			autoDisabled = true
-		}
+
 		return nil
 	}); err != nil {
 		return noNotification, fmt.Errorf("save custom domain health: %w", err)
@@ -302,21 +270,6 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			attr.SlogOrganizationID(args.OrganizationID),
 			attr.SlogCustomDomainHealthStatus(string(next.Status)),
 			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
-		)
-	}
-
-	if autoDisabled {
-		// Retries reuse CheckedAt, so the reconcile no-ops and this idempotent
-		// teardown re-runs until it succeeds.
-		if domain.IngressName.String != "" {
-			provisioner := c.infrastructure.Provisioner(k8s.ProvisionerKind(domain.ProvisionerKind))
-			if err := provisioner.Delete(ctx, domain.IngressName.String, domain.CertSecretName.String); err != nil {
-				return noNotification, fmt.Errorf("tear down auto-disabled custom domain resources: %w", err)
-			}
-		}
-		c.logger.WarnContext(ctx, "auto-disabled custom domain after prolonged failed health checks",
-			attr.SlogURLDomain(domain.Domain),
-			attr.SlogOrganizationID(args.OrganizationID),
 		)
 	}
 
@@ -435,7 +388,7 @@ func (c *CustomDomainHealth) FindOrphanResources(ctx context.Context) error {
 	return nil
 }
 
-// Probe errors retry until the final attempt, which persists check_failed.
+// Infrastructure errors retry until the final attempt, which persists check_failed.
 func isFinalHealthCheckAttempt(ctx context.Context) bool {
 	if !activity.IsActivity(ctx) {
 		return true
@@ -451,6 +404,7 @@ func customDomainHealthState(domain customdomainsrepo.CustomDomain) customdomain
 		UnhealthySince:       nil,
 		CertificateExpiresAt: nil,
 		ConsecutiveFailures:  domain.ConsecutiveFailures.Int32,
+		DNSConfiguration:     conv.FromPGTextOrEmpty[customdomains.DNSConfigurationStatus](domain.DnsConfigurationStatus),
 	}
 	if state.Status == "" {
 		state.Status = customdomains.HealthStatusUnknown
@@ -466,6 +420,16 @@ func customDomainHealthState(domain customdomainsrepo.CustomDomain) customdomain
 	if domain.CertificateExpiresAt.Valid {
 		expiresAt := domain.CertificateExpiresAt.Time.UTC()
 		state.CertificateExpiresAt = &expiresAt
+	}
+	currentObservation := domain.DnsCheckedAt.Valid && domain.HealthCheckedAt.Valid && domain.DnsCheckedAt.Time.Equal(domain.HealthCheckedAt.Time)
+	if customdomains.IsDNSHealthIssue(state.Issue) || (state.Issue == customdomains.HealthIssueCheckFailed && !currentObservation) {
+		// Workers that mix DNS into health can preserve newer DNS columns during
+		// a rolling upgrade. A check_failed from those workers may also be a DNS
+		// failure; neither episode establishes a previous infrastructure alert.
+		state.Status = customdomains.HealthStatusUnknown
+		state.Issue = ""
+		state.UnhealthySince = nil
+		state.ConsecutiveFailures = 0
 	}
 	return state
 }

@@ -5,6 +5,7 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { AppRoute } from "@/routes";
 import { useRoutes } from "@/routes";
+import { useAssistantsAvailable } from "./useAssistantsAvailability";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
@@ -49,6 +50,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
+  // Assistants are off for the whole deployment when its runtime is disabled;
+  // the pages stay hidden until that is confirmed either way.
+  const isAssistantsAvailable = useAssistantsAvailable();
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
@@ -62,16 +66,20 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     // Observe navigation stays visible to project readers. The Identities
     // roster uses that scope; identity detail resolution separately requires
     // org:read, and the remaining Observe pages render an org-admin notice.
-    // Tool Logs is the exception: it needs log:read on this project, which no
-    // role holds by default, so it only appears to those granted it.
+    // Tool Logs included: without log:read on the project it shows the
+    // member's own sessions and agents, so the page is reachable by all.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
-      {
-        route: routes.chat,
-        scope: ["assistant:read"],
-        projectId,
-      },
+      ...(isAssistantsAvailable
+        ? [
+            {
+              route: routes.chat,
+              scope: ["assistant:read"] as Scope[],
+              projectId,
+            },
+          ]
+        : []),
       // Two rosters, two entries: a person arrives from the identity
       // provider, an agent is registered here. The bare identities URL
       // redirects to the people.
@@ -92,11 +100,17 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
-      {
-        route: routes.assistants,
-        scope: ["assistant:read"],
-        projectId,
-      },
+      // Channels is deliberately absent: while it is hidden it is reachable
+      // only by direct URL, so neither the sidebar nor Command K offers it.
+      ...(isAssistantsAvailable
+        ? [
+            {
+              route: routes.assistants,
+              scope: ["assistant:read"] as Scope[],
+              projectId,
+            },
+          ]
+        : []),
       {
         route: routes.skills,
         scope: ["skill:read"],
@@ -107,6 +121,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
+      { route: routes.shadowMCP, scope: ["org:admin"] as Scope[] },
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled
         ? [
@@ -128,12 +143,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
-      { route: routes.logs, scope: ["log:read"], resourceId: projectId },
+      { route: routes.logs, scope: observe, resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [
     routes,
     projectId,
+    isAssistantsAvailable,
     isExploreEnabled,
     isOrgMemoryEnabled,
     isSignalsIntelligenceEnabled,

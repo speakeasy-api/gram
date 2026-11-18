@@ -26,7 +26,7 @@ func TestNewDelegatedPolicyV1CanonicalizesAndClosesImplications(t *testing.T) {
 
 	runtime := policy.RuntimeGrants()
 	require.Len(t, runtime, 4)
-	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPToolCallCheck("server-one", authz.MCPToolCallDimensions{Tool: "tool-one"})))
+	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPToolCallCheck("server-one", authz.MCPToolCallDimensions{Tool: "tool-one", ProjectID: "project-one"})))
 	require.True(t, authz.GrantsSatisfy(runtime, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
 
 	encoded, err := EncodeDelegatedPolicy(DelegatedPolicyVersion1, policy)

@@ -123,7 +123,7 @@ func handleResourcesRead(
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
-	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
+	userConfig, _, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +247,8 @@ func handleResourcesRead(
 		// Resource reads reach functions through a separate payload that
 		// carries no caller identity, and the functions SDK exposes none on a
 		// resource handler.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		Credentials: nil,
 	}, plan, logAttrs)
 	if err != nil {
 		if errors.Is(err, shutdowndrain.ErrInterrupted) {
@@ -257,6 +258,13 @@ func handleResourcesRead(
 			// it is not logged as the call's response.
 			rw.body.Reset()
 			return nil, interruption.Response
+		}
+		// Resource reads have no error result to carry the reason, so a
+		// disabled deployment answers as a missing resource with the reason as
+		// its message, logged at warn because nothing is broken.
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			rw.statusCode = http.StatusNotFound
+			return nil, oops.E(oops.CodeNotFound, err, "%s", functions.ErrFunctionsDisabled.Error()).LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)
 	}

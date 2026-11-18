@@ -3,6 +3,9 @@
 //
 // hook_source is not a controlled vocabulary: adapters report it verbatim and
 // spell the same product several ways.
+//
+// Deprecated: use aivendors.Identify, which names the aivendors product and
+// the client a reported name implies.
 package agentsurface
 
 import "strings"
@@ -86,6 +89,7 @@ var bySource = map[string]Surface{
 	"bedrock":        SurfaceOther,
 	"aws-bedrock":    SurfaceOther,
 	"pi":             SurfaceOther,
+	"vibe":           SurfaceOther,
 }
 
 // compact indexes the same surfaces separator-free, so "claudecode" resolves

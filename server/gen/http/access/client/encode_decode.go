@@ -5898,6 +5898,228 @@ func DecodeUpdateShadowMCPInventoryServerNameResponse(decoder func(*http.Respons
 	}
 }
 
+// BuildSetShadowMCPOfficialServerRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "setShadowMCPOfficialServer" endpoint
+func (c *Client) BuildSetShadowMCPOfficialServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetShadowMCPOfficialServerAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "setShadowMCPOfficialServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetShadowMCPOfficialServerRequest returns an encoder for requests sent
+// to the access setShadowMCPOfficialServer server.
+func EncodeSetShadowMCPOfficialServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.SetShadowMCPOfficialServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "setShadowMCPOfficialServer", "*access.SetShadowMCPOfficialServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetShadowMCPOfficialServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "setShadowMCPOfficialServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetShadowMCPOfficialServerResponse returns a decoder for responses
+// returned by the access setShadowMCPOfficialServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetShadowMCPOfficialServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetShadowMCPOfficialServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetShadowMCPOfficialServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetShadowMCPOfficialServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetShadowMCPOfficialServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetShadowMCPOfficialServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetShadowMCPOfficialServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetShadowMCPOfficialServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetShadowMCPOfficialServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetShadowMCPOfficialServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+				}
+				err = ValidateSetShadowMCPOfficialServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+				}
+				return nil, NewSetShadowMCPOfficialServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetShadowMCPOfficialServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+				}
+				err = ValidateSetShadowMCPOfficialServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+				}
+				return nil, NewSetShadowMCPOfficialServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "setShadowMCPOfficialServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetShadowMCPOfficialServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "setShadowMCPOfficialServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListShadowMCPInventoryUsersRequest instantiates a HTTP request object
 // with method and path set to call the "access" service
 // "listShadowMCPInventoryUsers" endpoint
@@ -11164,16 +11386,17 @@ func unmarshalDirectoryReviewItemResponseBodyToAccessDirectoryReviewItem(v *Dire
 // *ScopeDefinitionResponseBody.
 func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
 	res := &access.ScopeDefinition{
-		Slug:           *v.Slug,
-		Label:          *v.Label,
-		Description:    *v.Description,
-		ResourceType:   *v.ResourceType,
-		Category:       *v.Category,
-		Sensitive:      *v.Sensitive,
-		Sensitivity:    v.Sensitivity,
-		Visibility:     *v.Visibility,
-		AgentEligible:  *v.AgentEligible,
-		ExclusionScope: v.ExclusionScope,
+		Slug:               *v.Slug,
+		Label:              *v.Label,
+		Description:        *v.Description,
+		ResourceType:       *v.ResourceType,
+		Category:           *v.Category,
+		Sensitive:          *v.Sensitive,
+		Sensitivity:        v.Sensitivity,
+		Visibility:         *v.Visibility,
+		AgentEligible:      *v.AgentEligible,
+		TemporaryGrantable: *v.TemporaryGrantable,
+		ExclusionScope:     v.ExclusionScope,
 	}
 	res.SubScopes = make([]string, len(v.SubScopes))
 	for i, val := range v.SubScopes {
@@ -11356,6 +11579,12 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	for i, val := range v.BlockedPolicyIds {
 		res.BlockedPolicyIds[i] = val
 	}
+	if v.OfficialServer != nil {
+		res.OfficialServer = unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(v.OfficialServer)
+	}
+	if v.SuggestedOfficialServer != nil {
+		res.SuggestedOfficialServer = unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer(v.SuggestedOfficialServer)
+	}
 
 	return res
 }
@@ -11410,6 +11639,41 @@ func unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInve
 		StandingDecision:  v.StandingDecision,
 		RequesterCount:    *v.RequesterCount,
 		EvidenceChangedAt: v.EvidenceChangedAt,
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer
+// builds a value of type *access.ShadowMCPOfficialServer from a value of type
+// *ShadowMCPOfficialServerResponseBody.
+func unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(v *ShadowMCPOfficialServerResponseBody) *access.ShadowMCPOfficialServer {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPOfficialServer{
+		McpServerID:         *v.McpServerID,
+		Name:                *v.Name,
+		Slug:                v.Slug,
+		URL:                 v.URL,
+		GatewayName:         v.GatewayName,
+		DirectAccessAllowed: *v.DirectAccessAllowed,
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer
+// builds a value of type *access.ShadowMCPSuggestedOfficialServer from a value
+// of type *ShadowMCPSuggestedOfficialServerResponseBody.
+func unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer(v *ShadowMCPSuggestedOfficialServerResponseBody) *access.ShadowMCPSuggestedOfficialServer {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPSuggestedOfficialServer{
+		McpServerID: *v.McpServerID,
+		Name:        *v.Name,
+		Slug:        v.Slug,
 	}
 
 	return res
@@ -11756,6 +12020,25 @@ func unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(v *AuthzChallenge
 	for i, val := range v.RoleSlugs {
 		res.RoleSlugs[i] = val
 	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v.ResolutionTemporaryGrant)
+	}
+
+	return res
+}
+
+// unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant
+// builds a value of type *access.ChallengeTemporaryGrant from a value of type
+// *ChallengeTemporaryGrantResponseBody.
+func unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v *ChallengeTemporaryGrantResponseBody) *access.ChallengeTemporaryGrant {
+	if v == nil {
+		return nil
+	}
+	res := &access.ChallengeTemporaryGrant{
+		ID:        *v.ID,
+		Status:    *v.Status,
+		ExpiresAt: v.ExpiresAt,
+	}
 
 	return res
 }
@@ -11795,6 +12078,9 @@ func unmarshalChallengeBucketResponseBodyToAccessChallengeBucket(v *ChallengeBuc
 	res.ChallengeIds = make([]string, len(v.ChallengeIds))
 	for i, val := range v.ChallengeIds {
 		res.ChallengeIds[i] = val
+	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v.ResolutionTemporaryGrant)
 	}
 
 	return res

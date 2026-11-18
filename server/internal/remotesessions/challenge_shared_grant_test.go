@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -93,7 +94,7 @@ func newTestUpstreamRevoker(t *testing.T, ti *testInstance, signers ...remoteses
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
-		testenv.NewEncryptionClient(t),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)),
 		policy,
 		nil,
 		signers...,
@@ -704,7 +705,7 @@ func setStoredSessionResource(t *testing.T, ctx context.Context, fx sharedGrantF
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.session.UserSessionIssuerID,
 		RemoteSessionClientID:  fx.clientID,
-		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted,
+		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted.String,
 		AccessExpiresAt:        fx.session.AccessExpiresAt,
 		RefreshTokenEncrypted:  fx.session.RefreshTokenEncrypted,
 		AuthorizationExpiresAt: fx.session.AuthorizationExpiresAt,

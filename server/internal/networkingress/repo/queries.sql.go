@@ -118,7 +118,8 @@ INSERT INTO network_ingresses (
     credentials_encrypted,
     attestor_namespace,
     attestor_service_account,
-    provider_resources
+    provider_resources,
+    runtime
 ) VALUES (
     $1,
     $2,
@@ -131,9 +132,10 @@ INSERT INTO network_ingresses (
     $9,
     $10,
     $11,
-    $12
+    $12,
+    $13
 )
-RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateNetworkIngressParams struct {
@@ -149,6 +151,7 @@ type CreateNetworkIngressParams struct {
 	AttestorNamespace      string
 	AttestorServiceAccount string
 	ProviderResources      []byte
+	Runtime                pgtype.Text
 }
 
 func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIngressParams) (NetworkIngress, error) {
@@ -165,6 +168,7 @@ func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIng
 		arg.AttestorNamespace,
 		arg.AttestorServiceAccount,
 		arg.ProviderResources,
+		arg.Runtime,
 	)
 	var i NetworkIngress
 	err := row.Scan(
@@ -186,6 +190,10 @@ func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIng
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -235,7 +243,7 @@ func (q *Queries) GetLiveNetworkIngressAuthority(ctx context.Context, arg GetLiv
 }
 
 const getNetworkIngressByID = `-- name: GetNetworkIngressByID :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE id = $1
   AND organization_id = $2
@@ -268,6 +276,10 @@ func (q *Queries) GetNetworkIngressByID(ctx context.Context, arg GetNetworkIngre
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -277,7 +289,7 @@ func (q *Queries) GetNetworkIngressByID(ctx context.Context, arg GetNetworkIngre
 }
 
 const getNetworkIngressByOrganization = `-- name: GetNetworkIngressByOrganization :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -306,6 +318,10 @@ func (q *Queries) GetNetworkIngressByOrganization(ctx context.Context, organizat
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -314,8 +330,35 @@ func (q *Queries) GetNetworkIngressByOrganization(ctx context.Context, organizat
 	return i, err
 }
 
+const getNetworkIngressCertificateFailure = `-- name: GetNetworkIngressCertificateFailure :one
+SELECT last_error
+FROM network_ingress_nodes
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND retired_at IS NULL
+  AND status = 'awaiting_certificate'
+  AND last_error IS NOT NULL
+ORDER BY last_seen_at DESC NULLS LAST
+LIMIT 1
+`
+
+type GetNetworkIngressCertificateFailureParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+}
+
+// The message of the most recently seen gateway slot that holds no valid TLS
+// certificate because a request failed. The gateway writes it, naming the
+// cause and when it retries.
+func (q *Queries) GetNetworkIngressCertificateFailure(ctx context.Context, arg GetNetworkIngressCertificateFailureParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressCertificateFailure, arg.NetworkIngressID, arg.OrganizationID)
+	var last_error pgtype.Text
+	err := row.Scan(&last_error)
+	return last_error, err
+}
+
 const getNetworkIngressForReconcile = `-- name: GetNetworkIngressForReconcile :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE id = $1
   AND organization_id = $2
@@ -348,6 +391,10 @@ func (q *Queries) GetNetworkIngressForReconcile(ctx context.Context, arg GetNetw
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -357,7 +404,7 @@ func (q *Queries) GetNetworkIngressForReconcile(ctx context.Context, arg GetNetw
 }
 
 const getPendingDeletedNetworkIngressByOrganization = `-- name: GetPendingDeletedNetworkIngressByOrganization :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE organization_id = $1
   AND deleted IS TRUE
@@ -394,6 +441,10 @@ func (q *Queries) GetPendingDeletedNetworkIngressByOrganization(ctx context.Cont
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -565,7 +616,7 @@ func (q *Queries) ListPersistedNetworkIngressResources(ctx context.Context, arg 
 }
 
 const lockNetworkIngressByOrganization = `-- name: LockNetworkIngressByOrganization :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -595,6 +646,10 @@ func (q *Queries) LockNetworkIngressByOrganization(ctx context.Context, organiza
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -604,7 +659,7 @@ func (q *Queries) LockNetworkIngressByOrganization(ctx context.Context, organiza
 }
 
 const lockNetworkIngressForReconcile = `-- name: LockNetworkIngressForReconcile :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE id = $1
   AND organization_id = $2
@@ -638,6 +693,10 @@ func (q *Queries) LockNetworkIngressForReconcile(ctx context.Context, arg LockNe
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -647,7 +706,7 @@ func (q *Queries) LockNetworkIngressForReconcile(ctx context.Context, arg LockNe
 }
 
 const lockNetworkIngressRowsByOrganization = `-- name: LockNetworkIngressRowsByOrganization :many
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE organization_id = $1
 ORDER BY created_at, id
@@ -683,6 +742,10 @@ func (q *Queries) LockNetworkIngressRowsByOrganization(ctx context.Context, orga
 			&i.LastError,
 			&i.HealthCheckedAt,
 			&i.ConnectedSince,
+			&i.Runtime,
+			&i.GatewayShard,
+			&i.GatewayServiceHostname,
+			&i.GatewayServiceHostnames,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -791,7 +854,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 `
 
 type RotateNetworkIngressCredentialsParams struct {
@@ -821,6 +884,10 @@ func (q *Queries) RotateNetworkIngressCredentials(ctx context.Context, arg Rotat
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -860,7 +927,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND deleted IS FALSE
-RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 `
 
 func (q *Queries) SoftDeleteNetworkIngress(ctx context.Context, organizationID string) (NetworkIngress, error) {
@@ -885,6 +952,10 @@ func (q *Queries) SoftDeleteNetworkIngress(ctx context.Context, organizationID s
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -923,7 +994,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $7
   AND deleted IS FALSE
-RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, credentials_org_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateNetworkIngressSettingsParams struct {
@@ -966,6 +1037,10 @@ func (q *Queries) UpdateNetworkIngressSettings(ctx context.Context, arg UpdateNe
 		&i.LastError,
 		&i.HealthCheckedAt,
 		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.GatewayServiceHostname,
+		&i.GatewayServiceHostnames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

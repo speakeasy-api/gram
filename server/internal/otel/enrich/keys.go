@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 )
 
 const (
@@ -76,6 +78,8 @@ const (
 	AgentSourceKey       = attribute.Key(agentKeyPrefix + "source")
 	AgentProviderKey     = attribute.Key(agentKeyPrefix + "provider")
 	AgentSurfaceKey      = attribute.Key(agentKeyPrefix + "surface")
+	AgentProductKey      = attribute.Key(agentKeyPrefix + "product")
+	AgentClientKey       = attribute.Key(agentKeyPrefix + "client")
 
 	// Who and where.
 	AgentSessionIDKey      = attribute.Key(agentKeyPrefix + "session_id")
@@ -84,6 +88,7 @@ const (
 	AgentUserEmailKey      = attribute.Key(agentKeyPrefix + "user_email")
 	AgentExternalUserIDKey = attribute.Key(agentKeyPrefix + "external_user_id")
 	AgentExternalOrgIDKey  = attribute.Key(agentKeyPrefix + "external_org_id")
+	AgentAgentIDKey        = attribute.Key(agentKeyPrefix + "agent_id")
 
 	// What happened.
 	AgentModelKey          = attribute.Key(agentKeyPrefix + "model")
@@ -113,10 +118,21 @@ func IsAgentKey(key string) bool {
 	return strings.HasPrefix(key, agentKeyPrefix)
 }
 
+// InternalProvenanceSource marks records Speakeasy emits itself; only these may name the actor.
+const InternalProvenanceSource = "speakeasy-internal"
+
 const (
 	pipelineKeyPrefix  = "speakeasy."
 	directoryKeyPrefix = "directory."
+
+	// mcpConnectionKeyPrefix holds the attributes on exported MCP connection logs.
+	mcpConnectionKeyPrefix = "speakeasy.mcp_connection."
 )
+
+// IsMcpConnectionKey reports whether a key is one only the connection recorder may write.
+func IsMcpConnectionKey(key string) bool {
+	return strings.HasPrefix(key, mcpConnectionKeyPrefix)
+}
 
 // IsPipelineKey reports whether a key is in a namespace the pipeline owns,
 // speakeasy or directory. The transform drops what a producer sends there
@@ -124,4 +140,14 @@ const (
 // claim another tenant, pose as another scope or give a person a group.
 func IsPipelineKey(key string) bool {
 	return strings.HasPrefix(key, pipelineKeyPrefix) || strings.HasPrefix(key, directoryKeyPrefix)
+}
+
+// IsReservedLogKey reports whether a producer with the given provenance source
+// may not write key. It is IsPipelineKey, except that the connection recorder
+// writes speakeasy.mcp_connection itself.
+func IsReservedLogKey(source, key string) bool {
+	if source == dialect.ConnectionLogSource && IsMcpConnectionKey(key) {
+		return false
+	}
+	return IsPipelineKey(key)
 }

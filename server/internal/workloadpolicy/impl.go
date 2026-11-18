@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -59,7 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
-// Tier names in audit snapshots. A subject can be admitted at both tiers
+// Tier names in audit snapshots and the withdraw response. A subject can be admitted at both tiers
 // independently and withdrawing one leaves the other in force, so an entry that
 // does not say which tier it describes cannot be acted on.
 const (
@@ -345,10 +346,16 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 	}
 
 	// MCP servers are served on the server URL's host, whichever host their
-	// issuer's authorization server is on.
+	// issuer's authorization server is on, unless the organization pins MCP
+	// traffic to its custom domain with an IP allowlist: the platform host then
+	// refuses it, so the domain is the host a platform must call.
 	serverURL, err := url.Parse(s.sharedHosts.ServerURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read the server URL").LogError(ctx, s.logger)
+	}
+	mcpHost, err := s.mcpHost(ctx, t.organizationID, serverURL.Host)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]*types.WorkloadTokenEndpoint, 0, len(rows))
@@ -364,10 +371,24 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build token endpoint").LogError(ctx, s.logger)
 		}
-		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, serverURL.Host))
+		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, mcpHost))
 	}
 
 	return &types.WorkloadTokenEndpoints{Items: items}, nil
+}
+
+// mcpHost is the host an organization's MCP servers are reached on: its
+// custom domain when that domain carries an IP allowlist and is serving, since
+// the allowlist locks the platform host out, and platformHost otherwise.
+func (s *Service) mcpHost(ctx context.Context, organizationID string, platformHost string) (string, error) {
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organizationID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to read the organization's custom domain").LogError(ctx, s.logger)
+	}
+	if lockdown.ServingHost == "" {
+		return platformHost, nil
+	}
+	return lockdown.ServingHost, nil
 }
 
 // requireTrustDomain enforces the WIMSE identifier draft's guidance that a trust
@@ -1012,7 +1033,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	// The early, legible refusal. The issuer's permission is re-checked on every
 	// lookup, which is what makes clearing it revoke rules already written.
 	if err := workloadidentity.ValidateSubjectRule(matchKind, payload.Subject, issuerRow.AllowWildcardAdmission); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused")
+		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused: %s", err.Error())
 	}
 
 	// Tenancy-scoped for the same reason as the issuer: another organization's
@@ -1060,7 +1081,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
 	}
 	if err := workloadidentity.ValidateSubjectRule(matchKind, payload.Subject, issuerRow.AllowWildcardAdmission); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused")
+		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused: %s", err.Error())
 	}
 
 	admission, err := q.CreateWorkloadAdmission(ctx, repo.CreateWorkloadAdmissionParams{
@@ -1316,7 +1337,7 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 	return policy, nil
 }
 
-func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
+func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WithdrawnWorkloadSubjectPolicy, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
@@ -1460,7 +1481,11 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
 	}
 
-	return policy, nil
+	return &gen.WithdrawnWorkloadSubjectPolicy{
+		WithdrawnTier: tier(withdrawn.ProjectID),
+		Issuers:       policy.Issuers,
+		Admissions:    policy.Admissions,
+	}, nil
 }
 
 // isUniqueViolation reports a partial unique index rejecting a duplicate, which

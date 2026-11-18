@@ -126,7 +126,7 @@ func BuildUpsertConfigPayload(aiIntegrationsUpsertConfigBody string, aiIntegrati
 	{
 		err = json.Unmarshal([]byte(aiIntegrationsUpsertConfigBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key\": \"abc123\",\n      \"billing_mode\": \"abc123\",\n      \"enabled\": false,\n      \"external_organization_id\": \"abc123\",\n      \"provider\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key\": \"abc123\",\n      \"billing_mode\": \"abc123\",\n      \"delegated_user\": \"abc123\",\n      \"enabled\": false,\n      \"external_organization_id\": \"abc123\",\n      \"org_unit_id\": \"abc123\",\n      \"provider\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -145,6 +145,8 @@ func BuildUpsertConfigPayload(aiIntegrationsUpsertConfigBody string, aiIntegrati
 		Provider:               body.Provider,
 		APIKey:                 body.APIKey,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		DelegatedUser:          body.DelegatedUser,
+		OrgUnitID:              body.OrgUnitID,
 		BillingMode:            body.BillingMode,
 		Enabled:                body.Enabled,
 	}
@@ -180,6 +182,33 @@ func BuildDeleteConfigPayload(aiIntegrationsDeleteConfigBody string, aiIntegrati
 	v := &aiintegrations.DeleteConfigPayload{
 		Provider: body.Provider,
 	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListOrgUnitsPayload builds the payload for the aiIntegrations
+// listOrgUnits endpoint from CLI flags.
+func BuildListOrgUnitsPayload(aiIntegrationsListOrgUnitsProvider string, aiIntegrationsListOrgUnitsApikeyToken string, aiIntegrationsListOrgUnitsSessionToken string) (*aiintegrations.ListOrgUnitsPayload, error) {
+	var provider string
+	{
+		provider = aiIntegrationsListOrgUnitsProvider
+	}
+	var apikeyToken *string
+	{
+		if aiIntegrationsListOrgUnitsApikeyToken != "" {
+			apikeyToken = &aiIntegrationsListOrgUnitsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if aiIntegrationsListOrgUnitsSessionToken != "" {
+			sessionToken = &aiIntegrationsListOrgUnitsSessionToken
+		}
+	}
+	v := &aiintegrations.ListOrgUnitsPayload{}
+	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

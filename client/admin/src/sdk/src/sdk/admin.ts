@@ -9,6 +9,7 @@ import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
 import { adminCloneOnboardingPlaybook } from "../funcs/adminCloneOnboardingPlaybook.js";
+import { adminCreateGcpIamPlatformCredential } from "../funcs/adminCreateGcpIamPlatformCredential.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOnboardingPlaybook } from "../funcs/adminCreateOnboardingPlaybook.js";
 import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseCase.js";
@@ -16,6 +17,7 @@ import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
 import { adminCurateRegistryPromotionCandidate } from "../funcs/adminCurateRegistryPromotionCandidate.js";
+import { adminDeleteGcpIamPlatformCredential } from "../funcs/adminDeleteGcpIamPlatformCredential.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
@@ -26,6 +28,7 @@ import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminEnableUpstreamAuthEnforcement } from "../funcs/adminEnableUpstreamAuthEnforcement.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
+import { adminGetGcpIamPlatformCredential } from "../funcs/adminGetGcpIamPlatformCredential.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
@@ -33,6 +36,8 @@ import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
+import { adminGetMemoryEvalOptions } from "../funcs/adminGetMemoryEvalOptions.js";
+import { adminGetMemoryEvalRun } from "../funcs/adminGetMemoryEvalRun.js";
 import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
@@ -56,16 +61,21 @@ import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubs
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminGetUpstreamOAuthMigrationStatus } from "../funcs/adminGetUpstreamOAuthMigrationStatus.js";
+import { adminListAssistantOrganizations } from "../funcs/adminListAssistantOrganizations.js";
+import { adminListCustomDomains } from "../funcs/adminListCustomDomains.js";
 import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
+import { adminListMemoryEvalRuns } from "../funcs/adminListMemoryEvalRuns.js";
 import { adminListOnboardingPlaybooks } from "../funcs/adminListOnboardingPlaybooks.js";
 import { adminListOnboardingSteps } from "../funcs/adminListOnboardingSteps.js";
 import { adminListOnboardingUseCases } from "../funcs/adminListOnboardingUseCases.js";
 import { adminListOrganizationActivity } from "../funcs/adminListOrganizationActivity.js";
+import { adminListOrganizationAssistants } from "../funcs/adminListOrganizationAssistants.js";
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
+import { adminListPlatformExternalCredentials } from "../funcs/adminListPlatformExternalCredentials.js";
 import { adminListPlatformMcpFeedback } from "../funcs/adminListPlatformMcpFeedback.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
@@ -77,12 +87,15 @@ import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.
 import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
+import { adminMigrateOrganizationAssistantIdentities } from "../funcs/adminMigrateOrganizationAssistantIdentities.js";
+import { adminMigrateOrganizationAssistantsToKit } from "../funcs/adminMigrateOrganizationAssistantsToKit.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
 import { adminPromoteRegistryCandidate } from "../funcs/adminPromoteRegistryCandidate.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRedeployProject } from "../funcs/adminRedeployProject.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
+import { adminRepairOrganizationAssistantAgentNames } from "../funcs/adminRepairOrganizationAssistantAgentNames.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
@@ -98,8 +111,10 @@ import { adminSetOrganizationProviderSetup } from "../funcs/adminSetOrganization
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
+import { adminStartMemoryEvalRun } from "../funcs/adminStartMemoryEvalRun.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
+import { adminUpdateGcpIamPlatformCredential } from "../funcs/adminUpdateGcpIamPlatformCredential.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOnboardingPlaybook } from "../funcs/adminUpdateOnboardingPlaybook.js";
 import { adminUpdateOnboardingUseCase } from "../funcs/adminUpdateOnboardingUseCase.js";
@@ -107,7 +122,12 @@ import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
 import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
+import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AdminAssistantAgentNameRepairRun } from "../models/components/adminassistantagentnamerepairrun.js";
+import { AdminAssistantIdentityMigrationRun } from "../models/components/adminassistantidentitymigrationrun.js";
+import { AdminAssistantKitMigrationRun } from "../models/components/adminassistantkitmigrationrun.js";
+import { AdminAssistantOrganizations } from "../models/components/adminassistantorganizations.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
@@ -120,6 +140,7 @@ import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
+import { AdminListCustomDomainsResult } from "../models/components/adminlistcustomdomainsresult.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
@@ -128,6 +149,8 @@ import { AdminListUsersResult } from "../models/components/adminlistusersresult.
 import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
 import { AdminMcpServerResourceScopes } from "../models/components/adminmcpserverresourcescopes.js";
 import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
+import { AdminMemoryEvalOptions } from "../models/components/adminmemoryevaloptions.js";
+import { AdminMemoryEvalRun } from "../models/components/adminmemoryevalrun.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
 import { AdminOnboardingPlaybookList } from "../models/components/adminonboardingplaybooklist.js";
@@ -137,6 +160,7 @@ import { AdminOnboardingStepList } from "../models/components/adminonboardingste
 import { AdminOnboardingUseCase } from "../models/components/adminonboardingusecase.js";
 import { AdminOnboardingUseCaseList } from "../models/components/adminonboardingusecaselist.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
+import { AdminOrganizationAssistants } from "../models/components/adminorganizationassistants.js";
 import { AdminOrganizationOnboardingPlaybook } from "../models/components/adminorganizationonboardingplaybook.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
@@ -168,6 +192,7 @@ import { CloneOnboardingPlaybookRequestBody } from "../models/components/cloneon
 import { CreateOnboardingPlaybookRequestBody } from "../models/components/createonboardingplaybookrequestbody.js";
 import { CreateOnboardingUseCaseRequestBody } from "../models/components/createonboardingusecaserequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
+import { CreatePlatformGcpIamCredentialForm } from "../models/components/createplatformgcpiamcredentialform.js";
 import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { CreateSignupOfferRequestBody } from "../models/components/createsignupofferrequestbody.js";
@@ -180,13 +205,17 @@ import { EnableOrganizationRequestBody } from "../models/components/enableorgani
 import { EnableUpstreamAuthEnforcementRequestBody } from "../models/components/enableupstreamauthenforcementrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
+import { GcpIamCredential } from "../models/components/gcpiamcredential.js";
 import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { ListExternalCredentialsResult } from "../models/components/listexternalcredentialsresult.js";
 import { ListPlatformMcpFeedbackResponseBody } from "../models/components/listplatformmcpfeedbackresponsebody.js";
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
+import { MigrateOrganizationAssistantIdentitiesRequestBody } from "../models/components/migrateorganizationassistantidentitiesrequestbody.js";
+import { MigrateOrganizationAssistantsToKitRequestBody } from "../models/components/migrateorganizationassistantstokitrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
@@ -198,6 +227,7 @@ import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissu
 import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
+import { RepairOrganizationAssistantAgentNamesRequestBody } from "../models/components/repairorganizationassistantagentnamesrequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
@@ -213,18 +243,22 @@ import { SetOrganizationProviderSetupRequestBody } from "../models/components/se
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
+import { StartMemoryEvalRunRequestBody } from "../models/components/startmemoryevalrunrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
 import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
+import { UpdateGcpIamPlatformCredentialRequestBody } from "../models/components/updategcpiamplatformcredentialrequestbody.js";
 import { UpdateOnboardingPlaybookRequestBody } from "../models/components/updateonboardingplaybookrequestbody.js";
 import { UpdateOnboardingUseCaseRequestBody } from "../models/components/updateonboardingusecaserequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
+import { VerifyPlatformCredentialResult } from "../models/components/verifyplatformcredentialresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
+import { AdminGetGcpIamPlatformCredentialRequest } from "../models/operations/admingetgcpiamplatformcredential.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
@@ -232,6 +266,7 @@ import { AdminGetHookClientsRequest } from "../models/operations/admingethookcli
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetMcpServerToolCallsRequest } from "../models/operations/admingetmcpservertoolcalls.js";
+import { AdminGetMemoryEvalRunRequest } from "../models/operations/admingetmemoryevalrun.js";
 import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusage.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
@@ -250,6 +285,7 @@ import { AdminGetStripeSubscriptionRequest } from "../models/operations/adminget
 import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import { AdminGetUpstreamOAuthMigrationStatusRequest } from "../models/operations/admingetupstreamoauthmigrationstatus.js";
+import { AdminListCustomDomainsRequest } from "../models/operations/adminlistcustomdomains.js";
 import { AdminListCustomerUsageRequest } from "../models/operations/adminlistcustomerusage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
@@ -259,17 +295,23 @@ import {
   AdminListGlobalIssuersRequest,
   AdminListGlobalIssuersResponse,
 } from "../models/operations/adminlistglobalissuers.js";
+import {
+  AdminListMemoryEvalRunsRequest,
+  AdminListMemoryEvalRunsResponse,
+} from "../models/operations/adminlistmemoryevalruns.js";
 import { AdminListOnboardingPlaybooksRequest } from "../models/operations/adminlistonboardingplaybooks.js";
 import {
   AdminListOrganizationActivityRequest,
   AdminListOrganizationActivityResponse,
 } from "../models/operations/adminlistorganizationactivity.js";
+import { AdminListOrganizationAssistantsRequest } from "../models/operations/adminlistorganizationassistants.js";
 import { AdminListOrganizationMembersRequest } from "../models/operations/adminlistorganizationmembers.js";
 import { AdminListOrganizationProjectsRequest } from "../models/operations/adminlistorganizationprojects.js";
 import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
+import { AdminListPlatformExternalCredentialsRequest } from "../models/operations/adminlistplatformexternalcredentials.js";
 import { AdminListPlatformMcpFeedbackRequest } from "../models/operations/adminlistplatformmcpfeedback.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
@@ -319,6 +361,21 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * listAssistantOrganizations admin
+   *
+   * @remarks
+   * Lists live organizations with live assistants in live projects.
+   */
+  async listAssistantOrganizations(
+    options?: RequestOptions,
+  ): Promise<AdminAssistantOrganizations> {
+    return unwrapAsync(adminListAssistantOrganizations(
+      this,
+      options,
+    ));
+  }
+
+  /**
    * logout admin
    */
   async logout(
@@ -326,6 +383,125 @@ export class Admin extends ClientSDK {
   ): Promise<void> {
     return unwrapAsync(adminLogout(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * listCustomDomains admin
+   *
+   * @remarks
+   * Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.
+   */
+  async listCustomDomains(
+    request?: AdminListCustomDomainsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminListCustomDomainsResult> {
+    return unwrapAsync(adminListCustomDomains(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * createGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.
+   */
+  async createGcpIamPlatformCredential(
+    request: CreatePlatformGcpIamCredentialForm,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminCreateGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * deleteGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
+   */
+  async deleteGcpIamPlatformCredential(
+    request: RiskIDRequestBody,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(adminDeleteGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Get a platform GCP IAM external credential by ID.
+   */
+  async getGcpIamPlatformCredential(
+    request: AdminGetGcpIamPlatformCredentialRequest,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminGetGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listPlatformExternalCredentials admin
+   *
+   * @remarks
+   * List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.
+   */
+  async listPlatformExternalCredentials(
+    request?: AdminListPlatformExternalCredentialsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<ListExternalCredentialsResult> {
+    return unwrapAsync(adminListPlatformExternalCredentials(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * updateGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
+   */
+  async updateGcpIamPlatformCredential(
+    request: UpdateGcpIamPlatformCredentialRequestBody,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminUpdateGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * verifyGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.
+   */
+  async verifyGcpIamPlatformCredential(
+    request: RiskIDRequestBody,
+    options?: RequestOptions,
+  ): Promise<VerifyPlatformCredentialResult> {
+    return unwrapAsync(adminVerifyGcpIamPlatformCredential(
+      this,
+      request,
       options,
     ));
   }
@@ -373,6 +549,74 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminBackfillMCPConnectGrantsResult> {
     return unwrapAsync(adminBackfillMcpConnectGrants(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getMemoryEvalOptions admin
+   *
+   * @remarks
+   * Default Organizational Memory eval config, the models a run may pick from, and the daily run budget.
+   */
+  async getMemoryEvalOptions(
+    options?: RequestOptions,
+  ): Promise<AdminMemoryEvalOptions> {
+    return unwrapAsync(adminGetMemoryEvalOptions(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * getMemoryEvalRun admin
+   *
+   * @remarks
+   * One Organizational Memory eval run with its report.
+   */
+  async getMemoryEvalRun(
+    request: AdminGetMemoryEvalRunRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMemoryEvalRun> {
+    return unwrapAsync(adminGetMemoryEvalRun(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listMemoryEvalRuns admin
+   *
+   * @remarks
+   * Organizational Memory eval runs, newest first, without their reports.
+   */
+  async listMemoryEvalRuns(
+    request?: AdminListMemoryEvalRunsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<AdminListMemoryEvalRunsResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(adminListMemoryEvalRuns(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * startMemoryEvalRun admin
+   *
+   * @remarks
+   * Queue an Organizational Memory eval run against the demo organization's synthetic corpus. Spends model credits; one run at a time and a daily limit.
+   */
+  async startMemoryEvalRun(
+    request: StartMemoryEvalRunRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminMemoryEvalRun> {
+    return unwrapAsync(adminStartMemoryEvalRun(
       this,
       request,
       options,
@@ -573,6 +817,23 @@ export class Admin extends ClientSDK {
     PageIterator<AdminListOrganizationActivityResponse, { cursor: string }>
   > {
     return unwrapResultIterator(adminListOrganizationActivity(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listOrganizationAssistants admin
+   *
+   * @remarks
+   * Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.
+   */
+  async listOrganizationAssistants(
+    request: AdminListOrganizationAssistantsRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationAssistants> {
+    return unwrapAsync(adminListOrganizationAssistants(
       this,
       request,
       options,
@@ -786,6 +1047,40 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * migrateOrganizationAssistantIdentities admin
+   *
+   * @remarks
+   * Gives every assistant of one organization that has no dedicated agent its own agent, owned by the assistant's creator, and binds its triggers to workload identities. The agent starts with access to every MCP server and skill in the assistant's project, administration of the assistant, and project inference only when the creator has it. Assistants whose creator is no longer a member are skipped and reported. Idempotent, so it is safe to run again.
+   */
+  async migrateOrganizationAssistantIdentities(
+    request: MigrateOrganizationAssistantIdentitiesRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantIdentityMigrationRun> {
+    return unwrapAsync(adminMigrateOrganizationAssistantIdentities(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * migrateOrganizationAssistantsToKit admin
+   *
+   * @remarks
+   * Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.
+   */
+  async migrateOrganizationAssistantsToKit(
+    request: MigrateOrganizationAssistantsToKitRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantKitMigrationRun> {
+    return unwrapAsync(adminMigrateOrganizationAssistantsToKit(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getOrganizationOnboardingPlaybook admin
    *
    * @remarks
@@ -898,6 +1193,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ProductFeatures> {
     return unwrapAsync(adminSetOrganizationProviderSetup(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * repairOrganizationAssistantAgentNames admin
+   *
+   * @remarks
+   * Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.
+   */
+  async repairOrganizationAssistantAgentNames(
+    request: RepairOrganizationAssistantAgentNamesRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantAgentNameRepairRun> {
+    return unwrapAsync(adminRepairOrganizationAssistantAgentNames(
       this,
       request,
       options,

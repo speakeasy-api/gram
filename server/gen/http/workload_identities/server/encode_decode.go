@@ -2067,7 +2067,7 @@ func EncodeUpdateSubjectError(encoder func(context.Context, http.ResponseWriter)
 // the workloadIdentities withdrawSubject endpoint.
 func EncodeWithdrawSubjectResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*workloadidentities.WorkloadIdentityPolicy)
+		res, _ := v.(*workloadidentities.WithdrawnWorkloadSubjectPolicy)
 		enc := encoder(ctx, w)
 		body := NewWithdrawSubjectResponseBody(res)
 		w.WriteHeader(http.StatusOK)

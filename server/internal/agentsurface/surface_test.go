@@ -24,6 +24,7 @@ func TestForHookSource(t *testing.T) {
 		{name: "it folds mixed case and padding", source: "  Claude-Desktop  ", variant: "", want: agentsurface.SurfaceClaudeChat, known: true},
 		{name: "it folds chatgpt onto codex", source: "chatgpt", variant: "", want: agentsurface.SurfaceCodex, known: true},
 		{name: "it folds third-party agents onto other", source: "opencode", variant: "", want: agentsurface.SurfaceOther, known: true},
+		{name: "it folds vibe onto other", source: "vibe", variant: "", want: agentsurface.SurfaceOther, known: true},
 		{name: "it folds claude code desktop", source: "claude-code-desktop", variant: "", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it folds claude tag onto claude code", source: "claude-tag", variant: "", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it folds claude chat web", source: "claude-chat-web", variant: "", want: agentsurface.SurfaceClaudeChat, known: true},

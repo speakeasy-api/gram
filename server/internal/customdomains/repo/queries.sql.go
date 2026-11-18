@@ -123,7 +123,7 @@ INSERT INTO custom_domains (
     $5,
     $6
 )
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCustomDomainParams struct {
@@ -166,6 +166,8 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -188,32 +190,6 @@ WHERE organization_id = $1
 func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, deleteCustomDomain, organizationID)
 	return err
-}
-
-const disableCustomDomainForHealth = `-- name: DisableCustomDomainForHealth :one
-UPDATE custom_domains
-SET
-    verified = FALSE,
-    activated = FALSE,
-    updated_at = clock_timestamp()
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-RETURNING id
-`
-
-type DisableCustomDomainForHealthParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// Clearing activated drops the domain from health sweeps; clearing verified
-// puts it back into the dashboard reverify flow. Caller tears down k8s.
-func (q *Queries) DisableCustomDomainForHealth(ctx context.Context, arg DisableCustomDomainForHealthParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, disableCustomDomainForHealth, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
 }
 
 const ensureCustomDomainResourceNames = `-- name: EnsureCustomDomainResourceNames :execrows
@@ -253,7 +229,7 @@ func (q *Queries) EnsureCustomDomainResourceNames(ctx context.Context, arg Ensur
 }
 
 const getCustomDomainByDomain = `-- name: GetCustomDomainByDomain :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE domain = $1
   AND deleted IS FALSE
@@ -283,6 +259,8 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -292,7 +270,7 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 }
 
 const getCustomDomainByDomainAndOrganization = `-- name: GetCustomDomainByDomainAndOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted FROM custom_domains
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted FROM custom_domains
 WHERE domain = $1 AND organization_id = $2 AND deleted IS FALSE
 `
 
@@ -325,6 +303,8 @@ func (q *Queries) GetCustomDomainByDomainAndOrganization(ctx context.Context, ar
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -334,7 +314,7 @@ func (q *Queries) GetCustomDomainByDomainAndOrganization(ctx context.Context, ar
 }
 
 const getCustomDomainByID = `-- name: GetCustomDomainByID :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
   AND deleted IS FALSE
@@ -364,6 +344,8 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -373,7 +355,7 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 }
 
 const getCustomDomainByIDAndOrganization = `-- name: GetCustomDomainByIDAndOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
   AND organization_id = $2
@@ -413,6 +395,8 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -422,7 +406,7 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 }
 
 const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -453,6 +437,8 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -621,7 +607,7 @@ func (q *Queries) GetEligibleRootMcpEndpoint(ctx context.Context, arg GetEligibl
 }
 
 const getEligibleRootMcpServerForOrganization = `-- name: GetEligibleRootMcpServerForOrganization :one
-SELECT s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.builtin_backend, s.tool_variations_group_id, s.visibility, s.network_access_mode, s.requires_upstream_auth, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.builtin_backend, s.tool_variations_group_id, s.visibility, s.network_access_mode, s.requires_upstream_auth, s.setup_guide_completed_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
@@ -660,6 +646,7 @@ func (q *Queries) GetEligibleRootMcpServerForOrganization(ctx context.Context, a
 		&i.Visibility,
 		&i.NetworkAccessMode,
 		&i.RequiresUpstreamAuth,
+		&i.SetupGuideCompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -723,7 +710,7 @@ func (q *Queries) GetOrganizationForHealthNotification(ctx context.Context, orga
 }
 
 const getPendingDeletedCustomDomainByOrganization = `-- name: GetPendingDeletedCustomDomainByOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE organization_id = $1
   AND deleted IS TRUE
@@ -757,6 +744,8 @@ func (q *Queries) GetPendingDeletedCustomDomainByOrganization(ctx context.Contex
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -968,7 +957,7 @@ func (q *Queries) LockCustomDomainByID(ctx context.Context, id uuid.UUID) (uuid.
 }
 
 const lockCustomDomainByIDAndOrganization = `-- name: LockCustomDomainByIDAndOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
   AND organization_id = $2
@@ -1008,6 +997,8 @@ func (q *Queries) LockCustomDomainByIDAndOrganization(ctx context.Context, arg L
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1017,7 +1008,7 @@ func (q *Queries) LockCustomDomainByIDAndOrganization(ctx context.Context, arg L
 }
 
 const lockCustomDomainByOrganization = `-- name: LockCustomDomainByOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -1049,6 +1040,8 @@ func (q *Queries) LockCustomDomainByOrganization(ctx context.Context, organizati
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1104,7 +1097,7 @@ SET
     updated_at = clock_timestamp()
 WHERE id = $1
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 // Ownership verification is the sole writer of verified=true (the _gram TXT
@@ -1133,6 +1126,8 @@ func (q *Queries) SetCustomDomainVerified(ctx context.Context, id uuid.UUID) (Cu
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1172,7 +1167,7 @@ SET
     updated_at = clock_timestamp()
 WHERE id = $6
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainParams struct {
@@ -1215,6 +1210,8 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1232,22 +1229,28 @@ SET
     unhealthy_since = $4,
     certificate_expires_at = $5,
     consecutive_failures = $6,
+    dns_routing_method = $7,
+    dns_configuration_status = $8,
+    dns_checked_at = $9,
     updated_at = clock_timestamp()
-WHERE id = $7
-  AND organization_id = $8
+WHERE id = $10
+  AND organization_id = $11
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainHealthParams struct {
-	HealthStatus         pgtype.Text
-	HealthIssue          pgtype.Text
-	CheckedAt            pgtype.Timestamptz
-	UnhealthySince       pgtype.Timestamptz
-	CertificateExpiresAt pgtype.Timestamptz
-	ConsecutiveFailures  pgtype.Int4
-	ID                   uuid.UUID
-	OrganizationID       string
+	HealthStatus           pgtype.Text
+	HealthIssue            pgtype.Text
+	CheckedAt              pgtype.Timestamptz
+	UnhealthySince         pgtype.Timestamptz
+	CertificateExpiresAt   pgtype.Timestamptz
+	ConsecutiveFailures    pgtype.Int4
+	DnsRoutingMethod       pgtype.Text
+	DnsConfigurationStatus pgtype.Text
+	DnsCheckedAt           pgtype.Timestamptz
+	ID                     uuid.UUID
+	OrganizationID         string
 }
 
 func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustomDomainHealthParams) (CustomDomain, error) {
@@ -1258,6 +1261,9 @@ func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustom
 		arg.UnhealthySince,
 		arg.CertificateExpiresAt,
 		arg.ConsecutiveFailures,
+		arg.DnsRoutingMethod,
+		arg.DnsConfigurationStatus,
+		arg.DnsCheckedAt,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -1283,6 +1289,8 @@ func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustom
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1298,7 +1306,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainIPAllowlistParams struct {
@@ -1330,6 +1338,8 @@ func (q *Queries) UpdateCustomDomainIPAllowlist(ctx context.Context, arg UpdateC
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1346,7 +1356,7 @@ SET
     provisioner_kind = $3,
     updated_at = clock_timestamp()
 WHERE id = $4
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainResourceNamesParams struct {
@@ -1387,6 +1397,8 @@ func (q *Queries) UpdateCustomDomainResourceNames(ctx context.Context, arg Updat
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1409,7 +1421,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $5
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, dns_authorization_verified_at, dns_authorization_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainSettingsParams struct {
@@ -1450,6 +1462,8 @@ func (q *Queries) UpdateCustomDomainSettings(ctx context.Context, arg UpdateCust
 		&i.DnsRoutingMethod,
 		&i.DnsConfigurationStatus,
 		&i.DnsCheckedAt,
+		&i.DnsAuthorizationVerifiedAt,
+		&i.DnsAuthorizationCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

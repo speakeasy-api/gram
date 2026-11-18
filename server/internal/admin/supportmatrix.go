@@ -22,8 +22,8 @@ import (
 var supportCatalog []byte
 
 // SeedSupportMatrix inserts missing global catalog entries, refreshes the
-// columns the catalog owns on platforms and plans, and retires plans the
-// catalog no longer names. It never replaces operator edits or infers
+// columns the catalog owns on platforms, plans and methods, and retires plans
+// the catalog no longer names. It never replaces operator edits or infers
 // platform applicability from reference claims.
 func SeedSupportMatrix(ctx context.Context, db *pgxpool.Pool) error {
 	err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {

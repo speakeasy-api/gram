@@ -256,6 +256,13 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, enabled, "the default entitlements must be seeded on a created organization")
 
+	enforced, err := featuresrepo.New(conn).IsFeatureEnabled(ctx, featuresrepo.IsFeatureEnabledParams{
+		OrganizationID: res.ID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.True(t, enforced, "a created organization starts with upstream auth enforcement")
+
 	// The operator finds the organization again through both read surfaces, not
 	// only in the response body of the write.
 	detail, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: res.ID, AdminSessionToken: nil})
