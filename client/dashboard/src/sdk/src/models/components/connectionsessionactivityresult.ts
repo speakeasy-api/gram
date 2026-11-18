@@ -15,9 +15,17 @@ import {
 export type ConnectionSessionActivityResult = {
   activeNow: number;
   /**
-   * Mean length of sessions that ended in the range.
+   * Mean length of sessions that ended in the average window.
    */
   averageSessionSeconds?: number | undefined;
+  /**
+   * Start of the window the average covers: 30 days before now.
+   */
+  averageWindowFrom: Date;
+  /**
+   * End of the window the average covers: now.
+   */
+  averageWindowTo: Date;
   configuredSessionSeconds: number;
   days: Array<ConnectionSessionDay>;
 };
@@ -30,6 +38,14 @@ export const ConnectionSessionActivityResult$inboundSchema: z.ZodMiniType<
   z.object({
     active_now: z.int(),
     average_session_seconds: z.optional(z.int()),
+    average_window_from: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+    average_window_to: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
     configured_session_seconds: z.int(),
     days: z.array(ConnectionSessionDay$inboundSchema),
   }),
@@ -37,6 +53,8 @@ export const ConnectionSessionActivityResult$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "active_now": "activeNow",
       "average_session_seconds": "averageSessionSeconds",
+      "average_window_from": "averageWindowFrom",
+      "average_window_to": "averageWindowTo",
       "configured_session_seconds": "configuredSessionSeconds",
     });
   }),

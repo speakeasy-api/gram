@@ -128,9 +128,10 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions now").LogError(ctx, s.logger)
 	}
+	averageFrom := now.Add(-averageSessionWindow)
 	average, err := queries.AverageEndedSessionSeconds(ctx, repo.AverageEndedSessionSecondsParams{
-		FromTime:       timestamptz(from),
-		ToTime:         timestamptz(to),
+		FromTime:       timestamptz(averageFrom),
+		ToTime:         timestamptz(now.Add(clockSkewAllowance)),
 		IssuerID:       issuer.ID,
 		ProjectID:      project,
 		OrganizationID: c.organizationID,
@@ -144,6 +145,8 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		ActiveNow:                activeNow,
 		AverageSessionSeconds:    nil,
 		ConfiguredSessionSeconds: intervalSeconds(issuer.SessionDuration),
+		AverageWindowFrom:        formatTime(averageFrom),
+		AverageWindowTo:          formatTime(now),
 	}
 	if average >= 0 {
 		result.AverageSessionSeconds = new(int64(average))
@@ -153,6 +156,14 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 	}
 	return result, nil
 }
+
+// averageSessionWindow is how far back the average session length looks. It is
+// fixed so the readout does not swing with the chart's range.
+const averageSessionWindow = 30 * 24 * time.Hour
+
+// clockSkewAllowance covers a database clock slightly ahead of this server's. The
+// query also stops at the database's own now, so nothing later is counted.
+const clockSkewAllowance = time.Minute
 
 func timestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}

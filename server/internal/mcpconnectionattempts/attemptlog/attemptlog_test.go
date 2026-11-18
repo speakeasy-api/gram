@@ -388,3 +388,20 @@ func TestSourceOf_NamesTheServerForRejectedCredentials(t *testing.T) {
 	require.Equal(t, attemptlog.SourceSpeakeasySetting, attemptlog.SourceOf(mcpconnectionattempts.CodeCIMDAdmissionDenied.String()))
 	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(""))
 }
+
+func TestList_DeclinedAttemptsNeverFold(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i := range 3 {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-2*time.Hour+time.Duration(i)*time.Minute))
+		f.row(a, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled, true, time.Second, person("u1"))
+	}
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 3)
+	for _, r := range rows {
+		require.Equal(t, string(attemptlog.OutcomeDeclined), r.Outcome)
+		require.Equal(t, uint64(1), r.Count)
+	}
+}

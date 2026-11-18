@@ -249,8 +249,12 @@ type ConnectionServer struct {
 type ConnectionSessionActivityResult struct {
 	Days      []*ConnectionSessionDay
 	ActiveNow int64
-	// Mean length of sessions that ended in the range.
-	AverageSessionSeconds    *int64
+	// Mean length of sessions that ended in the average window.
+	AverageSessionSeconds *int64
+	// Start of the window the average covers: 30 days before now.
+	AverageWindowFrom string
+	// End of the window the average covers: now.
+	AverageWindowTo          string
 	ConfiguredSessionSeconds int64
 }
 

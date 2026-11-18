@@ -108869,8 +108869,16 @@ components:
                     format: int64
                 average_session_seconds:
                     type: integer
-                    description: Mean length of sessions that ended in the range.
+                    description: Mean length of sessions that ended in the average window.
                     format: int64
+                average_window_from:
+                    type: string
+                    description: 'Start of the window the average covers: 30 days before now.'
+                    format: date-time
+                average_window_to:
+                    type: string
+                    description: 'End of the window the average covers: now.'
+                    format: date-time
                 configured_session_seconds:
                     type: integer
                     format: int64
@@ -108882,6 +108890,8 @@ components:
                 - days
                 - active_now
                 - configured_session_seconds
+                - average_window_from
+                - average_window_to
         ConnectionSessionDay:
             type: object
             properties:

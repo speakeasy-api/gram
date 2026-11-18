@@ -371,9 +371,11 @@ var SessionDay = Type("ConnectionSessionDay", func() {
 var SessionActivityResult = Type("ConnectionSessionActivityResult", func() {
 	Attribute("days", ArrayOf(SessionDay))
 	Attribute("active_now", Int64)
-	Attribute("average_session_seconds", Int64, "Mean length of sessions that ended in the range.")
+	Attribute("average_session_seconds", Int64, "Mean length of sessions that ended in the average window.")
+	Attribute("average_window_from", String, "Start of the window the average covers: 30 days before now.", func() { Format(FormatDateTime) })
+	Attribute("average_window_to", String, "End of the window the average covers: now.", func() { Format(FormatDateTime) })
 	Attribute("configured_session_seconds", Int64)
-	Required("days", "active_now", "configured_session_seconds")
+	Required("days", "active_now", "configured_session_seconds", "average_window_from", "average_window_to")
 })
 
 var DeniedClient = Type("ConnectionDeniedClient", func() {

@@ -139,8 +139,12 @@ type GetSignInSummaryResponseBody struct {
 type GetSessionActivityResponseBody struct {
 	Days      []*ConnectionSessionDayResponseBody `form:"days" json:"days" xml:"days"`
 	ActiveNow int64                               `form:"active_now" json:"active_now" xml:"active_now"`
-	// Mean length of sessions that ended in the range.
-	AverageSessionSeconds    *int64 `form:"average_session_seconds,omitempty" json:"average_session_seconds,omitempty" xml:"average_session_seconds,omitempty"`
+	// Mean length of sessions that ended in the average window.
+	AverageSessionSeconds *int64 `form:"average_session_seconds,omitempty" json:"average_session_seconds,omitempty" xml:"average_session_seconds,omitempty"`
+	// Start of the window the average covers: 30 days before now.
+	AverageWindowFrom string `form:"average_window_from" json:"average_window_from" xml:"average_window_from"`
+	// End of the window the average covers: now.
+	AverageWindowTo          string `form:"average_window_to" json:"average_window_to" xml:"average_window_to"`
 	ConfiguredSessionSeconds int64  `form:"configured_session_seconds" json:"configured_session_seconds" xml:"configured_session_seconds"`
 }
 
@@ -1564,6 +1568,8 @@ func NewGetSessionActivityResponseBody(res *mcpconnectionhealth.ConnectionSessio
 	body := &GetSessionActivityResponseBody{
 		ActiveNow:                res.ActiveNow,
 		AverageSessionSeconds:    res.AverageSessionSeconds,
+		AverageWindowFrom:        res.AverageWindowFrom,
+		AverageWindowTo:          res.AverageWindowTo,
 		ConfiguredSessionSeconds: res.ConfiguredSessionSeconds,
 	}
 	if res.Days != nil {

@@ -137,9 +137,13 @@ type GetSignInSummaryResponseBody struct {
 type GetSessionActivityResponseBody struct {
 	Days      []*ConnectionSessionDayResponseBody `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
 	ActiveNow *int64                              `form:"active_now,omitempty" json:"active_now,omitempty" xml:"active_now,omitempty"`
-	// Mean length of sessions that ended in the range.
-	AverageSessionSeconds    *int64 `form:"average_session_seconds,omitempty" json:"average_session_seconds,omitempty" xml:"average_session_seconds,omitempty"`
-	ConfiguredSessionSeconds *int64 `form:"configured_session_seconds,omitempty" json:"configured_session_seconds,omitempty" xml:"configured_session_seconds,omitempty"`
+	// Mean length of sessions that ended in the average window.
+	AverageSessionSeconds *int64 `form:"average_session_seconds,omitempty" json:"average_session_seconds,omitempty" xml:"average_session_seconds,omitempty"`
+	// Start of the window the average covers: 30 days before now.
+	AverageWindowFrom *string `form:"average_window_from,omitempty" json:"average_window_from,omitempty" xml:"average_window_from,omitempty"`
+	// End of the window the average covers: now.
+	AverageWindowTo          *string `form:"average_window_to,omitempty" json:"average_window_to,omitempty" xml:"average_window_to,omitempty"`
+	ConfiguredSessionSeconds *int64  `form:"configured_session_seconds,omitempty" json:"configured_session_seconds,omitempty" xml:"configured_session_seconds,omitempty"`
 }
 
 // ListDeniedClientsResponseBody is the type of the "mcpConnectionHealth"
@@ -2245,6 +2249,8 @@ func NewGetSessionActivityConnectionSessionActivityResultOK(body *GetSessionActi
 	v := &mcpconnectionhealth.ConnectionSessionActivityResult{
 		ActiveNow:                *body.ActiveNow,
 		AverageSessionSeconds:    body.AverageSessionSeconds,
+		AverageWindowFrom:        *body.AverageWindowFrom,
+		AverageWindowTo:          *body.AverageWindowTo,
 		ConfiguredSessionSeconds: *body.ConfiguredSessionSeconds,
 	}
 	v.Days = make([]*mcpconnectionhealth.ConnectionSessionDay, len(body.Days))
@@ -2690,12 +2696,24 @@ func ValidateGetSessionActivityResponseBody(body *GetSessionActivityResponseBody
 	if body.ConfiguredSessionSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("configured_session_seconds", "body"))
 	}
+	if body.AverageWindowFrom == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("average_window_from", "body"))
+	}
+	if body.AverageWindowTo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("average_window_to", "body"))
+	}
 	for _, e := range body.Days {
 		if e != nil {
 			if err2 := ValidateConnectionSessionDayResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	if body.AverageWindowFrom != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.average_window_from", *body.AverageWindowFrom, goa.FormatDateTime))
+	}
+	if body.AverageWindowTo != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.average_window_to", *body.AverageWindowTo, goa.FormatDateTime))
 	}
 	return
 }

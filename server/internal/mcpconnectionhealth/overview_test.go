@@ -81,4 +81,19 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	require.Equal(t, int64(2), res.Days[len(res.Days)-1].ActiveSessions)
 	require.Equal(t, int64(0), res.Days[0].ActiveSessions)
 	require.NotNil(t, res.AverageSessionSeconds)
+
+	// The average looks at the last 30 days whatever range the chart shows.
+	older, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
+		UserSessionIssuerID: ti.issuer.String(),
+		From:                ti.now.Add(-10 * 24 * time.Hour).Format(time.RFC3339),
+		To:                  ti.now.Add(-9 * 24 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, older.AverageSessionSeconds)
+	from, err := time.Parse(time.RFC3339, older.AverageWindowFrom)
+	require.NoError(t, err)
+	to, err := time.Parse(time.RFC3339, older.AverageWindowTo)
+	require.NoError(t, err)
+	require.Equal(t, 30*24*time.Hour, to.Sub(from))
+	require.WithinDuration(t, time.Now(), to, time.Minute)
 }

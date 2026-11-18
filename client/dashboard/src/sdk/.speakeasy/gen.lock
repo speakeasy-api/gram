@@ -8199,7 +8199,7 @@ examples:
         application/json: {"from": "2026-07-30T06:08:16.229Z", "to": "2026-11-10T06:48:53.978Z", "user_session_issuer_id": "5e06e966-8bb1-4784-971f-0168313f1d56"}
       responses:
         "200":
-          application/json: {"active_now": 144566, "configured_session_seconds": 147265, "days": [{"active_sessions": 24401, "day": "<value>"}]}
+          application/json: {"active_now": 144566, "average_window_from": "2026-07-30T06:08:16.229Z", "average_window_to": "2026-11-10T06:48:53.978Z", "configured_session_seconds": 147265, "days": [{"active_sessions": 24401, "day": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
