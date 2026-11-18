@@ -87,7 +87,7 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 		}
 	}
 
-	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct // default transaction options
+	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct_v5 // default transaction options
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
@@ -243,7 +243,7 @@ func (s *Service) revokeSignedOutSignIn(ctx context.Context, sessionID string, a
 
 func (s *Service) revokeSignedOutOnce(ctx context.Context, organizationIDs []string, workosSessionID string, authCtx *contextvalues.AuthContext) (signins.SignedOut, error) {
 	var none signins.SignedOut
-	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct // default transaction options
+	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct_v5 // default transaction options
 	if err != nil {
 		return none, fmt.Errorf("begin: %w", err)
 	}

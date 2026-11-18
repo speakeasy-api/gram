@@ -928,3 +928,72 @@ func requireValue[T any](t *testing.T, value *T) T {
 	require.NotNil(t, value)
 	return *value
 }
+
+// signInServer is an MCP server whose sign-in provider lives on the same
+// host and advertises the registration methods given.
+func signInServer(t *testing.T, dcr bool, cimd bool) *httptest.Server {
+	t.Helper()
+	var base string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Add("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, base))
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": base + "/mcp", "authorization_servers": []string{base}})
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
+		doc := map[string]any{
+			"issuer":                                base,
+			"authorization_endpoint":                base + "/authorize",
+			"token_endpoint":                        base + "/token",
+			"response_types_supported":              []string{"code"},
+			"code_challenge_methods_supported":      []string{"S256"},
+			"token_endpoint_auth_methods_supported": []string{"none"},
+		}
+		if dcr {
+			doc["registration_endpoint"] = base + "/register"
+		}
+		if cimd {
+			doc["client_id_metadata_document_supported"] = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	})
+	server := httptest.NewServer(mux)
+	base = server.URL
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestProbeURL_ReportsHowSignInCanBeSetUp(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		dcr  bool
+		cimd bool
+		want string
+	}{
+		{name: "dynamic client registration", dcr: true, cimd: false, want: "dcr"},
+		{name: "client ID metadata document", dcr: false, cimd: true, want: "cimd"},
+		{name: "neither", dcr: false, cimd: false, want: "manual"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestServiceForProbe(t)
+			upstream := signInServer(t, tc.dcr, tc.cimd)
+
+			result, err := ti.service.ProbeURL(ctx, &gen.ProbeURLPayload{
+				URL:              upstream.URL + "/mcp",
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+			})
+			require.NoError(t, err)
+			require.Equal(t, remotemcp.ProbeOutcomeAuthenticationRequired, result.Outcome)
+			require.Equal(t, tc.want, requireValue(t, result.SignInSetup))
+		})
+	}
+}

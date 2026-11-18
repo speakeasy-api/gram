@@ -15,6 +15,16 @@ import { useEffect, useMemo, useState } from "react";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { cn } from "@/lib/utils";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { useRoutes } from "@/routes";
+import { useNavigate } from "react-router";
+import {
+  canMakeShadowMCPServerOfficial,
+  SHADOW_MCP_OFFICIAL_STATE_LABEL,
+  shadowMCPOfficialServerDescription,
+  shadowMCPOfficialState,
+  shadowMCPMakeOfficialHref,
+} from "./shadowMCPOfficialServer";
 import {
   type DecideAccessTarget,
   DecideAccessSheet,
@@ -70,6 +80,24 @@ const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
 function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
+
+  // An onboarded server has left the triage queue: the organization serves
+  // it now, which says more than the access verdict on the direct URL. A
+  // pending request still wins, because someone is waiting on an answer.
+  const officialState = shadowMCPOfficialState(server, status === "pending");
+  if (officialState) {
+    return (
+      <SimpleTooltip tooltip={shadowMCPOfficialServerDescription(server)}>
+        <span tabIndex={0} className="inline-flex cursor-help">
+          <Badge variant="success">
+            <Badge.Text>
+              {SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]}
+            </Badge.Text>
+          </Badge>
+        </span>
+      </SimpleTooltip>
+    );
+  }
 
   // The badge is the verdict; the description is the mechanism behind it,
   // which a one-word badge cannot carry. "Restricted" covers five different
@@ -147,9 +175,11 @@ export function ShadowMCPInventoryTable({
     ? POLICIES_UNAVAILABLE_REASON
     : undefined;
   const [search, setSearch] = useState("");
+  // Most used first: the servers many people rely on are the ones worth
+  // making official, and the ones a block would hurt most.
   const [sort, setSort] = useState<SortDescriptor | null>({
-    id: "review",
-    direction: "asc",
+    id: "usage",
+    direction: "desc",
   });
   const [decideTarget, setDecideTarget] = useState<DecideAccessTarget | null>(
     null,
@@ -161,6 +191,8 @@ export function ShadowMCPInventoryTable({
   const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(INVENTORY_FILTERS);
+  const routes = useRoutes();
+  const navigate = useNavigate();
 
   useEffect(() => {
     setPaginationScope(inventoryScope);
@@ -263,6 +295,41 @@ export function ShadowMCPInventoryTable({
     });
   };
 
+  // One action per row leads to the official server: open it when it
+  // exists, start making it when it can exist. A local command has no URL
+  // to serve, so it gets neither.
+  const officialServerActions = (server: ShadowMCPInventoryServer) => {
+    const official = server.officialServer;
+    if (official) {
+      return [
+        {
+          label: "Open official server",
+          onClick: () =>
+            void navigate(
+              routes.mcp.details.overview.href(
+                mcpServerRouteParam({
+                  id: official.mcpServerId,
+                  slug: official.slug,
+                }),
+              ),
+            ),
+        },
+      ];
+    }
+    if (!canMakeShadowMCPServerOfficial(server)) return [];
+    return [
+      {
+        label: "Make official",
+        onClick: () =>
+          void navigate(
+            shadowMCPMakeOfficialHref(
+              routes.shadowAI.mcps.detail.href(server.serverSlug),
+            ),
+          ),
+      },
+    ];
+  };
+
   const columns: Column<ShadowMCPInventoryServer>[] = [
     {
       key: "server",
@@ -279,8 +346,16 @@ export function ShadowMCPInventoryTable({
       key: "status",
       header: "Status",
       sortable: true,
-      sortValue: (server) =>
-        shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server)),
+      sortValue: (server) => {
+        const status = shadowMCPInventoryStatus(server);
+        const officialState = shadowMCPOfficialState(
+          server,
+          status === "pending",
+        );
+        return officialState
+          ? SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]
+          : shadowMCPInventoryStatusLabel(status);
+      },
       width: "0.9fr",
       render: (server) =>
         server.targetKind === "stdio_command" ? (
@@ -490,6 +565,7 @@ export function ShadowMCPInventoryTable({
                   disabled: policiesUnavailable,
                   description: decideDisabledReason,
                 },
+                ...officialServerActions(row),
               ]}
             >
               {rowElement}

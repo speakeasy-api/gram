@@ -8,6 +8,7 @@ import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 import { useActionCandidates } from "./useActionCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
 import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
@@ -31,6 +32,7 @@ import {
   type ResourceSearchMetrics,
   useResourceSearchCandidates,
 } from "./useResourceSearchCandidates";
+import { useShadowMCPServerCandidates } from "./useShadowMCPServerCandidates";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
@@ -112,7 +114,11 @@ export function useLauncherCandidates({
   // mcp:write-only reader would pass that one and then have the request
   // refused. Named on the project, as the server checks it.
   const canBrowseCatalog = hasScope("project:read", project.id);
-  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
+  // Assistants are hidden across a deployment that does not run them, so
+  // neither the assistant list nor indexed assistant results are offered.
+  const assistantsAvailable = useAssistantsAvailable();
+  const canReadAssistants =
+    assistantsAvailable && hasScope("assistant:read", undefined, project.id);
 
   const canReadSkills = hasScope("skill:read", project.id);
 
@@ -219,6 +225,11 @@ export function useLauncherCandidates({
   const people = usePersonCandidates({
     enabled: remoteCandidatesEnabled && !inProject && canReadPeople,
   });
+  // Not in the remote index, so it stays a local inventory, deferred to the
+  // same eligible query as the other remote candidates.
+  const shadowMCPServers = useShadowMCPServerCandidates({
+    enabled: projectRemoteCandidatesEnabled && canReadApprovals,
+  });
   const devices = useManagedDeviceCandidates({
     enabled: remoteCandidatesEnabled && canReadDevices,
   });
@@ -234,6 +245,7 @@ export function useLauncherCandidates({
       mcpServers.map((candidate) => candidate.id.replace(/^mcp:/, "")),
     );
     const indexedCandidates = resourceSearch.candidates.filter((candidate) => {
+      if (candidate.kind === "assistant") return assistantsAvailable;
       if (candidate.kind !== "mcp_server") return true;
       const identity = candidate.resourceIdentity;
       return (
@@ -266,6 +278,7 @@ export function useLauncherCandidates({
       ...adminOnly(builtinRules),
       ...(fallback("rule") ? adminOnly(rules) : []),
       ...(inProject && canReadApprovals ? accessRequests : []),
+      ...(inProject && canReadApprovals ? shadowMCPServers : []),
       ...(!inProject && canReadPeople ? people : []),
       ...(canReadDevices ? devices : []),
       ...projects,
@@ -281,6 +294,7 @@ export function useLauncherCandidates({
     canListPlugins,
     canBrowseCatalog,
     canReadAssistants,
+    assistantsAvailable,
     canReadSkills,
     resourceSearch.candidates,
     fallback,
@@ -304,6 +318,7 @@ export function useLauncherCandidates({
     rules,
     builtinRules,
     accessRequests,
+    shadowMCPServers,
     people,
     devices,
     projects,

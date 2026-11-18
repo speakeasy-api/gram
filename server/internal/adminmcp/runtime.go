@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK options intentionally use documented optional defaults.
+//nolint:exhaustruct_v5 // MCP SDK options intentionally use documented optional defaults.
 package adminmcp
 
 import (

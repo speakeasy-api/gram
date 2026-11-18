@@ -1995,7 +1995,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		s.logger.WarnContext(ctx, "invite callback: failed to invalidate user info cache", attr.SlogError(err))
 	}
 
-	//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
+	//nolint:exhaustruct_v5 // only desired fields — avoid unexpected zero-value behavior
 	http.SetCookie(w, &http.Cookie{
 		Name:     constants.SessionCookie,
 		Value:    sessionID,

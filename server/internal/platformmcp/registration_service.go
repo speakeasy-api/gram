@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Service defaults use optional zero values and preserve typed persistence errors.
+//nolint:exhaustruct_v5,wrapcheck // Service defaults use optional zero values and preserve typed persistence errors.
 package platformmcp
 
 import (

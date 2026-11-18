@@ -1279,6 +1279,28 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// can't enforce the policy — deny with a retry-or-restart message so the
 	// user knows the guard is fail-closed rather than silently allowing.
 	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
+	// The built-in blocklist (a project without a blocking policy, so no
+	// policy ID) allows servers until an administrator denies one. Without
+	// the list there is no server to match, and failing closed would block
+	// every MCP call in projects that never chose to block anything.
+	if cacheErr != nil && policy.ID == "" {
+		s.logger.With(
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(metadata.ProjectID),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+		).InfoContext(ctx, "allowing claude tool call: no cached MCP list under the built-in blocklist",
+			attr.SlogEvent("claude_hook_allowed_no_mcp_list"),
+			attr.SlogError(cacheErr),
+			attr.SlogRiskPolicyName(policy.Name),
+		)
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
 	if cacheErr != nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
@@ -1340,6 +1362,19 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			evidence.ServerIdentity = matched.Command
 		}
 	}
+	// Onboarding takes effect at once: a server the project serves an
+	// official version of is blocked for direct use whatever the policy's
+	// default, and no bypass grant on the direct URL lifts it, unless an
+	// administrator kept direct connections working. A Speakeasy-hosted URL
+	// is never the direct connection.
+	hasOfficialServer := false
+	if matched != nil && matched.URL != "" {
+		if official, ok := s.shadowMCPOfficialServer(ctx, metadata.GramOrgID, metadata.ProjectID, matched.URL); ok && !official.DirectAccessAllowed &&
+			!s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
+			hasOfficialServer = true
+			detail = shadowMCPOfficialServerDetail(official, matched.URL)
+		}
+	}
 	// A non-empty detail means this call is blocked. Return immediately for
 	// clean allows; otherwise give a URL-scoped bypass grant a chance to allow
 	// the call before recording and returning the block below.
@@ -1352,7 +1387,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	// Bypass grants are a block_all concept: under allow-all the blocked-list
 	// membership above is the whole check.
-	if !policy.IsAllowAll() {
+	if !policy.IsAllowAll() && !hasOfficialServer {
 		if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
 			matchedURL, matchedCommand := "", ""
 			if matched != nil {
@@ -1526,6 +1561,12 @@ func (s *Service) recordShadowMCPBlockFinding(
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
 	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
+		return uuid.Nil, uuid.Nil, false
+	}
+	// The built-in blocklist has no policy row, so there is no risk result to
+	// attach the block to. The ClickHouse record and the durable block row
+	// still capture it.
+	if policy.ID == "" {
 		return uuid.Nil, uuid.Nil, false
 	}
 

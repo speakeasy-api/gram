@@ -265,20 +265,20 @@ type ClientChoice struct {
 
 // LinkClient binds a stored client of the plan's provider.
 func LinkClient(id uuid.UUID) ClientChoice {
-	return ClientChoice{kind: clientLink, linkID: id, credentials: ClientCredentials{}, policy: RegistrationPolicy{}} //nolint:exhaustruct // Unused for a linked client.
+	return ClientChoice{kind: clientLink, linkID: id, credentials: ClientCredentials{}, policy: RegistrationPolicy{}} //nolint:exhaustruct_v5 // Unused for a linked client.
 }
 
 // ManualClient creates a client from credentials the provider issued out of
 // band.
 func ManualClient(credentials ClientCredentials) ClientChoice {
-	return ClientChoice{kind: clientManual, linkID: uuid.Nil, credentials: credentials, policy: RegistrationPolicy{}} //nolint:exhaustruct // Unused for a manual client.
+	return ClientChoice{kind: clientManual, linkID: uuid.Nil, credentials: credentials, policy: RegistrationPolicy{}} //nolint:exhaustruct_v5 // Unused for a manual client.
 }
 
 // RegisterClient obtains a client from the provider: a Speakeasy-hosted Client ID
 // Metadata Document when the policy allows one and the provider supports it,
 // otherwise dynamic client registration.
 func RegisterClient(policy RegistrationPolicy) ClientChoice {
-	return ClientChoice{kind: clientRegister, linkID: uuid.Nil, credentials: ClientCredentials{}, policy: policy} //nolint:exhaustruct // Registration fills the credentials.
+	return ClientChoice{kind: clientRegister, linkID: uuid.Nil, credentials: ClientCredentials{}, policy: policy} //nolint:exhaustruct_v5 // Registration fills the credentials.
 }
 
 // keep is the client a commit links again and therefore never unbinds.
@@ -641,7 +641,7 @@ func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
 	if err := c.readProvider(ctx, repo.New(c.committer.db)); err != nil {
 		return Registration{}, err
 	}
-	reg := Registration{Method: "", Provider: c.provider, ManualSetupRequired: false, Failure: nil, credentials: ClientCredentials{}} //nolint:exhaustruct // Filled per client choice below.
+	reg := Registration{Method: "", Provider: c.provider, ManualSetupRequired: false, Failure: nil, credentials: ClientCredentials{}} //nolint:exhaustruct_v5 // Filled per client choice below.
 	switch {
 	case c.reusable:
 		// ReuseBound keeps the bound client; registering another would leave
@@ -799,7 +799,7 @@ func issuerLevelResource() ResourceScopes {
 // issuerRegistrationScope is what a login with no client scope requests from
 // an issuer with these settings.
 func issuerRegistrationScope(supported, override []string, omitFallback pgtype.Bool, resource ResourceScopes) []string {
-	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+	login := Client{ //nolint:exhaustruct_v5 // Only scope inputs are used by RequestedScopes.
 		IssuerScopesSupported:   supported,
 		IssuerScopeOverride:     override,
 		IssuerOmitScopeFallback: omitFallback.Valid && omitFallback.Bool,
