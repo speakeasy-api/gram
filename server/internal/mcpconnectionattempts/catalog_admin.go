@@ -122,4 +122,6 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeUpstreamCredentialNotChosen:      {"The server has more than one sign-in for the service, and the request did not name one.", ""},
 	CodeSignInMethodNotAccepted:          {"This server does not accept assistant sign-ins of this kind.", "Assistant client-credentials tokens are not issued for this endpoint (an organization gateway, or assistant tokens not enabled)."},
 	CodeCredentialChoiceInvalid:          {"The sign-in the request chose does not fit this server.", ""},
+	CodeAddressNotAllowed:                {"This server or its sign-in uses a private or internal address that Speakeasy does not connect to.", ""},
+	CodeAddressNotFound:                  {"The address for this server or its sign-in does not exist.", ""},
 }
