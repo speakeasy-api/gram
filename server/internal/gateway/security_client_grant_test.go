@@ -47,8 +47,8 @@ var machineSecurity = &HTTPToolSecurity{
 
 // clientGrantMessages pins each failure's exact text; both address failures read the same.
 var clientGrantMessages = map[toolconfig.ClientGrantFailure]string{
-	toolconfig.ClientGrantUnavailable:     "This tool couldn't sign in: its sign-in service didn't answer or had an error. Try again in a few minutes. If it keeps happening, ask your administrator.",
-	toolconfig.ClientGrantRejected:        "This tool couldn't sign in: the service rejected its sign-in details. If you didn't set them yourself, ask your administrator to update them.",
+	toolconfig.ClientGrantUnavailable:     "This tool couldn't sign in: its sign-in service didn't answer or had an error. If it keeps happening and you didn't set its sign-in address yourself, ask your administrator.",
+	toolconfig.ClientGrantRejected:        "This tool couldn't sign in: its sign-in service refused the request. If you didn't set its sign-in details yourself, ask your administrator to check the tool's sign-in setup.",
 	toolconfig.ClientGrantBlocked:         "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",
 	toolconfig.ClientGrantAddressNotFound: "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it.",
 	toolconfig.ClientGrantMisconfigured:   "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. If you didn't set this tool up yourself, ask your administrator to check its sign-in address.",
@@ -87,6 +87,8 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 		{name: "redirect to a blocked address keeps its old reading", tokenURL: redirectToBlocked.URL, options: []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")}, want: toolconfig.ClientGrantMisconfigured},
 		{name: "refused", tokenURL: answering(http.StatusUnauthorized), want: toolconfig.ClientGrantRejected},
 		{name: "server error", tokenURL: answering(http.StatusInternalServerError), want: toolconfig.ClientGrantUnavailable},
+		{name: "rate limited", tokenURL: answering(http.StatusTooManyRequests), want: toolconfig.ClientGrantUnavailable},
+		{name: "bad request", tokenURL: answering(http.StatusBadRequest), want: toolconfig.ClientGrantRejected},
 		{name: "down", tokenURL: down.URL, want: toolconfig.ClientGrantUnavailable},
 		{name: "wrong url", tokenURL: answering(http.StatusNotFound), want: toolconfig.ClientGrantMisconfigured},
 		{name: "blocked address", tokenURL: answering(http.StatusOK), blocking: true, want: toolconfig.ClientGrantBlocked},

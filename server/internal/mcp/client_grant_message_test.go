@@ -180,8 +180,8 @@ func TestClientGrantFailureMessage(t *testing.T) {
 	}
 
 	const (
-		unavailable   = "This tool couldn't sign in: its sign-in service didn't answer or had an error. Try again in a few minutes. If it keeps happening, ask your administrator."
-		rejected      = "This tool couldn't sign in: the service rejected its sign-in details. If you didn't set them yourself, ask your administrator to update them."
+		unavailable   = "This tool couldn't sign in: its sign-in service didn't answer or had an error. If it keeps happening and you didn't set its sign-in address yourself, ask your administrator."
+		rejected      = "This tool couldn't sign in: its sign-in service refused the request. If you didn't set its sign-in details yourself, ask your administrator to check the tool's sign-in setup."
 		address       = "This tool couldn't sign in: its sign-in address can't be used. If you didn't set it yourself, ask your administrator to check it."
 		misconfigured = "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. If you didn't set this tool up yourself, ask your administrator to check its sign-in address."
 	)
