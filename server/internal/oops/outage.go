@@ -118,7 +118,7 @@ func answerOutage(ctx context.Context, logger *slog.Logger, w http.ResponseWrite
 		err = E(CodeUnavailable, err, "%s", outageMessage).LogError(ctx, logger)
 		shareable, isShareable = errors.AsType[*ShareableError](err)
 	}
-	if isShareable && shareable.Code == CodeUnavailable && w.Header().Get("Retry-After") == "" {
+	if isShareable && shareable.Code == CodeUnavailable && !shareable.unpaced && w.Header().Get("Retry-After") == "" {
 		w.Header().Set("Retry-After", strconv.Itoa(int(OutageRetryAfter.Seconds())))
 	}
 	return err
