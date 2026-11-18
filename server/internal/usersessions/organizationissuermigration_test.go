@@ -578,7 +578,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	// merge moves only live connections, so this attachment stays behind and
 	// leaves with the source's client bindings instead of aborting the merge.
 	staleSubject := urn.NewUserSubject("remote-migrate-stale-user")
-	staleSession, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	staleSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            staleSubject,
 		UserSessionIssuerID:   sourceID,
 		RemoteSessionClientID: remoteClient.ID,
@@ -708,7 +708,7 @@ func TestOrganizationUserSessionIssuerMigrateRefusesAttachmentsOnDifferentLogins
 	fixtures := testrepo.New(ti.conn)
 	bindingIDs := map[uuid.UUID]uuid.UUID{}
 	for issuerID, person := range map[uuid.UUID]string{sourceID: "different-logins-first", targetID: "different-logins-second"} {
-		login, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		login, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            urn.NewUserSubject(person),
 			UserSessionIssuerID:   issuerID,
 			RemoteSessionClientID: clientID,

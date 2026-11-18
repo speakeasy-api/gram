@@ -183,7 +183,7 @@ func TestResolveAccessTokens_LoginMadeThroughAnotherIssuerBoundToTheClient(t *te
 			subject := urn.NewUserSubject(tc.subject)
 			accessEnc, err := enc.Encrypt([]byte(tc.want))
 			require.NoError(t, err)
-			session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+			session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 				SubjectUrn:            subject,
 				UserSessionIssuerID:   tc.loginThrough,
 				RemoteSessionClientID: clientID,
@@ -238,7 +238,7 @@ func TestResolveOrganizationGatewayTokens_LoginMadeThroughAnotherIssuerBoundToTh
 			subject := urn.NewUserSubject(tc.subject)
 			accessEnc, err := enc.Encrypt([]byte(tc.want))
 			require.NoError(t, err)
-			session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+			session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 				SubjectUrn:            subject,
 				UserSessionIssuerID:   tc.loginThrough,
 				RemoteSessionClientID: clientID,
