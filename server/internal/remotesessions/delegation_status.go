@@ -129,7 +129,7 @@ func delegationRegistrationUsable(client repo.RemoteSessionClient, now time.Time
 		return false
 	}
 	secret := ""
-	if client.ClientSecretEncrypted.Valid && client.ClientSecretEncrypted.String != "" {
+	if hasNonEmptyClientSecret(client) {
 		secret = "present"
 	}
 	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)

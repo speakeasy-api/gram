@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Local fixture state initializes only its selected backing store.
+//nolint:exhaustruct_v5 // Local fixture state initializes only its selected backing store.
 package localfixture
 
 import (

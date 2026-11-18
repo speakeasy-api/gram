@@ -36,7 +36,11 @@ import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import ProjectIdentityRedirect from "./pages/org/ProjectIdentityRedirect";
-import UserSessions from "./pages/org/UserSessions";
+import McpSessionsIndex, {
+  LegacyMcpSessionsConfiguration,
+  LegacyMcpSessionsProviderDetail,
+} from "./pages/mcp-sessions/McpSessionsIndex";
+import McpSessionsProvider from "./pages/mcp-sessions/McpSessionsProvider";
 import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
@@ -130,14 +134,7 @@ import {
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
 import { SyncFromOkta } from "./pages/mcp/sync-from-okta/SyncFromOkta";
-import {
-  McpSessionsConfiguration,
-  McpSessionsProviderDetail,
-} from "./pages/user-session-issuers/McpSessionsConfiguration";
-import {
-  UserSessionIssuersPage,
-  UserSessionIssuersRoot,
-} from "./pages/user-session-issuers/UserSessionIssuers";
+import { UserSessionIssuersPage } from "./pages/user-session-issuers/UserSessionIssuers";
 import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
@@ -169,6 +166,7 @@ import {
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
+import ShadowMCP from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
@@ -428,14 +426,22 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   mcpSessions: {
     component: Outlet,
-    indexComponent: UserSessions,
+    indexComponent: McpSessionsIndex,
     subPages: {
+      provider: {
+        component: McpSessionsProvider,
+        subPages: {
+          connections: {},
+          mcpServers: {},
+          settings: {},
+        },
+      },
       configuration: {
-        component: UserSessionIssuersRoot,
-        indexComponent: McpSessionsConfiguration,
+        component: Outlet,
+        indexComponent: LegacyMcpSessionsConfiguration,
         subPages: {
           issuerDetail: {
-            component: McpSessionsProviderDetail,
+            component: LegacyMcpSessionsProviderDetail,
           },
         },
       },
@@ -653,7 +659,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   shadowMCP: {
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPIndexRedirect,
+    indexComponent: ShadowMCP,
     subPages: {
       detail: {
         component: ShadowMCPServerLegacyRedirect,
@@ -743,7 +749,7 @@ const ORG_ROUTE_PAGES: PageTree<OrgRouteStructure> = {
     component: OrgWebhooks,
   },
   userSessionIssuers: {
-    component: UserSessionIssuersRoot,
+    component: Outlet,
     indexComponent: UserSessionIssuersPage,
     subPages: {
       issuerDetail: {

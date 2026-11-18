@@ -800,6 +800,7 @@ sql:
   - schema: [schema.sql, sqlc_retired_columns.sql]
     queries:
       - ../internal/remotesessions/queries.sql
+      - ../internal/remotesessions/clientsecret_queries.sql
       - ../internal/remotesessions/preparation_fixture_queries.sql
       - ../internal/remotesessions/locking_fixture_queries.sql
     engine: postgresql
@@ -929,6 +930,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/unproxiedmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/shadowmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/shadowmcp/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

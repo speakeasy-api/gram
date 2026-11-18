@@ -199,7 +199,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if err != nil {
 		return nil, err
 	}
-	return detailed.Result, nil
+	return s.withVersionStatus(ctx, detailed.Result), nil
 }
 
 func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *AuthenticatedIngestResult, err error) {
@@ -305,6 +305,16 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		// cached copy refreshes on this exchange like any other.
 		if !s.isHookDuplicate(ctx) {
 			s.recordDeliveryFailure(context.WithoutCancel(ctx), payload, authCtx, actor, replayed)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+
+	if isInstallFailureReport(payload) {
+		if !s.isHookDuplicate(ctx) {
+			s.recordInstallFailure(context.WithoutCancel(ctx), payload, authCtx, actor)
 		}
 		return &AuthenticatedIngestResult{
 			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
@@ -651,7 +661,10 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return validateDeliveryFailurePayload(payload)
+	if err := validateDeliveryFailurePayload(payload); err != nil {
+		return err
+	}
+	return validateInstallFailurePayload(payload)
 }
 
 func isReservedServerAdapter(adapter string) bool {

@@ -18,26 +18,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
 	templateClientID     = "template-app"
-	templateSecretCipher = "ciphertext-of-the-template-secret"
+	templateSecret       = "the-template-secret"
 	templateCallbackBase = "https://auth.template.example.com"
 )
 
 // createTemplateClient stores a confidential personal sign-in client the way
 // an administrator registered it some time ago: with a secret, a callback
 // origin of its own, scopes and an audience.
-func createTemplateClient(t *testing.T, ctx context.Context, ti *testInstance, providerID uuid.UUID, mutate func(*repo.CreateRemoteSessionClientParams)) repo.RemoteSessionClient {
+func createTemplateClient(t *testing.T, ctx context.Context, ti *testInstance, providerID uuid.UUID, mutate func(*repo.CreateRemoteSessionClientFixtureParams)) repo.RemoteSessionClient {
 	t.Helper()
-	params := repo.CreateRemoteSessionClientParams{
+	params := repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(projectIDFromContext(t, ctx)),
 		OrganizationID:          conv.ToPGText(activeOrganizationID(t, ctx)),
 		RemoteSessionIssuerID:   providerID,
 		ClientID:                templateClientID,
-		ClientSecretEncrypted:   conv.ToPGText(templateSecretCipher),
+		ClientSecretEncrypted:   conv.ToPGText(encryptTestSecret(t, templateSecret)),
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC().Add(-48 * time.Hour)),
 		ClientSecretExpiresAt:   conv.ToPGTimestamptz(time.Now().UTC().Add(72 * time.Hour)),
 		TokenEndpointAuthMethod: conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodBasic)),
@@ -48,9 +49,26 @@ func createTemplateClient(t *testing.T, ctx context.Context, ti *testInstance, p
 	if mutate != nil {
 		mutate(&params)
 	}
-	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, params)
+	client, err := repo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, params)
 	require.NoError(t, err)
 	return client
+}
+
+// encryptTestSecret seals plaintext with the platform test key, as a secret
+// stored before organization encryption.
+func encryptTestSecret(t *testing.T, plaintext string) string {
+	t.Helper()
+	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte(plaintext))
+	require.NoError(t, err)
+	return ciphertext
+}
+
+// decryptTestSecret opens a platform-key secret copy.
+func decryptTestSecret(t *testing.T, ciphertext string) string {
+	t.Helper()
+	plaintext, err := testenv.NewEncryptionClient(t).Decrypt(ciphertext)
+	require.NoError(t, err)
+	return plaintext
 }
 
 func getStoredClient(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) repo.GetRemoteSessionClientByIDRow {
@@ -128,9 +146,10 @@ func TestCommitServerIdentityConfigurationFromTemplateCreatesIndependentClient(t
 	copied := getStoredClient(t, ctx, ti, copyID).RemoteSessionClient
 	require.Equal(t, templateClientID, copied.ClientID)
 	require.Equal(t, providerID, copied.RemoteSessionIssuerID)
-	// The secret moved between rows as ciphertext, with the registration's
-	// callback and lifecycle stamps.
-	require.Equal(t, templateSecretCipher, copied.ClientSecretEncrypted.String)
+	// The secret was opened and sealed again for the new row, with the
+	// registration's callback and lifecycle stamps.
+	require.Equal(t, templateSecret, decryptTestSecret(t, copied.ClientSecretEncrypted.String))
+	require.NotEqual(t, before.RemoteSessionClient.ClientSecretEncrypted, copied.ClientSecretEncrypted, "a ciphertext is never copied as stored")
 	require.Equal(t, templateCallbackBase, copied.CallbackBaseUrl.String)
 	require.Equal(t, before.RemoteSessionClient.ClientIDIssuedAt, copied.ClientIDIssuedAt)
 	require.Equal(t, before.RemoteSessionClient.ClientSecretExpiresAt, copied.ClientSecretExpiresAt)
@@ -183,13 +202,12 @@ func TestCommitServerIdentityConfigurationFromTemplateKeepsSuppliedSecret(t *tes
 	require.NoError(t, err)
 	copied := getStoredClient(t, ctx, ti, copyID).RemoteSessionClient
 	require.True(t, copied.ClientSecretEncrypted.Valid)
-	require.NotEqual(t, templateSecretCipher, copied.ClientSecretEncrypted.String)
-	require.NotEqual(t, "a-freshly-entered-secret", copied.ClientSecretEncrypted.String)
+	require.Equal(t, "a-freshly-entered-secret", decryptTestSecret(t, copied.ClientSecretEncrypted.String))
 	// The expiry described the template's secret, not the one entered now.
 	require.False(t, copied.ClientSecretExpiresAt.Valid)
 	// The registration is still the template's, so its callback is kept.
 	require.Equal(t, templateCallbackBase, copied.CallbackBaseUrl.String)
-	require.Equal(t, templateSecretCipher, getStoredClient(t, ctx, ti, template.ID).RemoteSessionClient.ClientSecretEncrypted.String)
+	require.Equal(t, templateSecret, decryptTestSecret(t, getStoredClient(t, ctx, ti, template.ID).RemoteSessionClient.ClientSecretEncrypted.String))
 }
 
 func TestCommitServerIdentityConfigurationRefusesUnusableTemplates(t *testing.T) {
@@ -219,21 +237,21 @@ func TestCommitServerIdentityConfigurationRefusesUnusableTemplates(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	serviceAccount := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientParams) {
+	serviceAccount := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientFixtureParams) {
 		p.CredentialOwner = conv.ToPGText(string(remotesessions.CredentialOwnerSelf))
 		p.GrantTypes = []string{"client_credentials"}
 	})
-	public := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientParams) {
+	public := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientFixtureParams) {
 		p.ClientSecretEncrypted = conv.ToPGTextEmpty("")
 		p.ClientSecretExpiresAt = conv.ToPGTimestamptz(time.Time{})
 		p.ClientSecretExpiresAt.Valid = false
 		p.TokenEndpointAuthMethod = conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodNone))
 	})
 
-	expired := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientParams) {
+	expired := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientFixtureParams) {
 		p.ClientSecretExpiresAt = conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Hour))
 	})
-	keySigned := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientParams) {
+	keySigned := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientFixtureParams) {
 		p.TokenEndpointAuthMethod = conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT))
 		p.JsonWebKeySetID = uuid.NullUUID{UUID: createJsonWebKeySet(t, ctx, ti.conn, organizationID, "refusal-key-set"), Valid: true}
 	})
@@ -351,7 +369,7 @@ func TestCommitServerIdentityConfigurationFromPublicTemplateCopiesNoSecret(t *te
 
 	ctx, ti := newTestService(t)
 	providerID := createServerIdentityProvider(t, ctx, ti, "public-template-provider", "", false, []string{"none"})
-	template := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientParams) {
+	template := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientFixtureParams) {
 		p.ClientSecretEncrypted = conv.ToPGTextEmpty("")
 		p.ClientSecretExpiresAt.Valid = false
 		p.TokenEndpointAuthMethod = conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodNone))
@@ -396,7 +414,7 @@ func TestCreateRemoteSessionClientFromTemplateCreatesStandaloneCopy(t *testing.T
 	copyID, err := uuid.Parse(created.ID)
 	require.NoError(t, err)
 	copied := getStoredClient(t, ctx, ti, copyID).RemoteSessionClient
-	require.Equal(t, templateSecretCipher, copied.ClientSecretEncrypted.String)
+	require.Equal(t, templateSecret, decryptTestSecret(t, copied.ClientSecretEncrypted.String))
 	require.Equal(t, templateCallbackBase, copied.CallbackBaseUrl.String)
 	require.Equal(t, []string{"repo"}, copied.Scope)
 	require.False(t, copied.Audience.Valid)

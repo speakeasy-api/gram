@@ -8,7 +8,6 @@ export const POLICY_CENTER_TABS = [
   "policies",
   "detection-rules",
   "shadow-ai-targets",
-  "mcp-approvals",
   "tool-approvals",
   "exclusions",
   "quarantines",
@@ -20,7 +19,6 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
   policies: "Policies",
   "detection-rules": "Detection Rules",
   "shadow-ai-targets": "Shadow AI targets",
-  "mcp-approvals": "MCP approvals",
   "tool-approvals": "Tool approvals",
   exclusions: "Exclusion Rules",
   quarantines: "Quarantines",
@@ -28,6 +26,12 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
 
 export function policyCenterTabLabel(tab: PolicyCenterTab): string {
   return TAB_LABEL[tab];
+}
+
+/** The MCP approvals tab moved to the Shadow MCP page. Slack, block
+ *  messages and bookmarks still carry its `?tab=` value. */
+export function movedToShadowMCP(tab: string | null): boolean {
+  return tab === "mcp-approvals";
 }
 
 /** The query string that selects a tab, for links that land on one from

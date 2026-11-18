@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Dynamic registration responses intentionally omit optional expiration values.
+//nolint:exhaustruct_v5 // Dynamic registration responses intentionally omit optional expiration values.
 package remotesessions
 
 import (

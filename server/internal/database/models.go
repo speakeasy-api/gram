@@ -1552,8 +1552,6 @@ type Chat struct {
 	SummaryRedacted bool
 	// @access: confidential
 	MemoryExcludedAt pgtype.Timestamptz
-	// @access: confidential
-	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
 	InferenceActorKey []byte
 	// @access: confidential
@@ -5644,6 +5642,8 @@ type Plugin struct {
 	// @access: confidential
 	AutoSyncEnabled pgtype.Bool
 	// @access: confidential
+	AutoAddServersEnabled bool
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -7051,6 +7051,31 @@ type SessionQuarantine struct {
 	ReleasedAt pgtype.Timestamptz
 	// @access: confidential
 	ReleasedBy pgtype.Text
+}
+
+type ShadowMcpOfficialServer struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	ServerUrl string
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	AllowDirectAccess bool
+	// @access: confidential
+	CreatedByUserID pgtype.Text
+	// @access: confidential
+	UpdatedByUserID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type SigintCustomSignal struct {

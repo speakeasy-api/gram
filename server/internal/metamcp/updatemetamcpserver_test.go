@@ -358,7 +358,7 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	client, err := rsRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := rsRepo.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(projectID),
 		OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   remoteIssuer.ID,

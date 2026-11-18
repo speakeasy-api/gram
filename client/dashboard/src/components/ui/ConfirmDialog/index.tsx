@@ -15,6 +15,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   pendingLabel = "Working…",
   onConfirm,
   isPending,
@@ -29,6 +30,8 @@ export function ConfirmDialog({
   title: string;
   description: React.ReactNode;
   confirmLabel: string;
+  // The button that backs out, when "Cancel" would misread ("Keep editing").
+  cancelLabel?: string;
   // Shown on the confirm button while the action runs. Name the action in
   // progress ("Deleting…") rather than leaving the generic default.
   pendingLabel?: string;
@@ -120,7 +123,7 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            <Button.Text>Cancel</Button.Text>
+            <Button.Text>{cancelLabel}</Button.Text>
           </Button>
           <Button
             variant={confirmVariant}

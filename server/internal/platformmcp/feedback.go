@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Optional feedback values use documented zero values.
+//nolint:exhaustruct_v5 // Optional feedback values use documented zero values.
 package platformmcp
 
 import (

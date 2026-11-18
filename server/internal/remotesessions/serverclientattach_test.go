@@ -131,7 +131,7 @@ func (f attachFixture) client(t *testing.T, ctx context.Context, slug string, us
 func (f attachFixture) clientOfProvider(t *testing.T, ctx context.Context, slug string, providerID, userIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	q := repo.New(f.ti.conn)
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(f.projectID),
 		OrganizationID:          conv.ToPGTextEmpty(f.orgID),
 		RemoteSessionIssuerID:   providerID,

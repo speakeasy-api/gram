@@ -903,7 +903,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.summary_redacted, c.memory_excluded_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.summary_redacted, c.memory_excluded_at, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   -- Name of the agent principal that produced the session (chats.agent_id,
   -- selected by c.*). Resolved live so a rename shows, and NULL for a deleted
@@ -929,40 +929,39 @@ type GetChatParams struct {
 }
 
 type GetChatRow struct {
-	SessionSurface              pgtype.Text
-	SlackTeamID                 pgtype.Text
-	SlackChannelID              pgtype.Text
-	SlackChannelName            pgtype.Text
-	ID                          uuid.UUID
-	ProjectID                   uuid.UUID
-	OrganizationID              string
-	UserID                      pgtype.Text
-	ExternalUserID              pgtype.Text
-	ExternalChatID              pgtype.Text
-	Title                       pgtype.Text
-	TitleManuallySet            bool
-	PinnedAt                    pgtype.Timestamptz
-	Summary                     pgtype.Text
-	SummaryGeneratedAt          pgtype.Timestamptz
-	SummaryRedacted             bool
-	MemoryExcludedAt            pgtype.Timestamptz
-	InferenceAcceptedCheckpoint []byte
-	InferenceActorKey           []byte
-	UserAccountID               uuid.NullUUID
-	LitellmProxied              bool
-	Cwd                         pgtype.Text
-	AgentID                     uuid.NullUUID
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
-	DeletedAt                   pgtype.Timestamptz
-	Deleted                     bool
-	AccountType                 string
-	AccountEmail                string
-	AssistantID                 uuid.NullUUID
-	AssistantName               pgtype.Text
-	AssistantAgentID            uuid.NullUUID
-	AgentName                   pgtype.Text
-	CapturedSurface             string
+	SessionSurface     pgtype.Text
+	SlackTeamID        pgtype.Text
+	SlackChannelID     pgtype.Text
+	SlackChannelName   pgtype.Text
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	UserID             pgtype.Text
+	ExternalUserID     pgtype.Text
+	ExternalChatID     pgtype.Text
+	Title              pgtype.Text
+	TitleManuallySet   bool
+	PinnedAt           pgtype.Timestamptz
+	Summary            pgtype.Text
+	SummaryGeneratedAt pgtype.Timestamptz
+	SummaryRedacted    bool
+	MemoryExcludedAt   pgtype.Timestamptz
+	InferenceActorKey  []byte
+	UserAccountID      uuid.NullUUID
+	LitellmProxied     bool
+	Cwd                pgtype.Text
+	AgentID            uuid.NullUUID
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+	AccountType        string
+	AccountEmail       string
+	AssistantID        uuid.NullUUID
+	AssistantName      pgtype.Text
+	AssistantAgentID   uuid.NullUUID
+	AgentName          pgtype.Text
+	CapturedSurface    string
 }
 
 // Loads a chat plus the team/personal classification of the AI account that
@@ -993,7 +992,6 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.SummaryGeneratedAt,
 		&i.SummaryRedacted,
 		&i.MemoryExcludedAt,
-		&i.InferenceAcceptedCheckpoint,
 		&i.InferenceActorKey,
 		&i.UserAccountID,
 		&i.LitellmProxied,
@@ -1162,35 +1160,41 @@ func (q *Queries) GetChatMessageStats(ctx context.Context, arg GetChatMessageSta
 }
 
 const getChatMetricsSummary = `-- name: GetChatMetricsSummary :one
-WITH chat_stats AS MATERIALIZED (
+WITH window_chats AS MATERIALIZED (
   SELECT
-    c.id as chat_id,
-    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms
-  FROM chats c
-  INNER JOIN chat_messages m ON m.chat_id = c.id
-  WHERE c.project_id = $1
-    AND c.deleted IS FALSE
+    m.chat_id,
+    MIN(m.created_at) AS first_message_at,
+    MAX(m.created_at) AS last_message_at
+  FROM chat_messages m
+  WHERE m.project_id = $1::uuid
     AND m.created_at >= $2
     AND m.created_at <= $3
-  GROUP BY c.id
+  GROUP BY m.chat_id
 ),
-latest_resolutions AS (
-  SELECT DISTINCT ON (cr.chat_id)
-    cr.chat_id,
-    cr.resolution
-  FROM chat_resolutions cr
-  INNER JOIN chat_stats cs ON cs.chat_id = cr.chat_id
-  WHERE cr.project_id = $1
-  ORDER BY cr.chat_id, cr.created_at DESC
+chat_stats AS (
+  SELECT
+    wc.chat_id,
+    EXTRACT(EPOCH FROM (wc.last_message_at - wc.first_message_at)) * 1000 AS duration_ms
+  FROM window_chats wc
+  INNER JOIN chats c ON c.id = wc.chat_id
+  WHERE c.project_id = $1::uuid
+    AND c.deleted IS FALSE
 )
 SELECT
   COUNT(*)::bigint as total_chats,
-  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
-  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolution.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolution.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
   COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
-  COALESCE(AVG(CASE WHEN COALESCE(latest_resolutions.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolution.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
 FROM chat_stats
-LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = chat_stats.chat_id
+LEFT JOIN LATERAL (
+  SELECT cr.resolution
+  FROM chat_resolutions cr
+  WHERE cr.chat_id = chat_stats.chat_id
+    AND cr.project_id = $1::uuid
+  ORDER BY cr.created_at DESC
+  LIMIT 1
+) latest_resolution ON TRUE
 `
 
 type GetChatMetricsSummaryParams struct {
@@ -1207,8 +1211,14 @@ type GetChatMetricsSummaryRow struct {
 	AvgResolutionTimeMs  float64
 }
 
-// Aggregate the requested chat window first so resolution selection does not
-// sort unrelated project history for empty or narrow windows.
+// Starts from the project's messages in the window, which
+// chat_messages_project_id_created_at_idx serves as a range scan, so this step
+// grows with the messages in the window rather than with the project's whole
+// chat history. The latest resolution is then one LIMIT 1 lookup per active
+// chat, which chat_resolutions_chat_id_created_at_idx serves as an index
+// probe. Unlike the join it replaces, this shape stays cheap when the planner
+// underestimates the window's rows, which happens when created_at statistics
+// lag behind recent inserts. Postgres still picks the access paths by cost.
 func (q *Queries) GetChatMetricsSummary(ctx context.Context, arg GetChatMetricsSummaryParams) (GetChatMetricsSummaryRow, error) {
 	row := q.db.QueryRow(ctx, getChatMetricsSummary, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
 	var i GetChatMetricsSummaryRow
@@ -4368,6 +4378,67 @@ func (q *Queries) RecordSlackMessageParticipant(ctx context.Context, arg RecordS
 		arg.MessageID,
 	)
 	return err
+}
+
+const referenceChatMetricsSummary = `-- name: ReferenceChatMetricsSummary :one
+WITH chat_stats AS MATERIALIZED (
+  SELECT
+    c.id as chat_id,
+    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms
+  FROM chats c
+  INNER JOIN chat_messages m ON m.chat_id = c.id
+  WHERE c.project_id = $1
+    AND c.deleted IS FALSE
+    AND m.created_at >= $2
+    AND m.created_at <= $3
+  GROUP BY c.id
+),
+latest_resolutions AS (
+  SELECT DISTINCT ON (cr.chat_id)
+    cr.chat_id,
+    cr.resolution
+  FROM chat_resolutions cr
+  INNER JOIN chat_stats cs ON cs.chat_id = cr.chat_id
+  WHERE cr.project_id = $1
+  ORDER BY cr.chat_id, cr.created_at DESC
+)
+SELECT
+  COUNT(*)::bigint as total_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolutions.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
+FROM chat_stats
+LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = chat_stats.chat_id
+`
+
+type ReferenceChatMetricsSummaryParams struct {
+	ProjectID uuid.UUID
+	TimeStart pgtype.Timestamptz
+	TimeEnd   pgtype.Timestamptz
+}
+
+type ReferenceChatMetricsSummaryRow struct {
+	TotalChats           int64
+	ResolvedChats        int64
+	FailedChats          int64
+	AvgSessionDurationMs float64
+	AvgResolutionTimeMs  float64
+}
+
+// Test fixture: the chats-first form GetChatMetricsSummary replaced. Tests
+// compare the two on the same data to show the rewrite keeps its results.
+func (q *Queries) ReferenceChatMetricsSummary(ctx context.Context, arg ReferenceChatMetricsSummaryParams) (ReferenceChatMetricsSummaryRow, error) {
+	row := q.db.QueryRow(ctx, referenceChatMetricsSummary, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
+	var i ReferenceChatMetricsSummaryRow
+	err := row.Scan(
+		&i.TotalChats,
+		&i.ResolvedChats,
+		&i.FailedChats,
+		&i.AvgSessionDurationMs,
+		&i.AvgResolutionTimeMs,
+	)
+	return i, err
 }
 
 const releaseToolCallSummaryLock = `-- name: ReleaseToolCallSummaryLock :exec

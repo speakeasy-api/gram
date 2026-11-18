@@ -25,6 +25,7 @@ import (
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -938,7 +939,7 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 			ti.conn,
 			gcpauth.NewIdentity(gcpauth.NewStubResolver()),
 			provisiontest.NewKMSClients(t).Factory,
-			audit.NewLogger(),
+			audit.NewLogger(), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)),
 			identityproviderconnections.Config{
 				KeyRing:               provisiontest.KeyRing,
 				SigningCredentialID:   uuid.New(),

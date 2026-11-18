@@ -14,6 +14,10 @@ export type ProductFeatures = {
    */
   aiPlatformPushIntegrationsEnabled: boolean;
   /**
+   * Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.
+   */
+  assistantsAvailable?: boolean | undefined;
+  /**
    * Whether authz challenge logging to ClickHouse is enabled
    */
   authzChallengeLoggingEnabled: boolean;
@@ -33,6 +37,10 @@ export type ProductFeatures = {
    * Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
    */
   deviceAgent: boolean;
+  /**
+   * Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.
+   */
+  functionsAvailable?: boolean | undefined;
   /**
    * Whether generated hook plugins may mint per-user keys via the interactive browser login
    */
@@ -114,11 +122,13 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     ai_platform_push_integrations_enabled: z.boolean(),
+    assistants_available: z.optional(z.boolean()),
     authz_challenge_logging_enabled: z.boolean(),
     code_mode_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
+    functions_available: z.optional(z.boolean()),
     hooks_browser_login_enabled: z.boolean(),
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
@@ -142,12 +152,14 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "ai_platform_push_integrations_enabled":
         "aiPlatformPushIntegrationsEnabled",
+      "assistants_available": "assistantsAvailable",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "code_mode_enabled": "codeModeEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "customer_managed_encryption_keys_enabled":
         "customerManagedEncryptionKeysEnabled",
       "device_agent": "deviceAgent",
+      "functions_available": "functionsAvailable",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
