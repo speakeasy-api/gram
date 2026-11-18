@@ -67,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/officiallink"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -693,7 +694,7 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
 	}
-	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB))
+	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB)).WithSettingsReads(config.DB)
 	reader.WithShadowInventory(shadowInventory)
 	return true
 }
@@ -1402,6 +1403,20 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Organization: ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionOrganizationLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		}
 		platformReader.WithShadowDecisions(platformmcp.NewShadowDecisionService(config.DB, shadowInventory, config.ShadowReview, pluginInventory, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), shadowDecisionBudget))
+		// The default access and official server writes share the decision
+		// tool's cohort and allowance, and the dashboard's policy and link
+		// write paths.
+		shadowInventory.WithSettingsReads(config.DB)
+		platformReader.WithShadowSettings(platformmcp.NewShadowMCPSettingsService(
+			config.DB,
+			shadowInventory,
+			pluginInventory,
+			risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
+			officiallink.NewWriter(config.AuditLogger),
+			config.FeatureFlags,
+			platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
+			shadowDecisionBudget,
+		))
 	}
 	// Outside the branch on purpose: the Shadow AI reads answer an
 	// organization-scoped question and share none of the Shadow MCP
