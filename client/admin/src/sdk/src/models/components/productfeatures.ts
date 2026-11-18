@@ -14,6 +14,10 @@ export type ProductFeatures = {
    */
   aiPlatformPushIntegrationsEnabled: boolean;
   /**
+   * Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.
+   */
+  assistantsAvailable?: boolean | undefined;
+  /**
    * Whether authz challenge logging to ClickHouse is enabled
    */
   authzChallengeLoggingEnabled: boolean;
@@ -114,6 +118,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     ai_platform_push_integrations_enabled: z.boolean(),
+    assistants_available: z.optional(z.boolean()),
     authz_challenge_logging_enabled: z.boolean(),
     code_mode_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
@@ -142,6 +147,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "ai_platform_push_integrations_enabled":
         "aiPlatformPushIntegrationsEnabled",
+      "assistants_available": "assistantsAvailable",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "code_mode_enabled": "codeModeEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",

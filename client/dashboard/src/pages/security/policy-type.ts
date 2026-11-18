@@ -48,3 +48,19 @@ export function findBlockingShadowMCPPolicy<
     isBlockingShadowMCPPolicy(policy.enabled, policy.sources, policy.action),
   );
 }
+
+/** The policy behind the Shadow MCP page's "blocked by default" setting: an
+ *  enabled blocking Shadow MCP policy with no other detector that denies
+ *  servers nobody approved. It is a setting on that page, so Guardrails and
+ *  Command K do not list it. A Shadow AI policy allows by default and stays
+ *  listed. A disabled one stays listed too: the Shadow MCP page reads only
+ *  enabled policies, so Guardrails is where it can be seen and turned on. */
+export function isShadowMCPModePolicy(
+  policy: PolicyShape & Pick<RiskPolicy, "enabled" | "shadowMcpDisposition">,
+): boolean {
+  return (
+    policy.enabled &&
+    isShadowAIPolicy(policy) &&
+    policy.shadowMcpDisposition !== "allow_all"
+  );
+}

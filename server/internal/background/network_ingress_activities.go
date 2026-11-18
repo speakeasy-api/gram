@@ -47,15 +47,33 @@ func (a *networkIngressActivities) reconcile(ctx context.Context, params Network
 	}()
 	result, err := a.executor.Reconcile(ctx, params.OrganizationID, params.IngressID)
 	if err != nil {
-		if failure, ok := errors.AsType[*networkingress.ReconcileError](err); ok {
-			if !failure.Retryable {
-				return NetworkIngressReconcileResult{Requeue: false}, temporal.NewNonRetryableApplicationError(failure.Code, "network_ingress", nil)
-			}
-			return NetworkIngressReconcileResult{Requeue: false}, fmt.Errorf("reconcile: %w", temporal.NewApplicationError(failure.Code, "network_ingress"))
-		}
-		return NetworkIngressReconcileResult{Requeue: false}, fmt.Errorf("reconcile: %w", temporal.NewApplicationError("reconciliation_failed", "network_ingress"))
+		return NetworkIngressReconcileResult{Requeue: false}, reconcileActivityError(err, activity.GetInfo(ctx).Attempt)
 	}
 	return NetworkIngressReconcileResult{Requeue: result.Requeue}, nil
+}
+
+// reconcileActivityError converts a reconcile failure into the Temporal error
+// that decides the retry. A teardown waiting on Kubernetes deletions retries
+// after a short fixed delay for its first attempts; every other retryable
+// failure uses the activity's exponential backoff.
+func reconcileActivityError(err error, attempt int32) error {
+	failure, ok := errors.AsType[*networkingress.ReconcileError](err)
+	if !ok {
+		return fmt.Errorf("reconcile: %w", temporal.NewApplicationError("reconciliation_failed", "network_ingress"))
+	}
+	if !failure.Retryable {
+		return temporal.NewNonRetryableApplicationError(failure.Code, "network_ingress", nil)
+	}
+	if failure.Code == networkingress.ReconcileCodeDeletionPending && attempt < networkIngressDeletionPendingFastAttempts {
+		return fmt.Errorf("reconcile: %w", temporal.NewApplicationErrorWithOptions(failure.Code, "network_ingress", temporal.ApplicationErrorOptions{
+			NonRetryable:   false,
+			Cause:          nil,
+			Details:        nil,
+			NextRetryDelay: networkIngressDeletionPendingRetryDelay,
+			Category:       temporal.ApplicationErrorCategoryUnspecified,
+		}))
+	}
+	return fmt.Errorf("reconcile: %w", temporal.NewApplicationError(failure.Code, "network_ingress"))
 }
 
 func (a *networkIngressActivities) sweep(ctx context.Context) error {
