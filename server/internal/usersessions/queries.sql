@@ -926,12 +926,16 @@ WHERE client.id = @source_client_id
   AND client.deleted IS FALSE;
 
 -- name: CountUserSessionIssuerPrincipalBindingConflicts :one
+-- An agent attached to the same client on both issuers blocks the merge only
+-- when the two attachments use different logins: merging would silently swap
+-- the agent's credential. On the same login the target's attachment is kept.
 SELECT COUNT(*)::int
 FROM principal_remote_session_bindings AS source
 JOIN principal_remote_session_bindings AS target
   ON target.project_id = source.project_id
  AND target.principal_id = source.principal_id
  AND target.remote_session_client_id = source.remote_session_client_id
+ AND target.remote_session_id <> source.remote_session_id
  AND target.user_session_issuer_id = @target_issuer_id
  AND target.revoked_at IS NULL
 WHERE source.user_session_issuer_id = @source_issuer_id
@@ -1141,7 +1145,8 @@ WHERE link.user_session_issuer_id = @source_issuer_id
 -- need not share its connection's issuer, so moving the connections does not
 -- move it. Only live connections of live clients the target now binds come
 -- along, as only live connections move; the rest leave with the source's
--- client bindings.
+-- client bindings. So does an attachment the target already holds on the same
+-- login, so the agent keeps exactly one active attachment for it.
 UPDATE principal_remote_session_bindings AS binding
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1157,6 +1162,16 @@ WHERE binding.user_session_issuer_id = @source_issuer_id
     FROM remote_session_client_user_session_issuers AS link
     WHERE link.remote_session_client_id = binding.remote_session_client_id
       AND link.user_session_issuer_id = @target_issuer_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_remote_session_bindings AS target
+    WHERE target.project_id = binding.project_id
+      AND target.principal_id = binding.principal_id
+      AND target.remote_session_client_id = binding.remote_session_client_id
+      AND target.remote_session_id = binding.remote_session_id
+      AND target.user_session_issuer_id = @target_issuer_id
+      AND target.revoked_at IS NULL
   )
   AND 2 = (
     SELECT COUNT(*)
