@@ -132,10 +132,12 @@ export function McpSetupFrame({
       strip={
         <Link
           to={overviewHref}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors hover:no-underline"
+          className="text-muted-foreground hover:text-foreground flex min-w-0 items-center gap-1.5 text-sm transition-colors hover:no-underline"
         >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          {chrome ? `Back to ${chrome.name}` : "Back to server"}
+          <ArrowLeft className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">
+            {chrome ? `Back to ${chrome.name}` : "Back to server"}
+          </span>
         </Link>
       }
       header={

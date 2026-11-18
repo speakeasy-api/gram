@@ -166,6 +166,7 @@ it("gives Setup the server's header and a way back instead of tabs", () => {
     </MemoryRouter>,
   );
   expect(screen.getByRole("heading", { name: "Set up Example" })).toBeTruthy();
+  expect(screen.getByText("Connect · Setup")).toBeTruthy();
   expect(
     screen.getByRole("link", { name: "Back to Example" }).getAttribute("href"),
   ).toBe("/servers/example");
