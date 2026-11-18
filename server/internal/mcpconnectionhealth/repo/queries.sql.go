@@ -14,7 +14,8 @@ import (
 
 const averageEndedSessionSeconds = `-- name: AverageEndedSessionSeconds :one
 WITH endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root
+  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
   LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = $3::text
@@ -27,7 +28,12 @@ candidates AS (
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $4
     AND (session.project_id = $5 OR (session.project_id IS NULL AND session.organization_id = $3::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) >= $7::timestamptz
+    AND COALESCE(session.credential_id, session.id) IN (
+      SELECT COALESCE(recent.credential_id, recent.id)
+      FROM user_sessions AS recent
+      WHERE recent.user_session_issuer_id = $4
+        AND LEAST(COALESCE(recent.deleted_at, 'infinity'::timestamptz), CASE WHEN recent.refresh_token_hash LIKE $6::text THEN recent.expires_at ELSE recent.refresh_expires_at END) >= $7::timestamptz
+    )
 ),
 scoped AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
@@ -41,11 +47,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $3::text
                        AND client.project_id <> $5)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $5
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $5 AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $5
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $5 AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
@@ -76,7 +82,8 @@ type AverageEndedSessionSecondsParams struct {
 }
 
 // Mean length, first sign-in to expiry or revocation, of sessions that ended
-// in the range and have no live row.
+// in the range and have no live row. Only credentials with a row ending after
+// live_since are read, all of their rows included.
 func (q *Queries) AverageEndedSessionSeconds(ctx context.Context, arg AverageEndedSessionSecondsParams) (float64, error) {
 	row := q.db.QueryRow(ctx, averageEndedSessionSeconds,
 		arg.FromTime,
@@ -100,7 +107,8 @@ WITH days AS (
   FROM generate_series($2::timestamptz, $3::timestamptz, '1 day'::interval) AS day_start
 ),
 endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root
+  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
   LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = $4::text
@@ -127,11 +135,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $4::text
                        AND client.project_id <> $6)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $6
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $6 AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $6
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $6 AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
@@ -203,7 +211,8 @@ func (q *Queries) CountActiveSessionsByDay(ctx context.Context, arg CountActiveS
 
 const countActiveSessionsNow = `-- name: CountActiveSessionsNow :one
 WITH endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root
+  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
   LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = $1::text
@@ -230,11 +239,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $1::text
                        AND client.project_id <> $3)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $3
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $3 AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $3
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $3 AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),

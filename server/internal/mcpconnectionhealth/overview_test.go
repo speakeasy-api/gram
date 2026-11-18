@@ -173,3 +173,47 @@ func TestGetSessionActivity_AnOrganizationSessionTiedToAnotherProjectIsNotCounte
 	require.Equal(t, int64(3), res.ActiveNow)
 	require.Equal(t, int64(3), res.Days[len(res.Days)-1].ActiveSessions)
 }
+
+func TestGetSessionActivity_ADeletedEndpointDoesNotClaimAnotherProjectsSession(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead)
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other", Slug: "other-" + uuid.NewString()[:8], OrganizationID: ti.org})
+	require.NoError(t, err)
+	otherGateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID: ti.org, ProjectID: other.ID, Name: "Elsewhere", UserSessionIssuerID: uuid.NullUUID{}, Visibility: "private", NetworkAccessMode: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	endpoints := mcpendpointsrepo.New(ti.conn)
+	slug := "reused-" + uuid.NewString()[:8]
+	own, err := endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: ti.project, CustomDomainID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{}, MetaMcpServerID: uuid.NullUUID{UUID: ti.server, Valid: true}, Slug: slug})
+	require.NoError(t, err)
+	_, err = endpoints.DeleteMCPEndpoint(ctx, mcpendpointsrepo.DeleteMCPEndpointParams{ID: own.ID, ProjectID: ti.project})
+	require.NoError(t, err)
+	_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: other.ID, CustomDomainID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{}, MetaMcpServerID: uuid.NullUUID{UUID: otherGateway.ID, Valid: true}, Slug: slug})
+	require.NoError(t, err)
+
+	sessions := usersessionsrepo.New(ti.conn)
+	issuer, err := sessions.CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID: pgtype.Text{String: ti.org, Valid: true}, Slug: "org-" + uuid.NewString()[:8], AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: 0, Days: 14, Months: 0, Valid: true}, TrustedRemoteSessionIssuerID: uuid.NullUUID{}, TrustedRemoteSessionClientID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	_, err = sessions.CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+		SubjectUrn:          urn.NewUserSubject(ti.userID),
+		Jti:                 uuid.NewString(),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: ti.now.Add(14 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: ti.now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Resource:            pgtype.Text{String: "https://example.com/mcp/" + slug, Valid: true},
+		UserSessionIssuerID: issuer.ID,
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
+		UserSessionIssuerID: issuer.ID.String(),
+		From:                ti.now.Add(-24 * time.Hour).Format(time.RFC3339),
+		To:                  ti.now.Add(time.Minute).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), res.ActiveNow)
+}

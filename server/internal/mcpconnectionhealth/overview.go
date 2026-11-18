@@ -145,7 +145,7 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		DashboardMintPattern:     dashboardMintPattern,
 		InferenceResourcePattern: inferenceResourcePattern,
 		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
-		LiveSince:                pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.NegativeInfinity, Valid: true},
+		LiveSince:                timestamptz(averageFrom),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "average session length").LogError(ctx, s.logger)
