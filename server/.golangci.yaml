@@ -366,9 +366,9 @@ linters:
         # cross-package facts, and those fact passes need staticcheck's IR, so
         # keeping any of them builds IR for every dependency package. They
         # reported nothing on this codebase when they were disabled.
-        # Reconsider once golangci/golangci-lint#6822 is fixed.
         # SA4023 (comparing an interface with untyped nil) uses nilness facts,
-        # the largest fact set in the run.
+        # the largest fact set in the run. Reconsider it once
+        # golangci/golangci-lint#6822 is fixed.
         - "-SA4023"
         # SA4017 (discarded result of a side-effect-free call), SA4018
         # (self-assignment) and S1011 (loop append that could be one append)
