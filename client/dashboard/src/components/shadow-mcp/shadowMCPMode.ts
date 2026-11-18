@@ -64,7 +64,8 @@ export const SHADOW_MCP_BLOCKED_BY_DEFAULT_POLICY = {
 
 /**
  * Who "blocked by default" applies to, in a few words for the page header:
- * everyone, or the people and roles it was narrowed to.
+ * everyone, or the people and roles it was narrowed to. A narrowed rule says
+ * that everyone else is still allowed by default.
  */
 export function shadowMCPAudienceSummary(
   policy:
@@ -79,17 +80,28 @@ export function shadowMCPAudienceSummary(
   }
   const urns = policy.audiencePrincipalUrns;
   if (urns.length === 0) return "Applies to nobody";
+  return `Applies only to ${chosenAudience(urns, groups)}. Everyone else is allowed by default.`;
+}
+
+/** The people and roles a narrowed rule names: one by name, more counted. */
+function chosenAudience(
+  urns: readonly string[],
+  groups: ReadonlyArray<{
+    options: ReadonlyArray<{ label: string; value: string }>;
+  }>,
+): string {
   if (urns.length === 1) {
     const label = groups
       .flatMap((group) => group.options)
       .find((option) => option.value === urns[0])?.label;
-    if (label) return `Applies to ${label}`;
+    if (label) return label;
   }
   const roles = urns.filter((urn) => urn.startsWith("role:")).length;
   const people = urns.length - roles;
-  const parts = [
+  return [
     roles > 0 ? `${roles} ${roles === 1 ? "role" : "roles"}` : "",
     people > 0 ? `${people} ${people === 1 ? "person" : "people"}` : "",
-  ].filter(Boolean);
-  return `Applies to ${parts.join(" and ")}`;
+  ]
+    .filter(Boolean)
+    .join(" and ");
 }

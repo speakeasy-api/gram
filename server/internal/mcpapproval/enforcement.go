@@ -2,6 +2,7 @@ package mcpapproval
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -13,6 +14,17 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+var (
+	// ErrNarrowApprovalUnderAllowAll marks an approval narrower than everyone
+	// when only allow-by-default policies govern, which cannot express it.
+	ErrNarrowApprovalUnderAllowAll = errors.New("approval narrower than everyone under an allow-by-default policy")
+
+	// ErrNarrowDenialUnderEveryoneBlockAll marks a denial narrower than
+	// everyone under a block-by-default policy that covers everyone, where a
+	// denial blocks everyone.
+	ErrNarrowDenialUnderEveryoneBlockAll = errors.New("denial narrower than everyone under a block-by-default policy for everyone")
 )
 
 // reconcileDecisionGrants makes a decision enforce: it writes the same
@@ -85,10 +97,10 @@ func reconcileDecisionGrants(
 	}
 
 	if approved && !principalsAreEveryone(principals) && hasAllowAll && !hasBlockAll {
-		return oops.E(oops.CodeBadRequest, nil, "This project's policy allows servers by default, so an approval can only clear the block for everyone. Approve without naming principals, or switch the policy to block-by-default for per-person approvals.")
+		return oops.E(oops.CodeBadRequest, ErrNarrowApprovalUnderAllowAll, "This project's policy allows servers by default, so an approval can only clear the block for everyone. Approve without naming principals, or switch the policy to block-by-default for per-person approvals.")
 	}
 	if !approved && len(principals) > 0 && !principalsAreEveryone(principals) && hasEveryoneBlockAll {
-		return oops.E(oops.CodeBadRequest, nil, "This project blocks servers by default for everyone, so a denial blocks the server for everyone. Deny without naming principals.")
+		return oops.E(oops.CodeBadRequest, ErrNarrowDenialUnderEveryoneBlockAll, "This project blocks servers by default for everyone, so a denial blocks the server for everyone. Deny without naming principals.")
 	}
 
 	for _, policy := range blocking {

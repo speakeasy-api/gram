@@ -57,14 +57,14 @@ const COPY: Record<
   audience: {
     title: "Who is blocked by default?",
     description:
-      "Servers nobody approved are blocked for these people. Everyone else is allowed by default.",
+      "Every MCP server nobody approved is blocked for everyone, including servers people use today. Approve a server to let it through.",
     confirm: "Save",
     done: "Saved who is blocked by default.",
   },
 };
 
-/** The "blocked by default" dialog once Advanced names people or roles: it
- *  no longer applies to everyone, so the copy says who it does apply to. */
+/** The "blocked by default" dialog once the picker names people or roles:
+ *  it no longer applies to everyone, so the copy says who it does apply to. */
 const BLOCKED_FOR_CHOSEN_DESCRIPTION =
   "Every MCP server nobody approved is blocked for the people and roles you chose, including servers they use today. Everyone else is still allowed by default. Approve a server to let it through.";
 
@@ -161,15 +161,17 @@ export function ShadowMCPModeControl(): JSX.Element | null {
   };
 
   const copy = pending ? COPY[pending] : null;
+  const picksAudience = pending === "blocked" || pending === "audience";
+  // An empty picker saves "everyone", so the copy names the chosen people
+  // and roles only once someone is picked.
   const description =
-    pending === "blocked" && principals.length > 0
+    picksAudience && principals.length > 0
       ? BLOCKED_FOR_CHOSEN_DESCRIPTION
       : (copy?.description ?? "");
   // A Guardrails policy that also scans for other risks decides the mode:
   // switching here would delete or rewrite it, so it changes in Guardrails.
   const heldByGuardrails = state.heldBy === "guardrails";
   const guardrailsTooltip = `Your ${state.policy?.name ?? "Guardrails"} policy sets this because it also scans for other risks. Change it in Guardrails.`;
-  const picksAudience = pending === "blocked" || pending === "audience";
   return (
     <div className="flex flex-col items-end gap-1.5">
       <SegmentedControl<ShadowMCPMode>

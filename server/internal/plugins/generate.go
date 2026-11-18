@@ -403,7 +403,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "63"
+const hooksGeneratorVersion = "64"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -664,6 +664,14 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	if err := generatePiObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate pi observability plugin: %w", err)
 	}
+	// The Vibe package is skipped (not fatal for the publish) unless the
+	// pinned hooks release carries the vibe provider and the org slug fits
+	// the plugin name schema — callers gate on VibeObservabilityPluginAvailable.
+	if VibeObservabilityPluginAvailable(cfg) {
+		if err := generateVibeObservabilityPlugin(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate vibe observability plugin: %w", err)
+		}
+	}
 	return files, nil
 }
 
@@ -721,6 +729,15 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 		}
 		for filePath, content := range agentFiles {
 			files[path.Join(agentPluginRoot, p.Slug, filePath)] = content
+			// Vibe consumes the same portable Agent Plugins 1.0 package, but at
+			// <slug>-vibe/ at the repo root: it has no marketplace to reference
+			// agent-plugins/, so the device agent unpacks that directory into
+			// ~/.vibe/plugins/<slug>/. Only the portable files go there — never
+			// the Cursor/Codex native manifests compileAgentPlugin adds in
+			// package mode (the dot-prefixed .cursor-plugin/ and .mcp.json).
+			if !strings.HasPrefix(filePath, ".") {
+				files[path.Join(p.Slug+"-vibe", filePath)] = content
+			}
 		}
 	}
 	return files, nil
@@ -1057,6 +1074,16 @@ func generateReadme(plugins []sharedPluginEntry, cfg GenerateConfig) []byte {
 		b.WriteString("Speakeasy reads the config those extensions share (`.pi/mcp.json`, `~/.pi/agent/mcp.json`) to report the servers a workspace can reach and to attribute tool calls to them.\n")
 	}
 
+	b.WriteString("\n### Mistral Vibe\n\n")
+	b.WriteString("Vibe has no plugin marketplace. Each plugin is a portable Agent Plugins 1.0 package at `<slug>-vibe/`: ")
+	b.WriteString("copy the contents of a plugin's `<slug>-vibe/` directory into `~/.vibe/plugins/<slug>/` (all projects) ")
+	b.WriteString("or a repository's `.vibe/plugins/<slug>/` (that project only, once the folder is trusted). ")
+	b.WriteString("Vibe discovers the plugin on next start or `/reload-plugins`; remove the copied directory to uninstall.\n")
+	b.WriteString("The package's `mcp.json` carries the plugin's public MCP servers; Speakeasy-hosted servers assigned to the device reach Vibe through `[[mcp_servers]]` entries the Speakeasy device agent writes into `~/.vibe/config.toml`.\n")
+	if cfg.HooksAPIKey != "" && VibeObservabilityPluginAvailable(cfg) {
+		fmt.Fprintf(&b, "For observability, also copy `%s/` into `~/.vibe/plugins/%s/`: the package's `ai.mistral.vibe/hooks.toml` registers the Speakeasy hooks, which Vibe runs on next start or `/reload-plugins` (coverage today is tool calls and turn end; prompt and session lifecycle hooks are a planned follow-up). Remove the copied directory to uninstall.\n", VibeObservabilitySlug(cfg), naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)))
+	}
+
 	return []byte(b.String())
 }
 
@@ -1304,6 +1331,9 @@ func OpenClawObservabilitySlug(cfg GenerateConfig) string {
 func PiObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-pi"
 }
+func VibeObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-vibe"
+}
 
 // hooksSubtreePrefixes returns the repo directory prefixes the hooks
 // (observability) subtree occupies for a given org name — every hooks
@@ -1329,6 +1359,7 @@ func hooksOptionalSubtreePrefixes(orgName string) []string {
 	return []string{
 		conv.ToSlug(orgName) + "-observability-openclaw/",
 		conv.ToSlug(orgName) + "-observability-pi/",
+		conv.ToSlug(orgName) + "-observability-vibe/",
 	}
 }
 
@@ -1349,6 +1380,7 @@ func pluginSubtreePrefixes(slug string) []string {
 		slug + "/",
 		cursorPluginRoot + "/" + slug + "-cursor/",
 		slug + "-codex/",
+		slug + "-vibe/",
 		opencodePluginRoot + "/" + slug + "/",
 		agentPluginRoot + "/" + slug + "/",
 	}
@@ -2562,6 +2594,186 @@ func generatePiObservabilityPluginInDir(files map[string][]byte, subdir string, 
 	return nil
 }
 
+// vibeHookTimeoutSeconds is the per-hook wall clock Vibe gives each command
+// (hooks.toml `timeout`) and the relay's own in-process gate
+// (`--timeout=60s`): 60s is Vibe's default hook timeout, and the bootstrap's
+// cold-install download budget already stays under it.
+const vibeHookTimeoutSeconds = 60
+
+// vibeObservabilityHookEvents are the Vibe lifecycle events the observability
+// plugin registers: pre_tool/post_tool fire around every tool call,
+// post_agent once per turn after the agent finishes responding.
+var vibeObservabilityHookEvents = []struct {
+	name string
+	typ  string
+}{
+	{"speakeasy-observability-pre-tool", "pre_tool"},
+	{"speakeasy-observability-post-tool", "post_tool"},
+	{"speakeasy-observability-post-agent", "post_agent"},
+}
+
+// renderVibeHooksTOML renders the plugin's native Vibe hooks extension
+// (ai.mistral.vibe/hooks.toml). Vibe 3.1.2 runs plugin hooks in PLUGIN_ROOT
+// (the plugin's read-only copy), not the session cwd, so every command
+// resolves the bootstrapper and config through $PLUGIN_ROOT. Commands are
+// TOML literal strings (single-quoted): the shell command carries double
+// quotes and must not be escape-processed.
+func renderVibeHooksTOML() []byte {
+	var b strings.Builder
+	b.WriteString("# Generated by Speakeasy. Do not edit — republished with the marketplace.\n")
+	b.WriteString("# Mistral Vibe loads this file as the plugin's native hooks extension\n")
+	b.WriteString("# (ai.mistral.vibe/hooks.toml). Each hook runs the pinned speakeasy-hooks\n")
+	b.WriteString("# relay, which reports tool events to your Speakeasy dashboard. Vibe runs\n")
+	b.WriteString("# plugin hooks in PLUGIN_ROOT (the plugin's read-only copy), so every\n")
+	b.WriteString("# command resolves the bootstrapper through $PLUGIN_ROOT. bootstrap.sh\n")
+	b.WriteString("# needs bash (bash-only array syntax); Vibe's own bash tool requires\n")
+	b.WriteString("# bash too — /bin/bash on macOS/Linux, Git Bash on Windows (install\n")
+	b.WriteString("# Git for Windows; PowerShell-only hosts are not supported).\n")
+	b.WriteString("# The pre_tool hook is strict: an undecodable payload or a crashed hook\n")
+	b.WriteString("# denies the call instead of letting it run unobserved. Strict does not\n")
+	b.WriteString("# cover an unreachable Speakeasy server — there the relay follows the\n")
+	b.WriteString("# organization's fail-open setting (fail open when enabled, block the call\n")
+	b.WriteString("# otherwise), same as Claude Code.\n")
+	for _, event := range vibeObservabilityHookEvents {
+		// Only pre_tool is strict: the server can only block prompt and
+		// pre-tool events, so strict post_tool would just clear the result of
+		// a tool that already ran. post_agent has no strict mode in Vibe.
+		strict := event.typ == "pre_tool"
+		command := fmt.Sprintf(`bash "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=%ds`, vibeHookTimeoutSeconds)
+		if strict {
+			command += " --strict"
+		}
+		fmt.Fprintf(&b, "\n[[hooks]]\nname = %q\ntype = %q\nmatch = \"*\"\ntimeout = %d\ncommand = '%s'\n", event.name, event.typ, vibeHookTimeoutSeconds, command)
+		if strict {
+			b.WriteString("strict = true\n")
+		}
+	}
+	return []byte(b.String())
+}
+
+// generateVibeObservabilityPlugin emits the per-org observability plugin for
+// Mistral Vibe: a portable Agent Plugins 1.0 package whose ai.mistral.vibe
+// extension ships hooks.toml, so Vibe runs the speakeasy-hooks relay on
+// pre_tool/post_tool/post_agent once the directory is copied into
+// ~/.vibe/plugins/<org>-observability/.
+func generateVibeObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateVibeObservabilityPluginInDir(files, VibeObservabilitySlug(cfg), cfg)
+}
+
+// generateVibeObservabilityPluginFlat emits the same files at the ZIP root for
+// direct download via downloadObservabilityPlugin?platform=vibe.
+func generateVibeObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateVibeObservabilityPluginInDir(files, "", cfg)
+}
+
+// releasedHooksProviders mirrors the generated hooksReleaseProviders (the
+// providers the pinned speakeasy-hooks release supports) but is a var so
+// tests can exercise both sides of the vibe gate before a release carrying
+// the provider is pinned. Tests that write it must not run in parallel with
+// other tests that read it.
+var releasedHooksProviders = hooksReleaseProviders
+
+// vibeProviderReleased reports whether the pinned hooks release's relay
+// carries the vibe provider. The generated hooks.toml runs the pinned binary,
+// and a release without the provider exits 64 ("unknown provider") on every
+// hook — under strict that denies every tool call — so the Vibe observability
+// package and the platform=vibe download are gated on this list, which
+// pin-hooks-release derives from the release itself.
+// VibeProviderReleased reports whether the pinned hooks release's relay
+// carries the vibe provider (exported for Platform MCP guidance).
+func VibeProviderReleased() bool { return vibeProviderReleased() }
+
+func vibeProviderReleased() bool {
+	return slices.Contains(releasedHooksProviders, string(relay.ProviderVibe))
+}
+
+// VibeObservabilityStatus is the shared view of the per-org Vibe observability
+// package used by publish status and the Platform MCP: Available reports
+// whether the ZIP can be downloaded right now, Published whether the published
+// marketplace repo carries the package (stored published hooks version equals
+// the current generator version), and Plugin is the install name under
+// ~/.vibe/plugins/, set only when Published.
+type VibeObservabilityStatus struct {
+	Available bool
+	Published bool
+	Plugin    string
+}
+
+// VibeObservabilityStatusFor computes the status for cfg given the stored
+// published hooks version of the project's GitHub connection ("" when the
+// project has never published).
+func VibeObservabilityStatusFor(cfg GenerateConfig, publishedHooksVersion string) VibeObservabilityStatus {
+	available := VibeObservabilityPluginAvailable(cfg)
+	st := VibeObservabilityStatus{Available: available, Published: false, Plugin: ""}
+	if available && publishedHooksVersion == hooksGeneratorVersion {
+		st.Published = true
+		st.Plugin = naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
+	}
+	return st
+}
+
+// VibeObservabilityPluginAvailable reports whether the per-org Vibe
+// observability package can be generated and published for cfg: the pinned
+// hooks release carries the vibe provider, and the manifest name (the org's
+// observability slug) satisfies the Agent Plugins 1.0 name schema — checked
+// through the same vendored-schema validation generation runs, so the two
+// cannot drift. Callers (the marketplace publish, the platform=vibe download,
+// publish status) gate on this before generating.
+func VibeObservabilityPluginAvailable(cfg GenerateConfig) bool {
+	if !vibeProviderReleased() {
+		return false
+	}
+	name := naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
+	return validateAgentPluginName(name) == nil
+}
+
+func generateVibeObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	// The plugin's identity is <org>-observability — the name users install it
+	// under (~/.vibe/plugins/<org>-observability/) — not the repo directory
+	// <org>-observability-vibe/, which only keeps the package from colliding
+	// with the feature plugins' <slug>-vibe/ directories in one repo.
+	manifestName := naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
+	manifest := agentPluginManifest{
+		Schema:      agentPluginSchemaID,
+		Name:        manifestName,
+		Version:     hooksManifestVersion(cfg),
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+		Author:      agentPluginAuthor{Name: cfg.OrgName, URL: "https://www.speakeasy.com/"},
+		Homepage:    "https://www.speakeasy.com/product/gram",
+		// The vendored Agent Plugins 1.0 schema leaves extensions namespaces
+		// uninterpreted (additionalProperties: object), so the Vibe extension
+		// declaring hooks.toml rides here; without it Vibe loads only
+		// plugin.json/skills/mcp.json and never runs the hooks.
+		Extensions: map[string]any{
+			"ai.mistral.vibe": map[string]any{
+				"schemaVersion": 1,
+				"displayName":   cfg.OrgName + " Observability",
+			},
+		},
+	}
+	// The name is checked on its own first so a schema-loader or future
+	// manifest error is not misreported as a name failure. Callers gate on
+	// VibeObservabilityPluginAvailable, so a bad name here means the caller
+	// did not check — still only this package fails.
+	if err := validateAgentPluginName(manifestName); err != nil {
+		return fmt.Errorf("vibe observability plugin name does not satisfy the Agent Plugins 1.0 name schema: %w", err)
+	}
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return fmt.Errorf("marshal vibe plugin.json: %w", err)
+	}
+	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
+		return fmt.Errorf("validate vibe plugin.json: %w", err)
+	}
+	files[path.Join(subdir, "plugin.json")] = manifestJSON
+	files[path.Join(subdir, "ai.mistral.vibe/hooks.toml")] = renderVibeHooksTOML()
+
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
 // GenerateObservabilityPluginPackage produces the file map for a single
 // observability plugin for direct ZIP installation (no <org>-observability/
 // subdir). Minting a fresh hooks key is the caller's responsibility — this
@@ -2596,6 +2808,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "pi":
 		if err := generatePiObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate pi observability plugin: %w", err)
+		}
+	case "vibe":
+		if err := generateVibeObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate vibe observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
@@ -3475,6 +3691,7 @@ func generatePlatformMCPAgentPackage(cfg GenerateConfig, platformURL string) (ma
 		Description: platformMCPDescription,
 		Author:      agentPluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
 		Homepage:    "https://www.speakeasy.com/product/gram",
+		Extensions:  nil,
 	}
 	mcpConfig := agentMCPConfig{
 		Schema: agentMCPSchemaID,

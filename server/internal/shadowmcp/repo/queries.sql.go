@@ -312,6 +312,22 @@ func (q *Queries) LockShadowMCPOfficialServerChoice(ctx context.Context, arg Loc
 	return i, err
 }
 
+const lockShadowMCPOfficialServerURL = `-- name: LockShadowMCPOfficialServerURL :exec
+SELECT pg_advisory_xact_lock(hashtextextended('shadow_mcp_official_servers:' || ($1::uuid)::text || ':' || $2::text, 0))
+`
+
+type LockShadowMCPOfficialServerURLParams struct {
+	ProjectID uuid.UUID
+	ServerUrl string
+}
+
+// Serializes every write to one URL's choice, including the first, which has
+// no row yet for LockShadowMCPOfficialServerChoice to lock.
+func (q *Queries) LockShadowMCPOfficialServerURL(ctx context.Context, arg LockShadowMCPOfficialServerURLParams) error {
+	_, err := q.db.Exec(ctx, lockShadowMCPOfficialServerURL, arg.ProjectID, arg.ServerUrl)
+	return err
+}
+
 const upsertShadowMCPOfficialServerChoice = `-- name: UpsertShadowMCPOfficialServerChoice :one
 INSERT INTO shadow_mcp_official_servers (
     project_id,

@@ -297,6 +297,12 @@ SELECT
     mm.mcp_server_id AS member_mcp_server_id,
     g.name AS gateway_name
 FROM meta_mcp_server_members mm
+JOIN mcp_servers s
+  ON s.id = mm.mcp_server_id
+  AND s.project_id = mm.project_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
 JOIN meta_mcp_servers g
   ON g.id = mm.meta_mcp_server_id
   AND g.project_id = mm.project_id
@@ -332,8 +338,10 @@ type ListAddressableGatewayEndpointsByMemberMCPServerIDsRow struct {
 	GatewayName       string
 }
 
-// The addressable endpoints of every live gateway that has one of the given
-// servers as a member. Custom-domain endpoints count only on a verified,
+// The addressable endpoints of every live gateway that serves one of the
+// given servers as a member. A member counts only when the gateway serves
+// it, filtered exactly as ListServableMetaMCPMembers: its server is live,
+// enabled and has a slug. Custom-domain endpoints count only on a verified,
 // activated domain, the same gate as ListAddressableMCPEndpointsByMCPServerIDs.
 func (q *Queries) ListAddressableGatewayEndpointsByMemberMCPServerIDs(ctx context.Context, arg ListAddressableGatewayEndpointsByMemberMCPServerIDsParams) ([]ListAddressableGatewayEndpointsByMemberMCPServerIDsRow, error) {
 	rows, err := q.db.Query(ctx, listAddressableGatewayEndpointsByMemberMCPServerIDs, arg.OrganizationID, arg.ProjectID, arg.McpServerIds)

@@ -249,7 +249,11 @@ describe("ShadowMCPModeControl", () => {
     ];
     renderControl();
 
-    expect(screen.getByText("Applies to Contractors")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Applies only to Contractors. Everyone else is allowed by default.",
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(
       screen.getByRole("button", { name: "pick Priya (priya@example.com)" }),
@@ -268,4 +272,85 @@ describe("ShadowMCPModeControl", () => {
       }),
     );
   });
+
+  it("says the edit covers everyone until someone is picked", () => {
+    mocks.policies = [
+      {
+        id: "policy-1",
+        name: "Shadow MCP",
+        enabled: true,
+        sources: ["shadow_mcp"],
+        action: "block",
+        shadowMcpDisposition: "block_all",
+        audienceType: "targeted",
+        audiencePrincipalUrns: ["role:contractors"],
+      },
+    ];
+    renderControl();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(
+      screen.getByText(/blocked for the people and roles you chose/),
+    ).toBeTruthy();
+    // Clearing the picker saves "everyone", so the copy says so.
+    fireEvent.click(screen.getByRole("button", { name: "pick Contractors" }));
+    expect(screen.getByText(/is blocked for everyone/)).toBeTruthy();
+    expect(
+      screen.queryByText(/blocked for the people and roles you chose/),
+    ).toBeNull();
+  });
+
+  const blockingPolicy = {
+    id: "policy-1",
+    name: "Shadow MCP",
+    enabled: true,
+    sources: ["shadow_mcp"],
+    action: "block",
+    shadowMcpDisposition: "block_all",
+    audienceType: "everyone",
+    audiencePrincipalUrns: [],
+  };
+
+  it.each([
+    {
+      change: "blocking by default",
+      policies: [],
+      open: "Blocked by default",
+      confirm: "Block by default",
+      title: "Block servers by default?",
+      mutation: () => mocks.create,
+    },
+    {
+      change: "changing who it applies to",
+      policies: [blockingPolicy],
+      open: "Edit",
+      confirm: "Save",
+      title: "Who is blocked by default?",
+      mutation: () => mocks.update,
+    },
+    {
+      change: "allowing by default",
+      policies: [blockingPolicy],
+      open: "Allowed by default",
+      confirm: "Allow by default",
+      title: "Allow servers by default?",
+      mutation: () => mocks.remove,
+    },
+  ])(
+    "keeps the dialog open with the error when $change fails",
+    async ({ policies, open, confirm, title, mutation }) => {
+      mocks.policies = policies;
+      mutation().mockRejectedValue(new Error("boom"));
+      renderControl();
+
+      fireEvent.click(screen.getByRole("button", { name: open }));
+      fireEvent.click(screen.getByRole("button", { name: confirm }));
+
+      expect(
+        await screen.findByText("The setting could not be changed. Try again."),
+      ).toBeTruthy();
+      expect(mutation()).toHaveBeenCalled();
+      expect(screen.getByText(title)).toBeTruthy();
+    },
+  );
 });

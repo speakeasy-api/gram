@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   statuses: [] as Array<Record<string, unknown>>,
   reset: vi.fn(),
   signInReady: true,
+  signInUnavailable: false,
+  detailsLoading: false,
+  detailsError: false,
   details: undefined as
     | { remotes: Array<{ url: string; transportType: string }> }
     | undefined,
@@ -31,14 +34,14 @@ vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
   useMcpServerAuthenticationReadiness: () => ({
     ready: mocks.signInReady,
     loading: false,
-    unavailable: false,
+    unavailable: mocks.signInUnavailable,
   }),
 }));
 vi.mock("@gram/client/react-query/mcpRegistriesGetServerDetails.js", () => ({
   useMcpRegistriesGetServerDetails: () => ({
     data: mocks.details,
-    isLoading: false,
-    isError: false,
+    isLoading: mocks.detailsLoading,
+    isError: mocks.detailsError,
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
@@ -160,8 +163,11 @@ function server(): ShadowMCPInventoryServer {
   };
 }
 
-function renderSheet(target: object = entry) {
-  return render(
+function sheet({
+  target = entry,
+  open = true,
+}: { target?: object; open?: boolean } = {}) {
+  return (
     <MemoryRouter>
       <CatalogOfficialSheet
         server={server()}
@@ -172,11 +178,25 @@ function renderSheet(target: object = entry) {
             "https://tracker.example.com/.well-known/oauth-protected-resource",
           signInSetup: "manual",
         }}
-        open
+        open={open}
         onOpenChange={() => {}}
       />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderSheet(target: object = entry) {
+  return render(sheet({ target }));
+}
+
+/** Starts an install from the sheet, then has it finish with statuses. */
+function installWith(statuses: Array<Record<string, unknown>>) {
+  const view = renderSheet();
+  fireEvent.click(screen.getByRole("button", { name: "Add and link" }));
+  mocks.phase = "complete";
+  mocks.statuses = statuses;
+  view.rerender(sheet());
+  return view;
 }
 
 describe("CatalogOfficialSheet", () => {
@@ -190,6 +210,9 @@ describe("CatalogOfficialSheet", () => {
     mocks.fetchQuery.mockReset();
     mocks.reset.mockReset();
     mocks.signInReady = true;
+    mocks.signInUnavailable = false;
+    mocks.detailsLoading = false;
+    mocks.detailsError = false;
     mocks.details = undefined;
   });
   afterEach(cleanup);
@@ -239,16 +262,6 @@ describe("CatalogOfficialSheet", () => {
   });
 
   it("sets up sign-in in the sheet, then turns the server on and links it", async () => {
-    mocks.phase = "complete";
-    mocks.statuses = [
-      {
-        status: "failed",
-        name: "Tracker Cloud",
-        mcpServerId: "server-1",
-        mcpServerParam: "tracker",
-        setupRequired: "Automatic client registration is unavailable.",
-      },
-    ];
     mocks.fetchQuery.mockResolvedValue({
       id: "server-1",
       slug: "tracker",
@@ -260,7 +273,15 @@ describe("CatalogOfficialSheet", () => {
       name: "Tracker Cloud",
       visibility: "private",
     });
-    renderSheet();
+    installWith([
+      {
+        status: "failed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+        setupRequired: "Automatic client registration is unavailable.",
+      },
+    ]);
 
     expect(await screen.findByText("Set up sign-in")).toBeTruthy();
     expect(screen.getByText("identity settings")).toBeTruthy();
@@ -279,11 +300,9 @@ describe("CatalogOfficialSheet", () => {
   });
 
   it("starts over with the form editable when nothing could be added", async () => {
-    mocks.phase = "complete";
-    mocks.statuses = [
+    installWith([
       { status: "failed", name: "Tracker Cloud", error: "Upstream refused." },
-    ];
-    renderSheet();
+    ]);
 
     expect(await screen.findByText("Upstream refused.")).toBeTruthy();
     expect(mocks.reset).toHaveBeenCalled();
@@ -293,16 +312,14 @@ describe("CatalogOfficialSheet", () => {
 
   it("says the server is added but not linked when the link fails", async () => {
     mocks.save.mockRejectedValue(new Error("nope"));
-    mocks.phase = "complete";
-    mocks.statuses = [
+    installWith([
       {
         status: "completed",
         name: "Tracker Cloud",
         mcpServerId: "server-1",
         mcpServerParam: "tracker",
       },
-    ];
-    renderSheet();
+    ]);
 
     expect(await screen.findByText("Server added")).toBeTruthy();
     expect(screen.queryByText("Official server linked")).toBeNull();
@@ -313,8 +330,7 @@ describe("CatalogOfficialSheet", () => {
 
   it("keeps Turn on off until the sign-in is saved, and shows why setup is needed", async () => {
     mocks.signInReady = false;
-    mocks.phase = "complete";
-    mocks.statuses = [
+    installWith([
       {
         status: "failed",
         name: "Tracker Cloud",
@@ -322,8 +338,7 @@ describe("CatalogOfficialSheet", () => {
         mcpServerParam: "tracker",
         setupRequired: "Automatic client registration is unavailable.",
       },
-    ];
-    renderSheet();
+    ]);
 
     expect(
       await screen.findByText("Automatic client registration is unavailable."),
@@ -336,8 +351,13 @@ describe("CatalogOfficialSheet", () => {
   });
 
   it("shows why turning the server on failed", async () => {
-    mocks.phase = "complete";
-    mocks.statuses = [
+    mocks.fetchQuery.mockResolvedValue({
+      id: "server-1",
+      slug: "tracker",
+      visibility: "disabled",
+    });
+    mocks.mutateUpdate.mockRejectedValue(new Error("Could not enable it."));
+    installWith([
       {
         status: "failed",
         name: "Tracker Cloud",
@@ -345,14 +365,7 @@ describe("CatalogOfficialSheet", () => {
         mcpServerParam: "tracker",
         setupRequired: "Automatic client registration is unavailable.",
       },
-    ];
-    mocks.fetchQuery.mockResolvedValue({
-      id: "server-1",
-      slug: "tracker",
-      visibility: "disabled",
-    });
-    mocks.mutateUpdate.mockRejectedValue(new Error("Could not enable it."));
-    renderSheet();
+    ]);
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Turn on and link" }),
@@ -389,6 +402,68 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.workflowServers).toEqual([]);
     expect(
       screen.getByText(/only over a connection Speakeasy cannot add/),
+    ).toBeTruthy();
+    const add = screen.getByRole("button", { name: "Add and link" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("does not replay a finished install when the sheet opens again", async () => {
+    const view = installWith([
+      {
+        status: "completed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+      },
+    ]);
+    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+
+    // The workflow keeps its complete phase while the sheet is closed.
+    view.rerender(sheet({ open: false }));
+    view.rerender(sheet());
+
+    expect(await screen.findByText("Add from the catalog")).toBeTruthy();
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the admin turn the server on when the sign-in check cannot run", async () => {
+    mocks.signInReady = false;
+    mocks.signInUnavailable = true;
+    installWith([
+      {
+        status: "failed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+        setupRequired: "Automatic client registration is unavailable.",
+      },
+    ]);
+
+    const turnOn = await screen.findByRole("button", {
+      name: "Turn on and link",
+    });
+    expect((turnOn as HTMLButtonElement).disabled).toBe(false);
+    expect(
+      screen.queryByText("Save the sign-in settings above to turn it on."),
+    ).toBeNull();
+  });
+
+  it("keeps Add and link off while the catalog entry loads", () => {
+    mocks.detailsLoading = true;
+    renderSheet({ ...entry, registryId: "registry-1", remotes: undefined });
+
+    expect(screen.getByText("Loading the catalog entry")).toBeTruthy();
+    const add = screen.getByRole("button", { name: "Add and link" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps Add and link off when the catalog entry cannot be loaded", () => {
+    mocks.detailsError = true;
+    renderSheet({ ...entry, registryId: "registry-1", remotes: undefined });
+
+    expect(
+      screen.getByText(/The catalog entry could not be loaded/),
     ).toBeTruthy();
     const add = screen.getByRole("button", { name: "Add and link" });
     expect((add as HTMLButtonElement).disabled).toBe(true);

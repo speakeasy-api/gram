@@ -32,6 +32,10 @@ type officialServerSeed struct {
 	// Unlinked leaves the server unlinked from the Shadow MCP server at its
 	// own URL; by default an administrator has linked it.
 	Unlinked bool
+
+	// NoSlug creates the server without a slug, like servers made before
+	// slugs existed.
+	NoSlug bool
 }
 
 // seedOfficialServer creates what the dashboard creates when a remote MCP
@@ -55,11 +59,15 @@ func seedOfficialServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 	})
 	require.NoError(t, err)
 
+	slug := conv.ToPGText("server-" + uuid.NewString())
+	if seed.NoSlug {
+		slug = pgtype.Text{String: "", Valid: false}
+	}
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                    uuid.New(),
 		ProjectID:             projectID,
 		Name:                  conv.ToPGText(seed.Name),
-		Slug:                  conv.ToPGText("server-" + uuid.NewString()),
+		Slug:                  slug,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMcpServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
@@ -274,6 +282,64 @@ func TestRenderShadowMCPUserBlockReason_SendsAgentToGatewayThatServesOfficialSer
 
 	require.Contains(t, reason, `"Chat", through the gateway "Team Gateway"`)
 	require.Contains(t, reason, "https://localhost:8080/mcp/"+gatewaySlug, "a gateway member is reached at the gateway's address")
+}
+
+// A gateway does not serve a member whose server has no slug, so the block
+// message sends the agent to the server's own address instead.
+func TestRenderShadowMCPUserBlockReason_SkipsGatewayThatDoesNotServeOfficialServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	serverURL := "https://notes.example.com/mcp"
+	endpointSlug := "notes-" + uuid.NewString()
+	serverID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "Notes", RemoteURL: serverURL, Visibility: "", EndpointSlug: endpointSlug, Unlinked: false, NoSlug: true,
+	})
+
+	gatewayID, err := testrepo.New(ti.conn).CreateMCPGatewayFixture(ctx, testrepo.CreateMCPGatewayFixtureParams{
+		ID:             uuid.New(),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           "Team Gateway",
+	})
+	require.NoError(t, err)
+	_, err = metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+		ProjectID:       *authCtx.ProjectID,
+		MetaMcpServerID: gatewayID,
+		McpServerID:     serverID,
+		SortOrder:       0,
+	})
+	require.NoError(t, err)
+	gatewaySlug := "team-gateway-" + uuid.NewString()
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID: uuid.NullUUID{UUID: gatewayID, Valid: true},
+		Slug:            gatewaySlug,
+	})
+	require.NoError(t, err)
+
+	reason := ti.service.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       authCtx.ProjectID.String(),
+		RequesterUserID: authCtx.UserID,
+		UserMessage:     nil,
+		AuditReason:     "Speakeasy blocked this tool call",
+		Evidence:        shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "notes"},
+		ToolName:        "read_note",
+		ToolInput:       nil,
+		RiskPolicyID:    uuid.NewString(),
+		PolicyName:      "Shadow MCP Block",
+	})
+
+	require.Contains(t, reason, "https://localhost:8080/mcp/"+endpointSlug)
+	require.NotContains(t, reason, gatewaySlug, "the gateway does not serve this member")
+	require.NotContains(t, reason, "Team Gateway")
 }
 
 func setOfficialServerChoice(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, serverURL string, chosen uuid.NullUUID, allowDirectAccess bool) {

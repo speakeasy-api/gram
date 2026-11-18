@@ -100,6 +100,16 @@ describe("useShadowMCPServerCandidates", () => {
     expect(result.current).toEqual([]);
   });
 
+  it("fetches nothing before a project is selected", async () => {
+    mocks.projectId = "";
+    mocks.pages[""] = { servers: [server("notion")] };
+    const { result } = render(true);
+
+    await settle();
+    expect(mocks.requests).toEqual([]);
+    expect(result.current).toEqual([]);
+  });
+
   it("indexes every page of the project's inventory and opens each server's page", async () => {
     mocks.pages[""] = {
       servers: [server("notion", { serverName: "Notion" })],

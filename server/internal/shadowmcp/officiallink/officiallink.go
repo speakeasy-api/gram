@@ -153,6 +153,12 @@ func (w *Writer) SetInTransaction(ctx context.Context, tx pgx.Tx, input SetInput
 		return SetResult{}, err
 	}
 	q := shadowmcprepo.New(tx)
+	// The row lock below only holds an existing link. Concurrent first links
+	// would both read no link and audit no previous state, so serialize on
+	// the URL before reading.
+	if err := q.LockShadowMCPOfficialServerURL(ctx, shadowmcprepo.LockShadowMCPOfficialServerURLParams{ProjectID: input.ProjectID, ServerUrl: key}); err != nil {
+		return SetResult{}, fmt.Errorf("lock shadow mcp official server url: %w", err)
+	}
 
 	var before *audit.ShadowMCPOfficialServerSnapshot
 	choiceID := uuid.Nil

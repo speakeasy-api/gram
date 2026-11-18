@@ -258,9 +258,11 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 
 // attachShadowMCPOfficialServers marks the rows linked to an official
 // server, and offers a project server that proxies to the same URL to the
-// rows without a link. A failed lookup leaves the rows unmarked rather than
-// failing the inventory: the page still lists what was observed, and only
-// the onboarded state is missing.
+// rows without a link. Access and AccessSummary stay the policy verdict; the
+// dashboard reads OfficialServer to show an active link as onboarded, since
+// the link blocks direct calls whatever the policy allows. A failed lookup
+// leaves the rows unmarked rather than failing the inventory: the page still
+// lists what was observed, and only the onboarded state is missing.
 func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizationID string, projectID uuid.UUID, servers []*gen.ShadowMCPInventoryServer) {
 	hasURLRow := false
 	for _, server := range servers {
@@ -1642,8 +1644,10 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	// carried only when the result is a project-wide block, and partially
 	// when only a targeted policy enforces it. The built-in blocklist reads
 	// the standing decision itself, so the decision is carried as recorded
-	// unless something else, such as a link to an official server, wins over
-	// it.
+	// unless the resulting access state contradicts it. This verdict covers
+	// policies, grants and decisions only. A link to an official server is
+	// reported beside it in the row's OfficialServer, and an active link
+	// blocks direct calls whatever this summary says.
 	if decision != nil && s.builtInBlocklist {
 		coverage = shadowMCPAccessCoverageFull
 		approvedButBlocked := *decision == shadowMCPInventoryBypassStatusApproved && state == shadowMCPAccessStateBlocked
