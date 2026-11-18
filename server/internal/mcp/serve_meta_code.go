@@ -83,7 +83,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 		description.WriteString("Additional prefixes are available through tools.servers().\n")
 	}
 	switch {
-	case len(members) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
+	case len(members) == 0 && len(gate.unapprovedMembers) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
 		fmt.Fprintf(&description, "The user hid every server on this gateway. The user can show one again at %s.\n", gate.connectURL)
 	case len(members) == 0:
 		description.WriteString("No member tools are currently callable. Use tools.servers() to inspect visible members. For a user-authenticated connection with a visible member, tools.connect(server=...) can return a browser sign-in link.\n")

@@ -34,6 +34,7 @@ import { useNavigate, useParams } from "react-router";
 import { AuthenticationHostDialog } from "./AuthenticationHostDialog";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
+import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 import { ClientAccessSection } from "./ClientAccessSection";
 import { ClientDriftWarning } from "./ClientDriftWarning";
 import { SessionLengthSection } from "./SessionLengthSection";
@@ -59,7 +60,7 @@ export default function UserSessionIssuerDetail(): JSX.Element {
   );
 }
 
-export type IssuerDetailLinks = {
+type IssuerDetailLinks = {
   /** Where "not found" sends people back to. */
   listHref: string;
   /** Another MCP Authentication Provider's page, after consolidating into it. */
@@ -72,7 +73,7 @@ export type IssuerDetailLinks = {
  * whose own providers this page may change; organization-wide ones are always
  * changed through the organization.
  */
-export function IssuerDetailContent({
+function IssuerDetailContent({
   listHref,
   detailHref,
   editableProjectId,
@@ -192,7 +193,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
  * How clients reach this provider to sign in. Rarely needed, so it stays
  * closed; only a broken sign-in address shows without opening it.
  */
-function AdvancedSection({
+export function AdvancedSection({
   issuer,
 }: {
   issuer: UserSessionIssuer;
@@ -270,10 +271,13 @@ function AdvancedSection({
   );
 }
 
-function McpServersSection({
+export function McpServersSection({
   issuer,
+  titled = true,
 }: {
   issuer: UserSessionIssuer;
+  /** Off where a tab already names the list. */
+  titled?: boolean;
 }): JSX.Element {
   const query = useOrganizationUserSessionIssuerMcpServersInfinite(
     { userSessionIssuerId: issuer.id },
@@ -356,17 +360,23 @@ function McpServersSection({
     );
   }
 
+  const drift = <ClientDriftWarning issuerId={issuer.id} />;
+  if (!titled) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-end">{drift}</div>
+        {body}
+      </div>
+    );
+  }
   return (
-    <InfoSection
-      title="MCP servers"
-      adornment={<ClientDriftWarning issuerId={issuer.id} />}
-    >
+    <InfoSection title="MCP servers" adornment={drift}>
       {body}
     </InfoSection>
   );
 }
 
-function ActionsSection({
+export function ActionsSection({
   issuer,
   detailHref,
 }: {
@@ -376,11 +386,21 @@ function ActionsSection({
   const navigate = useNavigate();
   const [movingHost, setMovingHost] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
+  const [promoting, setPromoting] = useState(false);
 
   return (
     <RequireScope scope="org:admin" level="section">
       <InfoSection title="Actions">
-        <Stack direction="horizontal" gap={2}>
+        <Stack direction="horizontal" gap={2} wrap="wrap">
+          {issuer.projectId !== "" && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setPromoting(true)}
+            >
+              <Button.Text>Make organization-wide</Button.Text>
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"
@@ -402,6 +422,12 @@ function ActionsSection({
             </Button>
           )}
         </Stack>
+        {promoting && (
+          <MakeOrganizationWideDialog
+            issuer={issuer}
+            onClose={() => setPromoting(false)}
+          />
+        )}
         {movingHost && (
           <AuthenticationHostDialog
             issuer={issuer}

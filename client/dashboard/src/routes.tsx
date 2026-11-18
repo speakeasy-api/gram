@@ -464,15 +464,29 @@ const ROUTE_STRUCTURE = {
     url: "mcp-sessions",
     icon: "users",
     subPages: {
-      // Rolled out behind gram-user-session-issuer-dashboard, which the root
-      // checks; without it MCP Sessions shows no tabs.
+      // One MCP Authentication Provider, chosen with the header's picker.
+      // The index opens the one an old `?issuerId=` link names, else the one
+      // picked last, else the organization's default, else the first.
+      provider: {
+        title: "MCP Authentication Provider",
+        url: ":issuerId",
+        subPages: {
+          connections: { title: "Connections", url: "connections" },
+          mcpServers: { title: "MCP servers", url: "mcp-servers" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+      // The provider list and its detail page before the picker. Static
+      // segments outrank `:issuerId`, so these still resolve.
       configuration: {
         title: "Configuration",
         url: "configuration",
+        legacyRedirect: true,
         subPages: {
           issuerDetail: {
             title: "MCP Authentication Provider",
             url: ":issuerId",
+            legacyRedirect: true,
           },
         },
       },
@@ -1184,8 +1198,6 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "webhook",
     stage: "beta",
   },
-  // Rolled out behind gram-user-session-issuer-dashboard, which the root
-  // checks; the sidebar hides the entry while it is off.
   userSessionIssuers: {
     title: "MCP Authentication",
     url: "user-session-issuers",

@@ -1,3 +1,4 @@
+import { errorRate } from "@/lib/error-rate";
 import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
 
 export interface SourceTelemetrySummary {
@@ -36,8 +37,12 @@ export function computeTelemetrySummary(
       ? tools.reduce((sum, m) => sum + m.avgLatencyMs * m.callCount, 0) /
         totalCalls
       : 0;
-  const errorRate = totalCalls > 0 ? (totalFailures / totalCalls) * 100 : 0;
-  return { totalCalls, totalFailures, avgLatencyMs, errorRate };
+  return {
+    totalCalls,
+    totalFailures,
+    avgLatencyMs,
+    errorRate: errorRate(totalFailures, totalCalls),
+  };
 }
 
 export function formatLatency(ms: number): string {

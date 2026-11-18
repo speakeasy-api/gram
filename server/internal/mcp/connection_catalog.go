@@ -42,8 +42,15 @@ var errConnectionCatalogExpired = errors.New("connection catalog expired; give c
 
 var errConnectionCatalogTooLarge = errors.New("approved tool definitions exceed the supported size")
 
-// catalogMemberNotApproved explains a member outside the approved catalog.
+// catalogMemberNotApproved explains a member outside the approved catalog
+// when the catalog does not record which members consent showed.
 const catalogMemberNotApproved = "This server was not approved. Reconnect this gateway in your AI app to add it."
+
+// catalogMemberSkippedAtConsent explains a member consent showed but did not approve.
+const catalogMemberSkippedAtConsent = "This server was left out when this gateway was approved because it was not connected or not available then. Reconnect this gateway in your AI app to add it."
+
+// catalogMemberAddedSinceConsent explains a member that joined the gateway after consent.
+const catalogMemberAddedSinceConsent = "This server was added to the gateway after it was approved. Reconnect this gateway in your AI app to add it."
 
 // consentRejectionReason is the log reason for an approval that cannot serve a
 // request. Clients see only a sign-in challenge or consent_required, so these
@@ -150,6 +157,10 @@ type connectionCatalog struct {
 	Members map[string]connectionCatalogMember `json:"members"`
 	// MemberOutcomes records unavailable members without authorizing them.
 	MemberOutcomes []consentMemberOutcome `json:"member_outcomes,omitempty"`
+	// ShownServerIDs lists every member consent showed, approved or not, so
+	// an unapproved member reads as skipped rather than added since. Nil in
+	// catalogs approved before it was recorded.
+	ShownServerIDs []uuid.UUID `json:"shown_server_ids,omitempty"`
 	// Tools retains complete qualified tool definitions, sorted by name.
 	Tools []*toolListEntry `json:"tools,omitempty"`
 	// ExpiresAt covers the authorization lifetime and code redemption window.
@@ -295,6 +306,12 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 		}
 		members[slug] = member
 	}
+	var shown []uuid.UUID
+	for _, outcome := range inventory.MemberOutcomes {
+		if outcome.ServerID != uuid.Nil {
+			shown = append(shown, outcome.ServerID)
+		}
+	}
 	tools := make([]*toolListEntry, 0, len(inventory.Tools))
 	var outcomes []consentMemberOutcome
 	if mode == toolfilter.CatalogModeCached {
@@ -317,7 +334,7 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	catalog := connectionCatalog{
 		Version: connectionCatalogVersion, ApprovalChallengeID: "", ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
 		IssuerID: endpoint.UserSessionIssuerID, ClientID: clientID, Subject: *state.Subject,
-		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, Tools: tools,
+		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, ShownServerIDs: shown, Tools: tools,
 		ExpiresAt: expiresAt,
 	}
 	return &catalog, nil
@@ -481,6 +498,25 @@ func (c *connectionCatalog) approvedMembers(members []metaMember) (approved, una
 	return approved, unapproved
 }
 
+// notApprovedMessage says why a member is outside this catalog: consent
+// showed it and left it out, or it joined the gateway since. A catalog that
+// predates the shown list, or approved this server under another project,
+// keeps the message that covers both.
+func (c *connectionCatalog) notApprovedMessage(serverID uuid.UUID) string {
+	approvedElsewhere := false
+	for _, member := range c.Members {
+		approvedElsewhere = approvedElsewhere || member.ServerID == serverID
+	}
+	switch {
+	case c.ShownServerIDs == nil || approvedElsewhere:
+		return catalogMemberNotApproved
+	case slices.Contains(c.ShownServerIDs, serverID):
+		return catalogMemberSkippedAtConsent
+	default:
+		return catalogMemberAddedSinceConsent
+	}
+}
+
 // catalogCheckRecording says whether a member check counts toward the re-consent forecast and writes diagnostics.
 type catalogCheckRecording string
 
@@ -498,7 +534,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 	}
 	approved, found := gate.catalog.Members[member.slug]
 	if !found || approved.ServerID != member.serverID || approved.ProjectID != member.projectID {
-		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionMemberNotApproved, catalogMemberNotApproved,
+		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionMemberNotApproved, gate.catalog.notApprovedMessage(member.serverID),
 			map[string]bool{"member_recorded": found, "server_id_matches": found && approved.ServerID == member.serverID, "project_id_matches": found && approved.ProjectID == member.projectID})
 	}
 

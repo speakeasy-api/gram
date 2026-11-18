@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -12,6 +13,7 @@ import (
 
 type HookInstall = repo.HookInstall
 type HookInstallPage = repo.HookInstallPage
+type HookVersionMixRow = repo.HookVersionMixRow
 
 // HookFleet reads one organization's hooks installs for staff. It runs no
 // RBAC check: the admin service that exposes it authorizes the operator.
@@ -32,4 +34,14 @@ func (h *HookFleet) HookInstalls(ctx context.Context, organizationID string, sin
 		return HookInstallPage{}, oops.E(oops.CodeUnexpected, err, "failed to read hook installs")
 	}
 	return page, nil
+}
+
+// VersionMix counts installs per organization, version and endpoint
+// generation over the UTC days in [from, to).
+func (h *HookFleet) VersionMix(ctx context.Context, from, to time.Time) ([]HookVersionMixRow, error) {
+	rows, err := h.chRepo.ListHookVersionMix(ctx, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("read hook version mix: %w", err)
+	}
+	return rows, nil
 }
