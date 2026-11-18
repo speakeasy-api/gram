@@ -181,6 +181,7 @@ func buildDecisionSnapshot() snapshotFile {
 	b.everyPermission()
 	b.mcpSingleGrants()
 	b.mcpServerGrantPairs()
+	b.mcpAllowsWithLimitedBlocks()
 	b.authClients()
 	return b.file
 }
@@ -251,8 +252,8 @@ var (
 	snapshotMCPScopes    = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect, ScopeMCPBlockedRead, ScopeMCPBlockedWrite, ScopeMCPBlockedConnect}
 )
 
-// mcpChecks is read, write, connect and every tool call and probe on each
-// server, or only the server-level ones.
+// mcpChecks is read, write and connect on each server, plus every tool call
+// and probe when withCalls is set.
 func (b *snapshotBuilder) mcpChecks(withCalls bool) []int {
 	var checks []int
 	for _, server := range snapshotMCPServers {
@@ -260,19 +261,54 @@ func (b *snapshotBuilder) mcpChecks(withCalls bool) []int {
 		for _, op := range []string{"read", "write", "connect"} {
 			checks = append(checks, b.check(snapshotCheck{Op: op, ID: id, Project: project}))
 		}
-		if !withCalls {
-			continue
+		if withCalls {
+			checks = append(checks, b.mcpCallChecks(id, project)...)
 		}
-		for _, tool := range append([]string{""}, snapshotTools...) {
-			for _, disposition := range append([]string{""}, snapshotDispositions...) {
-				checks = append(checks, b.check(snapshotCheck{Op: "tool_call", ID: id, Project: project, Tool: tool, Disposition: disposition}))
-				if tool == "" || disposition == "" {
-					checks = append(checks, b.check(snapshotCheck{Op: "tool_call", ID: id, Project: project, Tool: tool, Disposition: disposition, Probe: true}))
-				}
+	}
+	return checks
+}
+
+// mcpCallChecks is every tool call and probe on one server.
+func (b *snapshotBuilder) mcpCallChecks(id, project string) []int {
+	var checks []int
+	for _, tool := range append([]string{""}, snapshotTools...) {
+		for _, disposition := range append([]string{""}, snapshotDispositions...) {
+			checks = append(checks, b.check(snapshotCheck{Op: "tool_call", ID: id, Project: project, Tool: tool, Disposition: disposition}))
+			if tool == "" || disposition == "" {
+				checks = append(checks, b.check(snapshotCheck{Op: "tool_call", ID: id, Project: project, Tool: tool, Disposition: disposition, Probe: true}))
 			}
 		}
 	}
 	return checks
+}
+
+// mcpAllowsWithLimitedBlocks: an unlimited connect allow together with a
+// connect block limited to a tool or a disposition, asked every tool call and
+// probe. This is where a call that leaves out the blocked value shows.
+func (b *snapshotBuilder) mcpAllowsWithLimitedBlocks() {
+	var checks []int
+	for _, server := range snapshotMCPServers {
+		checks = append(checks, b.mcpCallChecks(server[0], server[1])...)
+	}
+	var allows, blocks []int
+	for _, g := range b.mcpGrants(true) {
+		grant := b.file.Grants[g]
+		_, tool := grant.Selector[SelectorKeyTool]
+		_, disposition := grant.Selector[SelectorKeyDisposition]
+		switch {
+		case grant.Scope == string(ScopeMCPConnect) && !tool && !disposition:
+			allows = append(allows, g)
+		case grant.Scope == string(ScopeMCPBlockedConnect) && (tool || disposition):
+			blocks = append(blocks, g)
+		}
+	}
+	var sets [][]int
+	for _, allow := range allows {
+		for _, block := range blocks {
+			sets = append(sets, []int{allow, block})
+		}
+	}
+	b.group("mcp allows with limited blocks", checks, sets)
 }
 
 // mcpGrants is every MCP grant a selector can name in the small world: each
