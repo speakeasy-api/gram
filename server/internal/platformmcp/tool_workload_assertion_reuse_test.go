@@ -288,20 +288,20 @@ func TestWorkloadAssertionReuseDiscoveryUsesExistingScopes(t *testing.T) {
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "policy", Version: "1"}, nil))
 	registerWorkloadAssertionReuseTools(reg, nil)
 	p := Principal{OrganizationID: "test-org", UserID: "test-user"}
-	tools := []*mcp.Tool{{Name: "get_workload_assertion_reuse"}, {Name: "set_workload_assertion_reuse"}}
+	tools := []*mcp.Tool{{Name: "list_workload_identities"}, {Name: "get_workload_assertion_reuse"}, {Name: "set_workload_assertion_reuse"}}
 	for _, tc := range []struct {
 		scope authz.Scope
 		org   string
 		admin bool
 		want  []string
 	}{
-		{authz.ScopeWorkloadRead, p.OrganizationID, false, []string{"get_workload_assertion_reuse"}},
+		{authz.ScopeWorkloadRead, p.OrganizationID, false, []string{"list_workload_identities", "get_workload_assertion_reuse"}},
 		// workload:write implies workload:read, but cannot admit organization mutations alone.
-		{authz.ScopeWorkloadWrite, p.OrganizationID, false, []string{"get_workload_assertion_reuse"}},
-		{authz.ScopeWorkloadWrite, p.OrganizationID, true, []string{"get_workload_assertion_reuse", "set_workload_assertion_reuse"}},
+		{authz.ScopeWorkloadWrite, p.OrganizationID, false, []string{"list_workload_identities", "get_workload_assertion_reuse"}},
+		{authz.ScopeWorkloadWrite, p.OrganizationID, true, []string{"list_workload_identities", "get_workload_assertion_reuse", "set_workload_assertion_reuse"}},
 		// Discovery is coarse: a grant for any resource advertises the workflow.
 		// The management service checks the exact organization at invocation.
-		{authz.ScopeWorkloadWrite, "other-org", true, []string{"get_workload_assertion_reuse", "set_workload_assertion_reuse"}},
+		{authz.ScopeWorkloadWrite, "other-org", true, []string{"list_workload_identities", "get_workload_assertion_reuse", "set_workload_assertion_reuse"}},
 	} {
 		grants := []authz.Grant{authz.NewGrant(tc.scope, tc.org)}
 		if tc.admin {
@@ -395,4 +395,79 @@ func TestWorkloadAssertionReuseReadCanonicalizesIssuerAndAcceptsWriteScope(t *te
 	require.NoError(t, err)
 	require.Equal(t, issuer.String(), output.IssuerID)
 	require.Equal(t, project.String(), output.ProjectID)
+}
+
+func TestWorkloadTrustPolicyReadFiltersAndLabelsVisibleTiers(t *testing.T) {
+	t.Parallel()
+	ctx, principal, project, _ := assertionReuseTestContext(t)
+	otherProject := uuid.NewString()
+	service := &WorkloadAssertionReuseService{
+		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
+			return ResolvedProject{ID: project, Slug: "workload-project"}, nil
+		},
+		management: assertionReuseManagementStub{
+			list: func(scoped context.Context, _ *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
+				authContext, ok := contextvalues.GetAuthContext(scoped)
+				require.True(t, ok)
+				require.Equal(t, project, *authContext.ProjectID)
+				return &gen.WorkloadIdentityPolicy{
+					Issuers: []*types.WorkloadIssuer{
+						{ID: "org-issuer", OrganizationID: principal.OrganizationID, Name: "Organization issuer", Issuer: "https://issuer.example.com", JwksURI: "https://issuer.example.com/jwks", AllowWildcardAdmission: true},
+						{ID: "project-issuer", OrganizationID: principal.OrganizationID, ProjectID: project.String(), Name: "Project issuer"},
+						{ID: "other-project", OrganizationID: principal.OrganizationID, ProjectID: otherProject},
+						{ID: "other-org", OrganizationID: "other-org"},
+					},
+					Admissions: []*types.WorkloadAdmission{
+						{ID: "org-admission", OrganizationID: principal.OrganizationID, WorkloadIssuerID: "org-issuer", Subject: "repository:example/app", MatchKind: "exact", AgentID: uuid.NewString(), AgentName: "CI agent", WildcardActive: true},
+						{ID: "project-admission", OrganizationID: principal.OrganizationID, ProjectID: project.String(), WorkloadIssuerID: "project-issuer", Subject: "service:*", MatchKind: "wildcard", WildcardActive: false},
+						{ID: "other-project", OrganizationID: principal.OrganizationID, ProjectID: otherProject},
+						{ID: "other-org", OrganizationID: "other-org"},
+					},
+				}, nil
+			},
+		},
+	}
+
+	output, err := service.getTrustPolicy(ctx, principal, GetWorkloadTrustPolicyInput{ProjectID: project.String()})
+	require.NoError(t, err)
+	require.Equal(t, project.String(), output.ProjectID)
+	require.Equal(t, principal.OrganizationID, output.OrganizationID)
+	require.Len(t, output.Issuers, 2)
+	require.Equal(t, "organization", output.Issuers[0].PolicyScope)
+	require.Equal(t, "project", output.Issuers[1].PolicyScope)
+	require.Len(t, output.Admissions, 2)
+	require.Equal(t, "organization", output.Admissions[0].PolicyScope)
+	require.Equal(t, "project", output.Admissions[1].PolicyScope)
+	require.False(t, output.Admissions[1].WildcardActive)
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "access_token")
+	require.NotContains(t, string(encoded), "private_key")
+}
+
+func TestWorkloadTrustPolicyToolContractAndUnavailableResult(t *testing.T) {
+	t.Parallel()
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "policy", Version: "1"}, nil))
+	registerWorkloadAssertionReuseTools(reg, nil)
+	reg.withProjects(slugProjects{"workload-project": uuid.New()})
+	descriptor := descriptorByName(t, reg, "list_workload_identities")
+	require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+	require.Equal(t, externalOnly, descriptor.Meta.Audiences)
+	require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+	require.Equal(t, []authz.Scope{authz.ScopeWorkloadRead}, descriptor.Meta.DiscoveryScopes)
+	require.True(t, descriptor.Annotations.ReadOnlyHint)
+	require.False(t, *descriptor.Annotations.DestructiveHint)
+
+	result, ok := workloadTrustPolicyToolResult(ErrUnavailable)
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, `"feature":"workload_trust_policy"`)
+
+	output := inferOutputSchema[WorkloadTrustPolicyOutput]("list_workload_identities")
+	require.NotNil(t, output.Properties["issuers"])
+	require.NotNil(t, output.Properties["admissions"])
+	require.Contains(t, output.Required, "issuers")
+	require.Contains(t, output.Required, "admissions")
 }

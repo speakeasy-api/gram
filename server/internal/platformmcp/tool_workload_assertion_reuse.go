@@ -49,6 +49,52 @@ type WorkloadAssertionReuseOutput struct {
 	AllowAssertionReuse bool   `json:"allow_assertion_reuse"`
 }
 
+type GetWorkloadTrustPolicyInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it; it establishes organization context and includes that project's policy tier"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
+}
+
+type WorkloadTrustPolicyIssuer struct {
+	ID                     string   `json:"id"`
+	Name                   string   `json:"name"`
+	PolicyScope            string   `json:"policy_scope"`
+	ProjectID              string   `json:"project_id"`
+	Issuer                 string   `json:"issuer"`
+	JWKSURI                string   `json:"jwks_uri"`
+	Description            string   `json:"description"`
+	AllowAssertionReuse    bool     `json:"allow_assertion_reuse"`
+	AllowWildcardAdmission bool     `json:"allow_wildcard_admission"`
+	Tags                   []string `json:"tags"`
+	CreatedAt              string   `json:"created_at"`
+	UpdatedAt              string   `json:"updated_at"`
+}
+
+type WorkloadTrustPolicyAdmission struct {
+	ID               string   `json:"id"`
+	PolicyScope      string   `json:"policy_scope"`
+	ProjectID        string   `json:"project_id"`
+	WorkloadIssuerID string   `json:"workload_issuer_id"`
+	Issuer           string   `json:"issuer"`
+	IssuerName       string   `json:"issuer_name"`
+	Subject          string   `json:"subject"`
+	MatchKind        string   `json:"match_kind"`
+	Name             string   `json:"name"`
+	Tags             []string `json:"tags"`
+	AgentID          string   `json:"agent_id"`
+	AgentName        string   `json:"agent_name"`
+	WildcardActive   bool     `json:"wildcard_active"`
+	CreatedAt        string   `json:"created_at"`
+	UpdatedAt        string   `json:"updated_at"`
+}
+
+type WorkloadTrustPolicyOutput struct {
+	ProjectID      string                         `json:"project_id"`
+	OrganizationID string                         `json:"organization_id"`
+	Issuers        []WorkloadTrustPolicyIssuer    `json:"issuers"`
+	Admissions     []WorkloadTrustPolicyAdmission `json:"admissions"`
+}
+
 type WorkloadAssertionReuseService struct {
 	management     WorkloadAssertionReuseManagement
 	authorization  *authz.Engine
@@ -60,37 +106,45 @@ func (r *PostgresReader) WithWorkloadAssertionReuse(management WorkloadAssertion
 	return r
 }
 
-func (s *WorkloadAssertionReuseService) scopedContext(ctx context.Context, principal Principal, projectInput, issuerInput string) (context.Context, string, string, error) {
+func (s *WorkloadAssertionReuseService) scopedProjectContext(ctx context.Context, principal Principal, projectInput string) (context.Context, string, error) {
 	if s == nil || s.management == nil || s.resolveProject == nil {
-		return nil, "", "", ErrUnavailable
+		return nil, "", ErrUnavailable
 	}
 	projectID, err := uuid.Parse(projectInput)
 	if err != nil || projectID == uuid.Nil {
-		return nil, "", "", oops.C(oops.CodeBadRequest)
+		return nil, "", oops.C(oops.CodeBadRequest)
+	}
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil || principal.UserID == "" || principal.OrganizationID == "" || ac.UserID != principal.UserID || ac.ActiveOrganizationID != principal.OrganizationID {
+		return nil, "", oops.C(oops.CodeUnauthorized)
+	}
+	// Do not manufacture API-key tenancy to expose project-tier issuers to an
+	// external user. The shared API intentionally restricts users to org tier.
+	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
+		return nil, "", oops.C(oops.CodeUnauthorized)
+	}
+	project, err := s.resolveProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: projectID.String()})
+	if err != nil {
+		return nil, "", err
+	}
+	if project.ID != projectID {
+		return nil, "", ErrForbidden
+	}
+	scoped := *ac
+	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
+	return contextvalues.SetAuthContext(ctx, &scoped), projectID.String(), nil
+}
+
+func (s *WorkloadAssertionReuseService) scopedContext(ctx context.Context, principal Principal, projectInput, issuerInput string) (context.Context, string, string, error) {
+	ctx, projectID, err := s.scopedProjectContext(ctx, principal, projectInput)
+	if err != nil {
+		return nil, "", "", err
 	}
 	issuerID, err := uuid.Parse(issuerInput)
 	if err != nil || issuerID == uuid.Nil {
 		return nil, "", "", oops.C(oops.CodeBadRequest)
 	}
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || principal.UserID == "" || principal.OrganizationID == "" || ac.UserID != principal.UserID || ac.ActiveOrganizationID != principal.OrganizationID {
-		return nil, "", "", oops.C(oops.CodeUnauthorized)
-	}
-	// Do not manufacture API-key tenancy to expose project-tier issuers to an
-	// external user. The shared API intentionally restricts users to org tier.
-	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
-		return nil, "", "", oops.C(oops.CodeUnauthorized)
-	}
-	project, err := s.resolveProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: projectID.String()})
-	if err != nil {
-		return nil, "", "", err
-	}
-	if project.ID != projectID {
-		return nil, "", "", ErrForbidden
-	}
-	scoped := *ac
-	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
-	return contextvalues.SetAuthContext(ctx, &scoped), projectID.String(), issuerID.String(), nil
+	return ctx, projectID, issuerID.String(), nil
 }
 
 func assertionReuseProjection(policy *gen.WorkloadIdentityPolicy, principal Principal, projectID, issuerID string) (WorkloadAssertionReuseOutput, error) {
@@ -102,6 +156,61 @@ func assertionReuseProjection(policy *gen.WorkloadIdentityPolicy, principal Prin
 		}
 	}
 	return WorkloadAssertionReuseOutput{}, oops.C(oops.CodeNotFound)
+}
+
+func workloadPolicyScope(projectID string) string {
+	if projectID == "" {
+		return "organization"
+	}
+	return "project"
+}
+
+func workloadTrustPolicyProjection(policy *gen.WorkloadIdentityPolicy, principal Principal, projectID string) WorkloadTrustPolicyOutput {
+	result := WorkloadTrustPolicyOutput{
+		ProjectID:      projectID,
+		OrganizationID: principal.OrganizationID,
+		Issuers:        []WorkloadTrustPolicyIssuer{},
+		Admissions:     []WorkloadTrustPolicyAdmission{},
+	}
+	if policy == nil {
+		return result
+	}
+	for _, issuer := range policy.Issuers {
+		if issuer == nil || issuer.OrganizationID != principal.OrganizationID || (issuer.ProjectID != "" && issuer.ProjectID != projectID) {
+			continue
+		}
+		result.Issuers = append(result.Issuers, WorkloadTrustPolicyIssuer{
+			ID: issuer.ID, Name: issuer.Name, PolicyScope: workloadPolicyScope(issuer.ProjectID), ProjectID: issuer.ProjectID,
+			Issuer: issuer.Issuer, JWKSURI: issuer.JwksURI, Description: issuer.Description,
+			AllowAssertionReuse: issuer.AllowAssertionReuse, AllowWildcardAdmission: issuer.AllowWildcardAdmission, Tags: issuer.Tags,
+			CreatedAt: issuer.CreatedAt, UpdatedAt: issuer.UpdatedAt,
+		})
+	}
+	for _, admission := range policy.Admissions {
+		if admission == nil || admission.OrganizationID != principal.OrganizationID || (admission.ProjectID != "" && admission.ProjectID != projectID) {
+			continue
+		}
+		result.Admissions = append(result.Admissions, WorkloadTrustPolicyAdmission{
+			ID: admission.ID, PolicyScope: workloadPolicyScope(admission.ProjectID), ProjectID: admission.ProjectID,
+			WorkloadIssuerID: admission.WorkloadIssuerID, Issuer: admission.Issuer, IssuerName: admission.IssuerName,
+			Subject: admission.Subject, MatchKind: admission.MatchKind, Name: admission.Name, Tags: admission.Tags,
+			AgentID: admission.AgentID, AgentName: admission.AgentName, WildcardActive: admission.WildcardActive,
+			CreatedAt: admission.CreatedAt, UpdatedAt: admission.UpdatedAt,
+		})
+	}
+	return result
+}
+
+func (s *WorkloadAssertionReuseService) getTrustPolicy(ctx context.Context, principal Principal, input GetWorkloadTrustPolicyInput) (WorkloadTrustPolicyOutput, error) {
+	ctx, projectID, err := s.scopedProjectContext(ctx, principal, input.ProjectID)
+	if err != nil {
+		return WorkloadTrustPolicyOutput{}, fmt.Errorf("workload trust policy: %w", err)
+	}
+	policy, err := s.management.List(ctx, &gen.ListPayload{})
+	if err != nil {
+		return WorkloadTrustPolicyOutput{}, fmt.Errorf("workload trust policy: %w", err)
+	}
+	return workloadTrustPolicyProjection(policy, principal, projectID), nil
 }
 
 func (s *WorkloadAssertionReuseService) get(ctx context.Context, principal Principal, input GetWorkloadAssertionReuseInput) (WorkloadAssertionReuseOutput, error) {
@@ -157,12 +266,38 @@ func (s *WorkloadAssertionReuseService) set(ctx context.Context, principal Princ
 }
 
 func registerWorkloadAssertionReuseTools(reg *Registrar, service *WorkloadAssertionReuseService) {
+	addTool(reg, &mcp.Tool{Name: "list_workload_identities", Title: "List Workload Identities", Description: "List the trusted workload issuers and admitted subjects visible in one exact project context, including organization-tier and selected project-tier policy, subject match mode, wildcard activity, and assigned agent. Requires workload:read. Returns configuration only, never assertions, access tokens, private keys, or other credentials.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: []authz.Scope{authz.ScopeWorkloadRead}}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetWorkloadTrustPolicyInput) (*mcp.CallToolResult, WorkloadTrustPolicyOutput, error) {
+		return principalToolCall(ctx, workloadTrustPolicyToolResult, func(p Principal) (WorkloadTrustPolicyOutput, error) { return service.getTrustPolicy(ctx, p, input) })
+	})
 	addTool(reg, &mcp.Tool{Name: "get_workload_assertion_reuse", Description: "Read replay protection for one exact organization-tier workload issuer. Requires workload:read. The exact project establishes organization context, not policy scope. Returns safe configuration only, never assertions, tokens, keys, or admissions.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: []authz.Scope{authz.ScopeWorkloadRead}}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetWorkloadAssertionReuseInput) (*mcp.CallToolResult, WorkloadAssertionReuseOutput, error) {
 		return principalToolCall(ctx, workloadAssertionReuseToolResult, func(p Principal) (WorkloadAssertionReuseOutput, error) { return service.get(ctx, p, input) })
 	})
 	addTool(reg, &mcp.Tool{Name: "set_workload_assertion_reuse", Description: "Set replay protection for one exact organization-tier workload issuer, without changing issuer trust, keys, or admissions. First read get_workload_assertion_reuse, then ask the user to confirm the exact issuer, desired value, and organization-wide impact before confirmed=true. Requires org:admin, workload:read, and workload:write. Enabling permits valid jti or uti assertions to be reused until expiry; disabling restores replay protection. Tokens without replay identifiers retain exact-token compatibility. This is an absolute, idempotent assignment, not a toggle or compare-and-swap: concurrent administrators use last committed write. Returns committed safe configuration, never credentials.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: []authz.Scope{authz.ScopeWorkloadWrite}}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkloadAssertionReuseInput) (*mcp.CallToolResult, WorkloadAssertionReuseOutput, error) {
 		return principalToolCall(ctx, workloadAssertionReuseToolResult, func(p Principal) (WorkloadAssertionReuseOutput, error) { return service.set(ctx, p, input) })
 	})
+}
+
+func workloadTrustPolicyToolResult(err error) (*mcp.CallToolResult, bool) {
+	if result, ok := externalAuthorizationToolResult(err); ok {
+		return result, true
+	}
+	result := featureUnavailableResult{Code: unavailableCode, Feature: "workload_trust_policy", Message: "Workload identity trust policy is temporarily unavailable."}
+	if errors.Is(err, ErrForbidden) {
+		result.Code, result.Message = "not_found", "That project is not available to you."
+	}
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+		switch shareable.Code {
+		case oops.CodeBadRequest, oops.CodeInvalid:
+			result.Code, result.Message = "invalid_request", "Provide one exact project_slug from list_projects."
+		case oops.CodeForbidden, oops.CodeUnauthorized, oops.CodeNotFound:
+			result.Code, result.Message = "not_found", "That project is not available to you."
+		}
+	}
+	contents, marshalErr := json.Marshal(result)
+	if marshalErr != nil {
+		return nil, false
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(contents)}}, IsError: true}, true
 }
 
 func workloadAssertionReuseToolResult(err error) (*mcp.CallToolResult, bool) {

@@ -27,6 +27,11 @@
         "--config",
         ".playwright-mcp.config.json"
       ]
+    },
+    "linear": {
+      "type": "streamable-http",
+      "url": "https://mcp.linear.app/mcp",
+      "description": "Linear issue and project management"
     }
   }
 }
