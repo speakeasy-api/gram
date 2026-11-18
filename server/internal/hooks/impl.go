@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -108,6 +109,9 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+	// versionPolicy classifies the sender's hooks version for the
+	// hooks_version effect. Zero leaves the effect off.
+	versionPolicy hookversions.Policy
 	// claudeBudget bounds how long the legacy /rpc/hooks.claude endpoint waits
 	// for a verdict before it answers from the org's fail-open posture.
 	claudeBudget time.Duration
@@ -336,7 +340,13 @@ func NewService(
 		claudeBudget:       legacyClaudeHookDecisionBudget,
 		claudeDrains:       sync.WaitGroup{},
 		deviceAgentTokens:  deviceAgentTokens,
+		versionPolicy:      hookversions.Policy{Latest: nil, Minimum: nil},
 	}
+}
+
+// SetVersionPolicy turns on the hooks_version effect on ingest responses.
+func (s *Service) SetVersionPolicy(policy hookversions.Policy) {
+	s.versionPolicy = policy
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

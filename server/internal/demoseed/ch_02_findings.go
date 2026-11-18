@@ -531,18 +531,17 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 			if supp == 2 || supp == 3 {
 				falsePositiveAt = new(chatDT.Add(3 * time.Hour))
 			}
-			// Same chat-to-server rule as telemetry_logs (i % 5 = 0 is Acme
-			// Ops), so the Risk Events MCP filter agrees with the call details.
+			// Same chat-to-server rule as telemetry_logs (every chat calls the
+			// OpenAPI Server), so the Risk Events MCP filter agrees with the
+			// call details.
 			var execID, mcpServerID, toolsetID, toolName, phase, mediation, method, principal, outcome string
 			if !onUser {
 				execID = s.det("mcp-execution-" + strconv.Itoa(i)).String()
-				mcpServerID = s.det("mcpserver-support").String()
+				mcpServerID = s.supportServer().String()
 				toolsetID = s.toolset1().String()
 				toolName = "get_customer"
 				if i%5 == 0 {
-					mcpServerID = s.det("mcpserver-ops").String()
-					toolsetID = s.toolset2().String()
-					toolName = "check_health"
+					toolName = "query_db"
 				}
 				phase, mediation, method, principal, outcome = "response", "hosted_mcp", "tools/call", "user_session", "logged"
 			}
@@ -626,7 +625,7 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 			"",
 			"",
 			s.det("mcp-execution-181").String(),
-			s.det("mcpserver-support").String(),
+			s.supportServer().String(),
 			s.toolset1().String(),
 			"get_customer",
 			"request",
@@ -793,10 +792,11 @@ func chfEmailClient(email string) string {
 	return chfClientAttrs(hash64("gwcli", email), hash64("gwcliv", email), hash64("gwcliseen", email))
 }
 
-// chfGatewayDiscovery is gateway (meta MCP) traffic for the Acme Agent
-// Gateway, which fronts the four mcp_servers seeded in postgres.sql. Ids
-// reproduce s.det("metamcp-1") / ("mcpserver-<member>") /
-// ("remotemcp-<member>") so ClickHouse rows join the Postgres rows.
+// chfGatewayDiscovery is gateway (meta MCP) traffic for the Multi-Server
+// Gateway, which fronts three of the seeded MCP servers. Ids
+// reproduce s.det("metamcp-1"), gatewayMemberServer (the toolset's canonical
+// wrapper for support, s.det("mcpserver-<member>") for the remotes)
+// and s.det("remotemcp-<member>"), so ClickHouse rows join the Postgres rows.
 //
 // Discovery calls (list_servers / describe_server / describe_tools) land under
 // gram.event.source = meta_discovery with a "metamcp:" urn: the runtime never
@@ -846,15 +846,15 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 }
 
 var (
-	// Weighted member pick: support 5, ops 3, linear 1, slack 1 of every 10.
-	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "ops", "ops", "ops", "linear", "slack"}
+	// Weighted member pick: OpenAPI Server 5, Example OAuth 3, Example Shared
+	// Credential 2 of every 10.
+	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "linear", "linear", "linear", "slack", "slack"}
 	chfGatewayTools   = map[string][]string{
 		"support": {"search_logs", "get_customer", "query_db", "fetch_traces"},
-		"ops":     {"list_deploys", "check_health", "get_metrics", "process_refund"},
-		"linear":  {"list_issues", "create_issue", "get_issue"},
-		"slack":   {"send_message", "list_channels"},
+		"linear":  {"list_notes", "add_note", "whoami"},
+		"slack":   {"whoami", "echo"},
 	}
-	chfGatewayToolsets = map[string]string{"support": "acme-support-tools", "ops": "acme-ops"}
+	chfGatewayToolsets = map[string]string{"support": "openapi-server"}
 )
 
 // chfGatewayMemberCalls: member calls dispatched through the gateway. They
@@ -863,7 +863,7 @@ var (
 // the "tools:externalmcp:<remote id>:" urn the proxy emits), plus
 // gram.meta_mcp_server.id. One row serves the member's own usage, the gateway
 // Activity section, and the MCP listing marker alike, so call totals never
-// double. Ops carries most of the failures.
+// double. The Example OAuth server carries most of the failures.
 func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) error {
 	rows := s.chfDispatchedCalls(s.det("metamcp-1").String(), "gw", 240)
 	return s.chfInsertTelemetry(ctx, ch, "gateway member call telemetry", rows)
@@ -878,6 +878,18 @@ func (s *seeder) chfOrganizationGatewayCalls(ctx context.Context, ch driver.Conn
 	return s.chfInsertTelemetry(ctx, ch, "organization gateway call telemetry", rows)
 }
 
+// gatewayMemberServer resolves a gateway member key to its MCP server id: the
+// toolset-backed members are their toolsets' canonical wrappers, the remotes
+// their own servers.
+func (s *seeder) gatewayMemberServer(mkey string) uuid.UUID {
+	switch mkey {
+	case "support":
+		return s.supportServer()
+	default:
+		return s.det("mcpserver-" + mkey)
+	}
+}
+
 // chfDispatchedCalls builds count member calls dispatched through gateway.
 // salt varies the draws per gateway and keeps trace ids distinct.
 func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTelemetryRow {
@@ -885,7 +897,7 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 	for n := range count {
 		i := n + 1
 		mkey := chfGatewayMembers[hash64(salt+"mem", n)%10]
-		member := s.det("mcpserver-" + mkey).String()
+		member := s.gatewayMemberServer(mkey).String()
 		remote := s.det("remotemcp-" + mkey).String()
 		toolsetSlug := chfGatewayToolsets[mkey]
 		tools := chfGatewayTools[mkey]
@@ -895,7 +907,7 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 			toolURNStr = toolURN(tool)
 		}
 		status := 200
-		if (mkey == "ops" && hash64(salt+"err", n)%5 == 0) || hash64(salt+"bg", n)%40 == 0 {
+		if (mkey == "linear" && hash64(salt+"err", n)%5 == 0) || hash64(salt+"bg", n)%40 == 0 {
 			status = 500
 		}
 		// Gateway endpoints see more kinds of client than a hosted server
@@ -942,15 +954,15 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 	return rows
 }
 
-// chfDirectRemoteCalls: calls made straight to Linear, Slack and GitHub
-// (not through a gateway), per tool, for the Inspect tab's per-tool health;
-// plus Linear and GitHub calls dispatched through the Direct mode gateway.
+// chfDirectRemoteCalls: calls made straight to Linear and Notion (not
+// through a gateway), per tool, for the Inspect tab's per-tool health; plus
+// calls to both dispatched through the Direct mode gateway.
 func (s *seeder) chfDirectRemoteCalls(ctx context.Context, ch driver.Conn) error {
 	var rows []chfTelemetryRow
-	for _, server := range []string{"linear", "slack", "github"} {
+	for _, server := range []string{"linear-app", "notion-app"} {
 		rows = append(rows, s.directRemoteCalls(server, s.det("mcpserver-"+server), s.det("remotemcp-"+server), "", inspectRemoteTools[server])...)
 	}
-	for _, server := range []string{"linear", "github"} {
+	for _, server := range []string{"linear-app", "notion-app"} {
 		tools := make([]inspectTool, 0, 4)
 		for _, t := range inspectRemoteTools[server][:4] {
 			t.calls /= 5
@@ -961,15 +973,15 @@ func (s *seeder) chfDirectRemoteCalls(ctx context.Context, ch driver.Conn) error
 	return s.chfInsertTelemetry(ctx, ch, "direct remote server call telemetry", rows)
 }
 
-// chfGatewayGoneCalls: dispatches to GitHub from before it left the gateway
+// chfGatewayGoneCalls: dispatches to Linear from before it left the gateway
 // (its membership is soft-deleted in Postgres three days ago). They count
 // toward the gateway's dispatched-call totals but must not appear in Calls by
 // member.
 func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error {
 	gateway := s.det("metamcp-1").String()
-	member := s.det("mcpserver-github").String()
-	remote := s.det("remotemcp-github").String()
-	tools := []string{"list_pull_requests", "get_issue", "search_code"}
+	member := s.det("mcpserver-linear-app").String()
+	remote := s.det("remotemcp-linear-app").String()
+	tools := []string{"list_issues", "get_issue", "search_issues"}
 	handles := []string{"amara", "priya", "mateo"}
 	rows := make([]chfTelemetryRow, 0, 24)
 	for n := range 24 {

@@ -492,6 +492,14 @@ type Client struct {
 	// startMemoryEvalRun endpoint.
 	StartMemoryEvalRunDoer goahttp.Doer
 
+	// ListAssistantOrganizations Doer is the HTTP client used to make requests to
+	// the listAssistantOrganizations endpoint.
+	ListAssistantOrganizationsDoer goahttp.Doer
+
+	// RepairOrganizationAssistantAgentNames Doer is the HTTP client used to make
+	// requests to the repairOrganizationAssistantAgentNames endpoint.
+	RepairOrganizationAssistantAgentNamesDoer goahttp.Doer
+
 	// ListOrganizationAssistants Doer is the HTTP client used to make requests to
 	// the listOrganizationAssistants endpoint.
 	ListOrganizationAssistantsDoer goahttp.Doer
@@ -643,6 +651,8 @@ func NewClient(
 		ListMemoryEvalRunsDoer:                      doer,
 		GetMemoryEvalRunDoer:                        doer,
 		StartMemoryEvalRunDoer:                      doer,
+		ListAssistantOrganizationsDoer:              doer,
+		RepairOrganizationAssistantAgentNamesDoer:   doer,
 		ListOrganizationAssistantsDoer:              doer,
 		MigrateOrganizationAssistantIdentitiesDoer:  doer,
 		MigrateOrganizationAssistantsToKitDoer:      doer,
@@ -3510,6 +3520,54 @@ func (c *Client) StartMemoryEvalRun() goa.Endpoint {
 		resp, err := c.StartMemoryEvalRunDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "startMemoryEvalRun", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAssistantOrganizations returns an endpoint that makes HTTP requests to
+// the admin service listAssistantOrganizations server.
+func (c *Client) ListAssistantOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAssistantOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeListAssistantOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAssistantOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAssistantOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listAssistantOrganizations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RepairOrganizationAssistantAgentNames returns an endpoint that makes HTTP
+// requests to the admin service repairOrganizationAssistantAgentNames server.
+func (c *Client) RepairOrganizationAssistantAgentNames() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRepairOrganizationAssistantAgentNamesRequest(c.encoder)
+		decodeResponse = DecodeRepairOrganizationAssistantAgentNamesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRepairOrganizationAssistantAgentNamesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RepairOrganizationAssistantAgentNamesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "repairOrganizationAssistantAgentNames", err)
 		}
 		return decodeResponse(resp)
 	}

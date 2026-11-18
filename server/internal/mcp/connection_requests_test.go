@@ -238,6 +238,7 @@ func TestRemoteSessionRejections(t *testing.T) {
 			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Equal(t, tc.detail, row.SubReason)
 			require.Equal(t, subject.String(), row.SubjectURN)
+			require.Empty(t, row.ProviderHost, "the request row names no sign-in issuer")
 		})
 	}
 }
@@ -275,6 +276,7 @@ func TestProxiedUpstreamFailureRecords(t *testing.T) {
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, mcpServer.ID.String(), row.ServerID)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.URL), row.ProviderHost)
 	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
 	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
 }
@@ -375,11 +377,52 @@ func TestGatewayMemberRows(t *testing.T) {
 	require.Equal(t, meta.ID.String(), row.ServerID)
 	require.NotEmpty(t, row.MemberID)
 	require.Equal(t, subject.String(), row.SubjectURN)
+	require.Empty(t, row.ProviderHost, "a member that was never reached names no upstream")
 
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-refused", deny.URL)
 	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	row = rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(deny.URL), row.ProviderHost)
+}
+
+// A member refresh outage counts once per provider, on its provider_refresh row, not again here.
+func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-refresh-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refresh", "", []uuid.UUID{issuerID})
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	remoteIssuer, err := remotesessions_repo.New(ti.conn).GetRemoteSessionIssuerByID(ctx, remotesessions_repo.GetRemoteSessionIssuerByIDParams{
+		ID: remoteIssuerID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, IncludeOrganizational: true, OrganizationID: conv.ToPGText(orgID), IncludeGlobal: true,
+	})
+	require.NoError(t, err)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	subject := createTestUser(t, ctx, ti, "meta-refresh-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, clientID, subject)
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, clientID, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) })
+
+	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+	require.NotEmpty(t, row.MemberID)
+	require.Empty(t, row.ProviderHost, "the request row names no issuer")
+	refresh := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(remoteIssuer.Issuer), refresh.ProviderHost)
+	require.Len(t, rec.Rows(), 2, "one outage, named once")
 }
 
 // A busy or broken member must write its row and read true, through the real request path.
@@ -424,6 +467,7 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 			require.Equal(t, `server "member" `+tc.text+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 			require.NotEmpty(t, row.MemberID)
 			require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+			require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.URL), row.ProviderHost, "a member's provider failure names its upstream")
 		})
 	}
 }
@@ -478,7 +522,7 @@ func TestGatewayRowsReadTheReportedClient(t *testing.T) {
 	}
 }
 
-// A toolset gate's rejection reads the record a hosted session keeps, and a missing session the User-Agent.
+// A hosted server's gate cannot name the toolset-keyed session record, so its rejection reads the User-Agent.
 func TestGateRejectionReadsTheReportedClient(t *testing.T) {
 	t.Parallel()
 
@@ -496,8 +540,8 @@ func TestGateRejectionReadsTheReportedClient(t *testing.T) {
 	_, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, map[string]string{"User-Agent": "claude-code/2.1.0", "Mcp-Session-Id": sessionID})
 	require.Error(t, err)
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession)
-	require.Equal(t, mcpconnectionattempts.FamilyCursor, row.ClientFamily)
-	require.Equal(t, "1.7.3", row.ClientVersion)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
+	require.Equal(t, "2.1.0", row.ClientVersion)
 	require.NotEmpty(t, row.AppKey)
 }
 
@@ -805,7 +849,7 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
 			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeInitializeBody(), "", nil)
-			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+			require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 			require.Empty(t, response.Body.String())
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
@@ -827,11 +871,11 @@ func TestDirectHostedMissingSecuritySkipsNotifications(t *testing.T) {
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
 	_, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "", nil)
-	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireNothing()
 
 	_, err = servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
-	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCallerCredentialMissing)
 	require.Len(t, rec.Rows(), 1)
 }
@@ -1103,7 +1147,7 @@ func TestExternalOAuthFirstHandshakeRecordsNothing(t *testing.T) {
 
 			for range 2 {
 				response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeInitializeBody(), "", nil)
-				require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+				require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 				require.Contains(t, response.Header().Get("WWW-Authenticate"), "resource_metadata=")
 			}
 			rec.RequireNothing()

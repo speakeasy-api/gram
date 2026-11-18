@@ -228,6 +228,7 @@ describe("AppSidebar", () => {
           { label: "Steps", href: "/onboarding-steps" },
           { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+          { label: "Assistants", href: "/assistants" },
           {
             label: "Upstream OAuth migration",
             href: "/upstream-oauth-migration",

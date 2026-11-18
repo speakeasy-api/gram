@@ -28,13 +28,12 @@ type inspectTool struct {
 	p50 float64
 }
 
-// inspectRemoteTools are the tools of the shared remote servers. The names
-// include the ones the gateway dispatch rows already use (chfGatewayTools,
-// chfGatewayGoneCalls), so gateway and direct calls land on the same rows.
-// Per server: most tools healthy (<1% errors), one at ~6%, one at ~18% or a
-// slow one, and one destructive tool nobody called this week.
+// inspectRemoteTools are the tools of the vendor servers, Linear and Notion
+// (vendor_apps.go), named as their MCP servers name them. Per server: most
+// tools healthy (<1% errors), one at ~6%, one at ~18% or a slow one, and one
+// destructive tool nobody called this week.
 var inspectRemoteTools = map[string][]inspectTool{
-	"linear": {
+	"linear-app": {
 		{"search_issues", "Search issues", true, false, true, true, 180, 0.004, 0.38},
 		{"list_issues", "List issues", true, false, true, true, 140, 0.005, 0.42},
 		{"get_issue", "Get issue", true, false, true, true, 120, 0.003, 0.21},
@@ -45,26 +44,15 @@ var inspectRemoteTools = map[string][]inspectTool{
 		{"delete_issue", "Delete issue", false, true, true, true, 6, 0, 0.51},
 		{"archive_project", "Archive project", false, true, true, true, 0, 0, 0},
 	},
-	"slack": {
-		{"list_channels", "List channels", true, false, true, true, 130, 0.004, 0.24},
-		{"read_channel_history", "Read channel history", true, false, true, true, 110, 0.006, 0.61},
-		{"search_messages", "Search messages", true, false, true, true, 95, 0.005, 0.83},
-		{"get_user_profile", "Get user profile", true, false, true, true, 45, 0, 0.18},
-		{"send_message", "Send message", false, false, false, true, 120, 0.18, 0.66},
-		{"add_reaction", "Add reaction", false, false, true, true, 35, 0.005, 0.2},
-		{"delete_message", "Delete message", false, true, true, true, 4, 0, 0.35},
-		{"archive_channel", "Archive channel", false, true, true, true, 0, 0, 0},
-	},
-	"github": {
-		{"search_code", "Search code", true, false, true, true, 110, 0.007, 2.4},
-		{"list_pull_requests", "List pull requests", true, false, true, true, 120, 0.004, 0.45},
-		{"get_issue", "Get issue", true, false, true, true, 70, 0.003, 0.31},
-		{"get_file_contents", "Get file contents", true, false, true, true, 85, 0.005, 0.36},
-		{"create_issue", "Create issue", false, false, false, true, 30, 0.06, 0.9},
-		{"create_pull_request", "Create pull request", false, false, false, true, 25, 0.008, 1.3},
-		{"merge_pull_request", "Merge pull request", false, false, true, true, 14, 0, 1.1},
-		{"delete_branch", "Delete branch", false, true, true, true, 9, 0, 0.42},
-		{"delete_repository", "Delete repository", false, true, true, true, 0, 0, 0},
+	"notion-app": {
+		{"notion-search", "Search", true, false, true, true, 130, 0.004, 0.24},
+		{"notion-fetch", "Fetch", true, false, true, true, 110, 0.006, 0.61},
+		{"notion-get-comments", "Get comments", true, false, true, true, 95, 0.005, 0.83},
+		{"notion-get-users", "Get users", true, false, true, true, 45, 0, 0.18},
+		{"notion-create-pages", "Create pages", false, false, false, true, 120, 0.18, 0.66},
+		{"notion-update-page", "Update page", false, false, true, true, 35, 0.005, 0.2},
+		{"notion-delete-pages", "Delete pages", false, true, true, true, 4, 0, 0.35},
+		{"notion-delete-databases", "Delete databases", false, true, true, true, 0, 0, 0},
 	},
 }
 
@@ -72,10 +60,9 @@ var inspectRemoteTools = map[string][]inspectTool{
 // selector): each role still connects to the server and its other tools.
 // The Admin block is what gives a signed-in admin a blocked tool to see.
 var inspectToolBlocks = []struct{ role, server, tool string }{
-	{"engineer", "linear", "delete_issue"},
-	{"contractors", "slack", "delete_message"},
-	{"contractors", "github", "delete_branch"},
-	{"admin", "linear", "delete_issue"},
+	{"engineer", "linear-app", "delete_issue"},
+	{"contractors", "notion-app", "notion-delete-pages"},
+	{"admin", "linear-app", "delete_issue"},
 }
 
 // toolBlockID is the grant id of one per-tool block.
@@ -87,6 +74,9 @@ func (s *seeder) toolBlockID(role, server, tool string) uuid.UUID {
 // outlive the custom roles' grant cleanup and so are deleted by id.
 func (s *seeder) globalToolBlockIDs() []uuid.UUID {
 	return []uuid.UUID{
+		s.toolBlockID("admin", "linear-app", "delete_issue"),
+		// The block's id before it moved to the Linear vendor server, so a
+		// reseed over an older seed's data still removes it.
 		s.toolBlockID("admin", "linear", "delete_issue"),
 		s.toolBlockID("admin", localTasksKey, "delete_task"),
 	}
@@ -97,7 +87,7 @@ func (s *seeder) globalToolBlockIDs() []uuid.UUID {
 func (s *seeder) seedInspect(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
-	for _, server := range []string{"linear", "slack", "github"} {
+	for _, server := range []string{"linear-app", "notion-app"} {
 		if err := s.upsertToolMetadata(ctx, s.det("mcpserver-"+server), inspectRemoteTools[server]); err != nil {
 			return fmt.Errorf("insert demo %s tool metadata: %w", server, err)
 		}
@@ -127,7 +117,7 @@ func (s *seeder) seedInspect(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo direct gateway: %w", err)
 	}
-	for i, member := range []string{"linear", "github", "deepwiki"} {
+	for i, member := range []string{"linear-app", "notion-app"} {
 		if err := s.q.ServersInsertGatewayMember(ctx, repo.ServersInsertGatewayMemberParams{
 			ID: s.det("metamember-direct-" + member), ProjectID: proj, MetaID: s.directGatewayID(),
 			McpServerID: s.det("mcpserver-" + member), SortOrder: int32(i),

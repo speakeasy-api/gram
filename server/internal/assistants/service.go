@@ -273,6 +273,7 @@ type assistantMCPServerRow struct {
 	Visibility             string
 	EndpointSlug           string
 	EndpointDomain         string // custom-domain host; "" for platform endpoints
+	EndpointIsDomainRoot   bool   // the endpoint serves at its custom domain's root
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -1083,21 +1084,10 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	if len(toolsetSlugs) == 0 {
 		return nil, nil
 	}
-	var aliasCandidates []uuid.UUID
-	for _, row := range toolsetRows {
-		if row.DisabledWrapper && !row.EnablesMcp {
-			aliasCandidates = append(aliasCandidates, row.ID)
-		}
-	}
-	// A disabled hosted server with only its legacy alias still serves once enabled.
-	aliased, err := hasLegacyAlias(ctx, tx, projectID, aliasCandidates)
-	if err != nil {
-		return nil, err
-	}
 	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
-		enablesMCP[row.ID] = row.EnablesMcp || aliased[row.ID]
+		enablesMCP[row.ID] = row.EnablesMcp
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -1309,7 +1299,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if len(assistantIDs) == 0 {
 		return out, nil
 	}
-	rows, err := loadAssistantMcpServers(ctx, s.db, assistantrepo.LoadAssistantMcpServersParams{
+	rows, err := assistantrepo.New(s.db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
 		AssistantIds: assistantIDs,
 		ProjectID:    projectID,
 	})
@@ -1324,6 +1314,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			Visibility:             row.Visibility,
 			EndpointSlug:           row.EndpointSlug,
 			EndpointDomain:         row.EndpointDomain,
+			EndpointIsDomainRoot:   row.EndpointIsDomainRoot,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
@@ -1962,7 +1953,7 @@ func (s *ServiceCore) UpdateAssistant(
 			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
 		}
 		if checkKitAttachments {
-			kitAttachmentsBefore, err = loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+			kitAttachmentsBefore, err = assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 			if err != nil {
 				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
 			}
@@ -2032,7 +2023,7 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 
 	if checkKitAttachments {
-		after, err := loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+		after, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
 		}
@@ -4064,9 +4055,12 @@ func unreachableReason(m assistantMCPServerRow) string {
 	return "disabled"
 }
 
-// endpointURL is the server's own MCP address; platform endpoints live under base.
-// Platform-first selection (not endpointaddr.PrimaryEndpoint) keeps existing URLs stable.
+// endpointURL is the server's own MCP address; platform endpoints live under base. A hosted row's domain root is the
+// bare domain, as endpointaddr.EndpointURL renders it; other rows keep /mcp/{slug} so configured Kit resources match.
 func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
+	if m.EndpointDomain != "" && m.EndpointIsDomainRoot && m.ToolsetSlug.Valid {
+		return &url.URL{Scheme: "https", Host: m.EndpointDomain}
+	}
 	if m.EndpointDomain != "" {
 		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)
 	}

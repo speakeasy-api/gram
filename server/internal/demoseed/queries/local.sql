@@ -215,6 +215,156 @@ WHERE id = (
 )
 AND NOT (@tool_urn::text = ANY(tool_urns));
 
+-- The Enterprise Sign-In (ID-JAG) Server (local_ema.go). Locally the company
+-- identity provider is the dev-idp's OAuth 2.1 server.
+-- name: LocalEMAPointIdentityProvider :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    authorization_endpoint = @issuer::text || '/authorize',
+    token_endpoint = @issuer::text || '/token',
+    userinfo_endpoint = @issuer::text || '/userinfo',
+    revocation_endpoint = @issuer::text || '/revoke',
+    registration_endpoint = NULL,
+    jwks_uri = @issuer::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = ARRAY['openid', 'email', 'profile'],
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['client_secret_post'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    id_token_signing_alg_values_supported = ARRAY['RS256'],
+    authorization_response_iss_parameter_supported = TRUE,
+    oidc = TRUE,
+    name = @name::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
+
+-- Speakeasy's registration at the dev-idp: its static login client, with the
+-- checked-in local secret the dev-idp EMA app also holds.
+-- name: LocalEMAPointIdentityProviderClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text,
+    client_secret_encrypted = @client_secret_encrypted::text,
+    token_endpoint_auth_method = 'client_secret_post',
+    grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    scope = ARRAY['openid', 'email', 'profile'],
+    callback_base_url = @callback_base_url::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
+
+-- The Enterprise Sign-In (ID-JAG) Server exists only in the local org: it
+-- needs the dev-idp and the MCP fixture, which the demo org does not have.
+-- Its rows sit in the seeded project (the project delete cascades them away)
+-- except its organization sign-in, which the org-scoped user session issuer
+-- delete removes on every reseed. Its organization sign-in federates through
+-- the company provider: its trusted client is the one the caller signs in
+-- with, and the ID token it returns is what Speakeasy exchanges for an ID-JAG.
+-- name: LocalEMAInsertUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode,
+                                  trusted_remote_session_issuer_id,
+                                  trusted_remote_session_client_id) VALUES
+  (@id::uuid, NULL, @org_id::text, 'enterprise-sign-in',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   @trusted_issuer_id::uuid, @trusted_client_id::uuid);
+
+-- name: LocalEMAInsertRemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   'streamable-http', @url::text);
+
+-- name: LocalEMAInsertMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   NULL, @remote_id::uuid, @issuer_id::uuid, 'private');
+
+-- name: LocalEMAInsertEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, NULL, @mcp_server_id::uuid, @slug::text);
+
+-- The server's authorization server is the dev-idp resource authorization
+-- server for the fixture's /mcp/ema endpoint, which accepts ID-JAGs from a
+-- confidential client. Identity chaining trusts its JWT-bearer and ID-JAG
+-- support only from a discovered document, so the row records when that
+-- document was read; without it the binding reads as incomplete metadata and
+-- the consent page offers an interactive sign-in the server does not have.
+-- name: LocalEMAInsertVendorIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, token_endpoint,
+   introspection_endpoint, jwks_uri, name, scopes_supported,
+   grant_types_supported, authorization_grant_profiles_supported,
+   token_endpoint_auth_methods_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   'enterprise-sign-in-auth', @issuer::text, @issuer::text || '/token',
+   @issuer::text || '/introspect', @issuer::text || '/.well-known/jwks.json',
+   'Enterprise Sign-In Authorization Server', @scopes::text[],
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+   ARRAY['client_secret_post'], clock_timestamp());
+
+-- name: LocalEMAInsertVendorClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @issuer_id::uuid, @client_id::text,
+   @client_secret_encrypted::text, 'client_secret_post',
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   @scopes::text[]);
+
+-- name: LocalEMAInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @resource::text,
+   @metadata_url::text, ARRAY[@issuer::text], @scopes::text[],
+   clock_timestamp());
+
+-- name: LocalEMAInsertBinding :exec
+INSERT INTO remote_session_ema_bindings
+  (id, project_id, organization_id, user_session_issuer_id,
+   remote_session_issuer_id, resource, remote_session_client_id, generation,
+   state, grant_source, created_at, updated_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @user_session_issuer_id::uuid, @issuer_id::uuid,
+   @resource::text, @client_id::uuid, 1,
+   'ready', 'administrator_declared',
+   now() - interval '6 days', now() - interval '6 days');
+
+-- Locally a vendor (Linear, Notion) cannot fetch a client ID metadata
+-- document from localhost, so the shared seed's metadata document client
+-- becomes the public client the local seed registered with the vendor by
+-- dynamic registration.
+-- name: LocalVendorAppPointRegisteredClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text, client_id_metadata_uri = NULL,
+    callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- Provisions the developer in the local org's directory, linked to their
+-- user, the way directory sync would. Federated sign-in (the Enterprise
+-- Sign-In server) admits only directory-provisioned people.
+-- name: LocalProvisionDeveloperDirectoryUser :exec
+INSERT INTO directory_users
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, workos_created_at, workos_updated_at)
+VALUES (@organization_id::text, @user_id::text, 'devidp_dir_' || @user_id::text,
+        @email::text, @first_name::text, NULLIF(@last_name::text, ''),
+        clock_timestamp(), clock_timestamp())
+ON CONFLICT (workos_directory_user_id) DO UPDATE
+SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
+    email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    deleted_at = NULL, workos_deleted_at = NULL,
+    workos_updated_at = clock_timestamp(), updated_at = clock_timestamp();
+
 -- name: LocalUpsertInspectRemoteServer :exec
 -- Remote MCP servers for the Inspect tab that exist only locally: the mock
 -- task tracker (server/cmd/mock-mcp), an unreachable upstream and a disabled

@@ -10,6 +10,19 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Whether the exact legacy generated agent name needs repair.
+ */
+export const AgentNameRepairState = {
+  NotNeeded: "not_needed",
+  Pending: "pending",
+  Conflict: "conflict",
+} as const;
+/**
+ * Whether the exact legacy generated agent name needs repair.
+ */
+export type AgentNameRepairState = ClosedEnum<typeof AgentNameRepairState>;
+
+/**
  * NEVER_CONFIGURED when the assistant has no dedicated agent and still runs as its owner, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted.
  */
 export const IdentityState = {
@@ -30,6 +43,14 @@ export type AdminOrganizationAssistant = {
    * The dedicated agent, when the assistant has one.
    */
   agentId?: string | undefined;
+  /**
+   * The live bound agent name, when available.
+   */
+  agentName?: string | undefined;
+  /**
+   * Whether the exact legacy generated agent name needs repair.
+   */
+  agentNameRepairState: AgentNameRepairState;
   /**
    * When the assistant was created.
    */
@@ -81,6 +102,11 @@ export type AdminOrganizationAssistant = {
 };
 
 /** @internal */
+export const AgentNameRepairState$inboundSchema: z.ZodMiniEnum<
+  typeof AgentNameRepairState
+> = z.enum(AgentNameRepairState);
+
+/** @internal */
 export const IdentityState$inboundSchema: z.ZodMiniEnum<typeof IdentityState> =
   z.enum(IdentityState);
 
@@ -91,6 +117,8 @@ export const AdminOrganizationAssistant$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agent_id: z.optional(z.string()),
+    agent_name: z.optional(z.string()),
+    agent_name_repair_state: AgentNameRepairState$inboundSchema,
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -110,6 +138,8 @@ export const AdminOrganizationAssistant$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "agent_id": "agentId",
+      "agent_name": "agentName",
+      "agent_name_repair_state": "agentNameRepairState",
       "created_at": "createdAt",
       "created_by_user_email": "createdByUserEmail",
       "created_by_user_id": "createdByUserId",

@@ -3,10 +3,14 @@ package gram
 import (
 	"context"
 	"flag"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+
+	"github.com/speakeasy-api/gram/server/internal/netingress"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestServerCommandsOwnSeparateListenerFlags(t *testing.T) {
@@ -61,4 +65,35 @@ func TestPrivateIngressRuntimeClosesInReverseOrderAfterCancellation(t *testing.T
 	}
 	runtime.Close(ctx)
 	require.Equal(t, []int{2, 1, 0}, closed)
+}
+
+func TestPrivateGatewayPrincipalMustBeConfiguredTogether(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, validatePrivateGatewayPrincipal("", ""))
+	require.NoError(t, validatePrivateGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
+	require.Error(t, validatePrivateGatewayPrincipal("gram-gateway", ""))
+	require.Error(t, validatePrivateGatewayPrincipal("", "gram-tailnet-gateway"))
+	for _, name := range []string{"netingress-gateway-namespace", "netingress-gateway-service-account"} {
+		requireFlag(t, newNetworkIngressServerCommand().Flags, name)
+	}
+}
+
+func TestPrivateIngressLocalTokenReviewerOnlyInLocalEnvironment(t *testing.T) {
+	t.Parallel()
+
+	keyFile := filepath.Join(t.TempDir(), "token.key")
+	_, err := netingress.LoadOrCreateLocalTokenKey(keyFile)
+	require.NoError(t, err)
+
+	reviewer, err := newPrivateIngressTokenReviewer(t.Context(), testenv.NewLogger(t), "local", keyFile)
+	require.NoError(t, err)
+	require.IsType(t, &netingress.LocalTokenReviewer{}, reviewer)
+
+	for _, environment := range []string{"dev", "prod", ""} {
+		_, err := newPrivateIngressTokenReviewer(t.Context(), testenv.NewLogger(t), environment, keyFile)
+		require.ErrorContains(t, err, "only accepted in the local environment", "environment %q", environment)
+	}
+
+	_, err = newPrivateIngressTokenReviewer(t.Context(), testenv.NewLogger(t), "local", "")
+	require.ErrorContains(t, err, "local token key", "without a key, local development has no reviewer")
 }

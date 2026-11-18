@@ -1,10 +1,8 @@
 import { useStripeSubscription } from "./use-stripe-subscription";
 import { isNotFoundError } from "@/lib/route-errors";
 import { useSession } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTrialNow } from "@/hooks/useTrialNow";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import {
   getTrialLifecycleFromDates,
   type TrialLifecycle,
@@ -35,7 +33,6 @@ export function usePaygCheckoutAccess(eligibility: PaygCheckoutEligibility): {
   activeOrganizationId: string;
   trialLifecycle: TrialLifecycle;
 } {
-  const flag = useFeatureFlag(FEATURE_FLAGS.paygSelfServeBilling);
   const { hasScope } = useRBAC();
   const {
     trial,
@@ -72,8 +69,7 @@ export function usePaygCheckoutAccess(eligibility: PaygCheckoutEligibility): {
   }
 
   return {
-    eligible:
-      flag.status === "enabled" && hasScope("org:admin") && eligibleForSurface,
+    eligible: hasScope("org:admin") && eligibleForSurface,
     activeOrganizationId,
     trialLifecycle,
   };
@@ -103,8 +99,8 @@ export function useBillingState({
   const { rawGramAccountType } = useSession();
   const { hasScope } = useRBAC();
   const canRead = hasScope("org:read") || hasScope("org:admin");
-  // Existing PAYG management remains available without the rollout flag, but
-  // active trial conversion is still explicitly flag/admin gated.
+  // Existing PAYG management remains available to readers, but active trial
+  // conversion is admin gated.
   const available =
     canRead &&
     (checkoutEligible ||

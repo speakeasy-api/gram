@@ -61,6 +61,24 @@ function statusVariant(
   }
 }
 
+// The tailnet has not approved Speakeasy's gateway to host the service.
+const SERVICE_NOT_APPROVED = "provider_service_not_approved";
+
+// The gateway is approved but Tailscale has not obtained the service's TLS
+// certificate from Let's Encrypt yet; the gateway retries on its own.
+const CERTIFICATE_UNAVAILABLE = "provider_certificate_unavailable";
+
+// Speakeasy can't use the organization's encryption key, so it can't store the
+// connection's secrets. The fix is access to the key, not the connection.
+const ENCRYPTION_KEY_UNAVAILABLE = "encryption_key_unavailable";
+
+// The service that hosts the connection isn't available in this Speakeasy
+// environment. Only Speakeasy can fix that.
+const PROVIDER_CONFIGURATION_UNAVAILABLE = "provider_configuration_unavailable";
+
+const SUPPORT_URL =
+  "mailto:support@speakeasy.com?subject=Tailscale%20setup%20help";
+
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
@@ -156,16 +174,33 @@ function PrivateNetworkCleanup({
 
 function ConfiguredPrivateNetwork({
   ingress,
+  gatewayTag,
   entitled,
   enterprise,
+  onShowSetup,
 }: {
   ingress: NetworkIngress;
+  // The Tailscale tag this environment's gateway carries.
+  gatewayTag: string;
   entitled: boolean;
   enterprise: boolean;
+  onShowSetup: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [rotateOpen, setRotateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const serviceNotApproved = ingress.lastError === SERVICE_NOT_APPROVED;
+  const certificateUnavailable = ingress.lastError === CERTIFICATE_UNAVAILABLE;
+  const encryptionKeyUnavailable =
+    ingress.lastError === ENCRYPTION_KEY_UNAVAILABLE;
+  const configurationUnavailable =
+    ingress.lastError === PROVIDER_CONFIGURATION_UNAVAILABLE;
+  // These errors have their own explanation, and retrying cannot fix them.
+  const explainedError =
+    serviceNotApproved ||
+    certificateUnavailable ||
+    encryptionKeyUnavailable ||
+    configurationUnavailable;
   const update = useUpdateNetworkIngressMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
@@ -259,12 +294,84 @@ function ConfiguredPrivateNetwork({
             </dd>
           </div>
         </dl>
-        {ingress.lastError && (
+        {serviceNotApproved ? (
           <Alert variant="error" dismissible={false}>
-            Latest check: {statusLabel(ingress.lastError)}
+            <div className="space-y-2">
+              <Text small>
+                Your tailnet hasn&apos;t approved Speakeasy to host{" "}
+                <code>svc:{ingress.hostname}</code>, so devices can&apos;t reach
+                it yet. Approve the <code>speakeasy-gw</code> hosts on the
+                service&apos;s page in the Tailscale admin console, or add{" "}
+                <code>
+                  &quot;svc:{ingress.hostname}&quot;: [&quot;{gatewayTag}&quot;]
+                </code>{" "}
+                to <code>autoApprovers.services</code> in your tailnet policy.
+                This page updates on its own once the hosts are approved.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a
+                  href="https://login.tailscale.com/admin/services"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open Tailscale services
+                </a>
+              </Button>
+            </div>
           </Alert>
+        ) : certificateUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy&apos;s gateway is approved, but it couldn&apos;t get a
+                valid HTTPS certificate for <code>{ingress.hostname}</code>, so
+                devices can&apos;t connect yet. Speakeasy retries on its own and
+                this page updates once the certificate is issued.
+              </Text>
+              {ingress.statusDetail && (
+                <Text small muted>
+                  Latest attempt: {ingress.statusDetail}
+                </Text>
+              )}
+            </div>
+          </Alert>
+        ) : encryptionKeyUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy can&apos;t use your organization&apos;s encryption
+                key, so it can&apos;t store the secrets this connection needs.
+                If your organization manages its own key, restore
+                Speakeasy&apos;s access to it in your cloud key management
+                service. Otherwise, contact support. Speakeasy retries on its
+                own once the key can be used again.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a href={SUPPORT_URL}>Contact support</a>
+              </Button>
+            </div>
+          </Alert>
+        ) : configurationUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy can&apos;t connect Tailscale because of a problem on
+                our side. Nothing in your tailnet or this connection needs to
+                change. Contact support and we&apos;ll fix it.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a href={SUPPORT_URL}>Contact support</a>
+              </Button>
+            </div>
+          </Alert>
+        ) : (
+          ingress.lastError && (
+            <Alert variant="error" dismissible={false}>
+              Latest check: {statusLabel(ingress.lastError)}
+            </Alert>
+          )
         )}
-        {ingress.status === "error" && (
+        {ingress.status === "error" && !explainedError && (
           <Alert variant="warning" dismissible={false}>
             <div className="space-y-3">
               <Text small>
@@ -286,9 +393,7 @@ function ConfiguredPrivateNetwork({
                   {health.isPending ? "Retrying..." : "Retry provisioning"}
                 </Button>
                 <Button asChild variant="tertiary" size="sm">
-                  <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
-                    Contact support
-                  </a>
+                  <a href={SUPPORT_URL}>Contact support</a>
                 </Button>
               </div>
             </div>
@@ -352,6 +457,9 @@ function ConfiguredPrivateNetwork({
               {health.isPending ? "Checking..." : "Check health"}
             </Button>
           )}
+          <Button variant="secondary" size="sm" onClick={onShowSetup}>
+            Setup steps
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -397,10 +505,22 @@ export function PrivateNetworkSection(): JSX.Element | null {
     enabled: canManageIngress,
     retry: (failureCount) => failureCount < 2,
     throwOnError: false,
-    refetchInterval: (query) =>
-      query.state.data?.ingress?.status === "deleting" ? 5_000 : false,
+    refetchInterval: (query) => {
+      const current = query.state.data?.ingress;
+      if (current?.status === "deleting") return 5_000;
+      // Admins approve the host in Tailscale's console, so pick that up
+      // without a reload.
+      if (current?.lastError === SERVICE_NOT_APPROVED) return 10_000;
+      // The gateway retries the certificate on its own; show it once issued.
+      if (current?.lastError === CERTIFICATE_UNAVAILABLE) return 30_000;
+      // The reconciler retries on its own once the encryption key is usable
+      // again; show the recovery without a reload.
+      if (current?.lastError === ENCRYPTION_KEY_UNAVAILABLE) return 30_000;
+      return false;
+    },
   });
   const ingress = ingressResult.data?.ingress;
+  const gatewayTag = ingressResult.data?.gatewayTag;
   const unsupportedProvider = ingress && ingress.provider !== "tailscale";
   const [setupOpen, setSetupOpen] = useState(false);
 
@@ -450,8 +570,10 @@ export function PrivateNetworkSection(): JSX.Element | null {
       ) : ingress ? (
         <ConfiguredPrivateNetwork
           ingress={ingress}
+          gatewayTag={gatewayTag ?? ""}
           entitled={entitled}
           enterprise={enterprise}
+          onShowSetup={() => setSetupOpen(true)}
         />
       ) : entitled ? (
         <InlineEmptyState
@@ -487,12 +609,20 @@ export function PrivateNetworkSection(): JSX.Element | null {
           }
         />
       )}
-      {entitled && !ingress && (
-        <PrivateNetworkSetupSheet
-          open={setupOpen}
-          onOpenChange={setSetupOpen}
-        />
-      )}
+      {/* Before a connection exists the sheet creates one; afterwards it
+          shows the steps for the connection, including the one it just
+          created. */}
+      {!unsupportedProvider &&
+        gatewayTag &&
+        ingress?.status !== "deleting" &&
+        (ingress ? setupOpen : entitled) && (
+          <PrivateNetworkSetupSheet
+            open={setupOpen}
+            onOpenChange={setSetupOpen}
+            ingress={ingress}
+            gatewayTag={gatewayTag}
+          />
+        )}
     </SettingsSection>
   );
 }

@@ -34,6 +34,15 @@ type Service interface {
 	// project-specific. A toolset served through an MCP server is listed once, as
 	// that server. Requires org:read.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListUserSessionIssuerMcpServersResult, err error)
+	// List the remote session clients a user_session_issuer in the caller's
+	// organization binds, and the remote session clients each of its live MCP
+	// servers is associated with, so the two can be compared. Requires org:read.
+
+	// Deprecated: the remote session clients bound to a user_session_issuer are no
+	// longer authoritative, and readers are being migrated to the remote session
+	// clients associated with each MCP server. This endpoint exists only to
+	// surface drift between the two during that migration.
+	ListRemoteSessionClientBindings(context.Context, *ListRemoteSessionClientBindingsPayload) (res *UserSessionIssuerRemoteSessionClientBindings, err error)
 	// Preview moving a user_session_issuer in the caller's organization onto or
 	// off the deployment's authentication host: where clients sign in before and
 	// after, and how many MCP servers that affects. Requires org:read.
@@ -110,7 +119,7 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "getAuthenticationHostImpact", "setAuthenticationHost", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+var MethodNames = [17]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "listRemoteSessionClientBindings", "getAuthenticationHostImpact", "setAuthenticationHost", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationUserSessionIssuers service createCimdClient method.
@@ -255,6 +264,15 @@ type ListOrganizationUserSessionIssuersResult struct {
 	Items []*types.UserSessionIssuer
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// ListRemoteSessionClientBindingsPayload is the payload type of the
+// organizationUserSessionIssuers service listRemoteSessionClientBindings
+// method.
+type ListRemoteSessionClientBindingsPayload struct {
+	// The user_session_issuer whose client bindings are listed.
+	UserSessionIssuerID string
+	SessionToken        *string
 }
 
 // ListUserSessionIssuerCimdClientsResult is the result type of the
@@ -567,6 +585,48 @@ type UserSessionIssuerMigrationServerImpact struct {
 	// issuer's bindings; when enforcement is on, its clients are its auth clients'
 	// offers instead and this is false.
 	Hosted bool
+}
+
+// A live remote session client, named by the authorization server it belongs
+// to.
+type UserSessionIssuerRemoteSessionClient struct {
+	// The remote_session_client id.
+	ID string
+	// The OAuth client id registered with the authorization server.
+	ClientID string
+	// The authorization server (remote_session_issuer) id.
+	RemoteSessionIssuerID string
+	// The authorization server's name, or its slug when it has none.
+	RemoteSessionIssuerName string
+	// The authorization server's issuer URL.
+	RemoteSessionIssuerURL string
+}
+
+// UserSessionIssuerRemoteSessionClientBindings is the result type of the
+// organizationUserSessionIssuers service listRemoteSessionClientBindings
+// method.
+type UserSessionIssuerRemoteSessionClientBindings struct {
+	// Remote session clients the user_session_issuer binds. Deprecated: these
+	// bindings are no longer authoritative; read the remote session clients
+	// associated with each MCP server instead.
+	BoundClients []*UserSessionIssuerRemoteSessionClient
+	// One entry per live MCP server and associated remote session client.
+	ServerClients []*UserSessionIssuerServerRemoteSessionClient
+}
+
+// One remote session client associated with a live MCP server attached to a
+// user_session_issuer.
+type UserSessionIssuerServerRemoteSessionClient struct {
+	// The MCP server id.
+	McpServerID string
+	// The MCP server display name.
+	McpServerName string
+	// The owning project id.
+	ProjectID string
+	// The owning project name.
+	ProjectName string
+	// The associated remote session client.
+	RemoteSessionClient *UserSessionIssuerRemoteSessionClient
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

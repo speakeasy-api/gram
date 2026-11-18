@@ -565,8 +565,7 @@ type AdminGetMcpServerAuthRow struct {
 // outright: it counts as one, and any other wrapper of that toolset as two.
 // url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 // endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
-// a domain root has no such path), else the server's own slug; the caller falls
-// back to the toolset's legacy alias when no other wrapper shares that toolset.
+// a domain root has no such path), else the server's own slug.
 func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
 	row := q.db.QueryRow(ctx, adminGetMcpServerAuth, arg.ID, arg.ProjectID)
 	var i AdminGetMcpServerAuthRow
@@ -1000,6 +999,110 @@ func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg Admi
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const adminListAssistantAgentNames = `-- name: AdminListAssistantAgentNames :many
+WITH bound AS (
+ SELECT a.id AS assistant_id, a.project_id, a.name, g.id AS agent_id, g.name AS agent_name,
+ g.owner_user_id, g.owner_reassignment_required_at, g.owner_reassignment_reason,
+ CASE WHEN g.revoked_at IS NOT NULL THEN 'revoked' WHEN g.suspended_at IS NOT NULL THEN 'suspended' ELSE 'active' END::text AS lifecycle
+ FROM assistants a
+ JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+ JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+ JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+ WHERE a.organization_id = $1 AND a.deleted IS FALSE
+)
+SELECT bound.assistant_id, bound.project_id, bound.name, bound.agent_id, bound.agent_name, bound.owner_user_id, bound.owner_reassignment_required_at, bound.owner_reassignment_reason, bound.lifecycle, CASE
+ WHEN agent_name <> 'Assistant ' || assistant_id::text OR agent_name = name THEN 'not_needed'
+ WHEN EXISTS (SELECT 1 FROM agents other WHERE other.organization_id = $1 AND other.deleted IS FALSE AND other.id <> bound.agent_id AND lower(other.name) = lower(bound.name))
+ OR EXISTS (SELECT 1 FROM bound other WHERE other.agent_id <> bound.agent_id AND other.agent_name = 'Assistant ' || other.assistant_id::text AND lower(other.name) = lower(bound.name)) THEN 'conflict'
+ ELSE 'pending' END::text AS repair_state
+FROM bound ORDER BY assistant_id
+`
+
+type AdminListAssistantAgentNamesRow struct {
+	AssistantID                 uuid.UUID
+	ProjectID                   uuid.UUID
+	Name                        string
+	AgentID                     uuid.UUID
+	AgentName                   string
+	OwnerUserID                 string
+	OwnerReassignmentRequiredAt pgtype.Timestamptz
+	OwnerReassignmentReason     pgtype.Text
+	Lifecycle                   string
+	RepairState                 string
+}
+
+func (q *Queries) AdminListAssistantAgentNames(ctx context.Context, organizationID string) ([]AdminListAssistantAgentNamesRow, error) {
+	rows, err := q.db.Query(ctx, adminListAssistantAgentNames, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAssistantAgentNamesRow
+	for rows.Next() {
+		var i AdminListAssistantAgentNamesRow
+		if err := rows.Scan(
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Name,
+			&i.AgentID,
+			&i.AgentName,
+			&i.OwnerUserID,
+			&i.OwnerReassignmentRequiredAt,
+			&i.OwnerReassignmentReason,
+			&i.Lifecycle,
+			&i.RepairState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListAssistantOrganizations = `-- name: AdminListAssistantOrganizations :many
+SELECT o.id, o.name, o.slug, count(*)::bigint AS assistants
+FROM organization_metadata o
+JOIN projects p ON p.organization_id = o.id AND p.deleted IS FALSE
+JOIN assistants a ON a.organization_id = o.id AND a.project_id = p.id AND a.deleted IS FALSE
+GROUP BY o.id, o.name, o.slug
+ORDER BY lower(o.name), o.id
+`
+
+type AdminListAssistantOrganizationsRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	Assistants int64
+}
+
+func (q *Queries) AdminListAssistantOrganizations(ctx context.Context) ([]AdminListAssistantOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAssistantOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAssistantOrganizationsRow
+	for rows.Next() {
+		var i AdminListAssistantOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Assistants,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListCustomDomains = `-- name: AdminListCustomDomains :many
@@ -2404,6 +2507,20 @@ func (q *Queries) AdminListUsersOrganizationPreviews(ctx context.Context, userId
 	return items, nil
 }
 
+const adminLockAssistantAgentNames = `-- name: AdminLockAssistantAgentNames :exec
+SELECT a.id FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+WHERE a.organization_id = $1 AND a.deleted IS FALSE
+ORDER BY a.id FOR UPDATE OF a, p, b, g
+`
+
+func (q *Queries) AdminLockAssistantAgentNames(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, adminLockAssistantAgentNames, organizationID)
+	return err
+}
+
 const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one
 SELECT EXISTS (
     SELECT 1 FROM projects
@@ -2509,6 +2626,34 @@ func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, remote
 		return nil, err
 	}
 	return items, nil
+}
+
+const adminRepairAssistantAgentName = `-- name: AdminRepairAssistantAgentName :execrows
+UPDATE agents SET name = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND organization_id = $3 AND project_id = $4
+AND deleted IS FALSE AND name = $5
+`
+
+type AdminRepairAssistantAgentNameParams struct {
+	Name           string
+	AgentID        uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	OldName        string
+}
+
+func (q *Queries) AdminRepairAssistantAgentName(ctx context.Context, arg AdminRepairAssistantAgentNameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminRepairAssistantAgentName,
+		arg.Name,
+		arg.AgentID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.OldName,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one

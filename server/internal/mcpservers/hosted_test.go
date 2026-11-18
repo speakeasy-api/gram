@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -28,6 +27,7 @@ import (
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -77,15 +77,12 @@ func (f *hostedFixture) payload(visibility types.McpServerVisibility, mutate fun
 }
 
 // requireProjected asserts the wrapper shares the toolset's name and tool variations group, keeps its single
-// platform endpoint, and that the toolset has no legacy alias.
+// platform endpoint.
 func (f *hostedFixture) requireProjected(t *testing.T, ctx context.Context) (toolsetsrepo.Toolset, mcpserversrepo.McpServer) {
 	t.Helper()
 
 	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
-	require.NoError(t, err)
-	require.Equal(t, legacyalias.None(), alias, "hosting writes never give the toolset a legacy alias")
 	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, toolset.Name, server.Name.String)
@@ -438,4 +435,66 @@ func (f *hostedFixture) requireAuditDelta(t *testing.T, ctx context.Context, act
 	after, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, action)
 	require.NoError(t, err)
 	require.Equal(t, before+delta, after, string(action))
+}
+
+func (f *hostedFixture) createIssuer(t *testing.T, ctx context.Context, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := usersessionsrepo.New(f.ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:               "hosted-issuer-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: 24 * 60 * 60 * 1_000_000, Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+func (f *hostedFixture) linkIssuer(t *testing.T, ctx context.Context) uuid.UUID {
+	t.Helper()
+
+	issuerID := f.createIssuer(t, ctx, f.projectID)
+	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
+		p.UserSessionIssuerID = new(issuerID.String())
+	}))
+	require.NoError(t, err)
+	return issuerID
+}
+
+func TestUpdateMcpServerHostedWrapperRejectsUnknownIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	linked := f.linkIssuer(t, ctx)
+
+	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
+		p.UserSessionIssuerID = new(uuid.NewString())
+	}))
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, server := f.requireProjected(t, ctx)
+	require.Equal(t, linked, server.UserSessionIssuerID.UUID)
+}
+
+func TestUpdateMcpServerHostedWrapperRejectsSiblingProjectIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	linked := f.linkIssuer(t, ctx)
+	sibling, err := projectsrepo.New(f.ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Sibling project",
+		Slug:           "sibling-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	siblingIssuer := f.createIssuer(t, ctx, sibling.ID)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
+		p.UserSessionIssuerID = new(siblingIssuer.String())
+	}))
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, server := f.requireProjected(t, ctx)
+	require.Equal(t, linked, server.UserSessionIssuerID.UUID)
 }
