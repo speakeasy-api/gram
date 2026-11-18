@@ -572,6 +572,37 @@ func (q *Queries) LocalUpsertMCPAppAsset(ctx context.Context, arg LocalUpsertMCP
 	return err
 }
 
+const localVendorAppPointRegisteredClient = `-- name: LocalVendorAppPointRegisteredClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text, client_id_metadata_uri = NULL,
+    callback_base_url = $2::text, updated_at = clock_timestamp()
+WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+`
+
+type LocalVendorAppPointRegisteredClientParams struct {
+	ClientID        string
+	CallbackBaseUrl string
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Locally a vendor (Linear, Notion) cannot fetch a client ID metadata
+// document from localhost, so the shared seed's metadata document client
+// becomes the public client the local seed registered with the vendor by
+// dynamic registration.
+func (q *Queries) LocalVendorAppPointRegisteredClient(ctx context.Context, arg LocalVendorAppPointRegisteredClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localVendorAppPointRegisteredClient,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localVerifyEmailDomain = `-- name: LocalVerifyEmailDomain :exec
 UPDATE organization_metadata
 SET verified_domains = array_append(COALESCE(verified_domains, '{}'), $1::text)

@@ -233,6 +233,7 @@ trackedFiles:
   src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
+  src/funcs/commandSearchSearchResources.ts: {}
   src/funcs/dashboardsAddWidget.ts: {}
   src/funcs/dashboardsCreate.ts: {}
   src/funcs/dashboardsDelete.ts: {}
@@ -1102,6 +1103,8 @@ trackedFiles:
   src/models/components/cloneenvironmentrequestbody.ts: {}
   src/models/components/codexhookpayload.ts: {}
   src/models/components/codexhookresult.ts: {}
+  src/models/components/commandresourceindex.ts: {}
+  src/models/components/commandresourceindexitem.ts: {}
   src/models/components/commitserveridentityconfigurationform.ts: {}
   src/models/components/commitserveridentityconfigurationresult.ts: {}
   src/models/components/completebindingrefreshrequestbody.ts: {}
@@ -3008,6 +3011,7 @@ trackedFiles:
   src/models/operations/saveriskevalreview.ts: {}
   src/models/operations/searchbusinessmemories.ts: {}
   src/models/operations/searchchats.ts: {}
+  src/models/operations/searchcommandresources.ts: {}
   src/models/operations/searchlogs.ts: {}
   src/models/operations/searchtoolcalls.ts: {}
   src/models/operations/searchusers.ts: {}
@@ -4150,6 +4154,8 @@ trackedFiles:
   src/react-query/searchBusinessMemories.ts: {}
   src/react-query/searchChats.core.ts: {}
   src/react-query/searchChats.ts: {}
+  src/react-query/searchCommandResources.core.ts: {}
+  src/react-query/searchCommandResources.ts: {}
   src/react-query/searchLogs.ts: {}
   src/react-query/searchToolCalls.ts: {}
   src/react-query/searchUsers.core.ts: {}
@@ -4458,6 +4464,7 @@ trackedFiles:
   src/sdk/chat.ts: {}
   src/sdk/chatsessions.ts: {}
   src/sdk/cliauth.ts: {}
+  src/sdk/commandsearch.ts: {}
   src/sdk/customrules.ts: {}
   src/sdk/dashboards.ts: {}
   src/sdk/dataexports.ts: {}
@@ -5086,7 +5093,7 @@ examples:
     speakeasy-default-check-network-ingress-health:
       responses:
         "200":
-          application/json: {"created_at": "2026-12-27T12:40:08.420Z", "credentials_configured": false, "enabled": true, "endpoint_namespace_kind": "platform", "hostname": "long-term-commodity.org", "id": "cb6bf58c-85ec-488c-9ae7-3bde816084d1", "identity_required": true, "organization_id": "<id>", "provider": "tailscale", "status": "<value>", "updated_at": "2025-03-10T07:17:29.704Z"}
+          application/json: {"created_at": "2026-12-27T12:40:08.420Z", "credentials_configured": false, "enabled": true, "endpoint_namespace_kind": "platform", "hostname": "long-term-commodity.org", "id": "cb6bf58c-85ec-488c-9ae7-3bde816084d1", "identity_required": true, "organization_id": "<id>", "provider": "tailscale", "runtime": "operator", "status": "<value>", "updated_at": "2025-03-10T07:17:29.704Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -5634,10 +5641,10 @@ examples:
   createNetworkIngress:
     speakeasy-default-create-network-ingress:
       requestBody:
-        application/json: {"hostname": "dapper-diagram.name", "oauth_client_id": "<id>", "oauth_client_secret": "<value>", "provider": "tailscale"}
+        application/json: {"oauth_client_id": "<id>", "oauth_client_secret": "<value>", "provider": "tailscale"}
       responses:
         "200":
-          application/json: {"created_at": "2026-03-27T06:26:17.101Z", "credentials_configured": true, "enabled": true, "endpoint_namespace_kind": "custom_domain", "hostname": "teeming-switch.biz", "id": "b2c68e9e-832e-41a7-9b11-5ac744b3bb24", "identity_required": false, "organization_id": "<id>", "provider": "tailscale", "status": "<value>", "updated_at": "2024-03-04T06:53:28.935Z"}
+          application/json: {"created_at": "2026-03-27T06:26:17.101Z", "credentials_configured": true, "enabled": true, "endpoint_namespace_kind": "custom_domain", "hostname": "teeming-switch.biz", "id": "b2c68e9e-832e-41a7-9b11-5ac744b3bb24", "identity_required": false, "organization_id": "<id>", "provider": "tailscale", "runtime": "gateway", "status": "<value>", "updated_at": "2024-03-04T06:53:28.935Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -13003,7 +13010,7 @@ examples:
         application/json: {"oauth_client_id": "<id>", "oauth_client_secret": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-05-29T14:11:46.710Z", "credentials_configured": true, "enabled": false, "endpoint_namespace_kind": "platform", "hostname": "whirlwind-antelope.name", "id": "70954a1b-5a21-487f-93de-4b84d9397d7b", "identity_required": true, "organization_id": "<id>", "provider": "tailscale", "status": "<value>", "updated_at": "2024-04-05T04:39:20.404Z"}
+          application/json: {"created_at": "2024-05-29T14:11:46.710Z", "credentials_configured": true, "enabled": false, "endpoint_namespace_kind": "platform", "hostname": "whirlwind-antelope.name", "id": "70954a1b-5a21-487f-93de-4b84d9397d7b", "identity_required": true, "organization_id": "<id>", "provider": "tailscale", "runtime": "gateway", "status": "<value>", "updated_at": "2024-04-05T04:39:20.404Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -13111,6 +13118,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  searchCommandResources:
+    speakeasy-default-search-command-resources:
+      parameters:
+        query:
+          q: "<value>"
+      responses:
+        "200":
+          application/json: {"failed_kinds": ["<value 1>", "<value 2>", "<value 3>"], "generated_at": "2026-12-28T14:32:17.946Z", "items": [{"id": "7ee9684a-cbd6-49b5-ba5a-8f725a5c32a2", "kind": "rule", "name": "<value>", "route_selector": "<value>"}], "partial": true, "schema_version": "1", "timed_out": false, "truncated": false, "truncated_kinds": ["<value 1>", "<value 2>", "<value 3>"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   searchLogs:
     speakeasy-default-search-logs:
       requestBody:
@@ -14424,7 +14443,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"created_at": "2026-12-10T15:11:12.984Z", "credentials_configured": true, "enabled": false, "endpoint_namespace_kind": "custom_domain", "hostname": "bitter-requirement.org", "id": "220c1f30-9a90-4dcf-9de8-0c1c0a5b0d1d", "identity_required": false, "organization_id": "<id>", "provider": "tailscale", "status": "<value>", "updated_at": "2024-02-10T12:20:48.432Z"}
+          application/json: {"created_at": "2026-12-10T15:11:12.984Z", "credentials_configured": true, "enabled": false, "endpoint_namespace_kind": "custom_domain", "hostname": "bitter-requirement.org", "id": "220c1f30-9a90-4dcf-9de8-0c1c0a5b0d1d", "identity_required": false, "organization_id": "<id>", "provider": "tailscale", "runtime": "operator", "status": "<value>", "updated_at": "2024-02-10T12:20:48.432Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

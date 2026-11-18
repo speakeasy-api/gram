@@ -31,11 +31,16 @@ func (r *NetworkIngressProvisionerRegistry) FindOrphans(ctx context.Context, kno
 	}
 	var result []NetworkIngressOrphan
 	for provider, wrapped := range r.providers {
-		observed, ok := wrapped.(*observedNetworkIngressProvisioner)
-		if !ok {
+		var inner NetworkIngressProvisioner
+		switch observed := wrapped.(type) {
+		case *observedNetworkIngressProvisioner:
+			inner = observed.provisioner
+		case *observedCredentialedNetworkIngressProvisioner:
+			inner = observed.provisioner
+		default:
 			return nil, fmt.Errorf("network ingress provider %q does not support orphan inventory", provider)
 		}
-		finder, ok := observed.provisioner.(interface {
+		finder, ok := inner.(interface {
 			FindOrphans(context.Context, []NetworkIngressResourceNames) ([]NetworkIngressOrphan, error)
 		})
 		if !ok {
