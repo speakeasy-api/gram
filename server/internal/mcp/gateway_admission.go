@@ -8,8 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -47,6 +49,7 @@ func emptyGatewayCaller() gatewayCaller {
 
 type gatewayAdmission struct {
 	caller         gatewayCaller
+	agentID        uuid.UUID
 	authentication *issuerGateAuthentication
 	toolSelection  *toolfilter.SessionPolicy
 }
@@ -80,6 +83,7 @@ func (s *Service) admitGatewayCaller(
 	if authentication.subject.Kind == urn.SessionSubjectKindAnonymous {
 		return authedCtx, &gatewayAdmission{
 			caller:         emptyGatewayCaller(),
+			agentID:        uuid.Nil,
 			authentication: authentication,
 			toolSelection:  toolSelection,
 		}, nil
@@ -92,7 +96,15 @@ func (s *Service) admitGatewayCaller(
 	if err != nil {
 		return ctx, nil, err
 	}
-	admitted, err := target.admits(caller)
+	storedMachineAccess := false
+	if caller.kind != gatewayCallerPerson && target.kind == gatewayKindStored && s.features != nil {
+		storedMachineAccess, err = s.features.IsFlagEnabledLocal(ctx, feature.FlagStoredGatewayMachineAccess, target.organizationID, nil, nil)
+		if err != nil {
+			logger.WarnContext(ctx, "check stored gateway machine access rollout", attr.SlogError(err))
+			storedMachineAccess = false
+		}
+	}
+	admitted, err := target.admits(caller, endpoint.ProjectID, storedMachineAccess)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("evaluate gateway target: %w", err)
 	}
@@ -100,14 +112,18 @@ func (s *Service) admitGatewayCaller(
 		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "credential cannot enter this gateway")
 	}
 
-	// Machine callers are authenticated and live-admitted above, but gateways
-	// continue to accept user sessions only.
+	agentID := uuid.Nil
 	if caller.kind == gatewayCallerAgent || caller.kind == gatewayCallerWorkload {
-		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "this gateway accepts user sessions only")
+		var ok bool
+		agentID, ok = contextvalues.EffectiveAgentID(authedCtx)
+		if !ok {
+			return ctx, nil, fmt.Errorf("admitted %s caller has no effective agent", authentication.subject.Kind)
+		}
 	}
 
 	return authedCtx, &gatewayAdmission{
 		caller:         caller,
+		agentID:        agentID,
 		authentication: authentication,
 		toolSelection:  toolSelection,
 	}, nil

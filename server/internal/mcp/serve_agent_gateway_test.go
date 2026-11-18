@@ -122,12 +122,21 @@ func mintAgentGatewayKey(t *testing.T, ctx context.Context, ti *testInstance, ag
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	return mintAgentGatewayKeyForProject(t, ctx, ti, agentID, *authCtx.ProjectID, resourceID)
+}
+
+func mintAgentGatewayKeyForProject(t *testing.T, ctx context.Context, ti *testInstance, agentID, projectID, resourceID uuid.UUID) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
 			authz.SelectorKeyResourceID:   resourceID.String(),
-			authz.SelectorKeyProjectID:    authCtx.ProjectID.String(),
+			authz.SelectorKeyProjectID:    projectID.String(),
 		},
 	}})
 	require.NoError(t, err)

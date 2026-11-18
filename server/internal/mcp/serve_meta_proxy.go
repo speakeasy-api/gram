@@ -643,6 +643,9 @@ func (r *memberResponseRecorder) Flush() {}
 // callerIdentity is the stable per-caller key member dispatch pins tunnel
 // affinity on; falls back through the identities the gate resolved.
 func (g *metaGateContext) callerIdentity() string {
+	if g.caller.kind == gatewayCallerAgent || g.caller.kind == gatewayCallerWorkload {
+		return g.caller.principal.String()
+	}
 	for _, id := range []string{g.sessionID, g.userID, g.externalUserID, g.apiKeyID} {
 		if id != "" {
 			return id

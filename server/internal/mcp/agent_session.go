@@ -143,6 +143,10 @@ func (s *Service) admitAgentSession(ctx context.Context, endpoint *ResolvedMcpEn
 }
 
 func (s *Service) requireAgentSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
+	if endpoint.MetaMcpServerID.Valid {
+		// Gateway entry and member authorization are separate decisions.
+		return ctx, nil
+	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)

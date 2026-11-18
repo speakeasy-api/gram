@@ -257,6 +257,10 @@ func (s *Service) admitWorkloadSession(ctx context.Context, organizationID strin
 // else could accept it. A session minted for all of the issuer's servers is
 // only out of reach here, and stays valid at the others.
 func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, reach workloadSessionReach) (context.Context, error) {
+	if endpoint.MetaMcpServerID.Valid {
+		// Gateway entry and member authorization are separate decisions.
+		return ctx, nil
+	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		if reach == workloadSessionReachIssuer {

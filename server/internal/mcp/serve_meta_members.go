@@ -259,7 +259,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		members []metaMember
 		err     error
 	)
-	if gate.agentID == uuid.Nil && !gate.organizationGateway {
+	storedMembership := !gate.organizationGateway && !gate.agentMembership
+	if storedMembership {
 		ctx, members, gate.deniedMembers, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
 		issuer := uuid.Nil
