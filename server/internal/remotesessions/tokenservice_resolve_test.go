@@ -147,6 +147,123 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	require.Equal(t, session.UpdatedAt.Time, tokens[remoteIssuerID].RemoteSessionUpdatedAt)
 }
 
+// A person signs in to an upstream once. The issuer-bound lookup that direct
+// server calls and a team gateway's member token fetch both use finds that one
+// login by subject and client, whichever issuer bound to the client it was
+// made through.
+func TestResolveAccessTokens_LoginMadeThroughAnotherIssuerBoundToTheClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+
+	member := createUserSessionIssuer(t, ctx, ti.conn, "usi-cross-member")
+	gateway := createUserSessionIssuer(t, ctx, ti.conn, "usi-cross-gateway")
+	clientID, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, member, authCtx.ActiveOrganizationID, "rsi-cross-issuer")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID, UserSessionIssuerID: gateway,
+	}))
+
+	for _, tc := range []struct {
+		name          string
+		loginThrough  uuid.UUID
+		requestedOn   uuid.UUID
+		subject, want string
+	}{
+		{name: "gateway login serves the member server", loginThrough: gateway, requestedOn: member, subject: "cross-gateway-first", want: "token-from-gateway"},
+		{name: "member login serves the gateway", loginThrough: member, requestedOn: gateway, subject: "cross-member-first", want: "token-from-member"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			subject := urn.NewUserSubject(tc.subject)
+			accessEnc, err := enc.Encrypt([]byte(tc.want))
+			require.NoError(t, err)
+			session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+				SubjectUrn:            subject,
+				UserSessionIssuerID:   tc.loginThrough,
+				RemoteSessionClientID: clientID,
+				AccessTokenEncrypted:  accessEnc,
+				AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+				Scopes:                []string{},
+			})
+			require.NoError(t, err)
+
+			tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject)
+			require.NoError(t, err)
+			require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: tc.want, Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}, tokenCredentials(tokens))
+			require.Equal(t, session.ID, tokens[remoteIssuerID].RemoteSessionID, "%s: the one login row serves")
+		})
+	}
+}
+
+// The organization gateway signs people in through the organization's own
+// issuer and resolves each member's tokens in the member's project on that
+// issuer. A login made on the member server's own issuer serves it there, and
+// a login made through the organization gateway serves the member's issuer,
+// when both issuers bind the client.
+func TestResolveOrganizationGatewayTokens_LoginMadeThroughAnotherIssuerBoundToTheClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+
+	member := createUserSessionIssuer(t, ctx, ti.conn, "usi-orggw-member")
+	organization := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-orggw-organization")
+	clientID, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, member, authCtx.ActiveOrganizationID, "rsi-orggw-cross-issuer")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID, UserSessionIssuerID: organization,
+	}))
+
+	for _, tc := range []struct {
+		name          string
+		loginThrough  uuid.UUID
+		requestedOn   uuid.UUID
+		subject, want string
+	}{
+		{name: "member login serves the organization gateway", loginThrough: member, requestedOn: organization, subject: "orggw-member-first", want: "token-from-member"},
+		{name: "organization gateway login serves the member server", loginThrough: organization, requestedOn: member, subject: "orggw-gateway-first", want: "token-from-organization"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			subject := urn.NewUserSubject(tc.subject)
+			accessEnc, err := enc.Encrypt([]byte(tc.want))
+			require.NoError(t, err)
+			session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+				SubjectUrn:            subject,
+				UserSessionIssuerID:   tc.loginThrough,
+				RemoteSessionClientID: clientID,
+				AccessTokenEncrypted:  accessEnc,
+				AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+				Scopes:                []string{},
+			})
+			require.NoError(t, err)
+			want := map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: tc.want, Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}
+
+			// A hosted member: every client the issuer binds in the member's project.
+			available, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject)
+			require.NoError(t, err)
+			require.Equal(t, want, tokenCredentials(available))
+			require.Equal(t, session.ID, available[remoteIssuerID].RemoteSessionID, "%s: the one login row serves")
+
+			// A proxied member: only the clients associated with it.
+			associated, err := mgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject, map[uuid.UUID]bool{clientID: true}, true)
+			require.NoError(t, err)
+			require.Equal(t, want, tokenCredentials(associated))
+			require.Equal(t, session.ID, associated[remoteIssuerID].RemoteSessionID, "%s: the one login row serves")
+		})
+	}
+}
+
 func TestResolveAuthorization_InvalidRequestIsNotReportedAsMissingAuthorization(t *testing.T) {
 	t.Parallel()
 
