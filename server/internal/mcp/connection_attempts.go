@@ -28,7 +28,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 // connectionAttemptEndTTL outlives the longest a browser attempt can stay live.
@@ -699,9 +701,9 @@ func remoteLoginRefusalHappened(err error) mcpconnectionattempts.Code {
 }
 
 // recordTokenClientRefusal records /token refusing the client of an authorization
-// code. A client that never resolved is no proof of a real flow: a metric, never a row.
+// code or ID-JAG. A client that never resolved is no proof of a real flow: a metric, never a row.
 func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID, reason string) {
-	if grantType != oauthwire.GrantTypeAuthorizationCode {
+	if grantType != oauthwire.GrantTypeAuthorizationCode && grantType != oauthwire.GrantTypeJWTBearer {
 		return
 	}
 	what, recorded := tokenClientRefusalHappened(reason)
@@ -742,9 +744,10 @@ func tokenClientRefusalHappened(reason string) (mcpconnectionattempts.Code, bool
 	return mcpconnectionattempts.CodeClientAuthFailed, true
 }
 
-// recordTokenClientFailure records /token unable to check an authorization code's client.
+// recordTokenClientFailure records /token unable to check an authorization code's or ID-JAG's client.
 func (s *Service) recordTokenClientFailure(r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID string, reason mcpmetrics.IDJAGRejectionReason) {
-	if grantType != oauthwire.GrantTypeAuthorizationCode {
+	// A caller disconnect is not evidence that the check failed.
+	if errors.Is(r.Context().Err(), context.Canceled) || (grantType != oauthwire.GrantTypeAuthorizationCode && grantType != oauthwire.GrantTypeJWTBearer) {
 		return
 	}
 	what, check := mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.ClientIDAdmitted
@@ -890,7 +893,7 @@ func refuseWorkloadGrantRow(ctx context.Context, t *mcpconnectionattempts.Tracke
 	t.Refuse(ctx, code, detail)
 }
 
-// workloadGrantHappened names a refused workload or assistant token grant; the detail is the logged reason.
+// workloadGrantHappened names a refused workload or assistant token grant, or any grant's headless upstream choice; the detail is the logged reason.
 // Workload refusals before the assertion's signature verifies never reach it: they are a metric.
 func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
 	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
@@ -933,4 +936,73 @@ func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnection
 		}
 	}
 	return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("")
+}
+
+// unverifiedIDJAGReasons are refusals decided by what the caller sent before the assertion's signature verified.
+var unverifiedIDJAGReasons = []idjag.Reason{
+	idjag.ReasonMalformed, idjag.ReasonTypeMismatch, idjag.ReasonIssuerMismatch,
+	idjag.ReasonKeyUnknown, idjag.ReasonKeyUnusable, idjag.ReasonSignatureInvalid,
+}
+
+// providerMintedIDJAGReasons are verified claims the identity provider's setup decides, not the app.
+var providerMintedIDJAGReasons = []idjag.Reason{
+	idjag.ReasonClaimsMalformed, idjag.ReasonClientMismatch, idjag.ReasonExpiryMissing,
+	idjag.ReasonIssuedAtMissing, idjag.ReasonLifetimeTooLong, idjag.ReasonIDMissing,
+}
+
+// keyFetchCancelled is a key set fetch that ended because a request context ended.
+func keyFetchCancelled(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// idJAGAssertionHappened names an ID-JAG the validator refused or could not check; the detail is its reason.
+// A refusal with no proof of a real flow returns only a metric label, never a code.
+func idJAGAssertionHappened(ctx context.Context, err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option, string) {
+	reason := idjag.ReasonOf(err)
+	detail := mcpconnectionattempts.Detail(string(reason))
+	none := mcpconnectionattempts.Code{}
+	switch {
+	case reason == idjag.ReasonTrustUnavailable && errors.Is(err, idjag.ErrNoTrustedIssuer):
+		return none, detail, "token_trusted_issuer_not_configured"
+	// Our key store failing in the stale-key fallback, recorded like any key store outage.
+	case reason == idjag.ReasonKeyUnusable && errors.Is(err, idjag.ErrStaleKeysUnreadable):
+		return mcpconnectionattempts.CodeAssertionCheckUnavailable, mcpconnectionattempts.Detail(string(idjag.ReasonKeyStoreUnavailable)), ""
+	// This request ended while the key set was fetched: nothing shows the key set failed.
+	case reason == idjag.ReasonKeyUnusable && keyFetchCancelled(err) && ctx.Err() != nil:
+		return none, detail, "token_assertion_key_fetch_cancelled"
+	// A shared fetch another caller ended: our fetch sharing, not the identity provider.
+	case reason == idjag.ReasonKeyUnusable && keyFetchCancelled(err):
+		return mcpconnectionattempts.CodeTransientFailure, detail, ""
+	// The stored key set itself failed, not the caller's key: the administrator's setup.
+	case reason == idjag.ReasonKeyUnusable && !errors.Is(err, jwks.ErrKeyAlgorithmMismatch):
+		return mcpconnectionattempts.CodeConfigurationRequired, mcpconnectionattempts.Detail("key_set_unusable"), ""
+	case slices.Contains(unverifiedIDJAGReasons, reason):
+		return none, detail, "token_" + string(reason)
+	case reason == idjag.ReasonKeyUnresolvable:
+		return mcpconnectionattempts.CodeIDPTransientFailure, detail, ""
+	case idjag.IsOutage(err):
+		return mcpconnectionattempts.CodeAssertionCheckUnavailable, detail, ""
+	case idjag.IsStoreFault(err):
+		return mcpconnectionattempts.CodeInternalError, detail, ""
+	case reason == idjag.ReasonTrustUnavailable:
+		return mcpconnectionattempts.CodeConfigurationRequired, detail, ""
+	case reason == idjag.ReasonVerifierMisconfigured:
+		return mcpconnectionattempts.CodeAssertionVerifierMisconfigured, detail, ""
+	case reason == idjag.ReasonNotProvisioned:
+		return mcpconnectionattempts.CodeSubjectNotProvisioned, detail, ""
+	case reason == idjag.ReasonSubjectMissing, reason == idjag.ReasonEmailMissing:
+		return mcpconnectionattempts.CodeInvalidIdentity, detail, ""
+	case reason == idjag.ReasonResourceMismatch && errors.Is(err, idjag.ErrResourceClaimInvalid):
+		return mcpconnectionattempts.CodeMalformedAssertion, mcpconnectionattempts.Detail("assertion_resource_claim_invalid"), ""
+	case reason == idjag.ReasonResourceMismatch:
+		return mcpconnectionattempts.CodeResourceMismatch, detail, ""
+	case reason == idjag.ReasonResourceNotIndicated:
+		return mcpconnectionattempts.CodeInvalidRequest, detail, ""
+	case slices.Contains(providerMintedIDJAGReasons, reason):
+		return mcpconnectionattempts.CodeMalformedAssertion, detail, ""
+	case strings.HasPrefix(string(reason), "assertion_"):
+		return mcpconnectionattempts.CodeAssertionInvalid, detail, ""
+	default:
+		return mcpconnectionattempts.CodeAssertionOther, detail, ""
+	}
 }
