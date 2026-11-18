@@ -333,11 +333,12 @@ export function CommandPalette(): JSX.Element {
     if (!isOpen || !hasQuery) return null;
 
     const startedAt = performance.now();
-    const rows = rank(prefilter(trimmedQuery, candidates)).slice(
-      0,
-      MAX_VISIBLE_SEARCH_RESULTS,
-    );
-    return { rows, duration: performance.now() - startedAt };
+    const rankedRows = rank(prefilter(trimmedQuery, candidates));
+    return {
+      rows: rankedRows.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
+      total: rankedRows.length,
+      duration: performance.now() - startedAt,
+    };
   }, [candidates, hasQuery, isOpen, trimmedQuery]);
   const rows = ranked?.rows ?? EMPTY_ROWS;
   const idle = useMemo(() => idleRows(candidates), [candidates]);
@@ -553,6 +554,12 @@ export function CommandPalette(): JSX.Element {
               <div className="py-6 text-center text-sm">No results found.</div>
             )}
             <RankedRows rows={rows} {...rowGroupProps} />
+            {ranked !== null && ranked.total > rows.length && (
+              <div className="text-muted-foreground px-3 py-2 text-center text-xs">
+                Showing top {rows.length} of {ranked.total} results. Refine your
+                search to see more.
+              </div>
+            )}
             {askAiGroup}
           </>
         )}

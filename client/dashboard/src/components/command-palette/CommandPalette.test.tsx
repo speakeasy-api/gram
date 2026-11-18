@@ -383,6 +383,11 @@ describe("CommandPalette", () => {
     expect(screen.getAllByRole("option")).toHaveLength(40);
     expect(screen.getByText("Linear integration 000")).not.toBeNull();
     expect(screen.queryByText("Linear integration 040")).toBeNull();
+    expect(
+      screen.getByText(
+        "Showing top 40 of 100 results. Refine your search to see more.",
+      ),
+    ).not.toBeNull();
   });
 
   it("keeps group headings for the idle list", () => {
