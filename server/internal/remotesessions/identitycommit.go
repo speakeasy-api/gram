@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -134,6 +135,7 @@ type IdentityCommitter struct {
 	logger    *slog.Logger
 	db        *pgxpool.Pool
 	enc       *encryption.Client
+	secrets   *clientsecrets.Secrets
 	audit     *audit.Logger
 	origins   CallbackOrigins
 	policy    *guardian.Policy
@@ -141,8 +143,8 @@ type IdentityCommitter struct {
 	telemetry registration.Recorder
 }
 
-func NewIdentityCommitter(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, auditLogger *audit.Logger, serverURL *url.URL, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, telemetry registration.Recorder) *IdentityCommitter {
-	return &IdentityCommitter{logger: logger, db: db, enc: enc, audit: auditLogger, origins: DefaultCallbackOrigins(serverURL), policy: policy, tunnels: tunnels, telemetry: telemetry}
+func NewIdentityCommitter(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, secrets *clientsecrets.Secrets, auditLogger *audit.Logger, serverURL *url.URL, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, telemetry registration.Recorder) *IdentityCommitter {
+	return &IdentityCommitter{logger: logger, db: db, enc: enc, secrets: secrets, audit: auditLogger, origins: DefaultCallbackOrigins(serverURL), policy: policy, tunnels: tunnels, telemetry: telemetry}
 }
 
 // SetCallbackOrigins replaces the default origins, which pin every client to
@@ -698,6 +700,14 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	callbackBaseURL, err := c.newClientBaseURL(ctx)
 	if err != nil {
 		return reg, err
+	}
+	// A registration cannot be undone, so confirm the returned secret can be
+	// stored before asking the provider for one. A public client asks for no
+	// secret.
+	if conv.PtrValOr(policy.TokenEndpointAuthMethod, "") != string(TokenEndpointAuthMethodNone) {
+		if err := c.committer.secrets.RequireUsable(ctx, c.committer.db, clientsecrets.OwnerOf(conv.ToPGTextEmpty(c.plan.Scope.OrganizationID), conv.ToNullUUID(c.plan.Scope.ProjectID))); err != nil {
+			return reg, fmt.Errorf("check client secret key before registration: %w", err)
+		}
 	}
 	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(callbackBaseURL), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
@@ -1740,14 +1750,7 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 	if err != nil {
 		return repo.RemoteSessionClient{}, err
 	}
-	var secret pgtype.Text
-	if credentials.ClientSecret != "" {
-		encrypted, err := c.committer.enc.Encrypt([]byte(credentials.ClientSecret))
-		if err != nil {
-			return repo.RemoteSessionClient{}, fmt.Errorf("encrypt client secret: %w", err)
-		}
-		secret = conv.ToPGText(encrypted)
-	}
+	hasSecret := credentials.ClientSecret != ""
 	// Keep what the provider said it issued: rewriting it to our own clock
 	// loses the only record of when the credential began, which is what a
 	// rotation window is measured against. RFC 7591 makes it optional.
@@ -1757,6 +1760,7 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 	}
 	secretExpiresAt := credentials.SecretExpiresAt
 	legacyCallbackURL := false
+	var secretTemplate *clientTemplate
 	if credentials.TemplateClientID.Valid {
 		// Read again and share-lock the row for the rest of the transaction:
 		// the copy is of the row stored now, and a template that stopped
@@ -1765,8 +1769,8 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		if err != nil {
 			return repo.RemoteSessionClient{}, err
 		}
-		if !secret.Valid {
-			secret = template.secretEncrypted
+		if !hasSecret {
+			secretTemplate = &template
 			secretExpiresAt = template.clientSecretExpiresAt
 		}
 		clientIDIssuedAt = template.clientIDIssuedAt
@@ -1779,7 +1783,6 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		OrganizationID:                  conv.ToPGTextEmpty(c.plan.Scope.OrganizationID),
 		RemoteSessionIssuerID:           c.provider.ID,
 		ClientID:                        strings.TrimSpace(credentials.ClientID),
-		ClientSecretEncrypted:           secret,
 		ClientIDIssuedAt:                clientIDIssuedAt,
 		ClientSecretExpiresAt:           secretExpiresAt,
 		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
@@ -1797,6 +1800,20 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)
+	}
+	switch {
+	case hasSecret:
+		client, err = c.committer.secrets.Set(ctx, tx.tx, client.ID, clientOwner(client), []byte(credentials.ClientSecret), secretExpiresAt)
+	case secretTemplate != nil:
+		var row repo.RemoteSessionClient
+		var copied bool
+		row, copied, err = c.committer.secrets.Copy(ctx, tx.tx, secretTemplate.owner, secretTemplate.secret, client.ID, clientOwner(client), secretExpiresAt)
+		if copied {
+			client = row
+		}
+	}
+	if err != nil {
+		return repo.RemoteSessionClient{}, fmt.Errorf("store client secret: %w", err)
 	}
 	if credentials.TemplateClientID.Valid {
 		return client, c.auditClientCopy(ctx, tx, client, credentials.TemplateClientID.UUID)

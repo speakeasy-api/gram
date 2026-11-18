@@ -36,6 +36,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -524,7 +525,7 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	engine := authz.NewEngine(logger, fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	revokerPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), fixture.conn, testenv.NewEncryptionClient(t), revokerPolicy, nil)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), fixture.conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, fixture.conn, testenv.NewEncryptionClient(t)), revokerPolicy, nil)
 	toolsetService := toolsets.NewService(logger, tracerProvider, nil, fixture.conn, sessionManager, nil, engine, audit.NewLogger(), nil, false, revoker)
 	serverService := mcpservers.NewService(logger, tracerProvider, fixture.conn, sessionManager, engine, audit.NewLogger(), nil, nil, false, nil, nil, networkaccess.DenyAllChecker{})
 	orgSlug := projectOrganizationSlug(ctx, fixture.conn, fixture.principal.OrganizationID)

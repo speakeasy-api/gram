@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -22,12 +23,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
+	orgencryptionrepo "github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // tokenRequestCapture records the last token request a fake endpoint received.
@@ -181,7 +188,7 @@ func newClientEndpointManager(t *testing.T) (*ChallengeManager, *encryption.Clie
 	require.NoError(t, err)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	return &ChallengeManager{enc: enc, policy: policy}, enc
+	return &ChallengeManager{enc: enc, secrets: clientsecrets.WithoutOrganizationEncryption(testenv.NewLogger(t), nil, enc), policy: policy}, enc
 }
 
 func resourceClientRow(t *testing.T, enc *encryption.Client, tokenEndpoint string) repo.GetRemoteSessionClientWithIssuerByIDRow {
@@ -204,7 +211,7 @@ func TestClientTokenEndpoint_AuthenticatesAsResourceClient(t *testing.T) {
 	srv, capture := newFakeTokenEndpoint(t, http.StatusOK, map[string]any{"access_token": "downstream-token", "token_type": "Bearer"})
 	m, enc := newClientEndpointManager(t)
 	row := resourceClientRow(t, enc, srv.URL+"/token")
-	endpoint, err := m.clientTokenEndpoint(row)
+	endpoint, err := m.clientTokenEndpoint(t.Context(), row)
 	require.NoError(t, err)
 	require.Equal(t, row.IssuerUrl, endpoint.Issuer())
 	require.Equal(t, row.RemoteSessionIssuerID, endpoint.IssuerID())
@@ -227,12 +234,12 @@ func TestClientTokenEndpoint_RequiresUsableRegistration(t *testing.T) {
 	m, enc := newClientEndpointManager(t)
 	missingEndpoint := resourceClientRow(t, enc, "")
 	missingEndpoint.TokenEndpoint = pgtype.Text{}
-	_, err := m.clientTokenEndpoint(missingEndpoint)
+	_, err := m.clientTokenEndpoint(t.Context(), missingEndpoint)
 	require.ErrorIs(t, err, ErrTokenEndpointConfiguration)
 
 	missingSecret := resourceClientRow(t, enc, "https://as.resource.example.test/token")
 	missingSecret.ClientSecretEncrypted = pgtype.Text{}
-	_, err = m.clientTokenEndpoint(missingSecret)
+	_, err = m.clientTokenEndpoint(t.Context(), missingSecret)
 	require.ErrorIs(t, err, ErrTokenEndpointConfiguration)
 }
 
@@ -260,7 +267,7 @@ func TestClientTokenEndpoint_PrivateKeyJWTRequiresKeySet(t *testing.T) {
 	row := resourceClientRow(t, enc, "https://as.resource.example.test/token")
 	row.TokenEndpointAuthMethod = pgtype.Text{String: string(TokenEndpointAuthMethodPrivateKeyJWT), Valid: true}
 	row.ClientSecretEncrypted = pgtype.Text{}
-	_, err := m.clientTokenEndpoint(row)
+	_, err := m.clientTokenEndpoint(t.Context(), row)
 	require.ErrorIs(t, err, ErrTokenEndpointConfiguration, "a private_key_jwt client without a key set cannot sign, so it is misconfigured, not transiently failing")
 }
 
@@ -301,4 +308,141 @@ func TestTokenEndpointPost_SigningFailures(t *testing.T) {
 		require.True(t, ok)
 		require.True(t, failure.Signing)
 	})
+}
+
+func TestClientTokenEndpoint_KeyOutageIsNotMisconfiguration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	require.NotNil(t, DelegationTestDatabase, "TestMain must provide the shared database clone factory")
+	db, err := DelegationTestDatabase(t, "client_secret_key_outage")
+	require.NoError(t, err)
+	organizationID := "org_" + uuid.NewString()
+	require.NoError(t, testrepo.New(db).SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: organizationID, Name: "Key outage organization", Slug: "key-outage-" + uuid.NewString()[:8]}))
+	// The organization's client secrets are past platform_key, and this
+	// process has no organization encryption to open them with.
+	_, err = orgencryptionrepo.New(db).CreateEncryptionTransition(ctx, orgencryptionrepo.CreateEncryptionTransitionParams{
+		OrganizationID:          organizationID,
+		UseCase:                 string(orgencryption.UseCaseOAuthClientSecrets),
+		State:                   string(orgencryption.TransitionStateDualWrite),
+		PlatformCopiesClearedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	m, enc := newClientEndpointManager(t)
+	m.secrets = clientsecrets.WithoutOrganizationEncryption(testenv.NewLogger(t), db, enc)
+	row := resourceClientRow(t, enc, "https://as.resource.example.test/token")
+	row.ClientOrganizationID = pgtype.Text{String: organizationID, Valid: true}
+
+	_, err = m.clientTokenEndpoint(ctx, row)
+	require.ErrorIs(t, err, orgencryption.ErrOrganizationEncryptionUnavailable)
+	require.NotErrorIs(t, err, ErrTokenEndpointConfiguration, "a key the process cannot use is retryable, not a broken client configuration")
+}
+
+// orgKeyClient is a client whose organization is in org_kms, so its secret is
+// stored only as the organization-key copy, read back with the row a reader
+// loads.
+type orgKeyClient struct {
+	fixture        *orgencryptiontest.Fixture
+	secrets        *clientsecrets.Secrets
+	organizationID string
+	row            repo.GetRemoteSessionClientWithIssuerByIDRow
+}
+
+func newOrgKeyClient(t *testing.T, tokenEndpoint string) orgKeyClient {
+	t.Helper()
+	ctx := t.Context()
+	require.NotNil(t, DelegationTestDatabase, "TestMain must provide the shared database clone factory")
+	db, err := DelegationTestDatabase(t, "client_secret_org_key_reader")
+	require.NoError(t, err)
+	organizationID := "org_" + uuid.NewString()
+	require.NoError(t, testrepo.New(db).SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: organizationID, Name: "Organization key reader", Slug: "org-key-reader-" + uuid.NewString()[:8]}))
+
+	fixture := orgencryptiontest.New(t, db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	_, err = transitions.StartInOrgKMS(ctx, organizationID, orgencryption.UseCaseOAuthClientSecrets, orgencryption.SystemActor())
+	require.NoError(t, err)
+	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x24}, 32))
+	require.NoError(t, err)
+	secrets := clientsecrets.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), enc, fixture.Service, transitions), enc)
+
+	q := repo.New(db)
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		OrganizationID:                      pgtype.Text{String: organizationID, Valid: true},
+		Slug:                                "org-key-reader-" + uuid.NewString()[:8],
+		Issuer:                              "https://as.resource.example.test",
+		TokenEndpoint:                       pgtype.Text{String: tokenEndpoint, Valid: true},
+		ScopesSupported:                     []string{},
+		GrantTypesSupported:                 []string{},
+		AuthorizationGrantProfilesSupported: []string{},
+		ResponseTypesSupported:              []string{},
+		TokenEndpointAuthMethodsSupported:   []string{},
+		CodeChallengeMethodsSupported:       []string{},
+		IntrospectionEndpointAuthMethodsSupported: []string{},
+		IDTokenSigningAlgValuesSupported:          []string{},
+		ClaimsSupported:                           []string{},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		OrganizationID:          pgtype.Text{String: organizationID, Valid: true},
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "resource-client",
+		TokenEndpointAuthMethod: pgtype.Text{String: string(TokenEndpointAuthMethodPost), Valid: true},
+	})
+	require.NoError(t, err)
+	stored, err := secrets.Set(ctx, db, client.ID, clientOwner(client), []byte("resource-secret"), pgtype.Timestamptz{})
+	require.NoError(t, err)
+	require.False(t, stored.ClientSecretEncrypted.Valid, "org_kms stores only the organization-key copy")
+
+	row, err := q.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
+	require.NoError(t, err)
+	return orgKeyClient{fixture: fixture, secrets: secrets, organizationID: organizationID, row: row}
+}
+
+func TestClientTokenEndpoint_OpensTheOrganizationKeyCopy(t *testing.T) {
+	t.Parallel()
+	srv, capture := newFakeTokenEndpoint(t, http.StatusOK, map[string]any{"access_token": "downstream-token", "token_type": "Bearer"})
+	client := newOrgKeyClient(t, srv.URL+"/token")
+	m, _ := newClientEndpointManager(t)
+	m.secrets = client.secrets
+
+	endpoint, err := m.clientTokenEndpoint(t.Context(), client.row)
+	require.NoError(t, err)
+	form := url.Values{}
+	form.Set(oauthwire.ParamGrantType, oauthwire.GrantTypeJWTBearer)
+	form.Set(oauthwire.ParamAssertion, "id-jag-value")
+	_, err = endpoint.Post(t.Context(), form)
+	require.NoError(t, err)
+	sent, _, _, _ := capture.snapshot()
+	require.Equal(t, "resource-secret", sent.Get("client_secret"))
+
+	// The owner comes from the client row: without its organization the
+	// organization-key copy cannot be opened, which is what a wrong owner
+	// would look like after finalize.
+	unowned := client.row
+	unowned.ClientOrganizationID = pgtype.Text{}
+	_, err = m.clientTokenEndpoint(t.Context(), unowned)
+	require.ErrorIs(t, err, ErrTokenEndpointConfiguration)
+}
+
+func TestClientTokenEndpoint_SuspendedOrganizationKeyIsRetryable(t *testing.T) {
+	t.Parallel()
+	client := newOrgKeyClient(t, "https://as.resource.example.test/token")
+	m, _ := newClientEndpointManager(t)
+	m.secrets = client.secrets
+	require.NoError(t, client.fixture.Provisioner.Suspend(t.Context(), client.organizationID, "customer disabled the key", orgencryption.SystemActor()))
+
+	_, err := m.clientTokenEndpoint(t.Context(), client.row)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrTokenEndpointConfiguration, "a suspended key is retryable, not a broken client configuration")
+	require.True(t, clientsecrets.IsKeyProblem(err))
+}
+
+func TestEnrichmentTarget_OpensTheOrganizationKeyCopy(t *testing.T) {
+	t.Parallel()
+	client := newOrgKeyClient(t, "https://as.resource.example.test/token")
+
+	secret, err := enrichmentTargetFromClient(client.row, client.organizationID, client.secrets).clientSecret(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "resource-secret", secret)
+
 }

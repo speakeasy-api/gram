@@ -851,8 +851,8 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			// Unconfigured or disabled, this is the zero value without an
-			// error. A configuration error stops the worker: a silently
+			// Unconfigured or disabled, Service and Provisioner are nil
+			// without an error. A configuration error stops the worker: a silently
 			// disabled sweep would leave organizations whose key was revoked
 			// unsuspended.
 			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
@@ -867,7 +867,7 @@ func newWorkerCommand() *cli.Command {
 			var issuerProvisioner *identityproviderconnections.Provisioner
 			if err != nil {
 				logger.ErrorContext(ctx, "invalid outbound callback origin; internal session issuer key sweep is off", attr.SlogError(err))
-			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, outboundOrigin); err != nil {
+			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, orgEncryption.ClientSecrets(logger, encryptionClient), outboundOrigin); err != nil {
 				// Nil where KMS provisioning is unconfigured, too.
 				logger.ErrorContext(ctx, "identity provider provisioner unavailable; internal session issuer key sweep is off", attr.SlogError(err))
 				issuerProvisioner = nil
@@ -895,6 +895,7 @@ func newWorkerCommand() *cli.Command {
 				TunnelHTTPClient:               tunnelHTTPClient,
 				DB:                             db,
 				EncryptionClient:               encryptionClient,
+				ClientSecrets:                  orgEncryption.ClientSecrets(logger, encryptionClient),
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,

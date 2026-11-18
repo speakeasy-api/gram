@@ -40,7 +40,7 @@ func ValidateTrustedIdentityProviderClient(client repo.RemoteSessionClient, issu
 	}
 
 	secret := ""
-	if client.ClientSecretEncrypted.Valid {
+	if hasClientSecret(client) {
 		secret = "configured"
 	}
 	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)

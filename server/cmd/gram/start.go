@@ -1197,11 +1197,12 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound)
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
 				return err
 			}
-			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
+			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, clientSecrets, callbackOrigins.Outbound)
 			if err != nil {
 				return err
 			}
@@ -1591,7 +1592,7 @@ func newStartCommand() *cli.Command {
 				WithMeterProvider(meterProvider).
 				WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state-new", agent.NewStateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agent.Attach(mux, agentService)
-			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
+			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, clientSecrets, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
 			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
@@ -1862,7 +1863,7 @@ func newStartCommand() *cli.Command {
 			issuerService.SetEMAIssuerTokenPurger(remotesessions.NewEMAIssuerTokenPurger(db))
 			internalsessionissuers.Attach(mux, issuerService)
 			internalsessionissuers.AttachDiscovery(mux, db, logger)
-			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner, encryptionClient), encryptionClient, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
+			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner), clientSecrets, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
 			oktaresourceconnections.Attach(mux, oktaresourceconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))
 			registryValidator, err := mcpregistry.LoadValidator()
 			if err != nil {
@@ -1895,11 +1896,11 @@ func newStartCommand() *cli.Command {
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission, mcpService.CodeModeAvailable, upstreamRevoker).
 				WithDistributionAdmission(distributionAdmission).WithPluginPublisher(pluginsPublishSignaler).WithPublicationRequests(publicationEmit))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, clientSecrets, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 			identityCommitter.SetCallbackOrigins(callbackOrigins)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner), remotesessions.WithRefreshConnectionRecorder(connectionRecorder), remotesessions.WithRefreshFeatureFlags(featureFlags)), productFeatures, protectedResources)
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, clientSecrets, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner), remotesessions.WithRefreshConnectionRecorder(connectionRecorder), remotesessions.WithRefreshFeatureFlags(featureFlags), remotesessions.WithRefreshClientSecrets(clientSecrets)), productFeatures, protectedResources)
 			remoteSessionsService.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(logger, db, encryptionClient, guardianPolicy, remoteChallengeManager))
-			userSessionsService := usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner)
+			userSessionsService := usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, clientSecrets, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner)
 			usersessions.Attach(mux, userSessionsService)
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remoteSessionsService.SetCallbackOrigins(callbackOrigins)
@@ -2321,6 +2322,7 @@ func newStartCommand() *cli.Command {
 						TunnelHTTPClient:               tunnelHTTPClient,
 						DB:                             db,
 						EncryptionClient:               encryptionClient,
+						ClientSecrets:                  clientSecrets,
 						FeatureProvider:                featureFlags,
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,

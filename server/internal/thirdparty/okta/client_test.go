@@ -677,7 +677,7 @@ func TestNewClient_RequiresTokenEndpointAudienceFormat(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
 
 	cfg := testConfig()
 	cfg.OrgURL = "https://example.okta.com"
@@ -706,7 +706,7 @@ func TestNewClient_OrgURLRequiresHTTPSExceptLoopback(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
 
 	cfg := testConfig()
 	cfg.ClientID = stubClientID
@@ -975,7 +975,7 @@ func TestNewClient_CanonicalOrgURLMatchesProofHTU(t *testing.T) {
 
 	cfg := tc.client.cfg
 	cfg.OrgURL = "https://Example.okta.com:443"
-	client, err := NewClient(testenv.NewLogger(t), tc.client.httpClient, tc.signer, tc.decrypter, cfg)
+	client, err := NewClient(testenv.NewLogger(t), tc.client.httpClient, tc.signer, cfg)
 	require.NoError(t, err)
 	impl, ok := client.(*httpClient)
 	require.True(t, ok)
@@ -1201,7 +1201,7 @@ func TestClientFactory_MemoizesAndForgets(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
 
 	cfg := testConfig()
 	cfg.OrgURL = "https://example.okta.com"
