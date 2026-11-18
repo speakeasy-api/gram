@@ -890,6 +890,7 @@ func engineAllows(t *testing.T, err error) bool {
 // someCallAllowed reports whether a call on ref with the probe's missing tool
 // or disposition filled in is allowed.
 func someCallAllowed(t *testing.T, grants []Grant, ref MCPServerRef, tool, disposition string) bool {
+	t.Helper()
 	tools, dispositions := []string{tool}, []string{disposition}
 	if tool == "" {
 		tools = toolNames
