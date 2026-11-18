@@ -223,3 +223,17 @@ func TestTypedAuthorizationProvenance(t *testing.T) {
 		require.Equal(t, tc.want, TypedAuthorizationHappened(fmt.Errorf("validator: %w", tc.err)))
 	}
 }
+
+// A signing failure whose cause looks like a missing address is still ours, not the provider's.
+func TestExchangeSigningFailureIsNotAnAddress(t *testing.T) {
+	t.Parallel()
+
+	err := &tokenExchangeRequestError{err: &tokenEndpointSigningError{err: &net.DNSError{Err: "no such host", Name: "db.example.invalid", IsNotFound: true}}}
+	page := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return exchangeFailureAnswer(t.Context(), testenv.NewLogger(t), err, false, func() string { return "idp.example.com" })
+	}).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback", nil))
+	text := html.UnescapeString(strings.Join(strings.Fields(page.Body.String()), " "))
+	require.NotContains(t, text, "sign-in address")
+	require.NotContains(t, text, "doesn't exist")
+}
