@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -15,8 +17,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -257,6 +261,81 @@ func TestClaudeTranscriptEndpointStoresEntriesBesideDiagnostic(t *testing.T) {
 	body := claudeTranscriptUploadBody(uuid.NewString(), claudeTranscriptFixture())
 	body["diagnostic"] = map[string]string{"reason": "transcript_read_failed"}
 	require.Equal(t, int64(6), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, body, ahpAuthHeaders)))
+}
+
+// claudeTranscriptReceivedLogs returns the hooks_claude_transcript_received
+// records written to logs, decoded from JSON lines.
+func claudeTranscriptReceivedLogs(t *testing.T, logs *lockedBuffer) []map[string]any {
+	t.Helper()
+	var records []map[string]any
+	for line := range strings.Lines(logs.String()) {
+		var record map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &record))
+		if record[string(attr.EventKey)] == "hooks_claude_transcript_received" {
+			records = append(records, record)
+		}
+	}
+	return records
+}
+
+// TestClaudeTranscriptEndpointLogsEachUpload: every authenticated upload
+// leaves one line naming its organization, project, session and the binary
+// that sent it, whether it stored rows or only reported a skip. The handler
+// runs behind HookDeviceTelemetry, as in the server, so the device headers on
+// a transcript upload reach the line.
+func TestClaudeTranscriptEndpointLogsEachUpload(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	logs := &lockedBuffer{}
+	ti.service.logger = slog.New(slog.NewJSONHandler(logs, nil))
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	h := middleware.HookDeviceTelemetry(ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript)))
+	headers := map[string]string{
+		"X-Gram-Device-Binary-Version": "1.2.3",
+		"X-Gram-Device-Harness":        "claude",
+		"X-Gram-Device-Install-Route":  "marketplace",
+	}
+	maps.Copy(headers, ahpAuthHeaders)
+
+	storedSession := uuid.NewString()
+	stored := claudeTranscriptUploadBody(storedSession, claudeTranscriptFixture())
+	require.Equal(t, int64(6), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, stored, headers)))
+
+	skippedSession := uuid.NewString()
+	skipped := claudeTranscriptUploadBody(skippedSession, nil)
+	skipped["diagnostic"] = map[string]string{"reason": "transcript_path_invalid", "detail": "outside the transcript root"}
+	require.Equal(t, int64(0), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, skipped, headers)))
+
+	records := claudeTranscriptReceivedLogs(t, logs)
+	require.Len(t, records, 2, "one line per upload")
+	for _, record := range records {
+		require.Equal(t, "INFO", record["level"])
+		require.Equal(t, authCtx.ActiveOrganizationID, record[string(attr.OrganizationIDKey)])
+		require.Equal(t, authCtx.ProjectID.String(), record[string(attr.ProjectIDKey)])
+		require.Equal(t, "cowork", record[string(attr.HookSourceKey)])
+		require.InDelta(t, http.StatusOK, record[string(attr.HTTPResponseStatusCodeKey)], 0)
+		require.InDelta(t, 0, record[string(attr.HookTranscriptOffsetStartKey)], 0)
+		require.InDelta(t, 100, record[string(attr.HookTranscriptOffsetEndKey)], 0)
+		require.Positive(t, record[string(attr.HTTPRequestSizeKey)])
+		require.Equal(t, "1.2.3", record[string(attr.HookDeviceBinaryVersionKey)])
+		require.Equal(t, "claude", record[string(attr.HookDeviceHarnessKey)])
+		require.Equal(t, "marketplace", record[string(attr.HookDeviceInstallRouteKey)])
+	}
+
+	storedEntries, ok := stored["entries"].([]json.RawMessage)
+	require.True(t, ok)
+	storedRecord, skippedRecord := records[0], records[1]
+	require.Equal(t, storedSession, storedRecord[string(attr.GenAIConversationIDKey)])
+	require.InDelta(t, len(storedEntries), storedRecord[string(attr.HookTranscriptEntryCountKey)], 0)
+	require.InDelta(t, 6, storedRecord[string(attr.HookTranscriptStoredCountKey)], 0)
+	require.NotContains(t, storedRecord, string(attr.ReasonKey))
+
+	require.Equal(t, skippedSession, skippedRecord[string(attr.GenAIConversationIDKey)])
+	require.InDelta(t, 0, skippedRecord[string(attr.HookTranscriptEntryCountKey)], 0)
+	require.InDelta(t, 0, skippedRecord[string(attr.HookTranscriptStoredCountKey)], 0)
+	require.Equal(t, "transcript_path_invalid", skippedRecord[string(attr.ReasonKey)])
 }
 
 func TestTruncateDiagnostic(t *testing.T) {

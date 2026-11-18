@@ -34,6 +34,18 @@ var hookDeviceHeaderAttrs = map[string]attribute.Key{
 	wire.HeaderDeviceSpoolDepth:     attr.HookDeviceSpoolDepthKey,
 }
 
+// hookTranscriptPath is the transcript intake route (hooks.TranscriptPath),
+// where the speakeasy-hooks binary uploads Claude transcripts. It is spelled
+// out here because this package cannot import the hooks package, which
+// depends on it.
+const hookTranscriptPath = "/transcript"
+
+// isHookDevicePath reports whether a route receives requests from the
+// speakeasy-hooks binary, which stamps X-Gram-Device-* headers on all of them.
+func isHookDevicePath(path string) bool {
+	return strings.HasPrefix(path, "/rpc/hooks.") || path == hookTranscriptPath
+}
+
 type hookDeviceContextKey struct{}
 
 type hookEndpointGenerationContextKey struct{}
@@ -112,7 +124,7 @@ func HookDeviceAttributes(ctx context.Context) map[attr.Key]string {
 // before becoming attributes, and non-hook routes are untouched.
 func HookDeviceTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/rpc/hooks.") {
+		if !isHookDevicePath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

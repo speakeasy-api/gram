@@ -1097,6 +1097,16 @@ const (
 	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
 	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
 	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
+	// Transcript uploads (POST /transcript) log these once per authenticated
+	// request, so uploads can be followed per organization and session. Each
+	// count covers that one request: the entries it carried, the rows it newly
+	// stored, and the warn-policy matches it returned. The offsets are the
+	// byte range of the client's transcript file the entries were read from.
+	HookTranscriptEntryCountKey   = attribute.Key("gram.hook.transcript.entry_count")
+	HookTranscriptStoredCountKey  = attribute.Key("gram.hook.transcript.stored_count")
+	HookTranscriptWarningCountKey = attribute.Key("gram.hook.transcript.warning_count")
+	HookTranscriptOffsetStartKey  = attribute.Key("gram.hook.transcript.offset_start")
+	HookTranscriptOffsetEndKey    = attribute.Key("gram.hook.transcript.offset_end")
 	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
 	// the Gram-Device-* headers, recorded on the request log for its
 	// endpoints so a fleet's requests can be counted and told apart per
@@ -1891,6 +1901,14 @@ func SlogHookDeviceBinaryVersion(v string) slog.Attr {
 func HookDeviceHarness(v string) attribute.KeyValue { return HookDeviceHarnessKey.String(v) }
 func SlogHookDeviceHarness(v string) slog.Attr      { return slog.String(string(HookDeviceHarnessKey), v) }
 
+func SlogHookDeviceHarnessVariant(v string) slog.Attr {
+	return slog.String(string(HookDeviceHarnessVariantKey), v)
+}
+
+func SlogHookDeviceInstallRoute(v string) slog.Attr {
+	return slog.String(string(HookDeviceInstallRouteKey), v)
+}
+
 func HookDeliveryEventType(v string) attribute.KeyValue { return HookDeliveryEventTypeKey.String(v) }
 func SlogHookDeliveryEventType(v string) slog.Attr {
 	return slog.String(string(HookDeliveryEventTypeKey), v)
@@ -1912,6 +1930,26 @@ func SlogHookDeliveryAttempts(v int) slog.Attr { return slog.Int(string(HookDeli
 
 func SlogHookDeliverySpoolDepth(v int) slog.Attr {
 	return slog.Int(string(HookDeliverySpoolDepthKey), v)
+}
+
+func SlogHookTranscriptEntryCount(v int) slog.Attr {
+	return slog.Int(string(HookTranscriptEntryCountKey), v)
+}
+
+func SlogHookTranscriptStoredCount(v int64) slog.Attr {
+	return slog.Int64(string(HookTranscriptStoredCountKey), v)
+}
+
+func SlogHookTranscriptWarningCount(v int) slog.Attr {
+	return slog.Int(string(HookTranscriptWarningCountKey), v)
+}
+
+func SlogHookTranscriptOffsetStart(v int64) slog.Attr {
+	return slog.Int64(string(HookTranscriptOffsetStartKey), v)
+}
+
+func SlogHookTranscriptOffsetEnd(v int64) slog.Attr {
+	return slog.Int64(string(HookTranscriptOffsetEndKey), v)
 }
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
