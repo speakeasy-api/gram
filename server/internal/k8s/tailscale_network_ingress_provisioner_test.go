@@ -592,7 +592,29 @@ func TestTailscaleNetworkIngressDeleteStopsWaitingWhenCanceled(t *testing.T) {
 		defer cancel()
 		started := time.Now()
 		require.ErrorIs(t, provisioner.Delete(ctx, desired.Resources), ErrNetworkIngressDeletionPending)
-		require.LessOrEqual(t, time.Since(started), 3*time.Second)
+		elapsed := time.Since(started)
+		require.GreaterOrEqual(t, elapsed, 2*time.Second)
+		require.LessOrEqual(t, elapsed, 3*time.Second)
+	})
+}
+
+func TestTailscaleNetworkIngressDeleteStopsWaitingWhenTailnetCredentialsAreRejected(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		provisioner, _, dynamicClient, desired := newTestTailscaleProvisioner(t)
+		provisioner.config.DeletionWait = time.Minute
+		_, err := provisioner.Apply(t.Context(), desired)
+		require.NoError(t, err)
+		markTerminatingWithFinalizer(t, dynamicClient, desired)
+		tailnet, err := dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+		require.NoError(t, err)
+		require.NoError(t, unstructured.SetNestedSlice(tailnet.Object, []any{map[string]any{"type": "TailnetReady", "status": "False", "reason": tailscaleReasonInvalidOAuth}}, "status", "conditions"))
+		_, err = dynamicClient.Resource(tailnetGVR).UpdateStatus(t.Context(), tailnet, metav1.UpdateOptions{})
+		require.NoError(t, err)
+
+		started := time.Now()
+		require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressProviderCredentialsRejected)
+		require.Less(t, time.Since(started), networkIngressDeletionPollInterval)
 	})
 }
 

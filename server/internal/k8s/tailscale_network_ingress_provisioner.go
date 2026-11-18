@@ -523,6 +523,9 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 	// dependency barrier until every resource in the preceding phase is absent.
 	// Each phase is re-checked until it settles or the call's wait budget ends.
 	deadline := time.Now().Add(p.config.DeletionWait)
+	// The operator cannot release its finalizers with rejected credentials,
+	// so waiting for them would only delay Delete reporting that blocker.
+	credentialsRejected := func() bool { return p.tailnetCredentialsRejected(ctx, resources) }
 	phase := func(deletes ...func() error) func() error {
 		return func() error { return runNetworkIngressDeletionPhase(deletes...) }
 	}
@@ -536,7 +539,7 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 		phase(securityPhase...),
 		phase(deleteNamespace),
 	} {
-		if err := awaitDeletionPhase(ctx, deadline, step); err != nil {
+		if err := awaitDeletionPhase(ctx, deadline, step, credentialsRejected); err != nil {
 			return err
 		}
 	}
@@ -545,13 +548,15 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 
 // awaitDeletionPhase runs a teardown phase and, while it reports
 // ErrNetworkIngressDeletionPending, runs it again every
-// networkIngressDeletionPollInterval until it settles or deadline passes. On
-// cancellation or at the deadline it returns the phase's last result, so a
-// caller still sees the step as pending rather than as a failure.
-func awaitDeletionPhase(ctx context.Context, deadline time.Time, phase func() error) error {
+// networkIngressDeletionPollInterval until it settles or deadline passes. It
+// stops early when blocked reports that the phase cannot settle without
+// outside help. On cancellation, at the deadline or when blocked it returns the
+// phase's last result, so a caller still sees the step as pending rather than
+// as a failure.
+func awaitDeletionPhase(ctx context.Context, deadline time.Time, phase func() error, blocked func() bool) error {
 	for {
 		err := phase()
-		if !errors.Is(err, ErrNetworkIngressDeletionPending) || time.Now().Add(networkIngressDeletionPollInterval).After(deadline) {
+		if !errors.Is(err, ErrNetworkIngressDeletionPending) || time.Now().Add(networkIngressDeletionPollInterval).After(deadline) || blocked() {
 			return err
 		}
 		timer := time.NewTimer(networkIngressDeletionPollInterval)
