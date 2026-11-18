@@ -530,16 +530,21 @@ function PluginDetailContent({
   const autoAddServersMutation = useUpdatePluginMutation({
     onSuccess: (updated) => {
       void invalidateAll();
-      toast.success(
-        updated.autoAddServersEnabled
-          ? "Automatic MCP servers turned on"
-          : "Automatic MCP servers turned off",
-        {
-          description: updated.autoAddServersEnabled
-            ? "Added the MCP servers this plugin's roles can use. Access changes now update the list."
-            : "The server list now changes only when someone edits it.",
-        },
-      );
+      const enabled = updated.autoAddServersEnabled;
+      const message = enabled
+        ? "Automatic MCP servers turned on"
+        : "Automatic MCP servers turned off";
+      // Turning it on can add servers, so say where those changes go, like any
+      // other content edit. Turning it off changes no servers.
+      if (enabled && publishStatus?.configured) {
+        offerPublish(message);
+        return;
+      }
+      toast.success(message, {
+        description: enabled
+          ? "Added the MCP servers this plugin's roles can use. Access changes now update the list."
+          : "The server list now changes only when someone edits it.",
+      });
     },
     onError: (error) => {
       handleError(error, { title: "Couldn't change automatic MCP servers" });
@@ -1139,8 +1144,8 @@ function PluginDetailContent({
                         </Label>
                         <Text small muted className="max-w-xl">
                           {plugin.autoAddServersEnabled
-                            ? "When a role this plugin is shared with gains or loses access to an MCP server, the server is added or removed here."
-                            : "Only people who edit this plugin change its MCP servers. Role and access changes leave the list alone."}
+                            ? "Role and access changes add or remove this plugin's MCP servers, including when you share it with a new role. Turning this off keeps the current list."
+                            : "Only people who edit this plugin change its MCP servers. Turning this on adds the servers this plugin's roles can use now, then keeps the list in step with role and access changes."}
                         </Text>
                       </div>
                       <Switch
