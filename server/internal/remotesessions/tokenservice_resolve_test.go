@@ -179,6 +179,7 @@ func TestResolveAccessTokens_LoginMadeThroughAnotherIssuerBoundToTheClient(t *te
 		{name: "member login serves the gateway", loginThrough: member, requestedOn: gateway, subject: "cross-member-first", want: "token-from-member"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			subject := urn.NewUserSubject(tc.subject)
 			accessEnc, err := enc.Encrypt([]byte(tc.want))
 			require.NoError(t, err)
@@ -233,6 +234,7 @@ func TestResolveOrganizationGatewayTokens_LoginMadeThroughAnotherIssuerBoundToTh
 		{name: "organization gateway login serves the member server", loginThrough: organization, requestedOn: member, subject: "orggw-gateway-first", want: "token-from-organization"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			subject := urn.NewUserSubject(tc.subject)
 			accessEnc, err := enc.Encrypt([]byte(tc.want))
 			require.NoError(t, err)
