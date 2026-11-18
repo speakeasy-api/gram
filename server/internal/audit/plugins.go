@@ -35,6 +35,11 @@ type PluginSnapshot struct {
 	// AutoSyncEnabled reports whether the plugin's changes publish
 	// automatically. Nil when the entry predates the setting.
 	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
+
+	// AutoAddServersEnabled reports whether the plugin's role audiences add
+	// and remove its MCP servers automatically. Nil when the entry predates
+	// the setting.
+	AutoAddServersEnabled *bool `json:"auto_add_servers_enabled,omitempty"`
 }
 
 type LogPluginCreateEvent struct {

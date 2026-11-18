@@ -95244,6 +95244,9 @@ components:
     CreatePluginForm:
       type: object
       properties:
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.
         auto_sync_enabled:
           type: boolean
           description: Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
@@ -109972,6 +109975,9 @@ components:
           items:
             $ref: '#/components/schemas/PluginAssignment'
           description: Role/user assignments.
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.
         auto_created:
           type: boolean
           description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
@@ -110019,6 +110025,7 @@ components:
         - slug
         - auto_created
         - auto_sync_enabled
+        - auto_add_servers_enabled
         - agent_plugins_v1_compatible
         - created_at
         - updated_at
@@ -123814,6 +123821,9 @@ components:
     UpdatePluginForm:
       type: object
       properties:
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.
         auto_sync_enabled:
           type: boolean
           description: Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
