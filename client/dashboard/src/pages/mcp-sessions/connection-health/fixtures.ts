@@ -1,6 +1,4 @@
-// FIXTURE DATA standing in for the mcpConnectionHealth API until the dashboard
-// SDK has it (AIM-1029). Every name, address and identifier here is made up.
-// Delete this file when `api.ts` points at the SDK.
+// FIXTURE DATA (made-up names) standing in for mcpConnectionHealth; delete with the swap in api.ts.
 
 import type { ConnectionHealthSource } from "./source";
 import type {

@@ -15,11 +15,7 @@ export interface Investigation {
   context: string;
 }
 
-/**
- * Hands a question about what the page shows to the Project Assistant, the
- * way the project dashboard's "Explore with AI" does: the context lands with
- * the first message, in the dock when there is one, else the full-page chat.
- */
+/** Sends a question with page context to the Project Assistant, like Explore with AI. */
 function useInvestigate(): (investigation: Investigation) => void {
   const routes = useRoutes();
   const navigate = useNavigate();

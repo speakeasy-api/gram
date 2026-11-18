@@ -100,10 +100,7 @@ function dayHeadings(rows: AttemptRow[], now: Date): Map<string, string> {
   return headings;
 }
 
-/**
- * Connection attempts, one row per attempt or folded repeat, grouped by day.
- * Shared by Connection Logs, Sign-in activity and a server's tab.
- */
+/** Connection attempts, one row per attempt or folded repeat, grouped by day. */
 export function AttemptsTable({
   rows,
   now,
@@ -183,7 +180,6 @@ export function AttemptsTable({
         header: "",
         width: "56px",
         render: (row) => (
-          // The row opens the attempt; the menu must not.
           // oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
           <span onClick={(event) => event.stopPropagation()}>
             <MoreActions

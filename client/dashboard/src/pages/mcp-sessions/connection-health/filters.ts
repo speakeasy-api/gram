@@ -142,10 +142,7 @@ type LinkFilters = AttemptFilters & {
   range?: TimeRangePreset;
 };
 
-/**
- * Query string that opens Connection Logs with these filters. The range goes
- * to the shared params `useFilterState` reads.
- */
+/** Query string that opens Connection Logs with these filters. */
 export function logsSearch(filters: LinkFilters, now: Date): string {
   const params = new URLSearchParams();
   if (filters.from) {

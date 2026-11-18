@@ -1,5 +1,4 @@
-// The mcpConnectionHealth API (AIM-1029 contract, 2026-11-18), in the
-// camelCase the generated SDK will use. Suspected problems are contract only.
+// mcpConnectionHealth API shapes (AIM-1029 contract, 2026-11-18), SDK camelCase.
 
 export const ATTEMPT_OUTCOMES = [
   "connected",
@@ -124,10 +123,7 @@ export interface ListAttemptsRequest extends AttemptRangeRequest {
   limit?: number;
 }
 
-/**
- * One Connection Logs row. Failed and blocked repeats fold into one row:
- * `count` > 1 and `firstStartedAt` is when they started.
- */
+/** One Connection Logs row; failed and blocked repeats fold into one (`count` > 1). */
 export interface AttemptRow {
   /** Reference of the newest attempt in the row. */
   id: string;
@@ -273,11 +269,7 @@ export interface ListSuspectedProblemsResponse {
   problems?: SuspectedProblem[];
 }
 
-/**
- * The contract types `problem` as `SuspectedProblem & { people: [...] }`,
- * which collides with the list's `people: number`; the list count is
- * `people.length` here.
- */
+/** Contract `people` collides (count vs list); the list count is `people.length`. */
 export interface SuspectedProblemDetail extends Omit<
   SuspectedProblem,
   "people"

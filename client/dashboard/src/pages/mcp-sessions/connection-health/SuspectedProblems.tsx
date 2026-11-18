@@ -8,10 +8,7 @@ const VISIBLE = 3;
 const SUSPECTED_PROBLEMS_RULE =
   "Failed the same way and not connected since: 3 or more people on one server, service or app version, or one person for 24 hours.";
 
-/**
- * The one panel that says we suspect something: people who failed the same
- * way and have not connected since. Renders nothing when there are none.
- */
+/** The one panel that says we suspect something; nothing when there is none. */
 export function SuspectedProblems({
   problems,
   now,

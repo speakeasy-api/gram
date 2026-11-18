@@ -13,11 +13,7 @@ import type {
   SummaryBucket,
 } from "./types";
 
-/**
- * Every read the connection health views make, one method per
- * mcpConnectionHealth RPC. Views reach data only through the hooks in
- * `api.ts`; pointing `api.ts` at SDK calls is the whole backend swap.
- */
+/** Every mcpConnectionHealth read the views make; `api.ts` picks the implementation. */
 export interface ConnectionHealthSource {
   listAttempts(request: ListAttemptsRequest): Promise<ListAttemptsResponse>;
   getAttemptCounts(

@@ -12,10 +12,7 @@ import { SuspectedProblems } from "./SuspectedProblems";
 
 const VIEW_PARAM = "view";
 
-/**
- * A server's Clients and Sessions tab with connection health: its suspected
- * problems, then Active Sessions or Connection Logs locked to the server.
- */
+/** A server's suspected problems, then Active Sessions or its locked Connection Logs. */
 export function ServerConnectionHealth({
   providerId,
   server,

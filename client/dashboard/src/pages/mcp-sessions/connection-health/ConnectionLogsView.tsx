@@ -88,10 +88,7 @@ function optionsFrom(facets: AttemptFacets | undefined): OptionsById {
   };
 }
 
-/**
- * Free text names a person or a server; the API filters by id, so text is
- * matched against the counts' labels: people first, else servers.
- */
+/** Matches free text to people, else servers, since the API filters by id. */
 function searchFilters(
   text: string,
   facets: AttemptFacets | undefined,
