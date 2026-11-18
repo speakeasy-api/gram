@@ -80,10 +80,12 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 		IsDefault:       row.IsDefault,
 		AutoCreated:     row.AutoCreated,
 		AutoSyncEnabled: pgtype.Bool{Bool: false, Valid: false},
-		CreatedAt:       row.CreatedAt,
-		UpdatedAt:       row.UpdatedAt,
-		DeletedAt:       row.DeletedAt,
-		Deleted:         row.Deleted,
+		// Not selected by the lock query; nothing here reads it yet.
+		AutoAddServersEnabled: false,
+		CreatedAt:             row.CreatedAt,
+		UpdatedAt:             row.UpdatedAt,
+		DeletedAt:             row.DeletedAt,
+		Deleted:               row.Deleted,
 	}, nil
 }
 
