@@ -12,7 +12,7 @@ package plugins
 
 // hooksBinaryVersion is the release every newly rendered bootstrap script
 // installs.
-const hooksBinaryVersion = "0.3.52"
+const hooksBinaryVersion = "0.3.57"
 
 // hooksReleaseProviders lists the hook providers the pinned release's relay
 // supports (the Provider* constants in hooks/relay at the release commit).
@@ -21,17 +21,18 @@ const hooksBinaryVersion = "0.3.52"
 // the provider is pinned.
 var hooksReleaseProviders = []string{
 	"pi",
+	"vibe",
 }
 
 // hooksBinarySHA256s pins the archive digests for hooksBinaryVersion. Bootstrap
 // scripts verify the same digests client-side after downloading.
 var hooksBinarySHA256s = map[string]string{
-	"darwin-amd64":  "c999c79ba6e936ec1ff44f7a7703ed17bb22cba8e8ee31201f371cf3de78fdc5",
-	"darwin-arm64":  "1d5cab0896a52a6d51dec5385197db9a69aa8f5e4d5f05d0d2207b7e45c6d42f",
-	"linux-amd64":   "97d6300e5e326206483267baa30a61c6a9816a33956387acf09ac356ed3d2f97",
-	"linux-arm64":   "b719d2717ad872dabc740f57deadce406658dc75ed7327d7e8bd7fdbe63c3ddc",
-	"windows-amd64": "0cef853eed60e198c79ba79b2e5bd6e9a9a6a4fcd30ccb574e32d09ff5ceec4e",
-	"windows-arm64": "38d98c329b4d66e083b04a0de60df212631640e26d4dacb509a530e46c2af758",
+	"darwin-amd64":  "eeb78aa3f4240f1a59cd3f5da96a754b5eaaf67f802380db654a414e19849ce5",
+	"darwin-arm64":  "57e7ad5e77dcafe70489c63545e3780545100b1aa65eefd79e4593cd69f39011",
+	"linux-amd64":   "5582fa7cf2b56b78ccdc4a7794ac56328e2171d399ab036e9a0b492fe0ba8442",
+	"linux-arm64":   "3203eec82f733413578d3a989e52e4398a51ad3f9fff591fbc547162c646ebf0",
+	"windows-amd64": "e335b208875869a78421f221c7eb26b43db21bb6f721bc2126b06e877a268e5d",
+	"windows-arm64": "1c6b56be256c9e7c8a01af58fb62274dbbc97147ce4da87e0b82ada0946e7b93",
 }
 
 // hooksRetiredSHA256s keeps previously pinned releases fetchable. Bootstrap
@@ -262,5 +263,13 @@ var hooksRetiredSHA256s = map[string]map[string]string{
 		"linux-arm64":   "99e4412aea1e6f05501f26d2db94b28388a7c7a53addacd4c5abbdb833f2a126",
 		"windows-amd64": "d6ff52e034c64c7987d448e7b750beb82b615be36c5fc56950f858b9f772678d",
 		"windows-arm64": "d12ca548afd81207780f603ebf03dd7e872cc26e8c37f85120485663fcdefb27",
+	},
+	"0.3.52": {
+		"darwin-amd64":  "c999c79ba6e936ec1ff44f7a7703ed17bb22cba8e8ee31201f371cf3de78fdc5",
+		"darwin-arm64":  "1d5cab0896a52a6d51dec5385197db9a69aa8f5e4d5f05d0d2207b7e45c6d42f",
+		"linux-amd64":   "97d6300e5e326206483267baa30a61c6a9816a33956387acf09ac356ed3d2f97",
+		"linux-arm64":   "b719d2717ad872dabc740f57deadce406658dc75ed7327d7e8bd7fdbe63c3ddc",
+		"windows-amd64": "0cef853eed60e198c79ba79b2e5bd6e9a9a6a4fcd30ccb574e32d09ff5ceec4e",
+		"windows-arm64": "38d98c329b4d66e083b04a0de60df212631640e26d4dacb509a530e46c2af758",
 	},
 }
