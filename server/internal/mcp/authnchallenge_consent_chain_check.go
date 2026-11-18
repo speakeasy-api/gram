@@ -149,7 +149,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		if challengeState.AccountSwitches > 0 {
 			result.Message = fmt.Sprintf(unmanagedAgainMessage, display)
 		}
-		offer, oerr := s.accountSwitchOffered(ctx, endpoint, challengeState, time.Now())
+		offer, oerr := s.accountSwitchOffered(r, endpoint, challengeState, time.Now())
 		if oerr != nil {
 			logger.WarnContext(ctx, "check account switch offer", attr.SlogError(oerr))
 		}

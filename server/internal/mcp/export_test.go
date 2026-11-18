@@ -409,3 +409,27 @@ func (s *Service) MarkConsentSwitched(ctx context.Context, stateID string, issue
 	}
 	return nil
 }
+
+// BindConsentBrowser binds state to a new browser, as authorize does, and returns that browser's cookie.
+func BindConsentBrowser(state *AuthnChallengeState) (*http.Cookie, error) {
+	w := &cookieRecorder{header: http.Header{}}
+	if err := bindConsentBrowser(w, state); err != nil {
+		return nil, err
+	}
+	cookie, err := http.ParseSetCookie(w.header.Get("Set-Cookie"))
+	if err != nil {
+		return nil, fmt.Errorf("parse consent browser cookie: %w", err)
+	}
+	return cookie, nil
+}
+
+// ConsentBrowserMatches reports whether r comes from the browser state is bound to.
+func ConsentBrowserMatches(r *http.Request, state AuthnChallengeState) bool {
+	return consentBrowserMatches(r, state, time.Now())
+}
+
+type cookieRecorder struct{ header http.Header }
+
+func (c *cookieRecorder) Header() http.Header         { return c.header }
+func (c *cookieRecorder) Write(b []byte) (int, error) { return len(b), nil }
+func (c *cookieRecorder) WriteHeader(int)             {}

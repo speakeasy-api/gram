@@ -94,6 +94,15 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 		UserSessionIssuerID: issuer.ID,
 		MCPResourceID:       toolset.ID,
 	}, stored.AgentAuthorizationTarget)
+
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1, "the starting browser is bound on the consent page's host")
+	require.Equal(t, "__Host-speakeasy_consent_"+stored.FlowID, cookies[0].Name)
+	require.Empty(t, cookies[0].Domain)
+	starting := httptest.NewRequest(http.MethodPost, "/", nil)
+	starting.AddCookie(cookies[0])
+	require.True(t, mcp.ConsentBrowserMatches(starting, stored))
+	require.False(t, mcp.ConsentBrowserMatches(httptest.NewRequest(http.MethodPost, "/", nil), stored))
 }
 
 func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) {
@@ -194,6 +203,8 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 		"public /authorize must not promote ambient credentials to a user subject")
 	require.NotEqual(t, authCtx.UserID, stored.Subject.ID)
 	require.NotEqual(t, bearerUserID, stored.Subject.ID)
+	require.Empty(t, stored.ConsentBrowserHash, "an anonymous flow has no sign-in to switch")
+	require.Empty(t, w.Result().Cookies())
 }
 
 // Authorize rejects in two shapes — inline JSON while the redirect_uri is

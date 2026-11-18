@@ -72,9 +72,11 @@ func accountSwitchTooLate(state AuthnChallengeState, now time.Time) bool {
 
 // accountSwitchOffered is the one predicate both the check's offer and the
 // action's acceptance use: an eligible consent, with time left, whose own
-// sign-in Speakeasy refuses as a personal account.
-func (s *Service) accountSwitchOffered(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, now time.Time) (accountSwitchVerdict, error) {
-	if !accountSwitchAllowed(state) {
+// sign-in Speakeasy refuses as a personal account, asked from the browser that
+// started it.
+func (s *Service) accountSwitchOffered(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, now time.Time) (accountSwitchVerdict, error) {
+	ctx := r.Context()
+	if !accountSwitchAllowed(state) || !consentBrowserMatches(r, state, now) {
 		return accountSwitchNotOffered, nil
 	}
 	if accountSwitchTooLate(state, now) {
@@ -124,6 +126,9 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 		}
 	}()
 
+	if !consentBrowserMatches(r, state, time.Now()) {
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountExpired).LogWarn(ctx, logger))
+	}
 	focusServer := r.PostForm.Get("server")
 	if focusServer != "" {
 		if !endpoint.MetaMcpServerID.Valid || len(focusServer) > maxFocusServerLength {
@@ -143,7 +148,7 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 		}
 		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry))
 	}
-	verdict, err := s.accountSwitchOffered(ctx, endpoint, state, time.Now())
+	verdict, err := s.accountSwitchOffered(r, endpoint, state, time.Now())
 	switch {
 	case err != nil:
 		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))

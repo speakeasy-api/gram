@@ -118,6 +118,8 @@ type switchFixture struct {
 	session string
 	// workosOrganization is the organization's WorkOS id.
 	workosOrganization string
+	// browser is the cookie of the browser that started the authorization request.
+	browser *http.Cookie
 }
 
 // seedSwitchConsent: a chained consent whose person signed in to Speakeasy with a personal Google account on the work domain.
@@ -144,6 +146,7 @@ func seedSwitchConsent(t *testing.T, tag string, wrap func(cache.Cache) cache.Ca
 		managed:              map[uuid.UUID]bool{},
 		session:              "",
 		workosOrganization:   "",
+		browser:              nil,
 	}
 	registerPageClient(t, ctx, fx.consentActionFixture)
 	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
@@ -185,6 +188,9 @@ func armSwitch(t *testing.T, fx *switchFixture, remoteIssuer uuid.UUID, upstream
 	fx.store(t, func(state *mcp.AuthnChallengeState) {
 		state.FlowID = uuid.NewString()
 		state.CreatedAt = time.Now()
+		browser, err := mcp.BindConsentBrowser(state)
+		require.NoError(t, err)
+		fx.browser = browser
 		state.State = switchClientState
 		state.CodeChallenge = switchCodeChallenge
 		state.CodeChallengeMethod = "S256"
@@ -242,6 +248,8 @@ func (fx *switchFixture) store(t *testing.T, edit func(*mcp.AuthnChallengeState)
 	require.NoError(t, fx.ti.authnChallengeCache.Store(fx.ctx, state))
 }
 
+const switchExpired = "This page expired; start connecting again."
+
 func postSwitchAccount(t *testing.T, fx *switchFixture, edit func(url.Values)) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"switch_account"}, "client_id": {fx.clientA.String()}}
@@ -251,8 +259,16 @@ func postSwitchAccount(t *testing.T, fx *switchFixture, edit func(url.Values)) (
 	if edit != nil {
 		edit(form)
 	}
+	return fx.serveAction(form)
+}
+
+// serveAction posts a consent card action from the fixture's browser.
+func (fx *switchFixture) serveAction(form url.Values) (*httptest.ResponseRecorder, error) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if fx.browser != nil {
+		req.AddCookie(fx.browser)
+	}
 	w := httptest.NewRecorder()
 	if err := fx.ti.service.ServeConsentAction(w, req, fx.endpoint); err != nil {
 		return w, fmt.Errorf("serve consent action: %w", err)
@@ -326,6 +342,9 @@ func refusedSwitchPage(t *testing.T, fx *switchFixture) string {
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"switch_account"}, "client_id": {fx.clientA.String()}}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if fx.browser != nil {
+		req.AddCookie(fx.browser)
+	}
 	w := httptest.NewRecorder()
 	oops.BrowserErrHandle(fx.ti.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return fx.ti.service.ServeConsentAction(w, r, fx.endpoint)
@@ -346,7 +365,7 @@ func requireRefusedSwitchPage(t *testing.T, fx *switchFixture, sentence string) 
 
 func checkCard(t *testing.T, fx *switchFixture) map[string]string {
 	t.Helper()
-	w, err := postChainCheck(t, fx.consentActionFixture, nil)
+	w, err := fx.serveAction(url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"identity_chaining_check"}, "client_id": {fx.clientA.String()}})
 	require.NoError(t, err)
 	return chainCheckResult(t, w)
 }
@@ -494,6 +513,52 @@ func TestConsentSwitchAccount_RefusesForgedAndForeignRequests(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://idp.example.com/authorize", w.Header().Get("Location"), "posted fields can't choose where it goes")
 	require.Equal(t, []string{fx.session}, fx.revoker.sessions(), "or whose session ends")
+}
+
+// Only the browser that started the authorization request can switch; any other changes nothing.
+func TestConsentSwitchAccount_OnlyFromTheStartingBrowser(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-browser", nil)
+	before := fx.state(t)
+	starting := fx.browser
+	other := *starting
+	other.Value = "another-browser"
+	for name, browser := range map[string]*http.Cookie{"no cookie": nil, "another browser": &other} {
+		fx.browser = browser
+		require.NotContains(t, checkCard(t, fx), "action", name)
+		_, err := postSwitchAccount(t, fx, nil)
+		requireSwitchRefused(t, err, oops.CodeBadRequest, switchExpired)
+		requireRefusedSwitchPage(t, fx, switchExpired)
+		require.Empty(t, fx.revoker.sessions(), name+": the person's session is not ended")
+		require.Equal(t, before, fx.state(t), name+": the page's challenge is untouched")
+		code, _, _ := render(t, fx.consentActionFixture)
+		require.Equal(t, http.StatusOK, code, name+": the page still loads")
+	}
+
+	fx.browser = starting
+	require.Equal(t, "switch_account", checkCard(t, fx)["action"])
+	switchAccount(t, fx)
+	require.Equal(t, []string{fx.session}, fx.revoker.sessions())
+}
+
+// A challenge minted before authorize bound its browser offers no switch and changes nothing.
+func TestConsentSwitchAccount_UnboundChallengeOffersNoSwitch(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-unbound", nil)
+	fx.store(t, func(s *mcp.AuthnChallengeState) { s.ConsentBrowserHash = "" })
+	before := fx.state(t)
+	body := checkCard(t, fx)
+	require.Equal(t, "rejected", body["status"])
+	require.NotContains(t, body, "action")
+	_, err := postSwitchAccount(t, fx, nil)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, switchExpired)
+	require.Empty(t, fx.revoker.sessions())
+	require.Equal(t, before, fx.state(t))
+	code, page, _ := render(t, fx.consentActionFixture)
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>", "the own-account sign-in still works")
 }
 
 // If the session can't be ended, nothing changes and the person sees a plain error.
@@ -739,6 +804,7 @@ func TestConsentSwitchAccount_KeepsTheGatewayServerPage(t *testing.T) {
 		managed:              map[uuid.UUID]bool{},
 		session:              "",
 		workosOrganization:   "",
+		browser:              nil,
 	}
 	armSwitch(t, fx, issuerID, upstream, nil)
 
