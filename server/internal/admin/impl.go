@@ -341,6 +341,8 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// A deployment-wide setting, not part of an organization's features.
+		AssistantsAvailable: nil,
 		// Staff read enforcement through the upstream auth enforcement status.
 		UpstreamAuthEnforced: nil,
 	}

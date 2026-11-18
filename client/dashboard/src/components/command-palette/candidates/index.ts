@@ -8,6 +8,7 @@ import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 import { useActionCandidates } from "./useActionCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
 import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
@@ -113,7 +114,11 @@ export function useLauncherCandidates({
   // mcp:write-only reader would pass that one and then have the request
   // refused. Named on the project, as the server checks it.
   const canBrowseCatalog = hasScope("project:read", project.id);
-  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
+  // Assistants are hidden across a deployment that does not run them, so
+  // neither the assistant list nor indexed assistant results are offered.
+  const assistantsAvailable = useAssistantsAvailable();
+  const canReadAssistants =
+    assistantsAvailable && hasScope("assistant:read", undefined, project.id);
 
   const canReadSkills = hasScope("skill:read", project.id);
 
@@ -240,6 +245,7 @@ export function useLauncherCandidates({
       mcpServers.map((candidate) => candidate.id.replace(/^mcp:/, "")),
     );
     const indexedCandidates = resourceSearch.candidates.filter((candidate) => {
+      if (candidate.kind === "assistant") return assistantsAvailable;
       if (candidate.kind !== "mcp_server") return true;
       const identity = candidate.resourceIdentity;
       return (
@@ -288,6 +294,7 @@ export function useLauncherCandidates({
     canListPlugins,
     canBrowseCatalog,
     canReadAssistants,
+    assistantsAvailable,
     canReadSkills,
     resourceSearch.candidates,
     fallback,

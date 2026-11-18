@@ -9,6 +9,7 @@ import { useProjectNavRoutes } from "./useProjectNavRoutes";
 const testState = vi.hoisted(() => ({
   projectId: "project_a",
   orgMemoryEnabled: false,
+  assistantsAvailable: true,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
@@ -29,6 +30,10 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization_a" }),
 }));
 
+vi.mock("./useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => testState.assistantsAvailable,
+}));
+
 vi.mock("./useOrgMemoryDeveloperToggle", () => ({
   useOrgMemoryDeveloperToggle: () => [testState.orgMemoryEnabled, vi.fn()],
 }));
@@ -46,6 +51,7 @@ function unavailableFeatureFlag(
 beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
+  testState.assistantsAvailable = true;
   testState.productFeatures = {
     isSuccess: true,
     data: { signalsIntelligenceEnabled: false },
@@ -311,5 +317,14 @@ describe("useProjectNavRoutes", () => {
         }),
       ]),
     );
+  });
+  it("hides the Project Assistant and Assistants on a deployment without assistants", () => {
+    testState.assistantsAvailable = false;
+    const { result } = renderNav();
+    const navRoutes = result.current.map((entry) => entry.route.href());
+
+    expect(navRoutes).not.toContain(routes.chat.href());
+    expect(navRoutes).not.toContain(routes.assistants.href());
+    expect(navRoutes).toContain(routes.home.href());
   });
 });
