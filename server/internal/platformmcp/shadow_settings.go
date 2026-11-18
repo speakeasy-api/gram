@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -63,6 +65,31 @@ type ShadowMCPSettingsService struct {
 	organizations OrganizationSlugResolver
 	budget        OperationBudget
 	now           func() time.Time
+	cleaner       shadowPolicyResultsCleaner
+	cleanerLogger *slog.Logger
+}
+
+// shadowPolicyResultsCleaner removes the results of a deleted policy, as the
+// dashboard does after it deletes one.
+type shadowPolicyResultsCleaner interface {
+	Clean(ctx context.Context, projectID, policyID uuid.UUID) error
+}
+
+// WithResultsCleaner removes a deleted policy's results after
+// set_shadow_mcp_default_access switches a project back to allowed by default.
+func (s *ShadowMCPSettingsService) WithResultsCleaner(cleaner shadowPolicyResultsCleaner, logger *slog.Logger) *ShadowMCPSettingsService {
+	s.cleaner = cleaner
+	s.cleanerLogger = logger
+	return s
+}
+
+func (s *ShadowMCPSettingsService) cleanPolicyResults(ctx context.Context, projectID, policyID uuid.UUID) {
+	if s.cleaner == nil || s.cleanerLogger == nil {
+		return
+	}
+	if err := s.cleaner.Clean(ctx, projectID, policyID); err != nil {
+		s.cleanerLogger.ErrorContext(ctx, "trigger risk policy results cleanup", attr.SlogError(err), attr.SlogProjectID(projectID.String()), attr.SlogRiskPolicyID(policyID.String()))
+	}
 }
 
 func NewShadowMCPSettingsService(db *pgxpool.Pool, shadow *ShadowInventoryService, audiences shadowDecisionAudienceResolver, policies *policycore.Core, links *officiallink.Writer, flags feature.Provider, organizations OrganizationSlugResolver, budget OperationBudget) *ShadowMCPSettingsService {
@@ -311,7 +338,10 @@ func (s *ShadowMCPSettingsService) applyDefaultAccess(ctx context.Context, tx pg
 		if err != nil {
 			return ShadowDefaultAccessReceiptResult{}, nil, mapShadowSettingPolicyError(err)
 		}
-		return ShadowDefaultAccessReceiptResult{Mode: mode, Audience: "", Roles: []ShadowDecisionAudience{}, ResultCategory: "removed"}, func(ctx context.Context) { s.policies.AfterDeletePolicy(ctx, deleted) }, nil
+		return ShadowDefaultAccessReceiptResult{Mode: mode, Audience: "", Roles: []ShadowDecisionAudience{}, ResultCategory: "removed"}, func(ctx context.Context) {
+			s.policies.AfterDeletePolicy(ctx, deleted)
+			s.cleanPolicyResults(ctx, project.ID, deleted.Row.ID)
+		}, nil
 	}
 
 	principals, everyone, err := s.resolveDefaultAccessAudience(ctx, tx, principal, project, references)
@@ -554,7 +584,7 @@ func (s *ShadowMCPSettingsService) SetOfficialServer(ctx context.Context, princi
 func shadowOfficialLinkActionSummary(action string) string {
 	switch action {
 	case shadowOfficialLinkActionLink:
-		return "makes the chosen MCP server this Shadow MCP server's official version: agents that connect to the Shadow MCP server directly are blocked wherever a Shadow MCP policy applies and sent to the official server."
+		return "makes the chosen MCP server this Shadow MCP server's official version: agents that connect to the Shadow MCP server directly are blocked and sent to the official server, whatever the default access."
 	case shadowOfficialLinkActionSwitchOff:
 		return "switches the link off: the official server stays linked, but direct use of the Shadow MCP server follows the ordinary Shadow MCP rules again."
 	case shadowOfficialLinkActionSwitchOn:

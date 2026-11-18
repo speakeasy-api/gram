@@ -1,6 +1,8 @@
 package platformmcp
 
 import (
+	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -179,6 +181,9 @@ func TestShadowDefaultAccessCreatesNarrowsAndRemovesTheManagedPolicy(t *testing.
 	require.Equal(t, "unchanged", same.ResultCategory)
 	require.Equal(t, updatesBefore+1, auditCount(t, t.Context(), h.conn, audit.ActionRiskPolicyUpdate))
 
+	policyID := h.blockingPolicies(t)[0].ID
+	cleaner := &recordingResultsCleaner{}
+	h.service.WithResultsCleaner(cleaner, slog.New(slog.DiscardHandler))
 	deletesBefore := auditCount(t, t.Context(), h.conn, audit.ActionRiskPolicyDelete)
 	allowed, err := h.service.SetDefaultAccess(ctx, h.principal, SetShadowMCPDefaultAccessInput{ProjectID: h.project.ID.String(), Mode: "allowed", ExpectedVersion: h.defaultAccess(t).Version, IdempotencyKey: "allow-by-default", Confirmed: true})
 	require.NoError(t, err)
@@ -186,12 +191,25 @@ func TestShadowDefaultAccessCreatesNarrowsAndRemovesTheManagedPolicy(t *testing.
 	require.Equal(t, "allowed", allowed.State.Mode)
 	require.Empty(t, h.blockingPolicies(t))
 	require.Equal(t, deletesBefore+1, auditCount(t, t.Context(), h.conn, audit.ActionRiskPolicyDelete))
+	require.Equal(t, []uuid.UUID{policyID}, cleaner.cleaned)
 
 	// Allowed again is already the state.
 	again, err := h.service.SetDefaultAccess(ctx, h.principal, SetShadowMCPDefaultAccessInput{ProjectID: h.project.ID.String(), Mode: "allowed", ExpectedVersion: h.defaultAccess(t).Version, IdempotencyKey: "allow-again", Confirmed: true})
 	require.NoError(t, err)
 	require.Equal(t, "unchanged", again.ResultCategory)
 	require.Equal(t, deletesBefore+1, auditCount(t, t.Context(), h.conn, audit.ActionRiskPolicyDelete))
+	require.Len(t, cleaner.cleaned, 1)
+}
+
+// recordingResultsCleaner records the policies whose results cleanup was
+// triggered.
+type recordingResultsCleaner struct {
+	cleaned []uuid.UUID
+}
+
+func (c *recordingResultsCleaner) Clean(_ context.Context, _, policyID uuid.UUID) error {
+	c.cleaned = append(c.cleaned, policyID)
+	return nil
 }
 
 func seedShadowModePolicy(t *testing.T, h shadowSettingsHarness, name string, sources []string, disposition string) riskrepo.RiskPolicy {

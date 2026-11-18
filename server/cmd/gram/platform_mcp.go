@@ -1411,7 +1411,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// tool's cohort and allowance, and the dashboard's policy and link
 		// write paths.
 		shadowInventory.WithSettingsReads(config.DB)
-		platformReader.WithShadowSettings(platformmcp.NewShadowMCPSettingsService(
+		shadowSettings := platformmcp.NewShadowMCPSettingsService(
 			config.DB,
 			shadowInventory,
 			pluginInventory,
@@ -1420,7 +1420,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			config.FeatureFlags,
 			platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
 			shadowDecisionBudget,
-		))
+		)
+		// Removing the blocked-by-default policy cleans up its results, as the
+		// dashboard's delete does.
+		if config.TemporalEnv != nil {
+			shadowSettings.WithResultsCleaner(&background.TemporalRiskPolicyResultsCleaner{TemporalEnv: config.TemporalEnv, Logger: config.Logger}, config.Logger)
+		}
+		platformReader.WithShadowSettings(shadowSettings)
 	}
 	// Outside the branch on purpose: the Shadow AI reads answer an
 	// organization-scoped question and share none of the Shadow MCP
