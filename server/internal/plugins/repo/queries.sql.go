@@ -273,23 +273,26 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 
 const createPlugin = `-- name: CreatePlugin :one
 
-INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled, auto_add_servers_enabled)
+VALUES ($1, $2, $3, $4, $5, $6,
+  COALESCE($7::boolean, FALSE))
 RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePluginParams struct {
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Name            string
-	Slug            string
-	Description     pgtype.Text
-	AutoSyncEnabled pgtype.Bool
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	Name                  string
+	Slug                  string
+	Description           pgtype.Text
+	AutoSyncEnabled       pgtype.Bool
+	AutoAddServersEnabled pgtype.Bool
 }
 
 // Queries for managing plugins (project-scoped distributable MCP server bundles).
 // plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
 // A NULL auto_sync_enabled means the plugin's changes publish automatically.
+// A NULL auto_add_servers_enabled leaves automatic server adding off.
 func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, createPlugin,
 		arg.OrganizationID,
@@ -298,6 +301,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		arg.Slug,
 		arg.Description,
 		arg.AutoSyncEnabled,
+		arg.AutoAddServersEnabled,
 	)
 	var i Plugin
 	err := row.Scan(
@@ -2769,6 +2773,7 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 const listProjectRoleDeliveryPluginsForUpdate = `-- name: ListProjectRoleDeliveryPluginsForUpdate :many
 SELECT p.id FROM plugins p
 WHERE p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = $1
     AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
 ORDER BY p.id FOR UPDATE OF p
@@ -2779,6 +2784,7 @@ type ListProjectRoleDeliveryPluginsForUpdateParams struct {
 	ProjectID      uuid.UUID
 }
 
+// Only plugins that opted in to automatic server adding take part.
 func (q *Queries) ListProjectRoleDeliveryPluginsForUpdate(ctx context.Context, arg ListProjectRoleDeliveryPluginsForUpdateParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listProjectRoleDeliveryPluginsForUpdate, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -2804,6 +2810,7 @@ SELECT p.id, p.project_id
 FROM plugins p JOIN projects project ON project.id = p.project_id
 WHERE p.organization_id = $1 AND project.organization_id = $1
   AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
     AND a.organization_id = $1 AND a.principal_urn = $2)
 ORDER BY p.project_id, p.id
@@ -2820,6 +2827,7 @@ type ListRoleDeliveryPluginsRow struct {
 }
 
 // Organization-scoped role event discovery; locks and writes retain exact project scope.
+// Only plugins that opted in to automatic server adding take part.
 func (q *Queries) ListRoleDeliveryPlugins(ctx context.Context, arg ListRoleDeliveryPluginsParams) ([]ListRoleDeliveryPluginsRow, error) {
 	rows, err := q.db.Query(ctx, listRoleDeliveryPlugins, arg.OrganizationID, arg.PrincipalUrn)
 	if err != nil {
@@ -3077,7 +3085,7 @@ func (q *Queries) LockPlatformCleanupMemberships(ctx context.Context, arg LockPl
 }
 
 const lockPluginForAssignments = `-- name: LockPluginForAssignments :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -3093,18 +3101,19 @@ type LockPluginForAssignmentsParams struct {
 }
 
 type LockPluginForAssignmentsRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	IsDefault      pgtype.Bool
-	AutoCreated    bool
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                    uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	Name                  string
+	Slug                  string
+	Description           pgtype.Text
+	IsDefault             pgtype.Bool
+	AutoCreated           bool
+	AutoAddServersEnabled bool
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 // Locks one exact live plugin. Dashboard and Platform MCP assignment writes
@@ -3121,6 +3130,7 @@ func (q *Queries) LockPluginForAssignments(ctx context.Context, arg LockPluginFo
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3894,31 +3904,35 @@ SET name = $1,
     slug = $2,
     description = $3,
     auto_sync_enabled = COALESCE($4::boolean, auto_sync_enabled),
+    auto_add_servers_enabled = COALESCE($5::boolean, auto_add_servers_enabled),
     updated_at = clock_timestamp()
-WHERE id = $5
-  AND organization_id = $6
-  AND project_id = $7
+WHERE id = $6
+  AND organization_id = $7
+  AND project_id = $8
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginParams struct {
-	Name            string
-	Slug            string
-	Description     pgtype.Text
-	AutoSyncEnabled pgtype.Bool
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
+	Name                  string
+	Slug                  string
+	Description           pgtype.Text
+	AutoSyncEnabled       pgtype.Bool
+	AutoAddServersEnabled pgtype.Bool
+	ID                    uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
 }
 
-// A NULL auto_sync_enabled argument keeps the plugin's current setting.
+// A NULL auto_sync_enabled or auto_add_servers_enabled argument keeps the
+// plugin's current setting.
 func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, updatePlugin,
 		arg.Name,
 		arg.Slug,
 		arg.Description,
 		arg.AutoSyncEnabled,
+		arg.AutoAddServersEnabled,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,

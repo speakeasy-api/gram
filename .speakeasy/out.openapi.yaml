@@ -31771,125 +31771,6 @@ paths:
       x-speakeasy-name-override: verify
       x-speakeasy-react-hook:
         name: VerifyIdentityProviderConnection
-  /rpc/instances.get:
-    get:
-      description: Load all relevant data for an instance of a toolset and environment
-      operationId: getInstance
-      parameters:
-        - allowEmptyValue: true
-          description: The slug of the toolset to load
-          in: query
-          name: toolset_slug
-          required: true
-          schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
-            pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetInstanceResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - chat_sessions_token_header_Gram-Chat-Session: []
-        - {}
-      summary: getInstance instances
-      tags:
-        - instances
-      x-speakeasy-name-override: getBySlug
-      x-speakeasy-react-hook:
-        name: Instance
   /rpc/integrations.get:
     get:
       tags:
@@ -95244,6 +95125,9 @@ components:
     CreatePluginForm:
       type: object
       properties:
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.
         auto_sync_enabled:
           type: boolean
           description: Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
@@ -100229,49 +100113,6 @@ components:
         connection:
           $ref: '#/components/schemas/OktaIdentityProviderConnection'
       description: The organization's Okta connection, or nothing when none is connected.
-    GetInstanceResult:
-      type: object
-      properties:
-        description:
-          type: string
-          description: The description of the toolset
-        function_environment_variables:
-          type: array
-          items:
-            $ref: '#/components/schemas/FunctionEnvironmentVariable'
-          description: The function environment variables that are relevant to the toolset
-        mcp_servers:
-          type: array
-          items:
-            $ref: '#/components/schemas/InstanceMcpServer'
-          description: The MCP servers that are relevant to the toolset
-        name:
-          type: string
-          description: The name of the toolset
-        prompt_templates:
-          type: array
-          items:
-            $ref: '#/components/schemas/PromptTemplate'
-          description: The list of prompt templates
-        security_variables:
-          type: array
-          items:
-            $ref: '#/components/schemas/SecurityVariable'
-          description: The security variables that are relevant to the toolset
-        server_variables:
-          type: array
-          items:
-            $ref: '#/components/schemas/ServerVariable'
-          description: The server variables that are relevant to the toolset
-        tools:
-          type: array
-          items:
-            $ref: '#/components/schemas/Tool'
-          description: The list of tools
-      required:
-        - name
-        - tools
-        - mcp_servers
     GetIntegrationResult:
       type: object
       properties:
@@ -102669,14 +102510,6 @@ components:
       required:
         - input_type
         - request_data
-    InstanceMcpServer:
-      type: object
-      properties:
-        url:
-          type: string
-          description: The address of the MCP server
-      required:
-        - url
     Integration:
       type: object
       properties:
@@ -109972,6 +109805,9 @@ components:
           items:
             $ref: '#/components/schemas/PluginAssignment'
           description: Role/user assignments.
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.
         auto_created:
           type: boolean
           description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
@@ -110019,6 +109855,7 @@ components:
         - slug
         - auto_created
         - auto_sync_enabled
+        - auto_add_servers_enabled
         - agent_plugins_v1_compatible
         - created_at
         - updated_at
@@ -123814,6 +123651,9 @@ components:
     UpdatePluginForm:
       type: object
       properties:
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.
         auto_sync_enabled:
           type: boolean
           description: Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
@@ -127069,8 +126909,6 @@ tags:
     description: Resolves the identifiers Speakeasy records activity under into a single identity.
   - name: identityProviderConnections
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
-  - name: instances
-    description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Speakeasy.
   - name: internalSessionIssuers

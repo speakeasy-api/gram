@@ -1250,6 +1250,7 @@ func (s *Service) writeSetupCallbackError(w http.ResponseWriter, r *http.Request
 		Setup:    true, Status: status, Reason: oauthui.ReasonDefault,
 		ErrorID: "", Code: oautherr.CodeInvalidRequest, Description: description,
 		ProviderName: "",
+		AdminDetail:  "",
 		CallbackURL:  "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
 	}
 	switch {

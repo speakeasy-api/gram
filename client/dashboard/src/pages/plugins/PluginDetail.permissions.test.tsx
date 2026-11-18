@@ -325,6 +325,29 @@ describe("plugin detail permission boundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sync changes" }));
     expect(publish).toHaveBeenCalled();
   });
+  it("turns automatic MCP servers on from settings, changing nothing else", () => {
+    state.pluginWrite = true;
+    renderAdmin("settings", [hostedServer], { autoAddServersEnabled: false });
+    const toggle = screen.getByRole("switch", {
+      name: "Add MCP servers automatically",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(toggle);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          updatePluginForm: {
+            id: "plugin-a",
+            name: "Example plugin",
+            slug: "example-plugin",
+            description: undefined,
+            autoAddServersEnabled: true,
+          },
+        },
+      }),
+    );
+  });
   // A failure that isn't the 412 for changes waiting to sync is a toast, with
   // no Sync changes beside the switch: a server fault, or a 400 a sync can't
   // fix such as packages that share a directory. handleError logs a 4xx as a

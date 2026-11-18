@@ -759,3 +759,27 @@ func TestExportRecord_ProviderFailureNamesTheHost(t *testing.T) {
 	require.Equal(t, "upstream.example.test", got[string(attr.ServerAddressKey)].AsString())
 	require.Equal(t, int64(8443), got[string(attr.ServerPortKey)].AsInt64())
 }
+
+func TestExportRecord_AddressSpeakeasyDidNotDialNamesTheConfiguredHost(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []Code{CodeAddressNotAllowed, CodeAddressNotFound} {
+		row := exportTestRow(t, code, true, Provider("https://idp.example.test:8443/oauth"))
+		require.Equal(t, "idp.example.test:8443", row.ProviderHost, code.String())
+
+		record, ok := exportRecord(row)
+		require.True(t, ok, code.String())
+		require.Equal(t, log.SeverityError, record.Severity(), code.String())
+		got := recordAttributes(record)
+		require.Equal(t, "idp.example.test", got[string(attr.ServerAddressKey)].AsString(), code.String())
+		require.Equal(t, string(WhoAdmin), got[string(attr.ExtMcpConnectionWhoFixesKey)].AsString(), code.String())
+	}
+}
+
+func TestExportRecord_RequestStoppedBySignInAddressLeavesOutTheServerHost(t *testing.T) {
+	t.Parallel()
+
+	record, ok := exportRecord(exportTestRow(t, CodeAddressNotAllowed, true, Provider("https://upstream.example.test/mcp"), FailedElsewhere()))
+	require.True(t, ok)
+	require.NotContains(t, recordAttributes(record), string(attr.ServerAddressKey))
+}

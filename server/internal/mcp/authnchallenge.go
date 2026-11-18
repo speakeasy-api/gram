@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -1340,10 +1341,12 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 	return oops.E(oops.CodeFailedPrecondition, err, "%s", selfClientMisconfiguredDescription)
 }
 
-// remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a
-// required upstream token endpoint that is temporarily unavailable, so every
-// path that hits one tells the client the same thing and paces its retries.
+// remoteSessionUnavailableError returns the 503 for a required token endpoint that failed; only an outage sets its own Retry-After.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
+	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+		// Still a 503, but without Retry-After: waiting does not fix an address.
+		return oops.E(oops.CodeUnavailable, err, "%s", address.EndUserMessage("This server", guardian.SignInAddress)).Unpaced()
+	}
 	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
 		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+". If it keeps happening, ask your administrator.")
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
@@ -1401,6 +1404,9 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 	}
 	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
+	if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine {
+		opts = append(opts, remotesessions.OutageAddressOption(errors.Join(causes...)))
 	}
 	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request, opts...)
 }

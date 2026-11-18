@@ -234,6 +234,9 @@ const (
 	// ClientGrantBlocked means the token URL resolves to an address Speakeasy may not call.
 	ClientGrantBlocked ClientGrantFailure = "blocked"
 
+	// ClientGrantAddressNotFound means the token URL's host name does not exist.
+	ClientGrantAddressNotFound ClientGrantFailure = "address_not_found"
+
 	// ClientGrantMisconfigured means the token endpoint gave any other answer.
 	ClientGrantMisconfigured ClientGrantFailure = "misconfigured"
 )

@@ -368,7 +368,11 @@
                   rather than hiding under it; a pending automatic verification
                   shows on it until the page refreshes with the verdict;
                   everything descriptive sits in the disclosure below. */}}
-                  {{if .Unavailable}}
+                  {{if .SignInAddress}}
+                  <span class="text-xs text-default-warning" data-validation="sign-in-address"
+                    >{{.SignInAddressStatus}}</span
+                  >
+                  {{else if .Unavailable}}
                   <span class="text-xs text-default-warning" data-validation="unavailable"
                     >Unavailable · try again shortly</span
                   >
@@ -591,7 +595,7 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive .Unavailable))}}
+                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive .Unavailable .SignInAddress))}}
                 <button
                   type="submit"
                   name="action"
@@ -932,6 +936,7 @@
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
             {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
+            {{else if .Gateway.Focus.AddressNotice}}{{.Gateway.Focus.AddressNotice}}
             {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}}'s sign-in has expired and hasn't been renewed. Try again shortly.
             {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
             {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}

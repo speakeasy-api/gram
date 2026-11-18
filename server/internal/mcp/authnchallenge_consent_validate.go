@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -316,9 +317,12 @@ func (s *Service) probeRemoteSession(
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
 					return errValidationRateLimited
 				}
-				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone {
+				switch {
+				case remotesessions.OutageAddress(candidate.ClientCredentialErr) != guardian.AddressFine:
+					logger.WarnContext(ctx, "verify stopped by a sign-in address problem", attr.SlogError(candidate.ClientCredentialErr))
+				case remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone:
 					logger.ErrorContext(ctx, "verify stopped by a refresh failure", attr.SlogError(candidate.ClientCredentialErr))
-				} else {
+				default:
 					logger.WarnContext(ctx, "verify stopped by an outage", attr.SlogError(candidate.ClientCredentialErr))
 				}
 				return fmt.Errorf("%w: %w", errValidationUnfinished, candidate.ClientCredentialErr)
