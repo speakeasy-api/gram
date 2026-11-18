@@ -18,7 +18,7 @@ func SessionMiddleware(next http.Handler) http.Handler {
 					if sessionID != cookie.Value {
 						return
 					}
-					//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
+					//nolint:exhaustruct_v5 // only desired fields — avoid unexpected zero-value behavior
 					http.SetCookie(w, &http.Cookie{
 						Name:     constants.SessionCookie,
 						Value:    sessionID,
@@ -34,7 +34,7 @@ func SessionMiddleware(next http.Handler) http.Handler {
 		}
 		// Can delete this strangeness on 11/15/25 (after all these bad cookies expire)
 		if strings.HasSuffix(r.URL.Path, "rpc/auth.info") {
-			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero valu
+			//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero valu
 			http.SetCookie(w, &http.Cookie{
 				Name:     constants.SessionCookie,
 				Value:    "",

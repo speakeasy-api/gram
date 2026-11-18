@@ -8,6 +8,7 @@ import {
 } from "@gram/client/react-query/assistantsGetManaged.js";
 import { useEnsureManagedAssistantMutation } from "@gram/client/react-query/ensureManagedAssistant.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { isNotFoundError } from "@/lib/route-errors";
@@ -128,8 +129,13 @@ export function useServerAssistantTransport(
   // path there (it would 403 and toast on every page load).
   // Any assistant grant in the project opens the dock; the server authorizes
   // the managed assistant itself.
+  // A deployment without assistants never reads or provisions the Project
+  // Assistant, so the dock and chat lists stay closed there.
+  const assistantsAvailable = useAssistantsAvailable();
   const canRead =
-    !!targetProjectId && hasScope("assistant:read", undefined, targetProjectId);
+    assistantsAvailable &&
+    !!targetProjectId &&
+    hasScope("assistant:read", undefined, targetProjectId);
   const canCreate =
     !!targetProjectId &&
     organization.slug !== DEMO_ORG_SLUG &&

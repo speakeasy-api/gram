@@ -231,6 +231,18 @@ func scrubRawPayload(raw json.RawMessage, provider agenthooks.Provider) json.Raw
 		delete(obj, openclawMCPServersField)
 		changed = true
 	}
+	// Vibe nests the full tool arguments and results in top-level fields. The
+	// canonical Data already carries them (subject to the server-side
+	// redaction there), so the raw echo drops them rather than persisting a
+	// second, unredacted copy.
+	if provider == ProviderVibe {
+		for _, key := range []string{"tool_input", "tool_output", "tool_output_text", "tool_error"} {
+			if _, ok := obj[key]; ok {
+				delete(obj, key)
+				changed = true
+			}
+		}
+	}
 	if !changed {
 		return raw
 	}

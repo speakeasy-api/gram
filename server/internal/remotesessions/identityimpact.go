@@ -341,7 +341,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	var visible []repo.RemoteSessionClient
 	for _, client := range change.bound {
 		if client.visibleTo(projectID) {
-			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID, CredentialOwner: client.credentialOwner}) //nolint:exhaustruct // Only the fields decideBoundClients reads.
+			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID, CredentialOwner: client.credentialOwner}) //nolint:exhaustruct_v5 // Only the fields decideBoundClients reads.
 		}
 	}
 	change.scopedToServer = targetID.Valid && kind != identityChangeAttach
