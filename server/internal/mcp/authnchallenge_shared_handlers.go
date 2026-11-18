@@ -297,6 +297,11 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 	}
 	challenge, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedChallengeError(ctx, issuer.logger, issuer.authorizationServer.issuerID, "", stateID); switched != nil {
+				return nil, switched
+			}
+		}
 		return nil, consentChallengeCacheError(ctx, issuer.logger, err)
 	}
 	if challenge.UserSessionIssuerID != issuer.authorizationServer.issuerID || !challenge.Endpoint.SharedAuthorizationServer {

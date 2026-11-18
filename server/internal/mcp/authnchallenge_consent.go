@@ -1182,6 +1182,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
@@ -1607,6 +1612,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if errors.Is(err, redisCache.ErrCacheMiss) {
 			// Lost the race to a double submit: the winner records the attempt.
 			t.Continue()
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
 		} else {
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		}

@@ -513,3 +513,29 @@ func TestSharedConsentReuseAcrossEnforcementTransitions(t *testing.T) {
 		})
 	}
 }
+
+// A shared authorization server's consent URL an account switch spent says so, but only for that server.
+func TestSharedConsentSwitchedPageExplainsTheSwitch(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	issuer := seedSharedIssuer(t, ctx, ti)
+	get := func(flow sharedConsentFlow) error {
+		req := sharedRequest(ctx, http.MethodGet, "/oauth/usi/"+flow.state.UserSessionIssuerID.String()+"/connect?state="+flow.state.ID, flow.state.UserSessionIssuerID.String(), nil)
+		req.AddCookie(flow.cookie)
+		return ti.service.HandleSharedConsent(httptest.NewRecorder(), req)
+	}
+
+	spent := sharedIdentifiedConsent(t, ctx, ti, issuer, issuer.slugA)
+	require.NoError(t, ti.service.MarkConsentSwitched(ctx, spent.state.ID, spent.state.UserSessionIssuerID, "Shared Client"))
+	_, err := ti.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+spent.state.ID)
+	require.NoError(t, err)
+	require.ErrorContains(t, get(spent), "this consent page started a new sign-in")
+
+	foreign := sharedIdentifiedConsent(t, ctx, ti, issuer, issuer.slugA)
+	require.NoError(t, ti.service.MarkConsentSwitched(ctx, foreign.state.ID, uuid.New(), "Shared Client"))
+	_, err = ti.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+foreign.state.ID)
+	require.NoError(t, err)
+	err = get(foreign)
+	require.ErrorContains(t, err, "not found or expired", "a marker from another authorization server is ignored")
+	require.NotContains(t, err.Error(), "started a new sign-in")
+}

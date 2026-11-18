@@ -679,6 +679,7 @@ func (s *Service) restartSignIn(w http.ResponseWriter, r *http.Request, logger *
 	}
 	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
+		s.dropRestartedChallenge(ctx, logger, challengeState.ID)
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
 		return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
 	}
@@ -693,6 +694,7 @@ func (s *Service) restartSignIn(w http.ResponseWriter, r *http.Request, logger *
 		OrganizationID:  restart.WorkOSOrganizationID,
 	})
 	if err != nil {
+		s.dropRestartedChallenge(ctx, logger, challengeState.ID)
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
 		return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 	}
@@ -705,6 +707,13 @@ func (s *Service) restartSignIn(w http.ResponseWriter, r *http.Request, logger *
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, idpURL.String(), status)
 	return nil
+}
+
+// dropRestartedChallenge removes a restart's stored challenge whose sign-in never started.
+func (s *Service) dropRestartedChallenge(ctx context.Context, logger *slog.Logger, id string) {
+	if err := s.authnChallengeCache.DeleteByKey(ctx, "authnChallenge:"+id); err != nil {
+		logger.WarnContext(ctx, "remove unstarted sign-in challenge", attr.SlogError(err))
+	}
 }
 
 // revokedSignInRevokeTimeout bounds ending a revoked WorkOS session inline.

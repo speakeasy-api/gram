@@ -10,6 +10,7 @@ import (
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -189,7 +190,7 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 		next.FocusServer = focusServer
 	}
 	// Marked first, so a request racing this one finds why the page is spent.
-	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug, ClientName: clientName}
+	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug, UserSessionIssuerID: endpoint.UserSessionIssuerID.String(), ClientName: clientName}
 	if err := s.accountSwitchCache.Store(context.WithoutCancel(ctx), marker); err != nil {
 		logger.WarnContext(ctx, "mark consent challenge as switched", attr.SlogError(err))
 	}
@@ -225,6 +226,8 @@ func (s *Service) restoreConsentChallenge(r *http.Request, logger *slog.Logger, 
 type accountSwitchMarker struct {
 	ID      string `json:"id"`
 	McpSlug string `json:"mcp_slug"`
+	// UserSessionIssuerID is the authorization server the page was served for; empty on markers written before it existed.
+	UserSessionIssuerID string `json:"user_session_issuer_id,omitempty"`
 	// ClientName is the MCP client's display name the consent page showed.
 	ClientName string `json:"client_name,omitempty"`
 }
@@ -243,8 +246,16 @@ func (m accountSwitchMarker) TTL() time.Duration {
 // switchedConsentError explains a consent page an account switch spent, or
 // returns nil when no switch did.
 func (s *Service) switchedConsentError(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, stateID string) error {
+	return s.switchedChallengeError(ctx, logger, endpoint.UserSessionIssuerID, endpoint.Slug, stateID)
+}
+
+// switchedChallengeError explains a challenge an account switch spent on issuerID, and on slug unless it is empty.
+func (s *Service) switchedChallengeError(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, slug, stateID string) error {
+	if stateID == "" {
+		return nil
+	}
 	marker, err := s.accountSwitchCache.Get(ctx, "authnChallengeSwitched:"+stateID)
-	if err != nil || marker.McpSlug != endpoint.Slug {
+	if err != nil || (slug != "" && marker.McpSlug != slug) || (marker.UserSessionIssuerID != "" && marker.UserSessionIssuerID != issuerID.String()) || (slug == "" && marker.UserSessionIssuerID == "") {
 		return nil
 	}
 	page := oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this consent page started a new sign-in").LogInfo(ctx, logger), oauthui.ReasonSignInRestarted)

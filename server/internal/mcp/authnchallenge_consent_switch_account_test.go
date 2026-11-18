@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -557,6 +558,8 @@ func TestConsentSwitchAccount_RedirectFailureAfterRotationLeavesARetry(t *testin
 	require.Equal(t, []string{fx.session}, fx.revoker.sessions(), "the session did end")
 	require.NotEmpty(t, fx.mock.buildAuthURLParams.State, "the rotated challenge was stored before the failure")
 	require.NotEqual(t, before.ID, fx.mock.buildAuthURLParams.State)
+	_, err = fx.ti.authnChallengeCache.Get(fx.ctx, "authnChallenge:"+fx.mock.buildAuthURLParams.State)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "the rotated challenge whose sign-in never started is removed")
 	require.Equal(t, before, fx.state(t), "the page is put back")
 	requireRefusedSwitchPage(t, fx, "Speakeasy couldn't start a new sign-in. Go back and try again.")
 
