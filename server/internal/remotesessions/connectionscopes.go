@@ -40,7 +40,7 @@ func ClientConnectionScopes(in ConnectionScopeInput, cached ResourceScopes, owns
 	if owns {
 		resource = cached
 	}
-	return (Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+	return (Client{ //nolint:exhaustruct_v5 // Only scope inputs are used by RequestedScopes.
 		ID:                      in.ClientID,
 		ClientScope:             in.ClientScope,
 		IssuerScopesSupported:   in.IssuerScopesSupported,

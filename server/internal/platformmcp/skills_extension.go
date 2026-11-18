@@ -105,7 +105,7 @@ func (r *Runtime) WithSkills(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate
 		for _, entry := range entries {
 			skills = append(skills, entry.Wire())
 		}
-		return &skillsListResult{Skills: skills, Cacheable: privateCacheable()}, nil //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
+		return &skillsListResult{Skills: skills, Cacheable: privateCacheable()}, nil //nolint:exhaustruct_v5 // MCP SDK metadata is intentionally omitted.
 	}); err != nil {
 		return nil, fmt.Errorf("register %s: %w", mcpversions.MethodSkillsList, err)
 	}
@@ -118,7 +118,7 @@ func (r *Runtime) WithSkills(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate
 		if !ok {
 			return nil, skillNotFound(params.URI)
 		}
-		return &skillsGetResult{Skill: entry.Wire(), Cacheable: privateCacheable()}, nil //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
+		return &skillsGetResult{Skill: entry.Wire(), Cacheable: privateCacheable()}, nil //nolint:exhaustruct_v5 // MCP SDK metadata is intentionally omitted.
 	}); err != nil {
 		return nil, fmt.Errorf("register %s: %w", mcpversions.MethodSkillsGet, err)
 	}
@@ -168,12 +168,14 @@ func skillsMiddleware(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate) mcp.M
 				if !found {
 					return nil, skillNotFound(read.Params.URI)
 				}
-				return &mcp.ReadResourceResult{ //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
+				return &mcp.ReadResourceResult{ //nolint:exhaustruct_v5 // MCP SDK metadata is intentionally omitted.
 					Cacheable: privateCacheable(),
 					Contents: []*mcp.ResourceContents{{
 						URI:      entry.URI(),
 						MIMEType: skillMIMEType,
 						Text:     entry.Content,
+						Blob:     nil,
+						Meta:     nil,
 					}},
 				}, nil
 			default:

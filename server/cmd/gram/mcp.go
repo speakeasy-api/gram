@@ -319,7 +319,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled, toolIOLogsEnabled,
 		tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	shutdown.funcs = append(shutdown.funcs, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
@@ -407,7 +407,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Consent runs on this tier in production. Compose the same attachment
 	// service and transactional owner authorizer as gram start, without mounting
 	// its dashboard RPC routes or introducing a Temporal client.
-	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+	clientSecrets := orgEncryption.ClientSecrets(logger, enc)
+	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, clientSecrets, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 	identityCommitter.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsRefresher := remotesessions.NewRefreshService(logger, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, cacheImpl,
 		remotesessions.WithRefreshIDTokenVerifier(remoteSessionDeps.Verifier),
@@ -415,8 +416,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
 		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner),
 		remotesessions.WithRefreshConnectionRecorder(connectionRecorder),
-		remotesessions.WithRefreshFeatureFlags(featureFlags))
-	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
+		remotesessions.WithRefreshFeatureFlags(featureFlags),
+		remotesessions.WithRefreshClientSecrets(clientSecrets))
+	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, clientSecrets, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetFeatureFlags(featureFlags)
 	remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())

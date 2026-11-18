@@ -52,10 +52,11 @@ it("runs only on submission, preserves submitted code and results, and never reu
   fireEvent.change(screen.getByLabelText("Python source"), {
     target: { value: source },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   expect(await screen.findByText("support--list_tickets")).toBeTruthy();
   expect(screen.getByText("Completed")).toBeTruthy();
-  expect(screen.getByText(/Returned · 1 tool call/)).toBeTruthy();
+  expect(screen.getByText("Returned")).toBeTruthy();
+  expect(screen.getByText(/^1 tool call/)).toBeTruthy();
   expect(screen.getByText('"total": 42', { exact: false })).toBeTruthy();
   expect(screen.getByText("calculated")).toBeTruthy();
   const first = JSON.parse(fetch.mock.calls[0]?.[1].body);
@@ -76,7 +77,7 @@ it("runs only on submission, preserves submitted code and results, and never reu
     ),
   ).toBeTruthy();
   expect(fetch).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   expect(JSON.parse(fetch.mock.calls[1]?.[1].body).id).not.toBe(first.id);
 });
@@ -84,7 +85,7 @@ it("does not retry a failed execution with potentially completed writes", async 
   const fetch = vi.fn().mockRejectedValue(new Error("Connection lost"));
   vi.stubGlobal("fetch", fetch);
   show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   expect((await screen.findByRole("alert")).textContent).toContain(
     "Connection lost",
   );
@@ -101,7 +102,7 @@ it("cancels the request and explains uncertain tool outcomes", async () => {
   );
   vi.stubGlobal("fetch", fetch);
   show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
   expect((await screen.findByRole("alert")).textContent).toContain(
     "may have completed",
@@ -130,7 +131,7 @@ it("aborts on unmount so a reconnected inspector cannot leave code running", asy
   );
   vi.stubGlobal("fetch", fetch);
   const { unmount } = show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   unmount();
   expect(fetch.mock.calls[0]?.[1].signal.aborted).toBe(true);
@@ -162,7 +163,7 @@ it("shows an admission refusal without claiming tools might have run", async () 
     ),
   );
   show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("The run was refused");
   expect(alert.textContent).toContain("No program was submitted.");
@@ -193,7 +194,7 @@ it("shows a structured capacity refusal as refused, with the server's time", asy
     ),
   );
   show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("The run was refused");
   expect(alert.textContent).toContain("Code Mode is busy.");
@@ -227,12 +228,11 @@ it("separates server time from the round trip", async () => {
     ),
   );
   show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   expect(
-    await screen.findByText(/round trip · 15 ms on the server/),
-  ).toBeTruthy();
-  expect(
-    screen.getByText("Server time: 3 ms waiting for capacity, 12 ms running."),
+    await screen.findByText(
+      "0 tool calls · 15 ms on the server · 3 ms waiting for capacity, 12 ms running",
+    ),
   ).toBeTruthy();
 });
 it.each([
@@ -273,7 +273,7 @@ it.each([
     vi.fn().mockImplementation(async () => reply()),
   );
   show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("The run was refused");
   expect(alert.textContent).toContain(message);
@@ -299,7 +299,7 @@ it.each([
     vi.fn().mockImplementation(async () => reply()),
   );
   show();
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("The run did not finish");
   expect(alert.textContent).toContain("tools may have run");
@@ -324,7 +324,7 @@ it("cancels with the submitted credential after headers refresh", async () => {
     </QueryClientProvider>
   );
   const { rerender } = render(view("original"));
-  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  fireEvent.click(screen.getByRole("button", { name: "Execute code" }));
   await screen.findByRole("button", { name: "Cancel" });
   rerender(view("refreshed"));
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -332,4 +332,94 @@ it("cancels with the submitted credential after headers refresh", async () => {
   expect(fetch.mock.calls[1]?.[1].headers.Authorization).toBe(
     "Bearer original",
   );
+});
+const wiki = {
+  name: "deepwiki--read_wiki_contents",
+  label: "read_wiki_contents",
+  inputSchema: {
+    type: "object",
+    properties: {
+      repoName: { type: "string", description: "Repository as owner/repo" },
+    },
+    required: ["repoName"],
+  },
+};
+const ask = { name: "deepwiki--ask_question", label: "ask_question" };
+function showWith(client: QueryClient) {
+  return (tool?: typeof wiki | typeof ask) => (
+    <QueryClientProvider client={client}>
+      <GatewayCodeExecution
+        connectUrl="https://example.com/gateway"
+        headers={undefined}
+        tool={tool}
+      />
+    </QueryClientProvider>
+  );
+}
+const source = () =>
+  (screen.getByLabelText("Python source") as HTMLTextAreaElement).value;
+const execute = () =>
+  screen.getByRole("button", { name: "Execute code" }) as HTMLButtonElement;
+
+it("builds the call from the selected tool's arguments form", () => {
+  const view = showWith(new QueryClient());
+  const { rerender } = render(view());
+  expect(source()).toBe('await tools.search("")');
+  expect(screen.queryByText("Arguments")).toBeNull();
+
+  rerender(view(wiki));
+  expect(source()).toContain('"repoName": "<owner/repo>",');
+  expect(execute().disabled).toBe(true);
+  expect(screen.getByText("repoName is required.")).toBeTruthy();
+
+  fireEvent.change(screen.getByLabelText(/repoName/), {
+    target: { value: "facebook/react" },
+  });
+  expect(source()).toBe(
+    'result = await tools.call("deepwiki--read_wiki_contents", {\n    "repoName": "facebook/react",\n})\nresult["data"] if result["ok"] else result',
+  );
+  expect(execute().disabled).toBe(false);
+
+  // No tool selected: the snippet stays.
+  rerender(view());
+  expect(source()).toContain("deepwiki--read_wiki_contents");
+  rerender(view(ask));
+  expect(source()).toContain('tools.call("deepwiki--ask_question", {})');
+});
+
+it("stops following the form once the code is edited, until regenerated", () => {
+  const view = showWith(new QueryClient());
+  const { rerender } = render(view(wiki));
+  fireEvent.change(screen.getByLabelText("Python source"), {
+    target: { value: "print(1)" },
+  });
+  // Hand-written code runs as written.
+  expect(execute().disabled).toBe(false);
+  fireEvent.change(screen.getByLabelText(/repoName/), {
+    target: { value: "a/b" },
+  });
+  rerender(view(ask));
+  expect(source()).toBe("print(1)");
+  fireEvent.click(
+    screen.getByRole("button", { name: "Regenerate from arguments" }),
+  );
+  expect(source()).toContain('tools.call("deepwiki--ask_question", {})');
+  expect(
+    screen.queryByRole("button", { name: "Regenerate from arguments" }),
+  ).toBeNull();
+});
+
+it("shows a run's response only while its tool is selected", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async () => response()),
+  );
+  const view = showWith(new QueryClient());
+  const { rerender } = render(view(ask));
+  fireEvent.click(execute());
+  expect(await screen.findByText("Returned")).toBeTruthy();
+  rerender(view(wiki));
+  expect(screen.queryByText("Returned")).toBeNull();
+  rerender(view(ask));
+  expect(screen.getByText("Returned")).toBeTruthy();
 });

@@ -87,7 +87,7 @@ func ActionMethodName(action authz.Action) string {
 
 func camel(s string) string {
 	var b strings.Builder
-	for _, word := range strings.Split(s, "_") {
+	for word := range strings.SplitSeq(s, "_") {
 		if word == "" {
 			continue
 		}

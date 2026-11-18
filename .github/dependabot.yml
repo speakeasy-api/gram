@@ -90,7 +90,7 @@ updates:
         patterns:
           - "oxfmt"
           - "oxlint"
-          - "oxlint-tsgolint"
+          - "tsrs"
       stripe:
         patterns:
           - "@stripe/*"

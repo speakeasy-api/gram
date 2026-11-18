@@ -1,5 +1,28 @@
 # server
 
+## 2.36.0
+
+### Minor Changes
+
+- 64477ee: Emit daily per-organization hooks fleet gauges (`gram.hooks.fleet.installs` by version status, `gram.hooks.fleet.outdated_ratio`, `gram.hooks.fleet.legacy_traffic_ratio`) so Datadog can trend and alert on organizations with outdated hooks installs.
+- 419b344: Hooks ingest responses now carry a `hooks_version` effect saying whether the sender's hooks binary is current, behind or unsupported. The hooks binary shows a once-per-session notice in Claude Code and Codex when its version is unsupported. The retired Claude hooks endpoint shows the same kind of notice when a session starts. Allow and deny decisions are unchanged.
+- 6da52f6: New organizations start with upstream auth enforcement turned on. Their MCP servers use the typed auth client chosen for each server from the start, with no migration step.
+
+### Patch Changes
+
+- c381bab: Organizations whose custom domain has an IP allowlist can reach the agent gateway on that domain. The custom-domain ingress now routes `/agent-mcp`, the agent setup wizard and the one-line installer give agents `https://<custom-domain>/agent-mcp/<agent-id>`, and the federated access setup lists the custom domain as the MCP host. Other organizations keep the platform host.
+- 06d27e1: Tool usage insights reads now cap their ClickHouse memory and spill large aggregations to disk, and a request runs at most three of them at once. A wide window on a large project no longer exhausts ClickHouse memory and fails other queries on the server.
+- 64d96e5: Cloning an environment now needs permission to create environments in the project, as creating one from scratch does.
+- 5fc1480: The hooks binary now tells the server when a Claude Cowork Stop hook ships no transcript, and why: an invalid transcript path, a read failure, or an empty transcript. The server logs the reason instead of the skip staying silent inside the Cowork VM.
+- ed6da3f: Drop the retired toolset MCP hosting columns `toolsets.mcp_slug`, `mcp_is_public`, `mcp_enabled`, `custom_domain_id` and `user_session_issuer_id`. Hosted MCP servers own this state.
+- 44d40ff: Gateway members and connection checks now resolve credentials from each member's own clients. A user session issuer that binds several clients for one provider, such as after consolidating issuers, no longer fails every connection check behind the gateway. Where upstream auth is enforced, a check of a typed auth client's card uses that client's registration, the same one requests are served from.
+- 617fac6: Adding a server to an existing gateway connection no longer fails with "connection no longer active" when a project gateway uses an organization-wide sign-in issuer.
+- 624f064: The admin hooks fleet view now treats hooks below 0.3.0, and anything still sending to the legacy per-tool hooks endpoints, as unsupported.
+- 8e3cf52: A new private network connection now shows as pending, not as an error, while its gateway hosts are still coming up: while the first HTTPS certificate request is in flight, and for the first minute while the tailnet auto-approves the hosts. If a certificate request is refused, the Domains page now shows the reason the gateway reported, such as a Let's Encrypt rate limit and when the gateway retries, instead of always blaming the tailnet's weekly certificate allowance.
+- 3731ab4: Public MCP servers keep serving people who connect without signing in when upstream auth enforcement is on. Each of them is served the auth client the server resolves for them, including their own connection to the upstream service, as before enforcement. A personal connection that no signed-in user owns is now refused with an authorization error instead of failing the request.
+- e036e52: The tailnet gateway's certificate lifecycle now runs as a statechart, checked by exhaustive exploration and a TLA+ model of all of a connection's slots. A renewal that returns a certificate no later than the one held is now treated as failed instead of replacing it.
+- 1f2f51a: The private network setup steps now show the Tailscale tag the environment's gateway actually uses, read from the API, in the tailnet policy snippet, the OAuth client step and the approval help. Gateway machines can carry an environment qualifier (`speakeasy-gw-<qualifier>-<slot>`) so two environments sharing a tailnet register devices that can be told apart; production names are unchanged.
+
 ## 2.35.0
 
 ### Minor Changes

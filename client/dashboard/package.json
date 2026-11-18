@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.149.0",
+  "version": "0.150.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -119,14 +119,14 @@
     "agentation-mcp": "1.3.2",
     "happy-dom": "^21.0.4",
     "knip": "^6.20.0",
-    "oxlint": "^1.93.0",
-    "oxlint-tsgolint": "^7.0.2006",
+    "oxlint": "^1.94.0",
     "react-grab": "^0.2.0",
     "storybook": "^10.6.6",
     "svix": "2.10.0",
     "svix-react": "^1.13.9",
+    "tsrs": "0.25.0-ts7.1.0-beta",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.0"
+    "vitest": "^5.1.0"
   }
 }

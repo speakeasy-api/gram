@@ -79,7 +79,7 @@ func buildDynamicSessionTools(
 
 	return []*toolListEntry{
 		{
-			Title: "Search Tools", OutputSchema: nil, Icons: nil, Execution: nil,
+			Title: "Search Tools", OutputSchema: nil, Icons: nil, Execution: nil, Annotations: nil,
 			Name:        searchToolsToolName,
 			Description: findDescription,
 			InputSchema: buildDynamicSearchToolsSchema(availableTags),
@@ -87,7 +87,7 @@ func buildDynamicSessionTools(
 		},
 		describeToolsTool,
 		{
-			Title: "Run a Tool", OutputSchema: nil, Icons: nil, Execution: nil,
+			Title: "Run a Tool", OutputSchema: nil, Icons: nil, Execution: nil, Annotations: nil,
 			Name:        executeToolToolName,
 			Description: executeDescription,
 			InputSchema: dynamicExecuteToolSchema,

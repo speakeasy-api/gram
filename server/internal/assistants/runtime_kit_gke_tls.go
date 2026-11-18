@@ -30,7 +30,7 @@ func newKitGKETLSCertificate(serverName string) ([]byte, []byte, error) {
 	// Keep serial numbers positive, including the extremely unlikely zero draw.
 	serial.Add(serial, big.NewInt(1))
 	now := time.Now()
-	//nolint:exhaustruct // Only server-leaf fields are set; CA and extension defaults must remain disabled.
+	//nolint:exhaustruct_v5 // Only server-leaf fields are set; CA and extension defaults must remain disabled.
 	leaf := &x509.Certificate{
 		SerialNumber:          serial,
 		DNSNames:              []string{serverName},

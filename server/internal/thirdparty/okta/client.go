@@ -76,12 +76,16 @@ type Config struct {
 	// required for private_key_jwt only.
 	JSONWebKeySetID uuid.UUID
 
-	// ClientSecretEncrypted is the encrypted client secret; required for
-	// client_secret_basic only and decrypted per token request.
-	ClientSecretEncrypted string
+	// ClientSecretGeneration is the stored client secret's revision for
+	// client_secret_basic. It changes whenever the secret is set, replaced or
+	// cleared, so a factory keyed on Config builds a new client and never
+	// reuses a token minted under the previous secret.
+	ClientSecretGeneration int64
 
-	// Credentials coordinates live credential reads and binding observations with revocation.
-	// Implementations must be comparable (Config is a factory cache key).
+	// Credentials coordinates live credential reads and binding observations
+	// with revocation, and opens the client secret per token request.
+	// Required for client_secret_basic. Implementations must be comparable
+	// (Config is a factory cache key).
 	Credentials CredentialProvider
 
 	// RequireDPoP refuses unbound tokens even for client_secret_basic. Set it
@@ -93,14 +97,17 @@ type Config struct {
 	MaxPages int
 }
 
-// ErrClientSecretUndecryptable means the stored client secret could not be
-// decrypted, so no token request was sent.
-var ErrClientSecretUndecryptable = errors.New("okta: client secret could not be decrypted")
+var (
+	// ErrClientSecretUndecryptable means the stored client secret does not
+	// decrypt and retrying cannot help, so no token request was sent.
+	ErrClientSecretUndecryptable = errors.New("okta: client secret could not be decrypted")
 
-// SecretDecrypter decrypts a stored client secret; *encryption.Client satisfies it.
-type SecretDecrypter interface {
-	Decrypt(ciphertext string) (string, error)
-}
+	// ErrClientSecretKeyUnavailable means the stored client secret could not
+	// be opened right now, such as when the organization's key is unreachable
+	// or suspended, so no token request was sent. It may clear on its own and
+	// says nothing about the credential.
+	ErrClientSecretKeyUnavailable = errors.New("okta: client secret key unavailable")
+)
 
 type cachedToken struct {
 	requireDPoP bool
@@ -117,7 +124,6 @@ type httpClient struct {
 	cfg        Config
 	httpClient *guardian.HTTPClient
 	signer     remotesessions.TokenEndpointAssertionSigner
-	decrypter  SecretDecrypter
 	authMethod remotesessions.TokenEndpointAuthMethod
 	key        *dpop.Key
 	orgURL     *url.URL
@@ -150,7 +156,7 @@ var _ Client = (*httpClient)(nil)
 // ephemeral DPoP key and token cache. The client never follows redirects:
 // a 3xx from Okta surfaces as an APIError so credentials are only ever sent
 // to the configured org.
-func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotesessions.TokenEndpointAssertionSigner, decrypter SecretDecrypter, cfg Config) (Client, error) {
+func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotesessions.TokenEndpointAssertionSigner, cfg Config) (Client, error) {
 	orgURL, err := parseOrgURL(cfg.OrgURL)
 	if err != nil {
 		return nil, err
@@ -171,11 +177,8 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 			return nil, errors.New("okta: private_key_jwt requires a key set")
 		}
 	case remotesessions.TokenEndpointAuthMethodBasic:
-		if cfg.ClientSecretEncrypted == "" && cfg.Credentials == nil {
-			return nil, errors.New("okta: client_secret_basic requires a client secret")
-		}
-		if decrypter == nil {
-			return nil, errors.New("okta: client_secret_basic requires a secret decrypter")
+		if cfg.Credentials == nil {
+			return nil, errors.New("okta: client_secret_basic requires a credential provider")
 		}
 	case remotesessions.TokenEndpointAuthMethodPost, remotesessions.TokenEndpointAuthMethodNone:
 		return nil, fmt.Errorf("okta: unsupported token endpoint auth method %q", authMethod)
@@ -211,7 +214,6 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 		cfg:           cfg,
 		httpClient:    &noRedirect,
 		signer:        signer,
-		decrypter:     decrypter,
 		authMethod:    authMethod,
 		key:           key,
 		orgURL:        orgURL,
@@ -723,7 +725,7 @@ func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 // up to maxRateLimitRetries times for 429. Every private_key_jwt attempt signs
 // a fresh assertion because Okta burns the jti on first use.
 func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, error) {
-	secret := c.cfg.ClientSecretEncrypted
+	secret := ""
 	required := c.cfg.RequireDPoP || c.dpopObserved
 	var lease CredentialLease
 	if c.cfg.Credentials != nil {
@@ -733,7 +735,12 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 			return noToken, fmt.Errorf("acquire okta credential: %w", err)
 		}
 		defer lease.Close()
-		secret = lease.EncryptedSecret()
+		// The secret is opened per token request and held only for the
+		// exchange, so a replaced or revoked secret is never reused.
+		secret, err = lease.ClientSecret(ctx)
+		if err != nil {
+			return noToken, fmt.Errorf("open okta client secret: %w", err)
+		}
 		required = required || lease.RequireDPoP()
 	}
 	tok, err := c.exchange(ctx, scopes, secret)
@@ -819,7 +826,7 @@ func parseTokenResponse(body []byte, now time.Time) (cachedToken, error) {
 
 // requestToken authenticates one client-credentials request and posts it to
 // the token endpoint, returning the raw response for mint to interpret.
-func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []string, encryptedSecret string) (int, http.Header, []byte, error) {
+func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []string, secret string) (int, http.Header, []byte, error) {
 	auth := remotesessions.TokenEndpointClientAuth{
 		Method:                c.authMethod,
 		RemoteSessionClientID: c.cfg.RemoteSessionClientID,
@@ -831,10 +838,6 @@ func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []st
 		AssertionSigner:       c.signer,
 	}
 	if c.authMethod == remotesessions.TokenEndpointAuthMethodBasic {
-		secret, err := c.decrypter.Decrypt(encryptedSecret)
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("decrypt okta client secret: %w: %w", ErrClientSecretUndecryptable, err)
-		}
 		auth.ClientSecret = secret
 	}
 

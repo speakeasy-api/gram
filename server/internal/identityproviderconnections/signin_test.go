@@ -76,7 +76,6 @@ func TestSignInReader_ReportsSetupProgress(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = rsRepo.UpdateOrganizationRemoteSessionClient(ctx, remotesessionsrepo.UpdateOrganizationRemoteSessionClientParams{
-		ClientSecretEncrypted:           pgtype.Text{},
 		TokenEndpointAuthMethod:         conv.ToPGText("private_key_jwt"),
 		TokenEndpointAuthAudienceFormat: conv.ToPGText("token_endpoint"),
 		Scope:                           []string{"openid", "email", "profile", "offline_access"},
@@ -147,7 +146,7 @@ func createSignInClient(t *testing.T, ctx context.Context, si *serviceInstance, 
 
 func createSignInClientSpec(t *testing.T, ctx context.Context, si *serviceInstance, issuerID uuid.UUID, spec signInClientSpec) uuid.UUID {
 	t.Helper()
-	client, err := remotesessionsrepo.New(si.conn.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := remotesessionsrepo.New(si.conn.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:                       uuid.NullUUID{},
 		OrganizationID:                  conv.ToPGText(si.orgID),
 		RemoteSessionIssuerID:           issuerID,

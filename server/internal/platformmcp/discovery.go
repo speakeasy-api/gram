@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK and Code Mode types deliberately rely on documented zero-value defaults.
+//nolint:exhaustruct_v5 // MCP SDK and Code Mode types deliberately rely on documented zero-value defaults.
 package platformmcp
 
 import (
