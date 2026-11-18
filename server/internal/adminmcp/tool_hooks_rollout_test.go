@@ -31,7 +31,7 @@ func (r *recordingHooksRolloutReader) GetOrganizationHooksRollout(_ context.Cont
 
 func TestGetHooksRolloutProjectsPinsAndHistory(t *testing.T) {
 	t.Parallel()
-	orgID, orgSlug, version := "org-a", "example-one", 41
+	orgID, orgSlug, version, defaultVersion := "org-a", "example-one", 41, 42
 	reads := &recordingHooksRolloutReader{platform: &gen.AdminHooksRollout{
 		CurrentVersion:          42,
 		DefaultPin:              &gen.AdminHooksRolloutPin{Version: 42, SetBy: "operator@example.com", SetAt: "2026-01-01T00:00:00Z"},
@@ -42,7 +42,7 @@ func TestGetHooksRolloutProjectsPinsAndHistory(t *testing.T) {
 		}},
 		RecentChanges: []*gen.AdminHooksRolloutChange{
 			{OrganizationID: &orgID, OrganizationSlug: &orgSlug, Version: &version, SetBy: "operator@example.com", SetAt: "2026-01-02T00:00:00Z"},
-			{OrganizationID: nil, OrganizationSlug: nil, Version: nil, SetBy: "operator@example.com", SetAt: "2026-01-01T00:00:00Z"},
+			{OrganizationID: nil, OrganizationSlug: nil, Version: &defaultVersion, SetBy: "operator@example.com", SetAt: "2026-01-01T00:00:00Z"},
 		},
 	}}
 
@@ -60,6 +60,7 @@ func TestGetHooksRolloutProjectsPinsAndHistory(t *testing.T) {
 	require.Equal(t, orgID, out.RecentChanges[0].OrganizationID)
 	require.Equal(t, 41, *out.RecentChanges[0].Version)
 	require.Empty(t, out.RecentChanges[1].OrganizationID)
+	require.Equal(t, 42, *out.RecentChanges[1].Version)
 	require.NotContains(t, body, "Example One", "organization names are customer content and are not projected")
 }
 

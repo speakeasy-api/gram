@@ -85,13 +85,13 @@ of the `hooks-rollout` PostHog flag. The server still reads that payload, but
 only for organizations without an override while no default pin is set. To move
 the rollout off PostHog without changing what any customer receives:
 
-1. In PostHog, open the `hooks-rollout` flag and note the payload version of
-   the release condition that matches all organizations, and of every condition
-   that targets specific organizations.
-2. For each organization a condition targets with a different version, set that
+1. In PostHog, open the `hooks-rollout` flag and work out the payload version
+   every organization receives today, including organizations matched by
+   groups, cohorts, or rollout percentages. Pick the version most of them get
+   as the default.
+2. For each organization whose version differs from that default, set its
    version as an override on the organization's **Features** tab.
-3. Set the default pin to the version of the condition that matches all
-   organizations.
+3. Set the default pin to the version you picked in step 1.
 4. Check that organizations without an override now show **Follows the default
    pin** on their **Features** tab. From this point the PostHog flag is no
    longer read and can be removed together with `FlagHooksRollout` in

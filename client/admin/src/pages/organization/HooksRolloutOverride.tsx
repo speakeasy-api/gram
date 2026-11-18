@@ -195,7 +195,9 @@ function HooksRolloutOverrideForm({
           </p>
         )}
         {error && (
-          <p className="text-destructive text-sm">{errorMessage(error)}</p>
+          <p role="alert" className="text-destructive text-sm">
+            {errorMessage(error)}
+          </p>
         )}
       </div>
     </section>

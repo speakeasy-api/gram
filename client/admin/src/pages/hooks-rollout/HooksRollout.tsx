@@ -70,7 +70,7 @@ export function HooksRollout(): JSX.Element {
         </div>
       )}
       <DefaultPin
-        key={rollout.current_version}
+        key={`${rollout.current_version}-${rollout.default_pin?.version ?? "none"}`}
         rollout={rollout}
         stale={query.isError}
       />
@@ -179,7 +179,7 @@ function DefaultPin({
           </p>
         )}
         {mutation.isError && (
-          <p className="text-destructive text-sm">
+          <p role="alert" className="text-destructive text-sm">
             {errorMessage(mutation.error)}
           </p>
         )}
