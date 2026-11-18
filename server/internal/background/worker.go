@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
@@ -100,9 +101,14 @@ type WorkerOptions struct {
 	TunnelHTTPClient *tunnelrouting.HTTPClient
 	DB               *pgxpool.Pool
 	EncryptionClient *encryption.Client
-	FeatureProvider  feature.Provider
-	AssetStorage     assets.BlobStore
-	SlackClient      *slack_client.SlackClient
+
+	// ClientSecrets opens remote session client secrets over the process's
+	// organization encryption. Nil opens them as a process without
+	// organization encryption.
+	ClientSecrets   *clientsecrets.Secrets
+	FeatureProvider feature.Provider
+	AssetStorage    assets.BlobStore
+	SlackClient     *slack_client.SlackClient
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
@@ -232,6 +238,7 @@ func ForDeploymentProcessing(
 		GuardianPolicy:                 guardianPolicy,
 		TunnelHTTPClient:               nil,
 		EncryptionClient:               enc,
+		ClientSecrets:                  nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -338,6 +345,7 @@ func NewTemporalWorker(
 		TunnelHTTPClient:               nil,
 		DB:                             nil,
 		EncryptionClient:               nil,
+		ClientSecrets:                  nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -401,6 +409,7 @@ func NewTemporalWorker(
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -518,6 +527,7 @@ func NewTemporalWorker(
 		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
+		opts.ClientSecrets,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -1021,12 +1031,18 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add memory digests schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
-	}
+	// A deployment with the disabled runtime provider and no backend has no
+	// runtime to reap, so its namespace never gets these schedules. One
+	// switched to disabled keeps any it already has; the sweeps then return
+	// without work.
+	if opts.AssistantsCore == nil || opts.AssistantsCore.RuntimeHasBackends() {
+		if err := AddAssistantReaperSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
+		}
 
-	if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+		if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+		}
 	}
 
 	// One image recycle sweep per deployed runtime image: a new worker build

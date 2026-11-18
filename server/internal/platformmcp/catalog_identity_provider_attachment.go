@@ -1,4 +1,4 @@
-//nolint:exhaustruct // OAuth persistence values intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // OAuth persistence values intentionally omit documented optional fields.
 package platformmcp
 
 import (
@@ -32,6 +32,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -497,6 +498,9 @@ func attachmentCommitError(what string, err error) error {
 	}
 	if errors.Is(err, remotesessions.ErrIdentityInvalid) {
 		return fmt.Errorf("%s: %w: %w", what, ErrIdentityProviderAttachmentUnsupported, err)
+	}
+	if clientsecrets.IsKeyProblem(err) {
+		return fmt.Errorf("%s: %w: %w", what, ErrIdentityProviderAttachmentUnavailable, err)
 	}
 	return fmt.Errorf("%s: %w", what, err)
 }

@@ -6,6 +6,7 @@ import (
 	"math"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -121,6 +122,10 @@ func (SemconvSpan) Provider(span *otelv1.InboundSpan) (string, string, error) {
 
 func (SemconvSpan) Surface(*otelv1.InboundSpan) (string, string, error) {
 	return "", "", nil
+}
+
+func (SemconvSpan) Identity(*otelv1.InboundSpan) (string, aivendors.Identity, error) {
+	return "", aivendors.Identity{ProductID: "", Client: aivendors.ClientUnknown}, nil
 }
 
 // EventName for a span is the span's own name.

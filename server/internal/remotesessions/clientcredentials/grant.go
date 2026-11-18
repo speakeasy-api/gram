@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -38,11 +39,11 @@ const (
 func (m *Minter) grant(ctx context.Context, logger *slog.Logger, client repo.GetClientCredentialsGrantClientRow, resource string, keys cacheKeys) (remotesessions.ClientCredential, error) {
 	var none remotesessions.ClientCredential
 
-	endpoint, err := m.endpoints.BindTokenEndpoint(remotesessions.TokenEndpointRegistration{
+	endpoint, err := m.endpoints.BindTokenEndpoint(ctx, remotesessions.TokenEndpointRegistration{
 		ClientID:                        client.ClientID,
 		OrganizationID:                  client.OrganizationID.String,
 		ExternalClientID:                client.ExternalClientID,
-		ClientSecretEncrypted:           client.ClientSecretEncrypted.String,
+		ClientSecret:                    clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted),
 		TokenEndpointAuthMethod:         client.TokenEndpointAuthMethod.String,
 		TokenEndpointAuthAudienceFormat: client.TokenEndpointAuthAudienceFormat.String,
 		JSONWebKeySetID:                 client.JsonWebKeySetID,

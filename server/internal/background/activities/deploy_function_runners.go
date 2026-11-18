@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"runtime"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -162,6 +164,8 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 			})
 			var serr *oops.ShareableError
 			switch {
+			case errors.Is(err, functions.ErrFunctionsDisabled):
+				return fmt.Errorf("deploy function runner: %w", err)
 			case errors.As(err, &serr):
 				return serr
 			case err != nil:
@@ -171,6 +175,9 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		})
 	}
 	if err := workers.Wait(); err != nil {
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			return d.refuseDisabled(ctx, args, err)
+		}
 		return err
 	}
 
@@ -300,4 +307,29 @@ func (d *DeployFunctionRunners) resolveRunnerVersion(
 	}
 
 	return conv.Default(functions.RunnerVersion(pinned), d.defaultVersion)
+}
+
+// refuseDisabled fails a deployment that carries functions on a deployment
+// that runs with the disabled Functions provider. It records the reason as a
+// deployment log so the failed deployment explains itself, and returns a code
+// that is not temporary so Temporal does not retry the activity.
+func (d *DeployFunctionRunners) refuseDisabled(ctx context.Context, args DeployFunctionRunnersRequest, cause error) error {
+	eventsHandler := events.NewLogHandler()
+	logger := slog.New(eventsHandler).With(
+		attr.SlogProjectID(args.ProjectID.String()),
+		attr.SlogDeploymentID(args.DeploymentID.String()),
+	)
+	logger.ErrorContext(ctx, functions.ErrFunctionsDisabled.Error())
+	if _, err := eventsHandler.Flush(ctx, d.db); err != nil {
+		d.logger.ErrorContext(ctx, "flush functions disabled deployment event",
+			attr.SlogProjectID(args.ProjectID.String()),
+			attr.SlogDeploymentID(args.DeploymentID.String()),
+			attr.SlogError(err),
+		)
+	}
+
+	return oops.E(oops.CodeNotImplemented, cause, "%s", functions.ErrFunctionsDisabled.Error()).LogWarn(ctx, d.logger,
+		attr.SlogProjectID(args.ProjectID.String()),
+		attr.SlogDeploymentID(args.DeploymentID.String()),
+	)
 }

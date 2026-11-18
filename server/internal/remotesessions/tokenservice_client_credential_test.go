@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -398,7 +399,7 @@ func TestRotate_RefusesAutomaticRotationOfSelfClient(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-rotate")
-	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, nil, nil, ti.redisCache, nil, nil, nil, nil)
+	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, clientsecretstest.New(t, ti.conn, nil), nil, nil, ti.redisCache, nil, nil, nil, nil)
 
 	_, err := rotator.Rotate(ctx, remotesessions.RotateClientRegistrationParams{
 		ClientID:       fx.clientID,

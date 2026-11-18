@@ -181,7 +181,7 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 		return fmt.Errorf("failed to delete customer state cache: %w", err)
 	}
 
-	//nolint:exhaustruct // only the org id is needed
+	//nolint:exhaustruct_v5 // only the org id is needed
 	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID}); err != nil {
 		return fmt.Errorf("failed todelete period usage storage: %w", err)
 	}

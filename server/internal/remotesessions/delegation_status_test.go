@@ -85,8 +85,9 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	org := authCtx.ActiveOrganizationID
 	issuerID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "delegation-observations")
 	clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, org, issuerID, "delegation-observations")
-	_, err := repo.New(ti.conn).UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), Scope: []string{"openid", "email"}, ClientSecretEncrypted: conv.ToPGText("must-not-decrypt-client-secret")})
+	_, err := repo.New(ti.conn).UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), Scope: []string{"openid", "email"}})
 	require.NoError(t, err)
+	require.NoError(t, repo.New(ti.conn).SetOrganizationRemoteSessionClientCredentialsFixture(ctx, repo.SetOrganizationRemoteSessionClientCredentialsFixtureParams{ID: clientID, OrganizationID: conv.ToPGText(org), ClientSecretEncrypted: conv.ToPGText("must-not-decrypt-client-secret")}))
 	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "delegation-observations", issuerID, clientID)
 	q := repo.New(ti.conn)
 	provider, err := newCIMDChallengeManager(t, ti, "https://gram.example.test").LoadFederatedDelegationProvider(ctx, org, issuerID, clientID)

@@ -70,6 +70,7 @@ import { useRecentLabelOverride } from "@/components/command-palette/recentlyVis
 import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
 import { RequireScope } from "@/components/require-scope";
+import { RequireAssistantsAvailable } from "@/components/require-assistants-available";
 import { useProject } from "@/contexts/Auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -85,9 +86,11 @@ export function ChatRoot(): ReactElement {
   // The page IS the chat, so hide the floating dock across the /chat subtree.
   useHideInsightsDock();
   return (
-    <RequireScope scope="assistant:read" projectId={project.id} level="page">
-      <Outlet />
-    </RequireScope>
+    <RequireAssistantsAvailable>
+      <RequireScope scope="assistant:read" projectId={project.id} level="page">
+        <Outlet />
+      </RequireScope>
+    </RequireAssistantsAvailable>
   );
 }
 

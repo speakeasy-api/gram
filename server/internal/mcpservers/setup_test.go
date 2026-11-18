@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -96,9 +97,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
-	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger, true)
 
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), guardianPolicy, nil)
 	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker, networkaccess.DenyAllChecker{})
 
 	return ctx, &testInstance{

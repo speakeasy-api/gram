@@ -564,7 +564,7 @@ func (s *Service) shadowMCPApprovalRequestTarget(ctx context.Context, input Shad
 		// Keep this explicit: the generated rows intentionally share a shape, but
 		// converting them positionally would let same-typed SQL columns be reordered
 		// without a compile error while silently changing the public projection.
-		result := mcpapprovalrepo.ListApprovalRequestTargetsRow{} //nolint:exhaustruct // Filled explicitly below to protect generated query field order.
+		result := mcpapprovalrepo.ListApprovalRequestTargetsRow{} //nolint:exhaustruct_v5 // Filled explicitly below to protect generated query field order.
 		result.ID = request.ID
 		result.TargetKind = request.TargetKind
 		result.TargetRaw = request.TargetRaw

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -330,7 +331,7 @@ func TestSoftDeleteSubjectSessions_SiblingIssuerRevokeDestroysSharedCredential(t
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
-		testenv.NewEncryptionClient(t),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)),
 		policy,
 		nil,
 	)
@@ -361,7 +362,7 @@ func TestSoftDeleteSubjectSessions_UnboundIssuerRevokesNothing(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
-		testenv.NewEncryptionClient(t),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)),
 		policy,
 		nil,
 	)

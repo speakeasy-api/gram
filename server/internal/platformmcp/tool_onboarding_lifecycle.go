@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // MCP SDK manifests use optional zero values and preserve bounded typed errors.
+//nolint:exhaustruct_v5,wrapcheck // MCP SDK manifests use optional zero values and preserve bounded typed errors.
 package platformmcp
 
 import (

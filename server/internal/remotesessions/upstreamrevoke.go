@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -81,6 +82,9 @@ type UpstreamRevoker struct {
 	db     *pgxpool.Pool
 	enc    *encryption.Client
 
+	// secrets opens the secret of the client a revoked grant was issued to.
+	secrets *clientsecrets.Secrets
+
 	// client is built once and shared by every direct-dial revocation.
 	// Guardian's pooled transport is meant for exactly this: a long-lived client
 	// making repeated requests to the same hosts. Even a batch spanning several
@@ -97,17 +101,21 @@ type UpstreamRevoker struct {
 	assertions TokenEndpointAssertionSigner
 }
 
-func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, signers ...TokenEndpointAssertionSigner) *UpstreamRevoker {
+func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, secrets *clientsecrets.Secrets, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, signers ...TokenEndpointAssertionSigner) *UpstreamRevoker {
 	logger = logger.With(attr.SlogComponent("remote-session-upstream-revoke"))
 	var signer TokenEndpointAssertionSigner = unavailableTokenEndpointAssertionSigner{}
 	if len(signers) > 0 {
 		signer = signers[0]
+	}
+	if secrets == nil {
+		secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
 	}
 	return &UpstreamRevoker{
 		logger:     logger,
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		db:         db,
 		enc:        enc,
+		secrets:    secrets,
 		client:     noRedirectClient(policy.PooledClient()),
 		tunnels:    tunnels,
 		metrics:    remotesessionmetrics.NewRevoke(logger, meterProvider),
@@ -423,6 +431,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 type IssuingClientAuth struct {
 	ClientID                        string
 	ClientSecretEncrypted           pgtype.Text
+	ClientSecretOrgEncrypted        pgtype.Text
 	TokenEndpointAuthMethod         pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	JsonWebKeySetID                 uuid.NullUUID
@@ -432,6 +441,7 @@ func issuingClientAuth(client repo.RemoteSessionClient) IssuingClientAuth {
 	return IssuingClientAuth{
 		ClientID:                        client.ClientID,
 		ClientSecretEncrypted:           client.ClientSecretEncrypted,
+		ClientSecretOrgEncrypted:        client.ClientSecretOrgEncrypted,
 		TokenEndpointAuthMethod:         client.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: client.TokenEndpointAuthAudienceFormat,
 		JsonWebKeySetID:                 client.JsonWebKeySetID,
@@ -541,6 +551,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, is
 	if issuedTo != nil {
 		client.ExternalClientID = issuedTo.ClientID
 		client.ClientSecretEncrypted = issuedTo.ClientSecretEncrypted
+		client.ClientSecretOrgEncrypted = issuedTo.ClientSecretOrgEncrypted
 		client.TokenEndpointAuthMethod = issuedTo.TokenEndpointAuthMethod
 		client.TokenEndpointAuthAudienceFormat = issuedTo.TokenEndpointAuthAudienceFormat
 		client.JsonWebKeySetID = issuedTo.JsonWebKeySetID
@@ -574,8 +585,8 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, is
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
-		clientSecret, err = r.enc.Decrypt(client.ClientSecretEncrypted.String)
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+		clientSecret, err = r.secrets.Open(ctx, nil, clientsecrets.OwnerOf(client.ClientOrganizationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), stored)
 		if err != nil {
 			logger.WarnContext(ctx, "upstream revoke: client secret could not be read", attr.SlogError(err))
 			return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal

@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Database row projections intentionally omit lifecycle fields not selected by each query.
+//nolint:exhaustruct_v5 // Database row projections intentionally omit lifecycle fields not selected by each query.
 package platformmcp
 
 import (
