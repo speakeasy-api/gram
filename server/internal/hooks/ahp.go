@@ -42,7 +42,7 @@ func AttachAHP(mux goahttp.Muxer, s *Service) error {
 func (s *Service) ahpHandler() (http.Handler, error) {
 	h, err := ahpserver.NewHandler(ahpserver.Handlers{
 		Configuration: ahp.ConfigurationFunc(s.ahpResolveConfiguration),
-		Intercept: ahpserver.InterceptHandlers{ //nolint:exhaustruct // unhandled events are rejected as unsupported
+		Intercept: ahpserver.InterceptHandlers{ //nolint:exhaustruct_v5 // unhandled events are rejected as unsupported
 			ToolBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolBeforeEvent, ahp.ToolBeforeCapabilities]) (ahpserver.ToolBeforeReply, error) {
 				var reply ahpserver.ToolBeforeReply
 				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ToolBeforeCapabilitiesEffectsValueItemDeny)
@@ -200,7 +200,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 		},
 		// Observations are recorded without policy evaluation: the harness
 		// has already acted, so a block could not be enforced.
-		Observe: ahpserver.ObserveHandlers{ //nolint:exhaustruct // unobserved events are acknowledged and dropped
+		Observe: ahpserver.ObserveHandlers{ //nolint:exhaustruct_v5 // unobserved events are acknowledged and dropped
 			ModelRequestBefore: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelRequestBeforeEvent]) error {
 				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
 			},
@@ -528,7 +528,7 @@ func ahpTurnStartPrompt(e *ahp.TurnStartEvent) *ahp.UserMessageInboundEvent {
 	if e == nil || (e.Trigger != ahp.TurnStartEventTriggerUser && e.Trigger != ahp.TurnStartEventTriggerExternal) {
 		return nil
 	}
-	prompt := &ahp.UserMessageInboundEvent{ //nolint:exhaustruct // internal prompt view, not a wire event
+	prompt := &ahp.UserMessageInboundEvent{ //nolint:exhaustruct_v5 // internal prompt view, not a wire event
 		Source: e.Source, Harness: e.Harness, ID: e.ID, Time: e.Time,
 		Type: ahp.UserMessageInboundEventType(e.Type), Session: e.Session,
 		Turn:    ahp.Some(ahp.UserMessageInboundEventTurn{ID: e.Turn.ID, Synthesized: e.Turn.Synthesized, AdditionalProperties: nil}),
@@ -551,7 +551,7 @@ func ahpTurnStartPrompt(e *ahp.TurnStartEvent) *ahp.UserMessageInboundEvent {
 			}
 			parts = append(parts, part)
 		}
-		prompt.Message.Messages = append(prompt.Message.Messages, ahp.UserMessageInboundEventMessageMessagesItem{ //nolint:exhaustruct // only prompt identity and content are consumed
+		prompt.Message.Messages = append(prompt.Message.Messages, ahp.UserMessageInboundEventMessageMessagesItem{ //nolint:exhaustruct_v5 // only prompt identity and content are consumed
 			ID: item.ID, Role: "user", Parts: parts,
 		})
 	}

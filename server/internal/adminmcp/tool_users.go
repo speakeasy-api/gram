@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP manifests and service payloads use optional defaults.
+//nolint:exhaustruct_v5 // MCP manifests and service payloads use optional defaults.
 package adminmcp
 
 import (

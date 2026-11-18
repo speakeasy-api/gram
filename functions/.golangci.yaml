@@ -19,7 +19,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exhaustruct
+    - exhaustruct_v5
     - exptostd
     - forcetypeassert
     - gochecksumtype
@@ -96,8 +96,8 @@ linters:
     gocritic:
       disabled-checks:
         - ifElseChain
-    exhaustruct:
-      exclude:
+    exhaustruct_v5:
+      ignore-patterns:
         - '^log/slog\.HandlerOptions$'
         - '^crypto/tls\.Config$'
         - '^net\.Dialer$'

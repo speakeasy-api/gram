@@ -26,7 +26,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exhaustruct
+    - exhaustruct_v5
     - exptostd
     - forbidigo
     - forcetypeassert
@@ -74,7 +74,7 @@ linters:
       # same dev-tooling linters we exempt tests from.
       - path: cmd/(riskjudge|skillefficacy|skillsuggest)bench/|cmd/dev-mcp/|cmd/mock-mcp/
         linters:
-          - exhaustruct
+          - exhaustruct_v5
           - wrapcheck
           - predeclared
           - sloglint
@@ -91,20 +91,20 @@ linters:
       # exists to prevent. Every other field of the struct stays enforced.
       - path: internal/audit/
         linters:
-          - exhaustruct
+          - exhaustruct_v5
         text: InsertAuditLogParams is missing fields ActingSurface, ActingClientID
       # The analytics catalog declares each field with only what it has; an
       # omitted field is its zero value by design, and spelling every empty
       # one out hides the declaration behind noise.
       - path: internal/telemetry/analytics/datasets\.go
         linters:
-          - exhaustruct
+          - exhaustruct_v5
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck
       - path: _test\.go|internal/oauthtest|internal/identityproviderconnections/provisiontest
         linters:
-          - exhaustruct
+          - exhaustruct_v5
           - gosec
       # gosec stays on for testenv; exempt only G306 (the Temporal dev server
       # shim has to carry the exec bit, and it is written 0700 into a 0700
@@ -388,13 +388,16 @@ linters:
     gocritic:
       disabled-checks:
         - ifElseChain
-    exhaustruct:
-      exclude:
+    exhaustruct_v5:
+      # Each pattern must match the whole type path.
+      ignore-patterns:
         - '^crypto/tls\.Config$'
         - '^net\.Dialer$'
         - '^net/url\.URL$'
         - '^net/http\.Server$'
         - '^net/http\.Client$'
+        # An alias of net/http.Client, which is excluded above.
+        - '^github\.com/speakeasy-api/gram/server/internal/guardian\.HTTPClient$'
         - '^net/http\.Transport$'
         - '^github.com/charmbracelet/log\.Options$'
         - '^github.com/urfave/cli/v2\.App$'
@@ -415,6 +418,10 @@ linters:
         - '^go.temporal.io/sdk/internal\.ScheduleWorkflowAction$'
         - '^go.temporal.io/sdk/contrib/opentelemetry\..+Options$'
         - '^go.temporal.io/sdk/testsuite\.DevServerOptions$'
+        # The public Temporal packages re-export the internal types above as
+        # aliases, and patterns match the name a literal is written with.
+        - '^go\.temporal\.io/sdk/(activity|client|temporal|worker|workflow)\..*Options$'
+        - '^go\.temporal\.io/sdk/(client|temporal|workflow)\.(RetryPolicy|ScheduleSpec|ScheduleIntervalSpec|ScheduleWorkflowAction)$'
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
         - '^sigs.k8s.io/gateway-api/apis/v1\..+$'
@@ -431,6 +438,9 @@ linters:
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Options$'
         - '^cloud\.google\.com/go/storage\.SignedURLOptions$'
         - '^github.com/google/jsonschema-go/jsonschema\.Schema$'
+        # Each AHP effect is a union with one Optional field per variant, and a
+        # literal sets exactly the one variant it returns.
+        - '^github\.com/agenthooksprotocol/go-sdk\.(ContextCompactAfter|ContextCompactBefore|ModelRequestBefore|ModelResponseAfter|ToolAfter|ToolBefore|ToolPermissionRequest|TurnStart|UserMessageInbound|UserMessageOutbound)Effect$'
         # Declarative classifier table: each entry intentionally sets only the
         # one classification field (Source, RuleIDs, or RulePrefix) plus the
         # always-present metadata. Filter is the runtime output struct, same
@@ -438,6 +448,12 @@ linters:
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Definition$'
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Filter$'
         - '^github\.com/speakeasy-api/gram/infra/gen/gram/.+'
+      # Fields here are optional for every literal of their type. A field-level
+      # //exhaustruct:optional directive would only be honored where the
+      # declaring package is loaded from source, which a warm cache skips.
+      optional-patterns:
+        - '^github\.com/speakeasy-api/gram/server/internal/assistants\.kitMCPConnection#ProjectID$'
+        - '^github\.com/speakeasy-api/gram/server/internal/platformtools/core\.ToolDescriptor#ThreadContext$'
     exhaustive:
       check:
         - switch

@@ -5038,7 +5038,7 @@ func toToolUsageClientToolBreakdownRows(rows []repo.ToolUsageClientToolBreakdown
 func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
 	if summary == nil {
 		summary = &repo.ToolUsageSummary{
-			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct // zero totals for the empty result
+			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct_v5 // zero totals for the empty result
 			Targets:             nil,
 			Users:               nil,
 			TargetTimeSeries:    nil,
