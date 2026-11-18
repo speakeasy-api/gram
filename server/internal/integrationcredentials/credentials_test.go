@@ -43,7 +43,7 @@ func TestStoreInPlatformKeyWritesOnlyThePlatformCopy(t *testing.T) {
 
 	require.NoError(t, ti.credentials.Store(t.Context(), ti.conn, ti.orgID, integrationcredentials.DeviceIntegrationConfigs, []byte("token"), ti.writeConfig(config.ID)))
 
-	stored := ti.stored(t, config.ID)
+	stored := ti.stored(t, config)
 	require.True(t, stored.Platform.Valid)
 	require.False(t, stored.Org.Valid)
 
@@ -61,7 +61,7 @@ func TestStoreInDualWriteWritesBothCopies(t *testing.T) {
 
 	require.NoError(t, ti.credentials.Store(t.Context(), nil, ti.orgID, integrationcredentials.DeviceIntegrationConfigs, []byte("token"), ti.writeConfig(config.ID)))
 
-	stored := ti.stored(t, config.ID)
+	stored := ti.stored(t, config)
 	require.True(t, stored.Platform.Valid)
 	require.True(t, stored.Org.Valid)
 }
@@ -84,7 +84,7 @@ func TestStoreSealsAgainWhenTheTransitionMoves(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, attempts)
 
-	stored := ti.stored(t, config.ID)
+	stored := ti.stored(t, config)
 	require.True(t, stored.Org.Valid, "the second attempt seals for dual_write")
 }
 
@@ -107,7 +107,7 @@ func TestSuspendedKeyIsACustomerKeyProblemNotUnreadable(t *testing.T) {
 	ti.finalize(t)
 	require.NoError(t, ti.fixture.Provisioner.Suspend(t.Context(), ti.orgID, "customer disabled the key", orgencryption.SystemActor()))
 
-	_, err := ti.credentials.Open(t.Context(), ti.conn, ti.orgID, integrationcredentials.DeviceIntegrationConfigs, ti.stored(t, config.ID))
+	_, err := ti.credentials.Open(t.Context(), ti.conn, ti.orgID, integrationcredentials.DeviceIntegrationConfigs, ti.stored(t, config))
 	require.Error(t, err)
 	require.False(t, integrationcredentials.IsUnreadable(err), "a suspended key never asks for new credentials: %v", err)
 	require.True(t, integrationcredentials.IsCustomerKeyProblem(err), "%v", err)
@@ -118,7 +118,7 @@ func TestSuspendedKeyIsACustomerKeyProblemNotUnreadable(t *testing.T) {
 	other := ti.createConfig(t)
 	err = ti.credentials.Store(t.Context(), ti.conn, ti.orgID, integrationcredentials.DeviceIntegrationConfigs, []byte("token"), ti.writeConfig(other.ID))
 	require.Error(t, err)
-	require.False(t, integrationcredentials.Has(ti.stored(t, other.ID)), "nothing falls back to the platform key")
+	require.False(t, integrationcredentials.Has(ti.stored(t, other)), "nothing falls back to the platform key")
 }
 
 func TestBackfillAndFinalizeMoveCredentialsToTheOrganizationKey(t *testing.T) {
@@ -144,7 +144,7 @@ func TestBackfillAndFinalizeMoveCredentialsToTheOrganizationKey(t *testing.T) {
 
 	ti.finalize(t)
 
-	stored := ti.stored(t, config.ID)
+	stored := ti.stored(t, config)
 	require.False(t, stored.Platform.Valid, "the platform-key copy is cleared")
 	require.True(t, stored.Org.Valid)
 

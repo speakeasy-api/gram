@@ -2,6 +2,7 @@ package integrationcredentials_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -111,20 +112,19 @@ func (ti *testInstance) writeConfig(id uuid.UUID) integrationcredentials.Write {
 			if isNoRows(err) {
 				return false, nil
 			}
-			return false, err
+			return false, fmt.Errorf("set config credentials: %w", err)
 		}
 		return true, nil
 	}
 }
 
-func (ti *testInstance) stored(t *testing.T, id uuid.UUID) orgencryption.Copies {
+func (ti *testInstance) stored(t *testing.T, config devicerepo.DeviceIntegrationConfig) orgencryption.Copies {
 	t.Helper()
 
-	var platform, org pgtype.Text
-	err := ti.conn.QueryRow(t.Context(), "SELECT credentials_encrypted, credentials_org_encrypted FROM device_integration_configs WHERE id = $1", id).Scan(&platform, &org)
+	row, err := devicerepo.New(ti.conn).GetConfigByOrgAndProvider(t.Context(), devicerepo.GetConfigByOrgAndProviderParams{OrganizationID: config.OrganizationID, Provider: config.Provider})
 	require.NoError(t, err)
 
-	return integrationcredentials.Stored(platform, org)
+	return integrationcredentials.Stored(row.CredentialsEncrypted, row.CredentialsOrgEncrypted)
 }
 
 func (ti *testInstance) enroll(t *testing.T) {

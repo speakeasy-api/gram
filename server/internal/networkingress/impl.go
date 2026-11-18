@@ -256,8 +256,11 @@ func (s *Service) storeCredentials(ctx context.Context, dbtx repo.DBTX, organiza
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
+		if err != nil {
+			return false, fmt.Errorf("rotate network ingress credentials: %w", err)
+		}
 		ingress = row
-		return err == nil, err
+		return true, nil
 	})
 	switch {
 	case err == nil:
@@ -348,7 +351,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 		return nil, oops.E(oops.CodeUnexpected, domainErr, "lock custom domain namespace").LogError(ctx, s.logger)
 	}
 
-	ingress, err := queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
+	_, err = queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: payload.Provider,
 		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
 		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false),
@@ -363,7 +366,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create network ingress").LogError(ctx, s.logger)
 	}
-	ingress, err = s.storeCredentials(ctx, dbtx, authCtx.ActiveOrganizationID, credentials)
+	ingress, err := s.storeCredentials(ctx, dbtx, authCtx.ActiveOrganizationID, credentials)
 	if err != nil {
 		return nil, err
 	}

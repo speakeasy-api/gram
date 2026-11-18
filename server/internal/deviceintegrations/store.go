@@ -147,8 +147,11 @@ func (s *Store) storeCredentials(ctx context.Context, dbtx repo.DBTX, orgID stri
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
+		if err != nil {
+			return false, fmt.Errorf("set device integration credentials: %w", err)
+		}
 		row = stored
-		return err == nil, err
+		return true, nil
 	})
 	switch {
 	case err == nil:

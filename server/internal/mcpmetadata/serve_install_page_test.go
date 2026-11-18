@@ -1677,13 +1677,13 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	})
 
 	ingressID := uuid.New()
-	ingress, err := networkingress_repo.New(ti.conn).CreateNetworkIngress(ctx, networkingress_repo.CreateNetworkIngressParams{
+	_, err := networkingress_repo.New(ti.conn).CreateNetworkIngress(ctx, networkingress_repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: "tailscale", Hostname: "private-test",
 		EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Enabled: true, IdentityRequired: false, AttestorNamespace: "private-test", AttestorServiceAccount: "private-test", ProviderResources: []byte(`{}`),
 	})
 	require.NoError(t, err)
-	ingress, err = networkingress_repo.New(ti.conn).RotateNetworkIngressCredentials(ctx, networkingress_repo.RotateNetworkIngressCredentialsParams{PlatformCopy: conv.ToPGText("ciphertext"), OrgCopy: pgtype.Text{}, OrganizationID: authCtx.ActiveOrganizationID, DecidedGeneration: 0})
+	ingress, err := networkingress_repo.New(ti.conn).RotateNetworkIngressCredentials(ctx, networkingress_repo.RotateNetworkIngressCredentialsParams{PlatformCopy: conv.ToPGText("ciphertext"), OrgCopy: pgtype.Text{}, OrganizationID: authCtx.ActiveOrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 	_, err = networkingress_repo.New(ti.conn).RecordNetworkIngressObservation(ctx, networkingress_repo.RecordNetworkIngressObservationParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, ExpectedUpdatedAt: ingress.UpdatedAt,
@@ -2102,13 +2102,13 @@ func TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission(t *t
 			})
 
 			ingressID := uuid.New()
-			ingress, err := networkingress_repo.New(ti.conn).CreateNetworkIngress(ctx, networkingress_repo.CreateNetworkIngressParams{
+			_, err := networkingress_repo.New(ti.conn).CreateNetworkIngress(ctx, networkingress_repo.CreateNetworkIngressParams{
 				ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: "tailscale", Hostname: "private-meta-test",
 				EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				Enabled: true, IdentityRequired: false, AttestorNamespace: "private-meta-test", AttestorServiceAccount: "private-meta-test", ProviderResources: []byte(`{}`),
 			})
 			require.NoError(t, err)
-			ingress, err = networkingress_repo.New(ti.conn).RotateNetworkIngressCredentials(ctx, networkingress_repo.RotateNetworkIngressCredentialsParams{PlatformCopy: conv.ToPGText("ciphertext"), OrgCopy: pgtype.Text{}, OrganizationID: authCtx.ActiveOrganizationID, DecidedGeneration: 0})
+			ingress, err := networkingress_repo.New(ti.conn).RotateNetworkIngressCredentials(ctx, networkingress_repo.RotateNetworkIngressCredentialsParams{PlatformCopy: conv.ToPGText("ciphertext"), OrgCopy: pgtype.Text{}, OrganizationID: authCtx.ActiveOrganizationID, DecidedGeneration: 0})
 			require.NoError(t, err)
 			_, err = networkingress_repo.New(ti.conn).RecordNetworkIngressObservation(ctx, networkingress_repo.RecordNetworkIngressObservationParams{
 				ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, ExpectedUpdatedAt: ingress.UpdatedAt,

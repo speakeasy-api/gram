@@ -119,12 +119,18 @@ func storeTokens(ctx context.Context, credentials *integrationcredentials.Creden
 	queries := repo.New(db)
 	err = credentials.Store(ctx, db, organizationID, integrationcredentials.SlackDirectoryConnections, plaintext, func(ctx context.Context, copies orgencryption.Copies, decided int64) (bool, error) {
 		updated, err := queries.UpdateSlackDirectoryCredentials(ctx, repo.UpdateSlackDirectoryCredentialsParams{PlatformCopy: copies.Platform, OrgCopy: copies.Org, OrganizationID: organizationID, ID: id, Generation: generation, DecidedGeneration: decided})
-		return updated > 0, err
+		if err != nil {
+			return false, fmt.Errorf("update Slack credentials: %w", err)
+		}
+		return updated > 0, nil
 	})
 	if errors.Is(err, integrationcredentials.ErrNotStored) {
 		return errSyncSuperseded
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("store Slack credentials: %w", err)
+	}
+	return nil
 }
 
 // freshTokens refreshes a rotating token close to expiry and persists the new bundle

@@ -185,7 +185,7 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 	const credentialSentinel = "sentinel-encrypted-tailscale-credentials"
 	const resourceSentinel = "sentinel-provider-resource"
 	attestor := "attestor-" + uuid.NewString()[:8]
-	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+	_, err = networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
 		ID:                     uuid.New(),
 		OrganizationID:         principal.OrganizationID,
 		Provider:               "tailscale",
@@ -199,7 +199,7 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 		ProviderResources:      []byte(`{"tailnet_key":"` + resourceSentinel + `"}`),
 	})
 	require.NoError(t, err)
-	created, err = networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: credentialSentinel, Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
+	created, err := networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: credentialSentinel, Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 	got, err = service.Get(ctx, principal)
 	require.NoError(t, err)
@@ -256,7 +256,7 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 	})
 	require.NoError(t, err)
 	attestor := "attestor-" + uuid.NewString()[:8]
-	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+	_, err = networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
 		ID: uuid.New(), OrganizationID: principal.OrganizationID,
 		Provider: "future-provider", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
 		Enabled:           true,
@@ -264,7 +264,7 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 		ProviderResources: []byte(`{}`),
 	})
 	require.NoError(t, err)
-	created, err = networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
+	created, err := networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 	updated, err := networkingressrepo.New(conn).RecordNetworkIngressObservation(ctx, networkingressrepo.RecordNetworkIngressObservationParams{
 		Status: "online", DnsName: pgtype.Text{String: "private-mcp.example.test", Valid: true},
