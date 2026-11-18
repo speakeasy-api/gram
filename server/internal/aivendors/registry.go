@@ -324,6 +324,7 @@ var registry = []Product{
 			{Name: "openai-mcp (Codex)", Client: ClientCloud},
 			{Name: "codex-cli-rs", Client: ClientCLI},
 			{Name: "codex-exec", Client: ClientCLI},
+			{Name: "codex-tui", Client: ClientCLI},
 			{Name: "codex-exec-server", Client: ClientUnknown},
 			{Name: "codex-app-server", Client: ClientUnknown},
 			{Name: "codex-mcp-client", Client: ClientUnknown},

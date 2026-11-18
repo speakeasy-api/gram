@@ -50,8 +50,9 @@ var identities = sync.OnceValue(func() map[string]Identity {
 })
 
 // Identify resolves a name a producer reported (an alias or an MCP clientInfo
-// name) to its product and client. Every product and client the pipeline
-// records comes from here.
+// name) to its product and client. Every product the pipeline records comes
+// from here, and every client except the Claude Code CLI's, which
+// ClientFromTerminal reads from its terminal type.
 func Identify(name string) (Identity, bool) {
 	normalized := normalize(withoutMCPRemote(name))
 	if normalized == "" {

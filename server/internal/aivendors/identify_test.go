@@ -36,6 +36,7 @@ func TestIdentify(t *testing.T) {
 		{name: "it identifies openai-mcp as chatgpt", raw: "openai-mcp", product: "chatgpt", client: aivendors.ClientUnknown, ok: true},
 		{name: "it identifies the codex rust cli by its service name", raw: "codex_cli_rs", product: "codex", client: aivendors.ClientCLI, ok: true},
 		{name: "it identifies codex exec at the command line", raw: "codex-exec", product: "codex", client: aivendors.ClientCLI, ok: true},
+		{name: "it identifies the codex tui at the command line", raw: "codex_tui", product: "codex", client: aivendors.ClientCLI, ok: true},
 		{name: "it identifies the codex app server without a client", raw: "codex-app-server", product: "codex", client: aivendors.ClientUnknown, ok: true},
 		{name: "it identifies copilot-cli as github copilot cli", raw: "copilot-cli", product: "github-copilot-cli", client: aivendors.ClientCLI, ok: true},
 		{name: "it identifies amp's thread actor as amp", raw: "amp-thread-actor", product: "amp", client: aivendors.ClientUnknown, ok: true},
