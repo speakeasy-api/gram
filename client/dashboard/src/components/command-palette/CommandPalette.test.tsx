@@ -24,6 +24,7 @@ const slugs = vi.hoisted(() => ({
 }));
 
 const mocks = vi.hoisted(() => ({
+  assistantsAvailable: true,
   candidates: [] as unknown[],
   capture: vi.fn(),
   prefilter: vi.fn(),
@@ -46,6 +47,9 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
+}));
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => mocks.assistantsAvailable,
 }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: mocks.capture }),
@@ -139,6 +143,7 @@ const input = () =>
   screen.getByPlaceholderText("Ask AI or search resources and pages…");
 
 beforeEach(() => {
+  mocks.assistantsAvailable = true;
   slugs.orgSlug = "acme";
   slugs.projectSlug = "widgets";
   mocks.candidates = [SETTINGS, SLACK];
@@ -272,6 +277,21 @@ describe("CommandPalette", () => {
     expect(row.textContent).toContain("“zzzzznomatch”");
   });
 
+  it("does not offer the Project Assistant on a deployment without assistants", async () => {
+    mocks.assistantsAvailable = false;
+    render(<CommandPalette />);
+
+    // The placeholder drops "Ask AI" along with the assistant row.
+    await userEvent.type(
+      screen.getByPlaceholderText("Search resources and pages…"),
+      "zzzzznomatch",
+    );
+
+    expect(
+      screen.queryByRole("option", { name: /Ask Project Assistant/ }),
+    ).toBeNull();
+  });
+
   // The palette used to fall back to page navigation alone at the org level,
   // leaving no way to reach a project from it (S-1028).
   it("offers projects at the organization level", () => {
@@ -360,6 +380,34 @@ describe("CommandPalette", () => {
     expect(
       screen.getByRole("option", { selected: true }).textContent,
     ).toContain("Sessions");
+  });
+
+  it("bounds broad searches before mounting result rows", async () => {
+    slugs.projectSlug = undefined;
+    mocks.candidates = Array.from({ length: 100 }, (_, index) =>
+      candidate({
+        id: `catalog:linear-${index}`,
+        kind: "catalog",
+        title: `Linear integration ${index.toString().padStart(3, "0")}`,
+        detail: "Catalog entry",
+        group: "MCP Catalog",
+      }),
+    );
+    render(<CommandPalette />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search projects and pages…"),
+      { target: { value: "linear" } },
+    );
+
+    expect(screen.getAllByRole("option")).toHaveLength(40);
+    expect(screen.getByText("Linear integration 000")).not.toBeNull();
+    expect(screen.queryByText("Linear integration 040")).toBeNull();
+    expect(
+      screen.getByText(
+        "Showing top 40 of 100 results. Refine your search to see more.",
+      ),
+    ).not.toBeNull();
   });
 
   it("keeps group headings for the idle list", () => {

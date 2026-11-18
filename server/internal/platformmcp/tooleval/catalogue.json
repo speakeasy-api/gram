@@ -4413,7 +4413,7 @@
     },
     {
       "name": "decide_shadow_mcp_access",
-      "description": "Record and enforce an allow or deny decision for one Shadow MCP target after reviewing it. Requires the current opaque decision version, a stable idempotency key, and explicit confirmation. Allow requires one or more opaque audience references from list_plugin_assignments, including the explicit Everyone reference for organization-wide access; deny accepts none. The committed decision, frozen evidence, enforcement grants, legacy-request drain, audit, and receipt are atomic.",
+      "description": "Record and enforce an allow or deny decision for one Shadow MCP target after reviewing it. Requires the current opaque decision version, a stable idempotency key, and explicit confirmation. Allow requires one or more opaque audience references from list_plugin_assignments, including the explicit Everyone reference for organization-wide access. Deny blocks everyone when it names no audience, or only the roles or groups whose references it names; a project that blocks servers by default for everyone accepts only a deny for everyone. The committed decision, frozen evidence, enforcement grants, legacy-request drain, audit, and receipt are atomic.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4438,7 +4438,7 @@
             "items": {
               "type": "string"
             },
-            "description": "for allow, one or more opaque role/directory references returned by list_plugin_assignments; use the explicit Everyone reference for organization-wide access; forbidden for deny"
+            "description": "for allow, one or more opaque role/directory references returned by list_plugin_assignments; use the explicit Everyone reference for organization-wide access. For deny, optional: references to block only those roles or groups; omit them to block everyone"
           },
           "expected_version": {
             "type": "string",
@@ -7728,6 +7728,27 @@
         "idempotentHint": true,
         "openWorldHint": false,
         "readOnlyHint": false
+      }
+    },
+    {
+      "name": "get_my_vibe_observability_install",
+      "description": "Check whether your organization's Mistral Vibe observability plugin (the Speakeasy hooks package for Mistral Vibe) can be installed, and get its install guidance. Returns available=true when a download ZIP can be minted (the pinned speakeasy-hooks release carries the vibe provider and the organization name fits the plugin schema), and published=true with the plugin install name when the published marketplace repository carries the package. When available, download_url is the ZIP endpoint to fetch, and next_action says how to install it: extract the ZIP into ~/.vibe/plugins/<plugin> (user scope) or copy the <plugin>-vibe/ directory from the marketplace repository, then restart Vibe or run /reload-plugins; the package's ai.mistral.vibe/hooks.toml runs automatically. When not available, next_action says what is missing (the hooks release carrying the vibe provider, or a name-schema-compatible organization name). The ZIP endpoint mints a fresh hooks-scoped key on each download. No API key, token, or package bytes are returned by this tool.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_slug": {
+            "type": "string",
+            "description": "the project's slug, as list_projects returns it; omit it to use the organization's Default project"
+          }
+        },
+        "additionalProperties": false
+      },
+      "read_only": true,
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
       }
     },
     {

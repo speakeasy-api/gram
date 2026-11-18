@@ -36,7 +36,7 @@ type RecordBuilder struct {
 
 // NewRecordBuilder returns a builder that stamps the given resource and instrumentation scope.
 func NewRecordBuilder(res *resource.Resource, scope string, opts ...Option) *RecordBuilder {
-	b := &RecordBuilder{resource: res, scope: scope, source: otelsvc.ProvenanceSource}
+	b := &RecordBuilder{resource: res, scope: scope, source: enrich.InternalProvenanceSource}
 	for _, opt := range opts {
 		opt(b)
 	}
@@ -57,8 +57,8 @@ type Logger struct {
 // Option configures a RecordBuilder.
 type Option func(*RecordBuilder)
 
-// WithProvenanceSource stamps source on every record instead of the ingest
-// edges' otel.ProvenanceSource. The pipeline routes and reserves keys by
+// WithProvenanceSource stamps source on every record instead of
+// enrich.InternalProvenanceSource. The pipeline routes and reserves keys by
 // source, so only a component the source names may use it.
 func WithProvenanceSource(source string) Option {
 	return func(b *RecordBuilder) { b.source = source }

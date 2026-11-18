@@ -57,14 +57,22 @@ import (
 )
 
 type Service struct {
-	auth                  *auth.Auth
-	db                    *pgxpool.Pool
-	chatRepo              *chatRepo.Queries
-	hooksRepo             *hooksRepo.Queries
-	orgsRepo              *orgsRepo.Queries
-	projectsRepo          *projectsRepo.Queries
-	chConn                clickhouse.Conn
-	chRepo                *repo.Queries
+	auth         *auth.Auth
+	db           *pgxpool.Pool
+	chatRepo     *chatRepo.Queries
+	hooksRepo    *hooksRepo.Queries
+	orgsRepo     *orgsRepo.Queries
+	projectsRepo *projectsRepo.Queries
+
+	// chConn is the read-write ClickHouse connection. Only mutations run on
+	// it; every query goes through chRepo.
+	chConn clickhouse.Conn
+
+	// chRepo runs on the read replica, so a write surge on the primary cannot
+	// starve the dashboards this service serves. Reads are eventually
+	// consistent with chConn and nothing here reads its own write.
+	chRepo *repo.Queries
+
 	logger                *slog.Logger
 	tracer                trace.Tracer
 	posthog               PosthogClient
@@ -84,6 +92,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn clickhouse.Conn,
+	chReadConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
@@ -92,7 +101,7 @@ func NewService(
 	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
-	chRepo := repo.New(chConn)
+	chRepo := repo.New(chReadConn)
 
 	// The sessions and chatSessions parameters may be nil for callers that only need
 	// telemetry emission (e.g., Temporal workers using CreateLog). When nil, the HTTP
@@ -2578,15 +2587,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	})
 
 	eg.Go(func() error {
-		var fetchErr error
-		chatMetrics, fetchErr = s.chatRepo.GetChatMetricsSummary(egCtx, chatRepo.GetChatMetricsSummaryParams{
-			ProjectID: *authCtx.ProjectID,
-			TimeStart: conv.ToPGTimestamptz(time.Unix(0, timeStart)),
-			TimeEnd:   conv.ToPGTimestamptz(time.Unix(0, timeEnd)),
+		chatMetrics = s.fetchOverviewChatMetrics(egCtx, chatMetricsTimeout, func(ctx context.Context) (chatRepo.GetChatMetricsSummaryRow, error) {
+			return s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
+				ProjectID: *authCtx.ProjectID,
+				TimeStart: conv.ToPGTimestamptz(time.Unix(0, timeStart)),
+				TimeEnd:   conv.ToPGTimestamptz(time.Unix(0, timeEnd)),
+			})
 		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving chat metrics summary")
-		}
 		return nil
 	})
 
@@ -2640,6 +2647,41 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		UsageByAgent: usage.byAgent,
 		McpUsage:     usage.mcpUsage,
 	}, nil
+}
+
+// chatMetricsTimeout bounds the PostgreSQL chat metrics read in the project
+// overview. Nothing else in the overview depends on it, so a slow read costs
+// only the chat count rather than holding the whole request until the 60s
+// statement timeout.
+const chatMetricsTimeout = 10 * time.Second
+
+// fetchOverviewChatMetrics runs fetch with the given timeout. On failure it
+// logs the error, records it on the request span, and returns zero metrics so
+// the rest of the project overview still renders. When ctx itself is done,
+// because another overview lane failed or the client went away, the failure
+// is not the chat read's own and is not reported.
+func (s *Service) fetchOverviewChatMetrics(
+	ctx context.Context,
+	timeout time.Duration,
+	fetch func(context.Context) (chatRepo.GetChatMetricsSummaryRow, error),
+) chatRepo.GetChatMetricsSummaryRow {
+	var unavailable chatRepo.GetChatMetricsSummaryRow
+
+	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	metrics, err := fetch(fetchCtx)
+	if err == nil {
+		return metrics
+	}
+	if ctx.Err() != nil {
+		return unavailable
+	}
+
+	trace.SpanFromContext(ctx).RecordError(err)
+	s.logger.ErrorContext(ctx, "chat metrics unavailable for project overview", attr.SlogError(err))
+
+	return unavailable
 }
 
 // calculateInterval determines the appropriate time bucket interval based on the time range.
@@ -5029,7 +5071,7 @@ func toToolUsageClientToolBreakdownRows(rows []repo.ToolUsageClientToolBreakdown
 func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
 	if summary == nil {
 		summary = &repo.ToolUsageSummary{
-			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct // zero totals for the empty result
+			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct_v5 // zero totals for the empty result
 			Targets:             nil,
 			Users:               nil,
 			TargetTimeSeries:    nil,

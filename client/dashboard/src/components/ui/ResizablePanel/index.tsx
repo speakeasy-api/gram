@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 import React, { Children, isValidElement, useMemo, useState } from "react";

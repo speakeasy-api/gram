@@ -4,3 +4,6 @@
 -- expanded `SELECT *` and `RETURNING *` never name them and keep working once the
 -- columns are dropped. Remove each statement in the migration that drops its
 -- column.
+
+-- No longer read since Anthropic inference hooks evaluate only the latest exchange (DNO-1390). GetChat selects c.*.
+ALTER TABLE chats DROP COLUMN inference_accepted_checkpoint;

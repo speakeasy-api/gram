@@ -8,6 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthTarget } from "./authTarget";
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
@@ -132,8 +133,13 @@ vi.mock("@gram/client/react-query/userSessionIssuers.js", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: "missing" }),
+// The settings link beside the picker needs only an address.
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcpSessions: {
+      provider: { settings: { href: (id: string) => `/sessions/${id}` } },
+    },
+  }),
 }));
 
 function issuer(id: string): UserSessionIssuer {
@@ -173,12 +179,14 @@ function renderField(
   };
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <UserSessionIssuerField
-        target={target}
-        issuers={[issuer("current"), issuer("candidate")]}
-        isLoading={false}
-        isError={false}
-      />
+      <MemoryRouter>
+        <UserSessionIssuerField
+          target={target}
+          issuers={[issuer("current"), issuer("candidate")]}
+          isLoading={false}
+          isError={false}
+        />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

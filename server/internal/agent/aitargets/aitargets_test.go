@@ -15,7 +15,7 @@ func TestDefaultsAreValid(t *testing.T) {
 	t.Parallel()
 
 	defaults := aitargets.Defaults()
-	require.Len(t, defaults, 40)
+	require.Len(t, defaults, 41)
 	require.NoError(t, aitargets.Validate(defaults))
 }
 

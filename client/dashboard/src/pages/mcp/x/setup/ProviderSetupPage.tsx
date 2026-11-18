@@ -6,7 +6,6 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers";
 import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
-import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { SetupBody } from "@/pages/catalog/provider-setup/SetupBody";
@@ -28,6 +27,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer";
 import { SetupContext } from "@/pages/catalog/provider-setup/setup-context";
 import { names, reduce } from "@/pages/catalog/provider-setup/state";
+import { GuideSetupPage } from "./GuideSetupPage";
 import {
   type SetupProvider,
   providerProgressKey,
@@ -54,29 +54,31 @@ export function ProviderSetupPage({
   if (!remoteId) return <Navigate to={overview} replace />;
   if (remote.isLoading)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Skeleton className="h-64 w-full" />
-        </Page.Body>
-      </Page>
+      <>
+        <Skeleton className="h-64 w-full" />
+      </>
     );
   if (remote.isError)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Alert variant="error">
-            Couldn’t load this server’s setup.{" "}
-            <Button variant="secondary" onClick={() => void remote.refetch()}>
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
-        </Page.Body>
-      </Page>
+      <>
+        <Alert variant="error">
+          Couldn’t load this server’s setup.{" "}
+          <Button variant="secondary" onClick={() => void remote.refetch()}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </Alert>
+      </>
     );
   const provider = setupProviderForUrl(remote.data?.url);
-  if (!provider) return <Navigate to={overview} replace />;
+  // Providers without a guided flow get their written guide, full page.
+  if (!provider)
+    return (
+      <GuideSetupPage
+        serverUrl={remote.data?.url}
+        mcpServer={mcpServer}
+        overviewHref={overview}
+      />
+    );
   if (provider === "okta")
     return (
       <ProviderSetupFlow
@@ -131,26 +133,20 @@ function SalesforceSetupEntry({
   );
   if (headers.isPending)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Skeleton className="h-64 w-full" />
-        </Page.Body>
-      </Page>
+      <>
+        <Skeleton className="h-64 w-full" />
+      </>
     );
   if (headers.isError)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Alert variant="error">
-            Couldn’t load Salesforce connection configuration.{" "}
-            <Button variant="secondary" onClick={() => void headers.refetch()}>
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
-        </Page.Body>
-      </Page>
+      <>
+        <Alert variant="error">
+          Couldn’t load Salesforce connection configuration.{" "}
+          <Button variant="secondary" onClick={() => void headers.refetch()}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </Alert>
+      </>
     );
   let instanceUrl;
   try {
@@ -159,25 +155,21 @@ function SalesforceSetupEntry({
     ).instanceUrl;
   } catch (error) {
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Alert variant="error">
-            {error instanceof Error
-              ? error.message
-              : "Review the MCP-Instance-URL header in identity settings."}{" "}
-            <Link
-              to={
-                routes.mcp.details.settings.href(
-                  mcpServerRouteParam(mcpServer),
-                ) + "#authentication"
-              }
-            >
-              Open identity settings
-            </Link>
-          </Alert>
-        </Page.Body>
-      </Page>
+      <>
+        <Alert variant="error">
+          {error instanceof Error
+            ? error.message
+            : "Review the MCP-Instance-URL header in identity settings."}{" "}
+          <Link
+            to={
+              routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
+              "#authentication"
+            }
+          >
+            Open identity settings
+          </Link>
+        </Alert>
+      </>
     );
   }
   return (
@@ -286,8 +278,12 @@ function RetainedProviderSetup({
     if (s.screen === "success")
       void navigate(completionHref, { replace: true });
   }, [storageKey, s, completionHref, navigate]);
+  // Each step starts at the top of the Setup page. The page body is bound
+  // too, so target the detail frame's scroller nested inside it.
   useEffect(() => {
-    window.scrollTo(0, 0);
+    document
+      .querySelector("[data-page-bound] [data-page-bound]")
+      ?.scrollTo?.(0, 0);
   }, [s.step, s.screen]);
   if (s.screen === "success") return <></>;
   return (

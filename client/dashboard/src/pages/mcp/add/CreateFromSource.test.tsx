@@ -14,6 +14,12 @@ const api = vi.hoisted(() => ({
   wrapper: vi.fn(),
   complete: vi.fn(),
 }));
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
+}));
 vi.mock("@/pages/mcp/gateway/useGatewayCreation", () => ({
   useGatewayCreation: () => ({
     gatewayId: "gateway",
@@ -57,6 +63,12 @@ vi.mock("@/components/sources/source-list", () => ({
         kind: "openapi",
         documentId: "second",
       },
+      {
+        key: "function",
+        name: "Function source",
+        kind: "function",
+        functionId: "function",
+      },
     ],
   }),
   sourceAssetId: () => "asset",
@@ -74,6 +86,7 @@ vi.mock("@/hooks/toolTypes", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 beforeEach(() => {
   vi.resetAllMocks();
+  functionsAvailability.available = true;
   api.create.mockResolvedValue({
     id: "toolset",
     slug: "toolset",
@@ -114,3 +127,21 @@ it.each(["click", "Enter", " "])(
     });
   },
 );
+it("offers function sources when Functions are available", () => {
+  render(
+    <MemoryRouter>
+      <CreateFromSource />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole("button", { name: /Function source/ })).toBeTruthy();
+});
+it("hides function sources on a deployment without Functions", () => {
+  functionsAvailability.available = false;
+  render(
+    <MemoryRouter>
+      <CreateFromSource />
+    </MemoryRouter>,
+  );
+  expect(screen.queryByRole("button", { name: /Function source/ })).toBeNull();
+  expect(screen.getByRole("button", { name: /First source/ })).toBeTruthy();
+});

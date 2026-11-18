@@ -342,7 +342,7 @@ function renderIdentityDraft() {
 }
 
 function addCustomHeader(name: string, value: string): void {
-  fireEvent.click(screen.getByText("Custom Headers"));
+  fireEvent.click(screen.getByText("Custom headers"));
   fireEvent.click(screen.getByRole("button", { name: "Add header" }));
   const names = screen.getAllByLabelText("Header name");
   fireEvent.change(names.at(-1)!, { target: { value: name } });
@@ -2058,13 +2058,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     // The warning lives on the choice it is about, not in a banner below it,
-    // and the detail waits for a hover rather than taking a row.
-    const card = screen
-      .getByLabelText("This server requires authentication")
-      .closest("[data-slot=radio-card]");
-    expect(card).not.toBeNull();
-    expect(card?.className).toContain("border-warning-default");
-    expect(screen.queryByText(/keep failing/i)).toBeNull();
+    // and says in words what goes wrong and what to choose instead.
+    expect(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /keep failing — choose User Identity/,
+      }),
+    ).toBeDefined();
     expect(mocks.authenticationProbe).toHaveBeenCalledWith(
       "remote-source-1",
       true,
@@ -3861,7 +3861,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         description: /static headers/,
       }),
     );
-    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(screen.getByText("Custom headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),
     );
@@ -3895,7 +3895,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         description: /static headers/,
       }),
     );
-    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(screen.getByText("Custom headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),
     );

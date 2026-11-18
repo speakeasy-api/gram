@@ -1,24 +1,8 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RemoteMcpSessionsSection } from "./RemoteMcpSessionsSection";
 
-const mocks = vi.hoisted(() => ({
-  clients: vi.fn(),
-  issuer: vi.fn(),
-  flag: vi.fn(),
-}));
-
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flag(),
-}));
-
-vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
-  useUserSessionIssuer: () => mocks.issuer(),
-}));
-vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => mocks.clients(),
-}));
 vi.mock("./authentication/authTarget", () => ({
   useMcpServerAuthTarget: () => ({}),
 }));
@@ -32,14 +16,6 @@ vi.mock("./authentication/useSelectableUserSessionIssuers", () => ({
 vi.mock("./authentication/UserSessionIssuerField", () => ({
   UserSessionIssuerField: () => <span>User session issuer</span>,
 }));
-vi.mock("./authentication/UserIdentitySessionControls", () => ({
-  UserIdentitySessionControls: () => (
-    <div>
-      <span>Session length</span>
-      <span>Client access</span>
-    </div>
-  ),
-}));
 
 const mcpServer = {
   id: "mcp-server-1",
@@ -51,70 +27,10 @@ const mcpServer = {
   updatedAt: new Date(0),
 } as McpServer;
 
-beforeEach(() => {
-  mocks.flag.mockReturnValue({ status: "missing" });
-  mocks.issuer.mockReturnValue({
-    data: { id: "user-session-issuer-1" },
-    isLoading: false,
-    isError: false,
-  });
-  mocks.clients.mockReturnValue({
-    items: [],
-    isLoading: false,
-    isError: false,
-  });
-});
-
 afterEach(cleanup);
 
 describe("RemoteMcpSessionsSection", () => {
-  it("shows existing session controls for User Identity", () => {
-    mocks.clients.mockReturnValue({
-      items: [{ id: "remote-session-client-1" }],
-      isLoading: false,
-      isError: false,
-    });
-
-    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-
-    expect(screen.getByText("Session length")).toBeDefined();
-    expect(screen.getByText("Client access")).toBeDefined();
-    expect(screen.getByText("User session issuer")).toBeDefined();
-  });
-
-  it("offers the user session issuer before User Identity is configured", () => {
-    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-
-    expect(screen.getByText("User session issuer")).toBeDefined();
-  });
-
-  it("does not present User Identity controls for other modes", () => {
-    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-
-    expect(
-      screen.getByText(/apply when User Identity is configured/i),
-    ).toBeDefined();
-    expect(screen.queryByText("Session length")).toBeNull();
-    expect(screen.queryByText("Client access")).toBeNull();
-  });
-
-  it("shows only the provider picker once MCP Authentication has its own page", () => {
-    mocks.flag.mockReturnValue({ status: "enabled" });
-    mocks.issuer.mockReturnValue({
-      data: {
-        id: "user-session-issuer-1",
-        slug: "acme-workforce",
-        sessionDurationHours: 336,
-      },
-      isLoading: false,
-      isError: false,
-    });
-    mocks.clients.mockReturnValue({
-      items: [{ id: "remote-session-client-1" }],
-      isLoading: false,
-      isError: false,
-    });
-
+  it("shows only the provider picker; its settings live in MCP Sessions", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
     expect(screen.getByText("User session issuer")).toBeDefined();

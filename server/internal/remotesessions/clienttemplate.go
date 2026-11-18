@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -24,9 +26,14 @@ type clientTemplate struct {
 	// sourceID is the template client.
 	sourceID uuid.UUID
 
-	// secretEncrypted is the template's stored secret ciphertext, invalid for
-	// a public client. It moves between rows without being decrypted.
-	secretEncrypted pgtype.Text
+	// secret is the template's stored secret copies, both NULL for a public
+	// client. A ciphertext is bound to its row's organization, so the secret
+	// is opened with owner's key and sealed again for the new client, never
+	// copied as stored.
+	secret orgencryption.Copies
+
+	// owner is who the template belongs to, whose key opens secret.
+	owner clientsecrets.Owner
 
 	// clientIDIssuedAt and clientSecretExpiresAt are the registration's
 	// lifecycle stamps, which belong to the credential rather than the row.
@@ -94,7 +101,8 @@ func loadClientTemplate(ctx context.Context, q *repo.Queries, projectID uuid.UUI
 
 	return clientTemplate{
 		sourceID:              source.ID,
-		secretEncrypted:       source.ClientSecretEncrypted,
+		secret:                clientsecrets.Stored(source.ClientSecretEncrypted, source.ClientSecretOrgEncrypted),
+		owner:                 clientsecrets.OwnerOf(source.OrganizationID, source.ProjectID),
 		clientIDIssuedAt:      source.ClientIDIssuedAt,
 		clientSecretExpiresAt: source.ClientSecretExpiresAt,
 		legacyCallbackURL:     source.LegacyCallbackUrl,
@@ -109,7 +117,7 @@ func (t clientTemplate) requireSecret(method string, suppliedSecret bool) error 
 	if suppliedSecret {
 		return nil
 	}
-	if t.secretEncrypted.Valid {
+	if clientsecrets.Has(t.secret) {
 		if t.clientSecretExpiresAt.Valid && !t.clientSecretExpiresAt.Time.After(time.Now()) {
 			return identityRefusal(ErrIdentityInvalid, nil, "the template client's stored secret has expired; enter a current client_secret instead of copying it")
 		}

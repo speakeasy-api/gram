@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "post_agent",
+  "session_id": "vibe-session-1",
+  "parent_session_id": null,
+  "transcript_path": "/tmp/vibe-sessions/vibe-session-1.jsonl",
+  "cwd": "/tmp/vibe-project",
+  "agent_name": "accept-edits"
+}

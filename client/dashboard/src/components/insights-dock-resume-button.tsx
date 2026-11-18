@@ -3,6 +3,7 @@ import {
   INSIGHTS_DOCK_VT_CLASS,
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { Sparkles } from "lucide-react";
 import { ReleaseStageBadge } from "./release-stage-badge";
 import { SidebarFooterAction } from "./sidebar-footer-action";
@@ -16,8 +17,9 @@ import { SidebarFooterAction } from "./sidebar-footer-action";
  */
 export function InsightsDockResumeButton(): JSX.Element | null {
   const { dismissed, resume } = useInsightsDockCta();
+  const assistantsAvailable = useAssistantsAvailable();
 
-  if (!dismissed) return null;
+  if (!dismissed || !assistantsAvailable) return null;
 
   return (
     <SidebarFooterAction

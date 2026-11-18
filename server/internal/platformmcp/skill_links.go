@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Zero-value summaries are the documented "absent" signal, and a skills-service refusal is returned unwrapped so its typed code survives the trip to the tool result.
+//nolint:exhaustruct_v5,wrapcheck // Zero-value summaries are the documented "absent" signal, and a skills-service refusal is returned unwrapped so its typed code survives the trip to the tool result.
 package platformmcp
 
 import (

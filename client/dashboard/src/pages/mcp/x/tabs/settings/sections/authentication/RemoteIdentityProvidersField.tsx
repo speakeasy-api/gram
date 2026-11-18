@@ -11,6 +11,9 @@ import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { AuthRow, ExplainerDialog } from "./AuthRow";
 
+/** Anchors the Authorization servers row, where a gateway links a member's sign-in. */
+export const AUTHORIZATION_SERVERS_FIELD_ID = "authorization-servers";
+
 export function RemoteIdentityProvidersField({
   associatedIssuers,
   isLoading,
@@ -21,6 +24,8 @@ export function RemoteIdentityProvidersField({
   onEdit,
   onDelete,
   readOnly = false,
+  members,
+  hiddenIssuerIds,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
@@ -37,7 +42,18 @@ export function RemoteIdentityProvidersField({
   onEdit: (issuer: RemoteSessionIssuer) => void;
   onDelete: (issuer: RemoteSessionIssuer) => void;
   readOnly?: boolean;
+  /**
+   * A gateway's members that sign people in, one row each, listed first: the
+   * row is then about linking them, and a hand-added server is the rare case.
+   */
+  members?: ReactNode;
+  /** Servers the member rows already show, so each appears once. */
+  hiddenIssuerIds?: ReadonlySet<string>;
 }): JSX.Element {
+  const guided = members !== undefined;
+  const others = hiddenIssuerIds
+    ? associatedIssuers.filter((issuer) => !hiddenIssuerIds.has(issuer.id))
+    : associatedIssuers;
   const addButton = (
     <RequireScope scope="mcp:write" resourceId={projectId} level="component">
       <Button variant="secondary" size="md" onClick={onAdd}>
@@ -56,7 +72,35 @@ export function RemoteIdentityProvidersField({
   );
 
   let providerControls: ReactNode;
-  if (isLoading) {
+  if (guided) {
+    providerControls = (
+      <div className="space-y-3">
+        {members}
+        {isLoading ? null : (
+          <>
+            {others.length > 0 ? (
+              <div className="space-y-3">
+                <Text muted small className="block">
+                  Also linked, not used by a member:
+                </Text>
+                {others.map((issuer) => (
+                  <RemoteIdentityProviderRow
+                    key={issuer.id}
+                    issuer={issuer}
+                    projectId={projectId}
+                    onEdit={() => onEdit(issuer)}
+                    onDelete={() => onDelete(issuer)}
+                    readOnly={readOnly}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {isError && loadError}
+          </>
+        )}
+      </div>
+    );
+  } else if (isLoading) {
     providerControls = (
       <Skeleton label="Loading authorization servers" className="h-9 w-48" />
     );
@@ -93,11 +137,13 @@ export function RemoteIdentityProvidersField({
 
   return (
     <AuthRow
+      id={AUTHORIZATION_SERVERS_FIELD_ID}
       label="Authorization servers"
       hint={
         <>
-          Where each user signs in to the upstream service. Speakeasy keeps
-          their token and sends it with their requests.
+          {guided
+            ? "Members that sign people in through their own service, such as Linear. Link each one so signing in to this gateway also signs people in to it."
+            : "Where each user signs in to the upstream service. Speakeasy keeps their token and sends it with their requests."}
           <ExplainerDialog title="Authorization servers">
             <Text muted small className="block">
               An authorization server issues the OAuth tokens that let this

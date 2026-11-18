@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -22,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -153,7 +153,7 @@ func (s *Service) DuplicateClient(ctx context.Context, payload *orgclientsgen.Du
 		created, err = s.duplicateCIMDClient(ctx, logger, txRepo, authCtx.ActiveOrganizationID, source, keySetID)
 		registration = audit.RemoteSessionClientDuplicateRegistrationMetadataDocument
 	} else {
-		created, registration, err = s.duplicateCredentialClient(ctx, logger, txRepo, authCtx.ActiveOrganizationID, issuer, source, keySetID, registered)
+		created, registration, err = s.duplicateCredentialClient(ctx, logger, dbtx, authCtx.ActiveOrganizationID, issuer, source, keySetID, registered)
 	}
 	if err != nil {
 		return nil, err
@@ -315,11 +315,13 @@ func (s *Service) duplicateCIMDClient(ctx context.Context, logger *slog.Logger, 
 
 // duplicateCredentialClient creates a copy of a client that holds a client_id
 // issued by its provider, reusing the source's credentials when registered is
-// nil and the supplied registration otherwise.
+// nil and the supplied registration otherwise. A reused secret is opened with
+// the source's key and sealed again for the copy, whose organization may
+// differ from the source's.
 func (s *Service) duplicateCredentialClient(
 	ctx context.Context,
 	logger *slog.Logger,
-	txRepo *repo.Queries,
+	dbtx repo.DBTX,
 	organizationID string,
 	issuer repo.RemoteSessionIssuer,
 	source repo.RemoteSessionClient,
@@ -347,7 +349,6 @@ func (s *Service) duplicateCredentialClient(
 		OrganizationID:                  conv.ToPGTextEmpty(organizationID),
 		RemoteSessionIssuerID:           source.RemoteSessionIssuerID,
 		ClientID:                        source.ClientID,
-		ClientSecretEncrypted:           source.ClientSecretEncrypted,
 		ClientIDIssuedAt:                source.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           source.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod:         source.TokenEndpointAuthMethod,
@@ -382,17 +383,7 @@ func (s *Service) duplicateCredentialClient(
 			return repo.RemoteSessionClient{}, "", oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
 		}
 
-		secretCiphertext := pgtype.Text{String: "", Valid: false}
-		if registered.clientSecret != "" {
-			ciphertext, err := s.enc.Encrypt([]byte(registered.clientSecret))
-			if err != nil {
-				return repo.RemoteSessionClient{}, "", oops.E(oops.CodeUnexpected, err, "encrypt client secret").LogError(ctx, logger)
-			}
-			secretCiphertext = conv.ToPGText(ciphertext)
-		}
-
 		params.ClientID = registered.clientID
-		params.ClientSecretEncrypted = secretCiphertext
 		params.ClientIDIssuedAt = registered.provenance.clientIDIssuedAt
 		params.ClientSecretExpiresAt = registered.provenance.clientSecretExpiresAt
 		if registered.tokenEndpointAuthMethod != nil {
@@ -404,9 +395,24 @@ func (s *Service) duplicateCredentialClient(
 		registration = audit.RemoteSessionClientDuplicateRegistrationRegistered
 	}
 
-	created, err := txRepo.CreateRemoteSessionClient(ctx, params)
+	created, err := repo.New(dbtx).CreateRemoteSessionClient(ctx, params)
 	if err != nil {
 		return repo.RemoteSessionClient{}, "", oops.E(oops.CodeUnexpected, err, "duplicate organization admin remote session client").LogError(ctx, logger)
+	}
+
+	switch {
+	case registered == nil:
+		var row repo.RemoteSessionClient
+		var copied bool
+		row, copied, err = s.secrets.Copy(ctx, dbtx, clientOwner(source), clientsecrets.Stored(source.ClientSecretEncrypted, source.ClientSecretOrgEncrypted), created.ID, clientOwner(created), params.ClientSecretExpiresAt)
+		if copied {
+			created = row
+		}
+	case registered.clientSecret != "":
+		created, err = s.secrets.Set(ctx, dbtx, created.ID, clientOwner(created), []byte(registered.clientSecret), params.ClientSecretExpiresAt)
+	}
+	if err != nil {
+		return repo.RemoteSessionClient{}, "", clientSecretWriteError(ctx, logger, err)
 	}
 
 	return created, registration, nil

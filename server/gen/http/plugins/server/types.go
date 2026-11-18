@@ -365,6 +365,18 @@ type GetPublishStatusResponseBody struct {
 	// marketplace — the value to mark required in Cursor's team marketplace.
 	// Present when connected.
 	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
+	// Whether the Mistral Vibe observability plugin ZIP can be downloaded right
+	// now: the pinned hooks release's relay carries the vibe provider and the org
+	// name satisfies the Agent Plugins 1.0 name schema. Present (true or false)
+	// when connected and observability is enabled for the project.
+	VibeObservabilityAvailable *bool `form:"vibe_observability_available,omitempty" json:"vibe_observability_available,omitempty" xml:"vibe_observability_available,omitempty"`
+	// Slug of the generated Mistral Vibe observability plugin's install directory
+	// (`~/.vibe/plugins/<slug>`) — present only when connected, observability is
+	// enabled, the vibe package is available, and the stored published hooks
+	// version equals the current generator version, i.e. the published marketplace
+	// repo actually carries the package. The marketplace repo directory is
+	// `<slug>-vibe`.
+	VibeObservabilityPlugin *string `form:"vibe_observability_plugin,omitempty" json:"vibe_observability_plugin,omitempty" xml:"vibe_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -4973,20 +4985,22 @@ func NewRotateObservabilityCredentialResponseBody(res *plugins.RotateObservabili
 // result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPublishStatusResponseBody {
 	body := &GetPublishStatusResponseBody{
-		Configured:                res.Configured,
-		Connected:                 res.Connected,
-		RepoOwner:                 res.RepoOwner,
-		RepoName:                  res.RepoName,
-		RepoURL:                   res.RepoURL,
-		MarketplaceURL:            res.MarketplaceURL,
-		ClaudeObservabilityPlugin: res.ClaudeObservabilityPlugin,
-		CodexObservabilityPlugin:  res.CodexObservabilityPlugin,
-		CursorObservabilityPlugin: res.CursorObservabilityPlugin,
-		HasCollaborators:          res.HasCollaborators,
-		UpToDate:                  res.UpToDate,
-		AutomaticSyncPending:      res.AutomaticSyncPending,
-		LastPublishedAt:           res.LastPublishedAt,
-		LiveVersion:               res.LiveVersion,
+		Configured:                 res.Configured,
+		Connected:                  res.Connected,
+		RepoOwner:                  res.RepoOwner,
+		RepoName:                   res.RepoName,
+		RepoURL:                    res.RepoURL,
+		MarketplaceURL:             res.MarketplaceURL,
+		ClaudeObservabilityPlugin:  res.ClaudeObservabilityPlugin,
+		CodexObservabilityPlugin:   res.CodexObservabilityPlugin,
+		CursorObservabilityPlugin:  res.CursorObservabilityPlugin,
+		VibeObservabilityAvailable: res.VibeObservabilityAvailable,
+		VibeObservabilityPlugin:    res.VibeObservabilityPlugin,
+		HasCollaborators:           res.HasCollaborators,
+		UpToDate:                   res.UpToDate,
+		AutomaticSyncPending:       res.AutomaticSyncPending,
+		LastPublishedAt:            res.LastPublishedAt,
+		LiveVersion:                res.LiveVersion,
 	}
 	if res.Plugins != nil {
 		body.Plugins = make([]*PluginPublishStatusResponseBody, len(res.Plugins))

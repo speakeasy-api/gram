@@ -192,6 +192,28 @@ func TestCreateRiskPolicy_AllowAllRejectsNarrowStandingApprovals(t *testing.T) {
 	require.Contains(t, err.Error(), narrowURL, "the rejection names the offending server")
 }
 
+// A block-by-default policy for everyone blocks a denied server for
+// everyone, so creating one against a standing denial scoped to specific
+// people fails with the servers named, the same way decision-time
+// enforcement refuses that denial.
+func TestCreateRiskPolicy_EveryoneBlockAllRejectsNarrowStandingDenials(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskServiceWithRealIntake(t)
+
+	narrowURL := "https://mcp.example.com/narrow-denial-blocks-block-all"
+	person := urn.NewPrincipal(urn.PrincipalTypeUser, "user_narrow_denial_reject").String()
+	seedStandingDecision(t, ctx, ti, narrowURL, "denied", []string{person})
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Sources: []string{"shadow_mcp"},
+		Action:  "block",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorIs(t, err, mcpapproval.ErrNarrowDenialUnderEveryoneBlockAll)
+	require.Contains(t, err.Error(), narrowURL, "the rejection names the offending server")
+}
+
 // Decisions recorded before RecordDecision normalized an empty approved set
 // stored ARRAY[] for an everyone-approval. Replaying that literally would
 // grant nobody — an approved server still blocked, the exact contradiction
