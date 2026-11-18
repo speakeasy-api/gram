@@ -382,6 +382,10 @@ func handleToolsCall(
 	}
 
 	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
+	agentID := ""
+	if agent, ok := contextvalues.EffectiveAgent(ctx); ok {
+		agentID = agent.ID
+	}
 
 	// One id names the call on its telemetry_logs row and its agent_events row.
 	call := toolCall{
@@ -402,6 +406,7 @@ func handleToolsCall(
 		externalUserID:  externalUserID,
 		userID:          callerID,
 		userEmail:       callerEmail,
+		agentID:         agentID,
 	}
 
 	logAttrs := tm.HTTPLogAttributes{}
