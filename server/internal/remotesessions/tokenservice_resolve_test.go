@@ -178,23 +178,25 @@ func TestResolveAccessTokens_LoginMadeThroughAnotherIssuerBoundToTheClient(t *te
 		{name: "gateway login serves the member server", loginThrough: gateway, requestedOn: member, subject: "cross-gateway-first", want: "token-from-gateway"},
 		{name: "member login serves the gateway", loginThrough: member, requestedOn: gateway, subject: "cross-member-first", want: "token-from-member"},
 	} {
-		subject := urn.NewUserSubject(tc.subject)
-		accessEnc, err := enc.Encrypt([]byte(tc.want))
-		require.NoError(t, err)
-		session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
-			SubjectUrn:            subject,
-			UserSessionIssuerID:   tc.loginThrough,
-			RemoteSessionClientID: clientID,
-			AccessTokenEncrypted:  accessEnc,
-			AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-			Scopes:                []string{},
-		})
-		require.NoError(t, err, tc.name)
+		t.Run(tc.name, func(t *testing.T) {
+			subject := urn.NewUserSubject(tc.subject)
+			accessEnc, err := enc.Encrypt([]byte(tc.want))
+			require.NoError(t, err)
+			session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+				SubjectUrn:            subject,
+				UserSessionIssuerID:   tc.loginThrough,
+				RemoteSessionClientID: clientID,
+				AccessTokenEncrypted:  accessEnc,
+				AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+				Scopes:                []string{},
+			})
+			require.NoError(t, err)
 
-		tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject)
-		require.NoError(t, err, tc.name)
-		require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: tc.want, Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}, tokenCredentials(tokens), tc.name)
-		require.Equal(t, session.ID, tokens[remoteIssuerID].RemoteSessionID, "%s: the one login row serves", tc.name)
+			tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject)
+			require.NoError(t, err)
+			require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: tc.want, Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}, tokenCredentials(tokens))
+			require.Equal(t, session.ID, tokens[remoteIssuerID].RemoteSessionID, "%s: the one login row serves")
+		})
 	}
 }
 
@@ -230,31 +232,33 @@ func TestResolveOrganizationGatewayTokens_LoginMadeThroughAnotherIssuerBoundToTh
 		{name: "member login serves the organization gateway", loginThrough: member, requestedOn: organization, subject: "orggw-member-first", want: "token-from-member"},
 		{name: "organization gateway login serves the member server", loginThrough: organization, requestedOn: member, subject: "orggw-gateway-first", want: "token-from-organization"},
 	} {
-		subject := urn.NewUserSubject(tc.subject)
-		accessEnc, err := enc.Encrypt([]byte(tc.want))
-		require.NoError(t, err)
-		session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
-			SubjectUrn:            subject,
-			UserSessionIssuerID:   tc.loginThrough,
-			RemoteSessionClientID: clientID,
-			AccessTokenEncrypted:  accessEnc,
-			AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-			Scopes:                []string{},
+		t.Run(tc.name, func(t *testing.T) {
+			subject := urn.NewUserSubject(tc.subject)
+			accessEnc, err := enc.Encrypt([]byte(tc.want))
+			require.NoError(t, err)
+			session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+				SubjectUrn:            subject,
+				UserSessionIssuerID:   tc.loginThrough,
+				RemoteSessionClientID: clientID,
+				AccessTokenEncrypted:  accessEnc,
+				AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+				Scopes:                []string{},
+			})
+			require.NoError(t, err)
+			want := map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: tc.want, Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}
+
+			// A hosted member: every client the issuer binds in the member's project.
+			available, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject)
+			require.NoError(t, err)
+			require.Equal(t, want, tokenCredentials(available))
+			require.Equal(t, session.ID, available[remoteIssuerID].RemoteSessionID, "%s: the one login row serves")
+
+			// A proxied member: only the clients associated with it.
+			associated, err := mgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject, map[uuid.UUID]bool{clientID: true}, true)
+			require.NoError(t, err)
+			require.Equal(t, want, tokenCredentials(associated))
+			require.Equal(t, session.ID, associated[remoteIssuerID].RemoteSessionID, "%s: the one login row serves")
 		})
-		require.NoError(t, err, tc.name)
-		want := map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: tc.want, Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}
-
-		// A hosted member: every client the issuer binds in the member's project.
-		available, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject)
-		require.NoError(t, err, tc.name)
-		require.Equal(t, want, tokenCredentials(available), tc.name)
-		require.Equal(t, session.ID, available[remoteIssuerID].RemoteSessionID, "%s: the one login row serves", tc.name)
-
-		// A proxied member: only the clients associated with it.
-		associated, err := mgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, tc.requestedOn, subject, map[uuid.UUID]bool{clientID: true}, true)
-		require.NoError(t, err, tc.name)
-		require.Equal(t, want, tokenCredentials(associated), tc.name)
-		require.Equal(t, session.ID, associated[remoteIssuerID].RemoteSessionID, "%s: the one login row serves", tc.name)
 	}
 }
 
