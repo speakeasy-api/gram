@@ -159,10 +159,10 @@ const adminAction = "Ask your administrator."
 
 // unavailableCauses is each named cause's card; who fixes it picks the status word.
 var unavailableCauses = map[mcpconnectionattempts.Code]unavailableCard{
-	mcpconnectionattempts.CodeProviderRateLimited:      {problem: "Too many requests.", action: waitAction},
+	mcpconnectionattempts.CodeProviderRateLimited:      {problem: "The server is busy.", action: waitAction},
 	mcpconnectionattempts.CodeProviderServerError:      {problem: "The server had an error.", action: waitAction},
 	mcpconnectionattempts.CodeProviderUnreachable:      {problem: "The server isn't responding.", action: waitAction},
-	mcpconnectionattempts.CodeRemoteSessionUnavailable: {problem: "Its sign-in service is down.", action: waitAction},
+	mcpconnectionattempts.CodeRemoteSessionUnavailable: {problem: "Its sign-in service isn't working right now.", action: waitAction},
 	mcpconnectionattempts.CodeSharedCredentialRejected: {problem: "Its saved sign-in was rejected.", action: adminAction},
 	mcpconnectionattempts.CodeStaticKeyRejected:        {problem: "Its saved sign-in was rejected.", action: adminAction},
 	mcpconnectionattempts.CodeCredentialMisconfigured:  {problem: "Its sign-in isn't set up correctly.", action: adminAction},

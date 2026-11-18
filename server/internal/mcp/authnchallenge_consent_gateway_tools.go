@@ -37,7 +37,7 @@ type consentMemberOutcome struct {
 	Name string `json:"name"`
 	// Status distinguishes verified access, sign-in issues, and outages.
 	Status gatewayServerStatus `json:"status"`
-	// Label is shared by the server list and the tool picker.
+	// Label is the stored status text, generic for a listing failure; the live server list names the cause.
 	Label string `json:"label"`
 
 	// address is an address Speakeasy did not dial that stopped the source.

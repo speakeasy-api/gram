@@ -1059,10 +1059,10 @@ func TestUnavailableLabelWording(t *testing.T) {
 	t.Parallel()
 
 	for code, want := range map[mcpconnectionattempts.Code]string{
-		mcpconnectionattempts.CodeProviderRateLimited:      "Unavailable · Too many requests. Try again shortly.",
+		mcpconnectionattempts.CodeProviderRateLimited:      "Unavailable · The server is busy. Try again shortly.",
 		mcpconnectionattempts.CodeProviderServerError:      "Unavailable · The server had an error. Try again shortly.",
 		mcpconnectionattempts.CodeProviderUnreachable:      "Unavailable · The server isn't responding. Try again shortly.",
-		mcpconnectionattempts.CodeRemoteSessionUnavailable: "Unavailable · Its sign-in service is down. Try again shortly.",
+		mcpconnectionattempts.CodeRemoteSessionUnavailable: "Unavailable · Its sign-in service isn't working right now. Try again shortly.",
 		mcpconnectionattempts.CodeSharedCredentialRejected: "Can't connect · Its saved sign-in was rejected. Ask your administrator.",
 		mcpconnectionattempts.CodeStaticKeyRejected:        "Can't connect · Its saved sign-in was rejected. Ask your administrator.",
 		mcpconnectionattempts.CodeCredentialMisconfigured:  "Can't connect · Its sign-in isn't set up correctly. Ask your administrator.",

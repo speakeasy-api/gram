@@ -57,7 +57,7 @@ func listingCases() []listingCase {
 	}
 	return []listingCase{
 		{name: "saved key rejected", url: failing(http.StatusUnauthorized), savedKey: true},
-		{name: "rate limited", url: failing(http.StatusTooManyRequests), reason: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · Too many requests. Try again shortly."},
+		{name: "rate limited", url: failing(http.StatusTooManyRequests), reason: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · The server is busy. Try again shortly."},
 		{name: "server error", url: failing(http.StatusInternalServerError), reason: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · The server had an error. Try again shortly."},
 		{name: "stopped", url: stoppedUpstream, reason: mcpconnectionattempts.CodeProviderUnreachable, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · The server isn't responding. Try again shortly."},
 		{name: "unreadable listing", url: func(t *testing.T) string {
