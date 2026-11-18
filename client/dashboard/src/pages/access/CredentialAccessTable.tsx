@@ -309,7 +309,10 @@ export function CredentialAccessTable({
 
   const body = (
     <>
-      <div id={sectionId} className="border-border bg-card scroll-mt-24 border">
+      <div
+        id={sectionId}
+        className={cn("bg-card scroll-mt-24", !bare && "border-border border")}
+      >
         {serverFilter && (
           <div className="border-border flex items-center justify-between gap-3 border-b px-4 py-2">
             <Text small>

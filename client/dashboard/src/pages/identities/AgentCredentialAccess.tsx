@@ -182,10 +182,9 @@ function ManagerCredentials({ agent }: { agent: ManagedAgent }): JSX.Element {
           ? `${ownerBlocks} ${ownerBlocks === 1 ? "person has" : "people have"} also blocked this agent from their own connection. Only they can lift that.`
           : "A block wins over every other rule, whatever the agent's keys allow."
       }
-      contentClassName="p-4"
     >
-      <div className="space-y-3">
-        <Text muted small className="block">
+      <div>
+        <Text muted small className="block border-b px-4 py-3">
           {credentialHolderCopy("agent").description}
         </Text>
         <CredentialAccessTable
