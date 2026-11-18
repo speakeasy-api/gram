@@ -27,6 +27,12 @@ const api = vi.hoisted(() => ({
 }));
 // Generated query hooks, keys and invalidators remain production code.
 // Observe the settlement callback without replacing its reconciliation behavior.
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
+}));
 vi.mock("./useGatewayMemberRows", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./useGatewayMemberRows")>();

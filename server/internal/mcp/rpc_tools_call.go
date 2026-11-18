@@ -554,6 +554,18 @@ func handleToolsCall(
 			invocation.rejected = true
 			invocation.message = "invalid request body"
 		}
+		// A function tool on a deployment without Functions is answered as a
+		// failed tool result, so the agent reads why the tool cannot run
+		// instead of a protocol error that suggests tools/call is unsupported.
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			logger.WarnContext(ctx, "function tool call refused: functions are disabled", attr.SlogToolName(params.Name), attr.SlogError(err))
+			rw.resultIsError = true
+			identity := serverInfoHostedToolset
+			if payload.metaMcpServerID != "" {
+				identity = serverInfoMetaServer
+			}
+			return marshalToolErrorResult(ctx, logger, req.ID, functions.ErrFunctionsDisabled.Error(), identity)
+		}
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected

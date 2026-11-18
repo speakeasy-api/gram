@@ -405,7 +405,7 @@ func TestCreateMCPFromFunctionsNeverReturnsDatabaseErrorText(t *testing.T) {
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-db-failure", Version: "0.0.1"}, nil))
 	registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
-	registerCreateMCPFromFunctionsTool(registrar, service)
+	registerCreateMCPFromFunctionsTool(registrar, service, true)
 	descriptor := registrar.Descriptors()[0]
 	ctx = ContextWithPrincipal(ctx, fixture.principal)
 
@@ -602,7 +602,7 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 	describe := func(service *MCPToolExposureService) Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-manifest", Version: "0.0.1"}, nil))
 		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
-		registerCreateMCPFromFunctionsTool(registrar, service)
+		registerCreateMCPFromFunctionsTool(registrar, service, true)
 		descriptors := registrar.Descriptors()
 		require.Len(t, descriptors, 1)
 		return descriptors[0]
@@ -626,4 +626,32 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
 	require.Contains(t, refusal, "Creating an MCP server from a project's functions")
+}
+
+// A deployment that runs with Functions disabled keeps the tool in the
+// catalogue with the same manifest and refuses it, even with the tool
+// exposure service composed.
+func TestCreateMCPFromFunctionsRefusesWhenFunctionsDisabled(t *testing.T) {
+	t.Parallel()
+	_, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_disabled")
+	require.True(t, fixture.service.valid())
+
+	describe := func(functionsAvailable bool) Descriptor {
+		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-disabled", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
+		registerCreateMCPFromFunctionsTool(registrar, fixture.service, functionsAvailable)
+		descriptors := registrar.Descriptors()
+		require.Len(t, descriptors, 1)
+		return descriptors[0]
+	}
+	live, disabled := describe(true), describe(false)
+	require.Equal(t, live.Description, disabled.Description)
+	require.Equal(t, live.Meta, disabled.Meta)
+	require.Equal(t, live.InputSchema, disabled.InputSchema)
+
+	refusal := invokeUnavailable(t, ContextWithPrincipal(t.Context(), fixture.principal), disabled, map[string]any{
+		"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+		"idempotency_key": uuid.NewString(), "confirmed": true,
+	})
+	require.Contains(t, refusal, unavailableCreateMCPFromFunctionsMessage)
 }

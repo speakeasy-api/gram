@@ -1029,7 +1029,10 @@ func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*
 	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
-	case "local":
+	case functions.ProviderDisabled:
+		warnIgnoredFunctionsFlags(ctx, c, logger, "functions-tigris-bucket-uri", "functions-tigris-key", "functions-tigris-secret")
+		return nil, nilShutdown, nil
+	case functions.ProviderLocal:
 		tmpDir, err := os.MkdirTemp("", "gram-tigris-")
 		if err != nil {
 			return nil, nilShutdown, fmt.Errorf("create temp dir for mock tigris store: %w", err)
@@ -1053,7 +1056,7 @@ func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*
 		store := assets.NewFSBlobStore(logger, root)
 
 		return assets.NewTigrisStore(store), shutdown, nil
-	case "flyio":
+	case functions.ProviderFlyIO:
 		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
 		tigrisKey := c.String("functions-tigris-key")
 		tigrisSecret := c.String("functions-tigris-secret")
@@ -1097,7 +1100,10 @@ func newFunctionOrchestrator(
 	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
-	case "local":
+	case functions.ProviderDisabled:
+		warnIgnoredFunctionsFlags(c.Context, c, logger, "functions-flyio-api-token", "functions-flyio-org")
+		return functions.Disabled{}, nilShutdown, nil
+	case functions.ProviderLocal:
 		codeRootDir := filepath.Clean(c.String("functions-local-runner-root"))
 		if codeRootDir == "" {
 			return nil, nilShutdown, fmt.Errorf("--functions-local-runner-root must be set in local environment")
@@ -1114,7 +1120,7 @@ func newFunctionOrchestrator(
 		}
 
 		return functions.NewLocalRunner(logger, tracerProvider, codeRootDir, serverURL, assetStore), nilShutdown, nil
-	case "flyio":
+	case functions.ProviderFlyIO:
 		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")
 		ociImage := c.String("functions-runner-oci-image")

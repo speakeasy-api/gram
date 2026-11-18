@@ -137,6 +137,11 @@ func (tp *ToolProxy) doFunctionResource(
 		ResourceURI:  descriptor.URI,
 		ResourceName: descriptor.Name,
 	})
+	// The caller decides how a disabled deployment is reported, so this
+	// is returned unlogged with the sentinel still matchable.
+	if errors.Is(err, functions.ErrFunctionsDisabled) {
+		return oops.E(oops.CodeNotImplemented, err, "%s", functions.ErrFunctionsDisabled.Error())
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create function resource call request").LogError(ctx, logger)
 	}
