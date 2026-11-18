@@ -402,7 +402,7 @@ func NewExportingConnectionRecorder(t *testing.T) (recorder *mcpconnectionattemp
 	}
 }
 
-// MarkConsentSwitched marks a consent challenge as spent by an account switch on issuerID.
+// MarkConsentSwitched writes a slug-less switch marker on issuerID, which only shared-server lookups honour.
 func (s *Service) MarkConsentSwitched(ctx context.Context, stateID string, issuerID uuid.UUID, clientName string) error {
 	if err := s.accountSwitchCache.Store(ctx, accountSwitchMarker{ID: stateID, McpSlug: "", UserSessionIssuerID: issuerID.String(), ClientName: clientName}); err != nil {
 		return fmt.Errorf("store switch marker: %w", err)
