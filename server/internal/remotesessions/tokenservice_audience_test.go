@@ -117,7 +117,7 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 
 	secretCiphertext, err := enc.Encrypt([]byte("aud-secret"))
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,

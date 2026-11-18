@@ -1212,6 +1212,10 @@ CREATE TABLE IF NOT EXISTS plugins (
   -- marketplace by hand. NULL or TRUE means changes publish automatically
   -- (the historical default).
   auto_sync_enabled boolean,
+  -- When TRUE, role audiences add and remove MCP servers in this plugin
+  -- automatically from the roles' Use access. FALSE (the default) keeps the
+  -- plugin's server list exactly as admins set it.
+  auto_add_servers_enabled boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1231,6 +1235,7 @@ COMMENT ON COLUMN plugins.slug IS '@access: confidential';
 COMMENT ON COLUMN plugins.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN plugins.auto_created IS '@access: confidential';
 COMMENT ON COLUMN plugins.auto_sync_enabled IS '@access: confidential';
+COMMENT ON COLUMN plugins.auto_add_servers_enabled IS '@access: confidential';
 COMMENT ON COLUMN plugins.created_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.updated_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.deleted_at IS '@access: confidential';

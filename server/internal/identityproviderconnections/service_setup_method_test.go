@@ -89,7 +89,7 @@ func TestSetSetupMethod_CustomAppToOINRetiresKeySet(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the client no longer serves a key set")
 	requireKeySetLive(t, ctx, si, before.JSONWebKeySetID.UUID, true)
 
-	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinSecret, si.enc)
+	si.oktaFakes.Fake(fullOrgURL).RequireClientSecret(oinSecret)
 	submitted, err := submitOIN(ctx, si, created.ID, oinSecret)
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusVerified, submitted.Status)

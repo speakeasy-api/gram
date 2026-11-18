@@ -1,9 +1,12 @@
 package oktaapplications
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
 
 func app(id string) Application {
@@ -116,4 +119,16 @@ func TestSnapshotTruncated(t *testing.T) {
 	require.True(t, Snapshot{ApplicationsTruncated: true}.Truncated())
 	require.True(t, Snapshot{IncompleteUsers: map[string]bool{"a": true}}.Truncated())
 	require.True(t, Snapshot{IncompleteGroups: map[string]bool{"a": true}}.Truncated())
+}
+
+func TestClassify_ClientSecretKeyOutageIsRetriedNotRejected(t *testing.T) {
+	t.Parallel()
+
+	reason, retry := classify(fmt.Errorf("open okta client secret: %w", okta.ErrClientSecretKeyUnavailable))
+	require.True(t, retry, "a key outage clears on its own, so the run is retried")
+	require.Equal(t, reasonClientUnavailable, reason, "a key outage says nothing about Okta or the credential")
+
+	reason, retry = classify(fmt.Errorf("open okta client secret: %w", okta.ErrClientSecretUndecryptable))
+	require.False(t, retry, "a secret that does not decrypt has to be replaced")
+	require.Equal(t, reasonClientUnavailable, reason)
 }

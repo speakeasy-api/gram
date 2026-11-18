@@ -53,7 +53,7 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		return fmt.Errorf("%w: typed login project changed", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	// Only fields consumed by subject admission are needed here.
-	//nolint:exhaustruct // Callback subject admission does not resolve an endpoint.
+	//nolint:exhaustruct_v5 // Callback subject admission does not resolve an endpoint.
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: a.OrganizationID, ProjectID: a.ProjectID, McpServerID: uuid.NullUUID{UUID: a.ServerID, Valid: true}, UserSessionIssuerID: state.UserSessionIssuerID}
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, a.Subject, "remote-login:"+state.ParentChallengeID, "")
 	if err != nil {
@@ -151,7 +151,7 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 			continue
 		}
 		a := &remotesessions.TypedAuthorization{OrganizationID: endpoint.OrganizationID, ProjectID: projectID, ServerID: serverID.UUID, AuthClientID: row.AuthClientID.UUID, RemoteSessionClientID: client.ID, Subject: *challenge.Subject}
-		//nolint:exhaustruct // Validate only authorization before minting the full OAuth state.
+		//nolint:exhaustruct_v5 // Validate only authorization before minting the full OAuth state.
 		state := remotesessions.RemoteLoginState{TypedAuthorization: a, ParentChallengeID: challenge.ID, OrganizationID: endpoint.OrganizationID, ProjectID: projectID, RemoteSessionClientID: client.ID, Subject: challenge.Subject, McpServerID: endpoint.McpServerID, UserSessionIssuerID: endpoint.UserSessionIssuerID}
 		if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err == nil {
 			return a, nil

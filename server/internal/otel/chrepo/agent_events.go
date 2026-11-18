@@ -27,10 +27,13 @@ type AgentEventRow struct {
 	Source   string `ch:"source"`
 	Provider string `ch:"provider"`
 	Surface  string `ch:"surface"`
+	Product  string `ch:"product"`
+	Client   string `ch:"client"`
 
 	UserID         string `ch:"user_id"`
 	UserEmail      string `ch:"user_email"`
 	ExternalUserID string `ch:"external_user_id"`
+	AgentID        string `ch:"agent_id"`
 
 	AccountType   string `ch:"account_type"`
 	BillingMode   string `ch:"billing_mode"`
@@ -90,9 +93,12 @@ var agentEventColumns = []string{
 	"source",
 	"provider",
 	"surface",
+	"product",
+	"client",
 	"user_id",
 	"user_email",
 	"external_user_id",
+	"agent_id",
 	"account_type",
 	"billing_mode",
 	"external_org_id",
@@ -152,9 +158,12 @@ func (q *Queries) InsertAgentEvents(ctx context.Context, rows []AgentEventRow) e
 			row.Source,
 			row.Provider,
 			row.Surface,
+			row.Product,
+			row.Client,
 			row.UserID,
 			row.UserEmail,
 			row.ExternalUserID,
+			row.AgentID,
 			row.AccountType,
 			row.BillingMode,
 			row.ExternalOrgID,

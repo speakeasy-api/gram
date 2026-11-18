@@ -40,10 +40,23 @@ type Service struct {
 	featureClient *Client
 	mutator       *Mutator
 
-	// assistantsAvailable is whether this deployment can run assistants. It
-	// comes from the assistant runtime provider, so it is the same for every
+	// capabilities are the deployment-wide features this process can serve.
+	// They come from its configuration, so they are the same for every
 	// organization.
-	assistantsAvailable bool
+	capabilities DeploymentCapabilities
+}
+
+// DeploymentCapabilities reports which deployment-wide features this process
+// can serve. Unlike organization features, they come from the deployment's
+// configuration and cannot be toggled per organization.
+type DeploymentCapabilities struct {
+	// AssistantsAvailable is false when the deployment runs with the disabled
+	// assistant runtime provider.
+	AssistantsAvailable bool
+
+	// FunctionsAvailable is false when the deployment runs with the disabled
+	// Functions provider.
+	FunctionsAvailable bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,7 +69,7 @@ func NewService(
 	redisClient *redis.Client,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	assistantsAvailable bool,
+	capabilities DeploymentCapabilities,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
@@ -71,7 +84,7 @@ func NewService(
 		featureClient: featureClient,
 		mutator:       NewMutator(featureClient, auditLogger),
 
-		assistantsAvailable: assistantsAvailable,
+		capabilities: capabilities,
 	}
 }
 
@@ -280,7 +293,8 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
-		AssistantsAvailable:                     new(s.assistantsAvailable),
+		AssistantsAvailable:                     new(s.capabilities.AssistantsAvailable),
+		FunctionsAvailable:                      new(s.capabilities.FunctionsAvailable),
 		UpstreamAuthEnforced:                    upstreamAuthEnforced,
 	}, nil
 }

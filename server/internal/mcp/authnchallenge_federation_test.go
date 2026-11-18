@@ -355,7 +355,7 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool, offline ...bool
 	// Same external client id and user email in another tenant must not affect
 	// provider selection or provisioned-human resolution in this organization.
 	otherIssuer := createTrustedIDJAGIssuer(t, ctx, ti, otherOrg, otherProvider.URL, otherProvider.URL+"/jwks")
-	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(otherOrg), RemoteSessionIssuerID: otherIssuer.TrustedRemoteSessionIssuerID.UUID, ClientID: "selected-client", TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{"openid", "email"}})
+	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{OrganizationID: conv.ToPGText(otherOrg), RemoteSessionIssuerID: otherIssuer.TrustedRemoteSessionIssuerID.UUID, ClientID: "selected-client", TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{"openid", "email"}})
 	require.NoError(t, err)
 	seedIDJAGDirectoryUser(t, ctx, ti, otherOrg)
 	scopes := []string{"openid", "email"}
@@ -371,9 +371,9 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool, offline ...bool
 	secret, err := ti.enc.Encrypt([]byte("selected-secret"))
 	require.NoError(t, err)
 	// Insert an unselected client first: selection must follow the explicit FK.
-	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "not-selected", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: []string{"openid"}})
+	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "not-selected", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: []string{"openid"}})
 	require.NoError(t, err)
-	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "selected-client", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: scopes})
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "selected-client", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: scopes})
 	require.NoError(t, err)
 	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), Slug: "federation-" + uuid.NewString(), AuthnChallengeMode: "chain", SessionDuration: pgtype.Interval{Microseconds: int64(8 * time.Hour / time.Microsecond), Valid: true}, TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true}})
 	require.NoError(t, err)
