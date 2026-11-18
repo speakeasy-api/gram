@@ -1,4 +1,4 @@
-import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailable";
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { ResourceListPage } from "@/components/page-templates";
 import {
   RemoveSourceDialog,
@@ -74,7 +74,7 @@ function toolSourceId(tool: Tool): string | undefined {
  */
 export default function Sources(): JSX.Element {
   const routes = useRoutes();
-  const { available: functionsAvailable } = useFunctionsAvailable();
+  const functionsAvailable = useFunctionsAvailable();
   const project = useProject();
   const { sources, isLoading, assetsLoading, assetsUnavailable } =
     useProjectSources();

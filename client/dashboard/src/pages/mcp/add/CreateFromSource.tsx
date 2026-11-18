@@ -1,4 +1,4 @@
-import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailable";
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { Spinner } from "@/components/ui/Spinner";
 import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
@@ -34,7 +34,7 @@ const VISIBLE_SOURCE_LIMIT = 10;
  */
 export default function CreateFromSource(): JSX.Element {
   const flow = useGatewayCreation();
-  const { available: functionsAvailable } = useFunctionsAvailable();
+  const functionsAvailable = useFunctionsAvailable();
   const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
   const client = useSdkClient();

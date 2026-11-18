@@ -26,7 +26,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
-import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailable";
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { ResourcesEmptyState } from "./ResourcesEmptyState";
 
 export function ResourcesTabContent({
@@ -39,7 +39,7 @@ export function ResourcesTabContent({
   const { data: resourcesResponse } = useListResources({});
   const allResources = resourcesResponse?.resources ?? [];
   const [instructionsOpen, setInstructionsOpen] = useState(false);
-  const { available: functionsAvailable } = useFunctionsAvailable();
+  const functionsAvailable = useFunctionsAvailable();
 
   const { data: deployment } = useLatestDeployment();
 

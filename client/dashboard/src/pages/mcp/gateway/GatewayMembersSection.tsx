@@ -2,7 +2,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
-import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailable";
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
@@ -744,7 +744,7 @@ export function AddServersSheet({
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
-  const { available: functionsAvailable } = useFunctionsAvailable();
+  const functionsAvailable = useFunctionsAvailable();
   const canWriteProject =
     !permissionsLoading && hasScope("project:write", projectId);
   // Match the Catalog page's browse permission; installation checks stay there.

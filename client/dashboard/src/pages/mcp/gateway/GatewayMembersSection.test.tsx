@@ -14,11 +14,10 @@ import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.j
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
 const functionsAvailability = vi.hoisted(() => ({ available: true }));
-vi.mock("@/hooks/useFunctionsAvailable", () => ({
-  useFunctionsAvailable: () => ({
-    status: functionsAvailability.available ? "available" : "unavailable",
-    available: functionsAvailability.available,
-  }),
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 

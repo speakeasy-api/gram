@@ -1,4 +1,4 @@
-import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailable";
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { InputDialog } from "@/components/input-dialog";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
 import { Card } from "@/components/ui/Card";
@@ -169,7 +169,7 @@ export default function AddMcpServer(): JSX.Element {
     routes.mcp.gateway.overview.goTo(gateway.id);
   };
 
-  const { available: functionsAvailable } = useFunctionsAvailable();
+  const functionsAvailable = useFunctionsAvailable();
   const oktaSync = useFeatureFlag(FEATURE_FLAGS.oktaMcpImport);
   // The Sync from Okta page needs org:admin, so nobody else is offered it.
   const { hasScope } = useRBAC();
