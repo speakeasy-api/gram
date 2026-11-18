@@ -421,7 +421,7 @@ func chainingRefusalCode(reason identitychaining.Reason) (mcpconnectionattempts.
 	}
 }
 
-// recordRefusedConsent writes one row per attempt and client, however often the page reloads; a cache failure writes it anyway.
+// recordRefusedConsent writes one row per attempt, client and code, however often the page reloads; a cache failure writes it anyway.
 func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {
 		return
