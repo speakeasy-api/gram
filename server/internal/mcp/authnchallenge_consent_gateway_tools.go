@@ -30,6 +30,9 @@ import (
 type consentMemberOutcome struct {
 	// Slug identifies the source independently of its display name.
 	Slug string `json:"slug"`
+	// ServerID identifies the source across slug changes. Empty in captures
+	// made before it was recorded.
+	ServerID uuid.UUID `json:"server_id,omitzero"`
 	// Name is the source's display name.
 	Name string `json:"name"`
 	// Status distinguishes verified access, sign-in issues, and outages.
@@ -327,7 +330,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		}
 		// Stored for later readers, so it names no cause that may have passed.
 		label := (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: address, signInAddress: signInAddress, cause: mcpconnectionattempts.Code{}, upstreamHost: "", Auth: nil}).StatusLabel()
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: label, address: address, signInAddress: signInAddress, cause: cause, host: host})
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, ServerID: member.serverID, Name: conv.Default(member.name, member.slug), Status: status, Label: label, address: address, signInAddress: signInAddress, cause: cause, host: host})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}

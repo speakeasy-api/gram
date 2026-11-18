@@ -136,20 +136,25 @@ export function StatTile(props: StatTileProps): JSX.Element {
     </span>
   );
 
+  // Beside the figure the comparison only fits a quarter-width tile without
+  // wrapping when it is the bare percentage, so a tile with no caption of its
+  // own carries "vs previous period" as its caption instead.
+  const comparisonAsCaption = showDelta && !!comparisonLabel && !subtext;
   const deltaNode = showDelta ? (
     <>
       {isPositive ? "+" : "-"}
       {delta.toFixed(1)}%
-      {comparisonLabel && (
+      {comparisonLabel && !comparisonAsCaption && (
         <span className="text-muted"> {comparisonLabel}</span>
       )}
     </>
   ) : undefined;
 
+  const caption = comparisonAsCaption ? comparisonLabel : subtext;
   const description =
-    subtext || link ? (
+    caption || link ? (
       <span className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground">{subtext}</span>
+        <span className="text-muted-foreground">{caption}</span>
         {link && (
           <Link
             to={link}

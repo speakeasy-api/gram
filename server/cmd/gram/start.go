@@ -1643,6 +1643,11 @@ func newStartCommand() *cli.Command {
 				metering.NewRiskRecorder(publishers.MeterReadings),
 				deviceAgentTokens,
 			)
+			hooksVersionPolicy, err := plugins.HooksVersionPolicy()
+			if err != nil {
+				return fmt.Errorf("hooks version policy: %w", err)
+			}
+			hooksService.SetVersionPolicy(hooksVersionPolicy)
 			hooks.Attach(mux, hooksService)
 			if err := hooks.AttachAHP(mux, hooksService); err != nil {
 				return fmt.Errorf("attach AHP hooks: %w", err)
@@ -2304,6 +2309,7 @@ func newStartCommand() *cli.Command {
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						Connections:                    connectionRecorder,
 						FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), tm.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
+						HookFleetMetrics:               newHookFleetMetrics(ctx, logger, meterProvider, db, meterReadConn),
 						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 						MemoryEvals:                    evalrun.NewRunner(logger, db, chatClient),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
