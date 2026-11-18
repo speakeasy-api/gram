@@ -13,12 +13,34 @@ const mocks = vi.hoisted(() => ({
   workflowServers: [] as unknown[],
   phase: "configure" as "configure" | "complete",
   statuses: [] as Array<Record<string, unknown>>,
+  reset: vi.fn(),
+  signInReady: true,
+  details: undefined as
+    | { remotes: Array<{ url: string; transportType: string }> }
+    | undefined,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "default" }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useProjectSlugForRequests: () => "default",
+}));
+vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
+  useMcpServerAuthenticationReadiness: () => ({
+    ready: mocks.signInReady,
+    loading: false,
+    unavailable: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/mcpRegistriesGetServerDetails.js", () => ({
+  useMcpRegistriesGetServerDetails: () => ({
+    data: mocks.details,
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, isLoading: false }),
 }));
@@ -59,8 +81,12 @@ vi.mock("@/lib/mcp-server-visibility", () => ({
 vi.mock("@/pages/catalog/useRemoteMcpInstallWorkflow", () => ({
   useRemoteMcpInstallWorkflow: ({ servers }: { servers: unknown[] }) => {
     mocks.workflowServers = servers;
+    const reset = () => {
+      mocks.reset();
+      mocks.phase = "configure";
+    };
     if (mocks.phase === "complete") {
-      return { phase: "complete", statuses: mocks.statuses, reset: () => {} };
+      return { phase: "complete", statuses: mocks.statuses, reset };
     }
     return {
       phase: "configure",
@@ -75,7 +101,7 @@ vi.mock("@/pages/catalog/useRemoteMcpInstallWorkflow", () => ({
       setHeaderValue: vi.fn(),
       canInstall: true,
       startInstall: mocks.startInstall,
-      reset: () => {},
+      reset,
     };
   },
 }));
@@ -134,12 +160,12 @@ function server(): ShadowMCPInventoryServer {
   };
 }
 
-function renderSheet() {
+function renderSheet(target: object = entry) {
   return render(
     <MemoryRouter>
       <CatalogOfficialSheet
         server={server()}
-        entry={entry as never}
+        entry={target as never}
         probe={{
           outcome: "authentication_required",
           protectedResourceMetadataUrl:
@@ -162,6 +188,9 @@ describe("CatalogOfficialSheet", () => {
     mocks.startInstall.mockReset();
     mocks.mutateUpdate.mockReset();
     mocks.fetchQuery.mockReset();
+    mocks.reset.mockReset();
+    mocks.signInReady = true;
+    mocks.details = undefined;
   });
   afterEach(cleanup);
 
@@ -247,5 +276,121 @@ describe("CatalogOfficialSheet", () => {
       mcpServerId: "server-1",
       allowDirectAccess: false,
     });
+  });
+
+  it("starts over with the form editable when nothing could be added", async () => {
+    mocks.phase = "complete";
+    mocks.statuses = [
+      { status: "failed", name: "Tracker Cloud", error: "Upstream refused." },
+    ];
+    renderSheet();
+
+    expect(await screen.findByText("Upstream refused.")).toBeTruthy();
+    expect(mocks.reset).toHaveBeenCalled();
+    const add = screen.getByRole("button", { name: "Add and link" });
+    expect((add as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("says the server is added but not linked when the link fails", async () => {
+    mocks.save.mockRejectedValue(new Error("nope"));
+    mocks.phase = "complete";
+    mocks.statuses = [
+      {
+        status: "completed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+      },
+    ];
+    renderSheet();
+
+    expect(await screen.findByText("Server added")).toBeTruthy();
+    expect(screen.queryByText("Official server linked")).toBeNull();
+    expect(
+      screen.getByText("Added, but not yet linked to Tracker."),
+    ).toBeTruthy();
+  });
+
+  it("keeps Turn on off until the sign-in is saved, and shows why setup is needed", async () => {
+    mocks.signInReady = false;
+    mocks.phase = "complete";
+    mocks.statuses = [
+      {
+        status: "failed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+        setupRequired: "Automatic client registration is unavailable.",
+      },
+    ];
+    renderSheet();
+
+    expect(
+      await screen.findByText("Automatic client registration is unavailable."),
+    ).toBeTruthy();
+    const turnOn = screen.getByRole("button", { name: "Turn on and link" });
+    expect((turnOn as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText("Save the sign-in settings above to turn it on."),
+    ).toBeTruthy();
+  });
+
+  it("shows why turning the server on failed", async () => {
+    mocks.phase = "complete";
+    mocks.statuses = [
+      {
+        status: "failed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+        setupRequired: "Automatic client registration is unavailable.",
+      },
+    ];
+    mocks.fetchQuery.mockResolvedValue({
+      id: "server-1",
+      slug: "tracker",
+      visibility: "disabled",
+    });
+    mocks.mutateUpdate.mockRejectedValue(new Error("Could not enable it."));
+    renderSheet();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Turn on and link" }),
+    );
+    expect(await screen.findByText("Could not enable it.")).toBeTruthy();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("installs from the entry's details, not the listing", () => {
+    mocks.details = {
+      remotes: [
+        {
+          url: "https://tracker.example.com/mcp",
+          transportType: "streamable-http",
+          headers: [{ name: "X-Api-Key", isRequired: true }],
+        } as never,
+      ],
+    };
+    renderSheet({ ...entry, registryId: "registry-1", remotes: undefined });
+
+    expect(
+      (mocks.workflowServers[0] as { remotes: Array<{ url: string }> }).remotes,
+    ).toEqual(mocks.details.remotes);
+  });
+
+  it("does not add an endpoint the catalog lists only over SSE", () => {
+    renderSheet({
+      ...entry,
+      remotes: [
+        { url: "https://tracker.example.com/mcp", transportType: "sse" },
+      ],
+    });
+
+    expect(mocks.workflowServers).toEqual([]);
+    expect(
+      screen.getByText(/only over a connection Speakeasy cannot add/),
+    ).toBeTruthy();
+    const add = screen.getByRole("button", { name: "Add and link" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 });

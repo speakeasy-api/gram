@@ -37,6 +37,10 @@ import type { ProbeURLResult } from "@gram/client/models/components/probeurlresu
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  shadowMCPCreatedDescription,
+  shadowMCPCreatedTitle,
+} from "./shadowMCPOfficialServer";
 import { useSaveShadowMCPOfficialServer } from "./useSaveShadowMCPOfficialServer";
 
 export type Created = {
@@ -183,12 +187,12 @@ export function MakeOfficialSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            {created ? "Official server linked" : "Make official"}
+            {created ? shadowMCPCreatedTitle(created) : "Make official"}
           </SheetTitle>
           <SheetDescription>
             {created
-              ? `Agents that call ${shadowName} directly are now sent here.`
-              : `Speakeasy serves ${shadowName} and links it as the official version. Direct connections are then blocked wherever a Shadow MCP policy applies.`}
+              ? shadowMCPCreatedDescription(created, shadowName)
+              : `Speakeasy serves ${shadowName} and links it as the official version. Direct connections are then blocked, and agents are sent to the official server.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -239,9 +243,7 @@ export function MakeOfficialSheet({
                     onChange={setIdentityMode}
                     credential={agentCredential}
                     upstreamName={name.trim() || shadowName}
-                    advertisesOAuth={
-                      probe?.outcome === "authentication_required"
-                    }
+                    advertisesOAuth={advertisesOAuth}
                     authenticationRequired={
                       probe?.outcome === "authentication_required"
                     }

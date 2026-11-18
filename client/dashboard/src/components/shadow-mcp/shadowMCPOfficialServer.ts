@@ -20,12 +20,13 @@ export function canMakeShadowMCPServerOfficial(
 }
 
 /**
- * What a linked server's status line says. Direct connections are only
- * blocked where a Shadow MCP policy applies, so with none the line says the
- * direct connection still works rather than claiming a block.
+ * What a linked server's status line says. A link that is on blocks direct
+ * connections in every mode, with or without a blocking policy, so only a
+ * link switched off or an official server with no address leaves them
+ * working.
  */
 export function shadowMCPOfficialServerDescription(
-  server: Pick<ShadowMCPInventoryServer, "officialServer" | "accessSummary">,
+  server: Pick<ShadowMCPInventoryServer, "officialServer">,
 ): string {
   const official = server.officialServer;
   if (!official) return "";
@@ -37,9 +38,6 @@ export function shadowMCPOfficialServerDescription(
   }
   if (official.directAccessAllowed) {
     return `${served} The link is off, so direct connections follow the usual rules.`;
-  }
-  if (server.accessSummary?.state === "unenforced") {
-    return `${served} No Shadow MCP policy is on, so direct connections still work.`;
   }
   return `${served} Direct connections are blocked and agents are sent there.`;
 }
@@ -330,4 +328,25 @@ export function recommendedOnboardOption({
   if (hasCatalogEntry) return "catalog";
   if (!readiness) return null;
   return readiness.ready ? "quick" : "manual";
+}
+
+/** What the result of making a server official needs for its copy. */
+type CreatedResult = { name: string; linkFailed: boolean };
+
+/** The result sheet's title: linked only once the link was saved. */
+export function shadowMCPCreatedTitle(
+  created: Pick<CreatedResult, "linkFailed">,
+): string {
+  return created.linkFailed ? "Server added" : "Official server linked";
+}
+
+/** What the result means for agents, which depends on the link. */
+export function shadowMCPCreatedDescription(
+  created: CreatedResult,
+  shadowName: string,
+): string {
+  if (created.linkFailed) {
+    return `${created.name} is added but not linked, so agents that call ${shadowName} directly are not sent there yet.`;
+  }
+  return `Agents that call ${shadowName} directly are now sent here.`;
 }

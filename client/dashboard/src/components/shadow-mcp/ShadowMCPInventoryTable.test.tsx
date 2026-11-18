@@ -734,6 +734,13 @@ describe("ShadowMCPInventoryTable", () => {
         }),
       );
     }
+    // A URL row can also be made official; a local command has no URL to
+    // serve, so it offers only the decision.
+    const labelLists = calls.map(([actions]) =>
+      actions.map((action) => action.label),
+    );
+    expect(labelLists).toContainEqual(["Decide access", "Make official"]);
+    expect(labelLists).toContainEqual(["Decide access"]);
 
     // The stdio review still opens, so the evidence can be read, but its
     // Decide Access button waits too.

@@ -17,10 +17,12 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
@@ -56,6 +58,29 @@ const ONBOARDING_REQUEST_EVENT = "shadow_mcp_onboarding_requested";
 
 const PANEL_CLASS = "border-border bg-card space-y-4 border p-4";
 
+const NO_MCP_WRITE =
+  "You need permission to manage MCP servers in this project to add one.";
+
+/**
+ * A button that adds an MCP server. Linking a server is part of the Shadow
+ * MCP page, but adding one needs permission to manage MCP servers, so
+ * without it the button is off and says why.
+ */
+function CreateServerGate({
+  allowed,
+  children,
+}: {
+  allowed: boolean;
+  children: React.ReactElement;
+}) {
+  if (allowed) return children;
+  return (
+    <SimpleTooltip tooltip={NO_MCP_WRITE}>
+      <span tabIndex={0}>{children}</span>
+    </SimpleTooltip>
+  );
+}
+
 /**
  * How a Shadow MCP server is linked to the version the organization serves
  * itself.
@@ -88,6 +113,9 @@ export function OfficialServerPanel({
         <LinkedPanel server={server} />
       ) : (
         <UnlinkedPanel
+          // A new server starts over: its checks, and whether this browser
+          // already asked for help, belong to the server it was opened for.
+          key={`${server.targetKind}:${server.canonicalServerUrl}`}
           server={server}
           onMakeOfficial={(probe) =>
             setSheet({ open: true, probe, entry: null })
@@ -421,6 +449,8 @@ function UnlinkedPanel({
   const telemetry = useTelemetry();
   const probe = useProbeRemoteMcpURLMutation();
   const { save, isPending: linking } = useSaveShadowMCPOfficialServer();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canCreateServer = !rbacLoading && hasScope("mcp:write", project.id);
   const [result, setResult] = useState<ProbeURLResult | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -461,6 +491,10 @@ function UnlinkedPanel({
   }, [url]);
 
   const readiness = result ? onboardReadiness(result) : null;
+  // The sheets take their sign-in default from the check, so none opens
+  // before the check has an answer: an OAuth server would default to no
+  // sign-in. A failed check still lets the admin go on.
+  const checking = !result && !checkFailed;
   const catalog = useListMCPCatalog();
   const catalogEntry = catalog.data?.servers
     ? shadowMCPCatalogMatch(catalog.data.servers as CatalogServer[], url)
@@ -477,17 +511,20 @@ function UnlinkedPanel({
   // dropped so a reload does not reopen it.
   const wantsSheet = searchParams.get(SHADOW_MCP_MAKE_OFFICIAL_PARAM) === "1";
   useEffect(() => {
-    if (!wantsSheet || recommended === null) return;
-    if (recommended === "catalog" && catalogEntry) {
+    if (!wantsSheet || recommended === null || rbacLoading || checking) return;
+    if (recommended === "catalog" && catalogEntry && canCreateServer) {
       onAddFromCatalog(catalogEntry, result);
     }
-    if (recommended === "quick") onMakeOfficial(result);
+    if (recommended === "quick" && canCreateServer) onMakeOfficial(result);
     const next = new URLSearchParams(searchParams);
     next.delete(SHADOW_MCP_MAKE_OFFICIAL_PARAM);
     setSearchParams(next, { replace: true });
   }, [
     wantsSheet,
     recommended,
+    rbacLoading,
+    checking,
+    canCreateServer,
     catalogEntry,
     result,
     onMakeOfficial,
@@ -589,13 +626,16 @@ function UnlinkedPanel({
           title={`In the Speakeasy catalog as “${catalogEntry.title || serverName}”`}
           description="Its setup is known, so it is added here in one step and linked as soon as it is on."
           actions={
-            <Button
-              size="sm"
-              variant={isRecommended ? "primary" : "secondary"}
-              onClick={() => onAddFromCatalog(catalogEntry, result)}
-            >
-              <Button.Text>Add from catalog</Button.Text>
-            </Button>
+            <CreateServerGate allowed={canCreateServer}>
+              <Button
+                size="sm"
+                variant={isRecommended ? "primary" : "secondary"}
+                disabled={!canCreateServer || checking}
+                onClick={() => onAddFromCatalog(catalogEntry, result)}
+              >
+                <Button.Text>Add from catalog</Button.Text>
+              </Button>
+            </CreateServerGate>
           }
         />
       ) : null,
@@ -605,7 +645,7 @@ function UnlinkedPanel({
         recommended={isRecommended && recommended === "quick"}
         icon={<Icon name="plus" className="size-4" />}
         title={
-          recommended === "manual" && isRecommended
+          recommended === "manual" && isRecommended && !checkFailed
             ? "This server needs a manual setup"
             : "Make a new server with this URL"
         }
@@ -613,7 +653,9 @@ function UnlinkedPanel({
           recommended === "manual" && isRecommended
             ? requested
               ? "Your request is with Speakeasy. We will contact you to set it up."
-              : "It cannot be made official automatically. Set it up yourself, or ask Speakeasy and we will set it up with you."
+              : checkFailed
+                ? "The check did not finish, so it is not known whether it can be set up in one step. Set it up yourself, or ask Speakeasy and we will set it up with you."
+                : "It cannot be made official automatically. Set it up yourself, or ask Speakeasy and we will set it up with you."
             : readiness?.ready
               ? "Speakeasy can register itself with its sign-in provider, so it is ready in one step."
               : "Speakeasy serves this URL as a new server. Sign-in may need a client you register by hand."
@@ -621,13 +663,16 @@ function UnlinkedPanel({
         actions={
           recommended === "manual" && isRecommended ? (
             <>
-              <Button
-                variant="tertiary"
-                size="sm"
-                onClick={() => onMakeOfficial(result)}
-              >
-                <Button.Text>Set it up myself</Button.Text>
-              </Button>
+              <CreateServerGate allowed={canCreateServer}>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  disabled={!canCreateServer || checking}
+                  onClick={() => onMakeOfficial(result)}
+                >
+                  <Button.Text>Set it up myself</Button.Text>
+                </Button>
+              </CreateServerGate>
               <Button
                 variant="secondary"
                 size="sm"
@@ -640,13 +685,16 @@ function UnlinkedPanel({
               </Button>
             </>
           ) : (
-            <Button
-              size="sm"
-              variant={isRecommended ? "primary" : "secondary"}
-              onClick={() => onMakeOfficial(result)}
-            >
-              <Button.Text>Make official</Button.Text>
-            </Button>
+            <CreateServerGate allowed={canCreateServer}>
+              <Button
+                size="sm"
+                variant={isRecommended ? "primary" : "secondary"}
+                disabled={!canCreateServer || checking}
+                onClick={() => onMakeOfficial(result)}
+              >
+                <Button.Text>Make official</Button.Text>
+              </Button>
+            </CreateServerGate>
           )
         }
       >

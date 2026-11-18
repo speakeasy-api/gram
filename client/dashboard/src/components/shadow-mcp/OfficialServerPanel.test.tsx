@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   toastSuccess: vi.fn(),
   save: vi.fn(),
+  canWriteMcp: true,
   catalogServers: [] as Array<{
     registrySpecifier: string;
     title?: string;
@@ -26,6 +34,12 @@ vi.mock("@gram/client/react-query/probeRemoteMcpURL.js", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1", slug: "acme" }),
   useProject: () => ({ id: "project-1", slug: "default" }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope === "mcp:write" && mocks.canWriteMcp,
+    isLoading: false,
+  }),
 }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: mocks.capture }),
@@ -91,6 +105,39 @@ vi.mock("./useSaveShadowMCPOfficialServer", () => ({
     isPending: false,
   }),
 }));
+// A native select stands in for the Radix one, which jsdom cannot open.
+vi.mock("@/components/ui/Select", () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value: string;
+    onValueChange: (value: string) => void;
+    children: React.ReactNode;
+  }) => (
+    <select
+      aria-label="Server to link"
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    >
+      <option value="">Choose a server</option>
+      {children}
+    </select>
+  ),
+  SelectTrigger: () => null,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectItem: ({
+    value,
+    children,
+  }: {
+    value: string;
+    children: React.ReactNode;
+  }) => <option value={value}>{children}</option>,
+}));
 vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess, error: vi.fn() },
 }));
@@ -137,6 +184,7 @@ describe("OfficialServerPanel", () => {
     mocks.save.mockReset();
     mocks.save.mockResolvedValue(undefined);
     mocks.catalogServers = [];
+    mocks.canWriteMcp = true;
     window.localStorage.clear();
   });
   afterEach(cleanup);
@@ -269,6 +317,32 @@ describe("OfficialServerPanel", () => {
     ).toBe("com.example/tracker");
   });
 
+  it("waits for the check before the catalog sheet can open", async () => {
+    mocks.catalogServers = [
+      {
+        registrySpecifier: "com.example/tracker",
+        title: "Tracker Cloud",
+        remotes: [{ url: "https://tracker.example.com/mcp" }],
+      },
+    ];
+    let answer: (value: unknown) => void = () => {};
+    mocks.probe.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    renderPanel(server(), "/page?make-official=1");
+
+    const add = await screen.findByRole("button", { name: "Add from catalog" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("dialog", { name: "Catalog sheet" })).toBeNull();
+
+    answer({ outcome: "mcp_available" });
+    expect(
+      await screen.findByRole("dialog", { name: "Catalog sheet" }),
+    ).toBeTruthy();
+  });
+
   it("prefers the catalog version even when a custom server would work", async () => {
     mocks.catalogServers = [
       {
@@ -321,7 +395,12 @@ describe("OfficialServerPanel", () => {
     mocks.probe.mockResolvedValueOnce({ outcome: "mcp_available" });
     renderPanel(server());
 
-    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+    await screen.findByRole("button", { name: "Check again" });
+    // A check that did not finish is not a finding that the server needs a
+    // manual setup.
+    expect(screen.queryByText("This server needs a manual setup")).toBeNull();
+    expect(screen.getByText(/The check did not finish/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
 
     expect(
       await screen.findByRole("button", { name: "Make official" }),
@@ -461,6 +540,74 @@ describe("OfficialServerPanel", () => {
       (screen.getByRole("button", { name: "Link" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("links the server picked under Advanced, never a disabled one", async () => {
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    renderPanel(server());
+    await screen.findByRole("button", { name: "Make official" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    const select = screen.getByRole("combobox", { name: "Server to link" });
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Choose a server", "Company Tools"]);
+
+    fireEvent.change(select, { target: { value: "server-tools" } });
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+
+    await waitFor(() => {
+      expect(mocks.save).toHaveBeenCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+        mcpServerId: "server-tools",
+        allowDirectAccess: false,
+      });
+    });
+  });
+
+  it("keeps adding a server off without permission to manage MCP servers", async () => {
+    mocks.canWriteMcp = false;
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    renderPanel(server(), "/page?make-official=1");
+
+    const make = await screen.findByRole("button", { name: "Make official" });
+    expect((make as HTMLButtonElement).disabled).toBe(true);
+    // The list's request to open the sheet is dropped rather than opening a
+    // sheet whose save would be refused.
+    expect(
+      screen.queryByRole("dialog", { name: "Make official sheet" }),
+    ).toBeNull();
+  });
+
+  it("starts over when the page moves to another server", async () => {
+    mocks.probe.mockResolvedValue({
+      outcome: "unreachable",
+      reason: "timeout",
+    });
+    const { rerender } = renderPanel(server());
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Request help" }),
+    );
+    expect(screen.getByRole("button", { name: "Help requested" })).toBeTruthy();
+
+    rerender(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/page"]}>
+          <OfficialServerPanel
+            server={server({
+              canonicalServerUrl: "https://other.example.com/mcp",
+              serverSlug: "other-example-com-mcp-87654321",
+            })}
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Request help" }),
+    ).toBeTruthy();
   });
 
   it("renders nothing for a local command", () => {

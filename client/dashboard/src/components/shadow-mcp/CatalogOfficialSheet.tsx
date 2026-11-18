@@ -18,8 +18,9 @@ import {
 import { Spinner } from "@/components/ui/Spinner";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useProject } from "@/contexts/Auth";
+import { useMcpServerAuthenticationReadiness } from "@/hooks/useMcpServerAuthenticationReadiness";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   invalidateMcpServerQueries,
@@ -29,8 +30,14 @@ import { useAgentCredentialFields } from "@/lib/remote-identity";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import type { CatalogServer } from "@/pages/catalog/hooks";
-import { collectibleHeaders } from "@/pages/catalog/remotes";
-import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
+import {
+  collectibleHeaders,
+  filterToHttpRemotes,
+} from "@/pages/catalog/remotes";
+import {
+  type ServerConfig,
+  useRemoteMcpInstallWorkflow,
+} from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { useMcpServerAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
@@ -43,11 +50,16 @@ import {
   buildGetMcpServerQuery,
   useGetMcpServer,
 } from "@gram/client/react-query/getMcpServer.js";
+import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type Created, CreatedSummary } from "./MakeOfficialSheet";
-import { shadowMCPCatalogRemote } from "./shadowMCPOfficialServer";
+import {
+  shadowMCPCatalogRemote,
+  shadowMCPCreatedDescription,
+  shadowMCPCreatedTitle,
+} from "./shadowMCPOfficialServer";
 import { useSaveShadowMCPOfficialServer } from "./useSaveShadowMCPOfficialServer";
 
 type Stage =
@@ -78,10 +90,42 @@ export function CatalogOfficialSheet({
 }): JSX.Element {
   const shadowName =
     server.serverName || server.urlHost || server.canonicalServerUrl;
-  const remote = shadowMCPCatalogRemote(
-    entry.remotes,
-    server.canonicalServerUrl,
+  const gramProject = useProjectSlugForRequests();
+  // A catalog listing can leave out an entry's endpoints or strip the
+  // headers they need, so the install reads the entry's own details, as the
+  // catalog's Add dialog does.
+  const details = useMcpRegistriesGetServerDetails(
+    {
+      registryId: entry.registryId ?? "",
+      serverSpecifier: entry.registrySpecifier,
+      gramProject,
+    },
+    undefined,
+    {
+      enabled: open && !!entry.registryId,
+      throwOnError: false,
+      staleTime: 0,
+      refetchOnWindowFocus: false,
+    },
   );
+  const detailsLoading = !!entry.registryId && details.isLoading;
+  const detailsFailed = !!entry.registryId && details.isError;
+  const listedRemotes = entry.registryId
+    ? details.data?.remotes
+    : entry.remotes;
+  const remote = useMemo(
+    () =>
+      // Only an HTTPS streamable HTTP endpoint can be added from the
+      // catalog; any other transport would be created as the wrong kind.
+      shadowMCPCatalogRemote(
+        filterToHttpRemotes({ ...entry, remotes: listedRemotes }).remotes,
+        server.canonicalServerUrl,
+      ),
+    [entry, listedRemotes, server.canonicalServerUrl],
+  );
+  const listedButNotServable =
+    !remote &&
+    !!shadowMCPCatalogRemote(listedRemotes, server.canonicalServerUrl);
   const routes = useRoutes();
   const link = useSaveShadowMCPOfficialServer();
   const project = useProject();
@@ -122,6 +166,10 @@ export function CatalogOfficialSheet({
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const handled = useRef(false);
+  // What the admin entered for the last attempt, put back after a failed
+  // install starts the workflow over.
+  const attempted = useRef<ServerConfig | null>(null);
+  const restore = useRef<ServerConfig | null>(null);
 
   const resetWorkflow = workflow.reset;
   useEffect(() => {
@@ -138,12 +186,33 @@ export function CatalogOfficialSheet({
     workflow.phase === "configure" ? workflow.serverConfigs[0] : undefined;
   const updateConfig =
     workflow.phase === "configure" ? workflow.updateServerConfig : undefined;
+  const setHeaderValue =
+    workflow.phase === "configure" ? workflow.setHeaderValue : undefined;
   const agentValue = agentCredential.authorizationValue;
+  const configAgent = config?.agentAuthorization;
+  // Follow the credential the admin types, and apply it again whenever the
+  // workflow starts over (a reopened sheet or a retry), since the field
+  // keeps its value across both.
   useEffect(() => {
-    updateConfig?.(0, { agentAuthorization: agentValue });
-    // updateServerConfig is stable; follow the credential the admin types.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentValue]);
+    if (!updateConfig || configAgent === undefined) return;
+    if (configAgent === agentValue) return;
+    updateConfig(0, { agentAuthorization: agentValue });
+  }, [agentValue, configAgent, updateConfig]);
+
+  // After a failed install the workflow starts over; put back what the
+  // admin entered so they can fix it and try again.
+  useEffect(() => {
+    const saved = restore.current;
+    if (!saved || !updateConfig || !setHeaderValue) return;
+    restore.current = null;
+    updateConfig(0, { name: saved.name, identityMode: saved.identityMode });
+    if (!remote) return;
+    for (const header of collectibleHeaders(remote)) {
+      const value =
+        saved.headerValues[`${remote.url} ${header.name.toLowerCase()}`];
+      if (value) setHeaderValue(0, remote.url, header.name, value);
+    }
+  }, [updateConfig, setHeaderValue, remote]);
 
   const finish = async (
     mcpServerId: string,
@@ -184,6 +253,11 @@ export function CatalogOfficialSheet({
       setError(status?.error ?? "The server could not be added.");
       setStage({ kind: "configure" });
       setWorking(false);
+      // Nothing was added, but the workflow ends in its complete phase.
+      // Start it over so the form can be edited and sent again.
+      restore.current = attempted.current;
+      handled.current = false;
+      resetWorkflow();
       return;
     }
     if (status.setupRequired) {
@@ -198,10 +272,11 @@ export function CatalogOfficialSheet({
     void finishRef
       .current(status.mcpServerId, status.mcpServerParam, status.name)
       .finally(() => setWorking(false));
-  }, [workflow]);
+  }, [workflow, resetWorkflow]);
 
   const add = async () => {
     if (workflow.phase !== "configure" || !workflow.canInstall) return;
+    attempted.current = config ?? null;
     setError(null);
     setWorking(true);
     try {
@@ -245,19 +320,19 @@ export function CatalogOfficialSheet({
     >
       <SheetContent
         side="right"
-        className="flex w-[680px] flex-col sm:max-w-[680px]"
+        className="flex w-[680px] max-w-[calc(100vw-2rem)] flex-col sm:max-w-[680px]"
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
             {stage.kind === "done"
-              ? "Official server linked"
+              ? shadowMCPCreatedTitle(stage.created)
               : stage.kind === "sign-in"
                 ? "Set up sign-in"
                 : "Add from the catalog"}
           </SheetTitle>
           <SheetDescription>
             {stage.kind === "done"
-              ? `Agents that call ${shadowName} directly are now sent here.`
+              ? shadowMCPCreatedDescription(stage.created, shadowName)
               : stage.kind === "sign-in"
                 ? `${entryTitle} is added but stays off until people can sign in. Enter the client you registered with its provider, save it, then turn the server on.`
                 : `Speakeasy adds the catalog version of ${entryTitle} and links it as the official version of ${shadowName}.`}
@@ -270,7 +345,12 @@ export function CatalogOfficialSheet({
           ) : null}
 
           {stage.kind === "sign-in" ? (
-            <SignInSetup mcpServerId={stage.mcpServerId} />
+            <Stack gap={4}>
+              <Alert variant="warning" dismissible={false}>
+                {stage.message}
+              </Alert>
+              <SignInSetup mcpServerId={stage.mcpServerId} />
+            </Stack>
           ) : null}
 
           {stage.kind === "configure" ? (
@@ -286,11 +366,25 @@ export function CatalogOfficialSheet({
                   </Text>
                 </div>
               </div>
-              {remote ? null : (
+              {detailsLoading ? (
+                <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                  <Spinner className="size-4" />
+                  Loading the catalog entry
+                </div>
+              ) : null}
+              {detailsFailed ? (
                 <Alert variant="error" dismissible={false}>
-                  The catalog entry no longer lists this URL.
+                  The catalog entry could not be loaded. Close this sheet and
+                  try again.
                 </Alert>
-              )}
+              ) : null}
+              {!detailsLoading && !detailsFailed && !remote ? (
+                <Alert variant="error" dismissible={false}>
+                  {listedButNotServable
+                    ? "The catalog lists this URL only over a connection Speakeasy cannot add from the catalog. Make a new server with this URL instead, under Advanced."
+                    : "The catalog entry no longer lists this URL."}
+                </Alert>
+              ) : null}
               <Stack gap={1}>
                 <label
                   htmlFor="catalog-official-name"
@@ -364,9 +458,7 @@ export function CatalogOfficialSheet({
                     }
                     credential={agentCredential}
                     upstreamName={config?.name.trim() || entryTitle}
-                    advertisesOAuth={
-                      probe?.outcome === "authentication_required"
-                    }
+                    advertisesOAuth={advertisesOAuth}
                     authenticationRequired={
                       probe?.outcome === "authentication_required"
                     }
@@ -483,6 +575,15 @@ function TurnOnAndLink({
   const update = useUpdateMcpServerMutation();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  // The same readiness the server's settings page shows. A check that could
+  // not run is not an open step, so it does not hold the admin back.
+  const serverQuery = useGetMcpServer({ id: mcpServerId }, undefined, {
+    throwOnError: false,
+  });
+  const readiness = useMcpServerAuthenticationReadiness(serverQuery.data);
+  const checking = serverQuery.isLoading || readiness.loading;
+  const signInOpen =
+    !serverQuery.isError && !readiness.unavailable && !readiness.ready;
 
   const turnOn = async () => {
     setPending(true);
@@ -518,12 +619,15 @@ function TurnOnAndLink({
 
   return (
     <div className="flex w-full items-center justify-between gap-3">
-      <Text muted small className="text-destructive">
-        {failed ?? ""}
+      <Text muted small className={failed ? "text-destructive" : undefined}>
+        {failed ??
+          (signInOpen && !checking
+            ? "Save the sign-in settings above to turn it on."
+            : "")}
       </Text>
       <Button
         variant="primary"
-        disabled={pending}
+        disabled={pending || checking || signInOpen}
         onClick={() => void turnOn()}
       >
         {pending ? (

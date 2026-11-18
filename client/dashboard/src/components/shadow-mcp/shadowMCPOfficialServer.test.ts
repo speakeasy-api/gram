@@ -9,7 +9,6 @@ import {
   shadowMCPOfficialServerDescription,
   shadowMCPMakeOfficialHref,
 } from "./shadowMCPOfficialServer";
-import { testAccessSummary } from "./shadowMCPInventoryTestFixtures";
 
 describe("shadowMCPMakeOfficialHref", () => {
   it("opens the Make official sheet on the server's page", () => {
@@ -57,11 +56,10 @@ describe("shadowMCPOfficialServerDescription", () => {
     directAccessAllowed: false,
   };
 
-  it("says direct connections are blocked when a policy enforces it", () => {
+  it("says direct connections are blocked while the link is on, in every mode", () => {
     expect(
       shadowMCPOfficialServerDescription({
         officialServer: official,
-        accessSummary: testAccessSummary("blocked"),
       }),
     ).toBe(
       "Linked to “Linear”. Direct connections are blocked and agents are sent there.",
@@ -72,7 +70,6 @@ describe("shadowMCPOfficialServerDescription", () => {
     expect(
       shadowMCPOfficialServerDescription({
         officialServer: { ...official, gatewayName: "Team Gateway" },
-        accessSummary: testAccessSummary("blocked"),
       }),
     ).toContain("through the gateway “Team Gateway”");
   });
@@ -81,20 +78,10 @@ describe("shadowMCPOfficialServerDescription", () => {
     expect(
       shadowMCPOfficialServerDescription({
         officialServer: { ...official, directAccessAllowed: true },
-        accessSummary: testAccessSummary("blocked"),
       }),
     ).toBe(
       "Linked to “Linear”. The link is off, so direct connections follow the usual rules.",
     );
-  });
-
-  it("does not claim a block when no policy is on", () => {
-    expect(
-      shadowMCPOfficialServerDescription({
-        officialServer: official,
-        accessSummary: testAccessSummary("none"),
-      }),
-    ).toContain("No Shadow MCP policy is on, so direct connections still work");
   });
 
   it("does not claim a block when the official server has no address", () => {
@@ -105,7 +92,6 @@ describe("shadowMCPOfficialServerDescription", () => {
           name: "GitHub",
           directAccessAllowed: false,
         },
-        accessSummary: testAccessSummary("blocked"),
       }),
     ).toContain("It has no address yet, so direct connections still work");
   });
