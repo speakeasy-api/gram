@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -116,11 +116,11 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		lastDay = lastDay.AddDate(0, 0, -1)
 	}
 	days, err := queries.CountActiveSessionsByDay(ctx, repo.CountActiveSessionsByDayParams{
-		FromDay:        timestamptz(firstDay),
-		LastDay:        timestamptz(lastDay),
-		IssuerID:       issuer.ID,
-		ProjectID:      project,
-		OrganizationID: c.organizationID,
+		FromDay:              timestamptz(firstDay),
+		LastDay:              timestamptz(lastDay),
+		IssuerID:             issuer.ID,
+		ProjectID:            project,
+		OrganizationID:       c.organizationID,
 		ToDay:                timestamptz(lastDay.AddDate(0, 0, 1)),
 		DashboardMintPattern: dashboardMintPattern,
 	})
@@ -133,10 +133,10 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 	}
 	averageFrom := now.Add(-averageSessionWindow)
 	average, err := queries.AverageEndedSessionSeconds(ctx, repo.AverageEndedSessionSecondsParams{
-		FromTime:       timestamptz(averageFrom),
-		ToTime:         timestamptz(now.Add(clockSkewAllowance)),
-		IssuerID:       issuer.ID,
-		ProjectID:      project,
+		FromTime:             timestamptz(averageFrom),
+		ToTime:               timestamptz(now.Add(clockSkewAllowance)),
+		IssuerID:             issuer.ID,
+		ProjectID:            project,
 		OrganizationID:       c.organizationID,
 		DashboardMintPattern: dashboardMintPattern,
 	})
