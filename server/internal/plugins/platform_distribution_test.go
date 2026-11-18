@@ -91,7 +91,7 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 					}
 					require.True(t, found, "platform-containing rows remain available for removal reconciliation")
 					slug := "distribution"
-					plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Distribution", Slug: &slug})
+					plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Distribution", Slug: &slug, AutoAddServersEnabled: new(true)})
 					require.NoError(t, err)
 					assign := func() {
 						_, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
@@ -200,7 +200,7 @@ func TestPlatformToolsetDistributionAfterAssistantRemoval(t *testing.T) {
 				_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 				require.NoError(t, err)
 				assertExcluded := func(name string) {
-					plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name})
+					plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name, AutoAddServersEnabled: new(true)})
 					require.NoError(t, err)
 					_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
 					require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestPlatformToolsetExplicitPluginAttachment(t *testing.T) {
 				ToolUrns: []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "send_message"), urn.NewTool(urn.ToolKindHTTP, "example", "get_status")},
 			})
 			require.NoError(t, err)
-			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Manual distribution"})
+			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Manual distribution", AutoAddServersEnabled: new(true)})
 			require.NoError(t, err)
 			id := toolsetID.String()
 			payload := &gen.AddPluginServerPayload{PluginID: plugin.ID, Policy: "required", ToolsetID: &id}

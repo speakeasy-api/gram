@@ -361,6 +361,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			IsDefault:                conv.FromPGBool[bool](r.IsDefault),
 			AutoCreated:              r.AutoCreated,
 			AutoSyncEnabled:          PluginAutoSyncEnabled(r.AutoSyncEnabled),
+			AutoAddServersEnabled:    r.AutoAddServersEnabled,
 			ServerCount:              &r.ServerCount,
 			SkillCount:               &r.SkillCount,
 			AssignmentCount:          &r.AssignmentCount,
@@ -536,13 +537,14 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	created, err := NewPluginMetadataCore(s.audit, s.publicationRequests).CreateInTransaction(ctx, tx, CreatePluginMutation{
-		OrganizationID:  ac.ActiveOrganizationID,
-		ProjectID:       *ac.ProjectID,
-		Name:            payload.Name,
-		Slug:            payload.Slug,
-		Description:     payload.Description,
-		AutoSyncEnabled: payload.AutoSyncEnabled,
-		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
+		OrganizationID:        ac.ActiveOrganizationID,
+		ProjectID:             *ac.ProjectID,
+		Name:                  payload.Name,
+		Slug:                  payload.Slug,
+		Description:           payload.Description,
+		AutoSyncEnabled:       payload.AutoSyncEnabled,
+		AutoAddServersEnabled: payload.AutoAddServersEnabled,
+		Actor:                 PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
 		return nil, s.pluginMetadataError(ctx, err, "create plugin")
@@ -604,15 +606,17 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	}
 
 	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(ctx, tx, UpdatePluginMutation{
-		OrganizationID:  ac.ActiveOrganizationID,
-		ProjectID:       *ac.ProjectID,
-		PluginID:        pluginID,
-		Name:            &payload.Name,
-		Slug:            &payload.Slug,
-		Description:     payload.Description,
-		KeepDescription: false,
-		AutoSyncEnabled: payload.AutoSyncEnabled,
-		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
+		OrganizationID:        ac.ActiveOrganizationID,
+		ProjectID:             *ac.ProjectID,
+		PluginID:              pluginID,
+		Name:                  &payload.Name,
+		Slug:                  &payload.Slug,
+		Description:           payload.Description,
+		KeepDescription:       false,
+		AutoSyncEnabled:       payload.AutoSyncEnabled,
+		AutoAddServersEnabled: payload.AutoAddServersEnabled,
+		DeliveryGuard:         s.distributionAdmission,
+		Actor:                 PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
 		return nil, s.pluginMetadataError(ctx, err, "update plugin")
@@ -3872,6 +3876,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 		IsDefault:                conv.FromPGBool[bool](p.IsDefault),
 		AutoCreated:              p.AutoCreated,
 		AutoSyncEnabled:          PluginAutoSyncEnabled(p.AutoSyncEnabled),
+		AutoAddServersEnabled:    p.AutoAddServersEnabled,
 		ServerCount:              nil,
 		SkillCount:               nil,
 		AssignmentCount:          nil,

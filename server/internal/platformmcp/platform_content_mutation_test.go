@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -27,9 +28,9 @@ func seedExposureMutationMemberships(t *testing.T, ctx context.Context, fixture 
 	t.Helper()
 	ac := &contextvalues.AuthContext{ActiveOrganizationID: fixture.principal.OrganizationID, ProjectID: &fixture.project.ID}
 	q := pluginsrepo.New(fixture.conn)
-	automatic, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Automatic", Slug: "automatic"})
+	automatic, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Automatic", Slug: "automatic", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
-	manual, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Manual", Slug: "manual"})
+	manual, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Manual", Slug: "manual", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
 	role, err := accessrepo.New(fixture.conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{OrganizationID: ac.ActiveOrganizationID, WorkosSlug: "content-edit", WorkosName: "Content edit", WorkosCreatedAt: conv.ToPGTimestamptz(time.Now()), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now())})
 	require.NoError(t, err)

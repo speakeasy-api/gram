@@ -23,20 +23,31 @@ no feature Temporal workflow, timer, recovery sweep, or retry scheduler.
 
 ## Server contents
 
-Role audiences also distribute eligible servers within each plugin's project.
-Granting effective `mcp:connect` access adds servers to existing matching plugins;
-assigning a role audience includes its existing access. Grant revocation or
-audience removal removes affected servers unless another assigned role still
-supplies them. Manual and automatic additions are the same membership, without
-separate ownership. Unrelated contents remain unchanged. This content path never
-creates a plugin or changes server permissions.
+Automatic server adding is opt-in per plugin through `plugins.auto_add_servers_enabled`.
+It is off by default, including for plugins that setup creates and plugins that
+existed before the setting. While it is off, nothing on this page changes the
+plugin's servers: role audience changes, grant changes, newly eligible servers,
+and setup all leave its server list exactly as admins set it. Admins change it by
+hand only. Turning the setting off keeps the current servers.
+
+For plugins with the setting on, role audiences also distribute eligible servers
+within each plugin's project. Granting effective `mcp:connect` access adds servers
+to existing matching plugins; assigning a role audience includes its existing access.
+Grant revocation or audience removal removes affected servers unless another
+assigned role still supplies them. Manual and automatic additions are the same
+membership, without separate ownership. Unrelated contents remain unchanged. This
+content path never creates a plugin or changes server permissions. Turning the
+setting on adds the servers the plugin's assigned roles can use at that moment,
+with the same deleted-content history rules as setup.
 
 Administrator removal is an ordinary content removal. Unchanged grant/audience
 replay and publication do not restore it; a new applicable grant or new role
 audience can add the server again. Bounded setup/backfill and server-eligibility
 delivery skip previously removed memberships rather than replaying additions.
 Deletion history is not a permanent exclusion from explicit changes. Setup also
-populates existing role-audience plugins, not just the plugin it creates/reuses.
+populates existing role-audience plugins with the setting on, not just the plugin
+it creates/reuses. A plugin setup creates starts with the setting off, so it stays
+empty until an admin adds servers or turns the setting on.
 
 Content changes use the existing transactional publication request. A queued
 request is not proof of publication or installed-client refresh; an unconfigured

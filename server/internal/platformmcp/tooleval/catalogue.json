@@ -7634,7 +7634,7 @@
     },
     {
       "name": "list_plugins",
-      "description": "List plugins in an explicit project. Organization administrators see the administrative inventory, including auto_sync_enabled: when false, the plugin's changes, including its first publish, wait until someone syncs by hand. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
+      "description": "List plugins in an explicit project. Organization administrators see the administrative inventory, including auto_sync_enabled: when false, the plugin's changes, including its first publish, wait until someone syncs by hand. It also includes auto_add_servers_enabled: when false, role and access changes never add or remove the plugin's MCP servers, and only manual changes alter its server list; it is off unless an administrator turned it on in the dashboard. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -8162,7 +8162,7 @@
     },
     {
       "name": "update_mcp_access_role",
-      "description": "Update a custom role through an opaque reference and expected version. Adds or removes exact MCP access rules while preserving every non-MCP grant. Changes to connect rules can also add or remove servers in plugins assigned to this role and queue publication; read and write rules never change plugin contents; another assigned role may retain access and distribution. Plugin-content edits do not grant or revoke server access. Requires explicit confirmation and an idempotency key.",
+      "description": "Update a custom role through an opaque reference and expected version. Adds or removes exact MCP access rules while preserving every non-MCP grant. Changes to connect rules can also add or remove servers in plugins assigned to this role that have auto_add_servers_enabled on, and queue publication; read and write rules never change plugin contents; another assigned role may retain access and distribution. Plugin-content edits do not grant or revoke server access. Requires explicit confirmation and an idempotency key.",
       "input_schema": {
         "type": "object",
         "properties": {

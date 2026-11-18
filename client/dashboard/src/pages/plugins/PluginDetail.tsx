@@ -527,6 +527,43 @@ function PluginDetailContent({
     });
   };
 
+  const autoAddServersMutation = useUpdatePluginMutation({
+    onSuccess: (updated) => {
+      void invalidateAll();
+      toast.success(
+        updated.autoAddServersEnabled
+          ? "Automatic MCP servers turned on"
+          : "Automatic MCP servers turned off",
+        {
+          description: updated.autoAddServersEnabled
+            ? "Added the MCP servers this plugin's roles can use. Access changes now update the list."
+            : "The server list now changes only when someone edits it.",
+        },
+      );
+    },
+    onError: (error) => {
+      handleError(error, { title: "Couldn't change automatic MCP servers" });
+    },
+  });
+
+  // Sends the plugin's current details back unchanged, like the auto sync
+  // switch, so only this setting changes.
+  const handleAutoAddServersChange = (enabled: boolean) => {
+    if (!canPublish) return;
+    autoAddServersMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updatePluginForm: {
+          id: pluginId!,
+          name: plugin.name,
+          slug: plugin.slug,
+          description: plugin.description || undefined,
+          autoAddServersEnabled: enabled,
+        },
+      },
+    });
+  };
+
   const handleDelete = () => {
     if (!canPublish) return;
     deleteMutation.mutate({
@@ -1085,6 +1122,34 @@ function PluginDetailContent({
                         </div>
                       </Alert>
                     )}
+                  </SettingsSection.Body>
+                </SettingsSection.Panel>
+              </SettingsSection>
+
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>MCP servers</SettingsSection.Title>
+                </SettingsSection.Header>
+                <SettingsSection.Panel>
+                  <SettingsSection.Body>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label id="plugin-auto-add-servers-label">
+                          Add MCP servers automatically
+                        </Label>
+                        <Text small muted className="max-w-xl">
+                          {plugin.autoAddServersEnabled
+                            ? "When a role this plugin is shared with gains or loses access to an MCP server, the server is added or removed here."
+                            : "Only people who edit this plugin change its MCP servers. Role and access changes leave the list alone."}
+                        </Text>
+                      </div>
+                      <Switch
+                        aria-labelledby="plugin-auto-add-servers-label"
+                        checked={plugin.autoAddServersEnabled === true}
+                        onCheckedChange={handleAutoAddServersChange}
+                        disabled={autoAddServersMutation.isPending}
+                      />
+                    </div>
                   </SettingsSection.Body>
                 </SettingsSection.Panel>
               </SettingsSection>

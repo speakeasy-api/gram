@@ -35,7 +35,7 @@ func TestRoleSetupPublishesExistingGrantedServer(t *testing.T) {
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 	require.NoError(t, err)
-	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "setup-backfill"})
+	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "setup-backfill", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	// Establish the existing marketplace required by transactional refresh hints.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})

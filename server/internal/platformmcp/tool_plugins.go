@@ -53,7 +53,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_plugins",
 		Title:       "List Plugins",
-		Description: "List plugins in an explicit project. Organization administrators see the administrative inventory, including auto_sync_enabled: when false, the plugin's changes, including its first publish, wait until someone syncs by hand. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
+		Description: "List plugins in an explicit project. Organization administrators see the administrative inventory, including auto_sync_enabled: when false, the plugin's changes, including its first publish, wait until someone syncs by hand. It also includes auto_add_servers_enabled: when false, role and access changes never add or remove the plugin's MCP servers, and only manual changes alter its server list; it is off unless an administrator turned it on in the dashboard. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginsOutput, error) {
