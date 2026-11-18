@@ -53,7 +53,12 @@ export function AttemptDetailSheet({
   const query = useAttempt(reference);
   const attempt = query.data?.attempt;
   return (
-    <Sheet open={!!reference} onOpenChange={(open) => !open && onClose()}>
+    <Sheet
+      open={!!reference}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <SheetContent className="bg-card w-full gap-0 overflow-y-auto p-0 sm:max-w-[600px]">
         {attempt ? (
           <AttemptDetailBody
