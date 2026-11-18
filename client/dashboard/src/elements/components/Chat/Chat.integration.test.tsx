@@ -25,7 +25,7 @@ import {
   vi,
 } from "vitest";
 
-// Renders the Playground chat (the real GramElementsProvider, assistant-ui
+// Renders the MCP Inspect chat (the real GramElementsProvider, assistant-ui
 // runtime, and <Chat /> thread) and sends a message through the UI. The model
 // call and MCP tool call go to the same test server the stream tests use, so
 // this covers what those tests skip: the provider's transport wiring,
@@ -67,7 +67,7 @@ async function chatShadowRoot(container: HTMLElement): Promise<HTMLElement> {
   return root as unknown as HTMLElement;
 }
 
-function playgroundConfig(): ElementsConfig {
+function inspectChatConfig(): ElementsConfig {
   return {
     projectSlug: "proj",
     api: {
@@ -93,7 +93,7 @@ function playgroundConfig(): ElementsConfig {
 }
 
 /**
- * Renders the Playground chat and sends the weather question once MCP tools
+ * Renders the MCP Inspect chat and sends the weather question once MCP tools
  * have loaded. Returns the thread's shadow root.
  */
 async function renderAndAskForWeather(): Promise<HTMLElement> {
@@ -103,7 +103,7 @@ async function renderAndAskForWeather(): Promise<HTMLElement> {
   // across tests.
   const { container } = render(
     <QueryClientProvider client={new QueryClient()}>
-      <GramElementsProvider config={playgroundConfig()}>
+      <GramElementsProvider config={inspectChatConfig()}>
         <Chat />
       </GramElementsProvider>
     </QueryClientProvider>,
@@ -128,7 +128,7 @@ async function renderAndAskForWeather(): Promise<HTMLElement> {
   return thread;
 }
 
-describe("Playground chat UI", () => {
+describe("MCP Inspect chat UI", () => {
   it("sends a message, runs the MCP tool, and renders the answer", async () => {
     await server.queueModelReplies(
       { kind: "stream", fixture: "tool-call-get-weather" },

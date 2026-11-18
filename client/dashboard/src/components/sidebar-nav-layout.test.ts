@@ -17,7 +17,7 @@ const groups = [
     items: [
       entry("MCP", "mcp:read"),
       entry("Environments", "project:write"),
-      entry("Playground", "mcp:connect"),
+      entry("Skills", "mcp:connect"),
     ],
   },
   { label: "Security and Policy", items: [entry("Risk", "org:admin")] },
@@ -38,7 +38,7 @@ describe("sidebarNavLayout", () => {
     expect(layout.groups.map((g) => g.label)).toEqual(["MCP Gateway"]);
     expect(layout.flatEntries?.map((e) => e.item.title)).toEqual([
       "MCP",
-      "Playground",
+      "Skills",
     ]);
   });
 

@@ -35,10 +35,7 @@ vi.mock("@assistant-ui/react", () => ({
   },
 }));
 
-import {
-  GramThreadWelcome,
-  PlaygroundNoToolsBanner,
-} from "./PlaygroundElementsOverrides";
+import { GramThreadWelcome, NoMcpToolsBanner } from "./InspectChatOverrides";
 
 const ACCESS_CLAIM =
   "This chat has access to the selected MCP server. Use it to test your tools.";
@@ -81,13 +78,13 @@ describe("GramThreadWelcome", () => {
   });
 });
 
-describe("PlaygroundNoToolsBanner", () => {
+describe("NoMcpToolsBanner", () => {
   it("stays hidden while tools are loading", () => {
     mocks.ctx.mcpToolsLoading = true;
     mocks.ctx.mcpTools = undefined;
     mocks.ctx.mcpToolsError = null;
 
-    expect(renderToStaticMarkup(<PlaygroundNoToolsBanner />)).toBe("");
+    expect(renderToStaticMarkup(<NoMcpToolsBanner />)).toBe("");
   });
 
   it("renders the honest warning when settled empty", () => {
@@ -95,7 +92,7 @@ describe("PlaygroundNoToolsBanner", () => {
     mocks.ctx.mcpTools = {};
     mocks.ctx.mcpToolsError = null;
 
-    const html = renderToStaticMarkup(<PlaygroundNoToolsBanner />);
+    const html = renderToStaticMarkup(<NoMcpToolsBanner />);
 
     expect(html).toContain(NO_MCP_TOOLS_MESSAGE);
     expect(html).toContain('role="alert"');
@@ -106,7 +103,7 @@ describe("PlaygroundNoToolsBanner", () => {
     mocks.ctx.mcpTools = { leftover: {} };
     mocks.ctx.mcpToolsError = new Error("401 Unauthorized");
 
-    const html = renderToStaticMarkup(<PlaygroundNoToolsBanner />);
+    const html = renderToStaticMarkup(<NoMcpToolsBanner />);
 
     expect(html).toContain(NO_MCP_TOOLS_MESSAGE);
     expect(html).toContain('role="alert"');
@@ -117,6 +114,6 @@ describe("PlaygroundNoToolsBanner", () => {
     mocks.ctx.mcpTools = { list_issues: {} };
     mocks.ctx.mcpToolsError = null;
 
-    expect(renderToStaticMarkup(<PlaygroundNoToolsBanner />)).toBe("");
+    expect(renderToStaticMarkup(<NoMcpToolsBanner />)).toBe("");
   });
 });

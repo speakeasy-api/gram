@@ -13,7 +13,7 @@ export default defineConfig({
   publicDir: false,
   define: {
     __GRAM_SERVER_URL__: JSON.stringify(""),
-    __PLAYGROUND_PROXY_URL__: "undefined",
+    __DEV_PROXY_URL__: "undefined",
     __GRAM_GIT_SHA__: JSON.stringify(""),
     __GRAM_API_URL__: JSON.stringify(""),
     __GRAM_DEV_WORKTREE__: JSON.stringify(""),

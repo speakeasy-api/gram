@@ -60,7 +60,7 @@ export const GramThreadWelcome: FC = () => {
 };
 
 /** Persistent warning when tools/list settled empty or failed. Hidden while loading. */
-export function PlaygroundNoToolsBanner(): JSX.Element | null {
+export function NoMcpToolsBanner(): JSX.Element | null {
   const { mcpTools, mcpToolsLoading, mcpToolsError } = useGramElements();
   if (
     mcpToolsAvailability(mcpToolsLoading, mcpTools, mcpToolsError) !==

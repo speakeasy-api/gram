@@ -33,6 +33,13 @@ import {
 // Deployments joined MCP as a tab; the old top-level listing keeps resolving.
 // The deployment *detail* URL is untouched — it is what the CLI prints after a
 // push.
+// The Playground was retired in favor of each server's Inspect tab, which has
+// the same test chat; old links land on the MCP inventory.
+export function RedirectToMcp(): JSX.Element {
+  const routes = useRoutes();
+  return <Navigate to={routes.mcp.href()} replace />;
+}
+
 export function RedirectToDeployments(): JSX.Element {
   const routes = useRoutes();
   return <Navigate to={routes.mcp.deployments.href()} replace />;

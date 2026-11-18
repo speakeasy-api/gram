@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { handleError, toError } from "@/lib/errors";
 import { DEFAULT_MODEL } from "@/lib/models";
-import { PlaygroundChat } from "@/pages/playground/PlaygroundChat";
+import { InspectChat } from "@/pages/mcp/inspect-chat/InspectChat";
 import { getServerURL } from "@/lib/utils";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
@@ -286,11 +286,9 @@ function RemoteMcpToolsSectionInner({
         canChat && chatUrl ? (
           // Reuses this tab's connection: the same Speakeasy-origin URL and
           // the same session token, so chatting never asks to connect again.
-          <PlaygroundChat
+          <InspectChat
             mcpUrl={chatUrl}
             gatewayToken={headers?.Authorization?.replace(/^Bearer /, "")}
-            environmentSlug={null}
-            compact
             model={DEFAULT_MODEL}
           />
         ) : undefined
