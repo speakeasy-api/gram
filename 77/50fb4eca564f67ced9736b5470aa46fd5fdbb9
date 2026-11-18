@@ -1,0 +1,19 @@
+.agents/skills/gram-rbac/SKILL.md
+  s_e5c75354b5887a::t_5652edc1411fc9 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7750fb4eca564f67ced9736b5470aa46fd5fdbb9",
+  "prompts": {},
+  "sessions": {
+    "s_e5c75354b5887a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8125f3cc-6a41-46ab-9735-a91c4bd7e886",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
