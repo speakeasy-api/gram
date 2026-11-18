@@ -170,6 +170,13 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 		require.Equal(t, "This server can't connect: its sign-in address is a private or internal one that Speakeasy can't reach. Waiting won't fix this. Ask your administrator to fix the server's sign-in address.", gate.Error())
 		requirePlainEndUserText(t, gate.Error())
 		require.Empty(t, w.Header().Get("Retry-After"), "waiting does not fix an address")
+
+		served := httptest.NewRecorder()
+		oops.MCPErrHandle(ti.logger, func(w http.ResponseWriter, _ *http.Request) error {
+			return mcp.RemoteSessionUnavailableError(w, token.ClientCredentialErr)
+		}).ServeHTTP(served, httptest.NewRequest(http.MethodPost, "/mcp", nil))
+		require.Equal(t, http.StatusServiceUnavailable, served.Code)
+		require.Empty(t, served.Header().Get("Retry-After"), "the error handler adds none either")
 	}
 }
 
@@ -186,7 +193,7 @@ func TestServeConsent_SignInProviderAddressCard(t *testing.T) {
 	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotAllowed, time.Minute))
 
 	_, page, _ := render(t, fx)
-	require.Contains(t, html.UnescapeString(page), "Can't connect · This sign-in's address isn't public. Ask your administrator.")
+	require.Contains(t, html.UnescapeString(page), "Can't connect · This sign-in's address is private or internal. Ask your administrator.")
 	require.Contains(t, page, "0 of 1 connected", "a down connection is not counted")
 	require.NotContains(t, page, "Unavailable · try again shortly")
 	require.NotContains(t, page, "> Reconnect </button>")
@@ -292,7 +299,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 		label  string
 		reason mcpconnectionattempts.Code
 	}{
-		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address isn't public. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address is private or internal. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
 		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · This server's address doesn't exist. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotFound},
 		{name: "broken server", url: broken.URL, label: "Unavailable · The server had an error. Try again shortly.", reason: mcpconnectionattempts.CodeProviderServerError},
 	} {
