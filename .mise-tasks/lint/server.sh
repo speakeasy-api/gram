@@ -107,31 +107,12 @@ if [ ! -x ./bin/gcl ] || [ "$gcl_stamp" != "$gcl_inputs" ]; then
     echo "Built gcl in $((SECONDS - build_started))s"
 fi
 
-# Generated packages produce no diagnostics after golangci-lint's generated
-# file filter, but making them initial packages more than doubles cold runtime.
-package_dirs=$(go list -f '{{.Dir}}' ./...)
-server_prefix="${PWD}/"
-lint_packages=(.)
-lint_roots=' '
-while IFS= read -r package_dir; do
-    case "$package_dir" in
-        "$PWD/gen"|"$PWD/gen/"*|"$PWD") ;;
-        "$PWD"/*)
-            relative_package=${package_dir#"$server_prefix"}
-            package_root=${relative_package%%/*}
-            case "$lint_roots" in
-                *" $package_root "*) ;;
-                *)
-                    lint_packages+=("./${package_root}/...")
-                    lint_roots="${lint_roots}${package_root} "
-                    ;;
-            esac
-            ;;
-        *)
-            echo "Unexpected server package path: $package_dir" >&2
-            exit 1
-            ;;
-    esac
-done <<< "$package_dirs"
+# Both CI lint jobs read the same list, so a local run analyses exactly the
+# packages CI does.
+lint_package_list=$(mise run -q go:server-lint-packages)
+lint_packages=()
+while IFS= read -r lint_package; do
+    lint_packages+=("$lint_package")
+done <<< "$lint_package_list"
 
 exec ./bin/gcl run --max-issues-per-linter=0 "${args[@]}" "${lint_packages[@]}"
