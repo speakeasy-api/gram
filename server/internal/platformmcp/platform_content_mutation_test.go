@@ -30,6 +30,9 @@ func seedExposureMutationMemberships(t *testing.T, ctx context.Context, fixture 
 	q := pluginsrepo.New(fixture.conn)
 	automatic, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Automatic", Slug: "automatic", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
+	// "Manual" names how its server is added (by hand, below), not the setting.
+	// It is opted in too, so the test shows cleanup keys on how a server was
+	// added rather than on the plugin's automatic-adding setting.
 	manual, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Manual", Slug: "manual", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
 	role, err := accessrepo.New(fixture.conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{OrganizationID: ac.ActiveOrganizationID, WorkosSlug: "content-edit", WorkosName: "Content edit", WorkosCreatedAt: conv.ToPGTimestamptz(time.Now()), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now())})
