@@ -1594,10 +1594,15 @@ describe("usePolicyCandidates", () => {
     mocks.policies = policies;
     const { result } = renderCandidates();
 
-    expect(byKind(result.current, "policy").map((c) => c.title)).toEqual([
+    const [standard, promptBased] = byKind(result.current, "policy");
+    expect([standard?.title, promptBased?.title]).toEqual([
       "Block secrets",
       "No customer data",
     ]);
+    expect(standard?.keywords).not.toContain("prompt-based");
+    expect(promptBased?.keywords).toEqual(
+      expect.arrayContaining(["prompt", "prompt-based"]),
+    );
   });
 });
 
